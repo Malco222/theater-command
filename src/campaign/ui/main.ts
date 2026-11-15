@@ -27,6 +27,7 @@ import {
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
   claimsOf, dialOf, historyStops, orderHistory,
+  crossings, liftOf, orderCrossingPlan,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
@@ -59,6 +60,7 @@ import {
 } from '../air';
 import {
   FLEETS, NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
+  type CrossingAccount, type CrossingOutlook,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
@@ -97,6 +99,8 @@ const ui = {
   sea: -1,
   /** The fleet being given orders under the Navy tab. */
   fleet: -1,
+  /** The crossing whose reckoning is open under the Navy tab: the beach, or -1. */
+  cross: -1,
   stance: 'patrol' as Stance,
   /** Choosing a new home port for that fleet. */
   rebase: false,
@@ -3980,10 +3984,11 @@ function navyPane(): string {
     const n = g.nations[me];
     const order = humanUp(g);
     out += `<h2>The ${n.adj} navy</h2><p class="sub">${seaWar(g) ? 'Your fleets are pieces on the map: click one there, or below, to pick it up and give it orders. A fleet holds a sea by patrolling it, guards a shipping lane by escorting it, and sinks submarines only by hunting them with destroyers and aircraft. Battleships and cruisers can shell an enemy coast. Ships at sea wear down, so bring a fleet home to refit.' : 'A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other\'s troopships and supply ships. Ships at sea wear down, so bring a fleet home to refit after a fight.'}</p>
-      <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} corps` : 'None'}</b></div></div>${budgeted(g) ? '<div class="acts"><button class="btn small" data-act="armgo" data-arm="navy" title="Lay down warships and troopships in your shipyards.">Lay down more ships</button></div>' : ''}`;
+      <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} of ${n.sealift} corps` : 'None'}</b></div></div>${liftNote()}${budgeted(g) ? '<div class="acts"><button class="btn small" data-act="armgo" data-arm="navy" title="Lay down warships and troopships in your shipyards.">Lay down more ships</button></div>' : ''}`;
     if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The fleet stays in harbour until the nation is at war.</div>`;
     out += seaNotes();
     out += laneNotes();
+    out += crossingNotes();
     out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && n.atWar.length > 0) + (order && ui.fleet === f.id && n.atWar.length ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
     const friends = g.fleets.filter((f) => f.nat !== me && afloat(f) && allied(g, f.nat, me)).sort(size);
     const foes = g.fleets.filter((f) => afloat(f) && atWar(g, f.nat, me)).sort(size);
@@ -4004,6 +4009,53 @@ function navyPane(): string {
   const peace = g.fleets.filter((f) => afloat(f) && !g.nations[f.nat].atWar.length).sort(size);
   if (peace.length) out += `<h3>Navies at peace</h3>${peace.map((f) => fleetRow(f, false, true)).join('')}`;
   return out;
+}
+
+/** The player's shipping for armies, in a sentence: what it carries, and what is on the slips. */
+function liftNote(): string {
+  const l = isOpen(g) ? liftOf(g) : null;
+  if (!l) return '';
+  const coming = l.building.length ? ` Troopships for ${l.building.length === 1 ? 'one more corps are' : `${l.building.length} more corps are`} on the slips, ready ${listOf([...new Set(l.building)].map((t) => date(t)))}.` : '';
+  const room = l.room > 0 ? ` Your ports can take ${l.room === 1 ? 'one more lot' : `${l.room} more lots`} of troopships.` : ' Your ports can handle no more troopships than these.';
+  return `<p class="sub" style="margin-top:6px"><b style="color:var(--ink)">Sea lift.</b> ${l.lift > 0 ? `Your shipping carries ${l.lift === 1 ? 'one corps' : `${l.lift} corps`} across the sea each month, to a friendly port or in a landing, and ${l.left === l.lift ? 'none of it is in use' : l.left > 0 ? `${l.left} ${l.left === 1 ? 'is' : 'are'} still free this month` : 'all of it is in use this month'}.` : 'You have no shipping to carry an army.'}${coming}${room}</p>`;
+}
+
+const lostAtSea = (risk: number): number => Math.round(risk * NAVY.intercept.loss * 100);
+
+/** The reckoning of a crossing, line by line, and what would make it safer. */
+function crossingTicket(acc: CrossingAccount): string {
+  return `<table class="ticket">${acc.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>
+    ${acc.helps.length ? `<h4 class="crh">What would make it safer</h4><ul class="ulist">${acc.helps.map((h) => `<li><span>${esc(h.text)}</span><span>${lostAtSea(h.risk) > 0 ? `about ${lostAtSea(h.risk)}% lost` : 'almost nothing lost'}</span></li>`).join('')}</ul>` : ''}`;
+}
+
+/** One way over the water: where from, where to, what it would cost today, and the button that makes it the plan. */
+function crossingRow(x: CrossingOutlook, order: boolean): string {
+  const loss = lostAtSea(x.account.risk);
+  const route = x.path.map((z) => g.seas[z].name).join(', then the ');
+  const open = x.planned || ui.cross === x.to.id;
+  const air = staffRunsDesk(g, 'air'), navy = staffRunsDesk(g, 'navy');
+  const prep = !x.planned ? '' : `<p class="sub" style="margin-top:6px"><b style="color:var(--ink)">Your plan.</b> ${
+    air && navy ? `Each month your air staff fights for the sky over ${esc(x.to.name)} and your admirals stand a fleet off the beach, where they judge they can.`
+    : air ? `Each month your air staff fights for the sky over ${esc(x.to.name)}. The fleets are yours to send: a fleet on patrol in the ${esc(g.seas[x.account.worst].name)} covers the troopships.`
+    : navy ? `Your admirals stand a fleet off the beach where they judge they can. The fight for the sky over ${esc(x.to.name)} is yours to fly, from the Air tab.`
+    : `The preparation is yours: fly a fight for the sky over ${esc(x.to.name)} from the Air tab, and send a fleet to patrol the ${esc(g.seas[x.account.worst].name)}. Hand the air war or the navy to your staff and they prepare the plan for you.`
+  } The landing is always your own order: stand the force on the quay at ${esc(x.from.name)}, and it can embark the month after.</p>`;
+  return `<div class="cross${x.planned ? ' plan' : ''}">
+    <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
+    <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.</div>
+    ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.bar)}</div>` : ''}
+    ${open ? crossingTicket(x.account) : ''}${prep}
+    <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
+  </div>`;
+}
+
+/** Crossing the sea (the grand campaign): the safest way to each shore the army cannot march to, and why it costs what it costs. */
+function crossingNotes(): string {
+  if (!g.human || !isOpen(g) || !g.nations[g.human].atWar.length) return '';
+  const rows = crossings(g);
+  if (!rows.length) return '';
+  const shown = rows.slice(0, 5);
+  return `<h3>Crossing the sea</h3><p class="sub">Where your army cannot march it has to sail. Each line is the safest way, as things stand this month, to a shore the enemy holds: what the troopships would lose, why, and what would bring it down. The enemy's coast watch sees troops and shipping gather on a quay, so expect to be met.</p>${shown.map((x) => crossingRow(x, humanUp(g))).join('')}${rows.length > shown.length ? `<p class="sub">${rows.length - shown.length} more ${rows.length - shown.length === 1 ? 'shore is' : 'shores are'} within reach, each more dangerous than these.</p>` : ''}`;
 }
 
 /** One sea: who holds it, which fleets are in it, and what it would cost to cross. */
@@ -4085,7 +4137,7 @@ function landingCard(): string {
         <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`;
     }
     body = `${odds}
-      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>`}
+      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
       <h3>${air ? 'Going in' : 'Going ashore'}</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
       <div class="note"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. If your navy loses that sea, the troops are cut off.</div>`;
@@ -5454,7 +5506,7 @@ function eventCard(h: Game['headlines'][number]): string {
     const mine = !!a && a.nat === g.human;
     return `<div class="evcard honour" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${mine ? 'Honour' : `${esc(n?.adj ?? '')} honour`} · ${date(h.turn).split(' ')[0]}${a ? ` ${ribbonOf(a)}` : ''}</span><p>${esc(h.text)}</p>${a && mine ? `<button class="btn small" data-act="award" data-id="${a.id}">${a.cash || a.kind === 'corps' && !unitOf(g, a.kind, a.unit) ? 'Read the citation' : 'Read the citation and decide'}</button>` : h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
   }
-  return `<div class="evcard ${h.kind}" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${h.kind === 'war' ? 'War' : h.kind === 'goal' ? 'Campaign goal' : 'Fallen'} · ${date(h.turn).split(' ')[0]}, week ${h.week}</span><p>${esc(h.text)}</p>${h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
+  return `<div class="evcard ${h.warn ? 'warn' : h.kind}" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${h.warn ? esc(h.warn) : h.kind === 'war' ? 'War' : h.kind === 'goal' ? 'Campaign goal' : 'Fallen'} · ${date(h.turn).split(' ')[0]}, week ${h.week}</span><p>${esc(h.text)}</p>${h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
 }
 
 /** A letter from the front, set apart from the news: somebody wrote it by hand. */
@@ -5466,7 +5518,7 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const hs = g.headlines.slice(from);
   // The player's own honours are cards; another army's are a line of news.
   const cited = (h: Game['headlines'][number]): boolean => h.kind === 'honour' && h.nat === g.human;
-  const big = hs.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'goal' || cited(h));
+  const big = hs.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'goal' || cited(h) || (!!h.warn && h.nat === g.human));
   const letters = hs.filter((h) => h.kind === 'letter');
   const rest = hs.filter((h) => !big.includes(h) && h.kind !== 'letter');
   const me = g.human;
@@ -6714,6 +6766,13 @@ function onClick(e: MouseEvent): void {
     }
     case 'arm': ui.arm = t.dataset.arm as typeof ui.arm; refresh(); break;
     case 'armgo': ui.arm = t.dataset.arm as typeof ui.arm; ui.tab = 'build'; refresh(); break;
+    case 'crosswhy': ui.cross = ui.cross === id ? -1 : id; refresh(); break;
+    case 'crossplan': {
+      const ok = id < 0 ? orderCrossingPlan(g, null, null) : orderCrossingPlan(g, Number(t.dataset.from), id);
+      if (ok) { ui.msg = id < 0 ? 'The plan is dropped.' : `The crossing to ${g.regions[id].name} is the plan.`; queueSave(); }
+      refresh();
+      break;
+    }
     case 'arsenal': {
       const b = orderArsenal(g, t.dataset.key!, ui.sel);
       if (b) { ui.msg = `Ordered: ${b.name}. Ready ${date(b.eta)}.`; queueSave(); }

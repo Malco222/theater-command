@@ -15,7 +15,7 @@ import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { atWar, headline } from './game';
-import { NAVY, fleetsOf, foundFleet, shipCount } from './navy';
+import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -140,6 +140,18 @@ export function joinsFleet(g: Game, nat: string, cls: ShipClass, port: number): 
 }
 
 const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'ship' && b.item === 'tp').length;
+
+/**
+ * A nation's shipping for armies: how many corps it carries across the sea in a month, how many more this month,
+ * the troopships on the slips (the month each lot is ready) and how many more lots its ports could still take.
+ */
+export interface LiftView { lift: number; left: number; building: number[]; room: number }
+
+export function liftView(g: Game, nat: string): LiftView {
+  const n = g.nations[nat];
+  const building = n.queue.filter((b) => b.what === 'ship' && b.item === 'tp').map((b) => b.eta).sort((a, b) => a - b);
+  return { lift: n.sealift, left: liftLeft(g, nat), building, room: Math.max(0, ARSENAL.lift.most - liftBought(g, nat)) };
+}
 
 // ---- The offers -------------------------------------------------------------------------------------
 

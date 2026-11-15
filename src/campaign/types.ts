@@ -630,6 +630,8 @@ export interface Headline {
   unit?: number;
   /** The grand campaign: the month's line from a desk the player's staff runs for him (depth.ts), so that an interface can offer to take it back. */
   desk?: string;
+  /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
+  warn?: string;
 }
 
 export type UnitKind = 'corps' | 'air' | 'fleet';

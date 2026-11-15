@@ -1266,7 +1266,9 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
   // So is the sky over a beach the staff means to land on (the second front, ai.ts): no invasion fleet crosses
   // under the enemy's fighters. With no fighter group in reach of it, one based overseas is brought up to the
   // friendly airfield nearest the beach.
-  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && skyDenies(g, nat, t));
+  // (A player who has named his crossing and handed over the air war has the sky over his beach fought for whenever it is not his: it keeps the enemy's ships and aircraft off his troopships.)
+  const wanted = (t: number): boolean => { if (skyDenies(g, nat, t)) return true; const sky = skyOver(g, t); return nat === g.human && !(sky !== null && allied(g, sky, nat)); };
+  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && wanted(t));
   for (const t of beaches) {
     const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
     if (fighters.some((f) => whyNotMission(g, f, 'superiority', t) === null)) continue;
