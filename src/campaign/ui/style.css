@@ -1828,3 +1828,25 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
   .hint { top: 4px; left: 8px; right: 8px; transform: none; width: fit-content; margin: 0 auto; padding: 4px 9px; font-size: 12px; line-height: 1.3; max-width: calc(100% - 16px); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .hint:empty { display: none; }
 }
+
+/* ---- The history dial (Version 70): five stops, the chosen notch lit; claims and ambitions on the Powers screen ---- */
+.dialmark { display: inline-flex; align-items: center; gap: 4px; height: 13px; }
+.dialmark i { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--line); }
+.dialmark i.on { width: 11px; height: 11px; background: var(--brass); border-color: var(--brass); box-shadow: 0 0 0 2px rgba(0, 0, 0, .25); }
+.dialends { display: flex; justify-content: space-between; margin: 4px 2px 0; font-size: 11px; letter-spacing: .05em; color: var(--ink-3); }
+.dialclosed { margin-top: 6px !important; padding-top: 6px; border-top: 1px solid var(--line); }
+.rank .rdial { display: inline-flex; margin-left: 7px; vertical-align: -1px; }
+.rank .dialmark { gap: 2px; height: 9px; }
+.rank .dialmark i { width: 3px; height: 3px; }
+.rank .dialmark i.on { width: 7px; height: 7px; box-shadow: none; }
+.claimhead { margin-top: 16px; }
+.nat.claim { cursor: pointer; padding: 6px 8px; margin: 0 -8px 4px; border-radius: 4px; }
+.nat.claim:hover { background: var(--panel-2); }
+.nat.claim.onyou { background: rgba(74, 36, 28, .35); }
+.nat.claim .will { line-height: 1.5; }
+.nat.claim .tag { white-space: nowrap; }
+@media (max-width: 640px) {
+  .dialends { font-size: 10px; }
+  .gclevels.dial .gclevel > .dialmark { display: inline-flex; gap: 3px; }
+  .rank .rdial { display: none; }
+}

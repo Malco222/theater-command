@@ -15,6 +15,7 @@ import { techMonth } from './tech';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
+import { mayJoin } from './history';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -149,6 +150,8 @@ export function court(g: Game, by: string, target: string): boolean {
   T.opinion = clamp(T.opinion + DIPLOMACY.court.opinion * k, -100, 100);
   T.home = clamp(T.home + DIPLOMACY.court.home * k, -100, 100);
   g.flags[`court:${by}:${target}`] = g.turn;
+  // A neutral the player has courted is his affair: the history dial does not hold it back from joining.
+  if (by === g.human && g.flags.hist !== undefined) g.flags[`courted:${target}`] = g.turn;
   settle(g, T);
   return true;
 }
@@ -315,7 +318,8 @@ function settle(g: Game, n: Nation): void {
     setAlign(g, n, 0);
     headline(g, 'event', `${n.name} steps back from ${blocName(s)} to strict neutrality.`, n.id);
   } else if (s !== 0 && n.opinion * s >= DIPLOMACY.joinAt) {
-    joinBloc(g, n, s > 0 ? 'axis' : 'allies');
+    // The history dial: by the book only the countries that really joined a bloc join it of their own accord.
+    if (mayJoin(g, n.id, s > 0 ? 'axis' : 'allies')) joinBloc(g, n, s > 0 ? 'axis' : 'allies');
   }
 }
 
@@ -378,6 +382,23 @@ function withdraw(g: Game, nat: string, from: Region): void {
   }
 }
 
+/**
+ * Two nations at war make peace. Each goes home: ground of the one that the other still occupies is handed back,
+ * and nobody stays on the other's soil. False if they were not at war. It says nothing: the news is the caller's.
+ */
+export function signPeace(g: Game, a: string, b: string): boolean {
+  const A = g.nations[a], B = g.nations[b];
+  if (!A?.alive || !B?.alive || !A.atWar.includes(b)) return false;
+  A.atWar = A.atWar.filter((x) => x !== b);
+  B.atWar = B.atWar.filter((x) => x !== a);
+  for (const r of g.regions) {
+    if ((r.owner === a && r.ctrl === b) || (r.owner === b && r.ctrl === a)) { r.ctrl = r.owner; r.since = g.turn; }
+    if (r.ctrl === a && r.units.some((u) => u.nat === b)) withdraw(g, b, r);
+    if (r.ctrl === b && r.units.some((u) => u.nat === a)) withdraw(g, a, r);
+  }
+  return true;
+}
+
 function transfer(g: Game, r: Region, to: string): void {
   r.owner = to; r.ctrl = to; r.cap = false; r.since = g.turn;
   g.supplyDirty = true;
@@ -419,19 +440,7 @@ function fire(g: Game, e: DiploEvent): boolean {
   }
   if (e.peace) {
     let made = false;
-    for (const [a, b] of e.peace) {
-      const A = g.nations[a], B = g.nations[b];
-      if (!A?.alive || !B?.alive || !A.atWar.includes(b)) continue;
-      A.atWar = A.atWar.filter((x) => x !== b);
-      B.atWar = B.atWar.filter((x) => x !== a);
-      // Each goes home: ground of the one that the other still occupies is handed back, and nobody stays on the other's soil.
-      for (const r of g.regions) {
-        if ((r.owner === a && r.ctrl === b) || (r.owner === b && r.ctrl === a)) { r.ctrl = r.owner; r.since = g.turn; }
-        if (r.ctrl === a && r.units.some((u) => u.nat === b)) withdraw(g, b, r);
-        if (r.ctrl === b && r.units.some((u) => u.nat === a)) withdraw(g, a, r);
-      }
-      made = true;
-    }
+    for (const [a, b] of e.peace) if (signPeace(g, a, b)) made = true;
     if (!made && !did) return false;
     g.supplyDirty = true;
     did = true;

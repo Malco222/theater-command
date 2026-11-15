@@ -15,6 +15,7 @@ import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, seaPath } from './navy';
 import { shoreAI } from './fleets';
+import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, isOpen, lodgment, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
@@ -776,6 +777,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
   let best: Region | null = null, bv = 0;
   for (const r of landingTargets(g, force)) {
     if (r.ctrl !== you || !r.port) continue;
+    // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
+    if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
     const plan = planLanding(g, force, r);
     if (plan.why || plan.risk > L.risk) continue;
     if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
@@ -811,6 +814,7 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
   let best: Region | null = null, bv = 0;
   for (const r of g.regions) {
     if (r.ctrl !== you || !r.port || !r.seas.length || g.turn < (g.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
+    if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
     // The way there over the water, whoever holds it now.
     if (!seaPath(g, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
     const defended = hostileUnits(g, r, nat).length > 0;
