@@ -433,3 +433,16 @@ program must be built with `build70.sh`, which puts `stop70.ts` in front of it; 
 | `ui34.cjs` | The month a neighbour marches on the player: the notices as the month opens and where the lines stand in the newsreel | `node ui34.cjs out/v70ui/ita5-12.json 97-v70-march` |
 
 Saves for the page come from `probe55` built with `build70.sh` (a plan with `"stop"`).
+
+## Version 71: the rule for winning the world, a German staff that will not be ringed
+
+Version 71 (dfa1cef) shipped while the Version 70 sets ran, so the Version 70 queue was stopped after stop 1, stops 4 and
+5 as Italy and par at stop 2 for Germany and the Soviet Union (244 wars); everything else is played on Version 71.
+The world is now won by the last great power standing once it holds three quarters of the map's worth. `probe56`
+prints the two tests at the end of its `DOM` line (rival great powers left, the player's share) and `domtab.py` adds
+them up. Build with `./build70.sh NAME /home/user/tc71 out71`.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `mk71.py`, `v71.tsv` | The Version 71 queue (1,244 jobs), most wanted first: par at the middle stop on seeds 25 to 48; the domination set (five seats, seeds 1 to 8, by hand, at Field command, idle); par at stop 2; start years 1940 to 1942 at stops 1, 2, 4, 5; stops 4 and 5 from every seat; wars watched to 1949 at every stop; par on seeds 1 to 24, the idle player, the French player who digs in | `python3 mk71.py && ./jobs.sh v71.tsv out/v71 4` |
+| `dialtab.py` | Adds up the `DIAL` lines by set and seat | `python3 dialtab.py out/v71 seat2 seat2field` |

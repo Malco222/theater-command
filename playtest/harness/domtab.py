@@ -43,6 +43,8 @@ for name in names:
         m = re.search(r'strongest rival (\w+) (\d+)% and (\d+) divisions', s); r['rival'] = m.group(1) if m else ''
         m = re.search(r'fell after the last act began (\d+)', s); r['beat'] = int(m.group(1))
         m = re.search(r'left at the end: ([^;]*);', s); r['who'] = [x.split()[0] for x in m.group(1).split(', ') if x] if m else []
+        m = re.search(r'by the rule of Version 71 [^:]*: rival great powers left ([A-Z ]+|none), the player (holds (\d+)%|has fallen)', s)
+        r['rule71'] = bool(m); r['rivals'] = [] if not m or m.group(1) == 'none' else m.group(1).split(); r['holds'] = int(m.group(3)) if m and m.group(3) else 0
         by.setdefault(nat, []).append(r)
     print(f'== {name}' + (f' (seeds {lo} to {hi})' if hi < 9999 else ''))
     if not by: print('   no wars with a DOM line'); continue
@@ -54,6 +56,10 @@ for name in names:
         print(f"   {NAME.get(nat, nat):13} {n:4} {len(dec):7} {len(ours):6} {len(act):8} {len(won):4} {len(fell):4} {len(short):5}  "
               f"{f'{st.median(r['end'] for r in rows):g}%, {st.median(r['most'] for r in rows):g}%':38} {date(mid([r['decided'] for r in dec])) if dec else '-':17} {date(mid([r['won'] for r in won])) if won else '-':14}")
         print(f"   {'':13} WORLD WON in {len(won)} of {n} ({round(100 * len(won) / n)}%); half the map's worth or more at the most in {sum(1 for r in rows if r['most'] >= 50)}, three quarters or more in {sum(1 for r in rows if r['most'] >= 75)}, nine tenths or more in {sum(1 for r in rows if r['most'] >= 90)}")
+        if any(r['rule71'] for r in rows):
+            up = [r for r in rows if r['rule71'] and not r['fell']]
+            rv = collections.Counter(x for r in up for x in r['rivals'])
+            print(f"   {'':13} by the rule of Version 71 (last great power standing, three quarters): the player stands at the end in {len(up)}; holds three quarters or more in {sum(1 for r in up if r['holds'] >= 75)}; no rival great power left in {sum(1 for r in up if not r['rivals'])}; one left in {sum(1 for r in up if len(r['rivals']) == 1)}; rivals still standing: {', '.join(f'{k} {v}' for k, v in rv.most_common(5)) or 'none'}")
         if short:
             who = collections.Counter(x for r in short for x in r['who'] if x != nat)
             print(f"   {'':13} left short in {len(short)}: middle {st.median(r['left'] for r in short):g} nations standing, the player holding a middle {st.median(r['end'] for r in short):g}%, beat a middle {st.median(r['beat'] for r in short):g} nations after the last act began; still standing: {', '.join(f'{k} {v}' for k, v in who.most_common(8))}")

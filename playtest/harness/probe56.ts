@@ -58,6 +58,7 @@ const fallen = MAJORS.filter((p) => N[p] && N[p].fellOn).map((p) => `${p} ${date
 const live = ['GER', 'ITA', 'UK', 'FRA', 'SOV'].filter((p) => N[p]?.alive);
 const pairs: string[] = [];
 for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) if (N[live[i]].atWar.includes(live[j])) pairs.push(`${live[i]}-${live[j]}`);
+const rivals71 = live.filter((p) => p !== me && !N[p].dormant);
 const end = won ? `WON ${date(g.flags['dom:won'] ?? lastTurn)}` : !stands ? `the player fell ${date(M.fellOn?.turn ?? lastTurn)} to ${M.fellOn?.to ?? '?'}` : `played to ${date(lastTurn)}${gaveUp ? ' (given up: undecided)' : ''}: ${s.left} nations left`;
 console.log(`DOM ${me} seed ${seedS} (${plan.depth ? plan.depth : 'by hand'}${plan.idle ? ', idle' : ''}): war decided ${decidedAt ? `${date(decidedAt)} for ${victor} (beaten ${beaten}; standing ${standingThen || 'none'}); the player's side ${victor === side ? 'won' : 'did not win'}` : `never (great powers fallen: ${fallen.join(', ') || 'none'}; still at war: ${pairs.join(', ') || 'no two'})`}`
   + `; last act ${domAt ? `begun ${date(domAt)} with ${domN} nations, the player holding ${Math.round(shareAtDom * 100)}%` : peaceAt ? `declined ${date(peaceAt)}` : refused ? `refused: ${refused}` : 'never open'}`
@@ -66,7 +67,8 @@ console.log(`DOM ${me} seed ${seedS} (${plan.depth ? plan.depth : 'by hand'}${pl
   + `; strongest rival ${rival ? `${rival.nat} ${Math.round(rival.share * 100)}% and ${Math.round(rival.divisions)} divisions` : 'none'}; the player's army ${Math.round(s.rows.find((r: any) => r.nat === me)?.divisions ?? 0)} divisions`
   + `; fell after the last act began ${fellAfter.length}${fellAfter.length ? ` (${fellAfter.slice(0, 40).join(', ')})` : ''}`
   + `; left at the end: ${s.rows.map((r: any) => `${r.nat} ${Math.round(r.share * 100)}%`).join(', ')}`
-  + `; share each December: ${byDec.join(', ')}`);
+  + `; share each December: ${byDec.join(', ')}`
+  + `; by the rule of Version 71 (the last great power standing, holding three quarters of the map's worth): rival great powers left ${rivals71.join(' ') || 'none'}, the player ${stands ? `holds ${Math.round(s.mine * 100)}%` : 'has fallen'}`);
 if (plan.landLog) {
   const log: string[] = (run as any).landLog ?? [];
   const why: Record<string, number> = {};
