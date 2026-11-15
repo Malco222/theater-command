@@ -136,6 +136,53 @@ export const BEYOND = [
   ['Colombia', 7.6, -74.6], ['Venezuela', 8.2, -66.0],
 ];
 
+/**
+ * Frontiers drawn true. Left to itself the map-maker shares a land mass out by nearness alone, and the line between
+ * two countries wanders with it. Each of these cuts the continent in two: the provinces on its own side share out
+ * the land of that side among themselves and take nothing across the line. 'line' is the frontier itself in
+ * [lat, lon], from sea to sea; 'close' carries it round through open water (or beyond the chart) to shut the side
+ * in; 'owners' are the countries whose provinces stand inside. A side listed earlier is cut out of one listed later:
+ * the peninsula of Lower California is its own side inside Mexico's, so that Sonora takes nothing across the gulf.
+ */
+export const FRONTIERS = [
+  {
+    name: 'north', owners: ['CAN', 'UK'],
+    line: [
+      // The Strait of Juan de Fuca and Haro Strait, then the 49th parallel to the Lake of the Woods.
+      [48.3, -128.0], [48.48, -124.8], [48.27, -123.9], [48.22, -123.3], [48.45, -123.17], [48.68, -123.25], [48.8, -123.0], [49.0, -123.3], [49.0, -95.15],
+      // The Rainy River and the boundary waters to Lake Superior, and down the middle of the lake.
+      [48.85, -94.7], [48.6, -93.4], [48.5, -92.6], [48.2, -91.8], [48.1, -90.8], [48.0, -89.6], [48.2, -88.5], [47.9, -87.0], [47.3, -85.5], [46.75, -84.75],
+      // The St Marys River, Lake Huron, the St Clair and Detroit Rivers.
+      [46.5, -84.6], [46.5, -84.35], [46.2, -84.0], [46.05, -83.8], [45.8, -83.3], [45.3, -82.5], [44.5, -82.3], [43.6, -82.2], [43.05, -82.42], [42.62, -82.52], [42.45, -82.7], [42.32, -83.07], [42.05, -83.12],
+      // Lake Erie, the Niagara River and Lake Ontario.
+      [41.85, -82.9], [41.9, -82.0], [42.3, -80.5], [42.65, -79.4], [42.87, -78.95], [43.1, -79.05], [43.3, -79.05], [43.5, -78.8], [43.6, -77.5], [43.95, -76.45], [44.1, -76.4],
+      // The St Lawrence to the 45th parallel, the height of land round Maine, the St John and the St Croix.
+      [44.35, -75.95], [44.7, -75.5], [45.0, -74.72], [45.01, -71.5], [45.3, -71.05], [45.35, -70.8], [45.9, -70.3], [46.4, -70.05], [46.7, -70.0], [47.46, -69.22], [47.2, -68.9], [47.36, -68.3], [47.07, -67.79],
+      [45.9, -67.78], [45.6, -67.45], [45.15, -67.2], [44.85, -66.98], [44.5, -66.9], [43.0, -67.2], [41.5, -66.0],
+    ],
+    // Out into the Atlantic, up the Labrador Sea and Davis Strait, and round beyond the top of the chart.
+    close: [[41.5, -48.0], [55.0, -48.0], [60.0, -55.0], [66.0, -58.0], [72.5, -62.0], [72.5, -179.0], [48.3, -179.0]],
+  },
+  {
+    name: 'peninsula', owners: ['MEX'],
+    // Lower California: the frontier above it, the Colorado to the head of the gulf.
+    line: [[32.53, -119.0], [32.53, -117.12], [32.72, -114.72], [32.49, -114.81], [31.8, -114.8]],
+    // Down the middle of the Gulf of California, round the cape and back up the Pacific.
+    close: [[31.0, -114.4], [30.0, -113.6], [29.3, -112.9], [28.0, -112.0], [27.0, -111.0], [26.0, -110.3], [25.0, -109.5], [24.0, -108.8], [23.0, -108.5], [22.0, -109.5], [22.0, -119.0]],
+  },
+  {
+    name: 'south', owners: ['MEX'],
+    line: [
+      // From the Pacific below San Diego to the Colorado, the Gadsden line to El Paso, and down the Rio Grande.
+      [32.53, -119.0], [32.53, -117.12], [32.72, -114.72], [32.49, -114.81], [31.33, -111.07], [31.33, -108.21], [31.78, -108.21], [31.78, -106.53],
+      [31.1, -105.6], [30.63, -104.99], [29.56, -104.37], [28.97, -103.15], [29.45, -102.8], [29.78, -102.4], [29.8, -101.5], [29.36, -100.9], [28.71, -100.5], [27.5, -99.5],
+      [26.4, -99.1], [26.2, -98.3], [25.9, -97.5], [25.95, -97.15], [25.95, -95.0],
+    ],
+    // Across the Gulf, through the Yucatan Channel, along the Caribbean off the mainland, and round below the chart.
+    close: [[24.0, -90.0], [22.0, -86.0], [19.0, -84.5], [16.5, -81.0], [14.0, -79.5], [13.2, -72.0], [12.6, -69.0], [12.0, -66.5], [11.5, -62.5], [11.5, -50.0], [2.0, -50.0], [2.0, -119.0]],
+  },
+];
+
 /** Short crossings armies can use without a fleet. */
 export const WORLD_LINKS = [
   ['Vancouver', 'Vancouver Island'], ['Nova Scotia', 'Cape Breton'],
@@ -157,3 +204,51 @@ export const LAKES = [
   ['Lake Ontario', [[43.25, -79.75], [43.65, -79.4], [43.95, -78.0], [44.2, -76.5], [43.9, -76.2], [43.45, -76.5], [43.3, -77.6], [43.3, -79.0]]],
   ['Lake Winnipeg', [[50.4, -96.9], [51.5, -96.6], [52.5, -97.2], [53.7, -98.0], [53.8, -98.9], [52.9, -99.1], [52.0, -97.6], [51.0, -96.95]]],
 ];
+
+/**
+ * The great rivers of the new world, in the form of data/campaign/rivers.mjs: each a line of [lat, lon] points from
+ * its upper course to its mouth. tools/build-rivers.mjs (run with 'world') works out the crossings. The Rio Grande
+ * below El Paso runs along the frontier, point for point.
+ */
+export const WORLD_RIVERS = [
+  ['Mississippi', [[44.98, -93.27], [44.05, -91.65], [43.05, -91.15], [42.5, -90.65], [41.52, -90.58], [40.4, -91.4], [39.7, -91.36], [38.81, -90.12], [38.63, -90.18], [37.0, -89.17], [36.0, -89.7], [35.15, -90.05], [33.4, -91.06], [32.35, -90.88], [31.56, -91.4], [30.45, -91.19], [29.95, -90.07], [29.15, -89.25]]],
+  ['Missouri', [[47.5, -111.3], [47.82, -110.67], [47.6, -108.0], [48.0, -106.4], [48.15, -103.6], [47.3, -101.4], [46.8, -100.78], [44.37, -100.35], [43.05, -98.5], [42.5, -96.4], [41.26, -95.93], [39.75, -94.85], [39.1, -94.58], [38.57, -92.17], [38.81, -90.12]]],
+  ['Ohio', [[40.44, -80.0], [40.06, -80.72], [39.27, -81.56], [38.42, -82.45], [38.73, -83.0], [39.1, -84.51], [38.25, -85.76], [37.97, -87.56], [37.08, -88.6], [37.0, -89.17]]],
+  ['St Lawrence', [[44.23, -76.48], [44.7, -75.5], [45.0, -74.72], [45.5, -73.55], [46.35, -72.55], [46.81, -71.2], [47.2, -70.6]]],
+  ['Rio Grande', [[37.47, -105.87], [36.3, -105.7], [35.08, -106.65], [33.1, -107.2], [31.78, -106.53], [31.1, -105.6], [30.63, -104.99], [29.56, -104.37], [28.97, -103.15], [29.45, -102.8], [29.78, -102.4], [29.8, -101.5], [29.36, -100.9], [28.71, -100.5], [27.5, -99.5], [26.4, -99.1], [26.2, -98.3], [25.9, -97.5], [25.95, -97.15]]],
+  ['Columbia', [[49.0, -117.63], [47.95, -118.98], [47.4, -120.3], [46.2, -119.1], [45.9, -119.3], [45.7, -121.5], [45.6, -122.7], [46.2, -123.8]]],
+  ['Colorado', [[39.07, -108.55], [38.57, -109.55], [37.2, -110.9], [36.94, -111.48], [36.1, -112.1], [36.2, -113.3], [36.0, -114.74], [34.3, -114.14], [33.6, -114.55], [32.72, -114.72], [32.49, -114.81], [31.8, -114.8]]],
+];
+/** Crossings the geometry finds that the country does not have: [region, region]. */
+export const WORLD_RIVER_CUT = [
+  // Montreal and Quebec both stand on the north bank, and the road between them keeps to it.
+  ['Montreal', 'Quebec'],
+];
+/** Crossings the geometry misses: [region, region, river]. */
+export const WORLD_RIVER_ADD = [
+  // Montreal and Quebec lie across the river from an army coming up out of New England.
+  ['White Mountains', 'Montreal', 'St Lawrence'], ['Kennebec', 'Montreal', 'St Lawrence'], ['Kennebec', 'Quebec', 'St Lawrence'],
+  // The whole frontier below El Paso is the river, and the lower Mississippi parts Louisiana from the state named for it.
+  ['Rio Grande', 'Chihuahua', 'Rio Grande'], ['Louisiana', 'Mississippi', 'Mississippi'],
+];
+
+/**
+ * The railways of the new world, laid by tools/build-rails.mjs (run with 'world') as Europe's are: a line to every
+ * province, main lines between the cities. No line ran into these in 1939: the far north, and the foot of Lower
+ * California.
+ */
+export const WORLD_NO_RAIL = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Labrador', 'Southern Baja', 'Greenland', 'Iceland'];
+/** Lines the tool leaves out that history built: [region, region]. */
+export const WORLD_RAIL_ADD = [
+  // The Overland Route to San Francisco, the Santa Fe to Los Angeles, the northern lines to Puget Sound.
+  ['Iowa', 'Nebraska'], ['Wyoming', 'Utah'], ['Missouri', 'Kansas'], ['Kansas', 'New Mexico'], ['Dakotas', 'Montana'], ['Montana', 'Columbia Plateau'],
+  ['Colorado', 'Kansas'], ['Colorado', 'Wyoming'], ['Colorado', 'Utah'],
+  // The Canadian Pacific round the lakes to the prairies.
+  ['Ottawa', 'Northern Ontario'], ['Northern Ontario', 'Winnipeg'],
+  // The New York Central up the Hudson, the Pennsylvania over the mountains, and the lines of the South.
+  ['New York', 'Upstate New York'], ['Susquehanna', 'Pittsburgh'], ['Pittsburgh', 'Ohio Valley'], ['Virginia', 'North Carolina'], ['Tennessee', 'Alabama'], ['Missouri', 'Arkansas'],
+  // Mexico: the west coast line to Nogales, and the line to Oaxaca.
+  ['Guadalajara', 'Sinaloa'], ['Sonora', 'Arizona'], ['Mexico City', 'Oaxaca'],
+];
+/** Lines the tool lays that were never there: [region, region]. */
+export const WORLD_RAIL_CUT = [];

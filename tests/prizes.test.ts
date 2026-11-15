@@ -20,6 +20,7 @@ import { fieldYield, stores } from '../src/campaign/resources';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { arrive, besieged, fedBySea, fieldCtrl, garrisonOf, lift } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
+import { beyondEurope } from '../src/campaign/world';
 import {
   beginHuman, endHuman, humanUp, myPrizeIncome, orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, runTurnAI, scorchPolicyNow, stepAI, whyNotBurnOrder,
   whyNotWreckPrize,
@@ -91,10 +92,16 @@ describe('prizes are for the grand campaign', () => {
 describe('what a province has, and where it lies', () => {
   it('oilfields, factory districts, airfields, harbours and great junctions are on the map', () => {
     const g = playing('GER');
-    const count = (k: PrizeKind): number => g.regions.filter((r) => hasPrize(g, r, k)).length;
+    // Counted on the map of Europe, and on the whole of the wider world the grand campaign is played on.
+    const count = (k: PrizeKind, all = false): number => g.regions.filter((r) => (all || !beyondEurope(r)) && hasPrize(g, r, k)).length;
     expect(count('oil')).toBe(5);
     expect(count('works')).toBe(37);
     expect(count('junction')).toBe(32);
+    expect(count('oil', true)).toBe(10);
+    expect(count('works', true)).toBe(54);
+    expect(count('junction', true)).toBe(37);
+    expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Kansas', 'East Texas', 'Northern Ontario']);
+    expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'works', 'airfield', 'harbour', 'junction']);
     expect(count('airfield')).toBeGreaterThan(100);
     expect(count('harbour')).toBeGreaterThan(80);
     expect(kindsAt(g, g.byName['Warsaw'])).toEqual(['works', 'airfield', 'junction']);

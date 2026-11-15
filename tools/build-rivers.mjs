@@ -1,9 +1,16 @@
 // Builds the rivers of the campaign map: projects each course in data/campaign/rivers.mjs onto the map, and finds
 // the crossings: pairs of neighbouring regions whose centres lie on opposite banks. Run after build-geo-campaign.
+// With 'world' it does the same for the wider world: the rivers of data/campaign/world.mjs on the provinces of
+// world-map.json (run after build-geo-world), written to world-rivers.json.
 import fs from 'node:fs';
-import { RIVERS, CUT, ADD } from '../data/campaign/rivers.mjs';
 
-const map = JSON.parse(fs.readFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), 'utf8'));
+const world = process.argv.includes('world');
+const { RIVERS, CUT, ADD } = world
+  ? await import('../data/campaign/world.mjs').then((m) => ({ RIVERS: m.WORLD_RIVERS, CUT: m.WORLD_RIVER_CUT, ADD: m.WORLD_RIVER_ADD }))
+  : await import('../data/campaign/rivers.mjs');
+const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${world ? 'world' : 'campaign'}-map.json`, import.meta.url), 'utf8'));
+// A province by its number: the new world's are numbered on from Europe's.
+const at = new Map(map.regions.map((r) => [r.id, r]));
 // The same projection as tools/build-geo-campaign.mjs.
 const W = -11, N = 71.4, SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
 const proj = ([lat, lon]) => [(lon - W) * KX * SCALE, (N - lat) * SCALE];
@@ -28,7 +35,8 @@ const found = new Map();
 for (const r of map.regions) {
   for (const j of r.nb) {
     if (j < r.id) continue;
-    const t = map.regions[j];
+    const t = at.get(j);
+    if (!t) continue;
     if (cut.has(key(r.id, j))) continue;
     // A road that crosses a river an even number of times ends on the bank it started from.
     let best = null;
@@ -61,7 +69,7 @@ for (const [a, b, river] of ADD) {
 }
 const crossings = [...found.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
 const out = { rivers: rivers.map((rv) => ({ name: rv.name, pts: rv.pts, ll: rv.ll })), crossings };
-fs.writeFileSync(new URL('../src/generated/campaign-rivers.json', import.meta.url), JSON.stringify(out));
+fs.writeFileSync(new URL(`../src/generated/${world ? 'world' : 'campaign'}-rivers.json`, import.meta.url), JSON.stringify(out));
 const per = rivers.map((rv, k) => `${rv.name} ${crossings.filter((c) => c[2] === k).length}`);
 console.log(`rivers: ${rivers.length} rivers, ${crossings.length} crossings (${per.join(', ')})`);
-if (process.argv.includes('--list')) for (const [a, b, k] of crossings) console.log(`  ${rivers[k].name}: ${map.regions[a].name} (${map.regions[a].owner}) - ${map.regions[b].name} (${map.regions[b].owner})`);
+if (process.argv.includes('--list')) for (const [a, b, k] of crossings) console.log(`  ${rivers[k].name}: ${at.get(a).name} (${at.get(a).owner}) - ${at.get(b).name} (${at.get(b).owner})`);

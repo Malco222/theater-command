@@ -7,7 +7,7 @@ import { Delaunay } from 'd3-delaunay';
 import polygonClipping from 'polygon-clipping';
 import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
 import { CELL, fill, simplify, smooth, buildSeas } from './geo-seas.mjs';
-import { FRAME, WORLD_REGIONS, BEYOND, WORLD_LINKS, WORLD_ROADS, WORLD_NO_BORDER, LAKES } from '../data/campaign/world.mjs';
+import { FRAME, WORLD_REGIONS, BEYOND, FRONTIERS, WORLD_LINKS, WORLD_ROADS, WORLD_NO_BORDER, LAKES } from '../data/campaign/world.mjs';
 
 const core = JSON.parse(fs.readFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), 'utf8'));
 const seaData = JSON.parse(fs.readFileSync(new URL('../data/campaign/world-seas.json', import.meta.url), 'utf8'));
@@ -32,6 +32,11 @@ function inRing(ring, x, y) {
   return inside;
 }
 const inPoly = (poly, x, y) => inRing(poly[0], x, y) && !poly.slice(1).some((h) => inRing(h, x, y));
+
+// The grid the chart is counted on: CELL map units to a cell, the chart's west edge at column 0.
+const cols = Math.ceil((x1 - gx0) / CELL), rows = Math.ceil(y1 / CELL);
+const shift = (poly) => poly.map((ring) => ring.map(([x, y]) => [x - gx0, y]));
+const closed = (poly) => poly.map((ring) => [...ring, ring[0]]);
 
 // ---- Land ----------------------------------------------------------------------------------------------------
 
@@ -61,6 +66,13 @@ for (const poly of clipToBox(loadLand('50m'), [FRAME.west, FRAME.south, FRAME.ea
 
 const first = core.regions.length;
 const taken = new Set(core.regions.map((r) => r.name));
+// The frontiers drawn true: each side of one is a closed shape on the chart, and a point outside them all is on
+// the side that is left.
+const sides = FRONTIERS.map((f) => {
+  const ring = [...f.line, ...f.close].map(([lat, lon]) => proj([lon, lat]));
+  return { name: f.name, owners: f.owners, poly: [[...ring, ring[0]]] };
+});
+const sideAt = (x, y) => sides.findIndex((sd) => inRing(sd.poly[0], x, y));
 const seeds = [];
 WORLD_REGIONS.forEach(([name, lat, lon, owner, terrain, vp, fac, flags], i) => {
   const [x, y] = proj([lon, lat]);
@@ -68,23 +80,45 @@ WORLD_REGIONS.forEach(([name, lat, lon, owner, terrain, vp, fac, flags], i) => {
   if (mass < 0) console.warn(`! ${name} is not on land (${lat}, ${lon})`);
   if (taken.has(name)) console.warn(`! two provinces are called ${name}`);
   taken.add(name);
-  seeds.push({ id: first + i, name, owner, terrain, vp, fac, flags, x, y, mass });
+  seeds.push({ id: first + i, name, owner, terrain, vp, fac, flags, x, y, mass, side: sideAt(x, y) });
 });
 for (const [what, lat, lon] of BEYOND) {
   const [x, y] = proj([lon, lat]);
   const mass = land.findIndex((p) => inPoly(p, x, y));
   if (mass < 0) console.warn(`! the seed for ${what} is not on land (${lat}, ${lon})`);
-  seeds.push({ id: -1, name: what, x, y, mass });
+  seeds.push({ id: -1, name: what, x, y, mass, side: sideAt(x, y) });
 }
 // Each land mass is shared out among the seeds that stand on it, so that no province's ground is cut off
 // by a seed across the water.
-const groups = new Map();
-for (const s of seeds) if (s.mass >= 0) (groups.get(s.mass) ?? groups.set(s.mass, []).get(s.mass)).push(s);
-for (const group of groups.values()) {
-  if (group.length < 2) { group[0].cell = null; group[0].near = []; continue; }
-  const delaunay = Delaunay.from(group, (s) => s.x, (s) => s.y);
-  const voronoi = delaunay.voronoi([gx0, 0, x1, y1]);
-  group.forEach((s, k) => { s.cell = voronoi.cellPolygon(k); s.near = [...delaunay.neighbors(k)].map((j) => group[j]); });
+const onMass = new Map();
+for (const s of seeds) if (s.mass >= 0) (onMass.get(s.mass) ?? onMass.set(s.mass, []).get(s.mass)).push(s);
+const areaOf = (multi) => multi.reduce((t, p) => t + Math.abs(ringArea(p[0])), 0);
+for (const [m, all] of onMass) {
+  // A land mass a frontier runs through is shared out side by side: no province takes ground across the line.
+  const split = new Set(all.map((s) => s.side)).size > 1;
+  const cut = (k) => {
+    try {
+      if (k < 0) return polygonClipping.difference(land[m], ...sides.map((sd) => sd.poly));
+      const own = polygonClipping.intersection(land[m], sides[k].poly);
+      // A side listed earlier is cut out of one listed later.
+      return k > 0 && own.length ? polygonClipping.difference(own, ...sides.slice(0, k).map((sd) => sd.poly)) : own;
+    }
+    catch (e) { console.warn('! could not cut a land mass along a frontier', e.message); return [land[m]]; }
+  };
+  const bySide = new Map();
+  for (const s of all) { const k = split ? s.side : 'all'; (bySide.get(k) ?? bySide.set(k, []).get(k)).push(s); }
+  for (const [k, group] of bySide) {
+    const part = split ? cut(k) : [land[m]];
+    for (const s of group) {
+      s.part = part;
+      if (split && s.id >= 0 && (k >= 0 ? !sides[k].owners.includes(s.owner) : sides.some((sd) => sd.owners.includes(s.owner)))) console.warn(`! ${s.name} (${s.owner}) stands on the wrong side of a frontier`);
+    }
+    if (group.length < 2) { group[0].cell = null; continue; }
+    const delaunay = Delaunay.from(group, (s) => s.x, (s) => s.y);
+    const voronoi = delaunay.voronoi([gx0, 0, x1, y1]);
+    group.forEach((s, i) => { s.cell = voronoi.cellPolygon(i); });
+  }
+  if (split) for (let k = -1; k < sides.length; k++) if (!bySide.has(k) && areaOf(cut(k)) > 20) console.warn(`! land on the ${k < 0 ? 'open' : sides[k].name} side of a frontier has no province to go to`);
 }
 
 const regions = [];
@@ -93,7 +127,7 @@ seeds.forEach((s) => {
   let polys = [];
   if (s.mass >= 0) {
     // A seed alone on its land mass has all of it.
-    try { polys = s.cell ? polygonClipping.intersection([s.cell], land[s.mass]) : [land[s.mass]]; } catch (e) { console.warn('clip failed', s.name); }
+    try { polys = s.cell ? polygonClipping.intersection([s.cell], s.part) : s.part; } catch (e) { console.warn('clip failed', s.name); }
   }
   polys = polys
     .map((p) => p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)])))
@@ -101,6 +135,42 @@ seeds.forEach((s) => {
   if (!polys.length) console.warn(`! ${s.name} has no land`);
   regions.push({ id: s.id, name: s.name, owner: s.owner, terrain: s.terrain, vp: s.vp, fac: s.fac, flags: s.flags, x: r1(s.x), y: r1(s.y), polys, nb: [] });
 });
+
+// A province's share can reach across a gulf or a bay to ground that touches only its neighbours: the north shore
+// of the St Lawrence opposite New Brunswick, the peninsula across the Chesapeake from Norfolk. Such a piece goes
+// to the province on its own side of the frontiers that it has the longest border with.
+{
+  const sideOfId = new Map(seeds.filter((s) => s.id >= 0).map((s) => [s.id, s.side]));
+  const at = new Int16Array(cols * rows).fill(-1);
+  const size = (p) => Math.abs(ringArea(closed(p)[0]));
+  const main = regions.map((r) => {
+    let k = r.polys.findIndex((p) => inPoly(p, r.x, r.y));
+    if (k < 0) r.polys.forEach((p, i) => { if (k < 0 || size(p) > size(r.polys[k])) k = i; });
+    return k;
+  });
+  regions.forEach((r, i) => { if (main[i] >= 0) fill(at, cols, rows, shift(closed(r.polys[main[i]])), r.id); });
+  const moved = [];
+  regions.forEach((r, i) => {
+    const keep = [];
+    r.polys.forEach((p, k) => {
+      if (k === main[i]) { keep.push(p); return; }
+      const mine = new Uint8Array(cols * rows);
+      fill(mine, cols, rows, shift(closed(p)), 1);
+      const touch = new Map();
+      for (let j = cols; j < mine.length - cols; j++) {
+        if (!mine[j]) continue;
+        for (const d of [1, -1, cols, -cols]) { const o = at[j + d]; if (o >= 0 && !mine[j + d]) touch.set(o, (touch.get(o) ?? 0) + 1); }
+      }
+      const best = [...touch].filter(([o]) => o !== r.id && sideOfId.get(o) === sideOfId.get(r.id)).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      // It stays where it touches its own province (a river mouth between them), or nobody else.
+      if (touch.has(r.id) || !best || best[1] < 2) { keep.push(p); return; }
+      regions[best[0] - first].polys.push(p);
+      moved.push(`${Math.round(size(p))} of ${r.name} to ${regions[best[0] - first].name}`);
+    });
+    r.polys = keep;
+  });
+  if (moved.length) console.log(`pieces across the water: ${moved.join(', ')}`);
+}
 
 // An island with no seed of its own goes with the nearest province, if it lies just off its shore:
 // Long Island with New York, Prince Edward Island with the mainland beside it.
@@ -120,41 +190,45 @@ land.forEach((p, m) => {
   joined.push(best.name);
 });
 
-// Two provinces are neighbours when the line between them runs over land for a fair stretch (BORDER map units).
-const BORDER = 8;
-const boxOf = new Map();
-const bbox = (m) => {
-  if (!boxOf.has(m)) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const [x, y] of land[m][0]) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } boxOf.set(m, [a - 1, b - 1, c + 1, d + 1]); }
-  return boxOf.get(m);
+// ---- Seas ----------------------------------------------------------------------------------------------------
+
+// The seas of Europe, worked out again from the map as it was written, cell for cell.
+const coreLand = core.land.map((p) => p.map((r) => [...r, r[0]]));
+const cs = buildSeas({ land: coreLand, regions: core.regions, proj, width: coreW, height: coreH });
+core.regions.forEach((r) => { if ((r.seas ?? []).join() !== cs.seaOf[r.id].join()) console.warn(`! the coast of ${r.name} does not come out as it stands on the map of Europe`); });
+
+const off = -gx0 / CELL;
+const isLand = new Uint8Array(cols * rows);
+for (const p of coreLand) fill(isLand, cols, rows, shift(p), 1);
+for (const p of land) fill(isLand, cols, rows, shift(p), 1);
+const regionAt = new Int16Array(cols * rows).fill(-1);
+for (const r of regions) for (const p of r.polys) fill(regionAt, cols, rows, shift(closed(p)), r.id);
+
+// Two provinces are neighbours where their ground meets along a fair stretch: counted on the grid, a cell's edge
+// at a time, so that it holds across a frontier as it does inside a country. Ground on two different land masses
+// never meets: a strait is crossed by a link or not at all.
+const BORDER = 2;
+const massOf = new Map(seeds.filter((s) => s.id >= 0).map((s) => [s.id, s.mass]));
+const meet = new Map();
+const tally = (a, b) => {
+  if (a < 0 || b < 0 || a === b || massOf.get(a) !== massOf.get(b)) return;
+  const k = a < b ? a * 10000 + b : b * 10000 + a;
+  meet.set(k, (meet.get(k) ?? 0) + 1);
 };
-seeds.forEach((s) => {
-  if (s.id < 0 || s.mass < 0) return;
-  const cell = s.cell;
-  if (!cell) return;
-  const [x0, y0, x9, y9] = bbox(s.mass);
-  for (const t of s.near) {
-    if (t.id < 0 || t.id < s.id || t.mass !== s.mass) continue;
-    let on = 0;
-    for (let q = 0; q < cell.length - 1; q++) {
-      let [ax, ay] = cell[q], [bx, by] = cell[q + 1];
-      const eq = (x, y) => Math.abs(Math.hypot(x - s.x, y - s.y) - Math.hypot(x - t.x, y - t.y)) < 0.05;
-      if (!eq(ax, ay) || !eq(bx, by)) continue;
-      // Only the part of the line that crosses the land mass's own box is walked: off a thin island most of it is at sea.
-      let t0 = 0, t1 = 1;
-      const dx = bx - ax, dy = by - ay;
-      for (const [p, q2] of [[-dx, ax - x0], [dx, x9 - ax], [-dy, ay - y0], [dy, y9 - ay]]) {
-        if (p === 0) { if (q2 < 0) t0 = 2; continue; }
-        const r = q2 / p;
-        if (p < 0) t0 = Math.max(t0, r); else t1 = Math.min(t1, r);
-      }
-      if (t0 >= t1) continue;
-      [ax, ay, bx, by] = [ax + dx * t0, ay + dy * t0, ax + dx * t1, ay + dy * t1];
-      const len = Math.hypot(bx - ax, by - ay), n = Math.max(12, Math.ceil(len / 3));
-      for (let k = 0; k <= n; k++) if (inPoly(land[s.mass], ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n)) on += len / (n + 1);
-    }
-    if (on >= BORDER) { regions[s.id - first].nb.push(t.id); regions[t.id - first].nb.push(s.id); }
+for (let r = 0; r < rows; r++) {
+  for (let c = 0; c < cols; c++) {
+    const a = regionAt[r * cols + c];
+    if (a < 0) continue;
+    if (c + 1 < cols) tally(a, regionAt[r * cols + c + 1]);
+    if (r + 1 < rows) tally(a, regionAt[(r + 1) * cols + c]);
   }
-});
+}
+for (const [k, n] of [...meet].sort((p, q) => p[0] - q[0])) {
+  if (n < BORDER) continue;
+  const a = Math.floor(k / 10000), b = k % 10000;
+  regions[a - first].nb.push(b); regions[b - first].nb.push(a);
+}
+for (const r of regions) r.nb.sort((p, q) => p - q);
 const byName = new Map(regions.map((r) => [r.name, r]));
 const links = [];
 const pair = (a, b, what) => {
@@ -180,21 +254,6 @@ for (const [a, b] of WORLD_NO_BORDER) {
 }
 const alone = regions.filter((r) => !r.nb.length).map((r) => r.name);
 
-// ---- Seas ----------------------------------------------------------------------------------------------------
-
-// The seas of Europe, worked out again from the map as it was written, cell for cell.
-const coreLand = core.land.map((p) => p.map((r) => [...r, r[0]]));
-const cs = buildSeas({ land: coreLand, regions: core.regions, proj, width: coreW, height: coreH });
-core.regions.forEach((r) => { if ((r.seas ?? []).join() !== cs.seaOf[r.id].join()) console.warn(`! the coast of ${r.name} does not come out as it stands on the map of Europe`); });
-
-const cols = Math.ceil((x1 - gx0) / CELL), rows = Math.ceil(y1 / CELL);
-const off = -gx0 / CELL;
-const shift = (poly) => poly.map((ring) => ring.map(([x, y]) => [x - gx0, y]));
-const isLand = new Uint8Array(cols * rows);
-for (const p of coreLand) fill(isLand, cols, rows, shift(p), 1);
-for (const p of land) fill(isLand, cols, rows, shift(p), 1);
-const regionAt = new Int16Array(cols * rows).fill(-1);
-for (const r of regions) for (const p of r.polys) fill(regionAt, cols, rows, shift(p.map((ring) => [...ring, ring[0]])), r.id);
 
 const nCore = core.seas.zones.length;
 const zones = core.seas.zones.map((z, i) => ({ ...z, i, adj: [...z.adj], coast: [...z.coast] }));
