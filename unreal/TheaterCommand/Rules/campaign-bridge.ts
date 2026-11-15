@@ -426,6 +426,8 @@ function view() {
     arms: armsTable(s),
     // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
     chart: chartOf(s),
+    // (release 1) Wrecks on the chart: where the big ships went down.
+    wrecks: wrecksOf(s),
     dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
     // For the drawn front line (release 1): every pair of living nations at war, tag by tag, two by two. The table
     // draws the line itself along every frontier between two such holders, so it moves the moment ground changes hands.
@@ -665,11 +667,58 @@ function shellingSince(s: Game, since: number): { regions: number[]; notes: stri
 function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean } {
   const fresh = s.seaReports.filter((r) => r.id > since);
   const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
+  // (release 1) Ships seen to sink: in a fight the player's side took part in he knows what went down, on both
+  // sides. Each loss is listed in the fight's own note and shown on the table, and the biggest ship a side lost
+  // (a battleship, a carrier or a cruiser) leaves a wreck on the chart, kept with the game as a flag.
+  const me = s.human;
+  const ours = (nat: string): boolean => !!me && (nat === me || allied(s, nat, me));
+  const nats = Object.keys(s.nations);
+  const sunk: { zone: number; nat: string; cls: string; n: number }[] = [];
+  const lostIn = new Map<number, string>();
+  try {
+    for (const r of fresh) {
+      const sides = [...r.att, ...r.def];
+      if (!sides.some((x) => ours(x.nat))) continue;
+      const said: string[] = [];
+      sides.forEach((side, i) => {
+        const parts: string[] = [];
+        for (const cls of ['bb', 'cv', 'ca', 'dd', 'ss']) {
+          const n = (side.sunk as unknown as Record<string, number>)[cls] ?? 0;
+          if (n <= 0) continue;
+          sunk.push({ zone: r.zone, nat: side.nat, cls, n });
+          parts.push(`${n} ${SHIP_WORD[cls][n === 1 ? 0 : 1]}`);
+        }
+        if (parts.length) said.push(`${adj(side.nat)} ships sunk: ${parts.join(', ')}.`);
+        const big = ['bb', 'cv', 'ca'].find((cls) => ((side.sunk as unknown as Record<string, number>)[cls] ?? 0) > 0);
+        const who = nats.indexOf(side.nat);
+        if (big && who >= 0) s.flags[`wreck:${r.id}:${i}`] = ((r.turn * 100 + who) * 10 + (big === 'bb' ? 1 : big === 'cv' ? 2 : 3)) * 1000 + r.zone;
+      });
+      if (said.length) lostIn.set(r.id, said.join(' '));
+    }
+  } catch { /* a fight whose losses cannot be read is told without them */ }
   return {
     zones: [...new Set(fresh.map((r) => r.zone))],
-    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`),
+    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn.has(r.id) ? ` ${lostIn.get(r.id)}` : ''}`),
     mine: fresh.some((r) => r.attNat === s.human || r.defNat === s.human),
+    sunk,
   };
+}
+
+/** (release 1) The wrecks on the chart: where a battleship, a carrier or a cruiser went down in a fight the player's side was in. The latest forty. */
+function wrecksOf(s: Game): { zone: number; nat: string; cls: string; turn: number; seed: number }[] {
+  const out: { zone: number; nat: string; cls: string; turn: number; seed: number }[] = [];
+  try {
+    const nats = Object.keys(s.nations);
+    for (const key of Object.keys(s.flags)) {
+      if (!key.startsWith('wreck:')) continue;
+      const v = s.flags[key];
+      const zone = v % 1000, a = Math.floor(v / 1000), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
+      const bits = key.split(':');
+      if (!nat || !s.seas[zone]) continue;
+      out.push({ zone, nat, cls: cls === 1 ? 'bb' : cls === 2 ? 'cv' : 'ca', turn, seed: Number(bits[1]) * 2 + Number(bits[2]) });
+    }
+  } catch { /* none to show */ }
+  return out.sort((x, y) => y.turn - x.turn || y.seed - x.seed).slice(0, 40);
 }
 
 /** One computer nation's month. If it did something worth seeing, that is noted. */
@@ -695,8 +744,8 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
       const seen = sight(s);
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
-      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, shelled: shore.regions, view: view() });
-      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, shelled: shore.regions, view: view() });
+      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
+      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
       else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
       return;
     }
@@ -719,6 +768,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       taken,
       raids: air.flights,
       seas: sea.zones,
+      sunk: sea.sunk,
       shelled: shore.regions,
       battles: reps.map((r) => r.region),
       focus: [...new Set([...taken, ...reps.map((r) => r.region)])],
@@ -1458,7 +1508,7 @@ function endMonth() {
     const air = raidsSince(s, air0, [month, s.turn]);
     if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, view: view() });
     const sea = seaFightsSince(s, sea00);
-    if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, view: view() });
+    if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view() });
     runOthers(s, steps);
     fallen = arrive(s);
     // (release 1) The player's armies on a standing march go on as his month opens: shown as the month's last move.
@@ -1478,7 +1528,7 @@ function endMonth() {
       const zones = [...new Set(late.map((r) => r.zone))];
       const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
       steps.push({
-        nat: late[0].attNat, taken: [], battles: [], focus: [], seas: zones, mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
+        nat: late[0].attNat, taken: [], battles: [], focus: [], seas: zones, sunk: all.sunk.filter((x) => zones.includes(x.zone)), mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
         note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
         view: view(),
       });

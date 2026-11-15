@@ -469,7 +469,8 @@ namespace
 				}
 				const FGeometry Place = Geometry.MakeChild(Box, FSlateLayoutTransform(Each.At / Scale - Box * 0.5), Lying, FVector2D(0.5, 0.5));
 				// (by moonlight the names sink back: a pale blue-grey, and fainter, so the lights of the towns lead the eye)
-				const FLinearColor Day = FMath::Lerp(Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204)),
+				// (a sea's name on a sea the admiral's chart veils is in dark chart ink at every height)
+				const FLinearColor Day = Each.bInk ? FLinearColor(FColor(60, 80, 95)) : FMath::Lerp(Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204)),
 					Each.bSea ? FLinearColor(FColor(58, 78, 88)) : FLinearColor(FColor(52, 36, 22)), Sheet * (1.0f - Moon));
 				const FLinearColor Ink = FMath::Lerp(Day, FLinearColor(FColor(168, 184, 212)), Moon).CopyWithNewOpacity(Each.Alpha * (1.0f - 0.42f * Moon));
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
@@ -951,6 +952,7 @@ namespace
 			}
 			// (the panels are brown leather with a brass edge; the date is a desk calendar; the dispatches are typed)
 			PanelBrush = FSlateRoundedBoxBrush(Leather, 6.0f, Brass.CopyWithNewOpacity(0.85f), 1.5f);
+			BigCardBrush = FSlateRoundedBoxBrush(Leather.CopyWithNewOpacity(0.975f), 6.0f, Brass.CopyWithNewOpacity(0.85f), 1.5f);
 			PaperBrush = FSlateRoundedBoxBrush(Paper, 5.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f);
 			BindingBrush = FSlateRoundedBoxBrush(Binding, FVector4(4.0f, 4.0f, 0.0f, 0.0f));
 			StripBrush = FSlateRoundedBoxBrush(TypingPaper, 2.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.75f), 1.0f);
@@ -1310,8 +1312,10 @@ namespace
 						]
 					]
 
-					// (where the bigger unit card is stood for a picture: see "-TheaterBigCard")
-					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0.0f, 262.0f, 0.0f, 0.0f)
+					// (release 1) The bigger unit card: docked straight above the army's tray, so that it never covers the
+					// army in hand (the art director's ruling of round 17).
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]() { return BigCardPlace(); }))
 					[
 						SAssignNew(BigCardShow, SBox).Visibility(EVisibility::HitTestInvisible)
 					]
@@ -1509,7 +1513,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 									[
-										MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)"), [this]() { Controller->ToggleWealth(); })
+										MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)\nAlso: hold B to lift every piece off the table and read the bare ground. Shift with 6, 7, 8 or 9 keeps the view you are looking at, and the key alone comes back to it."), [this]() { Controller->ToggleWealth(); })
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -1527,7 +1531,7 @@ namespace
 									[
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
-										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)"), [this]() { Controller->ToggleWealth(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)\nAlso: hold B to lift every piece off the table and read the bare ground. Shift with 6, 7, 8 or 9 keeps the view you are looking at, and the key alone comes back to it."), [this]() { Controller->ToggleWealth(); })]
 									]
 								]
 							])
@@ -1652,7 +1656,7 @@ namespace
 						// (It takes the room that is left on the screen and no more: with more corps than fit, the row of cards scrolls.)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left).VAlign(VAlign_Bottom)
 						[
-							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
+							Edge(TrayPiece, SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
 							.Visibility_Lambda([Tray]()
 							{
 								const FArmyTray* Info = Tray();
@@ -2870,6 +2874,7 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			UpdateBigCard();
 			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
@@ -3463,6 +3468,8 @@ namespace
 					];
 
 					Cards->ClearChildren();
+					BigCardTargets.Reset(); // (the cards the bigger card answers to are noted afresh as they are made)
+					BigCardRevision = -1;
 					if (ACampaignMapActor* Table = Controller->GetMap())
 					{
 						if (UTextureRenderTarget2D* Stand = Table->GetShowpiece())
@@ -3620,6 +3627,8 @@ namespace
 				];
 
 				Cards->ClearChildren();
+					BigCardTargets.Reset(); // (the cards the bigger card answers to are noted afresh as they are made)
+					BigCardRevision = -1;
 				// The model of the corps pointed at, large and turning, with its name under it.
 				if (ACampaignMapActor* Table = Controller->GetMap())
 				{
@@ -3656,22 +3665,6 @@ namespace
 					[
 						MakeCard(Card)
 					];
-				}
-				// ("-TheaterBigCard" stands the bigger card of the army's first corps on the screen, for a picture: it is
-				// otherwise shown only while the pointer rests on a card; "-TheaterBigCard=2" the first division of it)
-				if (BigCardShow.IsValid())
-				{
-					BigCardShow->SetContent(SNullWidget::NullWidget);
-					int32 Which = 0;
-					const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterBigCard")) || FParse::Value(FCommandLine::Get(), TEXT("TheaterBigCard="), Which);
-					if (bAsked && Controller->GetArmyTray().Cards.Num() > 0)
-					{
-						const FTrayCard& First = Controller->GetArmyTray().Cards[0];
-						const FString Tag = !First.Ally.IsEmpty() ? First.Ally : Controller->GetArmyTray().Tag;
-						const FViewDivision* Part = Which == 2 && First.Parts.Num() > 0 ? &First.Parts[0] : nullptr;
-						BigCardShow->SetContent(MakeBigCard(First, Part, Part && !Part->Kind.IsEmpty() && First.KindId != TEXT("heavy") ? Part->Kind : First.KindId, Tag,
-							FString(TEXT("Click to tell this corps to come along or stay behind."))));
-					}
 				}
 				}
 			}
@@ -5750,7 +5743,8 @@ namespace
 					{ TEXT("The bare ground"), TEXT("hold B to lift every piece off the table; hold P to ink every province line") },
 					{ TEXT("Armies and fleets"), TEXT("click a flag or a fleet to take it in hand; right-click where it should go; Esc puts it down; Tab goes to the next army yet to move") },
 					{ TEXT("The month"), TEXT("Enter ends it; Space skips what is being shown") },
-					{ TEXT("Screens"), TEXT("1 to 5 open the top bar's; L forces, R report, O goals, C your capital, Y map views, H how to play") },
+					{ TEXT("Screens"), TEXT("1 to 5 open the top bar's; L forces, R report, O goals, C your capital, H how to play") },
+					{ TEXT("Map views"), TEXT("Y steps through them: flat colours, wealth, friend and foe, and the admiral's chart of the seas you have searched") },
 				};
 				for (const auto& Line : Controls)
 				{
@@ -6089,7 +6083,7 @@ namespace
 		 * what it is for, and the ground it is at its best and its worst on. Every figure is the rules' own. Part is
 		 * the one division pointed at, or null for the corps as a whole.
 		 */
-		TSharedRef<SToolTip> MakeBigCard(const FTrayCard& Card, const FViewDivision* Part, const FString& Kind, const FString& Tag, const FString& Foot)
+		TSharedRef<SWidget> MakeBigCard(const FTrayCard& Card, const FViewDivision* Part, const FString& Kind, const FString& Tag, const FString& Foot)
 		{
 			const FString Arm = Kind == TEXT("heavy") ? FString(TEXT("arm")) : Kind;
 			const FArmNote* Note = Controller.IsValid() ? Controller->FindArm(Arm) : nullptr;
@@ -6188,7 +6182,8 @@ namespace
 			}
 			if (!Foot.IsEmpty())
 			{
-				Under->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(FText::FromString(Foot)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Faint)];
+				// (the design director's ruling: at the strength of the card's other words, or it cannot be read)
+				Under->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(FText::FromString(Foot)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.68f))];
 			}
 			TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox);
 			if (Portrait.IsValid())
@@ -6196,14 +6191,12 @@ namespace
 				Top->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 0.0f, 14.0f, 0.0f)[SNew(SPortrait).Picture(Portrait).Size(FVector2D(PictureWide, PictureWide * 336.0 / 552.0))];
 			}
 			Top->AddSlot().AutoWidth().VAlign(VAlign_Top)[SNew(SBox).WidthOverride(Wide)[Lines]];
-			return SNew(SToolTip).BorderImage(&PanelBrush)
+			// (on a backing that lets nothing of the table through: the card is read, not looked past)
+			return SNew(SBorder).BorderImage(&BigCardBrush).Padding(FMargin(14.0f, 13.0f, 14.0f, 11.0f))
 				[
-					SNew(SBox).Padding(FMargin(8.0f, 8.0f, 8.0f, 6.0f))
-					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[Top]
-						+ SVerticalBox::Slot().AutoHeight()[Under]
-					]
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Top]
+					+ SVerticalBox::Slot().AutoHeight()[Under]
 				];
 		}
 
@@ -6387,11 +6380,10 @@ namespace
 				}
 				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
-					// (release 1) Point at a division's tile for the bigger card of that division.
+					// (release 1) Point at a division's tile for the bigger card of that division: it is laid out above the tray.
 					Card.bUnknown
 					? StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))[Face])
-					: StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))
-						.ToolTip(MakeBigCard(Card, Part, Kind, Tag, Card.bLook ? FString() : FString(TEXT("Click to tell this corps to come along or stay behind."))))[Face])
+					: BigCardTarget(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))[Face], Card.CorpsId, Part ? Division : INDEX_NONE)
 				];
 			}
 
@@ -6429,19 +6421,11 @@ namespace
 					])
 				: StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(0.0, 0.0)));
 
-			// (release 1) Point at the corps' card for the bigger card of the corps. One nobody has identified keeps its plain line.
-			TSharedPtr<SToolTip> CardTip;
-			if (Card.bUnknown)
-			{
-				CardTip = SNew(SToolTip).Text(FText::FromString(Tip));
-			}
-			else
-			{
-				CardTip = MakeBigCard(Card, nullptr, Card.KindId, Tag, Card.bLook ? FString() : FString(TEXT("Click to tell this corps to come along or stay behind.")));
-			}
-			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
+			// (release 1) Point at the corps' card for the bigger card of the corps, laid out above the tray. One nobody
+			// has identified keeps its plain line.
+			const TSharedRef<SButton> Whole = SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
 				.IsFocusable(false).IsEnabled(Card.bCanOrder || Card.bLook)
-				.ToolTip(CardTip)
+				.ToolTipText(Card.bUnknown ? FText::FromString(Tip) : FText::GetEmpty())
 				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
 				.OnClicked_Lambda([this, Id = Card.CorpsId]()
 				{
@@ -6504,6 +6488,89 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
 					+ SVerticalBox::Slot().AutoHeight()[Divisions]
 				];
+			if (!Card.bUnknown)
+			{
+				BigCardTargets.Add({ Whole, Card.CorpsId, INDEX_NONE });
+			}
+			return Whole;
+		}
+
+		/** Notes a division's tile as something the bigger card is shown for while the pointer rests on it. */
+		TSharedRef<SWidget> BigCardTarget(TSharedRef<SWidget> Tile, int32 CorpsId, int32 Part)
+		{
+			BigCardTargets.Add({ Tile, CorpsId, Part });
+			return Tile;
+		}
+
+		/**
+		 * (release 1) Lays the bigger card out above the tray for whatever card or tile the pointer rests on, and takes
+		 * it away when it rests on none. ("-TheaterBigCard" keeps the army's first corps' card up for a picture, and
+		 * "-TheaterBigCard=2" its first division's.)
+		 */
+		void UpdateBigCard()
+		{
+			if (!BigCardShow.IsValid() || !Controller.IsValid())
+			{
+				return;
+			}
+			int32 CorpsId = INDEX_NONE, Part = INDEX_NONE;
+			for (const FBigCardTarget& Target : BigCardTargets)
+			{
+				const TSharedPtr<SWidget> Widget = Target.Widget.Pin();
+				if (Widget.IsValid() && Widget->IsHovered() && (CorpsId == INDEX_NONE || Target.Part != INDEX_NONE))
+				{
+					CorpsId = Target.CorpsId;
+					Part = Target.Part;
+				}
+			}
+			const FArmyTray& Tray = Controller->GetArmyTray();
+			static int32 Which = 0;
+			static const bool bForPicture = FParse::Param(FCommandLine::Get(), TEXT("TheaterBigCard")) || FParse::Value(FCommandLine::Get(), TEXT("TheaterBigCard="), Which);
+			if (CorpsId == INDEX_NONE && bForPicture && Tray.bVisible && Tray.Cards.Num() > 0 && !Tray.Cards[0].bUnknown)
+			{
+				CorpsId = Tray.Cards[0].CorpsId;
+				Part = Which == 2 && Tray.Cards[0].Parts.Num() > 0 ? 0 : INDEX_NONE;
+			}
+			const FTrayCard* Card = Tray.bVisible && CorpsId != INDEX_NONE ? Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& Each) { return Each.CorpsId == CorpsId; }) : nullptr;
+			if (!Card)
+			{
+				CorpsId = Part = INDEX_NONE;
+			}
+			if (CorpsId == BigCardCorps && Part == BigCardPart && Tray.Revision == BigCardRevision)
+			{
+				return;
+			}
+			BigCardCorps = CorpsId;
+			BigCardPart = Part;
+			BigCardRevision = Tray.Revision;
+			if (!Card)
+			{
+				BigCardShow->SetContent(SNullWidget::NullWidget);
+				return;
+			}
+			const FViewDivision* Division = Card->Parts.IsValidIndex(Part) ? &Card->Parts[Part] : nullptr;
+			const FString Tag = !Card->Ally.IsEmpty() ? Card->Ally : Tray.Tag;
+			BigCardShow->SetContent(MakeBigCard(*Card, Division, Division && !Division->Kind.IsEmpty() && Card->KindId != TEXT("heavy") ? Division->Kind : Card->KindId, Tag,
+				Card->bLook ? FString() : FString(TEXT("Click to tell this corps to come along or stay behind."))));
+		}
+
+		/** Where the bigger card stands: straight above the army's tray, their left edges in one line. */
+		FMargin BigCardPlace() const
+		{
+			const TSharedPtr<SWidget> Tray = TrayPiece.Pin();
+			if (!Tray.IsValid() || !BigCardShow.IsValid())
+			{
+				return FMargin(24.0f, 262.0f, 0.0f, 0.0f);
+			}
+			FVector2D Size(1920.0, 1080.0);
+			if (GEngine && GEngine->GameViewport)
+			{
+				GEngine->GameViewport->GetViewportSize(Size);
+			}
+			const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+			const FVector2D At = (FVector2D(Tray->GetTickSpaceGeometry().GetAbsolutePosition()) - FVector2D(GetTickSpaceGeometry().GetAbsolutePosition())) / Scale;
+			const float High = static_cast<float>(BigCardShow->GetDesiredSize().Y);
+			return FMargin(static_cast<float>(At.X), FMath::Max(static_cast<float>(At.Y) - High - 8.0f, 8.0f), 0.0f, 0.0f);
 		}
 
 		/** A unit's honours as a row of small two-coloured ribbons. */
@@ -6565,6 +6632,16 @@ namespace
 		TMap<FString, TSharedPtr<FSlateBrush>> PortraitBrushes;
 		TMap<FString, TSharedPtr<FSlateBrush>> LargePortraitBrushes; // (for the bigger unit card)
 		TSharedPtr<SBox> BigCardShow;
+		struct FBigCardTarget
+		{
+			TWeakPtr<SWidget> Widget;
+			int32 CorpsId = INDEX_NONE;
+			int32 Part = INDEX_NONE; // which of its divisions, or none for the corps' own card
+		};
+		TArray<FBigCardTarget> BigCardTargets;
+		int32 BigCardCorps = INDEX_NONE, BigCardPart = INDEX_NONE, BigCardRevision = -1;
+		TWeakPtr<SWidget> TrayPiece; // the army's tray: the bigger card stands on its top edge
+		FSlateBrush BigCardBrush; // the bigger card's backing: leather that lets nothing through
 		TSharedPtr<FSlateBrush> ShowBrush;
 		TSharedPtr<SVerticalBox> PageBody;
 		int32 ShownRoom = -1;

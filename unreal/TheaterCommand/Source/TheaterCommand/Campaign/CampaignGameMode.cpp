@@ -186,6 +186,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowWrecked(Session->GetView().Wrecked);
 		Table->SetWarAtNight(Session->GetView().Blackout, Session->GetView().Fronts);
 		Table->ShowFrontLine(Session->GetView().Wars, Session->GetView().Human);
+		Table->ShowWrecks(Session->GetView().Wrecks, Session->GetView().Turn);
 		Table->ShowIdle(Session->GetView().Cold);
 		Table->ShowPrizes(Session->GetView().Prizes);
 	}

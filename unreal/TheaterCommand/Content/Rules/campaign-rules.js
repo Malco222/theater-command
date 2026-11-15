@@ -23902,6 +23902,8 @@
       arms: armsTable(s),
       // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
       chart: chartOf(s),
+      // (release 1) Wrecks on the chart: where the big ships went down.
+      wrecks: wrecksOf(s),
       dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
       // For the drawn front line (release 1): every pair of living nations at war, tag by tag, two by two. The table
       // draws the line itself along every frontier between two such holders, so it moves the moment ground changes hands.
@@ -24179,11 +24181,55 @@
   function seaFightsSince(s, since) {
     const fresh3 = s.seaReports.filter((r) => r.id > since);
     const adj = (nat) => s.nations[nat]?.adj ?? nat;
+    const me = s.human;
+    const ours = (nat) => !!me && (nat === me || allied(s, nat, me));
+    const nats = Object.keys(s.nations);
+    const sunk = [];
+    const lostIn2 = /* @__PURE__ */ new Map();
+    try {
+      for (const r of fresh3) {
+        const sides = [...r.att, ...r.def];
+        if (!sides.some((x) => ours(x.nat))) continue;
+        const said = [];
+        sides.forEach((side3, i) => {
+          const parts = [];
+          for (const cls of ["bb", "cv", "ca", "dd", "ss"]) {
+            const n = side3.sunk[cls] ?? 0;
+            if (n <= 0) continue;
+            sunk.push({ zone: r.zone, nat: side3.nat, cls, n });
+            parts.push(`${n} ${SHIP_WORD[cls][n === 1 ? 0 : 1]}`);
+          }
+          if (parts.length) said.push(`${adj(side3.nat)} ships sunk: ${parts.join(", ")}.`);
+          const big = ["bb", "cv", "ca"].find((cls) => (side3.sunk[cls] ?? 0) > 0);
+          const who = nats.indexOf(side3.nat);
+          if (big && who >= 0) s.flags[`wreck:${r.id}:${i}`] = ((r.turn * 100 + who) * 10 + (big === "bb" ? 1 : big === "cv" ? 2 : 3)) * 1e3 + r.zone;
+        });
+        if (said.length) lostIn2.set(r.id, said.join(" "));
+      }
+    } catch {
+    }
     return {
       zones: [...new Set(fresh3.map((r) => r.zone))],
-      notes: fresh3.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`),
-      mine: fresh3.some((r) => r.attNat === s.human || r.defNat === s.human)
+      notes: fresh3.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn2.has(r.id) ? ` ${lostIn2.get(r.id)}` : ""}`),
+      mine: fresh3.some((r) => r.attNat === s.human || r.defNat === s.human),
+      sunk
     };
+  }
+  function wrecksOf(s) {
+    const out = [];
+    try {
+      const nats = Object.keys(s.nations);
+      for (const key4 of Object.keys(s.flags)) {
+        if (!key4.startsWith("wreck:")) continue;
+        const v = s.flags[key4];
+        const zone = v % 1e3, a = Math.floor(v / 1e3), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
+        const bits = key4.split(":");
+        if (!nat || !s.seas[zone]) continue;
+        out.push({ zone, nat, cls: cls === 1 ? "bb" : cls === 2 ? "cv" : "ca", turn, seed: Number(bits[1]) * 2 + Number(bits[2]) });
+      }
+    } catch {
+    }
+    return out.sort((x, y) => y.turn - x.turn || y.seed - x.seed).slice(0, 40);
   }
   function stepOne(s, steps) {
     {
@@ -24205,8 +24251,8 @@
       if (!taken2.length && !reps.length) {
         const seen2 = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen2[c.reg] > 0 || seen2[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, shelled: shore.regions, view: view() });
-        else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, shelled: shore.regions, view: view() });
+        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
+        else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
         else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
         return;
       }
@@ -24227,6 +24273,7 @@
         taken: taken2,
         raids: air2.flights,
         seas: sea.zones,
+        sunk: sea.sunk,
         shelled: shore.regions,
         battles: reps.map((r) => r.region),
         focus: [.../* @__PURE__ */ new Set([...taken2, ...reps.map((r) => r.region)])],
@@ -24906,7 +24953,7 @@
       const air2 = raidsSince(s, air0, [month2, s.turn]);
       if (air2.flights.length) steps.push({ nat: me, note: air2.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: true, raids: air2.flights, view: view() });
       const sea = seaFightsSince(s, sea00);
-      if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, view: view() });
+      if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view() });
       runOthers(s, steps);
       fallen = arrive2(s);
       if (!fallen && s.human) {
@@ -24929,6 +24976,7 @@
           battles: [],
           focus: [],
           seas: zones,
+          sunk: all.sunk.filter((x) => zones.includes(x.zone)),
           mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
           note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(" ") || all.notes[0] || "",
           view: view()

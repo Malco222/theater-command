@@ -1559,6 +1559,11 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 			Letter.Up = ScreenUp - Screen;
 			Letter.Alpha = Alpha;
 			Letter.bSea = Word.bSea;
+			if (Word.bSea && Map->ChartLevelOf(Word.Sea) < 2)
+			{
+				Letter.bInk = true;
+				Letter.Alpha = FMath::Min(Alpha * 1.5f, 0.92f);
+			}
 		}
 	}
 }
@@ -3588,6 +3593,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		static const bool bChartForPicture = FParse::Param(FCommandLine::Get(), TEXT("TheaterChart"));
 		Map->ShowChart(bChartView || FleetInHand != INDEX_NONE || bChartForPicture, Now->GetView().SeaSearch, Now->GetView().OldSightings);
 	}
+	{
+		// ("-TheaterSinking=6:GER:bb,6:UK:ca" sends ships down in a sea for a picture, once the table is laid)
+		static bool bSunkForPicture = false;
+		FString Asked;
+		if (!bSunkForPicture && !Opening.bVisible && GetWorld() && GetWorld()->GetTimeSeconds() > 3.0 && FParse::Value(FCommandLine::Get(), TEXT("TheaterSinking="), Asked, false))
+		{
+			bSunkForPicture = true;
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(","));
+			for (int32 Nth = 0; Nth < Each.Num(); ++Nth)
+			{
+				TArray<FString> Parts;
+				if (Each[Nth].ParseIntoArray(Parts, TEXT(":")) == 3)
+				{
+					Map->AddSinking(FCString::Atoi(*Parts[0]), Parts[1], Parts[2], Nth);
+				}
+			}
+		}
+	}
 	// (release 1) The lamp over the army or the fleet in hand.
 	Map->SetHandLamp(RingedPiece.IsValid() && ArmyRegion != INDEX_NONE ? RingedPiece.Get() : FleetInHand != INDEX_NONE ? Map->FindFleetPiece(FleetInHand) : nullptr);
 	// (release 1) Views kept under 6, 7, 8 and 9: Shift with the key keeps the view, the key alone comes back to it.
@@ -5419,6 +5443,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowWrecked(View.Wrecked);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
 		Map->ShowFrontLine(View.Wars, View.Human);
+		Map->ShowWrecks(View.Wrecks, View.Turn);
 		Map->ShowIdle(View.Cold);
 		Map->ShowPrizes(View.Prizes);
 		Map->ShowWorksGoing(View.Going);
@@ -5983,6 +6008,21 @@ void ACampaignPlayerController::WatchNextStep()
 	{
 		Map->AddSeaBattle(Zone);
 	}
+	// (release 1) And the ships that went down in them are seen to go: the biggest first, no more than six of a month's fight.
+	{
+		static const TCHAR* Order[] = { TEXT("bb"), TEXT("cv"), TEXT("ca"), TEXT("dd"), TEXT("ss") };
+		int32 Shown = 0;
+		for (const TCHAR* Class : Order)
+		{
+			for (const FSinking& Sinking : Step.Sinkings)
+			{
+				for (int32 Each = 0; Sinking.Class == Class && Each < FMath::Min(Sinking.Count, 2) && Shown < 6; ++Each)
+				{
+					Map->AddSinking(Sinking.Zone, Sinking.Nation, Sinking.Class, Shown++);
+				}
+			}
+		}
+	}
 	if (Step.SeaFights.Num() > 0)
 	{
 		CampaignSounds::Play(this, TEXT("ship_guns"), Step.bMine ? 0.5f : 0.3f);
@@ -6035,7 +6075,7 @@ void ACampaignPlayerController::WatchNextStep()
 		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
 	}
 	// (a raid takes its time to fly: long enough to see it reach the target when it is the player's sky)
-	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
+	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.Sinkings.Num() > 0 ? 6.4 : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }

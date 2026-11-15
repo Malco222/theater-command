@@ -706,6 +706,215 @@ void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 	}
 }
 
+void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FString& Class, int32 Nth)
+{
+	if (!Data.Seas.IsValidIndex(Zone) || !GetWorld() || SinkingShips.Num() >= 8)
+	{
+		return;
+	}
+	const TCHAR* Kind = Class == TEXT("bb") ? TEXT("Battleship:") : Class == TEXT("cv") ? TEXT("Carrier:") : Class == TEXT("ca") ? TEXT("Cruiser:") : Class == TEXT("dd") ? TEXT("Destroyer:") : TEXT("Submarine:");
+	// (to the scale of the fleets' own ships, a little over it so that she reads as the thing to look at)
+	const double Metre = 0.066 * UnitScale * 1.4 * 1.5;
+	FMiniatureMesh Model;
+	{
+		TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal)
+		if (!Model.Vehicle(FString(Kind) + Nation, FVector::ZeroVector, Metre, 0.0) || Model.Vertices.Num() == 0)
+		{
+			return;
+		}
+	}
+	FBox Bounds(ForceInit);
+	for (const FVector& Point : Model.Vertices)
+	{
+		Bounds += Point;
+	}
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+	Mesh->SetupAttachment(Root);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->RegisterComponent();
+	Mesh->SetCastShadow(false);
+	Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+	Mesh->SetMaterial(0, PieceMaterial);
+	// Beside where the guns flash, each ship of the fight in a place of her own.
+	// (well clear of the fleets that lie at the middle of the sea, and on open water)
+	const double Angle = 2.4 * Nth + 0.7 * Zone;
+	FVector2D Spot = Data.Seas[Zone].Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 9.0;
+	for (const double Far : { 30.0, 24.0, 18.0, 13.0 })
+	{
+		const FVector2D Try = Data.Seas[Zone].Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Far + 4.0 * (Nth % 2));
+		if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
+		{
+			Spot = Try;
+			break;
+		}
+	}
+	FSinkingShip& Ship = SinkingShips.AddDefaulted_GetRef();
+	Ship.Mesh = Mesh;
+	Ship.Began = GetWorld()->GetTimeSeconds() + 0.45 * Nth;
+	Ship.At = MapToWorld(Spot.X, Spot.Y, 0.0) + FVector(0.0, 0.0, 0.02 * UnitScale);
+	Ship.Yaw = FMath::Fmod(Angle * 97.0, 360.0);
+	Ship.High = FMath::Max(Bounds.GetSize().Z, 1.0);
+	SinkingMeshes.Add(Mesh);
+	Mesh->SetWorldLocationAndRotation(Ship.At, FRotator(0.0, Ship.Yaw, 0.0));
+}
+
+void ACampaignMapActor::UpdateSinkings()
+{
+	if (SinkingShips.Num() == 0 || !GetWorld())
+	{
+		return;
+	}
+	// She heels over, settles by the stern and slides under: about six seconds from the first list to the last of her.
+	// ("-TheaterSinkAt=0.45" holds every sinking ship at that point of it, for a picture.)
+	static float Held = -1.0f;
+	static const bool bHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterSinkAt="), Held);
+	const double Now = GetWorld()->GetTimeSeconds(), Lasts = 6.0;
+	for (int32 Index = SinkingShips.Num() - 1; Index >= 0; --Index)
+	{
+		FSinkingShip& Ship = SinkingShips[Index];
+		const double T = bHeld ? Held : (Now - Ship.Began) / Lasts;
+		if (T >= 1.0 || !Ship.Mesh)
+		{
+			if (Ship.Mesh)
+			{
+				SinkingMeshes.Remove(Ship.Mesh);
+				Ship.Mesh->DestroyComponent();
+			}
+			SinkingShips.RemoveAt(Index);
+			continue;
+		}
+		// (she lists for the first half of it, and only then begins to go)
+		const double Heel = 56.0 * FMath::SmoothStep(0.0, 0.7, T);
+		const double Stern = 14.0 * FMath::SmoothStep(0.3, 1.0, T);
+		const double Down = Ship.High * 1.4 * FMath::SmoothStep(0.5, 1.0, T);
+		Ship.Mesh->SetWorldLocationAndRotation(Ship.At - FVector(0.0, 0.0, Down), FRotator(Stern, Ship.Yaw, Heel));
+	}
+}
+
+void ACampaignMapActor::ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn)
+{
+	TArray<FWreckMark> Now = Wrecks;
+	{
+		// ("-TheaterWrecks=6:GER:bb,6:UK:ca" stands wrecks on the chart for a picture: the sea, whose, what class)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWrecks="), Asked, false))
+		{
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				TArray<FString> Parts;
+				if (One.ParseIntoArray(Parts, TEXT(":")) == 3)
+				{
+					FWreckMark& Mark = Now.AddDefaulted_GetRef();
+					Mark.Zone = FCString::Atoi(*Parts[0]);
+					Mark.Nation = Parts[1];
+					Mark.Class = Parts[2];
+					Mark.Turn = Turn;
+					Mark.Seed = Now.Num() * 7 + Mark.Zone;
+				}
+			}
+		}
+	}
+	if (Now == WrecksShown && Turn == WrecksTurn)
+	{
+		return;
+	}
+	WrecksShown = Now;
+	WrecksTurn = Turn;
+	if (!WrecksMesh)
+	{
+		if (Now.Num() == 0)
+		{
+			return;
+		}
+		WrecksMesh = NewObject<UProceduralMeshComponent>(this);
+		WrecksMesh->SetupAttachment(Root);
+		WrecksMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WrecksMesh->RegisterComponent();
+		WrecksMesh->SetCastShadow(false);
+	}
+	WrecksMesh->ClearAllMeshSections();
+	if (Now.Num() == 0 || !Data.IsLoaded())
+	{
+		return;
+	}
+	// A wreck as a chart-maker draws one: a short line for the hull with three strokes across it, in dark ink, on a
+	// faint slick. Small, to one side of the sea's middle, and paler once it is more than a year old.
+	FCampaignMeshBuffers Buffers;
+	for (const FWreckMark& Mark : Now)
+	{
+		if (!Data.Seas.IsValidIndex(Mark.Zone))
+		{
+			continue;
+		}
+		const FVector2D Sea = Data.Seas[Mark.Zone].Center;
+		FVector2D At = Sea + FVector2D(14.0, -12.0);
+		for (int32 Try = 0; Try < 8; ++Try)
+		{
+			const double Angle = 2.39996 * (Mark.Seed + Try * 3), Far = 15.0 + 2.2 * ((Mark.Seed + Try) % 6);
+			const FVector2D Spot = Sea + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Far;
+			if (Terrain.HeightAt(Spot.X, Spot.Y) <= 0.0f && Data.FindRegionAt(Spot.X, Spot.Y) == INDEX_NONE)
+			{
+				At = Spot;
+				break;
+			}
+		}
+		const float Old = Turn - Mark.Turn > 12 ? 0.55f : 1.0f;
+		const double Size = Mark.Class == TEXT("ca") ? 1.5 : 1.9;
+		const double Lie = FMath::DegreesToRadians(static_cast<double>((Mark.Seed * 53) % 50) - 25.0);
+		const FVector2D Along(FMath::Cos(Lie), FMath::Sin(Lie)), Across(-Along.Y, Along.X);
+		// (the slick)
+		{
+			const FColor Slick = FLinearColor(0.02f, 0.025f, 0.035f, 0.2f * Old).ToFColor(false), Edge = FLinearColor(0.02f, 0.025f, 0.035f, 0.0f).ToFColor(false);
+			const int32 Middle = Buffers.AddVertex(SurfacePoint(At.X, At.Y, 0.2), FVector::UpVector, Slick);
+			int32 First = INDEX_NONE, Last = INDEX_NONE;
+			for (int32 Side = 0; Side < 14; ++Side)
+			{
+				const double Angle = 2.0 * PI * Side / 14.0, Wobble = 1.0 + 0.18 * FMath::Sin(Angle * 3.0 + Mark.Seed);
+				const FVector2D Rim = At + Along * (FMath::Cos(Angle) * Size * 2.1 * Wobble) + Across * (FMath::Sin(Angle) * Size * 1.25 * Wobble);
+				const int32 Vertex = Buffers.AddVertex(SurfacePoint(Rim.X, Rim.Y, 0.2), FVector::UpVector, Edge);
+				if (Last != INDEX_NONE)
+				{
+					Buffers.AddTriangleFacingUp(Middle, Last, Vertex);
+				}
+				else
+				{
+					First = Vertex;
+				}
+				Last = Vertex;
+			}
+			Buffers.AddTriangleFacingUp(Middle, Last, First);
+		}
+		const FColor Ink = FLinearColor(0.07f, 0.05f, 0.04f, 0.85f * Old).ToFColor(false);
+		AppendRibbon(Buffers, { At - Along * Size, At + Along * Size }, 0.16, 0.26, Ink, false);
+		for (const double Place : { -0.55, 0.0, 0.55 })
+		{
+			AppendRibbon(Buffers, { At + Along * (Size * Place) - Across * (Size * 0.42), At + Along * (Size * Place) + Across * (Size * 0.42) }, 0.14, 0.26, Ink, false);
+		}
+	}
+	if (!LanesInk && HighlightMaterial)
+	{
+		LanesInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		LanesInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		ShownNight = -1.0f;
+	}
+	Buffers.Commit(WrecksMesh, 0, LanesInk ? static_cast<UMaterialInterface*>(LanesInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+}
+
+UMaterialInterface* ACampaignMapActor::WashInk()
+{
+	// The washes laid for an army in hand (where it can go, what it can attack, how far the enemy reaches) have an
+	// ink of their own, so that the night can take them down with the ground: see SetNight.
+	if (!OrdersInk && HighlightMaterial)
+	{
+		OrdersInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f; // (so that the hour's light is laid on it at once)
+		SetNight(NightNow, bLamplightNow);
+	}
+	return OrdersInk ? static_cast<UMaterialInterface*>(OrdersInk) : static_cast<UMaterialInterface*>(HighlightMaterial);
+}
+
 void ACampaignMapActor::SetHandLamp(AArmyPiece* Piece)
 {
 	HandLampPiece = Piece;
@@ -4739,6 +4948,19 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			LanesInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.36f, 0.5f), Moon));
 			LanesInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.6f, Moon));
 		}
+		// (The art director's ruling of round 17: by night the washes round an army in hand stayed as bright as by
+		// day while the ground under them fell to 0.38, so that the lamp's pool came out darker than the floor round
+		// it. By night only they take the chart veil's step; and the ring round the piece in hand, a hot yellow by
+		// day, is a warm cream at about 0.6.)
+		if (OrdersInk)
+		{
+			OrdersInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(WashNight.R, WashNight.G, WashNight.B), Moon));
+		}
+		if (UMaterialInstanceDynamic* Ring = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f))
+		{
+			Ring->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), FLinearColor(FColor::FromHex(TEXT("6E6554"))), Moon)); // (the lamp over the piece lights the ring too: this is what comes out a warm cream at about 0.6 under it)
+			Ring->SetScalarParameterValue(TEXT("Glow"), FMath::Lerp(2.5f, RingNightGlow, Moon));
+		}
 		// Province lines by night are blue-grey and faint (their strength is capped as the eye moves: UpdateForCamera).
 		if (ProvincePaleInk)
 		{
@@ -5478,6 +5700,7 @@ void ACampaignMapActor::BuildWords()
 	for (const FCampaignSeaZone& Sea : Data.Seas)
 	{
 		FMapWord& Word = MapWords.AddDefaulted_GetRef();
+		Word.Sea = static_cast<int32>(&Sea - Data.Seas.GetData());
 		Word.Text = Sea.Name.ToUpper();
 		Word.Height = 4.6;
 		const double Long = Word.Height * 1.75 * FMath::Max(Word.Text.Len() - 1, 1);
@@ -6258,7 +6481,7 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 			}
 		}
 	}
-	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
+	Buffers.Commit(OrdersMesh, 0, WashInk());
 }
 
 void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
@@ -6287,7 +6510,7 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 			AppendRegionFill(Buffers, Id, Wash);
 		}
 	}
-	Buffers.Commit(OrdersMesh, 9, HighlightMaterial);
+	Buffers.Commit(OrdersMesh, 9, WashInk());
 
 	if (!EnemyReachMesh)
 	{
@@ -7016,6 +7239,7 @@ bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponen
 		Point -= Middle;
 	}
 	OutRadius = Box.GetExtent().Size();
+	StagedExtent = Box.GetExtent();
 	Stage->ClearAllMeshSections();
 	Stage->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
 	Stage->SetMaterial(0, SceneryMaterial);
@@ -7048,6 +7272,21 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 		Picture->InitCustomFormat(bLarge ? 552 : 184, bLarge ? 336 : 112, PF_B8G8R8A8, false); // (the same shape, three times the size)
 		Picture->UpdateResourceImmediate(true);
 		AimStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), Radius);
+		if (bLarge)
+		{
+			// (The art director's ruling: the whole piece in the picture with a tenth of margin round it. The small
+			// pictures are framed on the model's roundness, which cut a standing figure at the helmet and the knee.
+			// The large one is fitted to the model's own box, as the camera sees it: its width and its height.)
+			const FVector From = FVector(-0.78, -0.5, 0.36).GetSafeNormal();
+			const FRotator Looks = (-From).Rotation();
+			const FRotationMatrix Axes(Looks);
+			auto Half = [this](const FVector& Axis) { return FMath::Abs(StagedExtent.X * Axis.X) + FMath::Abs(StagedExtent.Y * Axis.Y) + FMath::Abs(StagedExtent.Z * Axis.Z); };
+			const double Wide = Half(Axes.GetUnitAxis(EAxis::Y)), High = Half(Axes.GetUnitAxis(EAxis::Z)), Deep = Half(Axes.GetUnitAxis(EAxis::X));
+			const double TanWide = FMath::Tan(FMath::DegreesToRadians(PortraitCamera->FOVAngle * 0.5)), TanHigh = TanWide * 336.0 / 552.0;
+			const double Back = FMath::Max(Wide / TanWide, High / TanHigh) * 1.1 + Deep * 0.5;
+			const FVector Middle = PortraitMesh->GetRelativeLocation(), Eye = Middle + From * Back;
+			PortraitCamera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
+		}
 		PortraitCamera->TextureTarget = Picture;
 		PortraitCamera->CaptureScene();
 	}
@@ -7814,6 +8053,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	}
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
+	UpdateSinkings();
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();

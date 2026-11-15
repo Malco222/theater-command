@@ -211,6 +211,7 @@ struct FMapLetter
 	FVector2D Up = FVector2D::ZeroVector; // and the way the letter's top points, the same length on the map
 	float Alpha = 1.0f;
 	bool bSea = false;
+	bool bInk = false; // (a sea's name on a sea the chart veils: in dark chart ink, or it is lost on the pale veil)
 	FString Whole; // a province's name, written whole here instead of a single letter
 };
 

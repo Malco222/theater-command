@@ -76,6 +76,7 @@ public:
 		double Bulge = 0.0; // how far the middle of the word stands off the straight line, toward the letters' tops
 		double Height = 6.0; // the height of a capital, in map units
 		bool bSea = false;
+		int32 Sea = INDEX_NONE; // (which sea, for a sea's name)
 		bool bRegion = false; // a province's own name, small, written whole where the province's middle is
 	};
 	const TArray<FMapWord>& GetMapWords() const { return MapWords; }
@@ -248,10 +249,20 @@ public:
 	 */
 	void ShowChart(bool bOn, const TArray<int32>& Levels, const TArray<FOldSighting>& Old);
 	bool IsChartShown() const { return bChartOn; }
+	/** How well a sea is searched as the chart shows it now (0 not, 1 thinly, 2 well, 3 in full view): 3 for every sea while the chart is off. */
+	int32 ChartLevelOf(int32 Sea) const { return bChartOn && ChartLevels.IsValidIndex(Sea) ? ChartLevels[Sea] : 3; }
+	/**
+	 * (release 1) A ship goes down where fleets fought: a model of her class in her navy's paint heels over, settles
+	 * by the stern and slides under, in about six seconds. Nth sets her a little apart from the others of the fight.
+	 */
+	void AddSinking(int32 Zone, const FString& Nation, const FString& Class, int32 Nth);
+	/** (release 1) The wrecks on the chart: a small chart-maker's wreck sign in each sea where a big ship went down. */
+	void ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn);
 	/** (release 1) The bare ground: lifts every piece off the table (armies, fleets, air groups) while it is not shown, and sets them back. */
 	void SetPiecesShown(bool bShown);
 	/** (release 1) A warm lamp over the army or fleet in hand: it follows the piece, and goes out when the piece is put down. */
 	void SetHandLamp(AArmyPiece* Piece);
+	UMaterialInterface* WashInk();
 	AArmyPiece* FindFleetPiece(int32 FleetId) const;
 	bool AreColoursFlat() const { return bFlatColours; }
 	/** How strongly the countries are coloured: 0 light, 1 as the art is meant, 2 strong. */
@@ -608,6 +619,26 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	bool bPiecesShown = true;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> OrdersInk; // the washes laid for an army in hand: dimmed by night, in the chart veil's step
+	FVector StagedExtent = FVector(100.0); // half the size of the model last stood on a stage, each way
+	FLinearColor WashNight = FLinearColor(0.36f, 0.38f, 0.44f); // what the washes are multiplied by under the moon
+	float RingNightGlow = 0.05f; // and how much light of its own the ring round the piece in hand keeps
+	struct FSinkingShip
+	{
+		TObjectPtr<UProceduralMeshComponent> Mesh;
+		double Began = 0.0;
+		FVector At = FVector::ZeroVector;
+		double Yaw = 0.0, High = 10.0;
+	};
+	TArray<FSinkingShip> SinkingShips;
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> SinkingMeshes; // (kept from the collector while they go down)
+	void UpdateSinkings();
+	TArray<FWreckMark> WrecksShown;
+	int32 WrecksTurn = -1;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WrecksMesh;
 	bool bChartOn = false;
 	TArray<int32> ChartLevels;
 	TArray<FOldSighting> ChartOld;

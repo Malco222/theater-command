@@ -459,6 +459,23 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		}
 		Object->TryGetStringArrayField(TEXT("dark"), Out.Blackout);
 		Object->TryGetStringArrayField(TEXT("wars"), Out.Wars);
+		const TArray<TSharedPtr<FJsonValue>>* Wrecks = nullptr;
+		if (Object->TryGetArrayField(TEXT("wrecks"), Wrecks))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Wrecks)
+			{
+				const TSharedPtr<FJsonObject>* Wreck = nullptr;
+				if (Value->TryGetObject(Wreck))
+				{
+					FWreckMark& Mark = Out.Wrecks.AddDefaulted_GetRef();
+					(*Wreck)->TryGetNumberField(TEXT("zone"), Mark.Zone);
+					(*Wreck)->TryGetStringField(TEXT("nat"), Mark.Nation);
+					(*Wreck)->TryGetStringField(TEXT("cls"), Mark.Class);
+					(*Wreck)->TryGetNumberField(TEXT("turn"), Mark.Turn);
+					(*Wreck)->TryGetNumberField(TEXT("seed"), Mark.Seed);
+				}
+			}
+		}
 		const TSharedPtr<FJsonObject>* Chart = nullptr;
 		if (Object->TryGetObjectField(TEXT("chart"), Chart))
 		{
@@ -1315,6 +1332,22 @@ FMonthResult FCampaignSession::EndMonth()
 				for (const TSharedPtr<FJsonValue>& Sea : *SeaFights)
 				{
 					Step.SeaFights.AddUnique(FMath::RoundToInt32(Sea->AsNumber()));
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Sunk = nullptr;
+			if (Entry->TryGetArrayField(TEXT("sunk"), Sunk))
+			{
+				for (const TSharedPtr<FJsonValue>& WentDown : *Sunk)
+				{
+					const TSharedPtr<FJsonObject>* Lost = nullptr;
+					if (WentDown->TryGetObject(Lost))
+					{
+						FSinking& Sinking = Step.Sinkings.AddDefaulted_GetRef();
+						(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
+						(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
+						(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
+						(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
+					}
 				}
 			}
 			const TArray<TSharedPtr<FJsonValue>>* Raids = nullptr;

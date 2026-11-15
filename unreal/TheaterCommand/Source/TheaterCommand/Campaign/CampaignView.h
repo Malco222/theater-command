@@ -28,6 +28,26 @@ struct FArmNote
 	FString Poor; // and at its worst
 };
 
+/** (release 1) Ships that went down in a fight at sea, as the month's replay shows them: where, whose, what class (bb, cv, ca, dd, ss), how many. */
+struct FSinking
+{
+	int32 Zone = INDEX_NONE;
+	FString Nation;
+	FString Class;
+	int32 Count = 1;
+};
+
+/** (release 1) A wreck on the chart: where a battleship, a carrier or a cruiser went down. */
+struct FWreckMark
+{
+	int32 Zone = INDEX_NONE;
+	FString Nation;
+	FString Class;
+	int32 Turn = 0;
+	int32 Seed = 0; // (where in the sea it lies: the same every time)
+	bool operator==(const FWreckMark& Other) const { return Zone == Other.Zone && Nation == Other.Nation && Class == Other.Class && Turn == Other.Turn && Seed == Other.Seed; }
+};
+
 /** (release 1) Enemy ships that were found at sea and are lost again: where they were last seen, and how long ago. */
 struct FOldSighting
 {
@@ -401,6 +421,7 @@ struct FCampaignView
 	// (release 1) The admiral's chart: each sea by how well the player's side has it searched (0 not, 1 thinly, 2 well, 3 in full view), and old sightings.
 	TArray<int32> SeaSearch;
 	TArray<FOldSighting> OldSightings;
+	TArray<FWreckMark> Wrecks; // (release 1) where the big ships went down
 	const FArmNote* FindArm(const FString& Kind) const { return Arms.FindByPredicate([&Kind](const FArmNote& Each) { return Each.Kind == Kind; }); }
 	TArray<FPrizeMark> Prizes; // provinces to mark for their prizes: a fire where one is wrecked, a pennant where a besieger holds one
 	TArray<FString> Alerts; // things to tell the player as his month opens
@@ -559,6 +580,7 @@ struct FMonthStep
 	bool bMarchOnly = false; // nothing was fought for or taken: armies only moved
 	TArray<FSortie> Raids; // the raids flown in it, each group from its own airfield
 	TArray<int32> SeaFights; // the seas where fleets fought in it
+	TArray<FSinking> Sinkings; // (release 1) and the ships that went down in them, where the player's side fought
 	TArray<int32> Shelled; // the coasts shelled from the sea in it
 	bool bMine = false; // the player's own ground or troops were involved
 	FCampaignView View; // the war as it stood when that nation had finished
