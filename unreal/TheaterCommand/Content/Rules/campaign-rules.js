@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f7aafe0 2026-11-15. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 002e137 2026-11-15. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1176,6 +1176,15 @@
       _note: "A computer staff folds two of its corps into one where both are under 'worn' of their strength and the corps kept would not be over strength. The cadre is raised again from the arsenal when the treasury allows, 'cadres' on order at a time.",
       worn: 0.4,
       cadres: 1
+    },
+    ring: {
+      _note: "A staff that will not be ringed (Version 71; a judgement of the staff's, not a rule of the game). Before its month's operations each staff named in 'staffs' looks at the places of its own that face the enemy. The ways out of a place are the friendly places next door that lie no further from its capital. Where 'exits' or fewer are left and none is safe (a way out is safe with no enemy next to it, or held with 'safe' of what stands against it), the place is given up: a garrison comes out of the town, the field corps march out by the way with room nearest home, up to 'steps' stages where they come to more ground being given up, and nobody is sent back in that month. The capital is never given up. A force already ringed tries to get back first: where ground that still joins the country lies within 'reach' marches, one corps walks through any province on the way that the enemy holds but has left empty, taking it; where he stands on the way, the ringed corps next to him and any of the army outside that stand next to him attack together if the odds reach 'odds', and go through if they win. With the road open again the place is a sack like any other and is left. Only Germany's staff is named: its armies were being ringed whole by a careful Soviet player (about 85 divisions a war lost with no way out in Version 69).",
+      staffs: ["GER"],
+      exits: 2,
+      safe: 0.67,
+      steps: 3,
+      reach: 3,
+      odds: 1
     },
     exhaust: {
       _note: "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
@@ -10152,8 +10161,8 @@
     }
     const k = AIRWAR.success.k;
     const cost = ftrLoss + bmrLoss + 10;
-    const beats = (worth2) => {
-      const x = Math.pow((foeLoss + worth2 + 10) / cost, k);
+    const beats = (worth3) => {
+      const x = Math.pow((foeLoss + worth3 + 10) / cost, k);
       return x / (1 + x);
     };
     const pr = rail2 ?? 0, pf = ruin ?? 0;
@@ -12625,7 +12634,7 @@
     const capital = r.cap && seat3 && seat3.capital === r.id ? BUDGET.capital : 0;
     return Math.round((BUDGET.land[r.terrain] * k + (r.port ? BUDGET.port * k : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital) * BUDGET.scale);
   }
-  var rankOf3 = (worth2) => TOWNS.ranks.filter((x) => worth2 >= x).length;
+  var rankOf3 = (worth3) => TOWNS.ranks.filter((x) => worth3 >= x).length;
   function signsOf(g2, r) {
     const out = [];
     if (r.fac > 0) out.push("factory");
@@ -12641,7 +12650,7 @@
     if (!r) return null;
     const size = townSize(g2, r);
     const [x, y] = townSite(region);
-    const worth2 = worthOf(g2, r);
+    const worth3 = worthOf(g2, r);
     return {
       region,
       name: townName(r),
@@ -12652,8 +12661,8 @@
       y,
       owner: r.owner,
       holder: r.ctrl,
-      worth: worth2,
-      rank: rankOf3(worth2),
+      worth: worth3,
+      rank: rankOf3(worth3),
       signs: signsOf(g2, r),
       factories: r.fac,
       vp: r.vp
@@ -12924,8 +12933,8 @@
     const A = CIVIC.ai, purse = `cvb:${nat}`;
     g2.flags[purse] = (g2.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
     if (wait) return;
-    const worth2 = (r) => (g2.nations[nat].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
-    const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth2(b) - worth2(a) || a.id - b.id);
+    const worth3 = (r) => (g2.nations[nat].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
+    const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
     const gangs = 1 + Math.floor(home.length / A.gang);
     const built = {};
     for (const r of home) for (const { line, level } of civicAt(g2, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
@@ -14988,12 +14997,17 @@
       _about: "Troops standing on a former ally's soil when the alliances are dissolved go home under safe conduct: to the nearest ground their own nation holds, or to its capital by sea. They arrive with this much of their organisation and cannot move again that month.",
       org: 0.6
     },
+    won: {
+      _about: "How the last act is won. The world belongs to the last great power standing once it holds 'share' of the map's worth (its victory points): the countries still standing then lay down their arms, so that one nation is left. A great power behind the sea must be beaten like any other. With no great power left at all, the nation that holds the share has won; and a nation left alone on the map has won whatever it holds.",
+      share: 0.75
+    },
     lines: {
-      _about: "What the news says as the last act opens, by who chose it. {n} is the number of nations still standing.",
-      open: "World Domination. Every alliance is dissolved and every treaty is paper. {n} nations are left, each alone and at war with all the rest. The last one standing takes the world.",
+      _about: "What the news says as the last act opens, by who chose it. {n} is the number of nations still standing, {share} the share of the world that wins it.",
+      open: "World Domination. Every alliance is dissolved and every treaty is paper. {n} nations are left, each alone and at war with all the rest. The last great power standing takes the world, once it holds {share} of it.",
       guests: "Armies on a former ally's soil are given safe conduct home: {n} corps cross the old frontiers for the last time.",
       leave: "{name} takes its armies and fleets home across the ocean and shuts its ports to the Old World.",
-      won: "{name} stands alone. There is nobody left to fight: the world is {adj}."
+      won: "{name} stands alone. There is nobody left to fight: the world is {adj}.",
+      last: "{name} is the last great power standing and holds {pct}% of the world. {rest} {name} stands alone: the world is {adj}."
     }
   };
 
@@ -15085,7 +15099,7 @@
     for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) setWar(g2, live[i].id, live[j].id);
     g2.flags.dom = g2.turn;
     g2.flags["dom:n"] = live.length;
-    headline(g2, "war", fill3(DOMINATION.lines.open, { n: live.length }), by ?? void 0);
+    headline(g2, "war", fill3(DOMINATION.lines.open, { n: live.length, share: shareWords(DOMINATION.won.share) }), by ?? void 0);
     let home = 0;
     for (const c of guests) {
       if (c.dead) continue;
@@ -15109,18 +15123,8 @@
     g2.flags["dom:peace"] = g2.turn;
     return true;
   }
-  function crown(g2) {
-    if (!dominating(g2) || g2.flags["dom:won"]) return;
-    const live = contenders(g2);
-    if (live.length !== 1) return;
-    g2.flags["dom:won"] = g2.turn;
-    headline(g2, "goal", fill3(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
-  }
-  function worldWinner(g2) {
-    if (!dominating(g2) || !g2.flags["dom:won"]) return null;
-    return contenders(g2)[0]?.id ?? null;
-  }
-  function worldBoard(g2, viewer = g2.human) {
+  var shareWords = (s) => Math.abs(s - 0.75) < 1e-9 ? "three quarters" : Math.abs(s - 2 / 3) < 1e-3 ? "two thirds" : Math.abs(s - 0.5) < 1e-9 ? "half" : `${Math.round(s * 100)}%`;
+  function worth2(g2) {
     var _a;
     const held = {};
     let all = 0;
@@ -15130,6 +15134,50 @@
       h.n++;
       h.vp += r.vp;
     }
+    return { all, held };
+  }
+  var greatLeft = (g2) => contenders(g2).filter((n) => DIPLOMACY.majors.includes(n.id)).map((n) => n.id);
+  function layDown(g2, n, to) {
+    n.alive = false;
+    n.fellOn = { turn: g2.turn, week: g2.week, to, how: "terms" };
+    delete n.freedOn;
+    for (const c of g2.corps.filter((c2) => c2.nat === n.id)) removeCorps(g2, c);
+    fleetsOnFall(g2, n.id);
+    airOnFall(g2, n.id);
+    dropSieges(g2, n.id);
+    for (const r of g2.regions) if (r.ctrl === n.id) r.ctrl = to;
+    for (const m of Object.values(g2.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
+    n.atWar = [];
+  }
+  function crown(g2) {
+    if (!dominating(g2) || g2.flags["dom:won"]) return;
+    const live = contenders(g2);
+    if (!live.length) return;
+    if (live.length === 1) {
+      g2.flags["dom:won"] = g2.turn;
+      headline(g2, "goal", fill3(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
+      return;
+    }
+    const great = live.filter((n) => DIPLOMACY.majors.includes(n.id));
+    if (great.length > 1) return;
+    const { all, held } = worth2(g2);
+    const share = (n) => all > 0 ? (held[n.id]?.vp ?? 0) / all : 0;
+    const top = great[0] ?? [...live].sort((a, b) => share(b) - share(a) || (a.id < b.id ? -1 : 1))[0];
+    if (share(top) < DOMINATION.won.share) return;
+    const pct8 = Math.round(share(top) * 100);
+    const rest = live.filter((n) => n.id !== top.id);
+    g2.flags["dom:won"] = g2.turn;
+    g2.flags["dom:laid"] = rest.length;
+    for (const n of rest) layDown(g2, n, top.id);
+    g2.supplyDirty = true;
+    headline(g2, "goal", fill3(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct: pct8, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
+  }
+  function worldWinner(g2) {
+    if (!dominating(g2) || !g2.flags["dom:won"]) return null;
+    return contenders(g2)[0]?.id ?? null;
+  }
+  function worldBoard(g2, viewer = g2.human) {
+    const { all, held } = worth2(g2);
     let scale = 1;
     const row2 = (n) => {
       const L = n.alive ? ledger(g2, n.id) : null;
@@ -15153,7 +15201,7 @@
     };
     const rows = contenders(g2).map(row2).sort((a, b) => b.share - a.share || b.divisions - a.divisions || (a.nat < b.nat ? -1 : 1));
     const fallen = Object.values(g2.nations).filter((n) => !n.alive && !!n.fellOn).map(row2).sort((a, b) => b.fell.turn - a.fell.turn || (a.nat < b.nat ? -1 : 1));
-    return { on: dominating(g2), since: g2.flags.dom ?? 0, began: g2.flags["dom:n"] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g2), scale };
+    return { on: dominating(g2), since: g2.flags.dom ?? 0, began: g2.flags["dom:n"] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g2), great: greatLeft(g2), need: DOMINATION.won.share, laid: g2.flags["dom:laid"] ?? 0, scale };
   }
 
   // ../../data/campaign/divisions.json
@@ -16908,15 +16956,15 @@
     }
     if (wide && defenders.length) {
       const grade2 = (cs) => {
-        let w = 0, worth2 = 0, army = 0, xp = 0;
+        let w = 0, worth3 = 0, army = 0, xp = 0;
         for (const c of cs) {
           const k = c.divs * c.str;
           w += k;
-          worth2 += k * g2.nations[c.nat].quality * (0.85 + 0.4 * c.xp);
+          worth3 += k * g2.nations[c.nat].quality * (0.85 + 0.4 * c.xp);
           army += k * g2.nations[c.nat].quality;
           xp += k * c.xp;
         }
-        return w > 0 ? { worth: worth2 / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
+        return w > 0 ? { worth: worth3 / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
       };
       const ours = grade2(attackers2), theirs = grade2(defenders);
       const ratio = theirs.worth / Math.max(0.01, ours.worth);
@@ -18198,6 +18246,7 @@
     mendPrizes(g2, nat);
     tellBurnt(g2);
     judgeDirective(g2, nat);
+    crown(g2);
   }
   function startPhase(g2, nat) {
     const n = g2.nations[nat];
@@ -19624,7 +19673,7 @@
     if (!seaWar(g2) || !FLEETS.ai.bombard || byHand(g2, nat, "navy") || !g2.nations[nat]?.atWar.length) return;
     const sieged = (r) => besieged(g2, r) && allied(g2, nat, besiegerOf(g2, r) ?? "") && townHeld(g2, r) && breachOf(g2, r) * 100 <= SIEGE.breach.most - 10;
     const aim = (r) => sieged(r) ? "town" : "troops";
-    const worth2 = (r) => {
+    const worth3 = (r) => {
       if (!atWar(g2, nat, r.ctrl) || g2.flags[`shell:${r.id}`] === g2.turn) return 0;
       if (sieged(r)) return planTownHit(g2, r, "shell", 1).divs;
       if (!r.nb.some((j) => g2.regions[j].units.some((u) => !u.dead && u.kind !== "fort" && allied(g2, u.nat, nat)))) return 0;
@@ -19638,7 +19687,7 @@
         for (const id of g2.seas[f.zone].coast) {
           const r = g2.regions[id];
           if (whyNotBombard(g2, f, r, aim(r))) continue;
-          const v = worth2(r);
+          const v = worth3(r);
           if (v > bv2) {
             bv2 = v;
             best2 = r;
@@ -19653,7 +19702,7 @@
       for (const z of fleetReach(g2, f)) {
         if (seaSide(g2, z, nat, false).total + mine3 < FLEETS.ai.sortie * seaSide(g2, z, nat, true).total) continue;
         for (const id of g2.seas[z].coast) {
-          const v = worth2(g2.regions[id]);
+          const v = worth3(g2.regions[id]);
           if (v > bv) {
             bv = v;
             best = g2.regions[id];
@@ -20074,9 +20123,9 @@
   function objectives(g2, f) {
     const inside2 = g2.regions.filter((r) => f.depth[r.id] >= 1);
     const caps = inside2.filter((r) => r.cap && f.depth[r.id] <= 7 && g2.nations[r.owner]?.alive && f.enemies.includes(r.owner)).sort((a, b) => f.depth[a.id] - f.depth[b.id]);
-    const worth2 = inside2.filter((r) => f.depth[r.id] <= 4 && (r.vp >= 1 || r.port)).sort((a, b) => f.depth[a.id] - f.depth[b.id] || b.vp - a.vp || a.id - b.id);
+    const worth3 = inside2.filter((r) => f.depth[r.id] <= 4 && (r.vp >= 1 || r.port)).sort((a, b) => f.depth[a.id] - f.depth[b.id] || b.vp - a.vp || a.id - b.id);
     const near = inside2.filter((r) => f.depth[r.id] <= 2).sort((a, b) => f.depth[a.id] - f.depth[b.id] || a.id - b.id);
-    return [...new Set([...caps, ...worth2, ...near].map((r) => r.name))].slice(0, 30);
+    return [...new Set([...caps, ...worth3, ...near].map((r) => r.name))].slice(0, 30);
   }
   var GOING = { plains: 0, desert: 0.3, forest: 0.5, hills: 0.6, urban: 0.8, marsh: 1.5, mountain: 2 };
   function axis(g2, nat, f, placed = false) {
@@ -20763,21 +20812,21 @@
   }
   function quayWorth(g2, nat, from, shores, shut) {
     const d = lanes(g2, nat, from, shut);
-    let worth2 = 0, seas = Infinity;
+    let worth3 = 0, seas = Infinity;
     for (const s of shores) {
       let k = Infinity;
       for (const z of s.seas) if (d[z] > 0 && d[z] < k) k = d[z];
       if (k === Infinity) continue;
       seas = Math.min(seas, k);
       if (!allied(g2, nat, s.ctrl) && skyDenies(g2, nat, s.id)) {
-        worth2 += 0.02;
+        worth3 += 0.02;
         continue;
       }
       let near = 0;
       for (const j of [s.id, ...s.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near += u.divs * u.str;
-      worth2 += 1 / (1 + near / 4);
+      worth3 += 1 / (1 + near / 4);
     }
-    return { worth: worth2, seas };
+    return { worth: worth3, seas };
   }
   var harbours = (g2, e) => g2.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
   function seaFoe(g2, nat, slot = 0) {
@@ -21156,6 +21205,7 @@
   var bound2 = null;
   var massed = /* @__PURE__ */ new Set();
   var given = /* @__PURE__ */ new Set();
+  var sacks = /* @__PURE__ */ new Set();
   var aside = (g2, r, nat) => r.theatre >= 0 && !!THEATRES[r.theatre] && apart2(g2, r.theatre, nat);
   var within = (r) => !scope || scope.has(r.id);
   var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
@@ -21190,10 +21240,12 @@
     if (!n.alive) return;
     foldWorn(g2, nat);
     garrisons(g2, nat, false);
+    sacks = /* @__PURE__ */ new Set();
     try {
       campaignMoves(g2, nat);
     } finally {
       if (n.alive) garrisons(g2, nat, true);
+      sacks = /* @__PURE__ */ new Set();
     }
   }
   function garrisons(g2, nat, post2) {
@@ -21221,7 +21273,7 @@
         continue;
       }
       const want = SIEGE.ai.hold[townSize(g2, r)] ?? (r.fort ? 1 : 0);
-      if (inside2.length >= want || !near(r, 1)) continue;
+      if (inside2.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
       const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === "inf" && c.joint === void 0).sort((a, b) => corpsBase(g2, a) - corpsBase(g2, b));
       let field2 = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng").length, have = inside2.length;
       for (const c of foot) {
@@ -21511,6 +21563,9 @@
     const n = g2.nations[nat];
     hold(g2, nat, ph);
     mass(g2, nat, ph, true);
+    breakOut(g2, nat);
+    if (!n.alive) return;
+    stepBack(g2, nat);
     fallBack2(g2, nat);
     if (posture === "defend") {
       gather(g2, nat, ph);
@@ -21621,6 +21676,132 @@
         if (!to || c.ap < Math.min(moveCost(g2, c, to), 4) || !moveCorps(g2, c, to)) break;
       }
     });
+  }
+  function breakOut(g2, nat) {
+    const R = RIVALS.ring;
+    const n = g2.nations[nat];
+    if (!R || scope || !rivalRules(g2) || nat === g2.human || !R.staffs.includes(nat) || n.capital < 0) return;
+    const friendly2 = (x) => allied(g2, nat, ctl(g2, x));
+    const field2 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && !c.hold && !c.dyle && c.joint === void 0 && !massed.has(c.id) && c.ap > 0;
+    const tried = /* @__PURE__ */ new Set();
+    for (let round2 = 0; round2 < 2 * R.reach && n.alive; round2++) {
+      if (!friendly2(g2.regions[n.capital])) return;
+      ensureSupply(g2);
+      const home = hops(g2, n.capital, friendly2);
+      const cut = g2.regions.filter((r) => home[r.id] < 0 && friendly2(r) && !aside(g2, r, nat) && r.units.some(field2));
+      if (!cut.length) return;
+      const far = new Int16Array(g2.regions.length).fill(-1);
+      const q = [];
+      for (const r of g2.regions) if (home[r.id] >= 0) {
+        far[r.id] = 0;
+        q.push(r.id);
+      }
+      for (let i = 0; i < q.length; i++) {
+        if (far[q[i]] >= R.reach) continue;
+        for (const j of g2.regions[q[i]].nb) {
+          const x = g2.regions[j];
+          if (far[j] >= 0 || !(friendly2(x) || atWar(g2, nat, ctl(g2, x)))) continue;
+          far[j] = far[q[i]] + 1;
+          q.push(j);
+        }
+      }
+      let did = false;
+      for (const r of cut.sort((a, b) => far[a.id] - far[b.id] || a.id - b.id)) {
+        if (far[r.id] < 0) continue;
+        const nexts = r.nb.map((j) => g2.regions[j]).filter((x) => far[x.id] >= 0 && far[x.id] < far[r.id]);
+        const corps = r.units.filter(field2).sort((a, b) => b.ap - a.ap || a.id - b.id);
+        const open = nexts.filter((x) => !hostileUnits(g2, x, nat).length).sort((a, b) => (friendly2(a) ? 0 : 1) - (friendly2(b) ? 0 : 1) || a.id - b.id);
+        let moved = false;
+        for (const x of open) {
+          const ours = friendly2(x);
+          for (const c of corps) {
+            if (blocked(g2, c, x) || !hasRoom(g2, x, c) || c.ap < Math.min(moveCost(g2, c, x), 4)) continue;
+            if (moveCorps(g2, c, x)) {
+              moved = true;
+              if (!ours) break;
+            }
+          }
+          if (moved) break;
+        }
+        if (moved) {
+          did = true;
+          break;
+        }
+        let best = null;
+        for (const x of nexts) {
+          if (tried.has(x.id) || !hostileUnits(g2, x, nat).length) continue;
+          const near = x.nb.map((j) => g2.regions[j]).filter((y) => friendly2(y) && !aside(g2, y, nat)).flatMap((y) => y.units.filter(field2)).filter((c) => !blocked(g2, c, x) && c.org >= 0.35);
+          const pool = limitAttackers(g2, near, x);
+          if (!pool.length) continue;
+          const odds = assess(g2, pool, x).odds;
+          if (odds >= R.odds && (!best || odds > best.odds)) best = { x, pool, odds };
+        }
+        if (best) {
+          tried.add(best.x.id);
+          resolveBattle(g2, best.pool, best.x);
+          did = true;
+          break;
+        }
+      }
+      if (!did) return;
+    }
+  }
+  function stepBack(g2, nat) {
+    const R = RIVALS.ring;
+    const n = g2.nations[nat];
+    if (!R || scope || !rivalRules(g2) || nat === g2.human || !R.staffs.includes(nat) || n.capital < 0 || !allied(g2, nat, ctl(g2, g2.regions[n.capital]))) return;
+    ensureSupply(g2);
+    const friendly2 = (x) => allied(g2, nat, ctl(g2, x));
+    const home = hops(g2, n.capital, friendly2);
+    const press = (r) => {
+      let t = 0;
+      for (const j of r.nb) {
+        const e = g2.regions[j];
+        if (!atWar(g2, nat, ctl(g2, e))) continue;
+        const foes = hostileUnits(g2, e, nat).filter((u) => u.kind !== "fort").map((u) => atkPower(g2, u)).sort((a, b) => b - a);
+        for (const p of foes.slice(0, frontage(r))) t += p;
+      }
+      return t;
+    };
+    const stand = (r) => friendlyUnits(g2, r, nat).reduce((sum2, u) => sum2 + defPower(g2, u, r), 0);
+    const ways = (r) => r.nb.map((j) => g2.regions[j]).filter((x) => friendly2(x) && !hostileUnits(g2, x, nat).length && home[x.id] >= 0 && home[x.id] <= home[r.id]);
+    const safe = (x) => {
+      if (given.has(x.id)) return false;
+      const t = press(x);
+      return t === 0 || stand(x) >= R.safe * t;
+    };
+    const own = g2.regions.filter((r) => friendly2(r) && !aside(g2, r, nat) && (ctl(g2, r) === nat || r.owner === nat || r.units.some((u) => u.nat === nat && u.kind !== "fort")) && r.id !== n.capital && home[r.id] > 0 && !entrusted.has(r.id));
+    const found2 = /* @__PURE__ */ new Set();
+    for (let pass = 0; pass < 4; pass++) {
+      let more = false;
+      for (const r of own) {
+        if (given.has(r.id)) continue;
+        const w = ways(r);
+        if (!w.length || w.length > R.exits || w.some(safe)) continue;
+        if (press(r) === 0 && !w.every((x) => given.has(x.id))) continue;
+        given.add(r.id);
+        found2.add(r.id);
+        more = true;
+      }
+      if (!more) break;
+    }
+    if (!found2.size) return;
+    for (const id of found2) {
+      sacks.add(id);
+      for (const c of [...garrisonOf(g2.regions[id])]) if (c.nat === nat) takeField(g2, c);
+    }
+    const leaving2 = g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && !c.hold && !c.dyle && c.joint === void 0 && !massed.has(c.id) && found2.has(c.reg)).sort((a, b) => home[a.reg] - home[b.reg] || a.id - b.id);
+    for (const c of leaving2) {
+      for (let step2 = 0; step2 < R.steps && c.ap > 0 && given.has(c.reg); step2++) {
+        let to = null;
+        const worse = (x) => (given.has(x.id) ? 1e3 : 0) + 10 * home[x.id] + friendlyUnits(g2, x, nat).length;
+        for (const x of ways(g2.regions[c.reg])) {
+          if (friendlyUnits(g2, x, nat).length >= STACK || blocked(g2, c, x) || c.ap < Math.min(moveCost(g2, c, x), 4)) continue;
+          if (!to || worse(x) < worse(to)) to = x;
+        }
+        if (!to || !moveCorps(g2, c, to)) break;
+      }
+    }
   }
   function gather(g2, nat, ph) {
     if (!ph?.concentrate) return;
@@ -23884,8 +24065,8 @@
   function buildingTips(g2, most = 6) {
     const me = g2.human;
     if (!me || !civicRules(g2) || !g2.nations[me].alive) return [];
-    const worth2 = (r) => (g2.nations[me].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + (r.terrain === "urban" ? 3 : r.terrain === "plains" ? 2 : 1) + (r.port ? 1 : 0);
-    const home = g2.regions.filter((r) => r.ctrl === me && r.owner === me).sort((a, b) => worth2(b) - worth2(a) || a.id - b.id);
+    const worth3 = (r) => (g2.nations[me].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + (r.terrain === "urban" ? 3 : r.terrain === "plains" ? 2 : 1) + (r.port ? 1 : 0);
+    const home = g2.regions.filter((r) => r.ctrl === me && r.owner === me).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
     const keeps = keepsStores(g2, me);
     const out = [];
     for (const l of CIVIC.lines) {
@@ -27407,8 +27588,16 @@
     });
     const top = [];
     let note4 = "";
-    if (act2.winner) note4 = `${s.nations[act2.winner]?.name ?? act2.winner} is the last nation standing. The world is won.`;
-    else if (act2.on) note4 = `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
+    const world = board;
+    const need = world.need ?? 0, laid = world.laid ?? 0;
+    const mine3 = board.rows.find((r) => r.you);
+    const rivals2 = (world.great ?? []).filter((id) => id !== s.human);
+    const needWords = Math.abs(need - 0.75) < 1e-9 ? "three quarters" : Math.abs(need - 2 / 3) < 1e-3 ? "two thirds" : Math.abs(need - 0.5) < 1e-9 ? "half" : `${Math.round(need * 100)}%`;
+    const laidWords = laid === 1 ? "the last country still standing has laid down its arms" : `the last ${laid} countries still standing have laid down their arms`;
+    if (act2.winner) {
+      const name = s.nations[act2.winner]?.name ?? act2.winner, top1 = board.rows[0];
+      note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct7(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct7(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
+    } else if (act2.on) note4 = need > 0 ? `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.` : `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
     else {
       const why = whyNotOrderDomination(s);
       note4 = `The war between the alliances is decided. You can take the victory and leave the world as it is, or choose World Domination: every alliance is dissolved, your allies of yesterday become your enemies, and the last nation standing wins. It cannot be undone.${act2.peace ? " You have taken the victory; the last act stays open to you." : ""}`;
@@ -27423,6 +27612,26 @@
       note: note4,
       top,
       sections: [
+        // (Version 71) The two tests, as they stand for the player: the great powers still against him, and his share of the world.
+        ...act2.on && !act2.winner && mine3 && need > 0 ? [{
+          heading: "THE TWO TESTS FOR WINNING THE WORLD",
+          text: "",
+          rows: [
+            {
+              nat: "",
+              title: rivals2.length ? `${rivals2.length === 1 ? "One great power" : `${rivals2.length} great powers`} still to beat` : "No great power stands against you",
+              lines: [rivals2.length ? `${upFirst(listOf4(rivals2.map((id) => theName2(s, id))))}.` : "The first test is met."],
+              buttons: []
+            },
+            {
+              nat: "",
+              title: `${pct7(mine3.share)} of the world is yours`,
+              lines: [`It takes ${Math.round(need * 100)}%.${mine3.share >= need ? " The second test is met." : ""}`],
+              buttons: [],
+              meter: Math.min(1, mine3.share / need)
+            }
+          ]
+        }] : [],
         { heading: "STILL STANDING", text: "", rows: board.rows.map(row2) },
         { heading: "FALLEN", text: board.fallen.length ? "" : "Nobody has fallen yet.", rows: board.fallen.map(row2) }
       ]
@@ -28899,7 +29108,7 @@ ${standing3}`,
       invites: me.league ? leagueInvites(s).map((x) => ({ nat: x.nat, name: s.nations[x.nat].name, ok: x.ok, why: x.ok ? whyNotLeagueInvite(s, x.nat) ?? x.why : x.why, can: x.ok && whyNotLeagueInvite(s, x.nat) === null })) : [],
       inviteCost: LEAGUE.invite.cost
     };
-    const worth2 = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
+    const worth3 = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
     return {
       nation: me.name,
       date: turnToDate(s.turn).label,
@@ -28911,7 +29120,7 @@ ${standing3}`,
       partners: partners.size,
       cost: DIPLOMACY.court.cost,
       wind,
-      help: mine3 === "league" ? "The League courts nobody: it wins members by invitation, and only those who feel the danger say yes." : mine3 ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side3}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth2} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
+      help: mine3 === "league" ? "The League courts nobody: it wins members by invitation, and only those who feel the danger say yes." : mine3 ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side3}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth3} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
       powers,
       rows,
       league,

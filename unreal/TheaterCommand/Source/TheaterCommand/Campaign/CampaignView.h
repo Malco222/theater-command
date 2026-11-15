@@ -278,6 +278,7 @@ struct FPageRow
 	FString Title;
 	TArray<FString> Lines;
 	TArray<FPageButton> Buttons;
+	float Meter = -1.0f; // (rules version 71) a bar under the lines, 0 to 1: how far a test is met. None when less than nothing.
 };
 
 struct FPageSection

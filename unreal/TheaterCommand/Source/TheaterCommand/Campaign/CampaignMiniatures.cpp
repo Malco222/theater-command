@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMiniatures.h"
+#include "Misc/ScopeExit.h"
 #include "Campaign/CampaignMiniatureParts.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
@@ -544,6 +545,19 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
 		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
 		double CrossLean = 0.13, NumberLean = 0.16; // (how far the plate each lies on leans back)
+		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
+		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
+		bool bAircraft = false, bNationPaint = false;
+		TArray<FLinearColor> PaintColours;
+		TArray<int32> Wear;
+		struct FMark
+		{
+			FString Tag;
+			FVector At = FVector::ZeroVector, Facing = FVector::UpVector;
+			double Radius = 0.3, Curve = 0.0;
+			bool bBoth = false;
+		};
+		TArray<FMark> PlaneMarks;
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
@@ -599,6 +613,47 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
 				}
+				FString KindOfModel;
+				if (File->TryGetStringField(TEXT("kind"), KindOfModel) && KindOfModel == TEXT("aircraft"))
+				{
+					Raw->bAircraft = true;
+					File->TryGetBoolField(TEXT("nation_paint"), Raw->bNationPaint);
+					const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *WearList = nullptr, *MarkList = nullptr;
+					if (File->TryGetArrayField(TEXT("colours"), ColourList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+						{
+							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+						}
+					}
+					if ((*Part)->TryGetArrayField(TEXT("wear"), WearList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *WearList)
+						{
+							Raw->Wear.Add(static_cast<int32>(Value->AsNumber()));
+						}
+					}
+					if (File->TryGetArrayField(TEXT("marks"), MarkList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
+						{
+							const TSharedPtr<FJsonObject>* Entry = nullptr;
+							const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
+							if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
+								&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
+							{
+								FRaw::FMark& Mark = Raw->PlaneMarks.AddDefaulted_GetRef();
+								(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
+								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
+								(*Entry)->TryGetNumberField(TEXT("curve"), Mark.Curve);
+								(*Entry)->TryGetBoolField(TEXT("both"), Mark.bBoth);
+								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
+								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
+							}
+						}
+					}
+				}
 				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
 			}
 		}
@@ -629,8 +684,33 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		{
 			Fresh.Dust = FColor(124, 102, 74);
 		}
+		// An aircraft's paints are its own: the file gives the colour of each. (A plain machine built for any nation takes
+		// that nation's colour for its upper surfaces, a darker one for the patches, and darker again for its nose.)
+		TArray<FLinearColor> PlanePaints = Raw->PaintColours;
+		if (Raw->bAircraft)
+		{
+			Fresh.DustAmount = 0.0f; // (no dust of the road on a machine in the air)
+			if (Raw->bNationPaint && PlanePaints.Num() > 15)
+			{
+				PlanePaints[0] = Paint;
+				PlanePaints[1] = Paint * 0.72f;
+				PlanePaints[3] = Paint * 0.6f;
+				PlanePaints[4] = Paint * 0.6f;
+				PlanePaints[15] = FMath::Lerp(Paint, PlanePaints[11], 0.5f);
+			}
+		}
+		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
+		static const bool bPlaneMetal[17] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
+			if (Raw->bAircraft && PlanePaints.Num() > 0)
+			{
+				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, PlanePaints.Num() - 1);
+				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Fresh.Finish = Kind < 17 && bPlaneMetal[Kind] ? static_cast<uint8>(128 - Worn) : 255;
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], PlanePaints[Kind].ToFColor(true));
+				continue;
+			}
 			if (bFigure)
 			{
 				Fresh.Finish = 255;
@@ -649,8 +729,35 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				Fresh.Face(A, B, C, Raw->Facings[A] + Raw->Facings[B] + Raw->Facings[C]);
 			}
 		}
+		// An aircraft's markings, where its maker put them: the nation's own on its sides, its wings and its fin, and a
+		// number on each side that reads the right way from either.
+		if (Raw->bAircraft)
+		{
+			const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);
+			for (const FRaw::FMark& Mark : Raw->PlaneMarks)
+			{
+				const FString What = Mark.Tag == TEXT("*") ? Tag : Mark.Tag;
+				for (const double Hand : { 1.0, -1.0 })
+				{
+					if (Hand < 0.0 && !Mark.bBoth)
+					{
+						continue;
+					}
+					TGuardValue<uint8> Metal(Fresh.Finish, 128);
+					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
+					if (Mark.Tag == TEXT("#"))
+					{
+						Fresh.Numerals(At, Mark.Radius, Number, Facing);
+					}
+					else
+					{
+						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve);
+					}
+				}
+			}
+		}
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
-		if (!bFigure)
+		if (!bFigure && !Raw->bAircraft)
 		{
 			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
@@ -678,7 +785,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				}
 			}
 		}
-		if (!bFigure)
+		if (!bFigure && !Raw->bAircraft)
 		{
 			Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
 		}
@@ -1124,13 +1231,13 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 	}
 }
 
-int32 FMiniatureMesh::FWakeMesh::Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much)
+int32 FMiniatureMesh::FWakeMesh::Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much, bool bBand)
 {
 	auto Byte = [](double Share) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Share * 255.0), 0, 255)); };
 	Vertices.Add(At);
 	Normals.Add(FVector::UpVector);
 	UVs.Add(UV);
-	Colors.Add(FColor(Byte(White), Byte(Whole), 0, Byte(Much)));
+	Colors.Add(FColor(Byte(White), Byte(Whole), bBand ? 255 : 0, Byte(Much)));
 	return Vertices.Num() - 1;
 }
 
@@ -1141,24 +1248,66 @@ void FMiniatureMesh::FWakeMesh::Quad(int32 A, int32 B, int32 C, int32 D)
 
 void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& Ahead, const FVector& Abeam, double Long, double Beam, double Reach, double RoomPlus, double RoomMinus)
 {
-	// 1. The stern ribbon, the main part: from the stern at the hull's own width, straight astern, widening slowly
-	// to twice her beam over three of her lengths. Whitest by the stern and whole there; then it breaks into
-	// streaks and thins away (the material does the breaking, by how whole each point says the foam still is),
-	// with soft edges and no hard point.
+	// 1. The stern ribbon, the main part: from the stern at the stern's own width, straight astern, a beam wide by
+	// half her length and two beams at its tail, three lengths astern. It is two things laid one on the other (the
+	// art director's second pass: one tone read as white paint). Under it a pale band of churned water, the sea's
+	// own colour lifted and a touch greener, soft-edged, half a length longer than the foam. On it the foam: whitest
+	// by the stern and whole for the first half length only, about half gone by one length and four fifths by two
+	// (the material does the breaking, by how whole each point says the foam still is), its edges feathered over
+	// a fifth of its width, with no hard point at its end.
 	{
 		const double Run = 3.0 * Long * Reach;
-		const int32 Steps = 44;
-		static const double Across[5] = { -1.0, -0.5, 0.0, 0.5, 1.0 };
+		auto HalfWide = [&](double Astern)
+		{
+			// (the stern's width at the stern, one beam by half a length, two beams at the tail)
+			const double Lengths = FMath::Max(Astern, 0.0) / Long;
+			return Beam * 0.5 * (Lengths < 0.5 ? FMath::Lerp(0.72, 1.0, Lengths / 0.5) : FMath::Lerp(1.0, 2.0, FMath::Min((Lengths - 0.5) / (3.0 * Reach - 0.5), 1.0)));
+		};
+		// The band of churned water under the foam.
+		{
+			const int32 Steps = 26;
+			const double Reaches = Run + 0.5 * Long;
+			static const double Across[5] = { -1.25, -0.7, 0.0, 0.7, 1.25 };
+			int32 Before[5] = { 0, 0, 0, 0, 0 };
+			for (int32 Step = 0; Step <= Steps; ++Step)
+			{
+				const double Far = static_cast<double>(Step) / Steps;
+				const double Astern = -0.03 * Long + Far * Reaches;
+				const double Wide = HalfWide(FMath::Min(Astern, Run));
+				// (strongest a little astern of her, where the screws have churned it, and thinning to nothing at its end)
+				const double Much = Step == Steps ? 0.0 : 0.4 * FMath::Min(1.0, Far * 10.0 + 0.5) * FMath::Pow(1.0 - Far, 0.7);
+				const FVector Middle = Sea - Ahead * (Long * 0.48 + Astern);
+				int32 Now[5];
+				for (int32 Column = 0; Column < 5; ++Column)
+				{
+					const bool bEdge = Column == 0 || Column == 4;
+					Now[Column] = Out.Add(Middle + Abeam * (Wide * Across[Column]), FVector2D(Astern / Beam, Wide * Across[Column] / Beam), 1.0, 1.0, bEdge ? 0.0 : Much, true);
+				}
+				if (Step > 0)
+				{
+					for (int32 Column = 0; Column < 4; ++Column)
+					{
+						Out.Quad(Before[Column], Before[Column + 1], Now[Column + 1], Now[Column]);
+					}
+				}
+				FMemory::Memcpy(Before, Now, sizeof(Now));
+			}
+		}
+		// The foam on it.
+		const int32 Steps = 48;
+		static const double Across[5] = { -1.0, -0.8, 0.0, 0.8, 1.0 };
 		int32 Before[5] = { 0, 0, 0, 0, 0 };
 		for (int32 Step = 0; Step <= Steps; ++Step)
 		{
 			// (the steps are short by the stern, where the foam changes fastest)
 			const double Far = FMath::Pow(static_cast<double>(Step) / Steps, 1.5);
 			const double Astern = -0.04 * Long + Far * Run;
-			const double Wide = Beam * 0.5 * (0.86 + 1.14 * Far);
+			const double Lengths = FMath::Max(Astern, 0.0) / Long;
+			const double Wide = HalfWide(Astern);
 			const double White = 1.0 - 0.3 * Far;
-			// (whole for the first quarter of a length; half gone by a length and a half; flecks at the last)
-			const double Whole = FMath::Clamp(1.0 - 0.75 * FMath::Pow(Far, 0.4), 0.0, 1.0);
+			// (how whole the foam still is: whole to half a length, about half of it left at one length, a fifth at two)
+			const double Whole = Lengths < 0.5 ? FMath::Lerp(1.0, 0.58, Lengths / 0.5) : Lengths < 1.0 ? FMath::Lerp(0.58, 0.43, (Lengths - 0.5) / 0.5)
+				: Lengths < 2.0 ? FMath::Lerp(0.43, 0.31, Lengths - 1.0) : FMath::Lerp(0.31, 0.2, FMath::Min((Lengths - 2.0) / FMath::Max(3.0 * Reach - 2.0, 0.1), 1.0));
 			const double Much = Step == Steps ? 0.0 : 1.0 - 0.55 * Far;
 			const FVector Middle = Sea - Ahead * (Long * 0.48 + Astern);
 			int32 Now[5];
@@ -1166,7 +1315,7 @@ void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& 
 			{
 				const bool bEdge = Column == 0 || Column == 4;
 				Now[Column] = Out.Add(Middle + Abeam * (Wide * Across[Column]), FVector2D(Astern / Beam, Wide * Across[Column] / Beam),
-					White, bEdge ? Whole * 0.5 : Column == 2 ? Whole : Whole * 0.92, bEdge ? 0.0 : Much);
+					White, bEdge ? Whole * 0.6 : Column == 2 ? Whole : Whole * 0.94, bEdge ? 0.0 : Much);
 			}
 			if (Step > 0)
 			{
@@ -1193,8 +1342,13 @@ void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& 
 			const FVector Line = -Ahead * FMath::Cos(Open) + Abeam * (Side * FMath::Sin(Open));
 			const FVector Crest = -Ahead * FMath::Cos(Lie) + Abeam * (Side * FMath::Sin(Lie));
 			const FVector Thick(-Crest.Y, Crest.X, 0.0);
-			for (double Out_ = Beam * 0.9; Out_ < Length; Out_ += Beam * 1.05)
+			int32 Nth = 0;
+			for (double Out_ = Beam * 0.9; Out_ < Length; ++Nth)
 			{
+				// (no two crests alike: each is up to a third longer or shorter than the last, and so is the gap after it)
+				const double Chance = FMath::Frac(FMath::Sin((Nth + 1) * 12.9898 + Side * 4.1414 + Long * 0.37) * 43758.5453);
+				const double Chance2 = FMath::Frac(FMath::Sin((Nth + 1) * 78.233 + Side * 2.7183 + Beam * 1.93) * 24634.6345);
+				ON_SCOPE_EXIT { Out_ += Beam * 1.05 * (0.7 + 0.66 * Chance2); };
 				const double Share = Out_ / Length, Lateral = Out_ * FMath::Sin(Open);
 				double Fade = FMath::Pow(1.0 - Share, 0.8);
 				if (Space > 0.0)
@@ -1206,7 +1360,7 @@ void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& 
 					Fade *= FMath::Clamp((Space - Beam * 0.2 - Lateral) / (Space * 0.45), 0.0, 1.0);
 				}
 				const FVector At = Bow + Line * Out_;
-				const double Half = Beam * (0.5 + 1.0 * Share), Fat = Beam * (0.09 + 0.07 * Share);
+				const double Half = Beam * (0.45 + 1.5 * Share) * (0.7 + 0.66 * Chance), Fat = Beam * (0.09 + 0.07 * Share);
 				// (a crest is brightest along its middle and fades to nothing at both ends and both sides)
 				static const double Along[5] = { -1.0, -0.45, 0.0, 0.45, 1.0 };
 				static const double Peak[5] = { 0.0, 0.75, 1.0, 0.75, 0.0 };
@@ -1249,7 +1403,7 @@ void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& 
 				const double Thrown = Beam * Fuller * (0.1 + 0.2 * Aft) + Beam * 0.16 * Aft * Aft * Aft;
 				// (it rises from nothing at the very stem, is whitest a little aft of it, and thins away by the quarter length)
 				const double Left = FMath::SmoothStep(0.0, 0.12, Aft) * FMath::Pow(1.0 - Aft, 0.75);
-				const double Offsets[3] = { Hull * 0.4, Hull + Thrown * 0.5, Hull + Thrown };
+				const double Offsets[3] = { Hull * 0.4, Hull + Thrown * 0.8, Hull + Thrown };
 				const double Muches[3] = { Left, Left, 0.0 };
 				int32 Now[3];
 				for (int32 Row = 0; Row < 3; ++Row)
@@ -1282,7 +1436,9 @@ void FMiniatureMesh::AirFleet(int32 Fighters, int32 Bombers, double Unit, const 
 	{
 		const FVector At(4.0 * Unit, (Fighters > 0 ? 3.0 : 0.0) * Unit, 9.5 * Unit);
 		Rod(FVector(At.X, At.Y, 0.2 * Unit), At, 0.06 * Unit, Gunmetal, 5);
-		if (!Vehicle(MainBomberOf(Tag), At, Metre, 68.0))
+		// (the table's aircraft are the plainer mesh: an airfield piece carries two, and there are dozens of airfields.
+		// With the fine ones the frame took half as long again to draw.)
+		if (!Vehicle(MainBomberOf(Tag), At, Metre, 68.0, false))
 		{
 			Aeroplane(At, 22.0 * Metre, true, Nation, Tag, 68.0);
 		}
@@ -1291,7 +1447,7 @@ void FMiniatureMesh::AirFleet(int32 Fighters, int32 Bombers, double Unit, const 
 	{
 		const FVector At(-2.0 * Unit, (Bombers > 0 ? -3.5 : 0.0) * Unit, 4.2 * Unit);
 		Rod(FVector(At.X, At.Y, 0.2 * Unit), At, 0.05 * Unit, Gunmetal, 5);
-		if (!Vehicle(MainFighterOf(Tag), At, Metre, 62.0))
+		if (!Vehicle(MainFighterOf(Tag), At, Metre, 62.0, false))
 		{
 			Aeroplane(At, 10.5 * Metre, false, Nation, Tag, 62.0);
 		}

@@ -7598,23 +7598,23 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	if (Sortie.bBombers)
 	{
 		const double Metre = 0.34 * U; // a heavy bomber's wings then span about ten units of the table
-		Model.Vehicle(Bomber, FVector(0.0, 0.0, 0.0), Metre, 0.0, true);
-		Model.Vehicle(Bomber, FVector(26.0 * Metre, 22.0 * Metre, 3.0 * Metre), Metre, 0.0, true);
-		Model.Vehicle(Bomber, FVector(26.0 * Metre, -22.0 * Metre, 3.0 * Metre), Metre, 0.0, true);
+		Model.Vehicle(Bomber, FVector(0.0, 0.0, 0.0), Metre, 0.0, false);
+		Model.Vehicle(Bomber, FVector(26.0 * Metre, 22.0 * Metre, 3.0 * Metre), Metre, 0.0, false);
+		Model.Vehicle(Bomber, FVector(26.0 * Metre, -22.0 * Metre, 3.0 * Metre), Metre, 0.0, false);
 		if (Sortie.bEscort)
 		{
 			const double Small = 0.5 * U;
-			Model.Vehicle(Fighter, FVector(-6.0 * Metre, 34.0 * Metre, 16.0 * Metre), Small, 0.0, true);
-			Model.Vehicle(Fighter, FVector(10.0 * Metre, -36.0 * Metre, 18.0 * Metre), Small, 0.0, true);
+			Model.Vehicle(Fighter, FVector(-6.0 * Metre, 34.0 * Metre, 16.0 * Metre), Small, 0.0, false);
+			Model.Vehicle(Fighter, FVector(10.0 * Metre, -36.0 * Metre, 18.0 * Metre), Small, 0.0, false);
 		}
 	}
 	else
 	{
 		const double Small = 0.55 * U;
-		Model.Vehicle(Fighter, FVector(0.0, 0.0, 0.0), Small, 0.0, true);
-		Model.Vehicle(Fighter, FVector(9.0 * Small, 8.0 * Small, 1.0 * Small), Small, 0.0, true);
-		Model.Vehicle(Fighter, FVector(9.0 * Small, -8.0 * Small, 1.0 * Small), Small, 0.0, true);
-		Model.Vehicle(Fighter, FVector(18.0 * Small, 16.0 * Small, 2.0 * Small), Small, 0.0, true);
+		Model.Vehicle(Fighter, FVector(0.0, 0.0, 0.0), Small, 0.0, false);
+		Model.Vehicle(Fighter, FVector(9.0 * Small, 8.0 * Small, 1.0 * Small), Small, 0.0, false);
+		Model.Vehicle(Fighter, FVector(9.0 * Small, -8.0 * Small, 1.0 * Small), Small, 0.0, false);
+		Model.Vehicle(Fighter, FVector(18.0 * Small, 16.0 * Small, 2.0 * Small), Small, 0.0, false);
 	}
 	if (Model.Vertices.Num() > 0)
 	{
@@ -7632,8 +7632,8 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 		FMiniatureMesh Pair;
 		const double Small = 0.55 * U;
 		const FString Theirs = FMiniatureMesh::MainFighterOf(Sortie.Meet);
-		Pair.Vehicle(Theirs, FVector(0.0, 0.0, 0.0), Small, 0.0, true);
-		Pair.Vehicle(Theirs, FVector(10.0 * Small, 9.0 * Small, 1.5 * Small), Small, 0.0, true);
+		Pair.Vehicle(Theirs, FVector(0.0, 0.0, 0.0), Small, 0.0, false);
+		Pair.Vehicle(Theirs, FVector(10.0 * Small, 9.0 * Small, 1.5 * Small), Small, 0.0, false);
 		if (Pair.Vertices.Num() > 0)
 		{
 			Flight.Rivals = NewObject<UProceduralMeshComponent>(this);

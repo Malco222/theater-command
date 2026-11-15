@@ -2404,7 +2404,7 @@ function warPlan(on: string, target = -1) {
 // ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
 
 interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number }
 interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */
@@ -2569,8 +2569,25 @@ function lastActPage(s: Game): Page | null {
   });
   const top: PageButton[] = [];
   let note = '';
-  if (act.winner) note = `${s.nations[act.winner]?.name ?? act.winner} is the last nation standing. The world is won.`;
-  else if (act.on) note = `The last act began in ${turnToDate(act.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act.left} are left. The last one standing wins the world.`;
+  // (Version 71) Brian's rule for winning the world: the last great power standing takes it, once it holds a set share
+  // of the map's worth; the small countries left then lay down their arms. The board says which great powers still
+  // stand, the share it takes, and how many laid down their arms. (Asked for by name: older rules have none of it.)
+  const world = board as typeof board & { great?: string[]; need?: number; laid?: number };
+  const need = world.need ?? 0, laid = world.laid ?? 0;
+  const mine = board.rows.find((r) => r.you);
+  const rivals = (world.great ?? []).filter((id) => id !== s.human);
+  const needWords = Math.abs(need - 0.75) < 1e-9 ? 'three quarters' : Math.abs(need - 2 / 3) < 1e-3 ? 'two thirds' : Math.abs(need - 0.5) < 1e-9 ? 'half' : `${Math.round(need * 100)}%`;
+  const laidWords = laid === 1 ? 'the last country still standing has laid down its arms' : `the last ${laid} countries still standing have laid down their arms`;
+  if (act.winner) {
+    const name = s.nations[act.winner]?.name ?? act.winner, top1 = board.rows[0];
+    note = need > 0
+      ? (act.winner === s.human
+        ? `No great power is left to fight you. You hold ${pct(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ''}. The world is won.`
+        : `${name} is the last great power standing and holds ${pct(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ''}. ${name} stands alone.`)
+      : `${name} is the last nation standing. The world is won.`;
+  } else if (act.on) note = need > 0
+    ? `The last act began in ${turnToDate(act.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.`
+    : `The last act began in ${turnToDate(act.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act.left} are left. The last one standing wins the world.`;
   else {
     const why = whyNotOrderDomination(s);
     note = `The war between the alliances is decided. You can take the victory and leave the world as it is, or choose World Domination: every alliance is dissolved, your allies of yesterday become your enemies, and the last nation standing wins. It cannot be undone.${act.peace ? ' You have taken the victory; the last act stays open to you.' : ''}`;
@@ -2583,6 +2600,16 @@ function lastActPage(s: Game): Page | null {
     headline: act.winner ? 'The world is won' : act.on ? `${act.left} nations still stand` : 'The war is decided',
     note, top,
     sections: [
+      // (Version 71) The two tests, as they stand for the player: the great powers still against him, and his share of the world.
+      ...(act.on && !act.winner && mine && need > 0 ? [{
+        heading: 'THE TWO TESTS FOR WINNING THE WORLD', text: '',
+        rows: [
+          { nat: '', title: rivals.length ? `${rivals.length === 1 ? 'One great power' : `${rivals.length} great powers`} still to beat` : 'No great power stands against you',
+            lines: [rivals.length ? `${upFirst(listOf(rivals.map((id) => theName(s, id))))}.` : 'The first test is met.'], buttons: [] },
+          { nat: '', title: `${pct(mine.share)} of the world is yours`, lines: [`It takes ${Math.round(need * 100)}%.${mine.share >= need ? ' The second test is met.' : ''}`], buttons: [],
+            meter: Math.min(1, mine.share / need) },
+        ],
+      }] : []),
       { heading: 'STILL STANDING', text: '', rows: board.rows.map(row) },
       { heading: 'FALLEN', text: board.fallen.length ? '' : 'Nobody has fallen yet.', rows: board.fallen.map(row) },
     ],

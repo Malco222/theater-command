@@ -4036,6 +4036,14 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Line)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
 						];
 					}
+					if (Entry.Meter >= 0.0f)
+					{
+						// (Rules version 71: how far a test for winning the world is met, as a bar under its words.)
+						Words->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 2.0f)
+						[
+							SNew(SBox).WidthOverride(360.0f)[Meter(Entry.Meter, Entry.Meter >= 1.0f ? Gain : BrightBrass, TEXT("Met"))]
+						];
+					}
 					if (Entry.Buttons.Num() > 0)
 					{
 						Words->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[PageButtons(Entry.Buttons)];

@@ -1596,14 +1596,14 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		// ("-TheaterCodeBuilt" shows the code-built ones, to hold the two side by side.)
 		FString Kind = Name, Whose;
 		Name.Split(TEXT(":"), &Kind, &Whose);
-		if (Whose.IsEmpty())
+		const VehicleParts::FModel* Listed = VehicleParts::Find(Kind);
+		if (Whose.IsEmpty() && Listed)
 		{
-			if (const VehicleParts::FModel* Known = VehicleParts::Find(Kind))
-			{
-				Whose = Known->Nation;
-			}
+			Whose = Listed->Nation;
 		}
-		if (Sculpted(Kind, Whose, Where, Metre, Turn))
+		// (An aircraft asked for plainly is its table mesh: a formation carries five of them, and a raid several
+		// formations. The cards, the parade and the airfields have the fine one.)
+		if (Sculpted(Kind, Whose, Where, Metre, Turn, Listed && Listed->Aloft > 0.0 && !bFine))
 		{
 			return true;
 		}

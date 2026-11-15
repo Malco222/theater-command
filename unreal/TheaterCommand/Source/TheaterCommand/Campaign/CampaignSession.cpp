@@ -2575,6 +2575,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 					RowEntry->TryGetStringField(TEXT("title"), Row.Title);
 					RowEntry->TryGetStringArrayField(TEXT("lines"), Row.Lines);
 					ReadButtons(RowEntry, TEXT("buttons"), Row.Buttons);
+					RowEntry->TryGetNumberField(TEXT("meter"), Row.Meter);
 				}
 			}
 		}

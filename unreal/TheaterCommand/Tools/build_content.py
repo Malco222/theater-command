@@ -274,7 +274,8 @@ def build_wake():
     mix = plus(m, times(m, plus(m, mix, times(m, scalar(m, "Centre", 0.23, -900, 560), -1.0, -820, 560), -750, 500), scalar(m, "Contrast", 2.4, -900, 640), -650, 500), 0.5, -550, 500)
     kept = one_in(m, unreal.MaterialExpressionSaturate,
                   times(m, plus(m, plus(m, mix, -1.0, -450, 500), times(m, (colour, "G"), 1.6, -650, 300), -350, 420), scalar(m, "Sharp", 3.0, -500, 640), -250, 460), -120, 460)
-    foam = times(m, times(m, times(m, vector(m, "Foam", (0.6, 0.66, 0.68, 1.0), -900, -260), (colour, "R"), -650, -200),
+    # (a point that says it is of the band under the foam, in its blue, takes the band's colour: the sea's own, lifted and a touch greener)
+    foam = times(m, times(m, times(m, lerp(m, vector(m, "Foam", (0.6, 0.66, 0.68, 1.0), -900, -260), vector(m, "Band", (0.3, 0.62, 0.58, 1.0), -900, -380), (colour, "B"), -780, -300), (colour, "R"), -650, -200),
                           scalar(m, "Brightness", 1.0, -900, -80), -450, -160),
                  vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -650, -20), -250, -120)
     to_property(foam, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)

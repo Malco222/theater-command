@@ -36,7 +36,7 @@ struct FMiniatureMesh
 		TArray<FVector> Normals;
 		TArray<FVector2D> UVs;
 		TArray<FColor> Colors;
-		int32 Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much);
+		int32 Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much, bool bBand = false); // (a point of the pale band under the foam says so in its blue)
 		void Quad(int32 A, int32 B, int32 C, int32 D);
 	};
 	/** Two wakes for a fleet at sea: on patrol, and on passage between seas (half as long again). */
