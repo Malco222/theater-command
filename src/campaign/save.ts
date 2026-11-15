@@ -46,7 +46,9 @@ export function saveGame(g: Game): string {
   return JSON.stringify({
     v: SAVE_VERSION, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
-    dirty: g.supplyDirty, supply: Object.fromEntries(Object.entries(g.supply).map(([k, v]) => [k, Array.from(v).join('')])),
+    dirty: g.supplyDirty,
+    // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
+    supply: Object.fromEntries(Object.entries(g.supply).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
     // The order corps stand in within a region is kept too: battles and retreats take them in that order.
     regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),

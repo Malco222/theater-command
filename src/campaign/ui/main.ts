@@ -48,9 +48,10 @@ import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type P
 import { ARSENAL, canStation, factoriesBuilt, workLevel, yardLevel, type Hull, type Offer } from '../arsenal';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } from '../traits';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
-import { CROSSINGS, ENGINEERING, RIVERS, blocked, bridgeDown, noCrossing, riverNotes, whyBlocked } from '../rivers';
+import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
-import { RAILWAYS, RAIL_LINKS, railCut, railNote } from '../rails';
+import { RAILWAYS, railCut, railLinks, railNote } from '../rails';
+import { WORLD, beyondEurope, lakesOf } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan } from '../airwar';
 import type { FleetSeen, WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -59,7 +60,7 @@ import {
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  FLEETS, NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -180,7 +181,9 @@ const cash = (pp: number, signed = false): string => { const v = Math.round(pp *
 const inHand = (pp: number): string => (pp >= 0 ? money(pp) : cash(pp));
 /** "1 division", "12 divisions". */
 const divsOf = (n: number): string => `${num(n)} division${Math.round(n) === 1 ? '' : 's'}`;
-const natName = (id: string): string => g.nations[id]?.name ?? id;
+const natName = (id: string): string => g.nations[id]?.name ?? WORLD.nations[id]?.name ?? id;
+/** A nation's colour. A country of the wider world has one before any campaign on that world is open (the start screen). */
+const natColor = (id: string): string => g.nations[id]?.color ?? WORLD.nations[id]?.color ?? '#8a8676';
 /** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
 const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
 const upFirst = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -557,7 +560,9 @@ function mount(): void {
 }
 
 function drawStatic(): void {
-  $('#seas').innerHTML = SEA_BORDERS.map((b) => `<path class="seaborder" d="M${b.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>`).join('')
+  $('#seas').innerHTML = seaBorders(g).map((b) => `<path class="seaborder" d="M${b.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>`).join('')
+    // The great lakes of the wider world are named where they lie: none is a sea a ship of the war sails.
+    + lakesOf(g).map((l) => `<text class="sealbl narrow lake" x="${l.x}" y="${l.y}">${esc(l.name.replace(/^Lake /, ''))}</text>`).join('')
     + g.seas.map((z) => {
       // Long names, and names in tight water, go on two lines.
       const cut = z.narrow || z.name.length > 12 ? z.name.lastIndexOf(' ') : -1;
@@ -568,7 +573,7 @@ function drawStatic(): void {
   $('#land').innerHTML = `<path class="land" d="${pathOf(g.land)}"/>`;
   $('#regs').innerHTML = g.regions.map((r) => `<path class="reg" data-id="${r.id}" d="${pathOf(r.polys)}"/>`).join('');
   // The great rivers, each a smooth line with its name set along its middle reach.
-  $('#rivers').innerHTML = RIVERS.map((rv) => {
+  $('#rivers').innerHTML = riversOf(g).map((rv) => {
     const p = rv.pts;
     let d = `M${p[0][0]} ${p[0][1]}`;
     for (let i = 0; i < p.length - 1; i++) {
@@ -592,7 +597,7 @@ function drawStatic(): void {
 function railMarks(): string {
   if (!groundRules(g)) return '';
   let ok = '', cut = '';
-  for (const l of RAIL_LINKS) {
+  for (const l of railLinks(g)) {
     const a = g.regions[l.a], b = g.regions[l.b];
     const ha = `M${a.x} ${a.y}L${l.x} ${l.y}`, hb = `M${l.x} ${l.y}L${b.x} ${b.y}`;
     if (railCut(g, l.a)) cut += ha; else ok += ha;
@@ -604,7 +609,7 @@ function railMarks(): string {
 /** The bridges over the rivers: a span where they stand, a broken one in red where they are down (the grand campaign). */
 function bridgeMarks(): string {
   if (!groundRules(g)) return '';
-  return CROSSINGS.map((x) => {
+  return crossingsOf(g).map((x) => {
     const a = g.regions[x.a], b = g.regions[x.b];
     const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
     const down = bridgeDown(g, x);
@@ -796,7 +801,7 @@ function refresh(): void {
   ($('#legsteep') as HTMLElement).hidden = !groundRules(g);
   ($('#legfield') as HTMLElement).hidden = !airWar(g);
   $('#legair').textContent = airWar(g) ? 'Aircraft based here' : 'Air fleet';
-  ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !CROSSINGS.some((x) => bridgeDown(g, x));
+  ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !crossingsOf(g).some((x) => bridgeDown(g, x));
   ($('#legrail') as HTMLElement).hidden = !groundRules(g);
   ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !g.regions.some((r) => railCut(g, r.id));
   $('#hint').textContent = hintText();
@@ -3694,7 +3699,7 @@ function inviteList(): string {
   const list = leagueInvites(g);
   const yes = list.filter((x) => x.ok), no = list.filter((x) => !x.ok);
   const can = (id: string): boolean => whyNotLeagueInvite(g, id) === null;
-  return `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id)}</b></div><div class="fact"><span>An invitation</span><b>${LEAGUE.invite.cost}</b></div></div>
+  return `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id, g)}</b></div><div class="fact"><span>An invitation</span><b>${LEAGUE.invite.cost}</b></div></div>
     ${yes.length ? `<div class="lgrows">${yes.map((x) => inviteRow(x, 'leagueinvite', `Invite · ${LEAGUE.invite.cost}`, can(x.nat))).join('')}</div>` : '<p class="sub">No country is ready to join today. A country says yes when it is a friend of a member or has a nation at war on its border.</p>'}
     ${no.length ? `<details class="lgno"><summary>${no.length} ${no.length === 1 ? 'country' : 'countries'} would refuse today</summary><div class="lgrows">${no.map((x) => inviteRow(x, '', '', false)).join('')}</div></details>` : ''}`;
 }
@@ -3771,7 +3776,7 @@ function trackPane(list: Nation[]): string {
   if (me && mine) {
     const agreed = tradeRules(g);
     const partners = agreed ? dealsOf(g, me.id).length : tradePartners(g, me.id).length;
-    out += `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id)}</b></div><div class="fact"><span>Trade partners</span><b>${partners}</b></div></div>
+    out += `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id, g)}</b></div><div class="fact"><span>Trade partners</span><b>${partners}</b></div></div>
       <p class="sub" style="margin-top:6px">Courting a neutral costs ${DIPLOMACY.court.cost} and pulls it toward ${mine === 'axis' ? 'the Axis' : 'the Allies'}. ${agreed ? 'Trade is by agreement now, with any country at peace with you whose people can stand your alliance' : `A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${money(DIPLOMACY.tradeIncome)} a month to your treasury` : ''}`}; one that is fully won over joins your bloc.</p>`;
   }
   out += `<div class="trackhead"><span>◂ Allies</span><span>Independent</span><span>Axis ▸</span></div>`;
@@ -5162,29 +5167,29 @@ function startCard(): string {
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a war nobody has seen' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? `, grand campaign${saved.level !== null && DIFFICULTY.levels[saved.level] ? `, ${esc(DIFFICULTY.levels[saved.level].name)}` : ''}` : ''}. Saved in this browser.</span></button>` : '';
   const pick = grandPick();
   const years = grandYears(pick.nat);
-  const tile = (id: string, name: string, size = 54): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, g.nations[id].color, size) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
+  const tile = (id: string, name: string, size = 54): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, natColor(id), size) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
   const smallPick = GRAND.nations.some((n) => n.small && n.id === pick.nat);
   const goals = pick.nat && pick.year.turn === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[pick.nat]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '';
   return `${startHead('Theater Command')}
     <div class="body"><p class="lead">Pick a country and a year, then <b>make your own history</b>. From the day you take over nobody follows the history books: you decide where your armies, fleets and air fleets go, and so does the staff of every other nation.</p>
     ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on an earlier, smaller map and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
     <h3>The grand campaign · choose your country</h3>
-    <div class="gcnats">${GRAND.nations.filter((n) => !n.small).map((n) => tile(n.id, g.nations[n.id].name)).join('')}${tile('', 'Watch')}</div>
+    <div class="gcnats">${GRAND.nations.filter((n) => !n.small).map((n) => tile(n.id, natName(n.id))).join('')}${tile('', 'Watch')}</div>
     <h3>Or a smaller nation · choose your own path</h3>
-    <div class="gcnats small">${GRAND.nations.filter((n) => n.small).map((n) => tile(n.id, g.nations[n.id].name, 38)).join('')}</div>
+    <div class="gcnats small">${GRAND.nations.filter((n) => n.small).map((n) => tile(n.id, natName(n.id), 38)).join('')}</div>
     <p class="gcsmallnote">A small country decides where it stands: join the Axis, join the Allies, stand alone, or found a League of smaller nations with its neighbours.</p>
     <h3>Choose the year you take over</h3>
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
     <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
-    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
+    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
       ${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>
-    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 30) : ''}<span><b>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -5932,7 +5937,9 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   const italy = view === 'italy', west = view === 'west', east = view === 'east';
   const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47 && !italy;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : east ? g.byName[from >= 58 ? 'Minsk' : 'Kiev'] : west ? g.byName['Rouen'] : italy ? g.byName[from >= 53 ? 'Rome' : 'Calabria'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  // A country of the new world opens on its own capital, whatever the year.
+  const away = grand && human && g.nations[human] && beyondEurope(g.nations[human].capital) ? g.regions[g.nations[human].capital] : null;
+  const focus = away ? away : britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : east ? g.byName[from >= 58 ? 'Minsk' : 'Kiev'] : west ? g.byName['Rouen'] : italy ? g.byName[from >= 53 ? 'Rome' : 'Calabria'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - (torch ? 420 : 300), y: focus.y - (torch ? 250 : 230), w: torch ? 760 : desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   // Italy in 1944 is fought over a hundred miles of mountain: start close in.
   if (italy && from >= 53) ui.view = { x: focus.x - 215, y: focus.y - 185, w: 440 };
@@ -7182,13 +7189,17 @@ function onRegion(id: number): void {
 
 // ---- Moving around the map ----------------------------------------------------------------
 
+/** How far the map can be drawn back: the whole of Europe, or the whole of the wider chart. */
+const widest = (): number => Math.max(2100, Math.min(5400, g.width + 400));
+
 function applyView(): void {
   const svg = $('#map');
   const a = svg.clientHeight / Math.max(1, svg.clientWidth);
   const v = ui.view;
-  v.w = Math.max(150, Math.min(2100, v.w));
+  v.w = Math.max(150, Math.min(widest(), v.w));
   const h = v.w * a;
-  v.x = Math.max(-200, Math.min(g.width + 200 - v.w, v.x));
+  // The chart's west edge is at 0 on the map of Europe, and far to the left of it on the wider world.
+  v.x = Math.max(g.x0 - 200, Math.min(g.x0 + g.width + 200 - v.w, v.x));
   // The map ends in the Sahara: there is nothing to scroll to below it.
   v.y = Math.max(-200, Math.min(g.height - h, v.y));
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
@@ -7204,7 +7215,7 @@ function zoomBy(f: number, cx?: number, cy?: number): void {
   const px = cx === undefined ? 0.5 : (cx - rect.left) / rect.width;
   const py = cy === undefined ? 0.5 : (cy - rect.top) / rect.height;
   const mx = v.x + px * v.w, my = v.y + py * v.w * a;
-  v.w = Math.max(150, Math.min(2100, v.w * f));
+  v.w = Math.max(150, Math.min(widest(), v.w * f));
   v.x = mx - px * v.w; v.y = my - py * v.w * a;
   applyView();
 }
@@ -7265,7 +7276,7 @@ function wireMap(): void {
     drawRoute(el && el.classList.contains('reg') ? Number(el.dataset.id) : -1);
     if (!el) {
       const p = mapPoint(e.clientX, e.clientY);
-      const z = seaAt(p.x, p.y);
+      const z = seaAt(p.x, p.y, g);
       if (z < 0) { tip.style.display = 'none'; return; }
       const by = new Map<string, number>();
       for (const f of g.fleets) if (f.zone === z && atSea(f)) by.set(f.nat, (by.get(f.nat) ?? 0) + shipCount(f.ships));
@@ -7331,7 +7342,7 @@ function wireMap(): void {
       }
       else if (!el) {
         const p = mapPoint(e.clientX, e.clientY);
-        const z = seaAt(p.x, p.y);
+        const z = seaAt(p.x, p.y, g);
         if (z >= 0) onSea(z);
       }
     }

@@ -105,7 +105,7 @@ export const WORLD_REGIONS = [
   ['Chihuahua', 28.6, -106.1, 'MEX', 'hills', 0, 0, {}],
   ['Sonora', 29.3, -110.6, 'MEX', 'hills', 0, 0, { port: 1 }],
   ['Baja California', 30.3, -115.2, 'MEX', 'hills', 0, 0, {}],
-  ['Sinaloa', 24.6, -106.2, 'MEX', 'mountain', 0, 0, { port: 1 }],
+  ['Sinaloa', 24.8, -107.4, 'MEX', 'mountain', 0, 0, { port: 1 }],
   ['Guadalajara', 20.7, -103.4, 'MEX', 'hills', 1, 0, {}],
   ['Oaxaca', 17.0, -96.8, 'MEX', 'mountain', 0, 0, { port: 1 }],
   ['Chiapas', 16.6, -92.9, 'MEX', 'forest', 0, 0, {}],
@@ -247,8 +247,12 @@ export const WORLD_RAIL_ADD = [
   ['Ottawa', 'Northern Ontario'], ['Northern Ontario', 'Winnipeg'],
   // The New York Central up the Hudson, the Pennsylvania over the mountains, and the lines of the South.
   ['New York', 'Upstate New York'], ['Susquehanna', 'Pittsburgh'], ['Pittsburgh', 'Ohio Valley'], ['Virginia', 'North Carolina'], ['Tennessee', 'Alabama'], ['Missouri', 'Arkansas'],
-  // Mexico: the west coast line to Nogales, and the line to Oaxaca.
-  ['Guadalajara', 'Sinaloa'], ['Sonora', 'Arizona'], ['Mexico City', 'Oaxaca'],
+  // Mexico: the west coast line from Guadalajara to Nogales, and the line to Oaxaca.
+  ['Guadalajara', 'Sinaloa'], ['Sonora', 'Sinaloa'], ['Sonora', 'Arizona'], ['Mexico City', 'Oaxaca'],
 ];
 /** Lines the tool lays that were never there: [region, region]. */
-export const WORLD_RAIL_CUT = [];
+export const WORLD_RAIL_CUT = [
+  // Sonora's line ran north to Arizona: none crossed the head of the Gulf of California until 1948, and none
+  // crossed the Sierra Madre from Chihuahua to the Pacific until 1961.
+  ['San Diego', 'Sonora'], ['Sonora', 'Baja California'], ['Chihuahua', 'Sinaloa'],
+];

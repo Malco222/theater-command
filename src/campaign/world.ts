@@ -109,7 +109,9 @@ export function attachWorld(g: Game, fresh = true): void {
   }
   // Every nation's distances to its capital are counted again on the wider map.
   for (const n of Object.values(g.nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
-  g.supply = {};
+  // The supply picture keeps every country's place in it, widened to the new provinces: they are unsupplied until
+  // it is drawn again.
+  for (const [k, v] of Object.entries(g.supply)) { const w = new Uint8Array(g.regions.length); w.set(v); g.supply[k] = w; }
   g.reach = {};
   g.railhead = {};
   g.supplyDirty = true;

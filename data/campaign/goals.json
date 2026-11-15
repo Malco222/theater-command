@@ -24,6 +24,10 @@
     "SOV": {
       "short": { "title": "Not one step back", "text": "Moscow, Leningrad and Stalingrad are still Soviet when 1943 opens.", "hold": ["Moscow", "Leningrad", "Stalingrad"], "until": 40 },
       "long": { "title": "To Berlin", "text": "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", "hold": ["Moscow", "Berlin"], "by": 76 }
+    },
+    "USA": {
+      "short": { "title": "A second front", "text": "Paris is in Allied hands by the end of 1944, with Washington still yours.", "hold": ["Washington", "Paris"], "by": 64 },
+      "long": { "title": "Victory in Europe", "text": "Beat Germany by the end of 1945 with Washington still yours.", "hold": ["Washington"], "beaten": ["GER"], "by": 76 }
     }
   }
 }
