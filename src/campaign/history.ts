@@ -39,6 +39,7 @@ export const HISTORY = data as unknown as {
   theatre: Record<string, string>;
   theatres: Record<string, { name: string; after: string[] }>;
   marks: Mark[];
+  shores: { id: string; from: number; owners: string[] }[];
   claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
   ambitions: Ambition[];
 };
@@ -141,6 +142,19 @@ export function leash(g: Game, nat: string, opId: string): Leash {
   const date = bookDate(g, nat, opId);
   if (date === null) return { kind: 'follow', chance: 1, nerve: 1, early: 0 };
   return { kind: 'dated', chance: 1, date, nerve: S.nerve ?? 1, early: 0 };
+}
+
+/**
+ * The book's word on the second front: while it stands no computer staff lands an army from the sea on a shore
+ * before history's first landing there. `owner` is the country whose ground it is, `overseas` true for a colony.
+ */
+export function shoreOpen(g: Game, owner: string, overseas: boolean): boolean {
+  const S = stopDef(g);
+  if (!S.book || !onBook(g, 'second')) return true;
+  const rule = (overseas ? undefined : HISTORY.shores.find((s) => s.owners.includes(owner))) ?? HISTORY.shores.find((s) => s.owners.includes('*'));
+  if (!rule) return true;
+  const slack = S.slack ?? 0;
+  return g.turn >= rule.from + (slack ? Math.floor(dialDraw(g, 'shore', rule.id) * (2 * slack + 1)) - slack : 0);
 }
 
 /** The dial as the player reads it: the stop, its name and what it does, and the loosest stop the campaign has seen. */
