@@ -708,18 +708,6 @@ export function plannedCrossing(g: Game, nat: string): { from: Region; to: Regio
   return { from, to };
 }
 
-/**
- * The beach a named crossing has won (Version 73, the grand campaign): the plan's beach once the nation's side
- * holds it on an enemy's ground, with its quay and the seas between them, for as long as the plan stands. The army
- * ashore is fed across those seas: staff that prepared the crossing go on fighting for them.
- */
-export function lodgedCrossing(g: Game, nat: string): { from: Region; to: Region; path: number[] } | null {
-  const to = g.regions[(g.flags[aimKey(nat)] ?? 0) - 1], from = g.regions[(g.flags[quayKey(nat)] ?? 0) - 1];
-  if (!seaWar(g) || !to || !from || !allied(g, nat, to.ctrl) || !allied(g, nat, from.ctrl) || !atWar(g, nat, to.owner) || !g.nations[to.owner]?.alive) return null;
-  const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true });
-  return path ? { from, to, path } : null;
-}
-
 /** Names a crossing as the plan, or (with no beach) drops the plan. */
 export function planCrossing(g: Game, nat: string, from: Region | null, to: Region | null): boolean {
   if (!from || !to) { delete g.flags[aimKey(nat)]; delete g.flags[quayKey(nat)]; return true; }
@@ -1441,8 +1429,7 @@ function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> }
   const off = new Set<number>(), way = new Set<number>();
   for (const sfx of ['', ':o']) {
     const aim = g.regions[(g.flags[`st:aim:${nat}${sfx}`] ?? 0) - 1], quay = g.regions[(g.flags[`st:quay:${nat}${sfx}`] ?? 0) - 1];
-    // (A player's admirals stand off the beach his crossing has won as they stood off it before: the army ashore is fed across that sea.)
-    if (!aim || !quay || !(atWar(g, nat, aim.ctrl) || (sfx === '' && nat === g.human && lodgedCrossing(g, nat)))) continue;
+    if (!aim || !quay || !atWar(g, nat, aim.ctrl)) continue;
     const path = seaPath(g, nat, quay, aim, { max: NAVY.landing.range, surprise: true });
     if (!path) continue;
     path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));

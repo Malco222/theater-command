@@ -77,7 +77,7 @@ export const AIRWAR = warData as unknown as {
   recon: { aircraft: number; loss: number; ready: number };
   losses: { bombers: number; power: number; most: number; night: { bombers: number; power: number }; clash: number };
   success: { k: number };
-  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number; ships?: number } } };
+  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
