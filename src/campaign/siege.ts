@@ -351,7 +351,10 @@ export function pocketMonth(g: Game, nat: string): void {
       const corps = pocket.reduce((s, id) => s + g.regions[id].units.filter((c) => c.nat === nat && !c.dead).length + garrisonOf(g.regions[id]).filter((c) => c.nat === nat).length, 0);
       const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(left)}; after that the troops go hungry.`
         : `The town has stores for ${months(left)}, and any troops who fall back on it will live on them.`;
-      tell(g, town, `${townName(town)} is surrounded: no road and no ship reaches it from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
+      // Fed from an ally's town, the news is of the army and the province it holds: the town is not this nation's to lose.
+      const own = town.ctrl !== nat && mine.length ? g.regions[mine[0]] : null;
+      const lead = own ? `The ${n.adj} troops round ${townName(own)} are surrounded, with their allies in ${townName(town)}: no road and no ship reaches them` : `${townName(town)} is surrounded: no road and no ship reaches it`;
+      tell(g, own ?? town, `${lead} from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
     }
   }
 }

@@ -16,7 +16,8 @@ import { addCorps, armySize, atWar, createGame, removeCorps } from '../src/campa
 import { menSpare } from '../src/campaign/manpower';
 import { airAI, skyDenies, whyNotMission } from '../src/campaign/air';
 import { NAVY, fleetReach, landingTargets, navalAI, seaPath } from '../src/campaign/navy';
-import { pocketMonth } from '../src/campaign/siege';
+import { pocketMonth, pocketView, storesOf } from '../src/campaign/siege';
+import { townName } from '../src/campaign/towns';
 import { coastRules, coastWatch, lodgment, seaBase, seaFoe, staffPhase, startOpen, temper } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -344,13 +345,31 @@ describe('fortifications from idle money', () => {
 describe('a pocket fed from an ally\'s town', () => {
   it('does not stop the month: the news of it is written from the pocket\'s own count of its stores', () => {
     const g = quietYear();
-    // A British corps on French ground with the Germans all round it, and a French-held harbour beside it.
-    const a = g.regions.find((r) => r.owner === 'FRA' && !r.overseas && r.port && r.ctrl === 'FRA' && r.nb.some((j) => g.regions[j].owner === 'FRA' && !g.regions[j].port))!;
-    const b = g.regions[a.nb.find((j) => g.regions[j].owner === 'FRA' && !g.regions[j].port)!];
+    // A British corps on French ground with the Germans all round it, and beside it a French-held harbour town
+    // with more in store than the province the corps stands in. No ship of Britain's comes in.
+    let a!: Region, b!: Region;
+    for (const r of g.regions) {
+      if (a || r.owner !== 'FRA' || r.overseas || !r.port || r.ctrl !== 'FRA') continue;
+      const j = r.nb.find((k) => g.regions[k].owner === 'FRA' && !g.regions[k].port && !g.regions[k].cap && storesOf(g, g.regions[k]) < storesOf(g, r));
+      if (j !== undefined) { a = r; b = g.regions[j]; }
+    }
     for (const r of [a, b]) for (const j of r.nb) if (j !== a.id && j !== b.id) { clear(g.regions[j]).ctrl = 'GER'; }
     clear(b).ctrl = 'UK';
     corps(g, 'UK', b);
+    g.nations.UK.seaSupply = false;
+    g.nations.UK.sealift = 0;
+    // (The news of a small place is told to the nations it concerns: here the British player.)
+    g.human = 'UK';
+    const before = g.headlines.length;
     expect(() => { for (let k = 0; k < 4; k++) { pocketMonth(g, 'UK'); g.turn++; } }).not.toThrow();
+    // The news is of the British troops and the province they hold, not of a French town as if it were Britain's.
+    const news = g.headlines.slice(before).map((h) => h.text).filter((t) => /surrounded/.test(t));
+    expect(news.length).toBe(1);
+    expect(news[0]).toContain(`The British troops round ${townName(b)} are surrounded, with their allies in ${townName(a)}`);
+    expect(news[0]).toContain('One British corps is cut off there');
+    // The count is kept on the British province; the French town has none, which is what stopped the month before.
+    expect(pocketView(g, b.id)).not.toBeNull();
+    expect(pocketView(g, a.id)).toBeNull();
   });
 });
 
