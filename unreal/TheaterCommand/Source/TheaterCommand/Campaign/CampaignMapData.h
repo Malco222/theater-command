@@ -124,6 +124,9 @@ public:
 	TArray<TArray<FVector2D>> LandHoles; // waters cut out of the land: the Great Lakes
 	TArray<FCampaignLake> Lakes;
 	TArray<TArray<FVector2D>> RuledRivers; // the courses of the rules' rivers of the wider chart, which are laid as ribbons: the painted courses stand aside for them
+	TArray<double> RuledBroad; // and half the breadth each ribbon comes to at its mouth, in map units
+	/** Half the breadth a river's ribbon comes to at its mouth, by its name: the greatest of all, the great, and the rest. */
+	static double RiverBroad(const FString& Name);
 	/** Is a place inside the box the files draw the coast in, whichever turn of the world it is counted in? */
 	bool IsCharted(double X, double Y) const;
 	TArray<FCampaignRegion> Regions;

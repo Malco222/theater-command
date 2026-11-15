@@ -5181,6 +5181,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Verdict = FText::FromString(Plan.Verdict);
 			WarPrompt.VerdictUnder = FText::FromString(Plan.Under);
 			WarPrompt.VerdictTone = Plan.Tone == TEXT("red") ? 3 : Plan.Tone == TEXT("amber") ? 2 : Plan.Tone == TEXT("good") ? 1 : 0;
+			WarPrompt.UnderTone = Plan.UnderTone == TEXT("amber") ? 2 : 3;
 			WarPrompt.Confirm = FText::FromString(TEXT("SEND THEM IN"));
 			return;
 		}

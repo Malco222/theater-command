@@ -270,7 +270,7 @@ struct FWarPrompt
 	// (rules version 74) Before a landing: the headline that speaks for the whole venture, how it is to be read
 	// (0 plainly, 1 as good news, 2 in amber, 3 in red), and the line under it.
 	FText Verdict, VerdictUnder;
-	int32 VerdictTone = 0;
+	int32 VerdictTone = 0, UnderTone = 3;
 	bool bFromOffice = false; // asked from the foreign office: go back there afterwards
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;

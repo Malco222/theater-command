@@ -2061,29 +2061,38 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	const double Um = U / PerMap; // one house-unit, in map units
 
 	// ---- The paint of the place: walls and roofs by its part of Europe.
-	static const TCHAR* WallsOf[5][5] = {
+	static const TCHAR* WallsOf[7][5] = {
 		{ TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") }, // middle Europe: plaster
 		{ TEXT("8E5A48"), TEXT("A0705A"), TEXT("C9B79A"), TEXT("B8A890"), TEXT("7A5547") }, // the north-west: brick
 		{ TEXT("F0E8D8"), TEXT("E8DCC0"), TEXT("F2E4C8"), TEXT("E0D0B0"), TEXT("EDE0CC") }, // the south: whitewash
 		{ TEXT("7A3B2E"), TEXT("8A5A3C"), TEXT("6B5236"), TEXT("C9B79A"), TEXT("9A6A4A") }, // the north and east: painted timber
 		{ TEXT("EDE3CF"), TEXT("E6D8BC"), TEXT("F3EAD6"), TEXT("DCCFB4"), TEXT("E9DEC8") }, // the far south: pale plaster
+		// (The art director's round 30. A town takes the kit of the land it stands in: Europe's rule by latitude gave
+		// Washington the orange roofs of the Mediterranean and Mexico City the white roofs of North Africa.)
+		{ TEXT("925846"), TEXT("C8BCA2"), TEXT("925846"), TEXT("C8BCA2"), TEXT("8C5443") }, // north of Mexico: brick 146,88,70 and cream 200,188,162, about half and half
+		{ TEXT("E4DCC8"), TEXT("E4DCC8"), TEXT("CEA464"), TEXT("E6DECA"), TEXT("CEA464") }, // the plaza town: white 228,220,200, ochre 206,164,100 on about a third
 	};
-	static const TCHAR* RoofsOf[5][5] = {
+	static const TCHAR* RoofsOf[7][5] = {
 		{ TEXT("9A4A32"), TEXT("7C3F2E"), TEXT("5E5A58"), TEXT("8B5A3C"), TEXT("A65B3A") }, // red tile, some slate
 		{ TEXT("4E5560"), TEXT("5E5A58"), TEXT("444B55"), TEXT("6A6660"), TEXT("3F454D") }, // slate
 		{ TEXT("C2643A"), TEXT("B4552F"), TEXT("CC7040"), TEXT("A84E30"), TEXT("BD6A45") }, // terracotta
 		{ TEXT("3E4640"), TEXT("4A4440"), TEXT("55504A"), TEXT("2F3A36"), TEXT("5A5248") }, // dark shingle and tin
 		{ TEXT("D9CDB4"), TEXT("CFC2A6"), TEXT("E0D5BE"), TEXT("C6B99C"), TEXT("D3C7AE") }, // flat roofs, the colour of their walls
+		{ TEXT("484644"), TEXT("444240"), TEXT("4C4A48"), TEXT("484644"), TEXT("464442") }, // tar 72,70,68 (on pitched roofs, until there are flat ones)
+		{ TEXT("AC5E40"), TEXT("A85A3C"), TEXT("B06244"), TEXT("AC5E40"), TEXT("A65A3E") }, // low red tile 172,94,64
 	};
-	const int32 Look = FMath::Clamp(Site.Look, 0, 4);
+	const int32 Look = FMath::Clamp(Site.Look, 0, 6);
 	const bool bFlatRoofs = Look == 4;
 	auto WallPaint = [&]() { return FLinearColor(FColor::FromHex(WallsOf[Look][Dice.RandRange(0, 4)])); };
 	auto RoofPaint = [&]() { return FLinearColor(FColor::FromHex(RoofsOf[Look][Dice.RandRange(0, 4)])); };
-	const FLinearColor Ashlar(FColor::FromHex(TEXT("D9D2C0"))), Verdigris(FColor::FromHex(TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
-	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
+	// (The capital's own piece takes its kit's colours too: north of Mexico stone 192,182,162 with caps and roofs in
+	// the roofs' tar; in the plaza town white, with red tile.)
+	const FLinearColor Ashlar(FColor::FromHex(Look == 5 ? TEXT("C0B6A2") : Look == 6 ? TEXT("E4DCC8") : TEXT("D9D2C0")));
+	const FLinearColor Verdigris(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
+	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
 	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("7C766A"))), Lawn(FColor::FromHex(TEXT("46553A")));
 	const FLinearColor LeafDark(FColor::FromHex(TEXT("4F6B3A"))), LeafPale(FColor::FromHex(TEXT("668249"))), Glazing(FColor::FromHex(TEXT("6E7C80")));
-	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(TEXT("8A3B2A")));
+	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("8A3B2A")));
 
 	// ---- The plan's own frame: its streets run a little off the compass, each town its own way.
 	const double Sway = Site.Tier >= 3 ? 10.0 : 24.0; // (a capital's lie nearer the compass, so that its landmark faces the usual eye)
@@ -2165,7 +2174,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	};
 
 	// ---- The church, by the country's own manner of building one: a spire, a dome and a bell tower, or onion domes.
-	const int32 Manner = Look == 2 || Look == 4 ? 1 : Look == 3 ? 2 : 0;
+	const int32 Manner = Look == 2 || Look == 4 || Look == 6 ? 1 : Look == 3 ? 2 : 0;
 	auto Church = [&](double A, double B, double Size, double Turn, bool bCopper = false)
 	{
 		const FVector At = Stand(A, B);
@@ -2647,7 +2656,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// that the tall blocks round it do not stand in front of its landmark.)
 	auto InForecourt = [&](double A, double B) { return bPacked && bCapital && A < -SquareHalfA && A > -SquareHalfA - PitchA && FMath::Abs(B) < SquareHalfB; };
 	const FLinearColor CobbleDark(FColor::FromHex(TEXT("777166"))), Earth(FColor::FromHex(TEXT("67664F")));
-	const FLinearColor Leads = Look == 2 || Look == 4 ? FLinearColor(FColor::FromHex(RoofsOf[Look][0])) : LeadGrey;
+	const FLinearColor Leads = Look == 2 || Look == 4 || Look >= 5 ? FLinearColor(FColor::FromHex(RoofsOf[Look][0])) : LeadGrey;
 
 	// The square, its two avenues, and what stands in it.
 	Street(-ReachAt(Yaw0 + 180.0) + 0.3 * Um, 0.0, ReachAt(Yaw0) - 0.3 * Um, 0.0, 0.3);

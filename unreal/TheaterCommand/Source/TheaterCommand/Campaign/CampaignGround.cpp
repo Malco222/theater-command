@@ -494,6 +494,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		const double BoxMinY = Terrain.OriginY - Reach, BoxMaxY = Terrain.OriginY + (NY - 1) * Cell + Reach;
 		// One stretch of water, from A to B, with half its breadth and its water at each end: every point near it that
 		// is nearer its bank than any other water's takes it.
+		bool bPhantomLay = false; // what is being laid is the place of a ruled river's ribbon, not painted water
 		auto Lay = [&](const FVector2D& A, const FVector2D& B, float HalfA, float HalfB, float WaterA, float WaterB)
 		{
 			const double Lx = FMath::Min(A.X, B.X) - Reach, Hx = FMath::Max(A.X, B.X) + Reach, Ly = FMath::Min(A.Y, B.Y) - Reach, Hy = FMath::Max(A.Y, B.Y) + Reach;
@@ -525,7 +526,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					}
 				}
 			}
-			if (WetScale > 1)
+			if (WetScale > 1 && !bPhantomLay)
 			{
 				// (and at the points of the waters' own finer picture)
 				const double FinerCell = Cell / WetScale;
@@ -562,6 +563,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		{
 			FVector2D A, B;
 			bool bSource = false, bMouth = false;
+			float Half = 0.5f; // half the ribbon's breadth, about
 		};
 		TArray<FRuledStretch> Ruled;
 		FBox2D RuledBox(ForceInit);
@@ -576,6 +578,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					Stretch.B = Stretch.A + (River[K + 1] - River[K]);
 					Stretch.bSource = K == 0;
 					Stretch.bMouth = K + 2 == River.Num();
+					const int32 RiverIndex = static_cast<int32>(&River - Data.RuledRivers.GetData());
+					Stretch.Half = static_cast<float>((Data.RuledBroad.IsValidIndex(RiverIndex) ? Data.RuledBroad[RiverIndex] : 0.5) * 0.8);
 					RuledBox += Stretch.A;
 					RuledBox += Stretch.B;
 				}
@@ -651,7 +655,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			return SameRiver[Index] == 1;
 		};
 		TArray<FVector2D> CourseLine, CourseLineBefore; // a course as it is laid on this sheet
-		TArray<bool> NearRuled, LaidSkip;
+		bool bMeetsRibbon = false; // the course being laid runs into a ruled river's ribbon at its end
 		TArray<FVector2D> LaidLine;
 		TArray<float> LaidHalf, LaidWater;
 		for (const FCampaignWorldRivers::FCourse& Course : WorldRivers.Courses)
@@ -729,7 +733,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				return HalfLaid;
 			};
-			NearRuled.Reset();
+			bMeetsRibbon = false;
 			{
 				double Offset = 0.0;
 				const int32 CourseIndex = static_cast<int32>(&Course - WorldRivers.Courses.GetData());
@@ -738,23 +742,26 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					FVector2D Nearest;
 					if (IsSameRiver(CourseIndex))
 					{
-						// (the ruled river itself: it stands aside wherever the ribbon runs)
-						NearRuled.SetNum(LaidTo + 1);
-						TArray<FVector2D> OnRibbon;
-						OnRibbon.SetNum(LaidTo + 1);
-						for (int32 K = 0; K <= LaidTo; ++K)
+						// (The ruled river itself. From where it first comes to the ribbon it stands aside whole: it is
+						// the same water all the way down, however far the heights' course and the ribbon part. What
+						// is left is its headwaters above the ribbon's source, which run into the ribbon.)
+						int32 First = INDEX_NONE;
+						for (int32 K = 0; K <= LaidTo && First == INDEX_NONE; ++K)
 						{
-							NearRuled[K] = ToRuled(CourseLine[K] + FVector2D(Offset, 0.0), Nearest) < 25.0;
-							OnRibbon[K] = Nearest - FVector2D(Offset, 0.0);
-						}
-						// (where its painted headwaters, above the ruled river's source, come down to the ribbon, the last
-						// painted stretch runs to the ribbon itself and not to a place beside it)
-						for (int32 K = 0; K < LaidTo; ++K)
-						{
-							if (NearRuled[K] != NearRuled[K + 1])
+							if (ToRuled(CourseLine[K] + FVector2D(Offset, 0.0), Nearest) < 25.0)
 							{
-								CourseLine[NearRuled[K] ? K : K + 1] = OnRibbon[NearRuled[K] ? K : K + 1];
+								First = K;
 							}
+						}
+						if (First != INDEX_NONE)
+						{
+							if (First < 2)
+							{
+								continue; // (none of it is left)
+							}
+							CourseLine[First] = Nearest - FVector2D(Offset, 0.0);
+							LaidTo = First;
+							bMeetsRibbon = true;
 						}
 					}
 					else if ((IsSameRiver(Course.Joins) || Course.Joins < 0) && ToRuled(CourseLine[LaidTo] + FVector2D(Offset, 0.0), Nearest) < 30.0)
@@ -789,6 +796,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 							ToRuled(CourseLine[LaidTo] + FVector2D(Offset, 0.0), Nearest);
 							CourseLine[LaidTo] = Nearest - FVector2D(Offset, 0.0);
 						}
+						bMeetsRibbon = true;
 					}
 				}
 			}
@@ -810,7 +818,6 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LaidLine.Reset();
 			LaidHalf.Reset();
 			LaidWater.Reset();
-			LaidSkip.Reset();
 			if (bFromHigh)
 			{
 				for (int32 K = 0; K <= LaidTo; ++K)
@@ -840,9 +847,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					ToEnd += FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
 				}
-				bool bStandsAside = false; // the stretch that begins at the point being put is the ruled river's own, and is left out
-				auto Put = [&](const FVector2D& At, float HalfLaid, float Carried, double Left)
+				auto Put = [&](const FVector2D& At, float InHalf, float Carried, double Left)
 				{
+					// (The art director's round 30: where a painted course met a ribbon it ended at its full breadth, a
+					// grey smear against the ribbon's bank. It narrows to a hairline over its last twenty pixels.)
+					const float HalfLaid = bMeetsRibbon ? FMath::Lerp(FMath::Min(InHalf, 0.1f), InHalf, FMath::SmoothStep(0.0f, 5.6f, static_cast<float>(Left))) : InHalf;
 					const float Thin = FMath::Lerp(JoinsThin, 1.0f - FMath::SmoothStep(0.15f, 0.35f, HalfLaid), FMath::SmoothStep(0.0f, 5.0f, static_cast<float>(Left)));
 					// (up to about two and a half units either way on a grain of eleven, and a third of that on a finer one:
 					// the measure of the wander the heights give the other hairlines)
@@ -851,14 +860,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					LaidLine.Add(At + Wandered * Thin);
 					LaidHalf.Add(HalfLaid);
 					LaidWater.Add(Carried);
-					LaidSkip.Add(bStandsAside);
 				};
 				for (int32 K = 0; K < LaidTo; ++K)
 				{
 					float WaterA = 0.0f, WaterB = 0.0f;
 					const float HalfA = HalfHere(K, WaterA), HalfB = HalfHere(K + 1, WaterB);
 					const double Long = FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
-					bStandsAside = NearRuled.IsValidIndex(K + 1) && NearRuled[K] && NearRuled[K + 1];
 					// (a long straight stretch of a hairline is laid in pieces of about two units, each with its own wander)
 					const int32 Pieces = FMath::Max(HalfA, HalfB) < 0.35f ? FMath::Clamp(FMath::CeilToInt32(Long / 2.0), 1, 64) : 1;
 					for (int32 Piece = 0; Piece < Pieces; ++Piece)
@@ -870,7 +877,6 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				float Carried = 0.0f;
 				const float HalfLaid = HalfHere(LaidTo, Carried);
-				bStandsAside = false;
 				Put(CourseLine[LaidTo], HalfLaid, Carried, 0.0);
 			}
 			for (int32 Turn = -2; Turn <= 2; ++Turn)
@@ -883,13 +889,29 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				for (int32 K = 0; K + 1 < LaidLine.Num(); ++K)
 				{
-					if ((bFromHigh && FMath::Max(LaidHalf[K], LaidHalf[K + 1]) <= 0.0f) || (LaidSkip.IsValidIndex(K) && LaidSkip[K]))
+					if (bFromHigh && FMath::Max(LaidHalf[K], LaidHalf[K + 1]) <= 0.0f)
 					{
 						continue;
 					}
 					Lay(FVector2D(LaidLine[K].X + Shift, LaidLine[K].Y), FVector2D(LaidLine[K + 1].X + Shift, LaidLine[K + 1].Y), LaidHalf[K], LaidHalf[K + 1], LaidWater[K], LaidWater[K + 1]);
 				}
 			}
+		}
+		if (!bFromHigh && Ruled.Num() > 0)
+		{
+			// (Where a ruled river's ribbon runs, its place is laid as water that is not painted: the canopy opens
+			// under the ribbon, the red clearings come to its banks as they came to the painted river's, no field
+			// and no lake lies in it, and a painted water beside it gives way to it.)
+			bPhantomLay = true;
+			for (const FRuledStretch& Stretch : Ruled)
+			{
+				for (int32 Turn = -2; Turn <= 2; ++Turn)
+				{
+					const FVector2D Shift(Turn * Data.WorldWidth - Data.ShiftX, 0.0);
+					Lay(Stretch.A + Shift, Stretch.B + Shift, Stretch.Half, Stretch.Half, -2.0f, -2.0f);
+				}
+			}
+			bPhantomLay = false;
 		}
 		// The small lakes of the northern forest and the pools of the tundra (the art director's world look: "many
 		// small lakes with pale shores", "pools over about 6%"; her ruling of round 25: rounded shapes only, and none
@@ -914,7 +936,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				const int32 Idx = Terrain.Index(I, J);
 				// (a lake may lie nearer another lake than a river: lakes come in groups; counted here as if it stood a unit further off)
-				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] + (RiverWater[Idx] < 0.0f ? 0.9f : 0.0f) : 1000.0f;
+				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] + (RiverWater[Idx] < 0.0f && RiverWater[Idx] > -1.5f ? 0.9f : 0.0f) : 1000.0f;
 			};
 			struct FLakeRuling
 			{
@@ -1057,7 +1079,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					const float Out = Outside[Idx], Off = RiverAt[Idx], Half = RiverHalf[Idx];
 					const float Jungle = Shares[WorldLook::Jungle], Savanna = Shares[WorldLook::Savanna], Steppe = Shares[WorldLook::Steppe], Desert = Shares[WorldLook::Desert];
-					if (Half > 0.0f && Off < WetReach && RiverWater[Idx] < 0.0f)
+					if (Half > 0.0f && Off < WetReach && RiverWater[Idx] < -1.5f)
+					{
+						// (the place of a ruled river's ribbon: nothing is painted here)
+					}
+					else if (Half > 0.0f && Off < WetReach && RiverWater[Idx] < 0.0f)
 					{
 						// (a lake: deep blue-grey. Its pale shore lies along part of its edge only, the side the weather
 						// drives the water to; which side that is turns slowly from one stretch of country to the next.

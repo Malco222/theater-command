@@ -1772,6 +1772,7 @@ FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 
 		Object->TryGetStringField(TEXT("verdict"), Plan.Verdict);
 		Object->TryGetStringField(TEXT("tone"), Plan.Tone);
 		Object->TryGetStringField(TEXT("under"), Plan.Under);
+		Object->TryGetStringField(TEXT("underTone"), Plan.UnderTone);
 	}
 	return Plan;
 }

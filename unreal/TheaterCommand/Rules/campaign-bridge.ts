@@ -1029,7 +1029,7 @@ const dialStops = (): DialStop[] => { try { return dialCalls.stops ? dialCalls.s
 // names as his plan, and the shipping that carries his armies.
 
 // (Version 73) Whether the sea behind a beach stays open to the supply ships once the force is ashore: a ticket shaped like the reckoning.
-interface SeaHoldView { sea: number; open: boolean; port: boolean; lines: { label?: string; value?: string; effect?: string }[] }
+interface SeaHoldView { sea: number; open: boolean; port: boolean; lines: { label?: string; value?: string; effect?: string }[]; contested?: boolean; island?: boolean; months?: number }
 interface CrossAccount { risk: number; loss: number; sky: string; worst: number; skyWon: number | null; lines: { label?: string; value?: string; effect?: string }[]; helps: { id: string; text: string; risk: number }[]; hold?: SeaHoldView }
 interface CrossingRow { foe: string; owner: string; home: boolean; from: { id: number; name: string }; to: { id: number; name: string }; path: number[]; bar: string | null; barred: string | null; account: CrossAccount; planned: boolean; hope?: boolean }
 const seaCalls = {
@@ -1055,11 +1055,14 @@ function holdLines(h: SeaHoldView | undefined | null): string[] {
 }
 /** (Version 73) The warning where the enemy could close that sea behind the force, in the browser's own words; nothing where he could not. */
 function holdWarning(s: Game, h: SeaHoldView | undefined | null, landing: boolean): string {
-  if (!h || h.open) return '';
+  if (!h) return '';
   const sea = s.seas[h.sea]?.name ?? 'sea';
+  // (Version 76: a whole island that can be cut off, where the force lives a while on what it carries, and a sea that is contested)
+  if (!h.open && h.island) return `Once ashore the force is on its own: the enemy can close the ${sea} behind it. Cut off, it can hold out for about ${h.months ?? 0} months on what it carries.`;
+  if (h.open) return h.contested ? `Once ashore, the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` : '';
   return landing
     ? `As things stand the enemy can close the ${sea} behind the force, and the troops would be cut off from their supplies: beat his fleets, or bring more of your own ships and aircraft into that sea first.`
-    : `Once ashore, the ${sea} would be closed behind the force: the enemy can bring more than twice your strength into it.`;
+    : `Once ashore, the enemy can close the ${sea} behind the force: he can bring more than twice your strength into it.`;
 }
 
 /** The reckoning of a crossing as lines to read: each line of the account, then what would make it safer and the danger as it would then be. */
@@ -1888,27 +1891,34 @@ function landingPlan(ids: number[], to: number) {
   const p = previewLanding(s, cs, to);
   const lines: string[] = [];
   if (!p.why) {
-    // (Version 74, the design director's ruling 24.) The headline speaks for the whole venture and is never more
-    // cheerful than the worst line on the card: a force that can land and then be cut off says so in red, a
-    // crossing that would lose one man in four or more at sea says so in amber, and the fight for the beach then
-    // has a line of its own. A fight that is itself all but lost keeps the headline, with the warning under it.
-    const holdNow = (p as { hold?: SeaHoldView }).hold;
-    const cut = !p.air && !!holdNow && !holdNow.open;
+    // (Versions 74 and 76, the design director's rulings 24, 36 and 37.) The headline speaks for the whole venture and
+    // is never more cheerful than the worst line on the card. What applies, worst first: a mainland beach that can
+    // be cut off (red); a crossing that would lose one man in four or more at sea; a whole island that can be cut
+    // off, where the force lives a while on what it carries; a contested sea (these three amber). The worst leads,
+    // the next is the line under it, and the fight for the beach then has a line of its own. A fight that is itself
+    // all but lost keeps the headline, with the worst warning under it.
+    const holdNow = p.air ? null : ((p as { hold?: SeaHoldView }).hold ?? null);
     const seaBehind = holdNow ? s.seas[holdNow.sea]?.name ?? 'sea' : 'sea';
+    const place = s.regions[to].name;
     const lossAtSea = p.air ? 0 : Math.round(p.risk * NAVY.intercept.loss * 100);
-    const costly = !cut && !p.surprise && !p.air && lossAtSea >= 25;
+    const months = ['no', 'one', 'two', 'three', 'four', 'five', 'six'][holdNow?.months ?? 0] ?? String(holdNow?.months ?? 0);
+    const warns: { tone: 'red' | 'amber'; head: string; text: string; also: string }[] = [];
+    if (holdNow && !holdNow.open && !holdNow.island) warns.push({ tone: 'red', head: 'Ashore, then cut off', text: `The force can land, but the enemy can close the ${seaBehind} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close the ${seaBehind} behind it.` });
+    if (!p.surprise && !p.air && lossAtSea >= 25) warns.push({ tone: 'amber', head: 'A costly crossing', text: `About ${lossAtSea}% of the force would be lost at sea before it lands.`, also: `And about ${lossAtSea}% of the force would be lost at sea before it lands.` });
+    if (holdNow && !holdNow.open && holdNow.island) warns.push({ tone: 'amber', head: 'Ashore, but on its own', text: `The force can take ${place}, but the enemy can close the ${seaBehind} behind it. Cut off, it can hold out for about ${months} months on what it carries.`, also: `And a force that took ${place} would be on its own: the enemy can close the ${seaBehind} behind it, and cut off it can hold out for about ${months} months on what it carries.` });
+    if (holdNow && holdNow.contested) warns.push({ tone: 'amber', head: 'Ashore, on a contested sea', text: `The force can land and the ${seaBehind} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${seaBehind} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
     const fought = p.defended && p.assess ? p.assess : null;
     const chance = fought ? chanceOn(fought.odds, fought.dice) : 1;
     const hopeless = !!fought && chance < 0.3;
     const fight = !fought ? 'The coast is undefended' : chance >= 0.95 ? 'Victory is all but certain' : chance >= 0.6 ? 'The odds favour you' : chance >= 0.3 ? 'It could go either way' : chance > 0 ? 'A long shot' : p.air ? 'This assault will fail' : 'This landing will fail';
     const fightTone = !fought || chance >= 0.6 ? 'good' : chance >= 0.3 ? '' : 'red';
-    const whole = (cut || costly) && !hopeless;
-    const verdict = whole ? (cut ? 'Ashore, then cut off' : 'A costly crossing') : fight;
-    const tone = whole ? (cut ? 'red' : 'amber') : fightTone;
-    const under = whole
-      ? (cut ? `The force can land, but the enemy can close the ${seaBehind} behind it and the troops would be cut off from their supplies.` : `About ${lossAtSea}% of the force would be lost at sea before it lands.`)
-      : cut ? `And a force that did get ashore could be cut off: the enemy can close the ${seaBehind} behind it.` : '';
-    if (whole) lines.push(p.air ? 'THE FIGHT ON THE GROUND' : 'THE FIGHT FOR THE BEACH', `\u00B7 ${fight}${fought ? `: odds of ${fought.odds.toFixed(2)} to 1, about ${Math.round(chance * 100)} in 100 to take ${s.regions[to].name}` : ''}`, '');
+    const lead = hopeless ? null : warns[0] ?? null;
+    const next = hopeless ? warns[0] ?? null : warns[1] ?? null;
+    const verdict = lead ? lead.head : fight;
+    const tone = lead ? lead.tone : fightTone;
+    const under = lead ? `${lead.text}${next ? `\n${next.text}` : ''}` : next ? next.also : '';
+    const underTone = lead ? (lead.tone === 'red' || next?.tone === 'red' ? 'red' : 'amber') : next ? next.tone : '';
+    if (lead) lines.push(p.air ? 'THE FIGHT ON THE GROUND' : 'THE FIGHT FOR THE BEACH', `\u00B7 ${fight}${fought ? `: odds of ${fought.odds.toFixed(2)} to 1, about ${Math.round(chance * 100)} in 100 to take ${place}` : ''}`, '');
     lines.push(p.air ? 'The force goes in by air.' : p.surprise ? 'War was declared this month: the defenders are caught unready, and no fleet can stop the crossing.'
       // (Version 72: the danger is the share of the force caught at sea; the reckoning says what share of the men that costs.)
       : p.risk > 0.005 ? ((p as { account?: CrossAccount }).account
@@ -1927,9 +1937,10 @@ function landingPlan(ids: number[], to: number) {
     if (holding.length) lines.push('', ...holding);
     if (hold && hold.open && !p.air) lines.push('', `As things stand the enemy cannot close the ${s.seas[hold.sea]?.name ?? 'sea'} behind it.`);
     // (the long warning in red stays under the card where the headline does not already say it)
-    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: p.air || cut ? '' : holdWarning(s, hold, true), verdict, tone, under };
+    // (the headline and the line under it now say what the long warning in red said)
+    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict, tone, under, underTone };
   }
-  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '' };
+  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '', underTone: '' };
 }
 
 /** Lands the chosen corps on an enemy coast. */

@@ -2,6 +2,7 @@
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
 #include "EngineUtils.h"
+#include "Campaign/CampaignClimate.h"
 #include "Campaign/CampaignEnvironment.h"
 
 // (the land's own sun and shade at the evening: kept with the rest of the evening's look, in the room)
@@ -3243,9 +3244,18 @@ void ACampaignMapActor::BuildWaterways()
 	// (the paint is laid on darker than it is meant to look, to suit the lamp, as the land's is)
 	const FLinearColor MidstreamRuns = FLinearColor(FColor(72, 104, 125)), BankRuns = FLinearColor(FColor(60, 88, 106));
 	const FColor Earth = FColor(26, 38, 36);
-	static const TSet<FString> Great = { TEXT("Rhine"), TEXT("Danube"), TEXT("Vistula"), TEXT("Dnieper"), TEXT("Volga"), TEXT("Don"), TEXT("Elbe"), TEXT("Oder"), TEXT("Loire"), TEXT("Seine"),
-		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester"),
-		TEXT("Mississippi"), TEXT("Missouri"), TEXT("Ohio"), TEXT("St Lawrence"), TEXT("Columbia") };
+	// ("-TheaterJungleRiver=102,100,88" tries another paint for a ribbon in the jungle. It is laid cooler than it is
+	// seen: under the lamp (98, 95, 79) measured (122, 104, 67), and the painted jungle water is (128, 110, 76).)
+	FLinearColor JungleMidstream = FLinearColor(FColor(102, 100, 88));
+	{
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterJungleRiver="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+		{
+			JungleMidstream = FLinearColor(FColor(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2])));
+		}
+	}
+	const FLinearColor JungleBank = JungleMidstream * 0.84f;
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
@@ -3289,6 +3299,20 @@ void ACampaignMapActor::BuildWaterways()
 			}
 		}
 		Path.Add(River.Course.Last());
+		if (Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height))
+		{
+			// (The art director's round 30: the Mississippi turned through three hard corners where the Missouri comes
+			// in. No ribbon turns more than about thirty degrees at a point: beyond Europe each corner is rounded
+			// over the points either side of it.)
+			for (int32 Pass = 0; Pass < 5; ++Pass)
+			{
+				const TArray<FVector2D> Sharp = Path;
+				for (int32 K = 1; K + 1 < Path.Num(); ++K)
+				{
+					Path[K] = Sharp[K - 1] * 0.25 + Sharp[K] * 0.5 + Sharp[K + 1] * 0.25;
+				}
+			}
+		}
 		// A little wander, so that a river does not run like a ruled line: nothing at its two ends, most in the
 		// middle, and never so much that it leaves its bridges.
 		{
@@ -3304,14 +3328,17 @@ void ACampaignMapActor::BuildWaterways()
 		}
 		RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())] = MoveTemp(Path);
 	}
+	TArray<int32> RiverUnderFrom; // where a river's ribbon goes under the ribbon of the river it joins
+	RiverUnderFrom.Init(MAX_int32, Land.Rivers.Num());
 	if (Data.bWorld)
 	{
-		// (The wider chart's rivers. A tributary's last point is a point of the river it joins, and its ribbon ran on
-		// to the middle of that river and past it, with a hook where the two wandered apart: the Missouri at the
-		// Mississippi. It is ended where it reaches the other's bank. Europe's rivers are left as they were laid.)
+		// (The wider chart's rivers, by the art director's round 30. A tributary's ribbon runs on under the ribbon of
+		// the river it joins, to that river's middle, so that no end shows: cut off at the bank it showed a square
+		// end and a gap. Its last point is brought to the other's line, and from where it comes within the other's
+		// banks it lies a hair lower. Europe's rivers are left as they were laid.)
 		auto BreadthOf = [&](int32 Index, int32 At)
 		{
-			return (Great.Contains(Land.Rivers[Index].Name) ? 0.625 : 0.425) * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(At) / FMath::Max(RiverLaid[Index].Num() - 1, 1)));
+			return FCampaignMapData::RiverBroad(Land.Rivers[Index].Name) * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(At) / FMath::Max(RiverLaid[Index].Num() - 1, 1)));
 		};
 		for (int32 Index = 0; Index < RiverLaid.Num(); ++Index)
 		{
@@ -3320,6 +3347,12 @@ void ACampaignMapActor::BuildWaterways()
 			{
 				continue;
 			}
+			// (the river it ends on, if it ends on one: the one whose line lies nearest its last point. The rules give a
+			// great river a score of points, and the curve drawn through them lies a good way off the straight line
+			// between two of them, on which a tributary's last point was set: the Madeira stopped fifteen units short
+			// of the Amazon. Within thirty units it is one, and the tributary is carried on to it.)
+			int32 Joined = INDEX_NONE;
+			double Nearest = 30.0;
 			for (int32 Other = 0; Other < RiverLaid.Num(); ++Other)
 			{
 				const TArray<FVector2D>& Theirs = RiverLaid[Other];
@@ -3327,31 +3360,70 @@ void ACampaignMapActor::BuildWaterways()
 				{
 					continue;
 				}
-				// (how far a place lies from the other river's line, and how broad that river is there)
-				auto Off = [&](const FVector2D& P, double& OutHalf)
+				for (int32 K = 0; K + 1 < Theirs.Num(); ++K)
+				{
+					const double Far = FMath::PointDistToSegment(FVector(Mine.Last(), 0.0), FVector(Theirs[K], 0.0), FVector(Theirs[K + 1], 0.0));
+					if (Far < Nearest)
+					{
+						Nearest = Far;
+						Joined = Other;
+					}
+				}
+			}
+			if (Joined != INDEX_NONE)
+			{
+				const int32 Other = Joined;
+				const TArray<FVector2D>& Theirs = RiverLaid[Other];
+				// (how far a place lies from the other river's line, the place on that line nearest it, and how broad that river is there)
+				auto Off = [&](const FVector2D& P, double& OutHalf, FVector2D& OutNearest)
 				{
 					double Best = 1.0e9;
 					for (int32 K = 0; K + 1 < Theirs.Num(); ++K)
 					{
-						const double Far = FMath::PointDistToSegment(FVector(P, 0.0), FVector(Theirs[K], 0.0), FVector(Theirs[K + 1], 0.0));
+						const FVector Close = FMath::ClosestPointOnSegment(FVector(P, 0.0), FVector(Theirs[K], 0.0), FVector(Theirs[K + 1], 0.0));
+						const double Far = FVector2D::Distance(P, FVector2D(Close.X, Close.Y));
 						if (Far < Best)
 						{
 							Best = Far;
 							OutHalf = BreadthOf(Other, K);
+							OutNearest = FVector2D(Close.X, Close.Y);
 						}
 					}
 					return Best;
 				};
 				double Half = 0.0;
-				if (Off(Mine.Last(), Half) > 2.5)
+				FVector2D OnTheirs;
+				const double Short = Off(Mine.Last(), Half, OnTheirs);
+				if (Short > 1.0)
 				{
-					continue; // it does not end on this one
+					const FVector2D Was = Mine.Last();
+					const int32 Steps = FMath::CeilToInt32(Short / 2.0);
+					for (int32 Step = 1; Step < Steps; ++Step)
+					{
+						Mine.Add(FMath::Lerp(Was, OnTheirs, static_cast<double>(Step) / Steps));
+					}
+					Mine.Add(OnTheirs);
+					// (and the turn where the carried-on stretch begins is rounded, like every other)
+					const int32 Bend = Mine.Num() - Steps - 1;
+					for (int32 Pass = 0; Pass < 5; ++Pass)
+					{
+						const TArray<FVector2D> Sharp = Mine;
+						for (int32 K = FMath::Max(Bend - 5, 1); K < FMath::Min(Bend + 6, Mine.Num() - 1); ++K)
+						{
+							Mine[K] = Sharp[K - 1] * 0.25 + Sharp[K] * 0.5 + Sharp[K + 1] * 0.25;
+						}
+					}
 				}
-				while (Mine.Num() > 4 && Off(Mine.Last(), Half) < Half + 0.15)
+				else
 				{
-					Mine.Pop();
+					Mine.Last() = OnTheirs;
 				}
-				break;
+				int32 From = Mine.Num() - 1;
+				while (From > 1 && Off(Mine[From - 1], Half, OnTheirs) < Half + 0.3)
+				{
+					--From;
+				}
+				RiverUnderFrom[Index] = From;
 			}
 		}
 	}
@@ -3368,8 +3440,9 @@ void ACampaignMapActor::BuildWaterways()
 		// height would show through the coarse ground only in scraps)
 		const bool bRiverBeyond = Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height);
 		FCampaignMeshBuffers& Into = bRiverBeyond ? BuffersBeyond : Buffers;
-		TArray<FVector2D> Path = RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())];
-		const double Broad = Great.Contains(River.Name) ? 0.625 : 0.425;
+		const int32 RiverIndex = static_cast<int32>(&River - Land.Rivers.GetData());
+		TArray<FVector2D> Path = RiverLaid[RiverIndex];
+		const double Broad = FCampaignMapData::RiverBroad(River.Name);
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
@@ -3385,14 +3458,26 @@ void ACampaignMapActor::BuildWaterways()
 				break;
 			}
 			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
-			const FColor Midstream = FMath::Lerp(MidstreamRuns, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankRuns, BankIce, Frozen).ToFColor(true);
+			FLinearColor MidstreamHere = MidstreamRuns, BankHere = BankRuns;
+			if (bRiverBeyond)
+			{
+				// (The art director's condition of round 25: a ribbon takes the water colour of the country it crosses,
+				// so that it and the painted tributaries that run into it are one water. Brown in the jungle.)
+				float Shares[WorldLook::Count];
+				FCampaignClimate::Get().SharesAt(Data.LatitudeAt(Path[K].Y), Data.LongitudeAt(Path[K].X), Shares);
+				MidstreamHere = FMath::Lerp(MidstreamHere, JungleMidstream, Shares[WorldLook::Jungle]);
+				BankHere = FMath::Lerp(BankHere, JungleBank, Shares[WorldLook::Jungle]);
+			}
+			const FColor Midstream = FMath::Lerp(MidstreamHere, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankHere, BankIce, Frozen).ToFColor(true);
+			// (a tributary's ribbon lies a hair lower where it runs under the ribbon of the river it joins)
+			const double Under = K >= RiverUnderFrom[RiverIndex] ? 0.045 : 0.0;
 			const FVector2D Across[5] = { Path[K] + Side * Shore, Path[K] + Side * Half, Path[K], Path[K] - Side * Half, Path[K] - Side * Shore };
 			const FColor Inks[5] = { Earth, Bank, Midstream, Bank, Earth };
 			int32 Here[5];
 			for (int32 P = 0; P < 5; ++P)
 			{
 				// (the banks a hair lower than the water between them, so the water is never hidden by its bank)
-				Here[P] = Into.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, P == 0 || P == 4 ? Lift - 0.03 : Lift), FVector::UpVector, Inks[P]);
+				Here[P] = Into.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, (P == 0 || P == 4 ? Lift - 0.03 : Lift) - Under), FVector::UpVector, Inks[P]);
 			}
 			if (Previous[0] != INDEX_NONE)
 			{
@@ -4829,6 +4914,14 @@ void ACampaignMapActor::BuildTowns()
 			const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
 			Site.Look = Latitude < 37.5 || (Latitude < 42.0 && Longitude > 26.0) ? 4 : Latitude < 45.5 ? 2
 				: (Latitude > 55.0 && Longitude > 4.0) || Longitude > 22.0 ? 3 : Longitude < 7.5 ? 1 : 0;
+			if (Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && Longitude < -40.0)
+			{
+				// (The art director's brief 3.4 and her round 30: in the Americas a town takes the kit of the land it
+				// stands in. North of Mexico, the New World's brick and cream under tar; from Mexico south, the plaza
+				// town's white and ochre under red tile. The islands of the eastern Atlantic keep Europe's rule.)
+				const bool bNorth = Latitude > 33.0 || ((Region.Home == TEXT("USA") || Region.Home == TEXT("CAN")) && Latitude > 24.5);
+				Site.Look = bNorth ? 5 : 6;
+			}
 			// A capital's own great building: the great capitals have theirs, the rest one of four by turns.
 			static const TPair<const TCHAR*, int32> Named[] = {
 				TPair<const TCHAR*, int32>(TEXT("Berlin"), 8), TPair<const TCHAR*, int32>(TEXT("Paris"), 4), TPair<const TCHAR*, int32>(TEXT("London"), 5),
@@ -5356,6 +5449,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		// evening has a sun and a shade of its own on the land: gold on the slopes the lamp lights, cool in the shade.)
 		const float Moon = bLamplight ? 0.0f : ACampaignEnvironment::MoonOf(Night), Dusk = bLamplight ? 0.0f : ACampaignEnvironment::DuskOf(Night);
 		LandVector(TEXT("SunColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), ACampaignEnvironment_DuskSun(), Dusk), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
+		LandScalar(TEXT("WetMoon"), Moon); // (the lesser painted waters sink toward their ground by moonlight: see the land's paint)
 		LandVector(TEXT("ShadeColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), ACampaignEnvironment_DuskShade(), Dusk), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
 		if (PieceMaterial)
 		{

@@ -2779,7 +2779,7 @@ namespace
 										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().VerdictUnder.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 										.ColorAndOpacity_Lambda([this]()
 										{
-											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().VerdictTone : 0;
+											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().UnderTone : 3;
 											return FSlateColor(Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Alarm);
 										})
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().VerdictUnder : FText::GetEmpty(); })

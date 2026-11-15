@@ -219,7 +219,9 @@ struct FMiniatureMesh
 		int32 Factories = 0;
 		int32 Ruined = 0; // how many of its works are wrecks: bombed out, roofless, their stacks broken and cold
 		int32 Seed = 0;
-		int32 Look = 0; // roofs and walls by region: 0 middle Europe, 1 the north-west, 2 the south, 3 the north and east, 4 the far south
+		// roofs and walls by region: 0 middle Europe, 1 the north-west, 2 the south, 3 the north and east, 4 the far south;
+		// and beyond Europe (the art director's brief 3.4): 5 the New World north of Mexico, 6 the plaza town south of it
+		int32 Look = 0;
 		int32 Landmark = 0; // a capital's own great building, by kind (see Township)
 		bool bQuay = false; // it is a port, and its shore has been found:
 		FVector2D Quay = FVector2D::ZeroVector; // where its quay stands on the map, at the water's edge

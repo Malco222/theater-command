@@ -295,6 +295,7 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 				}
 			}
 			RuledRivers.Reset();
+			RuledBroad.Reset();
 			{
 				TSharedPtr<FJsonObject> Waters;
 				FString WatersError;
@@ -307,6 +308,7 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 						if (ReadRing(RiverValue->AsObject()->GetArrayField(TEXT("pts")), Course) || Course.Num() >= 2)
 						{
 							RuledRivers.Add(MoveTemp(Course));
+							RuledBroad.Add(RiverBroad(RiverValue->AsObject()->GetStringField(TEXT("name"))));
 						}
 					}
 				}
@@ -325,6 +327,16 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		return false;
 	}
 	return true;
+}
+
+double FCampaignMapData::RiverBroad(const FString& Name)
+{
+	static const TSet<FString> Great = { TEXT("Rhine"), TEXT("Danube"), TEXT("Vistula"), TEXT("Dnieper"), TEXT("Volga"), TEXT("Don"), TEXT("Elbe"), TEXT("Oder"), TEXT("Loire"), TEXT("Seine"),
+		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester"),
+		TEXT("Mississippi"), TEXT("Missouri"), TEXT("Ohio"), TEXT("St Lawrence"), TEXT("Columbia"),
+		TEXT("Madeira"), TEXT("Paraguay"), TEXT("Uruguay"), TEXT("Magdalena") };
+	// (the Amazon is as broad as the painted river it stands in for, which the art director passed as built)
+	return Name == TEXT("Amazon") ? 1.5 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
 }
 
 bool FCampaignMapData::IsCharted(double X, double Y) const
@@ -393,6 +405,12 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		{ TEXT("UK"), TEXT("B04A3E") }, { TEXT("ITA"), TEXT("548C5C") }, { TEXT("ROM"), TEXT("C4B048") }, { TEXT("BEL"), TEXT("CEA834") },
 		{ TEXT("NED"), TEXT("D68230") }, { TEXT("HUN"), TEXT("B08C5C") }, { TEXT("SWE"), TEXT("CCB85C") },
 		{ TEXT("DEN"), TEXT("B26084") }, { TEXT("YUG"), TEXT("607CA8") },
+		// (The twelve small republics of Latin America, which the rules give one parchment between them: the art
+		// director's picks of 15 November 2026, provisional until Brian approves them. Panama's plum also sets the
+		// Canal Zone apart from the American olive.)
+		{ TEXT("GUA"), TEXT("9383C4") }, { TEXT("ELS"), TEXT("C98494") }, { TEXT("HON"), TEXT("9DBD8C") }, { TEXT("NIC"), TEXT("BF7F73") },
+		{ TEXT("COS"), TEXT("7FAE8C") }, { TEXT("PAN"), TEXT("A8607F") }, { TEXT("HAI"), TEXT("8FBA7A") }, { TEXT("DOM"), TEXT("B08FB5") },
+		{ TEXT("ECU"), TEXT("CF8F66") }, { TEXT("BOL"), TEXT("6FA58C") }, { TEXT("PAR"), TEXT("C4838F") }, { TEXT("URU"), TEXT("9D8CC4") },
 	};
 	for (const auto& Paint : TablePaints)
 	{
