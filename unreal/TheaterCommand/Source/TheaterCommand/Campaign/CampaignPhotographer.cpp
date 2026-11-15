@@ -666,10 +666,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Asked.Lens = Parts.IsValidIndex(4) ? FCString::Atof(*Parts[4]) : 0.0f; // a fifth part is the width of the view in degrees: small for a long lens
 				if (Parts.IsValidIndex(5))
 				{
-					Asked.Army = Parts[5]; // a sixth part is a province whose army is picked up first
-					if (Parts.IsValidIndex(6))
+					// a sixth part is a province whose army is picked up first ("keep" leaves the army of the picture before in hand)
+					if (Parts[5] == TEXT("keep"))
+					{
+						Asked.bKeep = true;
+					}
+					else
+					{
+						Asked.Army = Parts[5];
+					}
+					if (Parts.IsValidIndex(6) && Parts[6] != TEXT("-"))
 					{
 						Asked.Route = Parts[6]; // and a seventh is a province the road is shown to, as when the pointer rests on it
+					}
+					if (Parts.IsValidIndex(7) && Parts[7] != TEXT("-"))
+					{
+						Asked.March = Parts[7]; // and an eighth is a province the army is ordered to just before the picture
 					}
 				}
 			}

@@ -884,6 +884,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			C.Region = Unit->GetIntegerField(TEXT("reg"));
 			C.Moves = Unit->GetIntegerField(TEXT("ap"));
 			C.MovesMax = Unit->GetIntegerField(TEXT("apMax"));
+			{
+				int32 Marching = INDEX_NONE;
+				if (Unit->TryGetNumberField(TEXT("marchTo"), Marching) && Marching >= 0)
+				{
+					C.MarchTo = Marching;
+					Unit->TryGetNumberField(TEXT("marchMonths"), C.MarchMonths);
+				}
+			}
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
@@ -995,12 +1003,20 @@ namespace
 	}
 }
 
-TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger)
+TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding)
 {
 	TArray<FReachRegion> Out;
 	if (OutDanger)
 	{
 		OutDanger->Reset();
+	}
+	if (OutFar)
+	{
+		OutFar->Reset();
+	}
+	if (OutStanding)
+	{
+		OutStanding->Reset();
 	}
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() == 0 || !CallRules(TEXT("reach"), FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds)), Object))
@@ -1028,6 +1044,24 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 		for (const TSharedPtr<FJsonValue>& Value : *Danger)
 		{
 			OutDanger->Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
+	// (release 1) Friendly ground beyond this month's reach, each province with about how many months the march
+	// would take; and the road still ahead of a corps already on a standing march.
+	const TArray<TSharedPtr<FJsonValue>>* Far = nullptr;
+	if (OutFar && Object->TryGetArrayField(TEXT("far"), Far))
+	{
+		for (int32 K = 0; K + 1 < Far->Num(); K += 2)
+		{
+			OutFar->Add(FMath::RoundToInt32((*Far)[K]->AsNumber()), FMath::RoundToInt32((*Far)[K + 1]->AsNumber()));
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Standing = nullptr;
+	if (OutStanding && Object->TryGetArrayField(TEXT("standing"), Standing))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Standing)
+		{
+			OutStanding->Add(FMath::RoundToInt32(Value->AsNumber()));
 		}
 	}
 	return Out;

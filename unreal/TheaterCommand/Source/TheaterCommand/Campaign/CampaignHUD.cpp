@@ -6115,6 +6115,7 @@ namespace
 					: Card.Stale > 0 ? FString::Printf(TEXT("from a report %d month%s old"), Card.Stale, Card.Stale == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("as it stands today")))
 				: !Card.bCanOrder ? FString(TEXT("holds its ground"))
 				: (!Card.bPicked ? FString(TEXT("staying behind"))
+					: !Card.Marching.IsEmpty() ? Card.Marching // (release 1: a corps on a standing march says where to, and how long)
 					: FString::Printf(TEXT("moves %d of %d"), Card.Moves, Card.MovesMax));
 			const FLinearColor StrengthInk = Card.Strength < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")));
 			const FLinearColor MoraleInk = Card.Morale < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("6FA3D8")));

@@ -56,6 +56,8 @@ struct FViewCorps
 	int32 Region = INDEX_NONE;
 	int32 Moves = 0; // weeks of action left this month
 	int32 MovesMax = 0;
+	int32 MarchTo = INDEX_NONE; // (release 1) the province it is marching to on a standing order
+	int32 MarchMonths = 0; // and about how many months it has still to go
 	bool bCanOrder = false; // the player may give this corps orders right now
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite

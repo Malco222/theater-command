@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, moveCost, railReach as railReachOf, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -75,7 +75,7 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
-import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
+import { CROSSINGS, RIVERS, blocked, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
 import { RAIL_LINKS, railCut, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
@@ -278,6 +278,8 @@ function view() {
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
+      // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
+      marchTo: marchOf(s, c), marchMonths: marchOf(s, c) >= 0 ? monthsOf(c, farRoad(s, c, marchOf(s, c))?.cost ?? 1) : 0,
       canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0,
       // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
       works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
@@ -828,6 +830,149 @@ function load(text: string) {
   return view();
 }
 
+// ---- Marches that carry on (release 1) ----------------------------------------------------------
+// A march to friendly ground too far for one month is a standing order: the corps goes as far as it can at once,
+// and on again as each of the player's months opens, until it arrives. Any other order to the corps ends it.
+// The design director's rules for it (2026-11-15): a march never walks into the enemy (it halts where it stands
+// if the enemy the player can see reaches its province or its next leg, or if it has fought since last month);
+// the road is found again each month by the rules' own costs, so railways, rivers, mud and lost ground all
+// count; friendly ground is wherever the rules let the army march, its own country's and its allies'; where the
+// road is full it waits one month and then halts; and a march that ends always tells the player. The order is
+// kept with the game, as flags for each corps.
+
+const marchKey = (id: number): string => `march:${id}`;
+/** Where a corps is marching to on a standing order, or -1. */
+const marchOf = (s: Game, c: Corps): number => { const v = s.flags[marchKey(c.id)]; return v !== undefined && v > 0 ? v - 1 : -1; };
+const forgetMarch = (s: Game, ids: number[]): void => { for (const id of ids) { delete s.flags[marchKey(id)]; delete s.flags[`marchRep:${id}`]; delete s.flags[`marchWait:${id}`]; } };
+const friendlyTo = (s: Game, c: Corps, id: number): boolean => { const r = s.regions[id]; return !!r && allied(s, c.nat, r.ctrl); };
+const lastReportId = (s: Game): number => (s.reports.length ? s.reports[s.reports.length - 1].id : 0);
+
+/**
+ * Every province a corps could march to over friendly ground, however many months it took, by the rules' own
+ * cost of each step (what a normal move pays, and what it cannot cross): the weeks it is off, and the province
+ * before it on the cheapest way.
+ */
+function farGround(s: Game, c: Corps): Map<number, { cost: number; prev: number }> {
+  const out = new Map<number, { cost: number; prev: number }>();
+  out.set(c.reg, { cost: 0, prev: -1 });
+  const open = [c.reg], done = new Set<number>();
+  while (open.length && done.size < 900) {
+    let best = 0;
+    for (let i = 1; i < open.length; i++) if (out.get(open[i])!.cost < out.get(open[best])!.cost) best = i;
+    const a = open.splice(best, 1)[0];
+    if (done.has(a)) continue;
+    done.add(a);
+    const ca = out.get(a)!.cost;
+    for (const j of s.regions[a].nb) {
+      if (done.has(j) || !friendlyTo(s, c, j)) continue;
+      const r = s.regions[j];
+      let step = 1;
+      try { if (blocked(s, c, r, a)) continue; step = Math.max(1, moveCost(s, c, r, a)); } catch { step = 1; }
+      const old = out.get(j);
+      if (old && old.cost <= ca + step) continue;
+      out.set(j, { cost: ca + step, prev: a });
+      open.push(j);
+    }
+  }
+  return out;
+}
+
+/** The road over friendly ground from where a corps stands to a place, the place itself last, and the weeks it costs; null if there is none. */
+function farRoad(s: Game, c: Corps, to: number): { road: number[]; cost: number } | null {
+  if (to === c.reg || !friendlyTo(s, c, to)) return null;
+  const ground = farGround(s, c);
+  const end = ground.get(to);
+  if (!end) return null;
+  const road: number[] = [];
+  for (let at = to; at !== c.reg && at >= 0; at = ground.get(at)!.prev) road.unshift(at);
+  return { road, cost: end.cost };
+}
+
+/** About how many months a march of so many weeks takes this corps. */
+const monthsOf = (c: Corps, cost: number): number => Math.max(1, Math.ceil(cost / Math.max(1, c.apMax ?? 4)));
+const inMonths = (n: number): string => (n === 1 ? 'about a month' : `about ${n} months`);
+
+/** The leg of its road a corps can cover this month: the provinces it would pass through, the last the one it stops in. Empty if it cannot move along it. */
+function marchLeg(s: Game, c: Corps, road: number[]): number[] {
+  const m = reach(s, c);
+  let far = -1;
+  for (let i = 0; i < road.length; i++) { const r = m.get(road[i]); if (r && !r.attack) far = i; }
+  if (far < 0) return [];
+  const path: number[] = [];
+  for (let at = road[far]; at !== c.reg && at >= 0; at = m.get(at)!.prev) path.unshift(at);
+  return path;
+}
+
+/**
+ * How far the enemy corps the player can see could strike next month, were each of them fresh: the ground it
+ * could march onto, and the ground beside any place it could reach with a week still in hand. Kept to the ground
+ * that matters to the asker.
+ */
+function enemyReach(s: Game, matters: (id: number) => boolean): Set<number> {
+  const danger = new Set<number>();
+  const me = s.human;
+  if (!me) return danger;
+  const seen = sight(s);
+  for (const e of s.corps) {
+    if (e.dead || e.kind === 'fort' || !(seen[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
+    const had = e.ap;
+    e.ap = Math.max(e.ap, e.apMax ?? e.ap);
+    try {
+      for (const [id, r] of reach(s, e)) {
+        if (id !== e.reg && matters(id)) danger.add(id);
+        if (!r.attack && e.ap - r.cost >= 1) {
+          for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
+        }
+      }
+    } finally { e.ap = had; }
+  }
+  return danger;
+}
+
+/**
+ * As the player's month opens: every corps with a standing march goes on, or halts. Returns the lines for the
+ * marches that ended (each with the province to jump to), and the provinces armies marched into, for the table.
+ */
+function advanceMarches(s: Game): { ended: { note: string; region: number }[]; went: number[] } {
+  const ended: { note: string; region: number }[] = [], went: number[] = [];
+  try {
+    const me = s.human;
+    if (!me || !humanUp(s) || onEve(s)) return { ended, went };
+    const keys = Object.keys(s.flags).filter((k) => k.startsWith('march:'));
+    if (!keys.length) return { ended, went };
+    const danger = enemyReach(s, (id) => { const r = s.regions[id]; return r.ctrl === me || allied(s, r.ctrl, me); });
+    for (const key of keys) {
+      const id = Number(key.slice(6)), c = s.corps.find((x) => x.id === id && !x.dead);
+      const to = c ? marchOf(s, c) : -1;
+      if (!c || to < 0 || !s.regions[to]) { forgetMarch(s, [id]); continue; } // (the corps is no more: there is nobody to tell of)
+      const here = s.regions[c.reg].name, goal = s.regions[to].name;
+      const halt = (why: string): void => { forgetMarch(s, [id]); ended.push({ note: `${c.name} has halted at ${here}, ${why}. It waits for orders.`, region: c.reg }); };
+      if (c.reg === to) { forgetMarch(s, [id]); ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to }); continue; }
+      if (!canOrder(s, c)) { halt('the way is closed'); continue; }
+      // It never walks into the enemy: not where his reach covers it, nor after a fight.
+      const since = s.flags[`marchRep:${id}`] ?? 0;
+      const fought = s.reports.some((r) => r.id > since && [...r.attackers, ...r.defenders].some((u) => u.name === c.name && u.nat === c.nat));
+      if (fought || danger.has(c.reg)) { halt('the enemy is near'); continue; }
+      const way = farRoad(s, c, to);
+      if (!way) { halt('the way is closed'); continue; }
+      const leg = marchLeg(s, c, way.road);
+      if (leg.some((r) => danger.has(r))) { halt('the enemy is near'); continue; }
+      if (!leg.length) {
+        // The next province is full, or cannot be entered this month: it waits one month, and then halts.
+        if (s.flags[`marchWait:${id}`]) halt('the way is closed');
+        else s.flags[`marchWait:${id}`] = 1;
+        continue;
+      }
+      delete s.flags[`marchWait:${id}`];
+      const n = orderMove(s, c, leg[leg.length - 1]);
+      s.flags[`marchRep:${id}`] = lastReportId(s);
+      if (n > 0) went.push(c.reg);
+      if (c.reg === to) { forgetMarch(s, [id]); ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to }); }
+    }
+  } catch { /* a march that cannot be worked out is left where it stands, its order kept */ }
+  return { ended, went };
+}
+
 /** Where a picked-up army could go: anywhere any one of its corps could, and what it could attack. */
 function reachOf(ids: number[]) {
   const s = game();
@@ -849,31 +994,34 @@ function reachOf(ids: number[]) {
       merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
     }
   }
-  // Enemy reach (release 1): how far the enemy corps the player can see could strike next month, were each of them
-  // fresh: the ground it could march onto, and the ground beside any place it could reach with a week still in
-  // hand. Kept to the ground that matters to the army in hand: his side's own, and wherever this army could go.
-  const danger = new Set<number>();
+  // Enemy reach (release 1): how far the enemy corps the player can see could strike next month. Kept to the ground
+  // that matters to the army in hand: his side's own, and wherever this army could go.
+  let danger = new Set<number>();
   try {
     const me = s.human;
-    if (me && humanUp(s)) {
-      const seen = sight(s);
-      const matters = (id: number): boolean => { const r = s.regions[id]; return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id); };
-      for (const e of s.corps) {
-        if (e.dead || e.kind === 'fort' || !(seen[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
-        const had = e.ap;
-        e.ap = Math.max(e.ap, e.apMax ?? e.ap);
-        try {
-          for (const [id, r] of reach(s, e)) {
-            if (id !== e.reg && matters(id)) danger.add(id);
-            if (!r.attack && e.ap - r.cost >= 1) {
-              for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
-            }
-          }
-        } finally { e.ap = had; }
+    if (me && humanUp(s)) danger = enemyReach(s, (id) => { const r = s.regions[id]; return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id); });
+  } catch { danger = new Set<number>(); }
+  // Friendly ground beyond this month's reach (release 1, marches that carry on): each such province with about how
+  // many months the march would take, two by two; and the road still ahead of a corps already on a standing march.
+  const far: number[] = [];
+  let standing: number[] = [];
+  let standingTo = -1;
+  try {
+    if (humanUp(s) && !onEve(s)) {
+      const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+      const lead = cs[0];
+      if (lead) {
+        for (const [id, g] of farGround(s, lead)) {
+          // (a province next door that cannot be entered this month is full: that is a matter of changing places, not of a long march)
+          if (id === lead.reg || merged.has(id) || s.regions[lead.reg].nb.includes(id) || far.length >= 1200) continue;
+          far.push(id, monthsOf(lead, g.cost));
+        }
+        const on = cs.find((c) => marchOf(s, c) >= 0);
+        if (on) { standingTo = marchOf(s, on); standing = farRoad(s, on, standingTo)?.road ?? []; }
       }
     }
-  } catch { danger.clear(); }
-  return { regions: [...merged.values()], danger: [...danger] };
+  } catch { far.length = 0; standing = []; standingTo = -1; }
+  return { regions: [...merged.values()], danger: [...danger], far, standing, standingTo };
 }
 
 /** (Version 65) The swap last offered: asked once, done when the same march is ordered again. */
@@ -905,7 +1053,26 @@ function move(ids: number[], to: number) {
     const m = reach(s, c);
     const end = m.get(to);
     if (to === c.reg || end?.attack) continue;
-    if (!end) { trySwap(c); continue; }
+    if (!end) {
+      // (release 1) Friendly ground too far for this month: a march that carries on. The corps sets off at once.
+      const way = canOrder(s, c) && !onEve(s) && !s.regions[c.reg].nb.includes(to) ? farRoad(s, c, to) : null;
+      if (way) {
+        forgetMarch(s, [c.id]);
+        const leg = marchLeg(s, c, way.road);
+        const n = leg.length ? orderMove(s, c, leg[leg.length - 1]) : 0;
+        if (n > 0) moved.push({ id: c.id, path: leg.slice(0, n) });
+        if (c.reg !== to) {
+          s.flags[marchKey(c.id)] = to + 1;
+          s.flags[`marchRep:${c.id}`] = lastReportId(s);
+          const left = farRoad(s, c, to);
+          note = `${c.name} marches for ${s.regions[to].name}, ${inMonths(left ? monthsOf(c, left.cost) : 1)} more. It goes on by itself as each month opens, and halts if the enemy comes near. Any other order stops the march.`;
+        }
+        continue;
+      }
+      trySwap(c);
+      continue;
+    }
+    forgetMarch(s, [c.id]); // (a new order ends a standing march)
     const path: number[] = [];
     for (let at = to; at !== c.reg && at >= 0; at = m.get(at)!.prev) path.unshift(at);
     const n = orderMove(s, c, to);
@@ -1153,6 +1320,7 @@ function wornNote(s: Game, r: BattleReport): string {
 
 function attack(ids: number[], to: number) {
   const s = game();
+  forgetMarch(s, ids); // (any other order ends a standing march)
   const before = new Map(s.corps.map((c) => [c.id, c.reg]));
   const report = orderAttack(s, attackers(s, ids, to), s.regions[to]);
   // Corps that followed up into the ground they won, for the game to march across.
@@ -1173,6 +1341,7 @@ function endMonth() {
   const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
   const steps: unknown[] = [];
   let fallen: string | null = null;
+  let marched: { note: string; region: number }[] = [];
   const roll0 = s.passings.length, month0 = s.turn;
   const seaStart = lastSeaReport(s);
   // How the player's own campaigns stood, to tell afterwards which were decided this month.
@@ -1203,6 +1372,13 @@ function endMonth() {
     if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, view: view() });
     runOthers(s, steps);
     fallen = arrive(s);
+    // (release 1) The player's armies on a standing march go on as his month opens: shown as the month's last move.
+    if (!fallen && s.human) {
+      const out = advanceMarches(s);
+      marched = out.ended;
+      const said = [out.went.length ? `${out.went.length === 1 ? 'One of your corps is' : `${out.went.length} of your corps are`} on the march.` : '', ...out.ended.slice(0, 2).map((x) => x.note)].filter(Boolean).join(' ');
+      if (said) steps.push({ nat: s.human, note: said, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view() });
+    }
   }
   // Fights at sea that no nation's own move accounts for (they are settled as a month opens): shown last.
   {
@@ -1296,6 +1472,8 @@ function endMonth() {
     rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
     news: events.map((e) => e.text),
   };
+  // (every march that ended is told with the player's own fronts, with the way to go and look at the army)
+  if (s.human) for (const x of marched) lastMonth.rows.push({ nat: s.human, note: x.note, region: x.region, mine: true });
   // A title card as each year opens: the year, and how the player stands as it begins.
   const year = (() => {
     const d = turnToDate(s.turn);
@@ -1338,6 +1516,7 @@ function railReach(ids: number[]) {
 
 function rail(ids: number[], to: number) {
   const s = game();
+  forgetMarch(s, ids); // (any other order ends a standing march)
   const moved: { id: number; path: number[] }[] = [];
   for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
   return { moved, view: view() };
@@ -1359,6 +1538,7 @@ function seaReach(ids: number[]) {
 /** Ships the chosen corps to a friendly port. */
 function ship(ids: number[], to: number) {
   const s = game();
+  forgetMarch(s, ids); // (any other order ends a standing march)
   const moved: { id: number; path: number[] }[] = [];
   for (const c of corpsById(s, ids)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
   return { moved, view: view() };
@@ -1383,6 +1563,7 @@ function landingPlan(ids: number[], to: number) {
 /** Lands the chosen corps on an enemy coast. */
 function landOn(ids: number[], to: number) {
   const s = game();
+  forgetMarch(s, ids); // (any other order ends a standing march)
   const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
   const before = new Map(cs.map((c) => [c.id, c.reg] as const));
   const r = orderLand(s, cs, to);

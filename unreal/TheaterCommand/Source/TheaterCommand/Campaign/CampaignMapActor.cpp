@@ -2893,7 +2893,7 @@ void ACampaignMapActor::BuildWorks()
 		// (The art director's ruling: the stone read as fresh plaster. It is a warm grey-buff now, its parapets a step
 		// darker, and the openings under the arches are near-black and stand a little proud of the roadway's sides,
 		// so that the arches read.)
-		const FLinearColor Ashlar(FColor::FromHex(TEXT("A39780"))), AshlarDark(FColor::FromHex(TEXT("857A66"))), Under(FColor::FromHex(TEXT("141210"))), Lamp(FColor::FromHex(TEXT("2E2B28")));
+		const FLinearColor Ashlar(FColor::FromHex(TEXT("968B75"))), AshlarDark(FColor::FromHex(TEXT("7C715E"))), Under(FColor::FromHex(TEXT("141210"))), Lamp(FColor::FromHex(TEXT("2E2B28")));
 		for (const FCampaignRegion& Region : Data.Regions)
 		{
 			if (!(Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2 || Region.Factories >= 2))
@@ -5977,6 +5977,10 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 {
 	OrdersMesh->ClearMeshSection(0);
 	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
+	if (EnemyReachMesh)
+	{
+		EnemyReachMesh->ClearAllMeshSections();
+	}
 	if (Reach.Num() == 0)
 	{
 		return;
@@ -6015,17 +6019,22 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 {
 	OrdersMesh->ClearMeshSection(9); // (a section of its own: the route to the province under the pointer is drawn and cleared in section 1)
+	if (EnemyReachMesh)
+	{
+		EnemyReachMesh->ClearAllMeshSections();
+	}
 	if (Danger.Num() == 0 || !Data.IsLoaded())
 	{
 		return;
 	}
-	// The ground the enemy could strike next month takes a faint red wash, and where it ends inside the player's
-	// own country, or an ally's or a neutral's, a dashed red line is ruled: this deep, and no deeper. Along the
-	// front itself nothing more is drawn: the front line is there already.
+	// The ground the enemy could strike next month takes a faint warm wash, and where it ends inside the player's
+	// own country, or an ally's or a neutral's, a dashed line is ruled: this deep, and no deeper. Along the front
+	// itself nothing more is drawn: the front line is there already. (The art director's ruling: the dashes are in
+	// the front line's own vermilion, about three points of the screen wide at working height and heavier from the
+	// staff map's height as the front line is, with no barbs; the wash is warmer, not darker.)
 	const TSet<int32> In(Danger);
 	FCampaignMeshBuffers Buffers;
-	const FLinearColor Wash(0.85f, 0.08f, 0.04f, 0.06f);
-	const FColor Dash = FLinearColor(0.72f, 0.05f, 0.04f, 0.95f).ToFColor(false);
+	const FLinearColor Wash(1.0f, 0.34f, 0.12f, 0.1f);
 	for (const int32 Id : In)
 	{
 		if (Data.Regions.IsValidIndex(Id) && !WarFoes.Contains(Data.Regions[Id].Owner))
@@ -6033,8 +6042,20 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 			AppendRegionFill(Buffers, Id, Wash);
 		}
 	}
+	Buffers.Commit(OrdersMesh, 9, HighlightMaterial);
+
+	if (!EnemyReachMesh)
+	{
+		EnemyReachMesh = NewObject<UProceduralMeshComponent>(this);
+		EnemyReachMesh->SetupAttachment(Root);
+		EnemyReachMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		EnemyReachMesh->RegisterComponent();
+		EnemyReachMesh->SetCastShadow(false);
+	}
 	FindSharedEdges();
-	const double HalfWidth = 0.28, Lift = 0.27, Long = 1.6, Gap = 1.0;
+	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
+	FCampaignMeshBuffers Weights[2];
+	static const double Heavier[2] = { 1.0, 2.7 };
 	for (const FSharedEdge& Edge : SharedEdges)
 	{
 		if (In.Contains(Edge.Here) == In.Contains(Edge.There)
@@ -6044,22 +6065,36 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 		}
 		const double Length = FVector2D::Distance(Edge.A, Edge.B);
 		const FVector2D Dir = (Edge.B - Edge.A) / Length;
-		// (dashes of an even length, centred on the edge so that each edge begins and ends in a gap or a whole dash)
-		const int32 Count = FMath::Max(1, FMath::FloorToInt32((Length + Gap) / (Long + Gap)));
-		const double Start = (Length - (Count * Long + (Count - 1) * Gap)) * 0.5;
-		for (int32 K = 0; K < Count; ++K)
+		for (int32 Weight = 0; Weight < 2; ++Weight)
 		{
-			const double From = FMath::Max(Start + K * (Long + Gap), 0.0), To = FMath::Min(From + Long, Length);
-			const FVector2D P0 = Edge.A + Dir * From, P1 = Edge.A + Dir * To;
-			const int32 A = Buffers.AddVertex(SurfacePointOver(P0.X + Edge.Side.X * HalfWidth, P0.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
-			const int32 B = Buffers.AddVertex(SurfacePointOver(P0.X - Edge.Side.X * HalfWidth, P0.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
-			const int32 C = Buffers.AddVertex(SurfacePointOver(P1.X + Edge.Side.X * HalfWidth, P1.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
-			const int32 D = Buffers.AddVertex(SurfacePointOver(P1.X - Edge.Side.X * HalfWidth, P1.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
-			Buffers.AddTriangleFacingUp(A, B, C);
-			Buffers.AddTriangleFacingUp(B, C, D);
+			FCampaignMeshBuffers& Into = Weights[Weight];
+			const double W = Heavier[Weight], Long = 1.7 * W, Gap = 1.1 * W;
+			// (dashes of an even length, centred on the edge so that each edge begins and ends in a gap or a whole dash)
+			const int32 Count = FMath::Max(1, FMath::FloorToInt32((Length + Gap) / (Long + Gap)));
+			const double Start = (Length - (Count * Long + (Count - 1) * Gap)) * 0.5;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const double From = FMath::Max(Start + K * (Long + Gap), 0.0), To = FMath::Min(From + Long, Length);
+				auto Dash = [&](double HalfWidth, double Run, double Lift, const FColor& Ink)
+				{
+					const FVector2D P0 = Edge.A + Dir * (From - Run), P1 = Edge.A + Dir * (To + Run);
+					const int32 A = Into.AddVertex(SurfacePointOver(P0.X + Edge.Side.X * HalfWidth, P0.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Ink);
+					const int32 B = Into.AddVertex(SurfacePointOver(P0.X - Edge.Side.X * HalfWidth, P0.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Ink);
+					const int32 C = Into.AddVertex(SurfacePointOver(P1.X + Edge.Side.X * HalfWidth, P1.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Ink);
+					const int32 D = Into.AddVertex(SurfacePointOver(P1.X - Edge.Side.X * HalfWidth, P1.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Ink);
+					Into.AddTriangleFacingUp(A, B, C);
+					Into.AddTriangleFacingUp(B, C, D);
+				};
+				Dash(0.36 * W, 0.1 * W, 0.24, Edging);
+				Dash(0.24 * W, 0.0, 0.28, Vermilion);
+			}
 		}
 	}
-	Buffers.Commit(OrdersMesh, 9, HighlightMaterial);
+	Weights[0].Commit(EnemyReachMesh, 0, InkMaterial);
+	Weights[1].Commit(EnemyReachMesh, 1, InkMaterial);
+	const bool bFar = FrontLineFar == 1;
+	EnemyReachMesh->SetMeshSectionVisible(0, !bFar);
+	EnemyReachMesh->SetMeshSectionVisible(1, bFar);
 }
 
 float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
@@ -7468,6 +7503,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			FrontLineFar = Far;
 			FrontLineMesh->SetMeshSectionVisible(0, Far == 0);
 			FrontLineMesh->SetMeshSectionVisible(1, Far == 1);
+			if (EnemyReachMesh)
+			{
+				EnemyReachMesh->SetMeshSectionVisible(0, Far == 0);
+				EnemyReachMesh->SetMeshSectionVisible(1, Far == 1);
+			}
 		}
 	}
 	UpdateSmoke(CameraDistance, CameraFocus);

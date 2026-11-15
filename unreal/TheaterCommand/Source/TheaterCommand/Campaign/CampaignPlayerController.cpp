@@ -2229,7 +2229,8 @@ int32 ACampaignPlayerController::ArmiesYetToMove() const
 	TSet<int32> Places;
 	for (const FViewCorps& Unit : View.Corps)
 	{
-		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.Kind != TEXT("fort"))
+		// (an army on a standing march has its orders: it is not waiting for any)
+		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.Kind != TEXT("fort") && Unit.MarchTo == INDEX_NONE)
 		{
 			Places.Add(Unit.Region);
 		}
@@ -2942,7 +2943,7 @@ void ACampaignPlayerController::NextArmy()
 	TArray<int32> Places;
 	for (const FViewCorps& Unit : View.Corps)
 	{
-		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0)
+		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.MarchTo == INDEX_NONE)
 		{
 			Places.AddUnique(Unit.Region);
 		}
@@ -3652,6 +3653,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							Line += TEXT("\nThe enemy you can see could strike here next month.");
 						}
 					}
+				}
+				else if (const int32* Months = (!bByRail && !bBySea) ? FarMonths.Find(TipRegion) : nullptr)
+				{
+					Line += FString::Printf(TEXT("\nOut of reach this month. Right-click: march here over about %s. The army goes on by itself as each month opens, and halts if the enemy comes near."),
+						*Months == 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), *Months));
 				}
 				else
 				{
@@ -4785,6 +4791,11 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Experience = Unit.Experience;
 		Card.Moves = Unit.Moves;
 		Card.MovesMax = Unit.MovesMax;
+		if (Unit.MarchTo != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Unit.MarchTo))
+		{
+			Card.Marching = FString::Printf(TEXT("Marching to %s, about %s"), *Map->GetData().Regions[Unit.MarchTo].Name,
+				Unit.MarchMonths <= 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), Unit.MarchMonths));
+		}
 		Card.bCanOrder = Unit.bCanOrder;
 		Card.bPicked = PickedCorps.Contains(Unit.Id);
 		Card.Nickname = FText::FromString(Unit.Nickname);
@@ -4876,7 +4887,8 @@ void ACampaignPlayerController::RefreshOrders()
 		ShowCorpsModel(Wanted);
 	}
 
-	TArray<int32> Danger;
+	TArray<int32> Danger, Road;
+	TMap<int32, int32> Far;
 	if (bBySea)
 	{
 		TArray<int32> Ports, Beaches;
@@ -4909,11 +4921,16 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps, &Danger);
+		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road);
 	}
 	EnemyReach = TSet<int32>(Danger);
+	FarMonths = MoveTemp(Far);
+	StandingRoad = MoveTemp(Road);
 	Map->SetReach(Reach, bByRail || bBySea);
 	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
+	// (an army on a standing march shows the road still ahead of it while it is in hand)
+	RouteTarget = -2;
+	ShowRouteTo(INDEX_NONE);
 
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
@@ -4945,6 +4962,10 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 		{
 			break;
 		}
+	}
+	if (Road.Num() == 0 && !bBySea)
+	{
+		Road = StandingRoad; // (nothing in reach is pointed at: the road of its standing march, if it has one)
 	}
 	const FVector From = RingedPiece.IsValid() ? RingedPiece->GetRestLocation() : FVector::ZeroVector;
 	const FReachRegion* Ends = FindReach(RegionId);
@@ -5012,6 +5033,40 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	if (Target && Target->IsWar())
 	{
 		Notify(TEXT("War cannot be declared on them this month."));
+		return;
+	}
+	if (!Target && !bByRail && FarMonths.Contains(RegionId))
+	{
+		// (release 1) Friendly ground too far for this month: a march that carries on. The army sets off at once, as
+		// far as it can go, and the rules send it on as each month opens.
+		AdviserSaw(1);
+		FString Said;
+		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
+		if (Said.IsEmpty() && Marches.Num() == 0)
+		{
+			Notify(TEXT("They cannot march there."), 5.0);
+			return;
+		}
+		if (!Said.IsEmpty())
+		{
+			Notify(Said, 10.0);
+		}
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		if (Marches.Num() > 0)
+		{
+			ShowWar(Session->GetView(), Marches, CarriedFrom);
+			PickedCorps.Reset();
+			for (const FCorpsMove& March : Marches)
+			{
+				PickedCorps.Add(March.CorpsId);
+			}
+			if (Marches[0].Path.Num() > 0)
+			{
+				ArmyRegion = Marches[0].Path.Last();
+			}
+		}
+		RefreshOrders();
+		SelectRegion(ArmyRegion);
 		return;
 	}
 	if (!Target)

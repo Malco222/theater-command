@@ -591,6 +591,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> FrontLineMesh;
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	struct FVictorFlag
 	{
 		FString Tag; // whose flag flies there (none: it is on its way down for good)

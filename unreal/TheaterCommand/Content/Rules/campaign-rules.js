@@ -23742,6 +23742,9 @@
           apMax: c.apMax,
           gen: generalOf(s, c)?.name ?? null,
           posture: postureOf(c),
+          // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
+          marchTo: marchOf(s, c),
+          marchMonths: marchOf(s, c) >= 0 ? monthsOf2(c, farRoad(s, c, marchOf(s, c))?.cost ?? 1) : 0,
           canOrder: up && canOrder(s, c),
           supplied: c.supplied,
           dug: !!c.dug,
@@ -24308,6 +24311,163 @@
     }
     return view();
   }
+  var marchKey = (id) => `march:${id}`;
+  var marchOf = (s, c) => {
+    const v = s.flags[marchKey(c.id)];
+    return v !== void 0 && v > 0 ? v - 1 : -1;
+  };
+  var forgetMarch = (s, ids2) => {
+    for (const id of ids2) {
+      delete s.flags[marchKey(id)];
+      delete s.flags[`marchRep:${id}`];
+      delete s.flags[`marchWait:${id}`];
+    }
+  };
+  var friendlyTo = (s, c, id) => {
+    const r = s.regions[id];
+    return !!r && allied(s, c.nat, r.ctrl);
+  };
+  var lastReportId = (s) => s.reports.length ? s.reports[s.reports.length - 1].id : 0;
+  function farGround(s, c) {
+    const out = /* @__PURE__ */ new Map();
+    out.set(c.reg, { cost: 0, prev: -1 });
+    const open = [c.reg], done = /* @__PURE__ */ new Set();
+    while (open.length && done.size < 900) {
+      let best = 0;
+      for (let i = 1; i < open.length; i++) if (out.get(open[i]).cost < out.get(open[best]).cost) best = i;
+      const a = open.splice(best, 1)[0];
+      if (done.has(a)) continue;
+      done.add(a);
+      const ca = out.get(a).cost;
+      for (const j of s.regions[a].nb) {
+        if (done.has(j) || !friendlyTo(s, c, j)) continue;
+        const r = s.regions[j];
+        let step2 = 1;
+        try {
+          if (blocked(s, c, r, a)) continue;
+          step2 = Math.max(1, moveCost(s, c, r, a));
+        } catch {
+          step2 = 1;
+        }
+        const old = out.get(j);
+        if (old && old.cost <= ca + step2) continue;
+        out.set(j, { cost: ca + step2, prev: a });
+        open.push(j);
+      }
+    }
+    return out;
+  }
+  function farRoad(s, c, to) {
+    if (to === c.reg || !friendlyTo(s, c, to)) return null;
+    const ground = farGround(s, c);
+    const end = ground.get(to);
+    if (!end) return null;
+    const road = [];
+    for (let at = to; at !== c.reg && at >= 0; at = ground.get(at).prev) road.unshift(at);
+    return { road, cost: end.cost };
+  }
+  var monthsOf2 = (c, cost) => Math.max(1, Math.ceil(cost / Math.max(1, c.apMax ?? 4)));
+  var inMonths = (n) => n === 1 ? "about a month" : `about ${n} months`;
+  function marchLeg(s, c, road) {
+    const m = reach2(s, c);
+    let far = -1;
+    for (let i = 0; i < road.length; i++) {
+      const r = m.get(road[i]);
+      if (r && !r.attack) far = i;
+    }
+    if (far < 0) return [];
+    const path = [];
+    for (let at = road[far]; at !== c.reg && at >= 0; at = m.get(at).prev) path.unshift(at);
+    return path;
+  }
+  function enemyReach(s, matters) {
+    const danger = /* @__PURE__ */ new Set();
+    const me = s.human;
+    if (!me) return danger;
+    const seen2 = sight(s);
+    for (const e of s.corps) {
+      if (e.dead || e.kind === "fort" || !(seen2[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
+      const had = e.ap;
+      e.ap = Math.max(e.ap, e.apMax ?? e.ap);
+      try {
+        for (const [id, r] of reach2(s, e)) {
+          if (id !== e.reg && matters(id)) danger.add(id);
+          if (!r.attack && e.ap - r.cost >= 1) {
+            for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
+          }
+        }
+      } finally {
+        e.ap = had;
+      }
+    }
+    return danger;
+  }
+  function advanceMarches(s) {
+    const ended = [], went = [];
+    try {
+      const me = s.human;
+      if (!me || !humanUp(s) || onEve(s)) return { ended, went };
+      const keys = Object.keys(s.flags).filter((k) => k.startsWith("march:"));
+      if (!keys.length) return { ended, went };
+      const danger = enemyReach(s, (id) => {
+        const r = s.regions[id];
+        return r.ctrl === me || allied(s, r.ctrl, me);
+      });
+      for (const key4 of keys) {
+        const id = Number(key4.slice(6)), c = s.corps.find((x) => x.id === id && !x.dead);
+        const to = c ? marchOf(s, c) : -1;
+        if (!c || to < 0 || !s.regions[to]) {
+          forgetMarch(s, [id]);
+          continue;
+        }
+        const here = s.regions[c.reg].name, goal = s.regions[to].name;
+        const halt = (why) => {
+          forgetMarch(s, [id]);
+          ended.push({ note: `${c.name} has halted at ${here}, ${why}. It waits for orders.`, region: c.reg });
+        };
+        if (c.reg === to) {
+          forgetMarch(s, [id]);
+          ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to });
+          continue;
+        }
+        if (!canOrder(s, c)) {
+          halt("the way is closed");
+          continue;
+        }
+        const since = s.flags[`marchRep:${id}`] ?? 0;
+        const fought = s.reports.some((r) => r.id > since && [...r.attackers, ...r.defenders].some((u) => u.name === c.name && u.nat === c.nat));
+        if (fought || danger.has(c.reg)) {
+          halt("the enemy is near");
+          continue;
+        }
+        const way = farRoad(s, c, to);
+        if (!way) {
+          halt("the way is closed");
+          continue;
+        }
+        const leg = marchLeg(s, c, way.road);
+        if (leg.some((r) => danger.has(r))) {
+          halt("the enemy is near");
+          continue;
+        }
+        if (!leg.length) {
+          if (s.flags[`marchWait:${id}`]) halt("the way is closed");
+          else s.flags[`marchWait:${id}`] = 1;
+          continue;
+        }
+        delete s.flags[`marchWait:${id}`];
+        const n = orderMove(s, c, leg[leg.length - 1]);
+        s.flags[`marchRep:${id}`] = lastReportId(s);
+        if (n > 0) went.push(c.reg);
+        if (c.reg === to) {
+          forgetMarch(s, [id]);
+          ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to });
+        }
+      }
+    } catch {
+    }
+    return { ended, went };
+  }
   function reachOf(ids2) {
     const s = game();
     const merged = /* @__PURE__ */ new Map();
@@ -24327,35 +24487,41 @@
         merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
       }
     }
-    const danger = /* @__PURE__ */ new Set();
+    let danger = /* @__PURE__ */ new Set();
     try {
       const me = s.human;
-      if (me && humanUp(s)) {
-        const seen2 = sight(s);
-        const matters = (id) => {
-          const r = s.regions[id];
-          return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id);
-        };
-        for (const e of s.corps) {
-          if (e.dead || e.kind === "fort" || !(seen2[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
-          const had = e.ap;
-          e.ap = Math.max(e.ap, e.apMax ?? e.ap);
-          try {
-            for (const [id, r] of reach2(s, e)) {
-              if (id !== e.reg && matters(id)) danger.add(id);
-              if (!r.attack && e.ap - r.cost >= 1) {
-                for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
-              }
-            }
-          } finally {
-            e.ap = had;
+      if (me && humanUp(s)) danger = enemyReach(s, (id) => {
+        const r = s.regions[id];
+        return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id);
+      });
+    } catch {
+      danger = /* @__PURE__ */ new Set();
+    }
+    const far = [];
+    let standing3 = [];
+    let standingTo = -1;
+    try {
+      if (humanUp(s) && !onEve(s)) {
+        const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+        const lead2 = cs[0];
+        if (lead2) {
+          for (const [id, g2] of farGround(s, lead2)) {
+            if (id === lead2.reg || merged.has(id) || s.regions[lead2.reg].nb.includes(id) || far.length >= 1200) continue;
+            far.push(id, monthsOf2(lead2, g2.cost));
+          }
+          const on = cs.find((c) => marchOf(s, c) >= 0);
+          if (on) {
+            standingTo = marchOf(s, on);
+            standing3 = farRoad(s, on, standingTo)?.road ?? [];
           }
         }
       }
     } catch {
-      danger.clear();
+      far.length = 0;
+      standing3 = [];
+      standingTo = -1;
     }
-    return { regions: [...merged.values()], danger: [...danger] };
+    return { regions: [...merged.values()], danger: [...danger], far, standing: standing3, standingTo };
   }
   var swapAsked = "";
   function move(ids2, to) {
@@ -24387,9 +24553,24 @@
       const end = m.get(to);
       if (to === c.reg || end?.attack) continue;
       if (!end) {
+        const way = canOrder(s, c) && !onEve(s) && !s.regions[c.reg].nb.includes(to) ? farRoad(s, c, to) : null;
+        if (way) {
+          forgetMarch(s, [c.id]);
+          const leg = marchLeg(s, c, way.road);
+          const n2 = leg.length ? orderMove(s, c, leg[leg.length - 1]) : 0;
+          if (n2 > 0) moved.push({ id: c.id, path: leg.slice(0, n2) });
+          if (c.reg !== to) {
+            s.flags[marchKey(c.id)] = to + 1;
+            s.flags[`marchRep:${c.id}`] = lastReportId(s);
+            const left = farRoad(s, c, to);
+            note4 = `${c.name} marches for ${s.regions[to].name}, ${inMonths(left ? monthsOf2(c, left.cost) : 1)} more. It goes on by itself as each month opens, and halts if the enemy comes near. Any other order stops the march.`;
+          }
+          continue;
+        }
         trySwap(c);
         continue;
       }
+      forgetMarch(s, [c.id]);
       const path = [];
       for (let at = to; at !== c.reg && at >= 0; at = m.get(at).prev) path.unshift(at);
       const n = orderMove(s, c, to);
@@ -24610,6 +24791,7 @@
   }
   function attack(ids2, to) {
     const s = game();
+    forgetMarch(s, ids2);
     const before = new Map(s.corps.map((c) => [c.id, c.reg]));
     const report = orderAttack(s, attackers(s, ids2, to), s.regions[to]);
     const moved = report ? s.corps.filter((c) => !c.dead && c.nat === s.human && c.reg === to && before.get(c.id) !== to).map((c) => ({ id: c.id, path: [to] })) : [];
@@ -24623,6 +24805,7 @@
     const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
     const steps = [];
     let fallen = null;
+    let marched = [];
     const roll0 = s.passings.length, month02 = s.turn;
     const seaStart = lastSeaReport(s);
     const me0 = s.human;
@@ -24650,6 +24833,12 @@
       if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, view: view() });
       runOthers(s, steps);
       fallen = arrive2(s);
+      if (!fallen && s.human) {
+        const out = advanceMarches(s);
+        marched = out.ended;
+        const said2 = [out.went.length ? `${out.went.length === 1 ? "One of your corps is" : `${out.went.length} of your corps are`} on the march.` : "", ...out.ended.slice(0, 2).map((x) => x.note)].filter(Boolean).join(" ");
+        if (said2) steps.push({ nat: s.human, note: said2, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view() });
+      }
     }
     {
       const shown2 = new Set(steps.flatMap((x) => x.seas ?? []));
@@ -24745,6 +24934,7 @@
       rows: steps.filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
       news: events.map((e) => e.text)
     };
+    if (s.human) for (const x of marched) lastMonth.rows.push({ nat: s.human, note: x.note, region: x.region, mine: true });
     const year = (() => {
       const d = turnToDate(s.turn);
       const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
@@ -24783,6 +24973,7 @@
   }
   function rail(ids2, to) {
     const s = game();
+    forgetMarch(s, ids2);
     const moved = [];
     for (const c of corpsById(s, ids2)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
     return { moved, view: view() };
@@ -24800,6 +24991,7 @@
   }
   function ship(ids2, to) {
     const s = game();
+    forgetMarch(s, ids2);
     const moved = [];
     for (const c of corpsById(s, ids2)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
     return { moved, view: view() };
@@ -24819,6 +25011,7 @@
   }
   function landOn(ids2, to) {
     const s = game();
+    forgetMarch(s, ids2);
     const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
     const before = new Map(cs.map((c) => [c.id, c.reg]));
     const r = orderLand(s, cs, to);
