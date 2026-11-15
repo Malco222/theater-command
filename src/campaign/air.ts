@@ -1263,11 +1263,30 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
 
   // A fight for the sky over the stretch of front where most of the army stands, if the fighters should win it:
   // flown only for an offensive of the staff's own, to give its army the air where it attacks.
+  // So is the sky over a beach the staff means to land on (the second front, ai.ts): no invasion fleet crosses
+  // under the enemy's fighters. With no fighter group in reach of it, one based overseas is brought up to the
+  // friendly airfield nearest the beach.
+  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && skyDenies(g, nat, t));
+  for (const t of beaches) {
+    const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
+    if (fighters.some((f) => whyNotMission(g, f, 'superiority', t) === null)) continue;
+    const cap = g.nations[nat].capital;
+    let move: { f: AirFleet; to: Region; d: number } | null = null;
+    for (const f of fighters) {
+      // The fighters that guard the homeland stay over it.
+      if (f.moved === g.turn || f.flew === g.turn || (g.regions[f.base].owner === nat && !g.regions[f.base].overseas && cap >= 0)) continue;
+      for (const r of airBases(g, f)) {
+        const d = km(g, r.id, t);
+        if (d <= reach(f).ftrRange && (!move || d < move.d)) move = { f, to: r, d };
+      }
+    }
+    if (move) rebaseAir(g, move.f, move.to);
+  }
   let flown = 0;
-  for (let k = 0; k < R.sweeps && front.size; k++) {
+  for (let k = 0; k < R.sweeps && (front.size || beaches.length); k++) {
     let best: { t: number; fleets: AirFleet[]; v: number } | null = null;
     const bases = [...new Set(mine.filter((f) => fit(f) && f.kind === 'ftr' && f.ftr > 0 && f.ready >= R.ready).map(homeOf))];
-    const spots = [...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, R.look);
+    const spots = [...beaches.filter((t) => !hit.has(t)).map((t): [number, number] => [t, 6]), ...[...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0])].slice(0, R.look);
     for (const base of bases) {
       for (const [t, divs] of spots) {
         const fleets = fightersAt(base).filter((f) => f.ready >= R.ready && whyNotMission(g, f, 'superiority', t) === null);

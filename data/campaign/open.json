@@ -25,9 +25,20 @@
     "local": [1.4, 1.25],
     "locals": 2
   },
+  "coast": {
+    "_about": "The coast watch. A computer staff at war with an enemy who has sea lift, and whose home army is not already fighting it on land, expects him by sea once the two have not fought for a season, and for a year after: it keeps a corps of its field army (two divisions or more: a town's standing garrison does not count) in each harbour of its own homeland that his ships can reach within a landing's range, from the ports he holds or an ally's where his troops stand, the most valuable first, up to 'share' of its corps in the field (never fewer than 'least') and 'each' to a harbour, and its treasury raises fortifications there to level 'works'. Conquered coasts are not watched. 'dig': a computer staff that can raise no corps for want of men puts idle money into fortifications in the provinces of its homeland nearest the enemy that he does not yet stand next to, 'orders' a month, to level 'top' (the capital to 'capital'), keeping 'keep' in the treasury.",
+    "share": 0.08,
+    "least": 3,
+    "each": 1,
+    "works": 2,
+    "dig": { "orders": 2, "top": 2, "capital": 3, "keep": 40 }
+  },
   "descent": {
-    "_about": "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops in touch with ground he holds keeps 'force' corps by a quay and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The hardest level has rules of its own for the player's coasts (difficulty.json).",
+    "_about": "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. The hardest level has rules of its own for the player's coasts (difficulty.json).",
     "after": 12,
+    "abroad": 3,
+    "hold": 15,
+    "feed": 2,
     "force": 3,
     "odds": 1.5,
     "risk": 0.25,
@@ -37,7 +48,7 @@
   },
   "temper": {
     "_default": { "persist": 0.85, "minOdds": 1.4 },
-    "GER": { "attackAt": 1.0, "persist": 0.6, "minOdds": 1.3 },
+    "GER": { "attackAt": 1.2, "persist": 0.9, "minOdds": 1.3 },
     "ITA": { "attackAt": 1.5, "persist": 0.9, "minOdds": 1.3 },
     "SOV": { "attackAt": 1.3, "persist": 0.8, "minOdds": 1.2 },
     "UK": { "attackAt": 1.5, "persist": 0.9, "minOdds": 1.3 },

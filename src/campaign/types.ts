@@ -761,6 +761,8 @@ export interface PlanPhase {
    * that can be spared march to it and stay. Such a force is infantry: once two corps are there, tanks are not held back.
    */
   staging?: Record<string, number>;
+  /** Staging places that are a coast watch (the grand campaign): one with no corps within three marches is sent one by rail. */
+  watch?: string[];
   minOdds?: number;
   force?: number;
   /** Places the plan means to starve out rather than storm: never assaulted while the phase lasts. */

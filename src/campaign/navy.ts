@@ -1068,11 +1068,28 @@ function blockadeWanted(g: Game, z: number, nat: string): boolean {
   });
 }
 
+/**
+ * The seas a nation's staff means to send its second front across (ai.ts keeps the beach it has its eye on, and
+ * staff.ts the quay, in the flags): the sea off the beach, and the others on the way to it.
+ */
+function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> } {
+  const off = new Set<number>(), way = new Set<number>();
+  for (const sfx of ['', ':o']) {
+    const aim = g.regions[(g.flags[`st:aim:${nat}${sfx}`] ?? 0) - 1], quay = g.regions[(g.flags[`st:quay:${nat}${sfx}`] ?? 0) - 1];
+    if (!aim || !quay || !atWar(g, nat, aim.ctrl)) continue;
+    const path = seaPath(g, nat, quay, aim, { max: NAVY.landing.range, surprise: true });
+    if (!path) continue;
+    path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));
+  }
+  return { off, way };
+}
+
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
   // The player's fleets are his own to order, unless he has handed the navy to his admirals (depth.ts).
   if (byHand(g, nat, 'navy')) return;
   const n = g.nations[nat];
+  let cross: { off: Set<number>; way: Set<number> } | null = null;
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
     if (!n.atWar.length || !shipCount(f.ships)) { home(); continue; }
@@ -1086,6 +1103,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     if (lane && f.tied && escort(g, f, lane.id)) continue;
     const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
+    cross ??= crossings(g, nat);
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
     const beat = new Set([f.station, ...g.seas[f.station].adj]);
     let best = -1, bv = 0;
@@ -1103,6 +1121,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       let v = 0;
       if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
+      // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
+      if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
       if (invaded) v += 60;
       // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
       if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;

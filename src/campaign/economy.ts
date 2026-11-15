@@ -9,7 +9,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
-import { addCorps, allied, headline } from './game';
+import { addCorps, allied, armySize, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
 import { campXp, civicSum, deliverCivic, hallShare } from './buildings';
 import { dealsOf, tradeIncome } from './trade';
@@ -522,13 +522,26 @@ export function deliver(g: Game, nat: string): void {
 }
 
 /**
+ * The grand campaign: true for a nation at war whose field army is under 'fit' (arsenal.json, 'ai.guns') of the
+ * largest it has been: an army that is being worn away. Its staff raises men for the line before guns, and its
+ * builders wait (Version 69).
+ */
+export function armyWorn(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  const fit = (arsenalData.ai as unknown as { guns: { fit?: number } }).guns.fit;
+  return g.flags.open === 1 && !!fit && !!n?.alive && n.atWar.length > 0 && n.armyPeak > 0 && armySize(g, nat) < fit * n.armyPeak;
+}
+
+/**
  * The grand campaign: true while a computer staff whose line has met dug-in troops wants massed guns to break them,
- * one corps of guns to every few of the rest, and has not got them yet.
+ * one corps of guns to every few of the rest, and has not got them yet. An army that is being worn away wants men
+ * in the line before guns (Version 69): none are asked for while the field army is under 'fit' of the largest it has been.
  */
 export function gunsWanted(g: Game, nat: string): boolean {
   const n = g.nations[nat];
   if (g.flags.open !== 1 || !n?.alive || !n.atWar.length) return false;
   const G = (arsenalData.ai as unknown as { guns: { per: number; most: number; facing: number } }).guns;
+  if (armyWorn(g, nat)) return false;
   let guns = n.queue.filter((b) => b.what === 'corps' && b.kind === 'art').length, rest = 0;
   for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng') rest++; }
   if (guns >= G.most || guns * G.per >= rest) return false;
@@ -556,7 +569,8 @@ export function aiProduction(g: Game, nat: string): void {
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
   // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
   // Engineers are ordered by their own rule (the grand campaign) and do not take a place in the army's programme.
-  const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
+  // (Nor do the fortifications a computer staff orders with idle money, arsenal.ts: a player's own take a place, as they always did.)
+  const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || (b.what === 'fort' && (nat === g.human || g.flags.open !== 1))).length;
   // How many corps a staff has forming at once. Two, as history's programmes ran; in the grand campaign a great
   // industry keeps more in hand, so that a rich country at war turns its money into an army and does not sit on it.
   const most = g.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
