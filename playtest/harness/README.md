@@ -178,6 +178,7 @@ Version 76 (b62e4cc) makes Brazil, Argentina, Chile, Peru, Colombia and Venezuel
 | `ui44.cjs` | Now also presses the navy desk's "more shores" button (`data-act="crossall"`) and lists every shore | `TC_PAGE=file:///home/user/tc76/dist/play.html node ui44.cjs 1942 9 99-v76-hour42` |
 | `ui45.cjs` | A Latin player's first hour on the page: the picker, the start card, the map, the path card and each path's page, a path taken, Declare war and its card, the Build, Powers, Navy and Staff tabs, then some months | `node ui45.cjs BRA 4 99-v76-bra allies` |
 | `ui46.cjs`, `ui47.cjs` | The start card's own words for each seat; a zoomed-out picture of a seat's first screen | `node ui47.cjs ARG 99-v76-map 3` |
+| `datestab.py` | History's dates in the wars with nobody playing, for the staff report card (ruling 56): the year France falls, the Soviet Union is attacked, America goes to war, Italy is out, France is freed, the Americans are ashore in the west to stay, Germany falls | `python3 datestab.py out/v76 out/v75` |
 
 Traps met on Version 76:
 
