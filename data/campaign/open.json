@@ -65,7 +65,7 @@
         "landings": [{ "corps": "Group XXI", "to": ["Oslo"] }, { "corps": "Mountain Corps Norway", "to": ["Narvik"] }, { "corps": "Trondheim Landing Group", "to": ["Trondheim"] }, { "corps": "Bergen Landing Group", "to": ["Bergen"] }] },
       { "id": "west", "name": "The attack in the west", "declare": ["NED", "BEL", "LUX"], "if": ["war:GER,FRA", "alive:FRA"], "ratio": 0.8, "prep": 2, "chance": 0.35, "hold": 0.5, "season": [3, 4, 5, 6, 7, 8, 9, 10, 11], "push": 3 },
       { "id": "balkans", "name": "The Balkan campaign", "declare": ["YUG", "GRE"], "if": ["alive:YUG", "quiet", "war:ITA,GRE"], "from": 16, "ratio": 1.0, "prep": 1, "chance": 0.35, "push": 2 },
-      { "id": "east", "name": "The attack on the Soviet Union", "declare": ["SOV"], "if": ["alive:SOV", "peace:GER,SOV", "quiet"], "from": 14, "ratio": 0.75, "prep": 3, "chance": 0.4, "hold": 0.35, "season": [5, 6, 7], "push": 4 }
+      { "id": "east", "name": "The attack on the Soviet Union", "declare": ["SOV"], "if": ["alive:SOV", "peace:GER,SOV", "quiet"], "from": 14, "ratio": 0.75, "prep": 3, "chance": 0.22, "hold": 0.35, "season": [5, 6, 7], "push": 4 }
     ],
     "ITA": [
       { "id": "jackal", "name": "Italy enters the war", "side": true, "declare": ["FRA", "UK"], "if": ["war:GER,FRA", "collapsing:FRA,0.07"], "chance": 0.7 },

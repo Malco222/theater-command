@@ -423,11 +423,12 @@ describe('a German staff that knows when to stop', () => {
     expect(t.persist).toBeGreaterThan(0.7);
   });
 
-  it('takes up the attack in the east in good time: three months of weighing it leave under one chance in four of a year lost', () => {
+  it('does not attack in the east by the calendar: some wars it waits a year, and the Soviet player cannot count the days', () => {
+    // (Weighed at 0.4 a month the east opened in 1941 in eleven wars of twelve, in the same three months, and the
+    // twelve wars with no plan of tests/exit/open-history.test.ts were no longer twelve different wars.)
     const east = OPEN.ops.GER.find((o) => o.id === 'east')!;
     expect(east.season).toEqual([5, 6, 7]);
-    expect((1 - east.chance) ** 3).toBeLessThan(0.25);
-    // And never a certainty: some wars the east waits a year, and the Soviet player cannot count the days.
-    expect(east.chance).toBeLessThan(0.6);
+    expect(east.chance).toBeGreaterThan(0.15);
+    expect(east.chance).toBeLessThan(0.3);
   });
 });
