@@ -15,7 +15,7 @@
 
 import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, allied, armySize, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar } from './game';
+import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -41,6 +41,8 @@ export const WORLD = data as unknown as {
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
+  warWork: Record<string, number>;
+  overseas: Record<string, OverseasRules>;
   protector: string[];
   pairs: [string, string][];
   order: string[];
@@ -48,6 +50,9 @@ export const WORLD = data as unknown as {
   oilHome: Record<string, number>;
   idle: Record<string, number>;
 };
+
+/** How a computer-run country an ocean away from its enemies sends its army across (world.json, 'overseas'). */
+export interface OverseasRules { guard: number; ahead: number; bank: number; risk: number; oceans: Record<string, number> }
 
 /** The first province beyond the map of Europe, and how many there are. */
 export const WORLD_FIRST = WORLD_MAP.first;
@@ -164,6 +169,36 @@ export function peaceFooting(g: Game, nat: string): number | null {
   return share;
 }
 
+/**
+ * The share of a country's industry on war work once it is at war, where the wider world has it climb there by
+ * steps (world.json, 'warWork'): from where the peace table stood on the day war came, so much more each month.
+ * Null for a country that works at full stretch from the first day of its war, as every other does.
+ */
+export function warFooting(g: Game, nat: string): number | null {
+  if (!worldOn(g) || WORLD.warWork[nat] === undefined) return null;
+  return Math.min(1, g.flags[`ww:${nat}`] ?? peaceFooting(g, nat) ?? 1);
+}
+
+/** The month's step in war work for the countries that climb to it: for the player's country and the computer's alike. */
+export function warWorkMonth(g: Game): void {
+  if (!worldOn(g)) return;
+  for (const [id, step] of Object.entries(WORLD.warWork)) {
+    const n = g.nations[id], key = `ww:${id}`;
+    // Peace again: the factories go back to the peace table, and a new war begins from there.
+    if (!n?.alive || !n.atWar.length) { delete g.flags[key]; continue; }
+    const table = peaceFooting(g, id) ?? 1, was = g.flags[key];
+    const now = Math.min(1, Math.max(table, was === undefined ? table : was + step));
+    g.flags[key] = now;
+    if (was !== undefined && was < 1 && now >= 1 && id === g.human) headline(g, 'info', `${n.adj} industry is now wholly on war work: every factory at home earns its full worth.`, id);
+  }
+}
+
+/** How many months of war are left before a country that climbs to full war work gets there: 0 when it is there, or has no climb to make. */
+export function warWorkLeft(g: Game, nat: string): number {
+  const share = warFooting(g, nat), step = WORLD.warWork[nat];
+  return share === null || share >= 1 || !step ? 0 : Math.ceil((1 - share) / step - 1e-9);
+}
+
 /** What a country's small wells and plants at home yield, where the wider world puts its oilfields on the map; null where the ordinary figure stands. */
 export const oilAtHome = (g: Game, nat: string): number | null => (worldOn(g) ? WORLD.oilHome[nat] ?? null : null);
 
@@ -183,7 +218,83 @@ export function armyIdle(g: Game, nat: string): boolean {
     for (const c of r.units) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
     for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
   }
+  // A country that ships its army across the ocean raises corps as far ahead as its sailings will carry, and a guard besides.
+  const O = overseasOf(g, nat);
+  if (O) return home >= O.guard + Math.ceil(O.ahead * sailings(g, nat, O));
   return home >= (WORLD.idle[nat] ?? WORLD.idle._default);
+}
+
+/**
+ * The rules a computer-run country ships its army across the ocean by, while they apply: it is at war, it has
+ * shipping, its capital stands in its own hands beyond the old chart, and no enemy holds ground on its side of the
+ * water (an invader at home is the army's first business). Null for the player's country, whose army is his to ship.
+ */
+export function overseasOf(g: Game, nat: string): OverseasRules | null {
+  const O = worldOn(g) && nat !== g.human ? WORLD.overseas[nat] : undefined;
+  const n = g.nations[nat];
+  if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g.regions[n.capital].ctrl !== nat) return null;
+  for (let i = WORLD_FIRST; i < g.regions.length; i++) if (n.atWar.includes(g.regions[i].ctrl)) return null;
+  return O;
+}
+
+/** True for a computer-run country that ships its own army overseas, at war or not: history's dated formations are not sent to it as well. */
+export const shipsItsOwn = (g: Game, nat: string): boolean => {
+  const n = g.nations[nat];
+  return worldOn(g) && nat !== g.human && !!WORLD.overseas[nat] && !!n && n.capital >= 0 && beyondEurope(n.capital) && g.regions[n.capital].ctrl === nat;
+};
+
+/**
+ * The great powers a country that ships its army across the ocean may go to war with from the first month (the
+ * design director's ruling 31): those of the bloc opposed to the one it stands with or leans toward. It reaches them
+ * through its friends' ports, so no enemy coast need lie within range of its own. Empty for every other country.
+ */
+export function acrossTheWater(g: Game, nat: string, majors: string[]): string[] {
+  const n = g.nations[nat];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive) return [];
+  const side = bloc(n) ?? (n.align === 'leaning_allies' ? 'allies' : n.align === 'leaning_axis' ? 'axis' : null);
+  if (side !== 'allies' && side !== 'axis') return [];
+  return majors.filter((id) => id !== nat && g.nations[id]?.alive && !g.nations[id].dormant && bloc(g.nations[id]) === (side === 'allies' ? 'axis' : 'allies'));
+}
+
+/** Whether going to war with this country would bring a country across the ocean to stand with the Allies (ruling 32), for the card that asks. */
+export function wouldStandWithAllies(g: Game, nat: string, on: string): boolean {
+  const n = g.nations[nat], B = g.nations[on];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive || !B?.alive || bloc(n) !== null || bloc(B) !== 'axis') return false;
+  if (n.atWar.some((id) => g.nations[id]?.alive && bloc(g.nations[id]) === 'allies')) return false;
+  return Object.values(g.nations).some((x) => x.id !== nat && x.alive && !x.dormant && bloc(x) === 'allies');
+}
+
+/**
+ * Ruling 32: a country that ships its army across the ocean, at war with a power of the Axis and with no Allied
+ * country, stands with the Allies from that day: their ports and supply lines are open to it. It is asked when a
+ * player declares war (a computer's country comes in by history's events, which do the same), with 'none' for `was`
+ * when it stood in no bloc before the declaration. True when it has come to stand with them.
+ */
+export function standWithAllies(g: Game, nat: string, was: string | null = null): boolean {
+  const n = g.nations[nat];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive) return false;
+  const say = (): void => headline(g, 'event', `${theName(n, true)} stands with the Allies: their ports and their supply lines are open to its armies.`, nat);
+  // The declaration itself may have done it (a country leaning to the Allies that attacks their enemy): it is told all the same.
+  if (bloc(n) === 'allies' && was === 'none') { say(); return true; }
+  if (bloc(n) !== null) return false;
+  const foes = n.atWar.map((id) => g.nations[id]).filter((x) => x?.alive);
+  if (!foes.some((x) => bloc(x) === 'axis') || foes.some((x) => bloc(x) === 'allies')) return false;
+  if (!Object.values(g.nations).some((x) => x.id !== nat && x.alive && !x.dormant && bloc(x) === 'allies')) return false;
+  n.align = 'allies_cobelligerent';
+  n.opinion = n.home = -100;
+  g.flags[`step:${nat}`] = g.turn;
+  g.supplyDirty = true;
+  say();
+  return true;
+}
+
+/** How many corps a month the country's shipping carries across its oceans, all runs together. */
+export const sailings = (g: Game, nat: string, O: OverseasRules): number => Object.values(O.oceans).reduce((s, x) => s + x, 0) * g.nations[nat].sealift;
+
+/** Whether a province lies across the named ocean from the Americas: where that run's ships can put an army down. */
+export function acrossOcean(ocean: string, r: Region): boolean {
+  // The Atlantic run ends on the old chart: Europe, Africa's northern shore and the Near East. (The Pacific's entry comes with its own slice.)
+  return ocean === 'atlantic' ? !beyondEurope(r) : false;
 }
 
 /**

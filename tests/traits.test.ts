@@ -303,7 +303,11 @@ describe('in the books', () => {
     const line = L.changes.find((l) => l.key === 'trait')!;
     expect(line.label).toBe('Arsenal of democracy');
     expect(line.amount).toBeCloseTo(L.gross * (1 - 1 / 1.15), 9);
-    expect(income(g, 'USA')).toBeGreaterThan(peace * 2);
+    // On the day war comes the trait is all that changes: the factories turn over to war work by steps (Version
+    // 75, world.json 'warWork'), and with all of them on it the country earns many times what it did at peace.
+    expect(income(g, 'USA')).toBeCloseTo(peace * 1.15, 9);
+    g.flags['ww:USA'] = 1;
+    expect(income(g, 'USA')).toBeGreaterThan(peace * 5);
   });
 
   it('makes good Soviet losses a quarter faster', () => {

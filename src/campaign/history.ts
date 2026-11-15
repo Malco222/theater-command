@@ -105,6 +105,13 @@ export function mayJoin(g: Game, id: string, side: 'allies' | 'axis'): boolean {
   return p > 0 && dialDraw(g, 'join', id, g.turn) < p;
 }
 
+/**
+ * True where the dial keeps a staff's envoys away from a neutral (stops 1 and 2): history did not bring it into the
+ * war on that side, and the player has not courted it by hand. His own envoys go where he sends them, and a country
+ * he has courted himself is one his staff may go on courting.
+ */
+export const staysOut = (g: Game, id: string, side: 'allies' | 'axis'): boolean => stopDef(g).join < 1 && !HISTORY.joined[side].includes(id) && !g.flags[`courted:${id}`];
+
 // ---- The book: history's calendar for the great choices ---------------------------------------------------
 
 /** The theatre one of the great choices belongs to, if the book has a word on it. */

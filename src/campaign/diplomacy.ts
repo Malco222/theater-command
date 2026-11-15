@@ -17,7 +17,7 @@ import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin } from './history';
 import worldData from '../../data/campaign/world.json';
-import { worldMonth } from './world';
+import { warWorkMonth, worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -610,7 +610,7 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
-  if ((g.flags.dom ?? 0) > 0) { traitsMonth(g); techMonth(g); return; }
+  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   for (const n of Object.values(g.nations)) {
     // A small country in the player's hands stays where its player puts it.
@@ -619,8 +619,9 @@ export function monthlyDiplomacy(g: Game): void {
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
     settle(g, n);
   }
-  // The wider world: the dominions follow their mother country.
+  // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
   worldMonth(g);
+  warWorkMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

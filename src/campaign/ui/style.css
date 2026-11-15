@@ -386,6 +386,8 @@ button.corps:hover { border-color: var(--ink-3); }
 h4.crh { font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin: 10px 0 2px; }
 h4.crh.bad { color: #f1a58f; }
 .cross .holdwarn, .card .holdwarn { margin-top: 5px; color: #f1a58f; }
+.crossword.warned { color: #f1a58f; }
+.crossword.ready b { color: #9fd28a; }
 .verdict.costly, .card .costwarn { color: #e9c987; }
 .card .costwarn { margin-top: 5px; }
 .card .fightline { font-family: var(--head); font-size: 18px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
@@ -582,6 +584,11 @@ button.buy:hover { border-color: var(--brass); }
 .gcnats.small .gcnat { padding: 7px 3px 6px; gap: 4px; }
 .gcnats.small .gcnat b { font-size: 12px; }
 .gcsmallnote { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.gcunder { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); border-left: 3px solid var(--brass); padding-left: 9px; }
+.shiplist .shiprow { display: grid; grid-template-columns: minmax(96px, 30%) 1fr; gap: 8px; align-items: start; margin-top: 8px; }
+.shiplist .shipnat { display: flex; gap: 6px; align-items: center; }
+.shiplist .shipports { display: flex; flex-wrap: wrap; gap: 4px; }
+.shiplist .shipports .btn { padding: 2px 7px; }
 /* How hard a war: five ranks, each with its pips, and what the chosen one does. */
 .pips { display: inline-flex; gap: 2px; align-items: center; }
 .pips i { display: block; width: 6px; height: 10px; background: var(--brass); clip-path: polygon(50% 0, 100% 35%, 100% 100%, 50% 65%, 0 100%, 0 35%); }

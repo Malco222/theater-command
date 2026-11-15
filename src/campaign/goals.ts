@@ -15,6 +15,8 @@ export interface Goal {
   hold?: string[];
   /** Nations that must have capitulated. */
   beaten?: string[];
+  /** An army of the nation's own on the ground: a field corps on the mainland of one of these countries. */
+  ashore?: { in: string[]; label: string };
   /** The last month in which the goal can be reached. */
   by?: number;
   /** A goal of endurance: decided when the month after this one opens. */
@@ -62,6 +64,11 @@ export function goalChecks(g: Game, nat: string, goal: Goal): { label: string; d
     const n = g.nations[id];
     out.push({ label: `${n?.name ?? id} beaten`, done: !!n && !n.alive && !n.dormant });
   }
+  if (goal.ashore) {
+    const where = new Set(goal.ashore.in);
+    const stands = (reg: number): boolean => { const r = g.regions[reg]; return where.has(r.owner) && !r.overseas && r.nb.length > 0; };
+    out.push({ label: goal.ashore.label, done: g.corps.some((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && stands(c.reg)) });
+  }
   if (goal.outlast !== undefined) {
     const fell = weeksLasted(g, nat);
     out.push({ label: `More than ${goal.outlast} weeks in the war`, done: fell !== null ? fell > goal.outlast : weeksThrough(g, nat) >= goal.outlast });
@@ -107,6 +114,8 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
     }
     else if (!g.nations[nat].alive) won = false;
     else if (goal.until !== undefined) { if (g.turn > goal.until) won = ok; }
+    // A goal that asks for an army ashore when the enemy falls is settled the day he falls: arriving afterwards is no victory.
+    else if (goal.ashore && goal.beaten?.length && goal.beaten.every((id) => { const x = g.nations[id]; return !!x && !x.alive && !x.dormant; })) won = ok && g.turn <= goalEnds(goal) + 1;
     // What stands when the month after the last one opens still counts: an ally may have finished the job.
     else if (ok && g.turn <= goalEnds(goal) + 1) won = true;
     else if (g.turn > goalEnds(goal)) won = false;
