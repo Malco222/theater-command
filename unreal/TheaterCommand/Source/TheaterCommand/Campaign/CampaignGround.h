@@ -80,7 +80,8 @@ public:
 	 *           more than the first two say, the points round about look to different waters and no line is there.
 	 *           Alpha, half the water's breadth there, 2.5 map units at one.
 	 *   WetInk  the colour of the water there as it is to be seen, and in its alpha how much of its breadth, from the
-	 *           banks inward, is dry bed (a river's bars, a dry river's sand, a lake's pale shore).
+	 *           banks inward, is dry bed: under a half, twice the share that is bars which come and go along it; from
+	 *           a half up, how far above it is twice the share that is dry all along (a dry river's sand, a lake's shore).
 	 */
 	TArray<FColor> Wet, WetInk;
 	float WetReach = 4.0f;

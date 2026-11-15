@@ -12,7 +12,9 @@
 // from the seam at 30.45 W, y south from 71.4 N, in map units; a course that crosses the seam keeps counting
 // past it), each point with how much water passes it:
 //
-//   "TCR1", number of rivers (uint32), then for each: number of points (uint32), and x, y, flow (float32) for each
+//   "TCR2", number of rivers (uint32), then for each: number of points (uint32), the river it joins (int32, its
+//   place in this list, or -1 where it reaches the sea or ends in a basin), how much water that river carries
+//   where it joins it (float32), and x, y, flow (float32) for each point
 //
 // Nothing is fetched and nothing is copied from a map: the courses are worked out from the heights alone.
 //
@@ -213,7 +215,7 @@ const LEAST = Number(process.env.LEAST) || 3500; // the least water a course car
 // of them is drawn across it: the rest end at its edge.)
 // (A wide one only. Every valley floor has small hollows a few points long, where these heights are too coarse to
 // show the river's own bed: across those a stream is drawn as anywhere.)
-const FLAT = 3, WIDE_FLAT = 70, ACROSS = 14;
+const FLAT = 3, WIDE_FLAT = 70, ACROSS = 14, REACH_ACROSS = 9;
 const level = new Uint8Array(count);
 {
   const mark = new Uint8Array(count), stack = [];
@@ -237,14 +239,25 @@ const level = new Uint8Array(count);
 }
 const stream = (at) => at >= 0 && isLand(at) && !ends[at] && flow[at] >= (level[at] ? LEAST * ACROSS : LEAST);
 // each point of a stream's biggest feeder
+// (At a fork the river is the longer branch, as it is on any map, so long as it carries at least half the water of the other:
+// the Niger and not the Benue, the Missouri and not the upper Mississippi, the White Nile. The other is its tributary.)
 const feeder = new Int32Array(count).fill(-1);
-const feeders = new Uint8Array(count);
+const above = new Int32Array(count); // how many points of stream lie above each point, by its longest branch
+const most = new Float32Array(count); // the most water any one branch brings to each point
+for (let k = ordered - 1; k >= 0; k--) {
+  const at = order[k];
+  if (!stream(at)) continue;
+  if (above[at] < 1) above[at] = 1;
+  const to = down[at];
+  if (!stream(to)) continue;
+  if (above[to] < above[at] + 1) above[to] = above[at] + 1;
+  if (flow[at] > most[to]) most[to] = flow[at];
+}
 for (let at = 0; at < count; at++) {
   if (!stream(at)) continue;
   const to = down[at];
-  if (!stream(to)) continue;
-  feeders[to]++;
-  if (feeder[to] < 0 || flow[at] > flow[feeder[to]]) feeder[to] = at;
+  if (!stream(to) || flow[at] < 0.5 * most[to]) continue;
+  if (feeder[to] < 0 || above[at] > above[feeder[to]] || (above[at] === above[feeder[to]] && flow[at] > flow[feeder[to]])) feeder[to] = at;
 }
 const rivers = [];
 const trace = (mouth, joinsAt) => {
@@ -258,14 +271,85 @@ const trace = (mouth, joinsAt) => {
 for (let at = 0; at < count; at++) {
   if (!stream(at)) continue;
   const to = down[at];
-  if (!stream(to)) rivers.push(trace(at, -1)); // it reaches the sea, a closed basin, or the end of the land
-  else if (feeder[to] !== at) rivers.push(trace(at, to)); // it joins a bigger river
+  if (!stream(to)) {
+    // It reaches the sea, a closed basin, or the edge of a wide flat where only the greatest stream is drawn. Where
+    // that flat is narrow and a river runs just beyond, the course is run through to join it: a creek does not stop
+    // a little short of the river it feeds.
+    const course = trace(at, -1);
+    let c = to, run = [];
+    while (c >= 0 && isLand(c) && !ends[c] && !stream(c) && run.length < REACH_ACROSS) { run.push(c); c = down[c]; }
+    let joins = -1;
+    if (run.length > 0 && run.length < REACH_ACROSS && (c < 0 || !isLand(c) || stream(c))) { for (const r of run) course.push(r); if (c >= 0 && stream(c)) { course.push(c); joins = c; } }
+    course.joins = joins;
+    rivers.push(course);
+  }
+  else if (feeder[to] !== at) { const course = trace(at, to); course.joins = to; rivers.push(course); } // it joins the river
 }
+// A great river's mouth is often a long drowned valley, which these heights give as sea: the Amazon below Gurupa,
+// the Plate. From high up the game's coarse land closes such a narrow water, and the river stopped in the middle of
+// the jungle a long way short of the coast. A great river is therefore carried on down its estuary to open water:
+// from its last point of land, by the shortest way through the narrow sea and its delta to water with no land near it.
+{
+  const NEAR = 7; // points: water with land nearer than this is narrow water
+  const LOW = 10; // metres: land no higher than this is delta
+  const toLand = new Uint8Array(count).fill(255);
+  let edge = [];
+  for (let at = 0; at < count; at++) if (isLand(at)) { toLand[at] = 0; edge.push(at); }
+  for (let d = 1; d <= NEAR && edge.length; d++) {
+    const next = [];
+    for (const at of edge) {
+      const i = at % wide, j = (at - i) / wide;
+      for (let k = 0; k < 8; k++) {
+        const y = j + DY[k];
+        if (y < 0 || y >= high) continue;
+        const to = y * wide + (i + DX[k] + wide) % wide;
+        if (toLand[to] === 255) { toLand[to] = d; next.push(to); }
+      }
+    }
+    edge = next;
+  }
+  let carried = 0;
+  for (const course of rivers) {
+    if (course.joins >= 0 || course.length < 3) continue;
+    const mouth = course[course.length - 1];
+    if (flow[mouth] < 200000 || ends[mouth]) continue;
+    // (breadth first from the mouth through narrow water, as far as 70 points, to the first open water)
+    const from = new Map([[mouth, -1]]);
+    let ring = [mouth], found = -1;
+    for (let d = 0; d < 70 && ring.length && found < 0; d++) {
+      const next = [];
+      for (const at of ring) {
+        const i = at % wide, j = (at - i) / wide;
+        for (let k = 0; k < 8 && found < 0; k++) {
+          const y = j + DY[k];
+          if (y < 0 || y >= high) continue;
+          const to = y * wide + (i + DX[k] + wide) % wide;
+          // (through the water, and over the mud banks and islands of a delta, which stand a few metres out of it)
+          if (heights[to] > LOW || from.has(to)) continue;
+          from.set(to, at);
+          if (toLand[to] === 255) found = to; else next.push(to);
+        }
+      }
+      ring = next;
+    }
+    if (found < 0) continue;
+    const way = [];
+    for (let at = found; at !== mouth && at >= 0; at = from.get(at)) way.push(at);
+    way.reverse();
+    // (down the estuary it carries what it carried at its last point of land)
+    if (way.length > NEAR + 2) { course.estuaryFrom = course.length; course.estuaryWater = flow[mouth]; for (const at of way.slice(0, way.length - NEAR)) course.push(at); carried++; }
+  }
+  console.log(`great rivers carried down their estuaries: ${carried}`);
+}
+
+// Which course each point of stream belongs to, so that a tributary knows the river it joins.
+const courseOf = new Int32Array(count).fill(-1);
+rivers.forEach((course, index) => { const own = course.joins >= 0 ? course.length - 1 : course.length; for (let k = 0; k < own; k++) courseOf[course[k]] = index; });
 
 // Each course as a smooth line: the points' own places, with the corners of the grid cut off twice.
 const out = [];
 let totalPoints = 0;
-for (const course of rivers) {
+for (const [index, course] of rivers.entries()) {
   if (course.length < 3) continue;
   let line = [];
   let turn = 0, lastI = null;
@@ -273,7 +357,7 @@ for (const course of rivers) {
     const i = at % wide, j = (at - i) / wide;
     if (lastI !== null) { if (i - lastI > wide / 2) turn--; else if (lastI - i > wide / 2) turn++; }
     lastI = i;
-    line.push([(i + turn * wide) * step, j * step, flow[at]]);
+    line.push([(i + turn * wide) * step, j * step, course.estuaryFrom !== undefined && line.length >= course.estuaryFrom ? course.estuaryWater : flow[at]]);
   }
   // (where it joins a bigger river its last point is that river's: it comes in at its own breadth, not the bigger one's)
   if (line.length >= 2 && line[line.length - 1][2] > line[line.length - 2][2] * 1.5) line[line.length - 1][2] = line[line.length - 2][2];
@@ -294,16 +378,23 @@ for (const course of rivers) {
     if (Math.hypot(line[k][0] - last[0], line[k][1] - last[1]) >= 1.4) thin.push(line[k]);
   }
   thin.push(line[line.length - 1]);
+  // (the river it joins, and how much water that river carries where it joins it)
+  thin.was = index;
+  thin.joined = course.joins >= 0 ? courseOf[course.joins] : -1;
+  thin.joinedWater = course.joins >= 0 ? flow[course.joins] : 0;
   out.push(thin);
   totalPoints += thin.length;
 }
 out.sort((a, b) => b[b.length - 1][2] - a[a.length - 1][2]);
-const bytes = Buffer.alloc(8 + out.length * 4 + totalPoints * 12);
-bytes.write('TCR1', 0, 'latin1');
+const placeOf = new Map(out.map((line, place) => [line.was, place]));
+const bytes = Buffer.alloc(8 + out.length * 12 + totalPoints * 12);
+bytes.write('TCR2', 0, 'latin1');
 bytes.writeUInt32LE(out.length, 4);
 let at = 8;
 for (const line of out) {
   bytes.writeUInt32LE(line.length, at); at += 4;
+  bytes.writeInt32LE(placeOf.has(line.joined) ? placeOf.get(line.joined) : -1, at); at += 4;
+  bytes.writeFloatLE(line.joinedWater, at); at += 4;
   for (const p of line) { bytes.writeFloatLE(p[0], at); bytes.writeFloatLE(p[1], at + 4); bytes.writeFloatLE(p[2], at + 8); at += 12; }
 }
 fs.writeFileSync(outputPath, bytes);

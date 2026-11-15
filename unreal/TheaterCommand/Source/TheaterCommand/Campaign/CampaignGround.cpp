@@ -248,6 +248,16 @@ namespace
 	}
 
 	/**
+	 * How a water's dry bed is written into the picture of its ink: under a half, the share of its breadth that is
+	 * bars which come and go along it; from a half up, the share that is dry the whole way along (a dry river's sand,
+	 * a gully, a lake's pale shore).
+	 */
+	uint8 BedByte(float Share, bool bSteady)
+	{
+		return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32((bSteady ? 0.5f + 0.5f * Share : 0.49f * Share) * 255.0f), 0, 255));
+	}
+
+	/**
 	 * How thick the noise must be before a clearing of red earth is cut in the jungle: away from any river, and on a
 	 * river's bank. ("-TheaterClearings=1.0,0.62" tries others.)
 	 */
@@ -256,7 +266,7 @@ namespace
 		static FVector2f Kept(-1.0f, -1.0f);
 		if (Kept.X < 0.0f)
 		{
-			Kept = FVector2f(0.76f, 0.3f);
+			Kept = FVector2f(0.76f, 0.16f);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterClearings="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -267,13 +277,13 @@ namespace
 		return Kept;
 	}
 
-	/** Of the squares the lakes are ruled by, the share that hold a lake in the northern forest, and a pool on the tundra. ("-TheaterLakes=0.4,0.85" tries others.) */
+	/** Of the squares the lakes are ruled by, the share that hold a lake in the northern forest, and a pool on the tundra. ("-TheaterLakes=0.26,0.45" tries others.) */
 	FVector2f LakesFrom()
 	{
 		static FVector2f Kept(-1.0f, -1.0f);
 		if (Kept.X < 0.0f)
 		{
-			Kept = FVector2f(0.42f, 0.85f);
+			Kept = FVector2f(0.34f, 0.45f);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLakes="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -514,35 +524,56 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				const int32 Last = Course.Points.Num() - 1;
 				for (int32 K = 0; K < Last; ++K)
 				{
-					// (a river rises from nothing: its first few points are narrower)
-					Lay(FVector2D(Course.Points[K].X + Shift, Course.Points[K].Y), FVector2D(Course.Points[K + 1].X + Shift, Course.Points[K + 1].Y),
-						FCampaignWorldRivers::HalfBreadth(Course.Water[K]) * FMath::Min(1.0f, K / 4.0f), FCampaignWorldRivers::HalfBreadth(Course.Water[K + 1]) * FMath::Min(1.0f, (K + 1) / 4.0f),
-						Course.Water[K], Course.Water[K + 1]);
+					float WaterA = 0.0f, WaterB = 0.0f;
+					// (three ranks: the river, its tributaries at no more than half its breadth, the rest hairlines: see the courses)
+					const float HalfA = Course.BreadthAt(K, WaterA), HalfB = Course.BreadthAt(K + 1, WaterB);
+					// (from high up, on the coarse sheet, only the great rivers: the rest were scraps and blobs at that size)
+					if (Terrain.Cell > 3.0 && FMath::Max(HalfA, HalfB) < 0.72f)
+					{
+						continue;
+					}
+					Lay(FVector2D(Course.Points[K].X + Shift, Course.Points[K].Y), FVector2D(Course.Points[K + 1].X + Shift, Course.Points[K + 1].Y), HalfA, HalfB, WaterA, WaterB);
 				}
 			}
 		}
 		// The small lakes of the northern forest and the pools of the tundra (the art director's world look: "many
-		// small lakes with pale shores", "pools over about 6%"). Each is laid like a short, broad river that comes to
-		// a point at both ends, which draws it as a lens of water with a clean shore. Where one lies is settled by the
-		// place alone, on a ruling seven map units square, so that every sheet that draws a place draws the same
-		// lake there. (From high up, on the coarse sheet, none: they are smaller than its points.)
+		// small lakes with pale shores", "pools over about 6%"; and her ruling of round 25: rounded pebbles and beans
+		// only, fewer and larger on the tundra, and none within a river's breadth of a river). Each is laid like a
+		// short stretch of river as broad at its ends as in its middle, which draws it as a pebble, or two such with a
+		// bend between them, which draws a bean. Where one lies is settled by the place alone, on a ruling seven map
+		// units square with one lake at most to a square and room between them, so that every sheet that draws a
+		// place draws the same lake there and no two run together. (From high up, on the coarse sheet, none: they
+		// are smaller than its points.)
 		if (Terrain.Cell <= 3.0)
 		{
-			const double Pitch = 7.0;
-			const int32 A0 = FMath::FloorToInt32(BoxMinX / Pitch) - 1, A1 = FMath::CeilToInt32(BoxMaxX / Pitch) + 1, B0 = FMath::FloorToInt32(BoxMinY / Pitch) - 1, B1 = FMath::CeilToInt32(BoxMaxY / Pitch) + 1;
-			for (int32 B = B0; B <= B1; ++B)
+			// (how near a river or another water runs to a place of this sheet, less its own half breadth: far away where none is known)
+			auto WaterNear = [&](const FVector2D& At) -> float
 			{
-				for (int32 A = A0; A <= A1; ++A)
+				const int32 I = FMath::RoundToInt32((At.X - Terrain.OriginX) / Cell), J = FMath::RoundToInt32((At.Y - Terrain.OriginY) / Cell);
+				if (I < 0 || J < 0 || I >= NX || J >= NY)
 				{
-					// (the same place is the same square whichever turn of the world it is counted in)
-					const double Around = FMath::Fmod(FMath::Fmod(A * Pitch + Data.ShiftX, Data.WorldWidth) + Data.WorldWidth, Data.WorldWidth);
-					uint32 Seed = HashCombineFast(GetTypeHash(FMath::RoundToInt32(Around / Pitch * 16.0)), GetTypeHash(B * 7919 + 13));
-					auto Draw = [&Seed]() { Seed = Seed * 1664525u + 1013904223u; return static_cast<float>((Seed >> 8) & 0xFFFF) / 65535.0f; };
-					// (one lake to a square in the forest; as many as three pools to a square on the tundra, which is about a sixteenth water)
-					for (int32 Nth = 0; Nth < 3; ++Nth)
+					return 0.0f; // (off this sheet: nothing can be said, and no lake is laid from there)
+				}
+				const int32 Idx = Terrain.Index(I, J);
+				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] : 1000.0f;
+			};
+			// (The forest's lakes on a ruling seven units square; the tundra's pools on one of fourteen, so that they are
+			// fewer and each is larger, for no more water in all.)
+			for (int32 Kind = 0; Kind < 2; ++Kind)
+			{
+				const bool bPool = Kind == 1;
+				const double Pitch = bPool ? 14.0 : 7.0;
+				const int32 A0 = FMath::FloorToInt32(BoxMinX / Pitch) - 1, A1 = FMath::CeilToInt32(BoxMaxX / Pitch) + 1, B0 = FMath::FloorToInt32(BoxMinY / Pitch) - 1, B1 = FMath::CeilToInt32(BoxMaxY / Pitch) + 1;
+				for (int32 B = B0; B <= B1; ++B)
+				{
+					for (int32 A = A0; A <= A1; ++A)
 					{
+						// (the same place is the same square whichever turn of the world it is counted in)
+						const double Around = FMath::Fmod(FMath::Fmod(A * Pitch + Data.ShiftX, Data.WorldWidth) + Data.WorldWidth, Data.WorldWidth);
+						uint32 Seed = HashCombineFast(GetTypeHash(FMath::RoundToInt32(Around / Pitch * 16.0)), GetTypeHash(B * 7919 + 13 + Kind * 104729));
+						auto Draw = [&Seed]() { Seed = Seed * 1664525u + 1013904223u; return static_cast<float>((Seed >> 8) & 0xFFFF) / 65535.0f; };
 						const float Luck = Draw(), Rx = Draw(), Ry = Draw(), Way = Draw(), Long = Draw(), Broad = Draw(), Bend = Draw();
-						const FVector2D Centre((A + 0.06 + 0.88 * Rx) * Pitch, (B + 0.06 + 0.88 * Ry) * Pitch);
+						const FVector2D Centre((A + 0.3 + 0.4 * Rx) * Pitch, (B + 0.3 + 0.4 * Ry) * Pitch);
 						const float Latitude = static_cast<float>(Data.LatitudeAt(Centre.Y)), Longitude = static_cast<float>(Data.LongitudeAt(Centre.X));
 						if (BeyondEurope(Latitude, Longitude) < 0.9f)
 						{
@@ -551,8 +582,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						float Shares[WorldLook::Count];
 						Climate.SharesAt(Latitude, Longitude, Shares);
 						const float Taiga = Shares[WorldLook::Taiga], Tundra = Shares[WorldLook::Tundra];
-						const bool bPool = Tundra > Taiga;
-						if ((Nth > 0 && !bPool) || Luck > LakesFrom().X * FMath::SmoothStep(0.4f, 0.8f, Taiga) + LakesFrom().Y * FMath::SmoothStep(0.4f, 0.8f, Tundra))
+						if ((Tundra > Taiga) != bPool || Luck > (bPool ? LakesFrom().Y * FMath::SmoothStep(0.4f, 0.8f, Tundra) : LakesFrom().X * FMath::SmoothStep(0.4f, 0.8f, Taiga)))
 						{
 							continue;
 						}
@@ -560,18 +590,24 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const float Here = Terrain.MetresAt(Centre.X, Centre.Y);
 						const float Slope = FMath::Max(FMath::Abs(Terrain.MetresAt(Centre.X + 2.0, Centre.Y) - Terrain.MetresAt(Centre.X - 2.0, Centre.Y)),
 							FMath::Abs(Terrain.MetresAt(Centre.X, Centre.Y + 2.0) - Terrain.MetresAt(Centre.X, Centre.Y - 2.0)));
-						if (Here <= 2.0f || Slope > 45.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < 3.0f || (!bPool && Here > WorldTreeLine(Latitude) - 150.0f))
+						if (Here <= 2.0f || Slope > 45.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < (bPool ? 5.5f : 3.5f) || (!bPool && Here > WorldTreeLine(Latitude) - 150.0f))
 						{
 							continue;
 						}
-						// (most are small; one in a few is a lake of some size)
-						const double Turned = Way * UE_DOUBLE_PI, HalfLong = bPool ? 0.5 + 1.0 * Long * Long : 0.7 + 2.6 * Long * Long;
-						const float HalfBroad = bPool ? 0.34f + 0.46f * Broad : 0.42f + 1.0f * Broad * Broad;
-						const FVector2D Dir(FMath::Cos(Turned), FMath::Sin(Turned)), Aside(-Dir.Y, Dir.X);
-						const FVector2D P0 = Centre - Dir * HalfLong, P1 = Centre - Dir * (0.42 * HalfLong) + Aside * ((Bend - 0.5) * 0.7 * HalfBroad), P2 = Centre + Dir * (0.4 * HalfLong) - Aside * ((Bend - 0.5) * 0.5 * HalfBroad), P3 = Centre + Dir * HalfLong;
-						Lay(P0, P1, 0.0f, HalfBroad * 0.9f, -1.0f, -1.0f);
-						Lay(P1, P2, HalfBroad * 0.9f, HalfBroad, -1.0f, -1.0f);
-						Lay(P2, P3, HalfBroad, 0.0f, -1.0f, -1.0f);
+						// (a pebble: as broad at its ends as in its middle, and not twice as long as it is broad. A bean: bent in
+						// the middle. Each keeps within its own square of the ruling, so that no two run together.)
+						const float Radius = bPool ? 1.7f + 1.1f * Broad : 0.75f + 0.6f * Broad * Broad;
+						const double Stretch = FMath::Min(Radius * (0.15 + 0.95 * Long), (bPool ? 4.1 : 2.05) - Radius);
+						const double Turned = Way * UE_DOUBLE_PI, Bent = Turned + (Bend - 0.5) * 1.3;
+						const FVector2D P0 = Centre - FVector2D(FMath::Cos(Turned), FMath::Sin(Turned)) * Stretch, P2 = Centre + FVector2D(FMath::Cos(Bent), FMath::Sin(Bent)) * Stretch;
+						// (no lake within a river's breadth of a river, or a unit and a half: where a river widens it is the river's own water)
+						const float Clear = Radius + 1.5f;
+						if (WaterNear(Centre) < Clear || WaterNear(P0) < Clear || WaterNear(P2) < Clear)
+						{
+							continue;
+						}
+						Lay(P0, Centre, Radius, Radius, -1.0f, -1.0f);
+						Lay(Centre, P2, Radius, Radius, -1.0f, -1.0f);
 					}
 				}
 			}
@@ -617,7 +653,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					{
 						// (a lake: deep blue-grey, with a pale shore)
 						const FVector3f Laid = Tone();
-						WetInk[Idx] = FColor(ToByte(40.0f / 255.0f * Laid.X), ToByte(70.0f / 255.0f * Laid.Y), ToByte(100.0f / 255.0f * Laid.Z), ToByte(0.2f));
+						WetInk[Idx] = FColor(ToByte(40.0f / 255.0f * Laid.X), ToByte(70.0f / 255.0f * Laid.Y), ToByte(100.0f / 255.0f * Laid.Z), BedByte(0.14f, true));
 					}
 					else if (Half > 0.0f && Off < WetReach)
 					{
@@ -629,17 +665,30 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						float Bed = 0.1f;
 						// (the jungle's rivers are brown, with pale bars)
 						Ink = Mix(Ink, FSeen::Bytes(120, 110, 95), Jungle); // (laid cooler than it is to be seen: under the lamp it comes out at about (128, 110, 76))
-						Bed = FMath::Lerp(Bed, 0.4f, Jungle);
+						// (a hairline has no bars: the art director's ruling of round 25)
+						Bed = FMath::Lerp(Bed, 0.4f * FMath::SmoothStep(0.2f, 0.45f, Half), Jungle);
 						// (the savanna's are dry beds of sand; a great one keeps a stream down its middle)
 						Ink = Mix(Ink, FSeen::Bytes(104, 122, 112), Savanna);
-						Bed = FMath::Lerp(Bed, FMath::Lerp(1.0f, 0.5f, Great), Savanna);
+						Bed = FMath::Lerp(Bed, FMath::Lerp(1.0f, 0.28f, Great), Savanna);
 						// (the steppe's are pale dry gullies with a thread of green)
 						Ink = Mix(Ink, Mix(FSeen::Bytes(112, 132, 84), Blue, Great), Steppe);
-						Bed = FMath::Lerp(Bed, FMath::Lerp(0.72f, 0.3f, Great), Steppe);
+						Bed = FMath::Lerp(Bed, FMath::Lerp(0.6f, 0.3f, Great), Steppe);
 						// (and in the desert only the rivers that come from wetter country run: the Nile, the Indus)
-						Bed = FMath::Lerp(Bed, FMath::Lerp(1.0f, 0.3f, Great), Desert);
+						Bed = FMath::Lerp(Bed, FMath::Lerp(1.0f, 0.28f, Great), Desert);
+						// (a dry bed and a gully are sand from bank to bank the whole way along; a running river's bars come and go)
+						const bool bSteady = (Savanna + Desert) * (1.0f - Great) + Steppe > 0.5f;
 						const FVector3f Laid = Tone();
-						WetInk[Idx] = FColor(ToByte(Ink.R * Laid.X), ToByte(Ink.G * Laid.Y), ToByte(Ink.B * Laid.Z), ToByte(Bed));
+						WetInk[Idx] = FColor(ToByte(Ink.R * Laid.X), ToByte(Ink.G * Laid.Y), ToByte(Ink.B * Laid.Z), BedByte(Bed, bSteady));
+						// (a prairie creek is a thread of water to be seen between its trees)
+						if (Shares[WorldLook::Prairie] > 0.5f)
+						{
+							RiverHalf[Idx] = FMath::Max(RiverHalf[Idx], 0.15f);
+						}
+						// (the steppe's gully is a pale bed some way across, with its thread of green: a hairline of it was a dark scratch)
+						if (Steppe > 0.5f && Great < 0.5f)
+						{
+							RiverHalf[Idx] = FMath::Max(RiverHalf[Idx], 0.38f * FMath::SmoothStep(0.5f, 0.8f, Steppe));
+						}
 						// (a great river through dry country waters a strip of it: green, and farmed)
 						const float Parched = FMath::Clamp(Desert + Steppe + Shares[WorldLook::DryPlain] + 0.6f * Shares[WorldLook::DrySouth], 0.0f, 1.0f);
 						const float Strip = Out * Parched * Great * (1.0f - FMath::SmoothStep(Half + 1.0f, Half + 4.6f, Off));
@@ -655,7 +704,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						// (clearings of red earth: under a fiftieth of the jungle, and most of them on a river's bank)
 						const float Patch = FMath::PerlinNoise2D(P * 0.23 + FVector2D(17.0, 71.0)) + 0.5f * FMath::PerlinNoise2D(P * 0.61 + FVector2D(3.0, 29.0));
 						// (not at a river's very head, where it is a thread: a clearing there was a red match-head on every source)
-						const float Bank = Half > 0.0f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.13f, 0.24f, Half) : 0.0f;
+						// (and only beside a course still drawn as a river, so that none floats alone in the canopy by a hairline)
+						const float Bank = Half > 0.0f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.25f, 0.45f, Half) : 0.0f;
 						const float Clear = FMath::SmoothStep(0.0f, 0.1f, Patch - FMath::Lerp(ClearingFrom().X, ClearingFrom().Y, Bank)) * FMath::SmoothStep(0.55f, 0.8f, Jungle) * Out;
 						if (Clear > 0.0f)
 						{
@@ -831,10 +881,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				if (Half > 0.0f && Terrain.Cell <= 3.0)
 				{
 					// (a ribbon of trees along each creek of the prairie, which has no other)
-					const float Ribbon = RiverWater[Idx] >= 0.0f ? LookOf[Idx * 3] / 255.0f * (1.0f - FMath::SmoothStep(Half + 0.6f, Half + 1.9f, Off)) * FMath::SmoothStep(-0.32f, 0.02f, FMath::PerlinNoise2D(P * 0.37 + FVector2D(9.0, 57.0))) : 0.0f;
-					Wooded = FMath::Max(Wooded, 0.86f * Ribbon * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]));
+					const float Ribbon = RiverWater[Idx] >= 0.0f ? LookOf[Idx * 3] / 255.0f * (1.0f - FMath::SmoothStep(Half + 0.5f, Half + 1.6f, Off)) * FMath::SmoothStep(-0.25f, 0.1f, FMath::PerlinNoise2D(P * 0.37 + FVector2D(9.0, 57.0))) : 0.0f;
+					Wooded = FMath::Max(Wooded, 0.8f * Ribbon * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]));
 					// (and no canopy over the water itself: a jungle's roof is broken by its rivers)
-					Wooded *= FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off);
+					// (a hairline has no rim: the canopy closes to its very edge, and the water is drawn over it)
+					Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]));
 				}
 				Wooded *= 1.0f - Opened[Idx];
 				Wet[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Clamp(RiverDx[Idx] / WetReach, -1.0f, 1.0f)), ToByte(0.5f + 0.5f * FMath::Clamp(RiverDy[Idx] / WetReach, -1.0f, 1.0f)),

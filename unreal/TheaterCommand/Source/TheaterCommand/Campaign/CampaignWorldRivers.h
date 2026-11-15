@@ -26,10 +26,19 @@ public:
 		TArray<FVector2f> Points;
 		TArray<float> Water; // how much water passes each point (rain-weighted square kilometres of the country above it)
 		float MinX = 0.0f, MaxX = 0.0f, MinY = 0.0f, MaxY = 0.0f;
+		int32 Joins = INDEX_NONE; // the river it joins, as its place among the courses: none where it reaches the sea or ends in a basin
+		float JoinsWater = 0.0f; // how much water that river carries where this one joins it
+		float HalfCap = 1.6f; // the most half its breadth may be: a tributary is never more than half as broad as the river it joins
+		bool bGreat = false; // it reaches the sea (or its basin) as a great river: it keeps a great river's breadth through any country
+
+		/** Half its breadth at one of its points, in map units, and the water it counts as carrying there. */
+		float BreadthAt(int32 Point, float& OutWater) const;
+		/** Half its breadth where it carries this much water (away from its source). */
+		float BreadthFor(float WaterThere) const;
 	};
 	TArray<FCourse> Courses;
 
-	/** Half the breadth a river is drawn with for the water it carries, in map units: 0.14 for the least, about 1.5 for the Amazon. */
+	/** Half the breadth a river is drawn with for the water it carries, in map units: a hairline of 0.12 for the lesser courses, about 0.6 for a main tributary, about 1.5 for the Amazon. */
 	static float HalfBreadth(float Water);
 
 private:

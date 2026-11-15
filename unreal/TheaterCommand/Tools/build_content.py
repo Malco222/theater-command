@@ -677,16 +677,19 @@ def build_land():
     # (how many map units one pixel of the screen covers there)
     px = larger(plus(m, one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDX, off, -1850, 2700), -1750, 2700),
                      one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDY, off, -1850, 2780), -1750, 2780), -1650, 2740), 0.002, -1550, 2740)
-    # (a great river is never drawn thinner than a pixel and a bit, from however high: the Amazon is seen from the top
-    # of the zoom. The lesser ones thin away as the eye rises, or from high up the land is a web of them.)
-    great = sat(times(m, plus(m, half, -0.42, -2150, 2880), 4.0, -2050, 2880), -1950, 2880)
-    half_seen = larger(half, times(m, times(m, px, scalar(m, "WetLeast", 0.6, -1700, 2960), -1550, 2900), great, -1400, 2900), -1250, 2850)
+    # (The art director's ruling of round 25: three ranks. A great river is never lost: from the top of the zoom it is
+    # one even line two or three pixels across. A main tributary is gone by then, and a hairline sooner, by the time
+    # the eye is a little above its working height: or from high up the land is a web of veins.)
+    great = sat(times(m, plus(m, half, -0.8, -2150, 2880), 8.0, -2050, 2880), -1950, 2880)
+    far = sat(times(m, plus(m, px, -0.3, -1700, 2960), 5.0, -1600, 2960), -1500, 2960)
+    half_seen = lerp(m, half, larger(times(m, px, scalar(m, "WetLeast", 1.25, -1700, 3040), -1550, 3040), times(m, half, 0.5, -1550, 3100), -1400, 3060), times(m, great, far, -1400, 2960), -1250, 2900)
     inside = less(sat(plus(m, over(less(half_seen, off, -1100, 2600), px, -950, 2600), 0.5, -800, 2600), -650, 2600),
                   sat(plus(m, over(less(times(m, half_seen, -1.0, -1100, 2700), off, -950, 2700), px, -800, 2700), 0.5, -650, 2700), -500, 2700), -350, 2650)
     # (the picture's points round about must all look to this one line: where they look to different waters, the
     # distance with no direction to it is far more than the one read with it, and no line is there)
     truly = sat(times(m, over(less(times(m, wet_cell, scalar(m, "WetTrue", 0.62, -1250, 2880), -1100, 2800), less(apart, off, -950, 2850), -800, 2800), wet_cell, -650, 2800), 4.0, -500, 2800), -350, 2800)
-    seen_from_here = lerp(m, sat(times(m, plus(m, over(times(m, half, 2.0, -1100, 2950), px, -950, 2950), -0.6, -800, 2950), 1.2, -650, 2950), -500, 2950), 1.0, great, -350, 2950)
+    goes_at = lerp(m, scalar(m, "WetHairGoes", 0.19, -1100, 2950), scalar(m, "WetTributaryGoes", 0.36, -1100, 3010), sat(times(m, plus(m, half, -0.16, -950, 2950), 3.3, -850, 2950), -750, 2950), -650, 2950)
+    seen_from_here = lerp(m, one_in(m, unreal.MaterialExpressionOneMinus, sat(over(less(px, goes_at, -500, 2950), times(m, goes_at, 0.4, -500, 3010), -400, 2950), -300, 2950), -200, 2950), 1.0, great, -100, 2950)
     river = times(m, times(m, times(m, inside, truly, -200, 2700), seen_from_here, -100, 2750), sat(times(m, half, 400.0, -350, 3020), -200, 3020), -50, 2750)
     # (its bed: dry sand from the banks inward, by the share the picture gives. Under six tenths, the bed comes and
     # goes along the river, as bars do.)
@@ -696,7 +699,8 @@ def build_land():
     swing = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, bars_south, 6.2832, -2150, 3380), times(m, one_in(m, unreal.MaterialExpressionSine, times(m, bars_east, 4.3, -2150, 3300), -2000, 3300), 1.9, -1850, 3300), -1700, 3340), -1550, 3340)
     swing2 = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, bars_east, 7.9, -2150, 3460), times(m, bars_south, 2.3, -2150, 3540), -2000, 3500), -1850, 3500)
     bars = sat(plus(m, times(m, plus(m, swing, swing2, -1400, 3420), 2.0, -1250, 3420), -2.1, -1100, 3420), -950, 3420)  # (a bar here and there, not a kerb)
-    share = lerp(m, times(m, (wet_ink, "A"), bars, -650, 3000), (wet_ink, "A"), sat(times(m, plus(m, (wet_ink, "A"), -0.6, -800, 3100), 5.0, -650, 3100), -500, 3100), -350, 3050)
+    steady = sat(times(m, plus(m, (wet_ink, "A"), -0.495, -800, 3100), 100.0, -650, 3100), -500, 3100)
+    share = lerp(m, times(m, times(m, (wet_ink, "A"), 2.04, -800, 3000), bars, -650, 3000), sat(times(m, plus(m, (wet_ink, "A"), -0.5, -800, 3160), 2.0, -650, 3160), -500, 3160), steady, -350, 3050)
     bed = sat(plus(m, over(less(off, times(m, half_seen, one_in(m, unreal.MaterialExpressionOneMinus, share, -350, 3150), -200, 3150), -50, 3100), px, 100, 3100), 0.5, 250, 3100), 400, 3100)
     water_colour = lerp(m, (wet_ink, "RGB"), vector(m, "BedColour", (0.36, 0.334, 0.2, 1.0), -200, 3250), bed, 550, 3050)
     c = lerp(m, c, water_colour, river, -950, -400)
