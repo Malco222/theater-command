@@ -51,7 +51,7 @@ import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSa
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { RAILWAYS, railCut, railLinks, railNote } from '../rails';
-import { WORLD, beyondEurope, lakesOf, warFooting, warWorkLeft } from '../world';
+import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan } from '../airwar';
 import type { FleetSeen, WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -60,7 +60,7 @@ import {
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -888,7 +888,7 @@ function hintText(): string {
   }
   if (ui.land) return byAir(pickedCorps()) ? 'Airborne assault: click a red coast to see the odds.' : 'Landing from the sea: click a red coast to see the odds.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
-  if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
+  if (ui.ship) return 'Sea transport: click any blue port, or pick one from the list beside the map. It takes the whole month.';
   // (A finger has no right button, and on a small screen a long hint lies over the provinces it speaks of.)
   if (pickedCorps().length) return fingers()
     ? invasions(g, pickedCorps()).size ? 'Tap green to march, red to attack. Amber is a country at peace with you.' : 'Tap green to march, red to attack.'
@@ -2330,7 +2330,7 @@ function regionPane(): string {
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
-    <h3>Forces here</h3>${acts}${units}${jobBlock(r)}${spyBlock(r)}
+    <h3>Forces here</h3>${acts}${shipPorts()}${units}${jobBlock(r)}${spyBlock(r)}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
 
@@ -2420,7 +2420,8 @@ function buildPane(): string {
     <div class="facts"><div class="fact"><span>In the treasury</span><b${L.treasury < 0 ? ' style="color:var(--red)"' : ''}>${inHand(L.treasury)}</b></div><div class="fact"><span>${L.budget ? 'After upkeep, a month' : 'Each month'}</span><b${L.net < 0 ? ' style="color:var(--red)"' : ''}>${cash(L.net, true)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>
     <div class="acts"><button class="btn small" data-act="ledger">Open the ledger</button>${L.budget && hasTraits(me) ? '<button class="btn small" data-act="traits">National abilities</button>' : ''}</div>`;
   if (L.treasury < 0) out += `<div class="note"><b>The treasury is in debt.</b> Nothing new can be ordered and no replacements go out until the books balance. Unpaid troops rest badly and men drift away.</div>`;
-  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> Industry runs at half speed until the nation is at war${L.budget ? ', and the forces cost half as much to keep' : ''}.</div>`;
+  const footing = n.atWar.length ? null : peaceFooting(g, me);
+  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> ${footing === null ? 'Industry runs at half speed until the nation is at war' : `${Math.round(footing * 100)} in 100 of your industry is on war work${L.budget ? ', and the forces cost half as much to keep' : ''}. Once the nation is at war the share climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months`}${footing === null && L.budget ? ', and the forces cost half as much to keep' : ''}.</div>`;
 
   const shelf = (k: Offer['group'], quiet = false): string => list.filter((o) => o.group === k).map((o) => offerButton(o, quiet)).join('');
   const army = (): string => {
@@ -4768,7 +4769,7 @@ function openModal(m: typeof ui.modal): void {
 // ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----
 
 interface GrandYear { year: number; turn: number; date: string; text: string }
-const GRAND = grandData as unknown as { years: GrandYear[]; nations: { id: string; small?: boolean; years: Record<string, string> }[]; watch: Record<string, string> };
+const GRAND = grandData as unknown as { years: GrandYear[]; nations: { id: string; small?: boolean; under?: string; years: Record<string, string> }[]; watch: Record<string, string> };
 
 /** The years a country can begin a grand campaign in. Nobody at the controls can begin in any. */
 const grandYears = (nat: string): number[] => (nat ? Object.keys(GRAND.nations.find((n) => n.id === nat)?.years ?? {}).map(Number) : GRAND.years.map((y) => y.year));
@@ -5183,6 +5184,8 @@ function startCard(): string {
   const years = grandYears(pick.nat);
   const tile = (id: string, name: string, size = 54): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, natColor(id), size) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
   const smallPick = GRAND.nations.some((n) => n.small && n.id === pick.nat);
+  // A line under the years for a country whose war begins on a date of its own (the United States).
+  const under = pick.nat ? GRAND.nations.find((n) => n.id === pick.nat)?.under ?? '' : '';
   const goals = pick.nat && pick.year.turn === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[pick.nat]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '';
   return `${startHead('Theater Command')}
     <div class="body"><p class="lead">Pick a country and a year, then <b>make your own history</b>. From the day you take over nobody follows the history books: you decide where your armies, fleets and air fleets go, and so does the staff of every other nation.</p>
@@ -5193,7 +5196,7 @@ function startCard(): string {
     <div class="gcnats small">${GRAND.nations.filter((n) => n.small).map((n) => tile(n.id, natName(n.id), 38)).join('')}</div>
     <p class="gcsmallnote">A small country decides where it stands: join the Axis, join the Allies, stand alone, or found a League of smaller nations with its neighbours.</p>
     <h3>Choose the year you take over</h3>
-    <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
+    <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>${under ? `<p class="gcunder">${esc(under)}</p>` : ''}
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
     <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</h4>
@@ -5885,6 +5888,8 @@ function invadeCard(on: string, target: number): string {
   // A country whose factories climb to war work by steps (the United States) is told so before it goes to war.
   const work = g.nations[me].atWar.length ? null : warFooting(g, me);
   if (work !== null && work < 1) what.push(`<b>Your industry will not turn over in a day.</b> ${Math.round(work * 100)} in 100 of it is on war work now. From the month you are at war it climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months.`);
+  // A country across the ocean that goes to war with an Axis power stands with the Allies from that day.
+  if (wouldStandWithAllies(g, me, on)) what.push(`<b>You will stand with the Allies.</b> From the day you are at war with ${esc(theName(on))} their ports and their supply lines are open to you: ship your corps port to port, to Britain or wherever the Allies hold a harbour.`);
   const moved = f.alarm.filter((a) => a.from !== a.to);
   const friends = f.alarm.filter((a) => a.friend);
   if (f.alarm.length) {
@@ -6598,6 +6603,7 @@ function onClick(e: MouseEvent): void {
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
     case 'rail': ui.rail = !ui.rail; ui.ship = ui.land = false; refresh(); break;
     case 'ship': ui.ship = !ui.ship; ui.rail = ui.land = false; refresh(); break;
+    case 'shipto': shipPicked(id); break;
     case 'land': ui.land = !ui.land; ui.rail = ui.ship = false; refresh(); break;
     case 'fleet': {
       const f = g.fleets.find((x) => x.id === id);
@@ -7191,7 +7197,8 @@ function onRegion(id: number): void {
     return;
   }
   if (picked.length && (ui.rail || ui.ship)) {
-    for (const c of picked) { if (ui.rail) orderRail(g, c, id); else orderShip(g, c, id); }
+    if (ui.ship) { shipPicked(id); return; }
+    for (const c of picked) orderRail(g, c, id);
     selectRegion(id);
     ui.picked.clear();
     ui.tab = 'region';
@@ -7202,6 +7209,43 @@ function onRegion(id: number): void {
   if (picked.length && id !== ui.sel && !r.units.some((c) => canOrder(g, c) && c.ap > 0) && orderAt(id)) return;
   selectRegion(id);
   refresh();
+}
+
+/**
+ * Ships the picked corps to a port. When none of them can sail there the page says why (no room on the quay, the
+ * enemy holds the sea between, no shipping left) and keeps the corps picked up, so another port can be tried.
+ */
+function shipPicked(id: number): void {
+  const picked = pickedCorps();
+  const to = g.regions[id];
+  let sailed = 0;
+  for (const c of picked) if (orderShip(g, c, id)) sailed++;
+  if (!sailed) {
+    ui.msg = (picked[0] && whyNotShip(g, picked[0], to)) || `Nothing can be shipped to ${to.name} this month.`;
+    refresh();
+    return;
+  }
+  ui.msg = `${sailed === 1 ? 'One corps has sailed' : `${sailed} corps have sailed`} to ${to.name}. The voyage is ${sailed === 1 ? 'its' : 'their'} whole month.`;
+  queueSave();
+  selectRegion(id);
+  ui.picked.clear();
+  ui.tab = 'region';
+  refresh();
+}
+
+/** The ports the picked corps can sail to this month, by the country that holds them: a port across an ocean is off the screen. */
+function shipPorts(): string {
+  const picked = pickedCorps();
+  if (!ui.ship || !picked.length) return '';
+  const ports = new Map<number, Region>();
+  for (const c of picked) for (const r of shipTargets(g, c)) ports.set(r.id, r);
+  if (!ports.size) return '<div class="note shiplist"><b>Ship by sea.</b> No port can take these corps this month.</div>';
+  const by = new Map<string, Region[]>();
+  for (const r of ports.values()) (by.get(r.ctrl) ?? by.set(r.ctrl, []).get(r.ctrl)!).push(r);
+  // Friends' ports first (that is where an army goes), the player's own last.
+  const order = [...by.keys()].sort((a, b) => (a === g.human ? 1 : 0) - (b === g.human ? 1 : 0) || natName(a).localeCompare(natName(b)));
+  const rows = order.map((nat) => `<div class="shiprow"><span class="shipnat">${chip(nat)}<b>${esc(natName(nat))}</b></span><span class="shipports">${by.get(nat)!.sort((a, b) => a.name.localeCompare(b.name)).map((r) => `<button class="btn small" data-act="shipto" data-id="${r.id}" title="Ship to ${esc(r.name)}${r.ctrl !== r.owner ? `, ${esc(g.nations[r.owner].adj)} ground` : ''}. It takes the whole month.">${esc(r.name)}</button>`).join('')}</span></div>`).join('');
+  return `<div class="note shiplist"><b>Ship by sea.</b> Pick a port here, or click a blue port on the map. It takes the whole month, and ${liftLeft(g, g.human!)} more corps can sail this month.${rows}</div>`;
 }
 
 // ---- Moving around the map ----------------------------------------------------------------

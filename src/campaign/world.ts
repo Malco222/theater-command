@@ -15,7 +15,7 @@
 
 import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, allied, armySize, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar } from './game';
+import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -242,6 +242,51 @@ export const shipsItsOwn = (g: Game, nat: string): boolean => {
   const n = g.nations[nat];
   return worldOn(g) && nat !== g.human && !!WORLD.overseas[nat] && !!n && n.capital >= 0 && beyondEurope(n.capital) && g.regions[n.capital].ctrl === nat;
 };
+
+/**
+ * The great powers a country that ships its army across the ocean may go to war with from the first month (the
+ * design director's ruling 31): those of the bloc opposed to the one it stands with or leans toward. It reaches them
+ * through its friends' ports, so no enemy coast need lie within range of its own. Empty for every other country.
+ */
+export function acrossTheWater(g: Game, nat: string, majors: string[]): string[] {
+  const n = g.nations[nat];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive) return [];
+  const side = bloc(n) ?? (n.align === 'leaning_allies' ? 'allies' : n.align === 'leaning_axis' ? 'axis' : null);
+  if (side !== 'allies' && side !== 'axis') return [];
+  return majors.filter((id) => id !== nat && g.nations[id]?.alive && !g.nations[id].dormant && bloc(g.nations[id]) === (side === 'allies' ? 'axis' : 'allies'));
+}
+
+/** Whether going to war with this country would bring a country across the ocean to stand with the Allies (ruling 32), for the card that asks. */
+export function wouldStandWithAllies(g: Game, nat: string, on: string): boolean {
+  const n = g.nations[nat], B = g.nations[on];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive || !B?.alive || bloc(n) !== null || bloc(B) !== 'axis') return false;
+  if (n.atWar.some((id) => g.nations[id]?.alive && bloc(g.nations[id]) === 'allies')) return false;
+  return Object.values(g.nations).some((x) => x.id !== nat && x.alive && !x.dormant && bloc(x) === 'allies');
+}
+
+/**
+ * Ruling 32: a country that ships its army across the ocean, at war with a power of the Axis and with no Allied
+ * country, stands with the Allies from that day: their ports and supply lines are open to it. It is asked when a
+ * player declares war (a computer's country comes in by history's events, which do the same), with 'none' for `was`
+ * when it stood in no bloc before the declaration. True when it has come to stand with them.
+ */
+export function standWithAllies(g: Game, nat: string, was: string | null = null): boolean {
+  const n = g.nations[nat];
+  if (!worldOn(g) || !WORLD.overseas[nat] || !n?.alive) return false;
+  const say = (): void => headline(g, 'event', `${theName(n, true)} stands with the Allies: their ports and their supply lines are open to its armies.`, nat);
+  // The declaration itself may have done it (a country leaning to the Allies that attacks their enemy): it is told all the same.
+  if (bloc(n) === 'allies' && was === 'none') { say(); return true; }
+  if (bloc(n) !== null) return false;
+  const foes = n.atWar.map((id) => g.nations[id]).filter((x) => x?.alive);
+  if (!foes.some((x) => bloc(x) === 'axis') || foes.some((x) => bloc(x) === 'allies')) return false;
+  if (!Object.values(g.nations).some((x) => x.id !== nat && x.alive && !x.dormant && bloc(x) === 'allies')) return false;
+  n.align = 'allies_cobelligerent';
+  n.opinion = n.home = -100;
+  g.flags[`step:${nat}`] = g.turn;
+  g.supplyDirty = true;
+  say();
+  return true;
+}
 
 /** How many corps a month the country's shipping carries across its oceans, all runs together. */
 export const sailings = (g: Game, nat: string, O: OverseasRules): number => Object.values(O.oceans).reduce((s, x) => s + x, 0) * g.nations[nat].sealift;

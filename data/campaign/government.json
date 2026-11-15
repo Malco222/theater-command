@@ -8,7 +8,7 @@
   "nations": {
     "_default": "authoritarian",
     "GER": "oneparty", "ITA": "oneparty", "SOV": "oneparty",
-    "UK": "democracy", "FRA": "democracy", "USA": "democracy", "NED": "democracy", "BEL": "democracy", "NOR": "democracy", "DEN": "democracy", "SWE": "democracy", "FIN": "democracy", "SUI": "democracy", "IRL": "democracy", "LUX": "democracy"
+    "UK": "democracy", "FRA": "democracy", "USA": "democracy", "CAN": "democracy", "NED": "democracy", "BEL": "democracy", "NOR": "democracy", "DEN": "democracy", "SWE": "democracy", "FIN": "democracy", "SUI": "democracy", "IRL": "democracy", "LUX": "democracy"
   },
   "capital": { "lowTrust": 35, "lowShare": 0.5, "lowIncome": 0.08, "highTrust": 75, "highAdd": 1 },
   "trust": {

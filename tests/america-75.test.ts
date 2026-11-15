@@ -13,6 +13,9 @@
 //    crossing stands: preparing, prepared but held back by the card's warning, or ready. It never sails itself.
 // 6. The history dial: by the book the staff's envoys court only the countries history brought in on that side.
 // 7. A harbour the player takes from the sea is a second front his allies' staffs can ship into.
+// 8. An American player goes to war when he chooses (the design director's rulings 31 to 33): Germany and Italy are
+//    on his list from the first month; at war with an Axis power he stands with the Allies, whose ports open to
+//    him; and his goals ask for an American army ashore, so that a player who gives no orders cannot win them.
 import { describe, expect, it } from 'vitest';
 import { landingWatch } from '../src/campaign/ai';
 import { liftView } from '../src/campaign/arsenal';
@@ -20,15 +23,17 @@ import { DEPTH, type DeskId } from '../src/campaign/depth';
 import { crossingWord } from '../src/campaign/desks';
 import { DIPLOMACY, canCourt } from '../src/campaign/diplomacy';
 import { income, ledger } from '../src/campaign/economy';
-import { addCorps, allied, atWar, capture, createGame, removeCorps, setWar } from '../src/campaign/game';
+import { addCorps, allied, atWar, bloc, capture, createGame, removeCorps, setWar } from '../src/campaign/game';
+import { GOALS, goalChecks, goalState, judgeGoals, openGoals } from '../src/campaign/goals';
 import { HISTORY, setStop, staysOut } from '../src/campaign/history';
-import { NAVY, crossingRisk, planCrossing, seaPath } from '../src/campaign/navy';
+import { NAVY, crossingRisk, planCrossing, seaPath, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { frontAshore, heedsCard, landingForce, lodgment, oceanRuns, startOpen } from '../src/campaign/staff';
-import { beginHuman, crossingStaffWord, crossings, endHuman, humanUp, landTargets, orderCourt, orderCrossingPlan, orderDesk, orderLand, runTurnAI, stepAI } from '../src/campaign/turn';
+import { beginHuman, crossingStaffWord, crossings, declarable, endHuman, humanUp, landTargets, orderCourt, orderCrossingPlan, orderDeclare, orderDesk, orderLand, orderShip, runTurnAI, shipTargets, stepAI } from '../src/campaign/turn';
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
-import { WORLD, armyIdle, beyondEurope, overseasOf, sailings, shipsItsOwn, warFooting, warWorkLeft, warWorkMonth } from '../src/campaign/world';
+import { WORLD, acrossTheWater, armyIdle, beyondEurope, overseasOf, sailings, shipsItsOwn, standWithAllies, warFooting, warWorkLeft, warWorkMonth, wouldStandWithAllies } from '../src/campaign/world';
+import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
@@ -489,5 +494,115 @@ describe('North America\'s colours and Canada\'s flag (the art director)', () =>
     expect(FLAGS.CAN).toContain('#f1bf00');
     expect(FLAGS.CAN).toContain('#00247d');
     expect(FLAGS.CAN).toContain('#1b8a4b');
+  });
+});
+
+describe('an American player goes to war when he chooses (rulings 31 to 33)', () => {
+  it('is offered Germany and Italy from the first month, and they are the only ones his ships cannot reach', () => {
+    const g = playing('USA');
+    expect(g.turn).toBe(1);
+    const list = declarable(g);
+    expect(list).toContain('GER');
+    expect(list).toContain('ITA');
+    // The great powers of the other side, and nobody else across the water: not Japan's friends, not the Allies.
+    expect(acrossTheWater(g, 'USA', ['GER', 'ITA', 'UK', 'FRA', 'SOV', 'USA'])).toEqual(['GER', 'ITA']);
+    // A country with no army to ship across an ocean is offered nobody by this rule, and neither is anyone on the map of Europe.
+    expect(acrossTheWater(g, 'MEX', ['GER', 'ITA'])).toEqual([]);
+    const small = startOpen(createGame(3, 'USA'), false);
+    expect(acrossTheWater(small, 'USA', ['GER', 'ITA'])).toEqual([]);
+    // The start screen says when America comes in if he does nothing.
+    const us = (grand as unknown as { nations: { id: string; under?: string }[] }).nations.find((n) => n.id === 'USA')!;
+    expect(us.under).toBe('America stays out until December 1941 unless you decide otherwise. Start in 1942 to begin at war.');
+  });
+
+  it('at war with Germany he stands with the Allies, and their ports are open to his corps the same month', () => {
+    const g = playing('USA');
+    expect(bloc(g.nations.USA)).toBeNull();
+    expect(allied(g, 'USA', 'UK')).toBe(false);
+    expect(wouldStandWithAllies(g, 'USA', 'GER')).toBe(true);
+    expect(wouldStandWithAllies(g, 'USA', 'MEX')).toBe(false);
+    const quay = g.byName['New York'];
+    const c = field(g, 'USA').find((u) => u.reg === quay.id) ?? addCorps(g, 'USA', 'First Army', 'inf', 1, quay.id, {});
+    // At peace no British port takes an American corps.
+    expect(shipTargets(g, c).some((r) => r.owner === 'UK')).toBe(false);
+    expect(orderDeclare(g, 'GER')).toBe(true);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    expect(bloc(g.nations.USA)).toBe('allies');
+    expect(allied(g, 'USA', 'UK')).toBe(true);
+    expect(g.headlines.filter((h) => h.text.startsWith('The United States stands with the Allies')).length).toBe(1);
+    // The price is ruling 28: war work climbs from a tenth.
+    expect(warFooting(g, 'USA')).toBeLessThan(0.2);
+    const british = shipTargets(g, c).filter((r) => r.owner === 'UK' && !r.overseas);
+    expect(british.length).toBeGreaterThan(0);
+    // A port that cannot take him says why (the page shows it).
+    for (const r of g.regions.filter((x) => x.port && x.owner === 'UK' && !x.overseas && !british.includes(x))) expect(whyNotShip(g, c, r)).toBeTruthy();
+    expect(orderShip(g, c, british[0].id)).toBe(true);
+    expect(c.reg).toBe(british[0].id);
+    // Italy is still his to choose.
+    expect(declarable(g)).toContain('ITA');
+    expect(declarable(g)).not.toContain('GER');
+  });
+
+  it('at war with an Axis power that fights no ally yet, he stands with the Allies all the same; a computer America is left to history', () => {
+    const g = playing('USA');
+    // Italy is at peace with everyone in September 1939.
+    expect(g.nations.ITA.atWar.length).toBe(0);
+    expect(wouldStandWithAllies(g, 'USA', 'ITA')).toBe(true);
+    expect(orderDeclare(g, 'ITA')).toBe(true);
+    expect(g.nations.USA.align).toBe('allies_cobelligerent');
+    expect(g.headlines.some((h) => /stands with the Allies/.test(h.text))).toBe(true);
+    // Asked again it changes nothing.
+    expect(standWithAllies(g, 'USA')).toBe(false);
+    // A country at war with an Allied power is not moved to the Allies.
+    const h = playing('USA');
+    setWar(h, 'USA', 'GER');
+    setWar(h, 'USA', 'UK');
+    expect(standWithAllies(h, 'USA')).toBe(false);
+    expect(bloc(h.nations.USA)).toBeNull();
+    // Nor is a country that ships no army of its own across the ocean.
+    const m = playing('MEX');
+    setWar(m, 'MEX', 'GER');
+    expect(standWithAllies(m, 'MEX')).toBe(false);
+  });
+
+  it('his goals ask for an American army ashore: Paris in Allied hands is not enough, and an army that comes after the fall wins nothing', () => {
+    const short = GOALS.USA.short!, long = GOALS.USA.long!;
+    expect(short.text).toBe('An American army is ashore in France and Paris is in Allied hands, with Washington still yours.');
+    expect(long.text).toBe('Germany is beaten with an American army on the continent, and Washington still yours.');
+    const g = playing('USA');
+    openGoals(g, 'USA', 1);
+    setWar(g, 'USA', 'GER');
+    g.nations.USA.align = 'allies';
+    const label = (goal: typeof short, text: string): boolean => goalChecks(g, 'USA', goal).find((c) => c.label === text)!.done;
+    // Paris is French and Washington American, and no American stands in France.
+    expect(label(short, 'Paris')).toBe(true);
+    expect(label(short, 'An American army ashore in France')).toBe(false);
+    expect(judgeGoals(g, 'USA')).toEqual([]);
+    // A corps in Algiers (France overseas) or on Corsica (a lone island) is not ashore in France; one in Normandy is.
+    const far = addCorps(g, 'USA', 'II Corps', 'inf', 2, g.byName.Algiers.id, {});
+    expect(label(short, 'An American army ashore in France')).toBe(false);
+    removeCorps(g, far);
+    const isle = addCorps(g, 'USA', 'II Corps', 'inf', 2, g.byName.Corsica.id, {});
+    expect(label(short, 'An American army ashore in France')).toBe(false);
+    removeCorps(g, isle);
+    const ashore = addCorps(g, 'USA', 'V Corps', 'inf', 2, g.byName.Normandy.id, {});
+    expect(label(short, 'An American army ashore in France')).toBe(true);
+    expect(label(long, 'An American army on the continent')).toBe(true);
+    expect(judgeGoals(g, 'USA').map((x) => [x.key, x.won])).toEqual([['short', true]]);
+    // Germany falls with the corps gone: the long campaign is lost that day, and a corps sent afterwards does not win it back.
+    removeCorps(g, ashore);
+    g.nations.GER.alive = false;
+    expect(judgeGoals(g, 'USA').map((x) => [x.key, x.won])).toEqual([['long', false]]);
+    addCorps(g, 'USA', 'V Corps', 'inf', 2, g.byName.Normandy.id, {});
+    expect(judgeGoals(g, 'USA')).toEqual([]);
+    expect(goalState(g, 'long')).toBe('lost');
+    // With an American army on the continent on the day Germany falls it is won.
+    const w = playing('USA');
+    openGoals(w, 'USA', 1);
+    setWar(w, 'USA', 'GER');
+    w.nations.USA.align = 'allies';
+    addCorps(w, 'USA', 'V Corps', 'inf', 2, w.byName.Normandy.id, {});
+    w.nations.GER.alive = false;
+    expect(judgeGoals(w, 'USA').some((x) => x.key === 'long' && x.won)).toBe(true);
   });
 });

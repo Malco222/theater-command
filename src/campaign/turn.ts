@@ -12,7 +12,7 @@ import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, pla
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, battleCost, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  DEFENCE, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
@@ -36,7 +36,8 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
-import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
+import { court, majorsOf, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
+import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
@@ -1904,6 +1905,8 @@ export function declarable(g: Game): string[] {
       for (const j of g.seas[q[i]].adj) if (depth[j] < 0 && canPass(g, q[i], j, me)) { depth[j] = depth[q[i]] + 1; q.push(j); }
     }
   }
+  // A country that ships its army across the ocean reaches its enemies through its friends' ports (ruling 31).
+  for (const id of acrossTheWater(g, me, majorsOf(g))) add(id);
   return [...out];
 }
 
@@ -1972,7 +1975,10 @@ export function orderLeagueInvite(g: Game, target: string): boolean {
 
 export function orderDeclare(g: Game, on: string): boolean {
   if (!g.human || current(g) !== g.human || !declarable(g).includes(on)) return false;
+  const was = bloc(g.nations[g.human]) ?? 'none';
   declareWar(g, g.human, on);
+  // At war with an Axis power, a country across the ocean stands with the Allies (ruling 32).
+  standWithAllies(g, g.human, was);
   ensureSupply(g);
   return true;
 }
