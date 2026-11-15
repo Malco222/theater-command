@@ -130,9 +130,10 @@ export function moment(g: Game, a: Ambition): string | null {
   const busy = H.atWar.filter((e) => g.nations[e]?.alive);
   // The balance of strength where the two would meet, as a staff weighs a war not yet declared. Ground across the sea
   // has no front to weigh: it is weakly held when few stand on it.
-  const f = fronts(g, a.nat, { extra: new Set([a.on]) }).find((x) => x.enemies.includes(a.on));
+  // (The front the claimed ground lies on, weighed against what stands on the line and a province behind it.)
+  const f = fronts(g, a.nat, { extra: new Set([a.on]) }).find((x) => x.enemies.includes(a.on) && held.some((r) => x.depth[r.id] > 0));
   const thin = held.every((r) => r.units.reduce((s, u) => s + (u.nat === a.on && !u.dead ? u.divs : 0), 0) <= C.thin);
-  const good = f ? f.ratio >= C.odds : thin;
+  const good = f ? f.near >= C.odds : thin;
   if (busy.length) {
     // A great power of the holder's alliance on the claimant's own border deters it, until that power is hard pressed
     // itself (not asked where anything goes).
