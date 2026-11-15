@@ -4,7 +4,8 @@
 // there are too few. An army standing idle on a far shore does the same from there. Against it, a staff keeps a
 // corps of its field army in each harbour of its homeland the enemy's ships can reach, and a computer-run nation
 // that has run out of men puts its idle money into fortifications. A staff whose army is being worn away raises men
-// for the line before guns, and its builders wait. History's scenarios use none of it.
+// for the line before guns, and its builders wait. A German staff opens a general offensive only with the numbers
+// and calls a losing one off in time. History's scenarios use none of it.
 import { describe, expect, it } from 'vitest';
 import arsenalData from '../data/campaign/arsenal.json';
 import openData from '../data/campaign/open.json';
@@ -15,13 +16,15 @@ import { addCorps, armySize, atWar, createGame, removeCorps } from '../src/campa
 import { menSpare } from '../src/campaign/manpower';
 import { landingTargets } from '../src/campaign/navy';
 import { pocketMonth } from '../src/campaign/siege';
-import { coastRules, coastWatch, lodgment, seaBase, seaFoe, staffPhase, startOpen } from '../src/campaign/staff';
+import { coastRules, coastWatch, lodgment, seaBase, seaFoe, staffPhase, startOpen, temper } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 const OPEN = openData as unknown as {
   coast: { share: number; least: number; each: number; works: number; dig: { orders: number; top: number; capital: number; keep: number } };
   descent: { after: number; abroad: number; hold: number; feed: number; force: number; every: number; chance: number };
+  temper: Record<string, { attackAt?: number; persist: number; minOdds: number }>;
+  ops: Record<string, { id: string; chance: number; season?: number[]; prep?: number; from?: number }[]>;
 };
 const D = OPEN.descent;
 
@@ -342,5 +345,33 @@ describe('men before guns', () => {
     const h = createGame(3, 'GER');
     h.nations.POL.armyPeak = armySize(h, 'POL') * 2;
     expect(armyWorn(h, 'POL')).toBe(false);
+  });
+});
+
+describe('a German staff that knows when to stop', () => {
+  it('opens a general offensive only with the numbers, and is still the boldest of the great powers', () => {
+    const T = OPEN.temper;
+    expect(T.GER.attackAt!).toBeGreaterThan(1.1);
+    for (const nat of ['SOV', 'UK', 'USA', 'ITA', 'FRA']) expect(T.GER.attackAt!).toBeLessThan(T[nat].attackAt!);
+  });
+
+  it('calls an offensive off before the enemy outweighs it by a third, as every other staff does', () => {
+    const T = OPEN.temper;
+    expect(T.GER.persist).toBeGreaterThanOrEqual(0.75);
+    expect(T.GER.persist).toBeLessThan(T.GER.attackAt!);
+    // In a war, whatever its mood and its staff's character: still called off before it opens, and never pressed
+    // down to the six tenths at which the armies of 1943 were spent.
+    const g = opened();
+    const t = temper(g, 'GER');
+    expect(t.persist).toBeLessThan(t.attackAt);
+    expect(t.persist).toBeGreaterThan(0.7);
+  });
+
+  it('takes up the attack in the east in good time: three months of weighing it leave under one chance in four of a year lost', () => {
+    const east = OPEN.ops.GER.find((o) => o.id === 'east')!;
+    expect(east.season).toEqual([5, 6, 7]);
+    expect((1 - east.chance) ** 3).toBeLessThan(0.25);
+    // And never a certainty: some wars the east waits a year, and the Soviet player cannot count the days.
+    expect(east.chance).toBeLessThan(0.6);
   });
 });
