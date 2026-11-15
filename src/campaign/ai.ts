@@ -6,7 +6,7 @@
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
-import { aiProduction, gunsWanted, income } from './economy';
+import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify } from './arsenal';
@@ -142,7 +142,7 @@ export function runAI(g: Game, nat: string): void {
   aiProduction(g, nat);
   aiArsenal(g, nat);
   aiFortify(g, nat, Object.keys(coastWatch(g, nat)), coastRules());
-  civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat));
+  civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
 }
 
 function campaign(g: Game, nat: string): void {
@@ -486,6 +486,8 @@ function fight(g: Game, nat: string, ph: PlanPhase | null, posture: string): voi
 function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): void {
   const n = g.nations[nat];
   hold(g, nat, ph);
+  // The coast watch is set before anybody marches for the front: a corps that has gone forward is not called back.
+  mass(g, nat, ph, true);
   fallBack(g, nat);
   if (posture === 'defend') {
     gather(g, nat, ph); mass(g, nat, ph);
@@ -544,12 +546,16 @@ const watchman = (ph: PlanPhase, name: string, u: Corps): boolean => !ph.watch?.
 
 /**
  * Brings each staging place up to the force the plan wants there: while there are too few, the nearest corps of
- * infantry that can be spared marches to join them. Nobody is taken from a place he holds alone.
+ * infantry that can be spared marches to join them. Nobody is taken from a place he holds alone. With `watchOnly`,
+ * only the harbours on the coast watch.
  */
-function mass(g: Game, nat: string, ph: PlanPhase | null): void {
+function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): void {
   if (!ph?.staging || ph.posture === 'redeploy') return;
   const own = (r: Region): Corps[] => r.units.filter((u) => u.nat === nat && u.kind !== 'fort');
-  for (const [name, count] of Object.entries(ph.staging)) {
+  for (const [name, all] of Object.entries(ph.staging)) {
+    if (watchOnly && !ph.watch?.includes(name)) continue;
+    // The watch itself first, one harbour after another: a landing force that gathers at one of them waits its turn.
+    const count = watchOnly ? Math.min(all, coastRules()?.each ?? 1) : all;
     const r = g.byName[name];
     if (!r || !allied(g, nat, r.ctrl)) continue;
     let have = own(r).filter((u) => massed.has(u.id)).length;
@@ -566,12 +572,15 @@ function mass(g: Game, nat: string, ph: PlanPhase | null): void {
       if (c.reg === r.id) { massed.add(c.id); have++; }
     }
     // A harbour on the coast watch with nobody near enough to march there is sent a corps by rail: the nearest
-    // that stands three or more to a place, so that no stretch of a front is left thin for it.
+    // that stands three or more to a place (so that no stretch of a front is left thin for it) and that the trains
+    // can carry the whole way. Where none can, the nearest goes as far as the line runs and marches on next month.
     if (have < count && !pool.length && ph.watch?.includes(name) && friendlyUnits(g, r, nat).length < STACK) {
       const far = g.corps
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && own(g.regions[c.reg]).length >= 3)
-        .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id)[0];
-      if (far && railToward(g, far, r) && far.reg === r.id) { massed.add(far.id); have++; }
+        .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
+      const got = far.slice(0, 12).find((c) => railMove(g, c, r));
+      if (got) { massed.add(got.id); have++; }
+      else if (far[0]) railToward(g, far[0], r);
     }
   }
 }

@@ -444,10 +444,13 @@ export function aiArsenal(g: Game, nat: string): void {
 export interface FortRules { works: number; dig?: { orders: number; top: number; capital: number; keep: number } }
 
 /**
- * A computer-run nation in the grand campaign fortifies (Version 69). The harbours of its homeland where its staff
- * keeps a coast watch are given works first, one order at a time. And a nation that can raise no more corps for
- * want of men does not sit on its money: it goes into fortifications in the provinces of its homeland nearest the
- * enemy that he does not yet stand next to, so many orders a month, with something kept back for the drafts.
+ * A computer-run nation in the grand campaign fortifies (Version 69), with idle money only: what the treasury
+ * holds over the price of a corps of infantry and the reserve. (The factories raise corps first, each month; money
+ * above that price is money they could not turn into troops, for want of men, of upkeep or of room in the
+ * programme. So the works never take the place of a corps the treasury is saving for.) The harbours of its
+ * homeland where its staff keeps a coast watch are given works first, one order at a time. And a nation that can
+ * raise no more corps for want of men digs in: fortifications in the provinces of its homeland nearest the enemy
+ * that he does not yet stand next to, so many orders a month, with 'keep' never touched.
  * The player's own building staff does neither: his fortifications are his to order.
  */
 export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
@@ -455,8 +458,9 @@ export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | 
   if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
   const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const order = (r: Region, keep: number): boolean => { const cost = fortCost(g, nat, r); return cost !== null && n.pp >= cost + keep && !!orderFort(g, nat, r.id); };
+  const idle = corpsCost(g, nat, 'inf') + PRODUCTION.aiReserve;
   const coast = watch.map((nm) => g.byName[nm]).filter((r) => !!r && isHome(g, nat, r) && level(r) < C.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
-  if (coast.length && !n.queue.some((b) => b.what === 'fort' && watch.includes(g.regions[b.region].name))) order(coast[0], PRODUCTION.aiReserve);
+  if (coast.length && !n.queue.some((b) => b.what === 'fort' && watch.includes(g.regions[b.region].name))) order(coast[0], idle);
   const D = C.dig;
   if (!D || menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1)) return;
   // How many marches each province lies from ground an enemy holds.
@@ -468,5 +472,5 @@ export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | 
     .filter((r) => isHome(g, nat, r) && !r.overseas && dist[r.id] >= 2 && level(r) < (r.id === n.capital ? D.capital : D.top))
     .sort((a, b) => dist[a.id] - dist[b.id] || level(a) - level(b) || a.id - b.id);
   let k = 0;
-  for (const r of cands) { if (k >= D.orders || !order(r, D.keep)) break; k++; }
+  for (const r of cands) { if (k >= D.orders || !order(r, Math.max(D.keep, idle))) break; k++; }
 }
