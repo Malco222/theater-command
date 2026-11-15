@@ -22,9 +22,11 @@ import type { Game, Region } from './types';
 
 interface WorldMap {
   frame: { x0: number; y0: number; x1: number; y1: number };
+  /** The whole world's own coordinates: world x = (x + shift) mod width; the seam is the longitude where world x is 0. */
+  world: { width: number; height: number; shift: number; seam: number };
   first: number;
   land: [number, number][][][];
-  lakes: { name: string; x: number; y: number }[];
+  lakes: { name: string; level: number; x: number; y: number; outline: number[][] }[];
   regions: any[];
   links: [number, number][];
   seas: { zones: any[]; gates: any[]; borders: [number, number][][] };
@@ -58,7 +60,7 @@ export const worldOn = (g: Game): boolean => g.flags.world === 1;
 export const beyondEurope = (r: Region | number): boolean => (typeof r === 'number' ? r : r.id) >= WORLD_FIRST;
 
 /** The great lakes cut out of the land: their names and where to write them. None is a sea. */
-export const lakesOf = (g: Game): { name: string; x: number; y: number }[] => (worldOn(g) ? WORLD_MAP.lakes : []);
+export const lakesOf = (g: Game): WorldMap['lakes'] => (worldOn(g) ? WORLD_MAP.lakes : []);
 
 /**
  * Attaches the wider world to a game on the map of Europe. Safe to call twice: the second call does nothing.

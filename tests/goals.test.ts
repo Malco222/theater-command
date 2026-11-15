@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, judgeGoals, openGoals, weeksLasted } from '../src/campaign/goals';
+import { startOpen } from '../src/campaign/staff';
 import { beginEve, runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
@@ -19,7 +20,8 @@ const war = history(3, JAN_41);
 
 describe('the goals as written', () => {
   it('name nations and cities that are on the map, and each has one kind of time limit', () => {
-    const g = createGame(1, null);
+    // The goals belong to the grand campaign, which is played on the wider world: America's name Washington.
+    const g = startOpen(createGame(1, null));
     for (const [nat, pair] of Object.entries(GOALS)) {
       expect(g.nations[nat], nat).toBeDefined();
       for (const key of GOAL_KEYS) {
@@ -35,7 +37,7 @@ describe('the goals as written', () => {
   });
 
   it('are not already won on the first day', () => {
-    const g = createGame(2, null);
+    const g = startOpen(createGame(2, null));
     for (const nat of Object.keys(GOALS)) for (const key of GOAL_KEYS) {
       const goal = GOALS[nat][key]!;
       if (goal.by !== undefined) expect(goalChecks(g, nat, goal).every((c) => c.done), `${nat} ${key}`).toBe(false);

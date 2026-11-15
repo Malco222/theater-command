@@ -43,10 +43,10 @@ const closed = (poly) => poly.map((ring) => [...ring, ring[0]]);
 // Everything on the chart outside the map of Europe, with the Great Lakes cut out of it.
 const box = [[[0, 0], [coreW, 0], [coreW, coreH], [0, coreH], [0, 0]]];
 const round = (ring) => ring.flatMap(([ax, ay], i) => { const [bx, by] = ring[(i + 1) % ring.length]; return [[ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]]; });
-const lakes = LAKES.map(([name, pts]) => {
+const lakes = LAKES.map(([name, level, pts]) => {
   // The outline is drawn with a few points: its corners are rounded off twice.
   const ring = round(round(pts.map(([lat, lon]) => proj([lon, lat]))));
-  return { name, poly: [[...ring, ring[0]]] };
+  return { name, level, poly: [[...ring, ring[0]]] };
 });
 const land = [];
 for (const poly of clipToBox(loadLand('50m'), [FRAME.west, FRAME.south, FRAME.east, FRAME.north])) {
@@ -425,11 +425,15 @@ for (let r = 0; r < rows; r += LOOK) {
 const out = {
   // The chart's edges in map units. Europe's own corner stays at 0, 0, so the new world lies at negative x.
   frame: { x0: gx0, y0: 0, x1: Math.round(x1), y1: Math.round(y1) },
+  // The whole world's own coordinates, for whoever draws it as one sheet or a globe: 40 units a degree of latitude
+  // from 71.4 N, 25.7115 a degree of longitude eastward from the seam at 30.45 W. This file's x is the rules' x.
+  world: { width: 9256.14, height: 5096, shift: 500, seam: -30.45, x: 'world x = (x + 500) mod 9256.14', y: 'world y = y' },
   first,
   land: land.map((p) => p.map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]))),
   lakes: lakes.map((l) => {
     const ring = l.poly[0].slice(0, -1);
-    return { name: l.name, x: r1(ring.reduce((s, p) => s + p[0], 0) / ring.length), y: r1(ring.reduce((s, p) => s + p[1], 0) / ring.length) };
+    // Where to write the name, the surface in metres above sea level, and the shore as it was cut out of the land.
+    return { name: l.name, level: l.level, x: r1(ring.reduce((s, p) => s + p[0], 0) / ring.length), y: r1(ring.reduce((s, p) => s + p[1], 0) / ring.length), outline: ring.map(([x, y]) => [r1(x), r1(y)]) };
   }),
   regions, links,
   seas: { zones: zones.map(({ i, ...z }) => z), gates, borders, cell: CELL * LOOK, cols: Math.ceil(cols / LOOK), grid },

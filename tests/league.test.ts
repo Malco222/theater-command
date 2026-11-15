@@ -47,21 +47,23 @@ describe('the data', () => {
     expect(LEAGUE.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it('offers sixteen small countries in the grand campaign, from September 1939', () => {
+  it('offers sixteen small countries of Europe and two of the new world in the grand campaign, from September 1939', () => {
     const g = grand();
     const list = (grandData as unknown as { nations: { id: string; small?: boolean; years: Record<string, string> }[] }).nations;
     const smalls = list.filter((n) => n.small);
-    expect(smalls.length).toBe(16);
+    expect(smalls.length).toBe(18);
+    expect(smalls.slice(16).map((n) => n.id)).toEqual(['CAN', 'MEX']);
     for (const n of smalls) {
       const N = g.nations[n.id];
       expect(N, n.id).toBeDefined();
       expect(small(n.id), n.id).toBe(true);
       expect(N.alive && !N.dormant, n.id).toBe(true);
-      expect(bloc(N), n.id).toBeNull();
+      // Canada is a dominion, at war beside Britain from the first week; every other small country starts uncommitted.
+      expect(bloc(N), n.id).toBe(n.id === 'CAN' ? 'allies' : null);
       expect(Object.keys(n.years)).toEqual(['1939']);
       expect(n.years['1939'].length).toBeGreaterThan(40);
     }
-    for (const n of list.filter((x) => !x.small)) expect(['GER', 'UK', 'FRA', 'SOV', 'ITA', 'POL']).toContain(n.id);
+    for (const n of list.filter((x) => !x.small)) expect(['GER', 'UK', 'FRA', 'SOV', 'ITA', 'USA', 'POL']).toContain(n.id);
     expect(new Set(list.map((n) => n.id)).size).toBe(list.length);
   });
 });

@@ -36,10 +36,13 @@ describe('the grand campaign menu', () => {
   });
 
   it('offers a country only in years when history still has it in the war or able to join it', () => {
+    // The campaign as it is handed over: on the wider world, where the countries of the new world stand too.
+    const handed = new Map<string, Game>();
     for (const n of NATIONS) {
       expect(Object.keys(n.years).length, n.id).toBeGreaterThan(0);
       for (const year of Object.keys(n.years)) {
-        const g = at(Number(year));
+        if (!handed.has(year)) handed.set(year, startOpen(at(Number(year))));
+        const g = handed.get(year)!;
         const nat = g.nations[n.id];
         expect(nat, n.id).toBeTruthy();
         expect(nat.alive && !nat.dormant, `${n.id} in ${year}`).toBe(true);

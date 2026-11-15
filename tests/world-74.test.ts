@@ -123,6 +123,15 @@ describe('the wider world', () => {
     expect(borders('San Diego', 'Baja California')).toBe(true);
     expect(borders('Southern Baja', 'Sinaloa')).toBe(false);
     expect(lakesOf(g).map((l) => l.name)).toEqual(expect.arrayContaining(['Lake Superior', 'Lake Michigan', 'Lake Erie']));
+    // Each lake carries what whoever draws the world in relief needs: its surface above the sea and its shore.
+    expect(Object.fromEntries(lakesOf(g).map((l) => [l.name.replace('Lake ', ''), l.level]))).toEqual({ Superior: 183, Michigan: 176, Huron: 176, Erie: 174, Ontario: 75, Winnipeg: 217 });
+    for (const l of lakesOf(g)) {
+      expect(l.outline.length, l.name).toBeGreaterThan(20);
+      const xs = l.outline.map((p) => p[0]), ys = l.outline.map((p) => p[1]);
+      expect(l.x > Math.min(...xs) && l.x < Math.max(...xs) && l.y > Math.min(...ys) && l.y < Math.max(...ys), l.name).toBe(true);
+    }
+    // The file says how its own coordinates sit in the whole world's.
+    expect(WORLD_MAP.world).toMatchObject({ width: 9256.14, height: 5096, shift: 500, seam: -30.45 });
   });
 
   it('puts the United States at home, neutral, and Canada, Mexico and Cuba on the map', () => {
