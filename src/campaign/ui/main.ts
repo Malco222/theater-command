@@ -14,7 +14,7 @@ import {
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
-  invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
+  invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
@@ -51,7 +51,7 @@ import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSa
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { RAILWAYS, railCut, railLinks, railNote } from '../rails';
-import { WORLD, beyondEurope, lakesOf } from '../world';
+import { WORLD, beyondEurope, lakesOf, warFooting, warWorkLeft } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan } from '../airwar';
 import type { FleetSeen, WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -4071,7 +4071,10 @@ function crossingLead(): string {
   if (!rows.length) return '';
   const plan = rows.find((x) => x.planned);
   const where = [...new Set(rows.map((x) => natName(x.owner)))];
-  return `<div class="note crosslead"><b>Crossing the sea.</b> ${plan ? `Your plan is ${esc(plan.from.name)} to ${esc(plan.to.name)}. ` : ''}${rows.length === 1 ? 'One enemy shore' : `${rows.length} enemy shores`} can be reached only by sea (${esc(where.slice(0, 3).join(', '))}${where.length > 3 ? ' and more' : ''}). The navy desk has the safest way to each, what it would cost and whether the force could be supplied once ashore. <button class="link" data-act="tab" data-tab="navy">See the crossings ›</button></div>`;
+  // The staff's word on the crossing he has named: preparing, held back by the card's warning, or ready.
+  const word = plan ? crossingStaffWord(g) : null;
+  const said = word ? `<span class="crossword ${word.state}"><b>${word.state === 'ready' ? 'Ready.' : word.state === 'warned' ? 'Waiting on your order.' : 'Preparing.'}</b> ${esc(word.text)}</span> ` : plan ? `Your plan is ${esc(plan.from.name)} to ${esc(plan.to.name)}. ` : '';
+  return `<div class="note crosslead"><b>Crossing the sea.</b> ${said}${rows.length === 1 ? 'One enemy shore' : `${rows.length} enemy shores`} can be reached only by sea (${esc(where.slice(0, 3).join(', '))}${where.length > 3 ? ' and more' : ''}). The navy desk has the safest way to each, what it would cost and whether the force could be supplied once ashore. <button class="link" data-act="tab" data-tab="navy">See the crossings ›</button></div>`;
 }
 
 /** Crossing the sea (the grand campaign): the safest way to each shore the army cannot march to, and why it costs what it costs. */
@@ -5879,6 +5882,9 @@ function invadeCard(on: string, target: number): string {
   // The player's own allies are not bound to follow him into a war of his choosing.
   const hang = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && !atWar(g, x.id, on)).map((x) => x.id);
   if (hang.length) what.push(`<b>Your allies do not follow at once.</b> ${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
+  // A country whose factories climb to war work by steps (the United States) is told so before it goes to war.
+  const work = g.nations[me].atWar.length ? null : warFooting(g, me);
+  if (work !== null && work < 1) what.push(`<b>Your industry will not turn over in a day.</b> ${Math.round(work * 100)} in 100 of it is on war work now. From the month you are at war it climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months.`);
   const moved = f.alarm.filter((a) => a.from !== a.to);
   const friends = f.alarm.filter((a) => a.friend);
   if (f.alarm.length) {

@@ -13,17 +13,18 @@ import { aiArsenal, aiFortify } from './arsenal';
 import { blocked, blowBridges } from './rivers';
 import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, seaPath } from './navy';
+import { NAVY, crossingRisk, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, seaPath } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, isOpen, lodgment, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, frontAshore, heedsCard, isOpen, lodgment, oceanRuns, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
+import { overseasOf } from './world';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
+  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf, headline,
   hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -462,7 +463,7 @@ function mainCampaign(g: Game, nat: string): void {
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   if (ph?.landings) landings(g, nat, ph);
-  if (open) descent(g, nat);
+  if (open) { descent(g, nat); ferry(g, nat); }
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
   entrusted = handedOver(g, nat, ph);
@@ -938,6 +939,13 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
 }
 
 /**
+ * For the measuring harness: told of every landing a staff makes, with the forecast of the sea behind the beach as
+ * the staff read it that moment (`warned`: it could be closed), and whether it was a further wave to men already
+ * ashore. Nothing in the game listens.
+ */
+export const landingWatch: { tell: ((e: { nat: string; to: Region; force: Corps[]; warned: boolean; sea: number; wave: boolean; taken: boolean }) => void) | null } = { tell: null };
+
+/**
  * A staff with shipping sends the force it keeps by a quay across the sea: the army at home, and an army standing
  * idle on a far shore, each in its turn.
  */
@@ -977,7 +985,12 @@ function crossSea(g: Game, nat: string, slot: number): void {
       const wave = ready.slice(0, Math.min(liftLeft(g, nat), STACK - friendlyUnits(g, ashore.at, nat).length));
       if (wave.length) {
         const plan = planLanding(g, wave, ashore.at);
-        if (!plan.why && plan.risk <= L.risk && landCorps(g, wave, ashore.at).ok) for (const c of wave) { c.hold = false; if (!c.dead) g.flags[`sf:${c.id}`] = 1; }
+        // (Not where its own forecast says the sea behind the beach could be closed: more men would only share the trap.)
+        const warned = !!plan.hold && !plan.hold.open;
+        if (!plan.why && plan.risk <= L.risk && !(heedsCard(ashore.at, true) && warned) && landCorps(g, wave, ashore.at).ok) {
+          landingWatch.tell?.({ nat, to: ashore.at, force: wave, warned, sea: plan.hold?.sea ?? -1, wave: true, taken: true });
+          for (const c of wave) { c.hold = false; if (!c.dead) g.flags[`sf:${c.id}`] = 1; }
+        }
       }
       return;
     }
@@ -996,29 +1009,101 @@ function crossSea(g: Game, nat: string, slot: number): void {
   }
   if (hashString(`descent:${g.seed}:${g.turn}:${nat}${sfx}`) / 4294967296 >= L.chance) return;
   const men = force.reduce((s, c) => s + c.divs * c.str, 0);
-  let best: Region | null = null, bv = 0;
+  let best: Region | null = null, bv = 0, bw = false, bz = -1;
   for (const r of landingTargets(g, force)) {
     if (r.ctrl !== you || !r.port) continue;
     // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
     if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
     const plan = planLanding(g, force, r);
     if (plan.why || plan.risk > L.risk) continue;
+    // A staff heeds its own forecast, the one a player reads on the landing card: it puts nobody on a beach where
+    // the sea behind could be closed and the force cut off from its supplies. (Except to take a whole island.)
+    const warned = !!plan.hold && !plan.hold.open;
+    if (heedsCard(r) && warned) continue;
     if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
     // The army within a march of the beach.
     let near = 0;
     for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g, g.regions[j], nat)) if (u.kind !== 'fort') near += u.divs * u.str;
     if (near > L.near * men) continue;
     const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (plan.defended ? 1 : 1.5) - 10 * plan.risk - 0.2 * near;
-    if (!best || v > bv) { best = r; bv = v; }
+    if (!best || v > bv) { best = r; bv = v; bw = warned; bz = plan.hold?.sea ?? -1; }
   }
   if (!best) return;
   const res = landCorps(g, force, best);
   if (!res.ok) return;
+  landingWatch.tell?.({ nat, to: best, force, warned: bw, sea: bz, wave: false, taken: !!res.taken });
   went(L.every);
   delete g.flags[`st:aim:${nat}${sfx}`];
   if (res.taken) {
     g.flags[`st:lodged:${nat}${sfx}`] = best.id + 1;
     if (sea.second) for (const c of force) if (!c.dead) g.flags[`sf:${c.id}`] = 1;
+  }
+}
+
+/**
+ * The army sent across the ocean (the wider world; world.json 'overseas', staff.ts `oceanRuns`). A computer-run
+ * country an ocean away from every enemy ships the corps it raises to a harbour of its own side's on the far shore:
+ * each ocean's run has a share of the month's shipping, banked while there is nothing to carry or no ship free, and
+ * a guard of so many field corps never leaves home. First, though, the corps already across that stand idle on the
+ * far shore go on by sea to a second front their side is fighting on, into its harbours: no beach is stormed for
+ * that. Then the month's sailings from home, the best corps first, to that front's harbours or, when they are full or
+ * the way to them too dangerous, to the harbour where the army is built up; and the next to sail are brought to the quay by
+ * rail. It runs after the month's landings (`descent`), which have first call on the ships.
+ */
+function ferry(g: Game, nat: string): void {
+  const O = overseasOf(g, nat);
+  if (!O) return;
+  const n = g.nations[nat];
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax;
+  const byWorth = (a: Corps, b: Corps): number => atkPower(g, b) - atkPower(g, a) || a.id - b.id;
+  const went = (c: Corps): void => { c.hold = false; g.flags[`sf:${c.id}`] = 1; };
+  // No corps is shipped to a full harbour, or over a crossing too dangerous for its staff ('risk').
+  const sails = (c: Corps, p: Region): boolean => {
+    if (friendlyUnits(g, p, nat).length >= STACK) return false;
+    const path = seaPath(g, nat, g.regions[c.reg], p);
+    return !!path && crossingRisk(g, nat, path) <= O.risk && shipMove(g, c, p);
+  };
+  // The far shore: idle corps go on to a front their side holds beyond a narrow sea.
+  const front = frontAshore(g, nat);
+  if (front) {
+    for (const c of g.corps.filter(fit).sort(byWorth)) {
+      if (liftLeft(g, nat) < 1) break;
+      const here = g.regions[c.reg];
+      if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g, nat, here.ctrl)) continue;
+      // One with the enemy next to it has a front of its own already.
+      if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
+      if (front.ports.some((p) => sails(c, p))) went(c);
+    }
+  }
+  // The ocean runs.
+  const home = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && g.regions[c.reg].owner === nat && !g.regions[c.reg].overseas);
+  for (const run of oceanRuns(g, nat)) {
+    const key = `fy:${nat}:${run.ocean}`, at = `fyAt:${nat}:${run.ocean}`;
+    if (g.flags[at] !== g.turn) { g.flags[at] = g.turn; g.flags[key] = Math.min(O.bank, (g.flags[key] ?? 0) + run.share * n.sealift); }
+    let spare = home().length - O.guard;
+    for (const c of run.from.units.filter((u) => fit(u) && !u.hold).sort(byWorth)) {
+      if (spare <= 0 || (g.flags[key] ?? 0) < 1 || liftLeft(g, nat) < 1) break;
+      const to = run.to.find((p) => sails(c, p));
+      if (!to) break;
+      g.flags[key] -= 1;
+      spare--;
+      went(c);
+      // The first to cross is news for everyone; after that, for the player whose war they have come to.
+      const first = !g.flags[`fy:first:${nat}`];
+      g.flags[`fy:first:${nat}`] = 1;
+      if (first) headline(g, 'event', `The first ${n.adj} troops to cross the ocean come ashore at ${to.name}: ${c.name}. More will follow as fast as the ships can carry them.`, nat, to.id);
+      else if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat)) && allied(g, g.human, to.ctrl)) headline(g, 'info', `${c.name} of the ${n.adj} army has landed at ${to.name}.`, nat, to.id);
+    }
+    // The next to sail come down to the quay: as many as the run will carry in the next two months, and never the guard.
+    const want = Math.min(spare, Math.ceil(2 * run.share * n.sealift));
+    let have = run.from.units.filter((u) => u.nat === nat && !u.dead && !u.hold && u.kind !== 'fort' && u.kind !== 'eng').length;
+    for (const u of run.from.units) if (u.nat === nat && !u.hold) massed.add(u.id);
+    if (have >= want) continue;
+    const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id)).sort(byWorth);
+    for (const c of pool) {
+      if (have >= want || friendlyUnits(g, run.from, nat).length >= STACK) break;
+      if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; }
+    }
   }
 }
 

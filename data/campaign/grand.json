@@ -36,10 +36,10 @@
       "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
     } },
     { "id": "USA", "years": {
-      "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Arm while you can, and choose your moment.",
+      "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Going to war will not turn the factories over in a day: they climb to full war work over many months. Arm while you can, and choose your moment.",
       "1940": "Still at peace. The war in Europe has gone quiet for the winter, your factories are taking orders from London and Paris, and the army is still a cadre.",
-      "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. How long can you stand aside?",
-      "1942": "At war since December. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
+      "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. A fifth of your industry is on war work, and war itself will take the rest there only step by step. How long can you stand aside?",
+      "1942": "At war since December. Industry is turning over to war work month by month and will be at full stretch in 1943. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
     } },
     { "id": "POL", "years": {
       "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."

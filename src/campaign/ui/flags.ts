@@ -94,7 +94,7 @@ export const FLAGS: Record<string, string> = {
   // Nations of the wider war.
   JPN: field(WHITE) + disc(11, 7, 4.2, '#bc002d'),
   CHN: field(RED) + rect(0, 0, 11, 7, '#000095') + star(5.5, 3.5, 2.7, WHITE, 12, 0.62) + disc(5.5, 3.5, 1.3, WHITE),
-  CAN: ensign('#c8102e', shield(16.5, 5.4, 3.6, 4.6, WHITE, GOLD) + rect(15.2, 8, 2.6, 1.2, '#1b8a4b')),
+  CAN: ensign('#c8102e', shield(16.5, 5, 4.4, 5.6, WHITE, GOLD) + rect(14.6, 5.3, 1.9, 1.5, '#c8102e') + rect(16.5, 5.3, 1.9, 1.5, '#f1bf00') + rect(14.6, 6.8, 3.8, 1.5, '#00247d') + star(16.5, 9.25, 0.95, '#1b8a4b', 3, 0.5)),
   AUS: ensign('#012169', star(5.5, 10.6, 1.9, WHITE, 7, 0.5) + star(16.5, 2.6, 0.9, WHITE, 7, 0.5) + star(13.6, 6.4, 0.9, WHITE, 7, 0.5) + star(19.2, 5.6, 0.9, WHITE, 7, 0.5) + star(16.5, 11.2, 0.9, WHITE, 7, 0.5)),
   NZL: ensign('#012169', star(16.5, 2.8, 1.1, RED, 5, 0.45) + star(14, 6.6, 1.1, RED, 5, 0.45) + star(19, 6, 1.1, RED, 5, 0.45) + star(16.5, 11, 1.1, RED, 5, 0.45)),
   IND: ensign('#c8102e', disc(16.5, 7, 2.6, GOLD) + star(16.5, 7, 1.7, WHITE, 5, 0.45)),

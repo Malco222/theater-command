@@ -36,7 +36,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { lineSince, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { beyondEurope, protectorOf, worldOn } from './world';
+import { beyondEurope, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
@@ -2180,6 +2180,9 @@ function expeditions(g: Game, nat: string): void {
     }
     let reg = g.byName[row[5]];
     let due = row[0];
+    // The wider world: a computer-run country that ships its own army across the ocean (world.ts, 'overseas') is sent
+    // none of history's dated formations as well: the corps it raises and ships take their place.
+    if (shipsItsOwn(g, nat)) return;
     if (g.flags.open === 1) {
       // Free play. An invasion force history put together for a landing of its own planning is nobody's to send.
       // A formation raised for a war waits for that war, however late it comes, and then has its half year.
@@ -2197,8 +2200,7 @@ function expeditions(g: Game, nat: string): void {
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
-      // it is his business. (A computer's still lands where history landed it, or not at all: its staff has no
-      // routine yet for carrying an army across an ocean by itself.)
+      // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
       if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !o.from && !o.joins && row[3] !== 'fort')
         reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
       // A full province sends it on to the nearest ground with room.

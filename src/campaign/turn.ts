@@ -47,7 +47,7 @@ import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
-import { RIVALS, characterOf, effortsOf, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
+import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -57,7 +57,7 @@ import {
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
-import { commandView, handOver, setDepth, setStaffCap, staffMonth, type CommandView } from './desks';
+import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { staffRuns, type DeskId } from './depth';
@@ -1079,7 +1079,12 @@ export function previewLanding(g: Game, cs: Corps[], to: number): LandingPlan {
 /** Sends the chosen corps across the sea to land on an enemy coast. */
 export function orderLand(g: Game, cs: Corps[], to: number): Landing {
   if (!cs.length || onEve(g) || !cs.every((c) => ownOrder(g, c))) return { ok: false, why: cs.some((c) => c.joint !== undefined) ? 'An ally\'s corps does not sail under your orders: send the landing with your own.' : 'Those corps cannot be given orders now.' };
-  return landCorps(g, cs, g.regions[to]);
+  const beach = g.regions[to], nat = cs[0].nat;
+  const res = landCorps(g, cs, beach);
+  // A harbour the player takes from the sea is a second front his allies' staffs know of: one that ships its army
+  // across an ocean puts its corps into that harbour beside his (staff.ts, `frontAshore`). The first stands while it lasts.
+  if (res.ok && res.taken && !res.air && beach.port && g.flags.open === 1 && !lodgment(g, nat)) g.flags[`st:lodged:${nat}`] = beach.id + 1;
+  return res;
 }
 
 /**
@@ -1089,6 +1094,15 @@ export function orderLand(g: Game, cs: Corps[], to: number): Landing {
  */
 export function crossings(g: Game): CrossingOutlook[] {
   return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human) : [];
+}
+
+/**
+ * What the player's staff says of the crossing he has named as his plan: still preparing it and what is wanting,
+ * prepared but held back by the landing card's warning (the order to sail under it is his own), or ready. Null
+ * with no crossing named.
+ */
+export function crossingStaffWord(g: Game): CrossingWord | null {
+  return g.human && g.nations[g.human].alive ? crossingWord(g, g.human) : null;
 }
 
 /**

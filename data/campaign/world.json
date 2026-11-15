@@ -6,18 +6,20 @@
     "follow": "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
     "corps": "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
     "fleets": "Squadrons in home waters on the first day, in the form of navy.json.",
-    "peace": "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country. Once it is at war its factories work as any other's do.",
+    "peace": "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
+    "warWork": "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
+    "overseas": "The army sent across the ocean. A computer-run country here whose homeland lies an ocean away from every enemy ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business.",
     "protector": "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
     "pairs": "Trade agreements history had in 1939, added to trade.json's.",
     "order": "Where the new countries stand in the order of play: after the countries of nations.json.",
-    "idle": "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (It has no routine yet for shipping an army across an ocean by itself; history's dated formations still arrive where history landed them.) A player's own staff is not bound by it.",
+    "idle": "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (A country with an entry under 'overseas' that is at war and has an ally's port to ship to raises by that rule instead.) A player's own staff is not bound by it.",
     "oilHome": "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
     "great": "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
   },
   "nations": {
-    "CAN": { "name": "Canada", "adj": "Canadian", "color": "#c0846a", "quality": 0.9, "air": 8, "resilience": 0.9, "align": "allies", "seaSupply": true, "sealift": 1 },
+    "CAN": { "name": "Canada", "adj": "Canadian", "color": "#eba181", "quality": 0.9, "air": 8, "resilience": 0.9, "align": "allies", "seaSupply": true, "sealift": 1 },
     "MEX": { "name": "Mexico", "adj": "Mexican", "color": "#1e7046", "quality": 0.55, "air": 2, "resilience": 0.6, "align": "independent" },
-    "CUB": { "name": "Cuba", "adj": "Cuban", "color": "#b0a488", "quality": 0.5, "air": 0, "resilience": 0.5, "align": "independent" }
+    "CUB": { "name": "Cuba", "adj": "Cuban", "color": "#644eb2", "quality": 0.5, "air": 0, "resilience": 0.5, "align": "independent" }
   },
   "home": {
     "USA": { "align": "leaning_allies" }
@@ -43,6 +45,10 @@
   ],
   "peace": {
     "USA": [[1, 0.1], [10, 0.2], [19, 0.35]]
+  },
+  "warWork": { "USA": 0.037 },
+  "overseas": {
+    "USA": { "guard": 4, "ahead": 7, "bank": 2, "risk": 0.1, "oceans": { "atlantic": 0.15 } }
   },
   "protector": ["UK", "USA"],
   "pairs": [["UK", "USA"], ["USA", "CAN"], ["USA", "MEX"], ["USA", "CUB"], ["UK", "CAN"]],

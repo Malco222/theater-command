@@ -29,7 +29,7 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
-import { armyIdle, peaceFooting } from './world';
+import { armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -217,7 +217,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
   const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
-  const peace = n.atWar.length ? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome;
+  const peace = n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome;
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
   const prizes = prizeIncome(g, nat);
@@ -247,7 +247,8 @@ export function ledger(g: Game, nat: string): Ledger {
     ...gift.lines,
   ];
   const changes: LedgerLine[] = [
-    { key: 'peace', label: peaceFooting(g, nat) === null ? 'At peace: industry at half speed' : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
+    // (At war, a country that climbs to full war work by steps says how far it has come and how long it has to go.)
+    { key: 'peace', label: n.atWar.length ? (peace >= 1 ? 'At war: all of industry on war work' : `At war: ${Math.round(peace * 100)} in 100 of industry on war work so far, all of it in ${warWorkLeft(g, nat) === 1 ? 'a month' : `${warWorkLeft(g, nat)} months`}`) : peaceFooting(g, nat) === null ? 'At peace: industry at half speed' : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
     { key: 'sea', label: 'Cargoes sunk at sea', amount: afterSea - atPeace },
     { key: 'air', label: 'Bombing of industry', amount: afterAir - afterSea },
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
@@ -286,7 +287,7 @@ export function income(g: Game, nat: string): number {
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
-    return (sum * (n.atWar.length ? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
+    return (sum * (n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;

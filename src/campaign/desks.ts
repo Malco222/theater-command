@@ -10,10 +10,11 @@
 // A desk's month ends in one line of news, tagged with the desk so that an interface can offer to take it back.
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
-import { atWar, bloc } from './game';
+import { atWar, bloc, headline } from './game';
+import { turnToDate } from '../core/ticket';
 import { BUDGET, PRODUCTION, aiProduction, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
-import { ARSENAL, aiArsenal, offers, orderOffer, type Wing } from './arsenal';
+import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
@@ -22,10 +23,12 @@ import { DIPLOMACY, canCourt, court, courtable, receptive, step } from './diplom
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
-import { atSea, fleetsOf, navalAI } from './navy';
+import { atSea, crossingsOf, fleetsOf, navalAI, plannedCrossing } from './navy';
+import { landingForce } from './staff';
+import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
-import type { AirReport, Build, Game, Nation } from './types';
+import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -82,7 +85,8 @@ const orderWords = (g: Game, b: Build): string =>
   b.what === 'civic' ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}`
     : b.what === 'air' ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}`
     : b.what === 'work' ? `${b.item === 'aa' ? 'anti-aircraft guns' : b.item ?? 'works'} at ${g.regions[b.region].name}`
-      : `${b.name} at ${g.regions[b.region].name}`;
+      : b.what === 'ship' ? `${b.name[0].toLowerCase()}${b.name.slice(1)}`
+        : `${b.name} at ${g.regions[b.region].name}`;
 
 /** The aircraft a nation has bought over its air force's own establishment, with the wings on order, by kind. */
 export function boughtAir(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number>; forming: Record<Wing, number> } {
@@ -126,6 +130,72 @@ function machines(g: Game, nat: string): void {
   }
 }
 
+/**
+ * The crossing the player has named as his plan (navy.ts, `plannedCrossing`): his building staff lays down
+ * troopships until the shipping can carry the force for it in one lift. The force is the corps standing on the
+ * quay, never fewer than a staff sends ashore in a landing and never more than can go ashore in one place. One lot
+ * a month, first call on the month's allowance, within what the yards can take (arsenal.json, 'lift').
+ */
+function shipping(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  const plan = plannedCrossing(g, nat);
+  if (!plan) return;
+  const lift = liftView(g, nat);
+  const force = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne).length;
+  const want = Math.min(STACK, Math.max(landingForce(), force));
+  if (lift.room <= 0 || lift.lift + lift.building.length >= want) return;
+  const o = offers(g, nat).find((x) => x.key === 'ship:tp');
+  if (o && o.why === null && o.at >= 0 && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, o.key, o.at);
+}
+
+/** The staff's word on the crossing the player has named as his plan. */
+export interface CrossingWord {
+  from: Region; to: Region;
+  /**
+   * 'waiting': something is still wanting (a sea or a sky that bars the way, corps on the quay, ships to carry
+   * them). 'warned': it could sail, but the landing card warns that the sea behind the beach can be closed, so the
+   * staff waits: the order to sail under a warning is the player's own. 'ready': it can sail and the card is clear.
+   */
+  state: 'waiting' | 'warned' | 'ready';
+  /** The same in words, for the Staff tab and the month's news. */
+  text: string;
+}
+
+/**
+ * What the player's staff has to say about the crossing he has named (navy.ts, `plannedCrossing`): it prepares
+ * the crossing (the admirals and the air staff where he has handed them those desks, the building staff with
+ * troopships), says what is still wanting, and reports when it is ready. Under the card's warning it waits and says
+ * so. It never sails: the landing is always the player's own order. Null with no crossing named.
+ */
+export function crossingWord(g: Game, nat: string): CrossingWord | null {
+  const plan = plannedCrossing(g, nat);
+  if (!plan) return null;
+  const x = crossingsOf(g, nat).find((c) => c.planned);
+  const lift = liftView(g, nat);
+  const force = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne).length;
+  const want = landingForce();
+  const way = `the crossing from ${plan.from.name} to ${plan.to.name}`;
+  // (A shore the army can now march to is no crossing at all.)
+  if (!x) return { ...plan, state: 'waiting', text: `Your staff is not preparing ${way}: your army can reach that shore by land.` };
+  const wanting: string[] = [];
+  if (x.bar) wanting.push(`the way itself (${x.bar.replace(/\.$/, '')})`);
+  if (force < want) wanting.push(`${want - force} more corps on the quay at ${plan.from.name} (a landing takes ${want}, and ${force === 0 ? 'none stands' : force === 1 ? 'one stands' : `${force} stand`} there)`);
+  if (lift.lift < want) wanting.push(lift.building.length ? `shipping (the ships carry ${lift.lift} corps a month; troopships for more are on the slips, the next lot ready in ${turnToDate(lift.building[0]).label})` : `shipping (the ships carry ${lift.lift} corps a month)`);
+  if (wanting.length) return { ...plan, state: 'waiting', text: `Your staff is preparing ${way}. Still wanting: ${listAnd(wanting)}.` };
+  if (!x.account.hold.open) return { ...plan, state: 'warned', text: `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[x.account.hold.sea].name} behind it. The order to sail under that warning is yours alone.` };
+  const lost = Math.round(x.account.loss * 100);
+  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}. The order to land is yours.` };
+}
+
+/** The month's report on the named crossing: said once in the news when it is ready, or prepared and held back by the card's warning. */
+function crossingReport(g: Game, nat: string): void {
+  const w = crossingWord(g, nat);
+  const code = w ? (w.to.id + 1) * 4 + (w.state === 'ready' ? 1 : w.state === 'warned' ? 2 : 3) : 0;
+  if (code === (g.flags['dk:cross'] ?? 0)) return;
+  if (code) g.flags['dk:cross'] = code; else delete g.flags['dk:cross'];
+  if (w && w.state !== 'waiting') headline(g, 'info', w.text, nat, w.to.id);
+}
+
 function build(g: Game, nat: string): string | null {
   const n = g.nations[nat];
   const did: string[] = [];
@@ -145,9 +215,11 @@ function build(g: Game, nat: string): string | null {
     }
     if (signed.length) did.push(`signed ${signed.length === 1 ? 'a trade agreement' : 'trade agreements'} with ${listAnd(signed)}`);
   }
-  // Then the month's orders, as a computer nation's staff places them: new corps, guns round bombed industry, building in the towns.
+  // Then the month's orders: troopships for the crossing the player has named, and then as a computer nation's
+  // staff places them: new corps, guns round bombed industry, building in the towns.
   const had = new Set(n.queue.map((b) => b.id));
   const spent = fromPurse(g, nat, () => {
+    shipping(g, nat);
     aiProduction(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
@@ -166,14 +238,22 @@ function diplomacy(g: Game, nat: string): string | null {
   const n = g.nations[nat], b = bloc(n);
   if (!b || b === 'league' || n.pc < DIPLOMACY.court.cost + DEPTH.diplomacy.keep) return null;
   const side = b === 'axis' ? 1 : -1;
-  let best: Nation | null = null, top = 0;
+  let best: Nation | null = null, top = 0, book = 0;
   for (const T of Object.values(g.nations)) {
     if (!canCourt(g, nat, T.id).ok) continue;
+    // The history dial: by the book the staff's envoys keep to the countries history brought in on this side. The
+    // player may court any other by hand, and from then on the staff may too.
+    if (staysOut(g, T.id, b)) { book++; continue; }
     // The neutral most ready to listen, the nearer to joining the better, and a rich one before a poor one.
     const v = receptive(T, b) * (2 + step(T) * side) * Math.sqrt(1 + wealthOf(g, T.id));
     if (v > top || (v === top && best !== null && T.id < best.id)) { top = v; best = T; }
   }
-  if (!best) return null;
+  if (!best) {
+    // Said once: why the envoys are at home.
+    if (!book || g.flags['dk:crt:book']) return null;
+    g.flags['dk:crt:book'] = 1;
+    return 'sent no envoys: by the book (the history dial) they court only the countries that history brought into the war on our side, and none of those is left to court. Court a country yourself and the staff will carry on with it.';
+  }
   const before = step(best);
   if (!court(g, nat, best.id)) return null;
   // One line when the envoys take up a country and one when it moves: a month of the same courting is not news.
@@ -339,6 +419,7 @@ export function staffMonth(g: Game): void {
   const nat = g.human;
   if (!depthRules(g) || nat === null || !g.nations[nat]?.alive) return;
   for (const desk of ORDER) if (staffRuns(g, nat, desk) && !deskRan(g, desk)) runDesk(g, nat, desk);
+  crossingReport(g, nat);
 }
 
 /**

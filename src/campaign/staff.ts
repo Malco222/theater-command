@@ -25,12 +25,12 @@ import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
-import { NAVY, canPass, closedTo } from './navy';
+import { NAVY, canPass, closedTo, seaPath, seaRisk } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { attachWorld } from './world';
+import { acrossOcean, attachWorld, overseasOf } from './world';
 import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -66,7 +66,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean } };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1190,6 +1190,18 @@ function quayWorth(g: Game, nat: string, from: Region, shores: Region[], shut: b
   return { worth, seas };
 }
 
+/**
+ * True where a staff heeds its own forecast of the sea behind a beach (open.json, 'descent.heed'): it lands nobody
+ * where that sea could be closed. On the mainland it does; for a landing that takes a whole island (a province with
+ * no land frontier) it does not; and a further wave to men already ashore (`wave`) has a switch of its own.
+ */
+export function heedsCard(to: Region, wave = false): boolean {
+  const H = OPEN.descent?.heed;
+  return !!H && (wave ? H.wave : to.nb.length ? H.mainland : H.island);
+}
+/** How many corps a staff sends ashore in a landing (open.json, 'descent.force'). */
+export const landingForce = (): number => OPEN.descent?.force ?? 3;
+
 /** The harbours a nation holds. */
 const harbours = (g: Game, e: string): Region[] => g.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
 
@@ -1415,6 +1427,150 @@ function seaHops(g: Game, from: number[], shores: Region[]): number {
     for (const j of g.seas[q[i]].adj) if (d[j] < 0) { d[j] = d[q[i]] + 1; q.push(j); }
   }
   return Infinity;
+}
+
+// ---- The army sent across the ocean (the wider world) ---------------------------------------------------
+//
+// A country whose homeland lies an ocean away from every enemy cannot land on him from its own ports: they are far
+// outside a landing's range. Its staff ships the corps it raises to a port of an ally who is in the same war, a
+// share of its shipping working that ocean each month (world.json, 'overseas'). From the far shore they go the way
+// every second front goes: into a harbour of a landing its side has already made, or across the narrow sea when the
+// way is open (`abroad`, above). It never lands on a defended shore straight from the ocean.
+
+/** One ocean's run this month: the quay at home, and the harbours the corps can be put down in, the best first. */
+export interface OceanRun { ocean: string; share: number; from: Region; to: Region[]; front: boolean }
+
+/** The ground a nation's side holds in one piece with a province, by whose army holds the country. */
+function groundFrom(g: Game, nat: string, at: Region): Uint8Array {
+  const on = new Uint8Array(g.regions.length);
+  const q = [at.id];
+  on[at.id] = 1;
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!on[j] && allied(g, nat, fieldCtrl(g, g.regions[j]))) { on[j] = 1; q.push(j); }
+  return on;
+}
+
+/**
+ * The second front a nation can join by ship: one it opened itself, or else one an ally who is in the same war
+ * opened and is still fighting on (a player's own landing counts, turn.ts). Its own comes first, and of two the one
+ * where the men ashore are still too few. With its harbours in friendly hands and the ground it stands on. Null
+ * where there is none.
+ */
+export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]; ground: Uint8Array } | null {
+  const n = g.nations[nat];
+  if (!n?.alive) return null;
+  let best: { at: Region; ports: Region[] } | null = null, bs = -1;
+  const look = (id: string, slot: number, own: boolean): void => {
+    const l = lodgment(g, id, slot);
+    if (!l || !l.ports.length) return;
+    const s = (own ? 2 : 0) + (l.short ? 1 : 0);
+    if (s > bs) { bs = s; best = { at: l.at, ports: l.ports }; }
+  };
+  for (const slot of [1, 0]) look(nat, slot, true);
+  for (const id of Object.keys(g.nations)) {
+    const A = g.nations[id];
+    if (id === nat || !A.alive || A.dormant || !allied(g, nat, id) || !A.atWar.some((e) => n.atWar.includes(e))) continue;
+    for (const slot of [0, 1]) look(id, slot, false);
+  }
+  if (!best) return null;
+  const b = best as { at: Region; ports: Region[] };
+  return { ...b, ground: groundFrom(g, nat, b.at) };
+}
+
+/**
+ * The harbour across an ocean where a staff builds its army up: a port of its own side's (its own, or an ally's who
+ * is in the same war) that its ships can reach without too dangerous a crossing, with no enemy in it, and the one from which the most lightly held of
+ * the enemy's harbours could then be reached over a narrow sea, as a quay for a second front is chosen. With none of
+ * them in reach of any, the port nearest his harbours. The choice is kept for half a year while it still serves.
+ */
+function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boolean): Region | null {
+  const n = g.nations[nat];
+  const key = `st:base:${nat}:${ocean}`, at = `st:baseAt:${nat}:${ocean}`;
+  const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g, nat, p.ctrl)
+    && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p);
+  const kept = g.regions[flag(g, key) - 1];
+  if (kept && serves(kept) && g.turn - flag(g, at) < 6) return kept;
+  const shores = [...n.atWar].sort().filter((e) => g.nations[e]?.alive && g.nations[e].capital >= 0).flatMap((e) => harbours(g, e));
+  if (!shores.length) { delete g.flags[key]; return null; }
+  const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  let best: Region | null = null, bw = 0, bs = Infinity;
+  let near: Region | null = null, bd = Infinity;
+  for (const p of g.regions) {
+    if (!serves(p)) continue;
+    const d = seaHops(g, p.seas, shores);
+    if (d < bd) { bd = d; near = p; }
+    const w = quayWorth(g, nat, p, shores, shut);
+    if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = p; bw = w.worth; bs = w.seas; }
+  }
+  best ??= near;
+  if (!best) { delete g.flags[key]; return null; }
+  g.flags[key] = best.id + 1;
+  g.flags[at] = g.turn;
+  return best;
+}
+
+/** The danger of the safest way by sea from a set of quays to each sea, as `crossingRisk` reckons it: 1 where no way is open. */
+function dangerFrom(g: Game, nat: string, quays: Region[]): Float64Array {
+  const N = g.seas.length;
+  const risk = g.seas.map((z) => (closedTo(g, z.id, nat) ? -1 : seaRisk(g, z.id, nat)));
+  const cost = new Float64Array(N).fill(1e9), safe = new Float64Array(N), done = new Uint8Array(N);
+  for (const r of quays) for (const z of r.seas) if (risk[z] >= 0) { cost[z] = 1 + 20 * risk[z]; safe[z] = 1 - risk[z]; }
+  for (;;) {
+    let a = -1;
+    for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
+    if (a < 0) break;
+    done[a] = 1;
+    for (const j of g.seas[a].adj) {
+      if (done[j] || risk[j] < 0 || !canPass(g, a, j, nat)) continue;
+      const c = cost[a] + 1 + 20 * risk[j];
+      if (c < cost[j]) { cost[j] = c; safe[j] = safe[a] * (1 - risk[j]); }
+    }
+  }
+  return safe.map((s, z) => (cost[z] < 1e9 ? 1 - s : 1));
+}
+
+/**
+ * This month's sailings for a country that ships its army across an ocean (world.ts, `overseasOf`): for each ocean
+ * its shipping works, the home port with the shortest open way across, and where the corps are put down. A second
+ * front its side is already fighting on comes first, into its harbours; then the harbour where the army is built
+ * up, and the ports within three marches of it, for when those are full. No harbour is listed that the ships cannot
+ * reach without too dangerous a crossing ('risk'), and there is no run for an ocean with none.
+ */
+export function oceanRuns(g: Game, nat: string): OceanRun[] {
+  const O = overseasOf(g, nat);
+  if (!O) return [];
+  const quays = homeGround(g, nat).list.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat);
+  if (!quays.length) return [];
+  const danger = dangerFrom(g, nat, quays);
+  const safe = (r: Region): boolean => r.seas.some((z) => danger[z] <= O.risk);
+  const front = frontAshore(g, nat);
+  const out: OceanRun[] = [];
+  for (const [ocean, share] of Object.entries(O.oceans)) {
+    const to = front ? front.ports.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+    const atFront = to.length > 0;
+    const base = oceanBase(g, nat, ocean, safe);
+    if (base) {
+      // The ports within three marches of it over friendly ground, the nearest first.
+      const d = new Int16Array(g.regions.length).fill(-1);
+      const q = [base.id];
+      d[base.id] = 0;
+      for (let i = 0; i < q.length; i++) {
+        if (d[q[i]] >= 3) continue;
+        for (const j of g.regions[q[i]].nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[q[i]] + 1; q.push(j); }
+      }
+      for (const id of q) {
+        const p = g.regions[id];
+        if (p.port && p.seas.length > 0 && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
+      }
+    }
+    if (!to.length) continue;
+    let from: Region | null = null, len = Infinity;
+    for (const r of quays) {
+      const path = seaPath(g, nat, r, to[0]);
+      if (path && (path.length < len || (path.length === len && from !== null && r.fac > from.fac))) { from = r; len = path.length; }
+    }
+    if (from) out.push({ ocean, share, from, to, front: atFront });
+  }
+  return out;
 }
 
 /** What follows a declaration the staff has just made: a neutral that marches of its own accord takes its side. */
