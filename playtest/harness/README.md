@@ -336,3 +336,57 @@ Traps met on Version 66:
 - Side tests on the same four cores slow the main queue: the 245 wars took 50 minutes with page checks and three side tests running beside them.
 
 Results of the Version 66 test: `/mnt/project-files/playtest/results-v66/`.
+
+## Version 67: critical fixes (the phone tray, warnings a month ahead, sleeping fronts, Field command)
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v67.tsv`, `v67e.tsv`, `v67f.tsv`, `v67s.tsv` | The queues of the Version 67 test for `jobs.sh`: the older checks (`v67`, 325 jobs); Berlin on seeds 1 to 60 by hand, digging, at Theatre and Field command, guns first and infantry only, with seeds 61 to 72 for the builder's 25 to 72 (`v67e`, 480); the orders one at a time and the Soviet seat (`v67f`, 108); a war from every major seat by hand and at Field command on seeds 1 to 24 (`v67s`, 240) | `./jobs.sh v67e.tsv out/v67e 4` |
+| `probe28.ts` | One more line a war, `EAST`: the months the eastern war lasted, the months with a battle in it, and the longest silence while it lasted (a silence after the Soviet Union falls is a different fault) | as before |
+| `easttab.py` | Adds up the `EAST` lines of a folder by set: wars with six months and with a year of silence in the east, when the Soviet Union fell, and the silence after it fell | `python3 easttab.py out/v67e dig field` |
+| `probe52.ts` | Why a front slept, month by month: each side's best odds on every sector, the enemy staff's bar and patience, and the best massed attack it could have made | `node out67/probe52.mjs GER 1 7 76 '<plan>'` |
+| `probe53.ts` | A war from any seat, with a `SEAT` line: whether the player's country stands, how the war went for its side, which great powers fell and when, the months at war, the months with a battle of the player's, the longest silence, and the provinces held at the start, the most and the end | `node out67/probe53.mjs UK 1 7 76 '{"minOdds":1.5,"land":true}'` |
+| `efftab.py` | The main efforts of a folder by nation: named, fought, the month of the first blow against the month of the first word in the news (a month ahead, the same month, after, never) | `python3 efftab.py out/v67e dig` |
+| `ui31.cjs` | The Build tab's rows on a desk and a phone: which greyed rows print a reason, which only carry a tooltip | `TC_PAGE=file:///home/user/tc67/dist/play.html node ui31.cjs SAVE.json 93-v67-build` |
+
+Traps met on Version 67:
+
+- `ui27.cjs` puts `shots/` in front of the prefix itself. Pass `93-v67-phone`, not `shots/93-v67-phone`.
+- On a phone held sideways the tap that should pick an army opens an alert's card, because the alerts lie over the map. A count of provinces reached is then a count with a card open. Read the screenshot before quoting the number.
+- Count silence only while the eastern war lasts. At Field command most of the long quiet comes after the Soviet Union has fallen.
+- The scripted by-hand player spends four marks in ten on fighters. When the staff beats it, say so: it is a poor shopper, not a careful player.
+
+Results of the Version 67 test: `/mnt/project-files/playtest/results-v67/`.
+
+## Version 68: the war retuned, and a fair shot from every seat
+
+Brian's yardstick (2026-11-14): at Colonel a careful player beats their country's real history in about half of their wars. Par: Germany holds Berlin at the end of 1944; the Soviet Union beats Germany before May 1945 and never loses Moscow; Britain is ashore in the west to stay before June 1944 and is never invaded; France holds Paris at the end of 1940; Italy holds Rome at the end of 1943.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v68s.tsv` (`v68sa.tsv`, `v68sb.tsv` are its two halves), `v68paris.tsv`, `v68e.tsv`, `v68.tsv`, `v68f.tsv` | The queues of the Version 68 test: every seat by hand and at Field command on seeds 1 to 48, France digging on 1 to 24, and a player who never gives an order on 1 to 12 (`v68s`, 588 jobs); France again with the month the capital fell on the line (`v68paris`, 96); Berlin for the six German players on seeds 1 to 60 and 61 to 72 (`v68e`, 408); the older checks (`v68`, 325); the orders and the Soviet seat (`v68f`, 108) | `./jobs.sh v68s.tsv out/v68s 4` |
+| `probe54.ts` | `probe53` with the par line: `par BEATEN` or `missed` and why, the home provinces in enemy hands at the worst, the months with an enemy on home soil, the month the capital was first lost, Soviet levies, the month Britain was ashore in the west to stay, and the overseas provinces held each December | `node out68/probe54.mjs FRA 1 30 76 '{"minOdds":1.6,"homeOnly":true}'` |
+| `seattab.py` | Adds up the `SEAT` lines by seat and set: stands, won, lost, par beaten, the fall of the player's country and of its chief enemy, the share of months with a battle, the silence. `--rows` prints every war | `python3 seattab.py out/v68s seat seatfield seatidle --seeds 1-48` |
+| `seatvs.py` | What a player in the seat changes: the month Germany falls with a player against the builder's computer-only wars on the same seeds (`fin68L-*.txt`) | `python3 seatvs.py out/v68s seat seatfield` |
+| `peek.ts` | Prints a country's provinces (home and overseas) and its collapse numbers | `node out68/peek.mjs FRA` |
+
+The plans of the five seats (the same player by hand; add `"depth":"field"` for the staff, and `{"idle":true}` for the player who never gives an order):
+
+- Germany `{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}`
+- Britain `{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}` (no shopping list at Field command)
+- Soviet Union `{"minOdds":1.5}`
+- Italy `{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}`
+- France `{"minOdds":1.6,"homeOnly":true}`, and with `"dig":2` for the digging player
+
+Bundles: `out68` is every program against Version 68 (56f2523); `out68b` holds the newer `probe54`, built while a queue was using `out68`.
+
+Traps met on Version 68:
+
+- Always play the seat with a player who never gives an order as well. If doing nothing beats par (Germany 12 of 12, Italy 12 of 12), the line is not measuring play.
+- My British script lands only when the odds allow; the builder's lands on a date and counts an early German fall as par beaten. The two read 0 of 48 and 14 of 24 by hand on the same rules. Say which player and which reading a number comes from.
+- A par line read at the end of a month and one read as the player's next month opens differ by the enemy's move: France on seed 30 holds Paris at the end of December 1940 one way and not the other.
+- France is out the month Paris falls, with a third of the home country lost and every overseas province still French. Counting provinces at the fall shows how early the rule ends the war.
+- A note to another thread or to the coordinator is refused over 2,000 characters. Draft to 1,900 and count with `wc -c`.
+- `xargs -I{}` breaks the quotes of a JSON plan. Write a queue file and use `jobs.sh`.
+
+Results of the Version 68 test: `/mnt/project-files/playtest/results-v68/`.
