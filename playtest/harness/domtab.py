@@ -45,6 +45,9 @@ for name in names:
         m = re.search(r'left at the end: ([^;]*);', s); r['who'] = [x.split()[0] for x in m.group(1).split(', ') if x] if m else []
         m = re.search(r'by the rule of Version 71 [^:]*: rival great powers left ([A-Z ]+|none), the player (holds (\d+)%|has fallen)', s)
         r['rule71'] = bool(m); r['rivals'] = [] if not m or m.group(1) == 'none' else m.group(1).split(); r['holds'] = int(m.group(3)) if m and m.group(3) else 0
+        # Version 74: the United States is a great power on the wider map (Japan later). Wars played before probe56 listed them
+        # name only the five of Europe on this line, so a great power left standing at the end is added from the list of who was left.
+        if m: r['rivals'] += [x for x in ('USA', 'JAP') if x in r['who'] and x != nat and x not in r['rivals']]
         by.setdefault(nat, []).append(r)
     print(f'== {name}' + (f' (seeds {lo} to {hi})' if hi < 9999 else ''))
     if not by: print('   no wars with a DOM line'); continue

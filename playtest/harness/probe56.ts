@@ -78,7 +78,7 @@ const rival = s.rows.filter((r: any) => r.nat !== me)[0];
 const rank = stands ? s.rows.findIndex((r: any) => r.nat === me) + 1 : 0;
 const fallen = MAJORS.filter((p) => N[p] && N[p].fellOn).map((p) => `${p} ${date(N[p].fellOn.turn)}${N[p].alive ? ' (back)' : ''}`);
 // Why the war was never decided: the great powers still standing and at war with each other.
-const live = ['GER', 'ITA', 'UK', 'FRA', 'SOV'].filter((p) => N[p]?.alive);
+const live = MAJORS.filter((p) => N[p]?.alive); // Version 74: the United States too, on the wider map
 const pairs: string[] = [];
 for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) if (N[live[i]].atWar.includes(live[j])) pairs.push(`${live[i]}-${live[j]}`);
 const rivals71 = live.filter((p) => p !== me && !N[p].dormant);

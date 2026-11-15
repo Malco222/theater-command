@@ -200,6 +200,8 @@ export interface Plan {
   declare?: [number, string][];
   /** Never march out of the home country (a defender). */
   homeOnly?: boolean;
+  /** Version 74, for a seat an ocean away (the United States, Canada): corps with no front in reach sail to an ally's port that faces an enemy coast, and land from there. */
+  stage?: boolean;
   /** What to buy first each month (arsenal offer keys), most wanted first. */
   buy?: string[];
   /** Try landings from the sea when there is no land front. */
@@ -644,7 +646,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   // Troopships: corps with no enemy in reach by land sail to the friendly port nearest a front.
   if (!plan.homeOnly) {
     const d = distanceToEnemy(g, me, false);
-    let lifted = 0;
+    let lifted = 0, staged = 0;
     for (const c of g.corps) {
       if (c.nat !== me || !T.canOrder(g, c) || c.kind === 'fort' || c.kind === 'eng' || !g.regions[c.reg].port || (c as any).ptWatch === g.turn) continue;
       if (d[c.reg] >= 0 && d[c.reg] <= 6) continue;
@@ -653,10 +655,21 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       if (g.regions[c.reg].owner === me && g.corps.filter((u) => u.nat === me && g.regions[u.reg].owner === me && !g.regions[u.reg].overseas).length <= g.corps.filter((u) => u.nat === me).length / 2) continue;
       let ports: Region[] = [];
       try { ports = T.shipTargets(g, c); } catch (e) { run.errors.push(`shipTargets threw: ${(e as Error).message}`); }
-      const to = ports.filter((r) => d[r.id] >= 1 && d[r.id] <= 3).sort((a, b) => d[a.id] - d[b.id])[0];
+      const near = ports.filter((r) => d[r.id] >= 1 && d[r.id] <= 3).sort((a, b) => d[a.id] - d[b.id]);
+      let to: Region | undefined = near[0];
+      if (plan.stage) {
+        // A port of the player's own beside a front (a beachhead) first; then the staging port; then any port near a front.
+        const mine = near.filter((r) => r.ctrl === me)[0];
+        if (g.regions[c.reg].owner !== me && !mine) continue; // already overseas and no beachhead to feed: wait for the landing
+        const worth = (r: Region): number => g.regions.reduce((v, e) => v + (atWar(g, me, e.ctrl) && e.seas?.some((z: number) => r.seas.includes(z)) ? Math.max(1, e.vp) : 0), 0);
+        const here = (r: Region): number => r.units.filter((u) => u.nat === me && u.kind !== 'fort').length;
+        const stagePorts = ports.filter((r) => r.ctrl !== me && r.seas?.length && worth(r) > 0 && !(d[r.id] >= 0 && d[r.id] <= 1)).sort((a, b) => here(b) - here(a) || worth(b) - worth(a));
+        to = mine ?? stagePorts[0] ?? near[0];
+        if (to && to !== near[0] && !mine) staged++;
+      }
       if (to && T.orderShip(g, c, to.id)) { lifted++; }
     }
-    if (lifted) row.notes.push(`shipped ${lifted} corps overseas`);
+    if (lifted) row.notes.push(`shipped ${lifted} corps overseas${staged ? ` (${staged} to a staging port)` : ''}`);
   }
 
   // The crossing to an enemy's homeland, when asked for (Version 72; the rules builder's routine).
@@ -831,7 +844,7 @@ function prepareCrossing(run: Run, plan: Plan, row: MonthRow, minOdds: number): 
 
 function tryLanding(run: Run, row: MonthRow, minOdds: number, plan: Plan = {}): void {
   const g = run.g, me = run.me;
-  const ports = g.regions.filter((r) => r.port && r.ctrl === me && r.units.some((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort' && (u as any).ptWatch !== g.turn));
+  const ports = g.regions.filter((r) => r.port && (r.ctrl === me || (plan.stage && allied(g, me, r.ctrl))) && r.units.some((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort' && (u as any).ptWatch !== g.turn));
   for (const p of ports) {
     const cs = p.units.filter((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort' && (u as any).ptWatch !== g.turn).slice(0, Math.max(1, g.nations[me].sealift));
     if (!cs.length) continue;
