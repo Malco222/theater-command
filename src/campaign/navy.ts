@@ -10,7 +10,7 @@ import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, carrierRules, skyDenies, skyOver } from './air';
+import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -491,26 +491,34 @@ export interface CrossingAccount {
   sky: 'ours' | 'denied' | 'open';
   /** The sea where most of the danger lies. */
   worst: number;
+  /** The danger as it would be with the sky over the beach won: null where the invader holds it already, or his fighters cannot reach it from any airfield he has. */
+  skyWon: number | null;
   lines: TicketLine[];
   helps: CrossingHelp[];
 }
 
 const round = (x: number): string => Math.round(x).toLocaleString('en-US');
 
-/** The account of a crossing by these seas to that coast. Nothing is changed. */
-export function crossingAccount(g: Game, nat: string, path: number[], to: Region): CrossingAccount {
+/**
+ * The account of a crossing by these seas to that coast. Nothing is changed. (`reach` is the answer to where the
+ * nation's fighters can fight for the sky, when the caller has it already.)
+ */
+export function crossingAccount(g: Game, nat: string, path: number[], to: Region, reach: ReturnType<typeof skyReach> = skyReach(g, nat)): CrossingAccount {
   const ds = seaDangers(g, nat, path, to);
   const risk = caughtIn(ds);
   const holder = skyOver(g, to.id);
   const sky = holder !== null && allied(g, holder, nat) ? 'ours' : skyDenies(g, nat, to.id) ? 'denied' : 'open';
   const worst = ds.reduce((a, d) => (d.caught > a.caught ? d : a), ds[ds.length - 1]);
   const name = (z: number): string => g.seas[z].name;
+  // Where the fight for the sky over the beach could be flown from, if anywhere.
+  const fly = sky === 'ours' ? null : reach(to.id);
+  const skyWon = fly ? withSky(g, to.id, nat, () => landingRisk(g, nat, path, to)) : null;
   const lines: TicketLine[] = [{ label: 'The way', value: path.map((z, i) => (i ? `then the ${name(z)}` : `the ${name(z)}`)).join(', '), effect: path.length > 1 ? 'every sea crossed is a chance to be found' : undefined }];
   for (const d of ds) {
     if (d.ships >= 0.5) lines.push({ label: `Enemy ships at sea in the ${name(d.z)}`, value: round(d.ships), effect: 'hunt the troopships' });
     if (d.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name(d.z)}`, value: round(d.air), effect: 'count for half against ships under way' });
     if (d.last && d.sortie >= 0.5) lines.push({ label: 'Enemy fleets that will come out', value: round(d.sortie), effect: 'from harbours on these seas and the seas next to them' });
-    if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : 'no help to either side' });
+    if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : fly ? 'no help to either side' : 'out of reach of your fighters from any airfield you hold' });
     if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
   }
   lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? `about ${Math.round(risk * NAVY.intercept.loss * 100)}% of the men lost` : 'nothing is in a position to stop the crossing' });
@@ -521,12 +529,15 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
     const more = cover.reduce((s, f) => s + fleetPower(g, f), 0);
     const foes = ds.some((d) => d.ships >= 0.5 || d.sortie >= 0.5);
     const tell = (id: CrossingHelp['id'], text: string, r: number): void => { if (r < risk - 0.005) helps.push({ id, text, risk: r }); };
-    if (sky !== 'ours') tell('sky', `Win the sky over ${to.name} with a fight for the sky flown by your fighters`, withSky(g, to.id, nat, () => landingRisk(g, nat, path, to)));
+    if (fly && skyWon !== null) tell('sky', fly.how === 'now' ? `Win the sky over ${to.name} with a fight for the sky flown by your fighters` : `Bring fighters up to the airfields of ${g.regions[fly.base].name} and win the sky over ${to.name}`, skyWon);
     if (more >= 1) tell('sea', `Send ${cover.length === 1 ? cover[0].name : `your ${cover.length} fleets in reach`} to patrol the ${name(worst.z)}`, caughtIn(seaDangers(g, nat, path, to, { more, at: worst.z })));
     if (foes) tell('fleets', 'Beat the enemy fleets within reach, or strike them in harbour, so that none comes out', caughtIn(seaDangers(g, nat, path, to, { beaten: true })));
-    if (helps.length > 1) tell('all', 'All of these together', withSky(g, to.id, nat, () => caughtIn(seaDangers(g, nat, path, to, { more: more >= 1 ? more : 0, at: worst.z, beaten: foes }))));
+    if (helps.length > 1) {
+      const rest = (): number => caughtIn(seaDangers(g, nat, path, to, { more: more >= 1 ? more : 0, at: worst.z, beaten: foes }));
+      tell('all', 'All of these together', helps.some((h) => h.id === 'sky') ? withSky(g, to.id, nat, rest) : rest());
+    }
   }
-  return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, lines, helps };
+  return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps };
 }
 
 /** What a landing would meet: the seas to cross, the danger on the way, and the odds on the beach. Nothing is changed. */
@@ -603,9 +614,12 @@ export interface CrossingOutlook {
   from: Region; to: Region; path: number[];
   /** Why no landing can be made there now, or null: no shipping, a sea the enemy has closed, a sky his fighters hold. */
   bar: string | null;
+  barred: 'lift' | 'sea' | 'sky' | null;
   account: CrossingAccount;
   /** True for the crossing the nation has named as its plan. */
   planned: boolean;
+  /** True for a crossing listed because it would be the safest way to its shore once the sky over the beach was won. */
+  hope?: boolean;
 }
 
 const aimKey = (nat: string): string => `st:aim:${nat}`;
@@ -642,7 +656,7 @@ function landReach(g: Game, nat: string): Uint8Array {
 }
 
 /** One crossing looked at: the lane (through a closed sea if there is no other), what bars it, and its account. */
-function lookAcross(g: Game, nat: string, from: Region, to: Region): Omit<CrossingOutlook, 'foe' | 'owner' | 'home' | 'planned'> | null {
+function lookAcross(g: Game, nat: string, from: Region, to: Region, reach: ReturnType<typeof skyReach>): Omit<CrossingOutlook, 'foe' | 'owner' | 'home' | 'planned'> | null {
   const n = g.nations[nat];
   let path = seaPath(g, nat, from, to, { max: NAVY.landing.range });
   let shut = -1;
@@ -651,18 +665,20 @@ function lookAcross(g: Game, nat: string, from: Region, to: Region): Omit<Crossi
     if (!path) return null;
     shut = path.find((z) => closedTo(g, z, nat)) ?? -1;
   }
-  const account = crossingAccount(g, nat, path, to);
-  const bar = n.sealift <= 0 ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.`
-    : shut >= 0 ? `The ${g.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.`
-    : account.sky === 'denied' ? `${g.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`
+  const account = crossingAccount(g, nat, path, to, reach);
+  const barred = n.sealift <= 0 ? 'lift' : shut >= 0 ? 'sea' : account.sky === 'denied' ? 'sky' : null;
+  const bar = barred === 'lift' ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.`
+    : barred === 'sea' ? `The ${g.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.`
+    : barred === 'sky' ? `${g.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`
     : null;
-  return { from, to, path, bar, account };
+  return { from, to, path, bar, barred, account };
 }
 
 /**
  * The crossings open to a nation at war (the grand campaign): for each shore an enemy holds that its army cannot
  * reach by land, the safest way to it from a port on its own side, within a landing's range. Barred ones are listed
- * too, with the reason: a coast under an enemy sky is offered to no landing force, and this says why.
+ * too, with the reason: a coast under an enemy sky is offered to no landing force, and this says why. The crossing
+ * named as the plan comes first, with a safer way to the same shore after it when there is one.
  */
 export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
   const n = g.nations[nat];
@@ -685,7 +701,10 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
     shores.set(k, [...(shores.get(k) ?? []), r]);
   }
   const plan = plannedCrossing(g, nat);
+  const reach = skyReach(g, nat);
   const out: CrossingOutlook[] = [];
+  // What a crossing would run with the sky over its beach won, where that can be done and nothing else bars the way.
+  const won = (x: CrossingOutlook): number => (x.barred === 'lift' || x.barred === 'sea' ? Infinity : x.account.skyWon ?? (x.account.sky === 'ours' ? x.account.risk : Infinity));
   const better = (a: CrossingOutlook, b: CrossingOutlook | null): boolean => {
     if (!b) return true;
     if ((a.bar === null) !== (b.bar === null)) return a.bar === null;
@@ -694,7 +713,7 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
   for (const [k, coasts] of shores) {
     const [owner, foe, far] = k.split(':');
     const home = owner === foe && far === '0';
-    let best: CrossingOutlook | null = null;
+    let best: CrossingOutlook | null = null, hope: CrossingOutlook | null = null;
     // The lane depends only on the waters at each end: one look for each pair, then the sky over each coast.
     const lanes = new Map<string, Region[]>();
     for (const c of coasts) lanes.set(c.seas.join(','), [...(lanes.get(c.seas.join(',')) ?? []), c]);
@@ -702,18 +721,28 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
       for (const group of lanes.values()) {
         if (!seaPath(g, nat, p, group[0], { max: NAVY.landing.range, surprise: true })) continue;
         for (const c of group) {
-          const look = lookAcross(g, nat, p, c);
+          const look = lookAcross(g, nat, p, c, reach);
           if (!look) continue;
           const row: CrossingOutlook = { ...look, foe, owner, home, planned: false };
           if (better(row, best)) best = row;
+          if (won(row) < Infinity && (!hope || won(row) < won(hope) - 1e-9)) hope = row;
         }
       }
     }
+    // The crossing named as the plan is always shown, and beside it a safer way to the same shore if there is one now.
     if (plan && `${plan.to.owner}:${plan.to.ctrl}:${plan.to.overseas ? 1 : 0}` === k) {
-      const look = lookAcross(g, nat, plan.from, plan.to);
-      if (look) best = { ...look, foe, owner, home, planned: true };
+      const look = lookAcross(g, nat, plan.from, plan.to, reach);
+      if (look) {
+        const named: CrossingOutlook = { ...look, foe, owner, home, planned: true };
+        out.push(named);
+        if (best && best.from === named.from && best.to === named.to) best = null;
+        else if (best && !better(best, named)) best = null;
+      }
     }
     if (best) out.push(best);
+    // A beach whose sky could be won, where that would make it a clearly safer way than the safest as things stand.
+    const shown: CrossingOutlook[] = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
+    if (hope && !shown.some((x) => x.from === hope!.from && x.to === hope!.to) && shown.every((x) => x.bar !== null || won(hope!) < x.account.risk - 0.05) && shown.every((x) => won(hope!) < won(x) - 0.05)) out.push({ ...hope, hope: true });
   }
   // The enemy's own country first, then the safest.
   return out.sort((a, b) => Number(b.planned) - Number(a.planned) || Number(b.home) - Number(a.home) || Number(a.bar !== null) - Number(b.bar !== null) || a.account.risk - b.account.risk || a.to.id - b.to.id);

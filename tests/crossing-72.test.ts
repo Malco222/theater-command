@@ -5,17 +5,20 @@
 // run the air war or the navy prepare it; and the coast watch reports troops and shipping gathering on a quay a
 // month before they can sail. History's scenarios use none of it.
 import { describe, expect, it } from 'vitest';
+import openData from '../data/campaign/open.json';
+import { runAI } from '../src/campaign/ai';
 import { liftView } from '../src/campaign/arsenal';
-import { AIR, airAI, skyDenies, skyOver, whyNotMission } from '../src/campaign/air';
+import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
 import { addCorps, allied, atWar, createGame, endPhase } from '../src/campaign/game';
+import { onBook, setStop, shoreOpen } from '../src/campaign/history';
 import {
   NAVY, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, planCrossing, planLanding,
   plannedCrossing, sail, seaPath, sortieAgainst, surfaceShips, whyNotLand, type CrossingOutlook,
 } from '../src/campaign/navy';
-import { coastWatch, startOpen } from '../src/campaign/staff';
+import { coastWatch, seaBase, startOpen } from '../src/campaign/staff';
 import { crossings, liftOf, orderCrossingPlan, runTurnAI } from '../src/campaign/turn';
-import type { Corps, Game, Region } from '../src/campaign/types';
+import type { AirFleet, Corps, Game, Region } from '../src/campaign/types';
 
 /** A war the computer plays on every side (or with one seat a player's), as it stands once Poland has fallen. */
 const opened = (human: string | null = null): Game => {
@@ -30,6 +33,35 @@ const harbours = (g: Game, nat: string): void => { for (const f of g.fleets) if 
 /** Germany's way to Britain's own shore, as the list of crossings gives it. */
 const toBritain = (g: Game): CrossingOutlook => crossingsOf(g, 'GER').find((x) => x.owner === 'UK' && x.home)!;
 const warnings = (g: Game): Game['headlines'] => g.headlines.filter((h) => h.warn === 'Coast watch');
+const fighters = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat && f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
+/**
+ * Germany given a port across the Channel with an airfield her fighters can use, a British beach within their reach
+ * of it, and (if asked) a fleet of hers in the water between strong enough that the sea is not closed to her.
+ */
+const acrossTheChannel = (g: Game, fleet = false): { field: Region; beach: Region; way: number[] } => {
+  const group = fighters(g, 'GER')[0];
+  const coasts = g.regions.filter((r) => r.owner === 'UK' && r.ctrl === 'UK' && !r.overseas && r.seas.length > 0);
+  let field: Region | null = null, beach: Region | null = null;
+  for (const r of g.regions) {
+    if (field || r.ctrl === 'GER' || !r.port || !['FRA', 'BEL', 'NED'].includes(r.owner)) continue;
+    const c = coasts.find((x) => km(g, r.id, x.id) <= airRange(group).ftr);
+    if (!c) continue;
+    const was = r.ctrl, since = r.since;
+    r.ctrl = 'GER';
+    r.since = g.turn - 3;
+    if (airBases(g, group).includes(r) && seaPath(g, 'GER', r, c, { max: NAVY.landing.range, surprise: true })) { field = r; beach = c; } else { r.ctrl = was; r.since = since; }
+  }
+  const way = seaPath(g, 'GER', field!, beach!, { max: NAVY.landing.range, surprise: true })!;
+  if (fleet) {
+    const f = g.fleets.find((x) => x.nat === 'GER' && surfaceShips(x) > 0)!;
+    f.ships.bb += 60;
+    f.base = -1;
+    f.home = way[way.length - 1];
+    f.zone = way[way.length - 1];
+    f.stance = 'patrol';
+  }
+  return { field: field!, beach: beach!, way };
+};
 
 describe('the reckoning of a crossing', () => {
   it('is the same danger the landing runs, set out line by line', () => {
@@ -66,20 +98,63 @@ describe('the reckoning of a crossing', () => {
     const g = opened();
     harbours(g, 'GER');
     const x = toBritain(g);
-    const sky = x.account.helps.find((h) => h.id === 'sky')!;
+    // (Reckoned for fighters that can reach the beach: where they cannot is the next test.)
+    const inReach = (): { how: 'now'; base: number } => ({ how: 'now', base: x.from.id });
+    const acc = crossingAccount(g, 'GER', x.path, x.to, inReach);
+    const sky = acc.helps.find((h) => h.id === 'sky')!;
     expect(sky).toBeTruthy();
-    expect(sky.text).toContain(x.to.name);
+    expect(sky.text).toBe(`Win the sky over ${x.to.name} with a fight for the sky flown by your fighters`);
+    expect(acc.skyWon).toBeCloseTo(sky.risk, 12);
+    expect(acc.risk).toBeCloseTo(x.account.risk, 12);
     const before = JSON.stringify(g.sky);
-    crossingAccount(g, 'GER', x.path, x.to);
+    crossingAccount(g, 'GER', x.path, x.to, inReach);
     // Asking changes nothing.
     expect(JSON.stringify(g.sky)).toBe(before);
     g.sky[x.to.id] = { nat: 'GER', turn: g.turn };
     expect(landingRisk(g, 'GER', x.path, x.to)).toBeCloseTo(sky.risk, 12);
-    const after = crossingAccount(g, 'GER', x.path, x.to);
+    const after = crossingAccount(g, 'GER', x.path, x.to, inReach);
     expect(after.sky).toBe('ours');
     expect(after.helps.some((h) => h.id === 'sky')).toBe(false);
     expect(after.lines.find((l) => l.label === `The sky over ${x.to.name}`)!.value).toBe('yours');
     expect(after.lines.find((l) => l.label === `The sky over ${x.to.name}`)!.effect).toContain(`${Math.round((1 - AIR.sky.seaFoe) * 100)}%`);
+    expect(after.skyWon).toBeNull();
+  });
+
+  it('offers the sky only where fighters can reach it: from the fields they are on, or from one they could be brought up to', () => {
+    const g = opened();
+    harbours(g, 'GER');
+    const home = g.regions.filter((r) => r.owner === 'UK' && r.ctrl === 'UK' && !r.overseas && r.seas.length > 0);
+    // From Germany's own airfields no fighter reaches any beach in Britain: the sky is no advice, and the line says why.
+    const far = skyReach(g, 'GER');
+    expect(home.every((r) => far(r.id) === null)).toBe(true);
+    const x = toBritain(g);
+    expect(x.account.helps.some((h) => h.id === 'sky')).toBe(false);
+    expect(x.account.skyWon).toBeNull();
+    const open = home.find((r) => !skyDenies(g, 'GER', r.id) && !!seaPath(g, 'GER', x.from, r, { max: NAVY.landing.range, surprise: true }))!;
+    expect(open).toBeTruthy();
+    const there = crossingAccount(g, 'GER', seaPath(g, 'GER', x.from, open, { max: NAVY.landing.range, surprise: true })!, open);
+    expect(there.lines.find((l) => l.label === `The sky over ${open.name}`)!.effect).toBe('out of reach of your fighters from any airfield you hold');
+    // Britain's own fighters reach a beach just across the water from the fields they stand on.
+    const uk = skyReach(g, 'UK');
+    const near = g.regions.find((r) => fighters(g, 'UK').some((f) => r.id !== f.base && km(g, f.base, r.id) <= airRange(f).ftr))!;
+    expect(uk(near.id)!.how).toBe('now');
+    // A field across the Channel in German hands: the beach opposite can be reached once fighters are brought up to it.
+    const { field, beach, way } = acrossTheChannel(g);
+    const fwd = skyReach(g, 'GER');
+    expect(fwd(beach.id)).toEqual({ how: 'forward', base: field.id });
+    expect(km(g, field.id, beach.id)).toBeLessThanOrEqual(airRange(fighters(g, 'GER')[0]).ftr);
+    expect(home.filter((r) => fwd(r.id) !== null).every((r) => km(g, field.id, r.id) <= airRange(fighters(g, 'GER')[0]).ftr)).toBe(true);
+    const acc = crossingAccount(g, 'GER', way, beach);
+    const sky = acc.helps.find((h) => h.id === 'sky')!;
+    expect(sky.text).toBe(`Bring fighters up to the airfields of ${field.name} and win the sky over ${beach.name}`);
+    expect(acc.skyWon).toBeCloseTo(sky.risk, 12);
+    // With a group on that field the advice is to fly, and the danger named is the danger a won sky leaves.
+    expect(rebaseAir(g, fighters(g, 'GER')[0], field)).toBe(true);
+    expect(skyReach(g, 'GER')(beach.id)).toEqual({ how: 'now', base: field.id });
+    const now = crossingAccount(g, 'GER', way, beach);
+    expect(now.helps.find((h) => h.id === 'sky')!.text).toBe(`Win the sky over ${beach.name} with a fight for the sky flown by your fighters`);
+    g.sky[beach.id] = { nat: 'GER', turn: g.turn };
+    expect(landingRisk(g, 'GER', way, beach)).toBeCloseTo(now.skyWon!, 12);
   });
 
   it('says what a fleet off the beach would do, and sending it does exactly that', () => {
@@ -189,7 +264,9 @@ describe('the crossings a nation could make', () => {
       const acc = crossingAccount(g, 'GER', path, held);
       expect(acc.sky).toBe('denied');
       expect(acc.lines.find((l) => l.label === `The sky over ${held.name}`)!.effect).toBe('no invasion fleet can cross under them');
-      expect(acc.helps.some((h) => h.id === 'sky')).toBe(true);
+      // Winning it is the advice only where fighters could reach it.
+      expect(acc.helps.some((h) => h.id === 'sky')).toBe(skyReach(g, 'GER')(held.id) !== null);
+      expect(crossingAccount(g, 'GER', path, held, () => ({ how: 'now', base: port.id })).helps.some((h) => h.id === 'sky')).toBe(true);
     }
     // A sea the enemy has closed: the Home Fleet at sea in strength on the way.
     const x = toBritain(g);
@@ -205,6 +282,36 @@ describe('the crossings a nation could make', () => {
     // No shipping at all.
     g.nations.GER.sealift = 0;
     for (const y of crossingsOf(g, 'GER')) expect(y.bar).toMatch(/has no shipping for a landing/);
+  });
+
+  it('shows the beach whose sky could be won beside the safest way as things stand', () => {
+    const g = opened();
+    harbours(g, 'GER');
+    expect(crossingsOf(g, 'GER').some((x) => x.hope)).toBe(false);
+    // A field across the Channel, the water between held by a German fleet, British fighters over the beach opposite.
+    const { field, beach } = acrossTheChannel(g, true);
+    expect(skyDenies(g, 'GER', beach.id)).toBe(true);
+    const rows = crossingsOf(g, 'GER').filter((x) => x.owner === 'UK' && x.home);
+    const hope = rows.find((x) => x.hope)!;
+    expect(hope).toBeTruthy();
+    expect(rows.filter((x) => x.hope).length).toBe(1);
+    expect(hope.to).toBe(beach);
+    expect(hope.from).toBe(field);
+    // It is barred today by the sky alone, and with the sky won it is clearly safer than anything open today.
+    expect(hope.barred).toBe('sky');
+    expect(hope.bar).toMatch(/hold the sky over/);
+    expect(hope.account.skyWon).not.toBeNull();
+    const open = rows.filter((x) => !x.hope);
+    expect(open.length).toBeGreaterThan(0);
+    expect(open.some((x) => x.bar === null)).toBe(true);
+    for (const x of open) if (x.bar === null) expect(hope.account.skyWon!).toBeLessThan(x.account.risk - 0.05);
+    // Once the sky there is won it is simply the safest way, and no second row is needed.
+    g.sky[beach.id] = { nat: 'GER', turn: g.turn };
+    const won = crossingsOf(g, 'GER').filter((x) => x.owner === 'UK' && x.home);
+    expect(won.some((x) => x.hope)).toBe(false);
+    expect(won[0].to).toBe(beach);
+    expect(won[0].bar).toBeNull();
+    expect(won[0].account.risk).toBeCloseTo(hope.account.skyWon!, 12);
   });
 
   it('a crossing can be named as the plan, comes first on the list, and can be dropped', () => {
@@ -227,8 +334,18 @@ describe('the crossings a nation could make', () => {
     expect(rows[0].planned).toBe(true);
     expect(rows[0].to).toBe(other);
     expect(rows[0].from).toBe(x.from);
-    expect(rows.filter((y) => y.owner === 'UK' && y.home).length).toBe(1);
     expect(rows.filter((y) => y.planned).length).toBe(1);
+    // A safer way to the same shore is still shown beside the plan, and only if it is safer.
+    const beside = rows.filter((y) => y.owner === 'UK' && y.home && !y.planned);
+    expect(beside.length).toBeLessThanOrEqual(1);
+    if (beside.length) {
+      expect(beside[0].to).toBe(x.to);
+      expect(rows[0].bar !== null || beside[0].account.risk < rows[0].account.risk).toBe(true);
+    }
+    // The safest way named as the plan stands alone on the list.
+    expect(orderCrossingPlan(g, x.from.id, x.to.id)).toBe(true);
+    expect(crossings(g).filter((y) => y.owner === 'UK' && y.home).length).toBe(1);
+    expect(orderCrossingPlan(g, x.from.id, other.id)).toBe(true);
     // Not in another nation's month.
     g.phase = g.order.indexOf('UK');
     expect(orderCrossingPlan(g, x.from.id, x.to.id)).toBe(false);
@@ -295,6 +412,67 @@ describe('staff who prepare the plan', () => {
     expect(over(c)).toBe(0);
   });
 
+  it('a player who has handed over the air war has fighters brought up to the fields in reach of his beach, a few a month, and none onto a full field', () => {
+    const picture = (human: string | null): { g: Game; field: Region; beach: Region; groups: AirFleet[] } => {
+      const g = opened(human);
+      harbours(g, 'GER');
+      const x = acrossTheChannel(g);
+      return { g, ...x, groups: fighters(g, 'GER') };
+    };
+    const B = AIRWAR.ai.raids.beach!;
+    const inReach = (x: { g: Game; beach: Region; groups: AirFleet[] }): AirFleet[] => x.groups.filter((f) => whyNotMission(x.g, f, 'superiority', x.beach.id) === null || (f.moved === x.g.turn && km(x.g, f.base, x.beach.id) <= airRange(f).ftr));
+    const atHome = (x: { g: Game; groups: AirFleet[] }): number => x.groups.filter((f) => x.g.regions[f.base].owner === 'GER' && !x.g.regions[f.base].overseas).length;
+    const a = picture('GER');
+    const cap = a.g.nations.GER.capital;
+    expect(a.groups.length).toBeGreaterThan(B.home + 1);
+    expect(inReach(a).length).toBe(0);
+    setDesk(a.g, 'air', true);
+    // No plan named: nothing moves toward the Channel.
+    airAI(a.g, 'GER');
+    expect(a.groups.filter((f) => f.base === a.field.id).length).toBe(0);
+    expect(planCrossing(a.g, 'GER', a.field, a.beach)).toBe(true);
+    const overCapital = a.groups.filter((f) => f.base === cap).length;
+    airAI(a.g, 'GER');
+    // No more than the month's number go, each to a field within reach of the beach.
+    const first = a.groups.filter((f) => f.moved === a.g.turn);
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.length).toBeLessThanOrEqual(B.monthly);
+    for (const f of first) expect(km(a.g, f.base, a.beach.id)).toBeLessThanOrEqual(airRange(f).ftr);
+    // The capital keeps its fighters while another group can go.
+    if (a.groups.length - overCapital >= first.length) expect(a.groups.filter((f) => f.base === cap).length).toBe(overCapital);
+    // Month after month, until enough are in reach or only the homeland's guard is left; never fewer than that guard.
+    for (let k = 0; k < 6; k++) { a.g.turn += 1; airAI(a.g, 'GER'); expect(atHome(a)).toBeGreaterThanOrEqual(B.home); }
+    // No field holds more aircraft than it can serve, and whoever stayed behind stayed because there was no room left.
+    const load = (g: Game, base: number): number => g.airFleets.reduce((s, f) => s + (f.base === base && f.ship === undefined ? f.ftr + f.bmr : 0), 0);
+    const holds = (g: Game, base: number): number => Math.max(AIRWAR.fields.least, airfieldsHold(g, base));
+    const up = inReach(a);
+    expect(up.length).toBeGreaterThanOrEqual(first.length);
+    for (const f of up) expect(load(a.g, f.base)).toBeLessThanOrEqual(holds(a.g, f.base));
+    const fields = a.g.regions.filter((r) => r.ctrl === 'GER' && km(a.g, r.id, a.beach.id) <= airRange(a.groups[0]).ftr && airfieldsHold(a.g, r.id) > 0);
+    const noRoom = a.groups.filter((f) => !up.includes(f)).every((f) => fields.every((r) => load(a.g, r.id) + f.ftr + f.bmr > holds(a.g, r.id)));
+    expect(up.length === Math.min(B.groups, a.groups.length - B.home) || noRoom).toBe(true);
+    // A field with no room is passed over: with the one field in reach full, nobody is sent to it.
+    const b = picture('GER');
+    setDesk(b.g, 'air', true);
+    planCrossing(b.g, 'GER', b.field, b.beach);
+    const inRange = b.g.regions.filter((r) => airBases(b.g, b.groups[0]).includes(r) && km(b.g, r.id, b.beach.id) <= airRange(b.groups[0]).ftr);
+    const filler = b.g.airFleets.find((f) => f.nat === 'GER' && f.kind === 'bmr')!;
+    for (const r of inRange) b.g.airFleets.push({ ...filler, id: 9000 + r.id, name: `Filler ${r.id}`, base: r.id, bmr: Math.max(AIRWAR.fields.least, airfieldsHold(b.g, r.id)), ftr: 0, moved: b.g.turn, flew: b.g.turn });
+    airAI(b.g, 'GER');
+    expect(b.groups.filter((f) => inRange.some((r) => r.id === f.base)).length).toBe(0);
+    // The air war in his own hands: nothing is moved for him.
+    const c = picture('GER');
+    planCrossing(c.g, 'GER', c.field, c.beach);
+    airAI(c.g, 'GER');
+    expect(c.groups.some((f) => f.moved === c.g.turn)).toBe(false);
+    // A computer Germany with its eye on the same beach leaves the homeland's fighters over the homeland, as before.
+    const d = picture(null);
+    d.g.flags['st:aim:GER'] = d.beach.id + 1;
+    const was = d.groups.map((f) => f.base);
+    airAI(d.g, 'GER');
+    expect(d.groups.map((f) => f.base)).toEqual(was);
+  });
+
   it('a player who has handed over the navy has a fleet stand off his beach', () => {
     const { g, beach, quay } = beachhead('UK');
     g.fleets = g.fleets.filter((f) => f.nat !== 'GER');
@@ -315,6 +493,86 @@ describe('staff who prepare the plan', () => {
     sail(g, fleet, fleet.station, 'patrol');
     navalAI(g, 'UK');
     expect(fleet.zone).toBe(fleet.station);
+  });
+});
+
+describe('the computer under the same rule', () => {
+  const D = (openData as unknown as { descent: { after: number; risk: number; chance: number } }).descent;
+  /**
+   * Britain's staff a quiet year into its war with a landing force by its quay, every German harbour in reach emptied
+   * with the country behind it, no German aircraft, and the German fleet in harbour.
+   */
+  const descent = (): { g: Game; quay: Region; force: Corps[]; shores: Region[] } => {
+    const g = opened();
+    g.turn += D.after + 1;
+    for (const c of g.corps) c.ap = c.apMax;
+    g.airFleets = g.airFleets.filter((f) => f.nat !== 'GER');
+    for (const f of g.fleets) if (f.nat === 'GER') sail(g, f, f.home, 'port');
+    const quay = seaBase(g, 'UK')!;
+    const force = [corps(g, 'UK', quay), corps(g, 'UK', quay), corps(g, 'UK', quay)];
+    const shores = landingTargets(g, force).filter((r) => r.ctrl === 'GER' && r.port);
+    for (const r of shores) { clear(r); for (const j of r.nb) if (g.regions[j].ctrl === 'GER') clear(g.regions[j]); }
+    return { g, quay, force, shores };
+  };
+  /** The staff's month, with its coin for a descent falling the right way. */
+  const month = (g: Game, nat: string): void => { const was = D.chance; D.chance = 1; try { runAI(g, nat); } finally { D.chance = was; } };
+  /** The German fleet in harbour made strong enough that every crossing is over the staff's limit. */
+  const armed = (x: { g: Game; force: Corps[]; shores: Region[] }): void => {
+    const fleet = x.g.fleets.find((f) => f.nat === 'GER' && surfaceShips(f) > 0)!;
+    for (let k = 0; k < 400 && Math.min(...x.shores.map((r) => planLanding(x.g, x.force, r).risk)) <= D.risk + 0.05; k++) fleet.ships.bb += 1;
+  };
+
+  it('does not cross while the danger is over its limit, and crosses once the sky is won and the danger is within it', () => {
+    const a = descent();
+    expect(a.shores.length).toBeGreaterThan(0);
+    armed(a);
+    // The danger the staff weighs is the danger the player is shown.
+    for (const r of a.shores) {
+      const p = planLanding(a.g, a.force, r);
+      expect(p.why).toBeNull();
+      expect(p.risk).toBeGreaterThan(D.risk);
+      expect(p.account!.risk).toBeCloseTo(p.risk, 12);
+      // (Winning the sky is advice only for a beach Britain's fighters can reach.)
+      expect(p.account!.helps.some((h) => h.id === 'sky' && h.risk < p.risk)).toBe(skyReach(a.g, 'UK')(r.id) !== null);
+    }
+    month(a.g, 'UK');
+    expect(a.force.every((c) => !c.dead && c.reg === a.quay.id)).toBe(true);
+    // The same war with the sky over those beaches won: the fleets that come out are kept off, and the staff goes.
+    const b = descent();
+    armed(b);
+    for (const r of b.shores) b.g.sky[r.id] = { nat: 'UK', turn: b.g.turn };
+    const within = b.shores.filter((r) => planLanding(b.g, b.force, r).risk <= D.risk);
+    expect(within.length).toBeGreaterThan(0);
+    month(b.g, 'UK');
+    const ashore = b.force.filter((c) => !c.dead && c.reg !== b.quay.id);
+    expect(ashore.length).toBeGreaterThan(0);
+    expect(within).toContain(b.g.regions[ashore[0].reg]);
+  });
+
+  it('opens no second front before history did at the two stops that keep to the book, and does at the others', () => {
+    for (const stop of [1, 2]) {
+      const { g, quay, force, shores } = descent();
+      g.fleets = g.fleets.filter((f) => f.nat !== 'GER');
+      expect(setStop(g, stop)).toBe(true);
+      expect(onBook(g, 'second')).toBe(true);
+      for (const r of shores) {
+        expect(planLanding(g, force, r).risk).toBeLessThanOrEqual(D.risk);
+        expect(shoreOpen(g, r.owner, !!r.overseas)).toBe(false);
+      }
+      month(g, 'UK');
+      expect(force.every((c) => !c.dead && c.reg === quay.id)).toBe(true);
+      expect(g.flags['st:aim:UK']).toBeUndefined();
+      // Britain's own shore is never opened by the book: no computer Germany crosses to it while the book stands.
+      g.turn = 90;
+      expect(shoreOpen(g, 'UK', false)).toBe(false);
+      g.flags['hist:off:second'] = 40;
+      expect(shoreOpen(g, 'UK', false)).toBe(true);
+    }
+    const free = descent();
+    free.g.fleets = free.g.fleets.filter((f) => f.nat !== 'GER');
+    expect(setStop(free.g, 3)).toBe(true);
+    month(free.g, 'UK');
+    expect(free.force.every((c) => !c.dead && free.shores.includes(free.g.regions[c.reg]))).toBe(true);
   });
 });
 
