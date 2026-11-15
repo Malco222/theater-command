@@ -15,7 +15,7 @@ import { techMonth } from './tech';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
-import { mayJoin } from './history';
+import { mayJoin, stopDef } from './history';
 import worldData from '../../data/campaign/world.json';
 import { warWorkMonth, worldMonth } from './world';
 
@@ -361,6 +361,13 @@ export function holds(g: Game, cond: string): boolean {
     case 'atPeace': return !N(a[0])?.atWar.length;
     case 'notInBloc': return !!N(a[0]) && bloc(N(a[0])!) === null;
     case 'inBloc': return !!N(a[0]) && bloc(N(a[0])!) === a[1];
+    // 'openTo:CUB,allies': in no alliance, or on that side already. (A country in the other camp or in the League is not history's to move.)
+    case 'openTo': return !!N(a[0]) && (bloc(N(a[0])!) === null || bloc(N(a[0])!) === a[1]);
+    // 'anyPeace:USA,GER,ITA': the first is at peace with at least one of the others still standing, so a war the entry brings has not begun.
+    case 'anyPeace': return !!N(a[0]) && a.slice(1).some((id) => !!N(id)?.alive && !N(a[0])!.atWar.includes(id));
+    // 'binds:USA': history's entry still binds this country. At the dial's looser stops (neutrals with ambitions) a
+    // player who has already taken a side keeps the war he chose: history does not widen it for him.
+    case 'binds': return !(a[0] === g.human && !!stopDef(g).ambitions && !!N(a[0]) && bloc(N(a[0])!) !== null);
     case 'step>=': return !!N(a[0]) && step(N(a[0])!) >= Number(a[1]);
     case 'step<=': return !!N(a[0]) && step(N(a[0])!) <= Number(a[1]);
     case 'opinion>=': return !!N(a[0]) && N(a[0])!.opinion >= Number(a[1]);
@@ -483,28 +490,40 @@ function fire(g: Game, e: DiploEvent): boolean {
     headline(g, 'event', e.text, e.wake.nations[0]);
     told = true;
   }
+  // The countries of an entry that are not history's to move: fallen, asleep, a small country in the player's hands,
+  // or one that stands in another camp. The war the entry brings is not theirs either.
+  const barred = new Set<string>();
   if (e.enter) {
-    let any = false;
+    const side = e.enter.align.startsWith('allies') ? 'allies' : e.enter.align.startsWith('axis') ? 'axis' : null;
+    let any = false, there = false;
     for (const id of e.enter.nations) {
       const n = g.nations[id];
-      if (!n?.alive || n.dormant || bloc(n) || ownPath(g, id)) continue;
+      const b = n ? bloc(n) : null;
+      if (!n?.alive || n.dormant || ownPath(g, id) || (b !== null && b !== side)) { barred.add(id); continue; }
+      // Already a member on that side (an early declaration brought it in): it has nothing to join, but the war
+      // the entry brings may still be its to fight. No declaration switches a country off (ruling 58).
+      if (n.align === e.enter.align) { there = true; continue; }
       n.align = e.enter.align;
       n.opinion = n.home = homeOpinion(id, n.align);
       g.flags[`step:${id}`] = g.turn;
       any = true;
     }
-    if (!any) return false;
-    did = true;
-    g.supplyDirty = true;
-    headline(g, 'event', e.text, e.enter.nations[0]);
-    told = true;
+    if (!any && !(there && e.war)) return false;
+    if (any) {
+      did = true;
+      g.supplyDirty = true;
+      headline(g, 'event', e.text, e.enter.nations[0]);
+      told = true;
+    }
   }
   if (e.war) {
     for (const [a, b] of e.war) {
       const A = g.nations[a], B = g.nations[b];
-      if (!A?.alive || !B?.alive || A.atWar.includes(b)) continue;
+      if (barred.has(a) || !A?.alive || !B?.alive || A.atWar.includes(b)) continue;
       // In free play no event drags a country at peace into the war: that decision is its own.
       if (g.flags.open === 1 && !B.atWar.length) continue;
+      // An entry whose countries were on their side already tells its news with the first war it brings.
+      if (e.enter && !told && !allied(g, a, b)) { headline(g, 'event', e.text, e.enter.nations[0]); told = true; }
       declareWar(g, a, b);
       did = did || A.atWar.includes(b);
     }

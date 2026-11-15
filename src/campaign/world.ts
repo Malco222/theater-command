@@ -193,6 +193,22 @@ export function worldMonth(g: Game): void {
       headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
     }
   }
+  // No declaration switches such a country off (ruling 58). A computer-led country whose industry goes to war by
+  // steps (the United States), at war with a member of the Axis and standing on no side, joins the Allies that
+  // month: the Axis is one enemy. Its war work is climbing already, and its staff ships its army as an Ally's.
+  for (const id of Object.keys(WORLD.warWork)) {
+    const n = g.nations[id];
+    if (!n?.alive || n.dormant || id === g.human || bloc(n) !== null) continue;
+    const foes = n.atWar.map((e) => g.nations[e]).filter((x) => x?.alive);
+    const foe = foes.find((x) => bloc(x) === 'axis');
+    if (!foe || foes.some((x) => bloc(x) === 'allies')) continue;
+    if (!Object.values(g.nations).some((x) => x.id !== id && x.alive && !x.dormant && bloc(x) === 'allies')) continue;
+    n.align = 'allies';
+    n.opinion = n.home = -100;
+    g.flags[`step:${id}`] = g.turn;
+    g.supplyDirty = true;
+    headline(g, 'event', `${theName(n, true)} joins the Allies: it is at war with ${theName(foe)}, and the Axis is one enemy.`, id);
+  }
 }
 
 /** The share of a country's industry on war work while it is at peace, where the wider world gives it one of its own, or null where the ordinary rule stands. */

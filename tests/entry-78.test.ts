@@ -1,0 +1,216 @@
+// Version 78, the design director's ruling 58, on two finds of the Playtester's in Version 76.
+// (a) No declaration switches America off. A small Axis country that declared war on the United States early made
+//     it an Ally at war with that country alone, and December 1941 never came: the entry asked that America stand on
+//     no side. Now every entry tests the war it brings, never peace with everyone, and a computer-led America at war
+//     with a member of the Axis and on no side joins the Allies that month.
+// (b) A League is a pact of neighbours: a founder or a member may ask only countries of its own part of the world.
+import { describe, expect, it } from 'vitest';
+import worldData from '../data/campaign/world.json';
+import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { atWar, bloc, createGame, declareWar, setWar } from '../src/campaign/game';
+import { enrol, founders, invites, partName, partOf, pathOptions, takePath, willing } from '../src/campaign/league';
+import { startOpen } from '../src/campaign/staff';
+import type { Game } from '../src/campaign/types';
+
+const DEC_41 = 28;
+/** A grand campaign in which Germany and Italy are at war with Britain, as they were by 1941. */
+function war(human: string | null = null, seed = 3): Game {
+  const g = startOpen(createGame(seed, human));
+  setWar(g, 'GER', 'UK');
+  setWar(g, 'ITA', 'UK');
+  return g;
+}
+const said = (g: Game, re: RegExp): boolean => g.headlines.some((h) => re.test(h.text));
+
+describe('the entries of the wider world test the war they bring (ruling 58a)', () => {
+  it('is written that way in the data: no entry asks for peace with everyone, or that its country stand on no side', () => {
+    for (const id of ['pearl-harbor-world', 'cuba-war', 'mexico-war', 'brazil-war']) {
+      const e = DIPLOMACY.events.find((x) => x.id === id)!;
+      expect(e, id).toBeDefined();
+      expect((e.if ?? []).some((c) => c.startsWith('atPeace:') || c.startsWith('notInBloc:')), id).toBe(false);
+      expect((e.if ?? []).some((c) => c.startsWith('openTo:')), id).toBe(true);
+      expect((e.if ?? []).some((c) => c.startsWith('peace:') || c.startsWith('anyPeace:')), id).toBe(true);
+    }
+  });
+
+  it('brings December 1941 as it always did to an America that stayed out', () => {
+    const g = war();
+    expect(bloc(g.nations.USA)).toBeNull();
+    g.turn = DEC_41 - 1;
+    monthlyDiplomacy(g);
+    expect(atWar(g, 'USA', 'GER')).toBe(false);
+    g.turn = DEC_41;
+    monthlyDiplomacy(g);
+    expect(g.nations.USA.align).toBe('allies');
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    expect(atWar(g, 'USA', 'ITA')).toBe(true);
+    expect(g.flags['event:pearl-harbor-world']).toBe(DEC_41);
+    expect(g.headlines.filter((h) => /Pearl Harbor/.test(h.text))).toHaveLength(1);
+  });
+
+  it('does not let an early Axis declaration switch America off: December 1941 still brings the wars not begun', () => {
+    // The Playtester's case: a player leads Brazil into the Axis and declares war on the United States in 1940.
+    const g = war('BRA');
+    g.nations.BRA.align = 'axis';
+    g.turn = 13;
+    declareWar(g, 'BRA', 'USA');
+    // Struck by the Axis, America is an Ally from that day, at war with Brazil alone.
+    expect(g.nations.USA.align).toBe('allies');
+    expect(g.nations.USA.atWar).toEqual(['BRA']);
+    g.turn = DEC_41;
+    monthlyDiplomacy(g);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    expect(atWar(g, 'USA', 'ITA')).toBe(true);
+    expect(g.nations.USA.align).toBe('allies');
+    expect(g.flags['event:pearl-harbor-world']).toBe(DEC_41);
+    // The news is told once, with the first war it brings.
+    expect(g.headlines.filter((h) => /Pearl Harbor/.test(h.text))).toHaveLength(1);
+    // And the republics that follow America follow it still.
+    expect(atWar(g, 'CUB', 'GER')).toBe(true);
+    expect(atWar(g, 'PAN', 'GER')).toBe(true);
+  });
+
+  it('gives an Axis that declares on America early the same America, early: at war with Germany, then with Italy in its turn', () => {
+    const g = war();
+    g.turn = 1;
+    declareWar(g, 'GER', 'USA');
+    expect(g.nations.USA.align).toBe('allies');
+    expect(atWar(g, 'USA', 'ITA')).toBe(false);
+    g.turn = DEC_41;
+    monthlyDiplomacy(g);
+    expect(atWar(g, 'USA', 'ITA')).toBe(true);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+  });
+
+  it('makes a computer-led America at war with a member of the Axis and on no side an Ally that month', () => {
+    const g = war();
+    // A quarrel that began before its enemy took a side: no declaration moved America then.
+    setWar(g, 'USA', 'BRA');
+    expect(bloc(g.nations.USA)).toBeNull();
+    g.turn = 6;
+    monthlyDiplomacy(g);
+    expect(bloc(g.nations.USA)).toBeNull();
+    g.nations.BRA.align = 'axis';
+    monthlyDiplomacy(g);
+    expect(g.nations.USA.align).toBe('allies');
+    expect(said(g, /United States joins the Allies: it is at war with Brazil, and the Axis is one enemy/)).toBe(true);
+    // A player who leads America keeps that choice for himself.
+    const p = war('USA');
+    setWar(p, 'USA', 'BRA');
+    p.nations.BRA.align = 'axis';
+    p.turn = 6;
+    monthlyDiplomacy(p);
+    expect(bloc(p.nations.USA)).toBeNull();
+  });
+
+  it('brings the war with Germany to a player whose America fights Italy alone, except at the looser stops of the dial', () => {
+    const usual = war('USA');
+    setWar(usual, 'USA', 'ITA');
+    usual.nations.USA.align = 'allies_cobelligerent';
+    usual.turn = DEC_41;
+    expect(holds(usual, 'binds:USA')).toBe(true);
+    monthlyDiplomacy(usual);
+    expect(atWar(usual, 'USA', 'GER')).toBe(true);
+    expect(usual.nations.USA.align).toBe('allies');
+    // Neutrals with ambitions (stops 4 and 5): the war he chose stays the war he has.
+    for (const stop of [4, 5]) {
+      const loose = war('USA');
+      loose.flags.hist = stop;
+      setWar(loose, 'USA', 'ITA');
+      loose.nations.USA.align = 'allies_cobelligerent';
+      loose.turn = DEC_41;
+      expect(holds(loose, 'binds:USA')).toBe(false);
+      monthlyDiplomacy(loose);
+      expect(atWar(loose, 'USA', 'GER')).toBe(false);
+      expect(loose.nations.USA.align).toBe('allies_cobelligerent');
+      // An America that has taken no side is still brought in there, as before.
+      const out = war('USA');
+      out.flags.hist = stop;
+      out.turn = DEC_41;
+      expect(holds(out, 'binds:USA')).toBe(true);
+    }
+  });
+
+  it('lets a country already fighting somebody else follow America into the war all the same', () => {
+    const g = war();
+    setWar(g, 'CUB', 'HAI');
+    setWar(g, 'MEX', 'GUA');
+    setWar(g, 'BRA', 'PAR');
+    g.turn = 36;
+    setWar(g, 'USA', 'GER');
+    g.nations.USA.align = 'allies';
+    monthlyDiplomacy(g);
+    for (const id of ['CUB', 'MEX', 'BRA']) {
+      expect(atWar(g, id, 'GER'), id).toBe(true);
+      expect(g.nations[id].align, id).toBe('allies');
+    }
+  });
+
+  it('moves nobody who stands in the other camp, in the League, or in a player\'s own hands', () => {
+    const g = war('BRA');
+    g.nations.CUB.align = 'axis';
+    enrol(g, g.nations.MEX);
+    g.turn = 36;
+    setWar(g, 'USA', 'GER');
+    g.nations.USA.align = 'allies';
+    monthlyDiplomacy(g);
+    expect(atWar(g, 'CUB', 'GER')).toBe(false);
+    expect(g.nations.CUB.align).toBe('axis');
+    expect(atWar(g, 'MEX', 'GER')).toBe(false);
+    expect(g.nations.MEX.league).toBe(true);
+    // The player's Brazil chooses for itself.
+    expect(atWar(g, 'BRA', 'GER')).toBe(false);
+    expect(bloc(g.nations.BRA)).toBeNull();
+  });
+});
+
+describe('a League is a pact of neighbours (ruling 58b)', () => {
+  it('knows which part of the world every country lies in', () => {
+    for (const id of Object.keys(worldData.nations)) expect(partOf(id), id).toBe('americas');
+    expect(partOf('USA')).toBe('americas');
+    for (const id of ['BEL', 'NED', 'SWE', 'TUR', 'EGY', 'GER', 'UK']) expect(partOf(id), id).toBe('europe');
+    expect(partName('BRA')).toBe('the Americas');
+    expect(partName('BEL')).toBe('Europe and the Mediterranean');
+  });
+
+  it('lets Brazil ask only the Americas, and Belgium only Europe', () => {
+    const g = startOpen(createGame(3, 'BRA'));
+    const mine = founders(g, 'BRA');
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((x) => partOf(x.nat) === 'americas')).toBe(true);
+    expect(mine.some((x) => x.nat === 'ARG')).toBe(true);
+    const no = willing(g, 'BEL', ['BRA']);
+    expect(no.ok).toBe(false);
+    expect(no.why).toBe('A pact of neighbours: Brazil lies in the Americas, another part of the world.');
+    expect(takePath(g, 'BRA', 'found', 'BEL')).toBe(false);
+    expect(g.flags['league:born']).toBeUndefined();
+    // With a neighbour it is founded as before.
+    const partner = mine.find((x) => x.ok);
+    if (partner) {
+      expect(takePath(g, 'BRA', 'found', partner.nat)).toBe(true);
+      expect(invites(g, 'BRA').every((x) => partOf(x.nat) === 'americas')).toBe(true);
+      expect(willing(g, 'NED', ['BRA', partner.nat]).ok).toBe(false);
+    }
+    const e = startOpen(createGame(3, 'BEL'));
+    const theirs = founders(e, 'BEL');
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((x) => partOf(x.nat) === 'europe')).toBe(true);
+    expect(willing(e, 'ARG', ['BEL']).why).toBe('A pact of neighbours: Belgium lies in Europe and the Mediterranean, another part of the world.');
+  });
+
+  it('offers a player no place in a League of another part of the world', () => {
+    const g = startOpen(createGame(3, 'BRA'));
+    g.flags['league:born'] = g.turn;
+    enrol(g, g.nations.BEL);
+    enrol(g, g.nations.NED);
+    const join = pathOptions(g, 'BRA').find((o) => o.id === 'join')!;
+    expect(join.ok).toBe(false);
+    expect(join.why).toBe('The League is a pact of neighbours, and its members lie in Europe and the Mediterranean.');
+    expect(takePath(g, 'BRA', 'join')).toBe(false);
+    const d = startOpen(createGame(3, 'DEN'));
+    d.flags['league:born'] = d.turn;
+    enrol(d, d.nations.BEL);
+    enrol(d, d.nations.NED);
+    expect(pathOptions(d, 'DEN').find((o) => o.id === 'join')!.ok).toBe(true);
+  });
+});
