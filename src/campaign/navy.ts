@@ -427,6 +427,8 @@ export interface LandingPlan {
   sortie: number;
   /** For a landing from the sea that is no surprise: why the crossing is as dangerous as it is, and what would make it safer. */
   account?: CrossingAccount;
+  /** For any landing from the sea: whether the sea behind the beach could be kept open once the force is ashore. */
+  hold?: SeaHold;
 }
 
 /** The enemy warships that put to sea against an invasion: those in harbour on the seas it crosses or the seas next to them, and those at sea next door. */
@@ -505,6 +507,65 @@ export interface CrossingAccount {
   skyWon: number | null;
   lines: TicketLine[];
   helps: CrossingHelp[];
+  /** Once ashore: whether the sea behind the beach could be kept open. */
+  hold: SeaHold;
+}
+
+/**
+ * The holding of a beach (Version 73): whether the sea behind it could be kept open to the supply ships once the
+ * force is ashore. A sea is closed to a nation when the enemy has `NAVY.closed.min` there and `NAVY.closed.ratio`
+ * times its own strength. What the enemy could bring is counted whole: his ships in that sea now, every fleet
+ * that could come into it (at sea on the way or next door, or in harbour on those seas), and his aircraft over it.
+ */
+export interface SeaHold {
+  /** The sea off the beach: the last the supply ships cross. */
+  sea: number;
+  /** What the enemy has in it now, the fleets that could come into it at their full strength, and his aircraft over it. */
+  there: number;
+  come: number;
+  air: number;
+  /** All of that together. */
+  foe: number;
+  /** What the invader has there now: his ships at sea in it and his aircraft over it. */
+  own: SeaBalance;
+  /** The strength the invader must have there to keep it open against all of that: 0 where the enemy has too little to close any sea. */
+  need: number;
+  /** True when the sea would stay open with every one of those fleets in it. */
+  open: boolean;
+  /** False where the beach has no harbour: a force is fed only through a port. */
+  port: boolean;
+  lines: TicketLine[];
+}
+
+/** The enemy's surface fleets that could come into the last sea of a crossing and are not in it now: at sea elsewhere on the way or next door to it, or in harbour on those seas. */
+export function fleetsInReach(g: Game, nat: string, path: number[]): Fleet[] {
+  const last = path[path.length - 1];
+  const near = new Set<number>(path);
+  for (const z of path) for (const j of g.seas[z].adj) near.add(j);
+  return g.fleets.filter((f) => {
+    if (!atWar(g, f.nat, nat) || !surfaceShips(f)) return false;
+    if (atSea(f)) return f.zone !== last && near.has(f.zone);
+    return (f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z));
+  });
+}
+
+/** Whether the sea behind a beach could be kept open, as things stand. Nothing is changed. */
+export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHold {
+  const sea = path[path.length - 1];
+  const e = seaSide(g, sea, nat, true), own = seaSide(g, sea, nat, false);
+  const come = fleetsInReach(g, nat, path).reduce((s, f) => s + fleetPower(g, f), 0);
+  const foe = e.ships + come + e.air;
+  const need = foe >= NAVY.closed.min ? foe / NAVY.closed.ratio : 0;
+  const open = !(foe >= NAVY.closed.min && foe >= NAVY.closed.ratio * own.total);
+  const name = g.seas[sea].name;
+  const lines: TicketLine[] = [];
+  if (e.ships >= 0.5) lines.push({ label: `Enemy ships in the ${name} now`, value: round(e.ships), effect: 'at sea there already' });
+  if (come >= 0.5) lines.push({ label: 'Enemy fleets that could come', value: round(come), effect: 'at their full strength, from the harbours and the seas in reach' });
+  if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round(e.air), effect: 'count against the supply ships too' });
+  lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
+  lines.push({ label: 'The sea behind the beach', value: open ? 'stays open' : 'would be closed', effect: open ? 'the supply ships reach the force' : 'the force ashore would be cut off from its supplies' });
+  if (!to.port) lines.push({ label: 'A harbour', value: `none at ${to.name}`, effect: 'the force is fed only once it holds a port on an open sea' });
+  return { sea, there: e.ships, come, air: e.air, foe, own, need, open, port: !!to.port, lines };
 }
 
 const round = (x: number): string => Math.round(x).toLocaleString('en-US');
@@ -547,7 +608,7 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
       tell('all', 'All of these together', helps.some((h) => h.id === 'sky') ? withSky(g, to.id, nat, rest) : rest());
     }
   }
-  return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps };
+  return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps, hold: seaHold(g, nat, path, to) };
 }
 
 /** What a landing would meet: the seas to cross, the danger on the way, and the odds on the beach. Nothing is changed. */
@@ -568,6 +629,7 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
     ...(surprise ? {} : { account: crossingAccount(g, nat, path, to) }),
+    hold: seaHold(g, nat, path, to),
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
     assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, nat), surprise }) : null,
   };

@@ -124,6 +124,7 @@ export const RIVALS = rivalsData as unknown as {
   fold: { worn: number; cadres: number };
   /** A staff that will not be ringed: who, how few ways out, how well one must be held to count as safe, how far the corps go. */
   ring?: { staffs: string[]; exits: number; safe: number; steps: number; reach: number; odds: number };
+  relief?: { staffs: string[]; worn: number; fit: number; months: number };
   exhaust: { after: number; per: number };
   stalemate?: { after: number };
 };
