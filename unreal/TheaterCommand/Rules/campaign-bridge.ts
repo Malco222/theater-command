@@ -88,6 +88,8 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
+import { NAVY } from '../../../src/campaign/navy';
+import { chanceOn } from '../../../src/campaign/game';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -881,11 +883,18 @@ function historyTo(from: number, seed: number): Game {
 }
 
 /** The war as the grand campaign finds it on the first day of a month: history up to then, nobody at the controls. */
+/**
+ * Whether the grand campaign is played on the wider world (rules version 74: North America and its seas) or kept to
+ * the map of Europe. The 3D table says which, when a campaign is started: it is the wider world only where the table
+ * has that world's provinces laid on it.
+ */
+let wideWorld = false;
+
 function grandGame(from: number, seed: number, human: string | null): Game {
   // September 1939 is free play from the first day. A later year is history up to the day the player takes
   // over, and from that day no nation follows history's plan: each one's staff decides for itself.
-  if (from <= 1) return startOpen(createGame(seed, human));
-  return startOpen(historyTo(from, seed));
+  if (from <= 1) return startOpen(createGame(seed, human), wideWorld);
+  return startOpen(historyTo(from, seed), wideWorld);
 }
 
 /**
@@ -928,7 +937,8 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string; history?: number }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string; history?: number; world?: boolean }) {
+  wideWorld = options?.world === true;
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
@@ -939,7 +949,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
     g = grandGame(from, seed, human);
   } else {
     g = createGame(seed, from > 1 ? null : human);
-    if (options?.view === 'open') startOpen(g);
+    if (options?.view === 'open') startOpen(g, false);
     while (g.turn < from) runTurnAI(g);
   }
   g.human = human;
@@ -1877,6 +1887,27 @@ function landingPlan(ids: number[], to: number) {
   const p = previewLanding(s, cs, to);
   const lines: string[] = [];
   if (!p.why) {
+    // (Version 74, the design director's ruling 24.) The headline speaks for the whole venture and is never more
+    // cheerful than the worst line on the card: a force that can land and then be cut off says so in red, a
+    // crossing that would lose one man in four or more at sea says so in amber, and the fight for the beach then
+    // has a line of its own. A fight that is itself all but lost keeps the headline, with the warning under it.
+    const holdNow = (p as { hold?: SeaHoldView }).hold;
+    const cut = !p.air && !!holdNow && !holdNow.open;
+    const seaBehind = holdNow ? s.seas[holdNow.sea]?.name ?? 'sea' : 'sea';
+    const lossAtSea = p.air ? 0 : Math.round(p.risk * NAVY.intercept.loss * 100);
+    const costly = !cut && !p.surprise && !p.air && lossAtSea >= 25;
+    const fought = p.defended && p.assess ? p.assess : null;
+    const chance = fought ? chanceOn(fought.odds, fought.dice) : 1;
+    const hopeless = !!fought && chance < 0.3;
+    const fight = !fought ? 'The coast is undefended' : chance >= 0.95 ? 'Victory is all but certain' : chance >= 0.6 ? 'The odds favour you' : chance >= 0.3 ? 'It could go either way' : chance > 0 ? 'A long shot' : p.air ? 'This assault will fail' : 'This landing will fail';
+    const fightTone = !fought || chance >= 0.6 ? 'good' : chance >= 0.3 ? '' : 'red';
+    const whole = (cut || costly) && !hopeless;
+    const verdict = whole ? (cut ? 'Ashore, then cut off' : 'A costly crossing') : fight;
+    const tone = whole ? (cut ? 'red' : 'amber') : fightTone;
+    const under = whole
+      ? (cut ? `The force can land, but the enemy can close the ${seaBehind} behind it and the troops would be cut off from their supplies.` : `About ${lossAtSea}% of the force would be lost at sea before it lands.`)
+      : cut ? `And a force that did get ashore could be cut off: the enemy can close the ${seaBehind} behind it.` : '';
+    if (whole) lines.push(p.air ? 'THE FIGHT ON THE GROUND' : 'THE FIGHT FOR THE BEACH', `\u00B7 ${fight}${fought ? `: odds of ${fought.odds.toFixed(2)} to 1, about ${Math.round(chance * 100)} in 100 to take ${s.regions[to].name}` : ''}`, '');
     lines.push(p.air ? 'The force goes in by air.' : p.surprise ? 'War was declared this month: the defenders are caught unready, and no fleet can stop the crossing.'
       // (Version 72: the danger is the share of the force caught at sea; the reckoning says what share of the men that costs.)
       : p.risk > 0.005 ? ((p as { account?: CrossAccount }).account
@@ -1894,9 +1925,10 @@ function landingPlan(ids: number[], to: number) {
     const holding = holdLines(hold);
     if (holding.length) lines.push('', ...holding);
     if (hold && hold.open && !p.air) lines.push('', `As things stand the enemy cannot close the ${s.seas[hold.sea]?.name ?? 'sea'} behind it.`);
-    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: p.air ? '' : holdWarning(s, hold, true) };
+    // (the long warning in red stays under the card where the headline does not already say it)
+    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: p.air || cut ? '' : holdWarning(s, hold, true), verdict, tone, under };
   }
-  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '' };
+  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '' };
 }
 
 /** Lands the chosen corps on an enemy coast. */

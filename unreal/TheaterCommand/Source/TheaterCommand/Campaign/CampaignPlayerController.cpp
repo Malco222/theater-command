@@ -5178,6 +5178,9 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Land at %s?"), *Plan.Name));
 			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")) + TEXT("\n\nOnce they sail it cannot be taken back."));
 			WarPrompt.Warning = FText::FromString(Plan.Warn);
+			WarPrompt.Verdict = FText::FromString(Plan.Verdict);
+			WarPrompt.VerdictUnder = FText::FromString(Plan.Under);
+			WarPrompt.VerdictTone = Plan.Tone == TEXT("red") ? 3 : Plan.Tone == TEXT("amber") ? 2 : Plan.Tone == TEXT("good") ? 1 : 0;
 			WarPrompt.Confirm = FText::FromString(TEXT("SEND THEM IN"));
 			return;
 		}

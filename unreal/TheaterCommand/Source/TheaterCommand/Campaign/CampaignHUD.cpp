@@ -2759,6 +2759,31 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
 									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										// (Rules version 74, the design director's ruling 24: a landing's headline speaks for the whole
+										// venture and is never more cheerful than the worst line on the card. Red when the force can
+										// land and then be cut off, amber when one man in four or more would be lost at sea.)
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 20)).AutoWrapText(true).Justification(ETextJustify::Center)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Verdict.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.ColorAndOpacity_Lambda([this]()
+										{
+											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().VerdictTone : 0;
+											return FSlateColor(Tone == 3 ? Alarm : Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Tone == 1 ? FLinearColor(FColor::FromHex(TEXT("9DB37A"))) : Cream);
+										})
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Verdict : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().VerdictUnder.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.ColorAndOpacity_Lambda([this]()
+										{
+											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().VerdictTone : 0;
+											return FSlateColor(Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Alarm);
+										})
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().VerdictUnder : FText::GetEmpty(); })
+									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)

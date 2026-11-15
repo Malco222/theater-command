@@ -1023,6 +1023,9 @@ struct FLandingPlan
 	FString Name; // the coast
 	TArray<FString> Lines; // the crossing, the sky, the defenders
 	FString Warn; // (rules version 73) set out in red: the enemy could close the sea behind the force once it is ashore
+	// (rules version 74) The headline, which speaks for the whole venture: "Ashore, then cut off" (red), "A costly
+	// crossing" (amber), or how the fight for the beach stands; its tone ("red", "amber", "good" or none); and a line under it.
+	FString Verdict, Tone, Under;
 };
 
 struct FLandingResult

@@ -267,6 +267,10 @@ struct FWarPrompt
 	FText Title;
 	FText Body;
 	FText Warning; // (rules version 73) set out in red under the body: before a landing, that the sea behind the beach could be closed
+	// (rules version 74) Before a landing: the headline that speaks for the whole venture, how it is to be read
+	// (0 plainly, 1 as good news, 2 in amber, 3 in red), and the line under it.
+	FText Verdict, VerdictUnder;
+	int32 VerdictTone = 0;
 	bool bFromOffice = false; // asked from the foreign office: go back there afterwards
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;
