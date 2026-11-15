@@ -472,3 +472,4 @@ Build against the version under test, for example `./build70.sh probe56 /home/us
 | `v73x.tsv`, `v73h.tsv`, `v73d.tsv` | The domination set with the follow-up lines: the two crossing seats first (Soviet `domfirsteng-`, German `dom-`, seeds 1 to 8), then every seat by hand, at Field command and idle | `./jobs.sh v73d.tsv out/v73d 4` |
 | `v73c.tsv` | The control: the same eight German wars by hand without the crossing (`domnocross-GER`), to see what the crossing costs a German player | `./jobs.sh v73c.tsv out/v73d 2` |
 | `v73w.tsv`, `v72w.tsv` | The war with nobody playing, to December 1949 at the middle stop: 24 wars on Version 73 (seeds 17 to 40), 12 more on Version 72 (seeds 29 to 40), three wars a file | `./jobs.sh v73w.tsv out/v73 2` |
+| `watchend.py` | The war with nobody playing: when Germany fell, by seed, from the `WATCH` lines; the middle war and how many end within three months of May 1945 | `python3 watchend.py out/v73 out/v72 --seeds 17-40` |
