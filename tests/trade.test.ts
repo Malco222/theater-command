@@ -342,7 +342,10 @@ describe('signing and ending', () => {
     expect(whyNoTrade(g, 'GER', 'FRA')).toMatch(/at war with France/);
     expect(whyNoTrade(g, 'GER', 'UK')).toMatch(/at war with the United Kingdom/);
     expect(whyNoTrade(g, 'GER', 'ITA')).toMatch(/already trade with Italy/);
-    expect(whyNoTrade(g, 'GER', 'USA')).toMatch(/keeps to itself/);
+    // A country that has not come onto the stage signs nothing. The United States, at home on the wider world, is
+    // no longer one of them.
+    expect(whyNoTrade(g, 'GER', 'VIC')).toMatch(/keeps to itself/);
+    expect(whyNoTrade(g, 'GER', 'USA') ?? '').not.toMatch(/keeps to itself/);
     // Vichy France and Britain never sign.
     g.nations.VIC.alive = true; g.nations.VIC.dormant = false;
     expect(whyNoTrade(g, 'UK', 'VIC')).toMatch(/will not sign/);

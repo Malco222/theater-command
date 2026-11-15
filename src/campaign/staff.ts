@@ -31,7 +31,7 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { attachWorld } from './world';
-import { EASTERN, allied, assess, atWar, bloc, collapseScore, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -78,10 +78,11 @@ export const isOpen = (g: Game): boolean => g.flags.open === 1;
  * Turns a game into a free-play war from this month on. In September 1939 history sets the start: Germany's
  * attack on Poland is already under way. Later in the war each staff finds its fronts as history left them.
  */
-export function startOpen(g: Game): Game {
+export function startOpen(g: Game, wide = true): Game {
   g.flags.open = 1;
-  // The grand campaign is played on the wider world: it is attached before anything else is set up for it.
-  attachWorld(g);
+  // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
+  // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
+  if (wide) attachWorld(g);
   if (g.turn === 1) {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
@@ -99,6 +100,8 @@ export function startOpen(g: Game): Game {
   openGovernment(g);
   openManpower(g);
   numberDivisions(g);
+  // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
+  if (wide) computeSupply(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;
   return g;

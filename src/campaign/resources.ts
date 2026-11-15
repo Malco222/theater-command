@@ -12,6 +12,7 @@ import { CLASSES, atSea, laneLoss, oreRoute, zoneOf } from './navy';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { TECH } from './tech';
+import { oilAtHome } from './world';
 
 export type Good = 'oil' | 'sup';
 
@@ -345,7 +346,7 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
       if (r.owner === nat) { own += fieldYield(g, r, nat); nOwn++; } else { taken += fieldYield(g, r, nat); nTaken++; }
     }
     // The wells and plants at home work for as long as the homeland is held.
-    const home = pick(RES.oil.home, nat) * (n.offmap || (n.capital >= 0 && g.regions[n.capital].ctrl === nat) ? 1 : 0.5);
+    const home = (oilAtHome(g, nat) ?? pick(RES.oil.home, nat)) * (n.offmap || (n.capital >= 0 && g.regions[n.capital].ctrl === nat) ? 1 : 0.5);
     out.push({ key: 'fields', label: 'Oilfields at home', amount: own, count: nOwn });
     out.push({ key: 'taken', label: 'Captured oilfields', amount: taken, count: nTaken });
     out.push({ key: 'home', label: n.offmap ? 'The oilfields of the homeland, beyond the map' : 'Small wells and plants at home', amount: home });

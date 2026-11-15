@@ -15,22 +15,22 @@ import {
 } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
-const grand = (human: string | null = 'UK', seed = 3): Game => startOpen(createGame(seed, human));
+const grand = (human: string | null = 'UK', seed = 3, wide = true): Game => startOpen(createGame(seed, human), wide);
 
 function war(g: Game, a: string, b: string): void {
   if (!g.nations[a].atWar.includes(b)) g.nations[a].atWar.push(b);
   if (!g.nations[b].atWar.includes(a)) g.nations[b].atWar.push(a);
 }
 /** A grand campaign in the player's first month. */
-function playing(human = 'UK', seed = 3): Game {
-  const g = grand(human, seed);
+function playing(human = 'UK', seed = 3, wide = true): Game {
+  const g = grand(human, seed, wide);
   for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
   beginHuman(g);
   return g;
 }
 /** The same, with Germany beaten and Italy never in the war: the Axis has lost its fight. */
-function decided(human = 'UK', seed = 3): Game {
-  const g = playing(human, seed);
+function decided(human = 'UK', seed = 3, wide = true): Game {
+  const g = playing(human, seed, wide);
   capitulate(g, 'GER', 'UK');
   return g;
 }
@@ -225,7 +225,9 @@ describe('dissolving the alliances', () => {
   });
 
   it('sees a nation from beyond the map take its forces home', () => {
-    const g = decided();
+    // A campaign kept to the map of Europe, as one saved before the world was drawn plays on: there the United
+    // States lies beyond the map's edge.
+    const g = decided('UK', 3, false);
     const U = g.nations.USA;
     U.alive = true; U.dormant = false;
     war(g, 'USA', 'ITA');
@@ -286,8 +288,9 @@ describe('the last war', () => {
       expect(a.league, a.id).toBeFalsy();
       for (const b of live) if (a !== b) expect(atWar(g, a.id, b.id), `${a.id} and ${b.id}`).toBe(true);
     }
-    // Nobody new has come onto the stage: no government at Vichy, no power from beyond the map.
-    expect(g.nations.USA.alive).toBe(false);
+    // Nobody new has come onto the stage: no government at Vichy. The United States, at home on the wider world,
+    // was there from the first day and is in the last war with the rest.
+    expect(live.some((n) => n.id === 'USA')).toBe(true);
     expect(g.nations.VIC.alive).toBe(false);
     // France conquered is France gone, not a new country in the south.
     if (g.nations.FRA.alive) {
@@ -320,7 +323,7 @@ describe('the last war', () => {
   it('is not won while a rival great power stands, whatever the leader holds', () => {
     const g = decided();
     startDomination(g);
-    for (const id of ['FRA', 'ITA']) capitulate(g, id, 'UK');
+    for (const id of ['FRA', 'ITA', 'USA']) capitulate(g, id, 'UK');
     for (const r of g.regions) if (r.ctrl !== 'SOV') r.ctrl = 'UK';
     const t = worldTests(g, 'UK');
     expect(t.rivals).toEqual(['SOV']);
@@ -334,7 +337,7 @@ describe('the last war', () => {
     const g = decided();
     startDomination(g);
     expect(g.headlines.filter((h) => h.kind === 'war').at(-1)!.text).toContain('The last great power standing takes the world, once it holds three quarters of it');
-    for (const id of ['FRA', 'ITA']) capitulate(g, id, 'UK');
+    for (const id of ['FRA', 'ITA', 'USA']) capitulate(g, id, 'UK');
     for (const r of g.regions) if (r.ctrl !== 'SOV' && r.owner !== 'ESP' && r.owner !== 'SWE') r.ctrl = 'UK';
     expect(worldTests(g, 'UK').share).toBeGreaterThan(0.5);
     expect(worldWinner(g)).toBeNull();
@@ -377,7 +380,7 @@ describe('the last war', () => {
     const g = decided();
     startDomination(g);
     // The other great powers fall to a small country, which keeps their ground.
-    for (const id of ['FRA', 'ITA', 'SOV']) capitulate(g, id, 'ESP');
+    for (const id of ['FRA', 'ITA', 'SOV', 'USA']) capitulate(g, id, 'ESP');
     const t = worldTests(g, 'UK');
     expect(t.rivals).toEqual([]);
     expect(t.share).toBeLessThan(DOMINATION.won.share);
@@ -397,7 +400,7 @@ describe('the last war', () => {
   it('gives the world to a nation left alone, whatever it holds, when no great power is left', () => {
     const g = decided();
     startDomination(g);
-    for (const id of ['FRA', 'ITA', 'SOV']) capitulate(g, id, 'ESP');
+    for (const id of ['FRA', 'ITA', 'SOV', 'USA']) capitulate(g, id, 'ESP');
     capitulate(g, 'UK', 'SWE');
     // Two small countries with half the world each: neither has the share.
     g.regions.forEach((r, k) => { r.ctrl = k % 2 ? 'ESP' : 'SWE'; });

@@ -11,6 +11,7 @@
     "pairs": "Trade agreements history had in 1939, added to trade.json's.",
     "order": "Where the new countries stand in the order of play: after the countries of nations.json.",
     "idle": "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (It has no routine yet for shipping an army across an ocean by itself; history's dated formations still arrive where history landed them.) A player's own staff is not bound by it.",
+    "oilHome": "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
     "great": "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
   },
   "nations": {
@@ -47,5 +48,6 @@
   "pairs": [["UK", "USA"], ["USA", "CAN"], ["USA", "MEX"], ["USA", "CUB"], ["UK", "CAN"]],
   "order": ["CAN", "MEX", "CUB"],
   "great": ["USA"],
+  "oilHome": { "USA": 20 },
   "idle": { "_default": 4, "USA": 8, "CUB": 2 }
 }

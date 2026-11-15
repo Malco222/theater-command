@@ -17,6 +17,7 @@ import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin } from './history';
 import worldData from '../../data/campaign/world.json';
+import { worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -618,6 +619,8 @@ export function monthlyDiplomacy(g: Game): void {
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
     settle(g, n);
   }
+  // The wider world: the dominions follow their mother country.
+  worldMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

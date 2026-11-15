@@ -15,7 +15,7 @@
 
 import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, armySize, capitalDistances, nationOf, regionOf, setWar } from './game';
+import { addCorps, allied, armySize, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -43,6 +43,7 @@ export const WORLD = data as unknown as {
   pairs: [string, string][];
   order: string[];
   great: string[];
+  oilHome: Record<string, number>;
   idle: Record<string, number>;
 };
 
@@ -112,7 +113,9 @@ export function attachWorld(g: Game, fresh = true): void {
   g.reach = {};
   g.railhead = {};
   g.supplyDirty = true;
-  if (!fresh) return;
+  // A saved campaign's picture is laid over one drawn here, with every country in its usual place in it. (A new
+  // campaign's is drawn once everything else is set up: staff.ts.)
+  if (!fresh) { computeSupply(g); return; }
   // The armies standing at home on the first day: peacetime cadres.
   for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
     if (!g.nations[nat]?.alive || !g.byName[at] || g.byName[at].ctrl !== nat) continue;
@@ -130,6 +133,24 @@ export function attachWorld(g: Game, fresh = true): void {
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
 }
 
+/**
+ * The wider world's month: a dominion follows its mother country into every war she is in, while the two stand in
+ * the same alliance. One in the player's hands goes to war only when its player says so.
+ */
+export function worldMonth(g: Game): void {
+  if (!worldOn(g) || (g.flags.dom ?? 0) > 0) return;
+  for (const [id, of] of Object.entries(WORLD.follow)) {
+    const n = g.nations[id], M = g.nations[of];
+    if (!n?.alive || !M?.alive || id === g.human || !allied(g, id, of)) continue;
+    for (const e of M.atWar) {
+      const E = g.nations[e];
+      if (!E?.alive || n.atWar.includes(e) || allied(g, id, e)) continue;
+      setWar(g, id, e);
+      headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
+    }
+  }
+}
+
 /** The share of a country's industry on war work while it is at peace, where the wider world gives it one of its own, or null where the ordinary rule stands. */
 export function peaceFooting(g: Game, nat: string): number | null {
   const rows = worldOn(g) ? WORLD.peace[nat] : undefined;
@@ -138,6 +159,9 @@ export function peaceFooting(g: Game, nat: string): number | null {
   for (const [from, s] of rows) if (g.turn >= from) share = s;
   return share;
 }
+
+/** What a country's small wells and plants at home yield, where the wider world puts its oilfields on the map; null where the ordinary figure stands. */
+export const oilAtHome = (g: Game, nat: string): number | null => (worldOn(g) ? WORLD.oilHome[nat] ?? null : null);
 
 /**
  * True for a computer-run staff across the ocean from every enemy that already has as many field corps at home as
