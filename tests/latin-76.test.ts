@@ -232,7 +232,7 @@ describe('Latin America is on the chart', () => {
       expect(traitsOf(id).length + (TRAITS.nations[id].unit ? 1 : 0), id).toBe(2);
       expect(g.nations[id].sealift, id).toBe(1);
     }
-    expect(LARGE.map((id) => g.nations[id].color)).toEqual(['#f2d516', '#4aa2ec', '#a0600f', '#93479a', '#2f55a6', '#2cc0c6']);
+    expect(LARGE.map((id) => g.nations[id].color)).toEqual(['#f2d516', '#4aa2ec', '#a0600f', '#93479a', '#2f55a6', '#1f9d6b']);
     // (Each of the twelve has a colour of its own since Version 77: the art director's sheet. tests/staff-77.test.ts)
     expect(new Set(SMALL.map((id) => g.nations[id].color)).size).toBe(SMALL.length);
     for (const id of SMALL) { expect(list.some((n) => n.id === id), id).toBe(false); expect(g.nations[id].sealift, id).toBe(0); }

@@ -26,7 +26,7 @@
     "CHL": { "name": "Chile", "adj": "Chilean", "color": "#a0600f", "quality": 0.65, "air": 2, "resilience": 0.6, "align": "independent", "sealift": 1 },
     "PER": { "name": "Peru", "adj": "Peruvian", "color": "#93479a", "quality": 0.55, "air": 2, "resilience": 0.5, "align": "independent", "sealift": 1 },
     "COL": { "name": "Colombia", "adj": "Colombian", "color": "#2f55a6", "quality": 0.5, "air": 1, "resilience": 0.5, "align": "independent", "sealift": 1 },
-    "VEN": { "name": "Venezuela", "adj": "Venezuelan", "color": "#2cc0c6", "quality": 0.5, "air": 1, "resilience": 0.5, "align": "independent", "sealift": 1 },
+    "VEN": { "name": "Venezuela", "adj": "Venezuelan", "color": "#1f9d6b", "quality": 0.5, "air": 1, "resilience": 0.5, "align": "independent", "sealift": 1 },
     "GUA": { "name": "Guatemala", "adj": "Guatemalan", "color": "#9383c4", "quality": 0.45, "air": 0, "resilience": 0.4, "align": "independent" },
     "ELS": { "name": "El Salvador", "adj": "Salvadoran", "color": "#c98494", "quality": 0.45, "air": 0, "resilience": 0.4, "align": "independent" },
     "HON": { "name": "Honduras", "adj": "Honduran", "color": "#9dbd8c", "quality": 0.45, "air": 0, "resilience": 0.4, "align": "independent" },
