@@ -77,7 +77,7 @@ export const AIRWAR = warData as unknown as {
   recon: { aircraft: number; loss: number; ready: number };
   losses: { bombers: number; power: number; most: number; night: { bombers: number; power: number }; clash: number };
   success: { k: number };
-  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number } } };
+  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -427,6 +427,40 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region): string | null {
 }
 
 export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotBase(g, f, r) === null);
+
+/**
+ * Whether a nation's fighters could fight for the sky over a region: from the airfields they are on now ('now'), or
+ * from one they could be brought up to ('forward', with that airfield), or not at all (null). Fighters reach only
+ * so far, and a beach beyond them is one whose sky cannot be won. Carrier wings are left out: they go where the fleet goes.
+ */
+export function skyReach(g: Game, nat: string): (region: number) => { how: 'now' | 'forward'; base: number } | null {
+  const fighters = airFleetsOf(g, nat).filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
+  let fields: { base: number; range: number }[] | null = null;
+  const known = new Map<number, { how: 'now' | 'forward'; base: number } | null>();
+  return (region: number) => {
+    if (known.has(region)) return known.get(region)!;
+    let out: { how: 'now' | 'forward'; base: number } | null = null;
+    for (const f of fighters) if (km(g, f.base, region) <= reach(f).ftrRange) { out = { how: 'now', base: f.base }; break; }
+    if (!out) {
+      // Every airfield a fighter group could move to, with the longest reach of any group that could use it.
+      if (!fields) {
+        const far = new Map<number, number>();
+        const seen = new Set<string>();
+        for (const f of fighters) {
+          const range = reach(f).ftrRange, k = `${range}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          for (const r of airBases(g, f)) far.set(r.id, Math.max(far.get(r.id) ?? 0, range));
+        }
+        fields = [...far.entries()].map(([base, range]) => ({ base, range }));
+      }
+      let d = Infinity;
+      for (const x of fields) { const k = km(g, x.base, region); if (k <= x.range && k < d) { d = k; out = { how: 'forward', base: x.base }; } }
+    }
+    known.set(region, out);
+    return out;
+  };
+}
 
 /** Moves a fleet to airfields in another friendly region. Settling in costs it some readiness. */
 export function rebaseAir(g: Game, f: AirFleet, r: Region): boolean {
@@ -1266,21 +1300,41 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
   // So is the sky over a beach the staff means to land on (the second front, ai.ts): no invasion fleet crosses
   // under the enemy's fighters. With no fighter group in reach of it, one based overseas is brought up to the
   // friendly airfield nearest the beach.
-  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && skyDenies(g, nat, t));
+  // (A player who has named his crossing and handed over the air war has the sky over his beach fought for whenever it is not his: it keeps the enemy's ships and aircraft off his troopships.)
+  const wanted = (t: number): boolean => { if (skyDenies(g, nat, t)) return true; const sky = skyOver(g, t); return nat === g.human && !(sky !== null && allied(g, sky, nat)); };
+  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && wanted(t));
+  // (A player's air staff, for the crossing he has named: it brings up to 'monthly' fighter groups forward each
+  // month until 'groups' of them can reach the beach or the airfields in reach of it are full, from the homeland
+  // too while more than 'home' groups still guard it.)
+  const BP = nat === g.human ? R.beach : undefined;
+  const roomOn = (base: number, f: AirFleet): boolean => {
+    const there = g.airFleets.reduce((s, x) => s + (x.base === base && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
+    return there + f.ftr + f.bmr <= (airWar(g) ? Math.max(AIRWAR.fields.least, airfieldsHold(g, base)) : airfieldsHold(g, base));
+  };
   for (const t of beaches) {
     const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
-    if (fighters.some((f) => whyNotMission(g, f, 'superiority', t) === null)) continue;
     const cap = g.nations[nat].capital;
-    let move: { f: AirFleet; to: Region; d: number } | null = null;
-    for (const f of fighters) {
-      // The fighters that guard the homeland stay over it.
-      if (f.moved === g.turn || f.flew === g.turn || (g.regions[f.base].owner === nat && !g.regions[f.base].overseas && cap >= 0)) continue;
-      for (const r of airBases(g, f)) {
-        const d = km(g, r.id, t);
-        if (d <= reach(f).ftrRange && (!move || d < move.d)) move = { f, to: r, d };
+    const guards = (f: AirFleet): boolean => g.regions[f.base].owner === nat && !g.regions[f.base].overseas && cap >= 0;
+    for (let k = 0; k < (BP ? BP.monthly : 1); k++) {
+      const within = fighters.filter((f) => whyNotMission(g, f, 'superiority', t) === null).length;
+      if (within >= (BP ? BP.groups : 1)) break;
+      const spare = !!BP && fighters.filter(guards).length > BP.home;
+      let move: { f: AirFleet; to: Region; d: number } | null = null;
+      for (const f of fighters) {
+        // The fighters that guard the homeland stay over it.
+        if (f.moved === g.turn || f.flew === g.turn || (guards(f) && !spare)) continue;
+        if (BP && whyNotMission(g, f, 'superiority', t) === null) continue;
+        for (const r of airBases(g, f)) {
+          const d = km(g, r.id, t);
+          // (For a player: not onto airfields that are full already. Aircraft that cannot be served fly nowhere.)
+          if (BP && !roomOn(r.id, f)) continue;
+          // (Of two groups that could go as near, a player's staff sends the one that is not over the capital.)
+          if (d <= reach(f).ftrRange && (!move || d < move.d || (!!BP && d === move.d && move.f.base === cap && f.base !== cap))) move = { f, to: r, d };
+        }
       }
+      if (!move) break;
+      rebaseAir(g, move.f, move.to);
     }
-    if (move) rebaseAir(g, move.f, move.to);
   }
   let flown = 0;
   for (let k = 0; k < R.sweeps && (front.size || beaches.length); k++) {
@@ -1298,6 +1352,20 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         const v = R.skyWorth * Math.min(1, divs / 6) + fc.foeLoss - fc.ftrLoss;
         if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
       }
+    }
+    // (A player's staff, over the beach of the crossing he has named: every fit fighter group in reach goes up
+    // together, from whatever fields they stand on, and it flies when it expects to win the sky, with 'sky' times
+    // the odds that win it. The sky is what he asked for; the margin a staff keeps for its own offensives is not.)
+    if (BP) for (const t of beaches) {
+      if (hit.has(t)) continue;
+      const fleets = mine.filter((f) => fit(f) && f.kind === 'ftr' && f.ftr > 0 && f.ready >= R.ready && f.ready >= AIRWAR.ai.escortReady && whyNotMission(g, f, 'superiority', t) === null);
+      if (!fleets.length) continue;
+      const a = assessAir(g, fleets, 'superiority', t);
+      if (a.why || a.E < AIR.sky.least) continue;
+      const fc = forecastAir(g, a, 'superiority', t);
+      if (fc.odds < AIR.sky.win * BP.sky) continue;
+      const v = R.skyWorth + fc.foeLoss - fc.ftrLoss;
+      if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
     }
     if (!best) break;
     send('superiority', best.t, best.fleets, flown++);

@@ -25,7 +25,7 @@ import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
+import { coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -158,6 +158,11 @@ export function theName(n: Nation, start = false): string {
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number): void {
   g.headlines.push({ turn: g.turn, week: g.week, text, kind, nat, region });
+}
+
+/** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
+export function warning(g: Game, title: string, text: string, nat?: string, region?: number): void {
+  g.headlines.push({ turn: g.turn, week: g.week, text, kind: 'event', nat, region, warn: title });
 }
 
 /** Routine news of a computer-run nation's month, kept back for one line when the month closes. */
@@ -2320,6 +2325,8 @@ export function endPhase(g: Game, nat: string): void {
   tellBurnt(g);
   // The player's directive is looked at as his month closes: a town taken in it is a job done (the grand campaign).
   judgeDirective(g, nat);
+  // The coast watch: troops and shipping left standing on a quay are seen from across the water (the grand campaign).
+  if (g.nations[nat].alive) coastReport(g, nat);
   // The last act of the grand campaign: has this month's ground given the last great power its share of the world?
   crown(g);
 }

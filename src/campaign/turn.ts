@@ -8,7 +8,7 @@ import {
   airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -18,7 +18,7 @@ import {
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { cancelBuild, orderCorps, orderFort } from './economy';
-import { offers, orderOffer, type Offer } from './arsenal';
+import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
 import { tearUp, whyNotCutRail } from './rails';
@@ -1080,6 +1080,31 @@ export function previewLanding(g: Game, cs: Corps[], to: number): LandingPlan {
 export function orderLand(g: Game, cs: Corps[], to: number): Landing {
   if (!cs.length || onEve(g) || !cs.every((c) => ownOrder(g, c))) return { ok: false, why: cs.some((c) => c.joint !== undefined) ? 'An ally\'s corps does not sail under your orders: send the landing with your own.' : 'Those corps cannot be given orders now.' };
   return landCorps(g, cs, g.regions[to]);
+}
+
+/**
+ * The crossings open to the player (the grand campaign): for each shore an enemy holds that his army cannot reach
+ * by land, the safest way over the water, what bars it today, why it is as dangerous as it is and what would make
+ * it safer. The one he has named as his plan comes first.
+ */
+export function crossings(g: Game): CrossingOutlook[] {
+  return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human) : [];
+}
+
+/**
+ * Names a crossing as the player's plan: his admirals stand a fleet off that beach and his air staff fights for the
+ * sky over it, where he has handed them the navy and the air war. With no beach, the plan is dropped. The landing
+ * itself is always his own order.
+ */
+export function orderCrossingPlan(g: Game, from: number | null, to: number | null): boolean {
+  const me = g.human;
+  if (!me || onEve(g) || current(g) !== me) return false;
+  return planCrossing(g, me, from === null ? null : g.regions[from] ?? null, to === null ? null : g.regions[to] ?? null);
+}
+
+/** The player's shipping for armies: corps a month, what is left this month, the troopships on the slips and when they are ready. */
+export function liftOf(g: Game): LiftView | null {
+  return g.human && g.nations[g.human].alive ? liftView(g, g.human) : null;
 }
 
 const myFleet = (g: Game, id: number): Fleet | null => {

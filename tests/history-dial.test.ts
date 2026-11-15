@@ -9,8 +9,8 @@ import openData from '../data/campaign/open.json';
 import { bookMonth, claimsMonth, claimsView, dealMonth, historyMonth, moment, readable } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { atWar, createGame, removeCorps, setWar } from '../src/campaign/game';
-import { FREE, HISTORY, bookDate, dialView, leanFor, leash, leagueMul, loosest, mayJoin, moodMul, onBook, setStop, shoreOpen, stopOf, whyNotStop } from '../src/campaign/history';
-import { RIVALS, characterOf, startOpen } from '../src/campaign/staff';
+import { FREE, HISTORY, bookDate, bookExpects, bookIf, dialView, leanFor, leash, leagueMul, loosest, mayJoin, moodMul, onBook, setStop, shoreOpen, stopOf, whyNotStop } from '../src/campaign/history';
+import { RIVALS, characterOf, decide, startOpen } from '../src/campaign/staff';
 import { claimsOf, dialOf, historyStops, orderHistory, runTurnAI, whyNotSetHistory } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
@@ -363,5 +363,122 @@ describe('anything goes', () => {
     expect(leash(g, 'SOV', 'west').chance).toBe(2);
     expect(leash(grand(8, null, 4), 'SOV', 'west').chance).toBe(1.5);
     expect((historyData as { stops: { stop: number }[] }).stops.length).toBe(5);
+  });
+});
+
+// Three mends of Version 72, found by the Playtester on the dial as it shipped.
+describe('the book, mended', () => {
+  it('has Germany fight the Balkans beside the army it is bringing up for the east, each in its own month', () => {
+    // A war at the second stop in which both are dated May 1941: the army for the east starts coming up in February,
+    // and the Balkan campaign used to be shut out by it and the book closed there in the summer.
+    const seed = 26;
+    const g = grand(seed, null, 2);
+    const balkans = bookDate(g, 'GER', 'balkans')!, east = bookDate(g, 'GER', 'east')!;
+    expect([balkans, east]).toEqual([21, 21]);
+    let yug = 0, sov = 0, prepared = 0;
+    while (g.turn <= east) {
+      const t = g.turn;
+      runTurnAI(g);
+      if (!yug && (atWar(g, 'GER', 'YUG') || !g.nations.YUG.alive)) yug = t;
+      if (!sov && atWar(g, 'GER', 'SOV')) sov = t;
+      if (!prepared && OPS.GER[(g.flags['st:op:GER'] ?? 0) - 1]?.id === 'east') prepared = t;
+    }
+    // The east was being prepared when the Balkans were struck, the month before the greater blow, and it still fell on its date.
+    expect(prepared).toBeGreaterThan(0);
+    expect(prepared).toBeLessThan(yug);
+    expect(yug).toBe(east - 1);
+    expect(sov).toBe(east);
+    expect([onBook(g, 'balkans'), onBook(g, 'east')]).toEqual([true, true]);
+    expect(news(g, /History's book is closed/)).toEqual([]);
+  }, 120000);
+
+  it('gives a dated choice the book\'s own conditions: Italy comes in in her month though France has fallen already', () => {
+    expect(bookIf('ITA', 'jackal')).toEqual(['war:GER,UK', 'collapsing:FRA,0.07']);
+    expect(bookIf('GER', 'balkans')).toContain('war:ITA,GRE|fallen:GRE');
+    expect(bookIf('GER', 'west')).toBeNull();
+    const fallen = (stop: number): Game => {
+      const g = grand(8, 'GER', stop);
+      g.turn = 10;
+      const F = g.nations.FRA;
+      for (const c of g.corps.filter((c) => c.nat === 'FRA')) removeCorps(g, c);
+      F.alive = false;
+      F.fellOn = { turn: 9, week: 4, to: 'GER', how: 'beaten' };
+      for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== 'FRA');
+      F.atWar = [];
+      return g;
+    };
+    const g = fallen(1);
+    expect(leash(g, 'ITA', 'jackal')).toMatchObject({ kind: 'dated', date: 10 });
+    expect(atWar(g, 'ITA', 'UK')).toBe(false);
+    decide(g, 'ITA');
+    expect(g.flags['st:go:ITA']).toBe(10);
+    expect(OPS.ITA[(g.flags['st:goOp:ITA'] ?? 0) - 1].id).toBe('jackal');
+    // Not before her month.
+    const early = fallen(1);
+    early.turn = 9;
+    decide(early, 'ITA');
+    expect(early.flags['st:go:ITA']).toBeUndefined();
+    // Off the book the choice keeps its staff's own conditions, and a France already beaten is no reason for it.
+    const free = fallen(3);
+    decide(free, 'ITA');
+    expect(free.flags['st:done:ITA:jackal']).toBeUndefined();
+  });
+
+  it('says beforehand what the book expects, soonest first, and drops what has passed or been closed', () => {
+    const g = grand(9, 'GER', 1);
+    const all = bookExpects(g);
+    expect(all.length).toBe(HISTORY.marks.length);
+    expect(all.map((x) => x.turn)).toEqual([...all.map((x) => x.turn)].sort((a, b) => a - b));
+    expect(dialOf(g)!.expects).toEqual(all);
+    expect(all.some((x) => x.text === 'The book is closed in the west if France still stands when December 1940 is over.')).toBe(true);
+    expect(all.some((x) => x.text === 'The book is closed in the north if Norway is at war before its time: that is, before April 1940.')).toBe(true);
+    for (const x of all) expect(x.text).not.toMatch(/undefined|NaN/);
+    // A mark whose month has gone by is no longer expected, and nothing is expected where the book is closed.
+    g.turn = 9;
+    expect(bookExpects(g).some((x) => /Norway is at war before its time/.test(x.text))).toBe(false);
+    g.flags['hist:off:west'] = 9;
+    expect(bookExpects(g).some((x) => x.theatre === 'west')).toBe(false);
+    // The second stop gives each date its month of grace, and the stops without a book expect nothing.
+    const close = grand(9, 'GER', 2);
+    expect(bookExpects(close).some((x) => x.text === 'The book is closed in the west if France still stands when January 1941 is over.')).toBe(true);
+    expect(bookExpects(grand(9, 'GER', 3))).toEqual([]);
+    expect(dialOf(grand(9, 'GER', 4))!.expects).toEqual([]);
+  });
+
+  it('tells a player on a card of its own when the book is closed and when a claim is pressed on his ground', () => {
+    // The book closing: a warning addressed to the player, where a war nobody plays gets a line of news.
+    const g = grand(9, 'SOV', 1);
+    g.turn = 7;
+    setWar(g, 'SOV', 'GER');
+    bookMonth(g);
+    const closed = g.headlines.filter((h) => /History's book is closed/.test(h.text));
+    expect(closed.length).toBe(1);
+    expect(closed[0]).toMatchObject({ kind: 'event', warn: 'History\'s book', nat: 'SOV' });
+    const nobody = grand(9, null, 1);
+    nobody.turn = 7;
+    setWar(nobody, 'SOV', 'GER');
+    bookMonth(nobody);
+    expect(nobody.headlines.filter((h) => /History's book is closed/.test(h.text)).map((h) => h.warn)).toEqual([undefined]);
+    // A claim on the player's own ground: a warning to him, with the ground to look at.
+    const seed = seedWith('epirus', 'ITA');
+    const mine = grand(seed, 'ITA', 4);
+    setWar(mine, 'ITA', 'UK');
+    for (const c of mine.corps.filter((c) => c.nat === 'ITA' && mine.regions[c.reg].name === 'Albania')) removeCorps(mine, c);
+    claimsMonth(mine);
+    const pressed = mine.headlines.filter((h) => /Greece presses its claim to Northern Epirus/.test(h.text));
+    expect(pressed.length).toBe(1);
+    expect(pressed[0]).toMatchObject({ kind: 'event', warn: 'A claim on your ground', nat: 'ITA', region: mine.byName.Albania.id });
+    expect(pressed[0].text).toMatch(/It will not march for \d+ months at least, and what it weighs is the troops you keep there\./);
+    // When it marches the declaration is a card as every war is, and it points at the ground.
+    for (let k = 0; k < 24 && !atWar(mine, 'GRE', 'ITA'); k++) { mine.turn++; claimsMonth(mine); }
+    const marched = mine.headlines.filter((h) => /Greece marches for Northern Epirus/.test(h.text));
+    expect(marched.length).toBe(1);
+    expect(marched[0]).toMatchObject({ kind: 'war', region: mine.byName.Albania.id });
+    // The same claim on a computer's Italy stays a line of news about the claimant.
+    const theirs = grand(seedWith('epirus'), null, 4);
+    setWar(theirs, 'ITA', 'UK');
+    for (const c of theirs.corps.filter((c) => c.nat === 'ITA' && theirs.regions[c.reg].name === 'Albania')) removeCorps(theirs, c);
+    claimsMonth(theirs);
+    expect(theirs.headlines.filter((h) => /presses its claim to Northern Epirus/.test(h.text)).map((h) => [h.warn, h.nat])).toEqual([[undefined, 'GRE']]);
   });
 });

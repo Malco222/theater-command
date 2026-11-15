@@ -37,6 +37,11 @@
     "GER": { "weser": 8, "west": 9, "balkans": 20, "east": 22 },
     "ITA": { "jackal": 10, "greece": 14 }
   },
+  "bookIf": {
+    "_note": "By the book a dated choice is taken when these hold, in place of its own conditions (open.json): history's month is the staff's reason, and what was a precondition in the real war may already be over in this one. Italy came in as France was falling: with France already fallen in her month she comes in all the same. Germany went into the Balkans while Italy was held in Greece: with Greece already beaten she goes for Yugoslavia in her month all the same.",
+    "ITA:jackal": ["war:GER,UK", "collapsing:FRA,0.07"],
+    "GER:balkans": ["alive:YUG", "quiet", "war:ITA,GRE|fallen:GRE"]
+  },
   "unhistoric": ["SOV:west", "SOV:vulture", "ITA:late"],
   "joined": { "axis": ["HUN", "ROM", "BUL", "FIN", "SVK"], "allies": [] },
   "theatre": {

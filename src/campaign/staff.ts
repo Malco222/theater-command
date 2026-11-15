@@ -17,7 +17,7 @@ import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
-import { leanFor, leash, moodMul, stopDef } from './history';
+import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
 import { openAirWar, skyDenies } from './air';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
@@ -791,6 +791,8 @@ const shy = (g: Game, nat: string, f: Front, where = ''): boolean => rivalRules(
 
 /** One of the staff's own conditions, or one that reads as in diplomacy.json. */
 function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
+  // (One of several will do where they are written with a bar between them.)
+  if (c.includes('|')) return c.split('|').some((x) => cond(g, nat, x, real));
   const [key, rest = ''] = c.split(/:(.*)/s);
   const a = rest.split(',');
   if (key === 'quiet') {
@@ -943,11 +945,17 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       const L = leash(g, nat, op.id);
       if (L.kind === 'never') continue;
       // While an army is being brought up for one great choice, only a side-show the book has dated goes in beside it.
-      if (cur && !(op.side && L.kind === 'dated')) continue;
+      // So does a great choice of the book's that is dated no later than the one the army is coming up for: the
+      // Balkan campaign of April 1941 was fought while the army for the east assembled. It goes in in its own
+      // month, or the month before the greater blow if the two are dated together.
+      const upL = cur ? leash(g, nat, list[cur - 1].id) : null;
+      const first = !!cur && k !== cur - 1 && !op.side && L.kind === 'dated' && upL?.kind === 'dated' && L.date! <= upL.date!;
+      if (cur && !(L.kind === 'dated' && (op.side || first))) continue;
       if (flag(g, `st:done:${nat}:${op.id}`) || g.turn < (op.from ?? 1) - L.early || g.turn > (op.to ?? 999) || g.turn < flag(g, `st:cool:${nat}:${op.id}`)) continue;
-      if (L.kind === 'dated' && g.turn < L.date! - (op.side ? 0 : op.prep ?? 0)) continue;
+      if (L.kind === 'dated' && g.turn < (first ? Math.min(L.date!, upL!.date! - 1) : L.date! - (op.side ? 0 : op.prep ?? 0))) continue;
       if (!op.side && busy) continue;
-      if (!(op.if ?? []).every((c) => cond(g, nat, c, real))) continue;
+      // (By the book a dated choice may wait on the book's own conditions in place of its staff's: history.json, 'bookIf'.)
+      if (!((L.kind === 'dated' ? bookIf(nat, op.id) : null) ?? op.if ?? []).every((c) => cond(g, nat, c, real))) continue;
       const who = targets(g, nat, op);
       if ((op.declare ?? []).length && !who.length) { g.flags[`st:done:${nat}:${op.id}`] = -1; continue; }
       if (op.ratio !== undefined) { const p = prospect(g, nat, op, skip); if (!p || p.ratio < 0.9 * op.ratio * L.nerve) continue; }
@@ -958,7 +966,7 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       // A staff thinks twice before a blow that would bring the whole League down on it.
       // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
       if (L.kind === 'free' && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
-      if (op.side || !(op.prep ?? 0)) {
+      if (op.side || !(op.prep ?? 0) || first) {
         if (inSeason(g, op)) go(k, !!cur);
       } else {
         g.flags[`st:op:${nat}`] = k + 1;

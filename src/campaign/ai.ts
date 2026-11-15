@@ -888,7 +888,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
   if (!quay) return;
   const sfx = slot ? ':o' : '';
   const ready = quay.units
-    .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= Math.min(4, u.apMax))
+    .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
     .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
   if (sea.second) {
     const ashore = lodgment(g, nat, slot);

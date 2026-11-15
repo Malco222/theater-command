@@ -11,7 +11,7 @@
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
 import { DIPLOMACY, holds, signPeace } from './diplomacy';
-import { allied, atWar, bloc, collapseScore, declareWar, headline, theName } from './game';
+import { allied, atWar, bloc, collapseScore, declareWar, headline, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
 import { fronts, launch } from './staff';
@@ -54,7 +54,9 @@ export function bookMonth(g: Game): Mark[] {
     const closed = closeBook(g, m.theatre);
     failed.push(m);
     const [first, ...rest] = closed;
-    headline(g, 'event', `History's book is closed in ${first}: ${m.why}.${rest.length ? ` With it the book is closed in ${listOf(rest)}.` : ''} From here on the staffs there decide for themselves.`);
+    // (A player is told on a card of its own: the war he is in has just changed its rules.)
+    const told = `History's book is closed in ${first}: ${m.why}.${rest.length ? ` With it the book is closed in ${listOf(rest)}.` : ''} From here on the staffs there decide for themselves.`;
+    if (g.human) warning(g, 'History\'s book', told, g.human); else headline(g, 'event', told);
   });
   return failed;
 }
@@ -169,7 +171,7 @@ function march(g: Game, a: Ambition, why: string): void {
   launch(g, a.nat, [a.on], C.push);
   g.flags[`amb:go:${a.id}`] = g.turn;
   g.flags['hist:live'] = 1;
-  headline(g, 'war', `${n.name} marches for ${a.name}: ${why}. ${cap(a.why)}.`, a.nat);
+  headline(g, 'war', `${n.name} marches for ${a.name}: ${why}. ${cap(a.why)}.`, a.nat, a.on === g.human ? groundOf(g, a)[0]?.id : undefined);
 }
 
 /** A great power of the holder's alliance that borders the claimant may stand by its ally. */
@@ -226,7 +228,10 @@ export function claimsMonth(g: Game): void {
       g.flags[`amb:last:${a.id}`] = g.turn;
       if (!warned) {
         g.flags[`amb:${a.id}`] = g.turn;
-        headline(g, 'event', `${n.name} presses its claim to ${a.name}: ${why}. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`, a.nat);
+        const told = `${n.name} presses its claim to ${a.name}: ${why}. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`;
+        // (A claim on the player's own ground is a warning to him, on a card of its own, with the ground to look at.)
+        if (a.on === g.human) warning(g, 'A claim on your ground', `${told} It will not march for ${C.notice === 1 ? 'a month' : `${C.notice} months`} at least, and what it weighs is the troops you keep there.`, a.on, groundOf(g, a)[0]?.id);
+        else headline(g, 'event', told, a.nat);
       } else if (g.turn - warned >= C.notice && dialDraw(g, 'march', a.id, g.turn) < C.chance * deterred(g, a.nat, [a.on])) {
         // (A staff thinks twice before a march that would bring the whole League down on it.)
         march(g, a, why);

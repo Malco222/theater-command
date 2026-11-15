@@ -10,13 +10,13 @@ import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, carrierRules, skyDenies, skyOver } from './air';
+import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, type Assessment } from './game';
+import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -38,6 +38,7 @@ export const NAVY = data as unknown as {
   battle: { seek: number; catchRaider: number; evadeAt: number; evade: number };
   ready: { port: number; sea: number; mend: number; floor: number; lost: number; won: number; sortieAt: number };
   intercept: { loss: number; sea: number };
+  watch?: { corps: number; every: number };
   landing: { assault: number; surprise: number; range: number; sortie: number; airborne: number; craft?: [number, string[], number][] };
   range: number;
   admiral: { perLevel: number; maxLevel: number; lostWithFlagship: number };
@@ -244,6 +245,16 @@ export function openSeas(g: Game, nat: string): Uint8Array {
   const start = (z: number): void => { if (!shut[z] && !open[z]) { open[z] = 1; q.push(z); } };
   for (const r of g.regions) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
+  // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
+  // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
+  // from a conquered coast is fed from that coast, and not round by the harbours of the homeland.
+  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat) {
+    const linked = new Uint8Array(g.regions.length);
+    const road = [g.nations[nat].capital];
+    linked[road[0]] = 1;
+    for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+    for (const r of g.regions) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
+  }
   // So is the sea a country off the map sends its convoys in by.
   const off = g.nations[nat]?.offmap;
   if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));
@@ -414,6 +425,8 @@ export interface LandingPlan {
   sky: boolean;
   /** The strength of the enemy fleets that would put to sea against the landing. */
   sortie: number;
+  /** For a landing from the sea that is no surprise: why the crossing is as dangerous as it is, and what would make it safer. */
+  account?: CrossingAccount;
 }
 
 /** The enemy warships that put to sea against an invasion: those in harbour on the seas it crosses or the seas next to them, and those at sea next door. */
@@ -434,18 +447,107 @@ export function sortieAgainst(g: Game, nat: string, path: number[]): number {
  * it also meets the enemy fleets that come out against an invasion. An invader who has won the sky over the beach keeps most of them off.
  */
 export function landingRisk(g: Game, nat: string, path: number[], to: Region): number {
-  const sortie = sortieAgainst(g, nat, path);
+  return caughtIn(seaDangers(g, nat, path, to));
+}
+
+/** One sea of a crossing as the troopships would meet it: who hunts them there, who covers them, and the share caught. */
+interface SeaDanger { z: number; last: boolean; ships: number; air: number; sortie: number; own: SeaBalance; hunters: number; caught: number }
+
+/**
+ * The seas of a crossing in order. `more` is strength added to the invader's side in the sea `at` (a fleet sent to
+ * patrol it), and `beaten` leaves the enemy's warships out: what the crossing would meet if those things were done.
+ */
+function seaDangers(g: Game, nat: string, path: number[], to: Region, o: { more?: number; at?: number; beaten?: boolean } = {}): SeaDanger[] {
+  const sortie = o.beaten ? 0 : sortieAgainst(g, nat, path);
   const sky = skyOver(g, to.id);
   const held = sky !== null && allied(g, sky, nat);
-  let safe = 1;
-  path.forEach((z, i) => {
-    const e = seaSide(g, z, nat, true);
+  return path.map((z, i) => {
+    const e = seaSide(g, z, nat, true), own = seaSide(g, z, nat, false);
     const last = i === path.length - 1;
-    let hunters = e.ships + e.air * 0.5 + (last ? sortie : 0);
+    const ships = o.beaten ? 0 : e.ships;
+    let hunters = ships + e.air * 0.5 + (last ? sortie : 0);
     if (last && held) hunters *= AIR.sky.seaFoe;
-    if (hunters > 0) safe *= 1 - hunters / (hunters + 2 * seaSide(g, z, nat, false).total + NAVY.intercept.sea);
+    const mine = o.more && z === o.at ? own.total + o.more : own.total;
+    return { z, last, ships, air: e.air, sortie: last ? sortie : 0, own, hunters, caught: hunters > 0 ? hunters / (hunters + 2 * mine + NAVY.intercept.sea) : 0 };
   });
+}
+
+/** The share of a force caught on the whole crossing. */
+function caughtIn(ds: SeaDanger[]): number {
+  let safe = 1;
+  for (const d of ds) if (d.hunters > 0) safe *= 1 - d.caught;
   return 1 - safe;
+}
+
+/** Works something out as it would be with this nation holding the sky over a region, and puts the sky back as it was. */
+function withSky<T>(g: Game, region: number, nat: string, f: () => T): T {
+  const was = g.sky[region];
+  g.sky[region] = { nat, turn: g.turn };
+  try { return f(); } finally { if (was) g.sky[region] = was; else delete g.sky[region]; }
+}
+
+/** What would make a crossing safer, and how dangerous it would be then. */
+export interface CrossingHelp { id: 'sky' | 'sea' | 'fleets' | 'all'; text: string; risk: number }
+
+/**
+ * Why a landing's crossing is as dangerous as it is: the reckoning line by line, as a Battle Ticket sets out a
+ * battle, and what the invader could do about it, each with the danger as it would then be.
+ */
+export interface CrossingAccount {
+  /** The share of the force likely to be caught at sea, and the share of its men likely to be lost. */
+  risk: number;
+  loss: number;
+  /** The sky over the beach: the invader's, the enemy's fighters' (no invasion fleet can cross under them), or nobody's. */
+  sky: 'ours' | 'denied' | 'open';
+  /** The sea where most of the danger lies. */
+  worst: number;
+  /** The danger as it would be with the sky over the beach won: null where the invader holds it already, or his fighters cannot reach it from any airfield he has. */
+  skyWon: number | null;
+  lines: TicketLine[];
+  helps: CrossingHelp[];
+}
+
+const round = (x: number): string => Math.round(x).toLocaleString('en-US');
+
+/**
+ * The account of a crossing by these seas to that coast. Nothing is changed. (`reach` is the answer to where the
+ * nation's fighters can fight for the sky, when the caller has it already.)
+ */
+export function crossingAccount(g: Game, nat: string, path: number[], to: Region, reach: ReturnType<typeof skyReach> = skyReach(g, nat)): CrossingAccount {
+  const ds = seaDangers(g, nat, path, to);
+  const risk = caughtIn(ds);
+  const holder = skyOver(g, to.id);
+  const sky = holder !== null && allied(g, holder, nat) ? 'ours' : skyDenies(g, nat, to.id) ? 'denied' : 'open';
+  const worst = ds.reduce((a, d) => (d.caught > a.caught ? d : a), ds[ds.length - 1]);
+  const name = (z: number): string => g.seas[z].name;
+  // Where the fight for the sky over the beach could be flown from, if anywhere.
+  const fly = sky === 'ours' ? null : reach(to.id);
+  const skyWon = fly ? withSky(g, to.id, nat, () => landingRisk(g, nat, path, to)) : null;
+  const lines: TicketLine[] = [{ label: 'The way', value: path.map((z, i) => (i ? `then the ${name(z)}` : `the ${name(z)}`)).join(', '), effect: path.length > 1 ? 'every sea crossed is a chance to be found' : undefined }];
+  for (const d of ds) {
+    if (d.ships >= 0.5) lines.push({ label: `Enemy ships at sea in the ${name(d.z)}`, value: round(d.ships), effect: 'hunt the troopships' });
+    if (d.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name(d.z)}`, value: round(d.air), effect: 'count for half against ships under way' });
+    if (d.last && d.sortie >= 0.5) lines.push({ label: 'Enemy fleets that will come out', value: round(d.sortie), effect: 'from harbours on these seas and the seas next to them' });
+    if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : fly ? 'no help to either side' : 'out of reach of your fighters from any airfield you hold' });
+    if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
+  }
+  lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? `about ${Math.round(risk * NAVY.intercept.loss * 100)}% of the men lost` : 'nothing is in a position to stop the crossing' });
+  const helps: CrossingHelp[] = [];
+  if (risk > 0) {
+    // The invader's own fleets that could stand in the worst sea and are not there now.
+    const cover = fleetsOf(g, nat).filter((f) => surfaceShips(f) > 0 && !(f.zone === worst.z && atSea(f)) && fleetReach(g, f).includes(worst.z));
+    const more = cover.reduce((s, f) => s + fleetPower(g, f), 0);
+    const foes = ds.some((d) => d.ships >= 0.5 || d.sortie >= 0.5);
+    const tell = (id: CrossingHelp['id'], text: string, r: number): void => { if (r < risk - 0.005) helps.push({ id, text, risk: r }); };
+    if (fly && skyWon !== null) tell('sky', fly.how === 'now' ? `Win the sky over ${to.name} with a fight for the sky flown by your fighters` : `Bring fighters up to the airfields of ${g.regions[fly.base].name} and win the sky over ${to.name}`, skyWon);
+    if (more >= 1) tell('sea', `Send ${cover.length === 1 ? cover[0].name : `your ${cover.length} fleets in reach`} to patrol the ${name(worst.z)}`, caughtIn(seaDangers(g, nat, path, to, { more, at: worst.z })));
+    if (foes) tell('fleets', 'Beat the enemy fleets within reach, or strike them in harbour, so that none comes out', caughtIn(seaDangers(g, nat, path, to, { beaten: true })));
+    if (helps.length > 1) {
+      const rest = (): number => caughtIn(seaDangers(g, nat, path, to, { more: more >= 1 ? more : 0, at: worst.z, beaten: foes }));
+      tell('all', 'All of these together', helps.some((h) => h.id === 'sky') ? withSky(g, to.id, nat, rest) : rest());
+    }
+  }
+  return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps };
 }
 
 /** What a landing would meet: the seas to cross, the danger on the way, and the odds on the beach. Nothing is changed. */
@@ -465,6 +567,7 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
+    ...(surprise ? {} : { account: crossingAccount(g, nat, path, to) }),
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
     assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, nat), surprise }) : null,
   };
@@ -510,6 +613,194 @@ export function landingTargets(g: Game, cs: Corps[]): Region[] {
   if (!cs.length) return [];
   if (!airborne(cs) && (g.nations[cs[0].nat].sealift <= 0 || !g.regions[cs[0].reg].port)) return [];
   return g.regions.filter((r) => r.seas.length > 0 && whyNotLand(g, cs, r) === null);
+}
+
+// ---- The crossings a nation could make ------------------------------------------------------------------
+
+/** The safest way over the water to one enemy-held shore: from which port, to which coast, and what bars it today. */
+export interface CrossingOutlook {
+  /** Who holds the shore, and whose ground it is. `home` when it is the enemy's own country, and no colony of his. */
+  foe: string; owner: string; home: boolean;
+  from: Region; to: Region; path: number[];
+  /** Why no landing can be made there now, or null: no shipping, a sea the enemy has closed, a sky his fighters hold. */
+  bar: string | null;
+  barred: 'lift' | 'sea' | 'sky' | null;
+  account: CrossingAccount;
+  /** True for the crossing the nation has named as its plan. */
+  planned: boolean;
+  /** True for a crossing listed because it would be the safest way to its shore once the sky over the beach was won. */
+  hope?: boolean;
+}
+
+const aimKey = (nat: string): string => `st:aim:${nat}`;
+const quayKey = (nat: string): string => `st:quay:${nat}`;
+
+/**
+ * The crossing a nation has named as its plan (the grand campaign): the quay and the beach. A computer staff names
+ * its own (ai.ts); a player names his from the list of crossings. The admirals then stand a fleet off the beach and
+ * the air staff fights for the sky over it, for a player where he has handed those desks to his staff.
+ */
+export function plannedCrossing(g: Game, nat: string): { from: Region; to: Region } | null {
+  const to = g.regions[(g.flags[aimKey(nat)] ?? 0) - 1], from = g.regions[(g.flags[quayKey(nat)] ?? 0) - 1];
+  if (!to || !from || !atWar(g, nat, to.ctrl) || !allied(g, nat, from.ctrl)) return null;
+  return { from, to };
+}
+
+/** Names a crossing as the plan, or (with no beach) drops the plan. */
+export function planCrossing(g: Game, nat: string, from: Region | null, to: Region | null): boolean {
+  if (!from || !to) { delete g.flags[aimKey(nat)]; delete g.flags[quayKey(nat)]; return true; }
+  if (!seaWar(g) || !from.port || !to.seas.length || !allied(g, nat, from.ctrl) || !atWar(g, nat, to.ctrl)) return false;
+  if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true })) return false;
+  g.flags[aimKey(nat)] = to.id + 1;
+  g.flags[quayKey(nat)] = from.id + 1;
+  return true;
+}
+
+/** The ground a nation's army can reach by land: its own side's, and on from there through the ground of its enemies. */
+function landReach(g: Game, nat: string): Uint8Array {
+  const byLand = new Uint8Array(g.regions.length);
+  const q: number[] = [];
+  for (const r of g.regions) if (allied(g, nat, r.ctrl)) { byLand[r.id] = 1; q.push(r.id); }
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
+  return byLand;
+}
+
+/** One crossing looked at: the lane (through a closed sea if there is no other), what bars it, and its account. */
+function lookAcross(g: Game, nat: string, from: Region, to: Region, reach: ReturnType<typeof skyReach>): Omit<CrossingOutlook, 'foe' | 'owner' | 'home' | 'planned'> | null {
+  const n = g.nations[nat];
+  let path = seaPath(g, nat, from, to, { max: NAVY.landing.range });
+  let shut = -1;
+  if (!path) {
+    path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true });
+    if (!path) return null;
+    shut = path.find((z) => closedTo(g, z, nat)) ?? -1;
+  }
+  const account = crossingAccount(g, nat, path, to, reach);
+  const barred = n.sealift <= 0 ? 'lift' : shut >= 0 ? 'sea' : account.sky === 'denied' ? 'sky' : null;
+  const bar = barred === 'lift' ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.`
+    : barred === 'sea' ? `The ${g.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.`
+    : barred === 'sky' ? `${g.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`
+    : null;
+  return { from, to, path, bar, barred, account };
+}
+
+/**
+ * The crossings open to a nation at war (the grand campaign): for each shore an enemy holds that its army cannot
+ * reach by land, the safest way to it from a port on its own side, within a landing's range. Barred ones are listed
+ * too, with the reason: a coast under an enemy sky is offered to no landing force, and this says why. The crossing
+ * named as the plan comes first, with a safer way to the same shore after it when there is one.
+ */
+export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
+  const n = g.nations[nat];
+  if (!seaWar(g) || !n?.alive || !n.atWar.length) return [];
+  // One port for each stretch of water: the one with most of this nation's troops on its quays.
+  const troops = (r: Region): number => r.units.reduce((s, u) => s + (u.nat === nat && !u.dead && u.kind !== 'fort' ? 1 : 0), 0);
+  const ports = new Map<string, Region>();
+  for (const r of g.regions) {
+    if (!r.port || !r.seas.length || !allied(g, nat, r.ctrl)) continue;
+    const k = r.seas.join(','), p = ports.get(k);
+    if (!p || troops(r) > troops(p) || (troops(r) === troops(p) && r.ctrl === nat && p.ctrl !== nat)) ports.set(k, r);
+  }
+  if (!ports.size) return [];
+  // Enemy ground the army can reach by land needs no ships. The other shores, by whose ground they are and who holds them.
+  const byLand = landReach(g, nat);
+  const shores = new Map<string, Region[]>();
+  for (const r of g.regions) {
+    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive) continue;
+    const k = `${r.owner}:${r.ctrl}:${r.overseas ? 1 : 0}`;
+    shores.set(k, [...(shores.get(k) ?? []), r]);
+  }
+  const plan = plannedCrossing(g, nat);
+  const reach = skyReach(g, nat);
+  const out: CrossingOutlook[] = [];
+  // What a crossing would run with the sky over its beach won, where that can be done and nothing else bars the way.
+  const won = (x: CrossingOutlook): number => (x.barred === 'lift' || x.barred === 'sea' ? Infinity : x.account.skyWon ?? (x.account.sky === 'ours' ? x.account.risk : Infinity));
+  const better = (a: CrossingOutlook, b: CrossingOutlook | null): boolean => {
+    if (!b) return true;
+    if ((a.bar === null) !== (b.bar === null)) return a.bar === null;
+    return a.account.risk < b.account.risk - 1e-9;
+  };
+  for (const [k, coasts] of shores) {
+    const [owner, foe, far] = k.split(':');
+    const home = owner === foe && far === '0';
+    let best: CrossingOutlook | null = null, hope: CrossingOutlook | null = null;
+    // The lane depends only on the waters at each end: one look for each pair, then the sky over each coast.
+    const lanes = new Map<string, Region[]>();
+    for (const c of coasts) lanes.set(c.seas.join(','), [...(lanes.get(c.seas.join(',')) ?? []), c]);
+    for (const p of ports.values()) {
+      for (const group of lanes.values()) {
+        if (!seaPath(g, nat, p, group[0], { max: NAVY.landing.range, surprise: true })) continue;
+        for (const c of group) {
+          const look = lookAcross(g, nat, p, c, reach);
+          if (!look) continue;
+          const row: CrossingOutlook = { ...look, foe, owner, home, planned: false };
+          if (better(row, best)) best = row;
+          if (won(row) < Infinity && (!hope || won(row) < won(hope) - 1e-9)) hope = row;
+        }
+      }
+    }
+    // The crossing named as the plan is always shown, and beside it a safer way to the same shore if there is one now.
+    if (plan && `${plan.to.owner}:${plan.to.ctrl}:${plan.to.overseas ? 1 : 0}` === k) {
+      const look = lookAcross(g, nat, plan.from, plan.to, reach);
+      if (look) {
+        const named: CrossingOutlook = { ...look, foe, owner, home, planned: true };
+        out.push(named);
+        if (best && best.from === named.from && best.to === named.to) best = null;
+        else if (best && !better(best, named)) best = null;
+      }
+    }
+    if (best) out.push(best);
+    // A beach whose sky could be won, where that would make it a clearly safer way than the safest as things stand.
+    const shown: CrossingOutlook[] = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
+    if (hope && !shown.some((x) => x.from === hope!.from && x.to === hope!.to) && shown.every((x) => x.bar !== null || won(hope!) < x.account.risk - 0.05) && shown.every((x) => won(hope!) < won(x) - 0.05)) out.push({ ...hope, hope: true });
+  }
+  // The enemy's own country first, then the safest.
+  return out.sort((a, b) => Number(b.planned) - Number(a.planned) || Number(b.home) - Number(a.home) || Number(a.bar !== null) - Number(b.bar !== null) || a.account.risk - b.account.risk || a.to.id - b.to.id);
+}
+
+// ---- The coast watch's report --------------------------------------------------------------------------
+
+/**
+ * The coast watch (the grand campaign). When a nation's month closes with troops standing on a quay, shipping
+ * to carry them, and an enemy's home coast within a landing's range over seas its troopships can use, that enemy's
+ * coast watch reports it: his staff mans its harbours, and a player is told. Only a corps that has not moved in
+ * the month can embark, so the report always comes a month before the landing can. A coast the army could march
+ * to is not watched for this: the war there is a land war already.
+ */
+export function coastReport(g: Game, att: string): void {
+  const W = NAVY.watch;
+  const n = g.nations[att];
+  if (!W || !seaWar(g) || !n?.alive || n.sealift <= 0 || !n.atWar.length) return;
+  // The field corps on a quay as the month closes: they will have had no march to make when the next one opens. A town's garrison is not counted.
+  const idle = (r: Region): number => r.units.reduce((s, u) => s + (u.nat === att && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && !u.town ? 1 : 0), 0);
+  const quays = g.regions.filter((r) => r.port && r.seas.length > 0 && allied(g, att, r.ctrl) && idle(r) >= W.corps).sort((a, b) => idle(b) - idle(a) || a.id - b.id);
+  if (!quays.length) return;
+  const byLand = landReach(g, att);
+  for (const d of [...n.atWar].sort()) {
+    const x = g.nations[d];
+    if (!x?.alive || x.capital < 0) continue;
+    const coasts = g.regions.filter((r) => r.owner === d && r.ctrl === d && !r.overseas && r.seas.length > 0 && !byLand[r.id]);
+    if (!coasts.length) continue;
+    let seen: { quay: Region; coast: Region; corps: number } | null = null;
+    for (const q of quays) {
+      let near: Region | null = null, len = Infinity;
+      for (const c of coasts) {
+        const path = seaPath(g, att, q, c, { max: NAVY.landing.range });
+        if (path && (path.length < len || (path.length === len && near !== null && 2 * c.vp + c.fac + (c.cap ? 8 : 0) > 2 * near.vp + near.fac + (near.cap ? 8 : 0)))) { near = c; len = path.length; }
+      }
+      if (near) { seen = { quay: q, coast: near, corps: Math.min(idle(q), n.sealift) }; break; }
+    }
+    if (!seen) continue;
+    // His staff mans the harbours of the homeland from now (staff.ts, the coast watch).
+    g.flags[`st:watch:${d}`] = g.turn;
+    const key = `cw:${att}:${d}`, at = `cwAt:${att}:${d}`;
+    if (g.flags[key] === seen.quay.id + 1 && g.turn - (g.flags[at] ?? -99) < W.every) continue;
+    g.flags[key] = seen.quay.id + 1;
+    g.flags[at] = g.turn;
+    const force = seen.corps === 1 ? 'one corps' : `${seen.corps} corps`;
+    if (d === g.human) warning(g, 'Coast watch', `The coast watch reports ${n.adj} shipping gathering at ${seen.quay.name}, with troops on the quays: enough to carry ${force}. ${seen.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen.coast.id);
+    else if (att === g.human) headline(g, 'info', `${x.adj} coast watchers have seen your shipping and troops gather at ${seen.quay.name}: ${x.name} expects a landing and is manning its harbours.`, att, seen.quay.id);
+  }
 }
 
 // ---- Fleet orders -------------------------------------------------------------------------------

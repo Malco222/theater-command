@@ -363,6 +363,27 @@ button.corps:hover { border-color: var(--ink-3); }
 .evcard { background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--side, var(--brass)); border-radius: 4px; padding: 9px 11px; display: grid; gap: 5px; align-content: start; justify-items: start; }
 .evcard .ek { font-family: var(--head); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
 .evcard.fall .ek { color: #f1c9a0; }
+.evcard.warn { border-left-color: #d9a441; }
+.evcard.warn .ek { color: #f0c36a; }
+.evcard.warn p { font-family: var(--body); font-size: 13.5px; font-weight: 400; letter-spacing: 0; line-height: 1.4; color: var(--ink); }
+.cross { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
+.cross.plan { border-left-color: var(--brass); }
+.cross .crhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cross .crhead b { font-family: var(--head); font-size: 15px; letter-spacing: .04em; }
+.cross .crloss { font-size: 12px; white-space: nowrap; }
+.cross .crloss.ok { color: #b8dcb2; }
+.cross .crloss.mid { color: #e9c987; }
+.cross .crloss.bad, .cross .crloss.bar { color: #f1a58f; }
+.cross .acts { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+.cross table.ticket { margin-top: 7px; }
+/* The side pane is narrow: each line of the reckoning is its name, then the figure with what it means beside it. */
+.cross table.ticket, .cross table.ticket tbody, .cross table.ticket tr { display: block; }
+.cross table.ticket tr { border-top: 1px solid var(--line); padding: 5px 0 6px; }
+.cross table.ticket td { display: inline; border-top: 0; padding: 0 2px; }
+.cross table.ticket td:first-child { display: block; white-space: normal; font-size: 12px; padding-bottom: 1px; }
+.cross table.ticket td:nth-child(2) { font-weight: 600; padding-right: 6px; }
+.cross table.ticket td.fx:empty { display: none; }
+h4.crh { font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin: 10px 0 2px; }
 .evcard p { margin: 0; font-family: var(--head); font-size: 18px; font-weight: 600; letter-spacing: .02em; line-height: 1.2; }
 .pref { margin-top: 10px; }
 .pref .btn { margin-left: 4px; }
@@ -1835,6 +1856,9 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
 .dialmark i.on { width: 11px; height: 11px; background: var(--brass); border-color: var(--brass); box-shadow: 0 0 0 2px rgba(0, 0, 0, .25); }
 .dialends { display: flex; justify-content: space-between; margin: 4px 2px 0; font-size: 11px; letter-spacing: .05em; color: var(--ink-3); }
 .dialclosed { margin-top: 6px !important; padding-top: 6px; border-top: 1px solid var(--line); }
+.dialexp { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.dialexp ul { margin: 4px 0 0; }
+.dialexp small { display: block; margin-top: 4px; }
 .rank .rdial { display: inline-flex; margin-left: 7px; vertical-align: -1px; }
 .rank .dialmark { gap: 2px; height: 9px; }
 .rank .dialmark i { width: 3px; height: 3px; }
