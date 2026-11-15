@@ -4786,12 +4786,14 @@ function dialPicker(chosen: number, act: string, dial: DialView | null = null): 
   const on = stops.find((s) => s.stop === chosen) ?? stops.find((s) => s.stop === HIST_FREE)!;
   const locked = dial?.locked ?? null;
   const closed = dial && dial.closed.length ? `<p class="dialclosed"><b>History's book is closed</b> ${listOf(dial.closed.map((c) => `in ${esc(c.name)} since ${date(c.turn)}`))}. The staffs there decide for themselves, as they do at ${esc(stopName(HIST_FREE))}.</p>` : '';
+  // What the book still asks of the war, for a player who means to keep to it: the next few marks, soonest first.
+  const expects = dial && dial.expects.length ? `<div class="dialexp"><b>What the book still expects</b><ul>${dial.expects.slice(0, 4).map((x) => `<li>${esc(x.text)}</li>`).join('')}</ul>${dial.expects.length > 4 ? `<small>And ${dial.expects.length - 4} more after ${date(dial.expects[3].turn)}.</small>` : ''}</div>` : '';
   const small = dial
     ? `${locked ? esc(locked) : 'The dial leashes the world the computer runs, never you. Turn it in any month: it bears on what the rival staffs and the neutral countries decide from next month on.'}${dial.loosest !== dial.stop ? ` This campaign has been played as loose as <b>${esc(dial.loosestName)}</b>, and its record is read against that.` : ''}`
     : 'The dial leashes the world the computer runs, never you: your own orders are free at every stop. You can turn it in any month: click the badge beside the date.';
   return `<div class="gclevels dial">${stops.map((s, k) => `<button class="gclevel${s.stop === on.stop ? ' on' : ''}" data-act="${act}" data-stop="${s.stop}" aria-pressed="${s.stop === on.stop}"${locked ? ' disabled' : ''}>${dialMark(k)}<b>${esc(s.name)}</b><span>${esc(s.under)}</span></button>`).join('')}</div>
     <div class="dialends" aria-hidden="true"><span>◂ Closer to history</span><span>Further from it ▸</span></div>
-    <div class="gclevelnote"><p>${esc(on.blurb)}</p><ul>${on.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${closed}<small>${small}</small></div>`;
+    <div class="gclevelnote"><p>${esc(on.blurb)}</p><ul>${on.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${expects}${closed}<small>${small}</small></div>`;
 }
 
 /** Claims and ambitions on the Powers screen: who claims what ground from whom, and how far it has gone. Claims on the player's ground come first. */

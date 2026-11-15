@@ -8,6 +8,7 @@
 
 import data from '../../data/campaign/history.json';
 import { hashString, Rng } from '../core/rng';
+import { turnToDate } from '../core/ticket';
 import type { Game } from './types';
 
 export interface Stop {
@@ -34,6 +35,8 @@ export const HISTORY = data as unknown as {
   start: number;
   stops: Stop[];
   dates: Record<string, Record<string, number>>;
+  /** The conditions that stand in for a dated choice's own while the book dates it. */
+  bookIf?: Record<string, string[] | string>;
   unhistoric: string[];
   joined: { axis: string[]; allies: string[] };
   theatre: Record<string, string>;
@@ -132,6 +135,12 @@ export function bookDate(g: Game, nat: string, opId: string): number | null {
   return date + (slack ? Math.floor(dialDraw(g, 'date', nat, opId) * (2 * slack + 1)) - slack : 0);
 }
 
+/** What a choice the book has dated waits on in place of its own conditions, where the book says so. */
+export function bookIf(nat: string, opId: string): string[] | null {
+  const c = HISTORY.bookIf?.[`${nat}:${opId}`];
+  return Array.isArray(c) ? c : null;
+}
+
 export function leash(g: Game, nat: string, opId: string): Leash {
   const S = stopDef(g);
   const un = HISTORY.unhistoric.includes(`${nat}:${opId}`);
@@ -163,8 +172,33 @@ export interface DialView {
   loosest: number; loosestName: string;
   /** Where the book has been closed, at a stop that keeps one: the theatre, the month and why. */
   closed: { theatre: string; name: string; turn: number }[];
+  /** What the book still expects, at a stop that keeps one: the theatre it would be closed in, by when, and in what case. */
+  expects: { theatre: string; name: string; turn: number; text: string }[];
   /** Why it cannot be turned now, or null. */
   locked: string | null;
+}
+
+/**
+ * What history's calendar still asks of the war, soonest first: each mark not yet passed in a theatre where the book
+ * is still open, in words. A player who means to keep to the book can read here what would close it.
+ */
+export function bookExpects(g: Game): DialView['expects'] {
+  const S = stopDef(g);
+  if (!S.book) return [];
+  const slack = S.slack ?? 0;
+  const out: DialView['expects'] = [];
+  HISTORY.marks.forEach((m, k) => {
+    const t = HISTORY.theatres[m.theatre];
+    if (!t || g.flags[`hist:off:${m.theatre}`]) return;
+    if (m.until !== undefined) {
+      const last = m.until - slack;
+      if (g.turn < last) out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why}: that is, before ${turnToDate(last).label}.` });
+    } else if (m.by !== undefined && !g.flags[`hist:mk:${k}`]) {
+      const last = m.by + slack;
+      out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why} when ${turnToDate(last).label} is over.` });
+    }
+  });
+  return out.sort((a, b) => a.turn - b.turn);
 }
 
 export function dialView(g: Game): DialView | null {
@@ -172,5 +206,5 @@ export function dialView(g: Game): DialView | null {
   const S = stopDef(g);
   const most = loosest(g);
   const closed = S.book ? Object.entries(HISTORY.theatres).filter(([id]) => bookClosed(g, id) > 0).map(([id, t]) => ({ theatre: id, name: t.name, turn: bookClosed(g, id) })) : [];
-  return { stop: S.stop, name: S.name, under: S.under, blurb: S.blurb, lines: S.lines, loosest: most, loosestName: stopByNumber(most)?.name ?? S.name, closed, locked: (g.flags.dom ?? 0) > 0 ? whyNotStop(g, S.stop) : null };
+  return { stop: S.stop, name: S.name, under: S.under, blurb: S.blurb, lines: S.lines, loosest: most, loosestName: stopByNumber(most)?.name ?? S.name, closed, expects: bookExpects(g), locked: (g.flags.dom ?? 0) > 0 ? whyNotStop(g, S.stop) : null };
 }
