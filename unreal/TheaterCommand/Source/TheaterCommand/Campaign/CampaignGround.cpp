@@ -256,7 +256,7 @@ namespace
 		static FVector2f Kept(-1.0f, -1.0f);
 		if (Kept.X < 0.0f)
 		{
-			Kept = FVector2f(0.9f, 0.5f);
+			Kept = FVector2f(0.76f, 0.3f);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterClearings="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -538,37 +538,41 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					const double Around = FMath::Fmod(FMath::Fmod(A * Pitch + Data.ShiftX, Data.WorldWidth) + Data.WorldWidth, Data.WorldWidth);
 					uint32 Seed = HashCombineFast(GetTypeHash(FMath::RoundToInt32(Around / Pitch * 16.0)), GetTypeHash(B * 7919 + 13));
 					auto Draw = [&Seed]() { Seed = Seed * 1664525u + 1013904223u; return static_cast<float>((Seed >> 8) & 0xFFFF) / 65535.0f; };
-					const float Luck = Draw(), Rx = Draw(), Ry = Draw(), Way = Draw(), Long = Draw(), Broad = Draw(), Bend = Draw();
-					const FVector2D Centre((A + 0.06 + 0.88 * Rx) * Pitch, (B + 0.06 + 0.88 * Ry) * Pitch);
-					const float Latitude = static_cast<float>(Data.LatitudeAt(Centre.Y)), Longitude = static_cast<float>(Data.LongitudeAt(Centre.X));
-					if (BeyondEurope(Latitude, Longitude) < 0.9f)
+					// (one lake to a square in the forest; as many as three pools to a square on the tundra, which is about a sixteenth water)
+					for (int32 Nth = 0; Nth < 3; ++Nth)
 					{
-						continue;
+						const float Luck = Draw(), Rx = Draw(), Ry = Draw(), Way = Draw(), Long = Draw(), Broad = Draw(), Bend = Draw();
+						const FVector2D Centre((A + 0.06 + 0.88 * Rx) * Pitch, (B + 0.06 + 0.88 * Ry) * Pitch);
+						const float Latitude = static_cast<float>(Data.LatitudeAt(Centre.Y)), Longitude = static_cast<float>(Data.LongitudeAt(Centre.X));
+						if (BeyondEurope(Latitude, Longitude) < 0.9f)
+						{
+							continue;
+						}
+						float Shares[WorldLook::Count];
+						Climate.SharesAt(Latitude, Longitude, Shares);
+						const float Taiga = Shares[WorldLook::Taiga], Tundra = Shares[WorldLook::Tundra];
+						const bool bPool = Tundra > Taiga;
+						if ((Nth > 0 && !bPool) || Luck > LakesFrom().X * FMath::SmoothStep(0.4f, 0.8f, Taiga) + LakesFrom().Y * FMath::SmoothStep(0.4f, 0.8f, Tundra))
+						{
+							continue;
+						}
+						// (on level ground, well inland, below the tree line)
+						const float Here = Terrain.MetresAt(Centre.X, Centre.Y);
+						const float Slope = FMath::Max(FMath::Abs(Terrain.MetresAt(Centre.X + 2.0, Centre.Y) - Terrain.MetresAt(Centre.X - 2.0, Centre.Y)),
+							FMath::Abs(Terrain.MetresAt(Centre.X, Centre.Y + 2.0) - Terrain.MetresAt(Centre.X, Centre.Y - 2.0)));
+						if (Here <= 2.0f || Slope > 45.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < 3.0f || (!bPool && Here > WorldTreeLine(Latitude) - 150.0f))
+						{
+							continue;
+						}
+						// (most are small; one in a few is a lake of some size)
+						const double Turned = Way * UE_DOUBLE_PI, HalfLong = bPool ? 0.5 + 1.0 * Long * Long : 0.7 + 2.6 * Long * Long;
+						const float HalfBroad = bPool ? 0.34f + 0.46f * Broad : 0.42f + 1.0f * Broad * Broad;
+						const FVector2D Dir(FMath::Cos(Turned), FMath::Sin(Turned)), Aside(-Dir.Y, Dir.X);
+						const FVector2D P0 = Centre - Dir * HalfLong, P1 = Centre - Dir * (0.42 * HalfLong) + Aside * ((Bend - 0.5) * 0.7 * HalfBroad), P2 = Centre + Dir * (0.4 * HalfLong) - Aside * ((Bend - 0.5) * 0.5 * HalfBroad), P3 = Centre + Dir * HalfLong;
+						Lay(P0, P1, 0.0f, HalfBroad * 0.9f, -1.0f, -1.0f);
+						Lay(P1, P2, HalfBroad * 0.9f, HalfBroad, -1.0f, -1.0f);
+						Lay(P2, P3, HalfBroad, 0.0f, -1.0f, -1.0f);
 					}
-					float Shares[WorldLook::Count];
-					Climate.SharesAt(Latitude, Longitude, Shares);
-					const float Taiga = Shares[WorldLook::Taiga], Tundra = Shares[WorldLook::Tundra];
-					if (Luck > LakesFrom().X * FMath::SmoothStep(0.4f, 0.8f, Taiga) + LakesFrom().Y * FMath::SmoothStep(0.4f, 0.8f, Tundra))
-					{
-						continue;
-					}
-					// (on level ground, well inland, below the tree line)
-					const float Here = Terrain.MetresAt(Centre.X, Centre.Y);
-					const float Slope = FMath::Max(FMath::Abs(Terrain.MetresAt(Centre.X + 2.0, Centre.Y) - Terrain.MetresAt(Centre.X - 2.0, Centre.Y)),
-						FMath::Abs(Terrain.MetresAt(Centre.X, Centre.Y + 2.0) - Terrain.MetresAt(Centre.X, Centre.Y - 2.0)));
-					if (Here <= 2.0f || Slope > 45.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < 3.0f || Here > WorldTreeLine(Latitude) - 150.0f)
-					{
-						continue;
-					}
-					const bool bPool = Tundra > Taiga;
-					// (most are small; one in a few is a lake of some size)
-					const double Turned = Way * UE_DOUBLE_PI, HalfLong = bPool ? 0.5 + 1.0 * Long * Long : 0.7 + 2.6 * Long * Long;
-					const float HalfBroad = bPool ? 0.34f + 0.46f * Broad : 0.42f + 1.0f * Broad * Broad;
-					const FVector2D Dir(FMath::Cos(Turned), FMath::Sin(Turned)), Aside(-Dir.Y, Dir.X);
-					const FVector2D P0 = Centre - Dir * HalfLong, P1 = Centre - Dir * (0.42 * HalfLong) + Aside * ((Bend - 0.5) * 0.7 * HalfBroad), P2 = Centre + Dir * (0.4 * HalfLong) - Aside * ((Bend - 0.5) * 0.5 * HalfBroad), P3 = Centre + Dir * HalfLong;
-					Lay(P0, P1, 0.0f, HalfBroad * 0.9f, -1.0f, -1.0f);
-					Lay(P1, P2, HalfBroad * 0.9f, HalfBroad, -1.0f, -1.0f);
-					Lay(P2, P3, HalfBroad, 0.0f, -1.0f, -1.0f);
 				}
 			}
 		}
@@ -624,7 +628,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						FSeen Ink = Blue;
 						float Bed = 0.1f;
 						// (the jungle's rivers are brown, with pale bars)
-						Ink = Mix(Ink, FSeen::Bytes(128, 110, 76), Jungle);
+						Ink = Mix(Ink, FSeen::Bytes(120, 110, 95), Jungle); // (laid cooler than it is to be seen: under the lamp it comes out at about (128, 110, 76))
 						Bed = FMath::Lerp(Bed, 0.4f, Jungle);
 						// (the savanna's are dry beds of sand; a great one keeps a stream down its middle)
 						Ink = Mix(Ink, FSeen::Bytes(104, 122, 112), Savanna);
@@ -650,11 +654,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					{
 						// (clearings of red earth: under a fiftieth of the jungle, and most of them on a river's bank)
 						const float Patch = FMath::PerlinNoise2D(P * 0.23 + FVector2D(17.0, 71.0)) + 0.5f * FMath::PerlinNoise2D(P * 0.61 + FVector2D(3.0, 29.0));
-						const float Bank = Half > 0.0f ? 1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off) : 0.0f;
+						// (not at a river's very head, where it is a thread: a clearing there was a red match-head on every source)
+						const float Bank = Half > 0.0f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.13f, 0.24f, Half) : 0.0f;
 						const float Clear = FMath::SmoothStep(0.0f, 0.1f, Patch - FMath::Lerp(ClearingFrom().X, ClearingFrom().Y, Bank)) * FMath::SmoothStep(0.55f, 0.8f, Jungle) * Out;
 						if (Clear > 0.0f)
 						{
-							C = Mix(C, FSeen::Bytes(152, 94, 64), Clear);
+							C = Mix(C, FSeen::Bytes(152, 97, 86), Clear); // (laid bluer than it is to be seen: the lamp brings it to about (152, 94, 64))
 							Opened[Idx] = FMath::Max(Opened[Idx], Clear);
 						}
 					}
