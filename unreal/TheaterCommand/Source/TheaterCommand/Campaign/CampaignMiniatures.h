@@ -83,7 +83,7 @@ struct FMiniatureMesh
 	 * turret roof. Curve wraps it round a surface that is rounded top to bottom, such as the side of a
 	 * fuselage: it is the radius of that roundness.
 	 */
-	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve = 0.0);
+	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve = 0.0, bool bMirror = false);
 
 	/**
 	 * Marks where a finished vehicle (built nose toward -X, in metres) is knocked about, for the pieces' material:
@@ -93,6 +93,8 @@ struct FMiniatureMesh
 	void MarkWear(bool bAll, double Roof = 0.0);
 	/** A number painted on a surface that faces the way given, as a marking is: plain white figures, read from outside. */
 	void Numerals(const FVector& Where, double High, int32 Number, const FVector& Facing);
+	/** A number painted with a brush, round where a figure is round: an aircraft's side number. */
+	void PaintedNumerals(const FVector& Where, double High, int32 Number, const FVector& Facing, const FLinearColor& Ink);
 	/** Copies a finished model into this mesh, at a place, to a size, turned. */
 	void Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn);
 

@@ -2404,7 +2404,7 @@ function warPlan(on: string, target = -1) {
 // ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
 
 interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string }
 interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */
@@ -2646,7 +2646,8 @@ function airfieldPage(s: Game, region: number): Page | null {
       buttons.push({ label: 'REST AND REFIT', act: `air:${f.id}:rest:-1`, ok: up && f.mission !== 'rest', tip: MISSION.rest.what });
       buttons.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${f.id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
     }
-    return { nat: f.nat, title: f.name, lines, buttons };
+    // (the group's own aircraft, large, beside its orders: the fighter, or the bomber where it is mostly bombers)
+    return { nat: f.nat, title: f.name, lines, buttons, picture: `${f.bmr > f.ftr ? 'air:bmr' : 'air:ftr'}:${f.nat}` };
   });
   return {
     id: 'airfield', title: `THE AIRFIELDS AT ${r.name.toUpperCase()}`,
@@ -3467,6 +3468,17 @@ function page(id: string, region = -1) {
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
     : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1])) : null;
+  // An air group's row carries a large picture of its own machine, wherever the row is of an air group by name:
+  // the fighter, or the bomber where the group is mostly bombers. (The fine model of an aircraft is seen here.)
+  if (p) {
+    for (const section of p.sections) {
+      for (const row of section.rows as PageRow[]) {
+        if (row.picture || !row.nat) continue;
+        const f = s.airFleets.find((x) => x.name === row.title && x.nat === row.nat);
+        if (f) row.picture = `${f.bmr > f.ftr ? 'air:bmr' : 'air:ftr'}:${f.nat}`;
+      }
+    }
+  }
   // (Version 66) A room that belongs to a desk the staff runs says so at its head, with the staff's line for the month
   // and a way to take the desk back; one the player runs offers, at its head, to hand it over.
   const desk = p ? deskOfPage(id) : null;

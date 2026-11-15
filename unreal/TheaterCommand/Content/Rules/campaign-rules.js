@@ -27663,7 +27663,7 @@
         buttons.push({ label: "REST AND REFIT", act: `air:${f.id}:rest:-1`, ok: up && f.mission !== "rest", tip: MISSION.rest.what });
         buttons.push({ label: "MOVE TO ANOTHER AIRFIELD", act: `open:rebase:${f.id}`, ok: up, tip: "Settling in costs it some readiness for a month." });
       }
-      return { nat: f.nat, title: f.name, lines, buttons };
+      return { nat: f.nat, title: f.name, lines, buttons, picture: `${f.bmr > f.ftr ? "air:bmr" : "air:ftr"}:${f.nat}` };
     });
     return {
       id: "airfield",
@@ -28539,6 +28539,15 @@ ${standing3}`,
     const s = game();
     const part = id.split(":");
     const p = id === "staff" ? staffPage(s) : id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
+    if (p) {
+      for (const section of p.sections) {
+        for (const row2 of section.rows) {
+          if (row2.picture || !row2.nat) continue;
+          const f = s.airFleets.find((x) => x.name === row2.title && x.nat === row2.nat);
+          if (f) row2.picture = `${f.bmr > f.ftr ? "air:bmr" : "air:ftr"}:${f.nat}`;
+        }
+      }
+    }
     const desk = p ? deskOfPage(id) : null;
     if (p && desk) {
       const bar = deskBar(s, desk);

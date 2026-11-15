@@ -4258,6 +4258,15 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		AirSignMesh->SetCastShadow(false);
 	}
 	AirSignMesh->ClearAllMeshSections();
+	for (UProceduralMeshComponent* Old : ParkedMeshes)
+	{
+		if (Old)
+		{
+			Old->DestroyComponent();
+		}
+	}
+	ParkedMeshes.Reset();
+	ParkedFields.Reset();
 	FMiniatureMesh Model;
 	const double Field = UnitScale * 2.1 * 1.3; // (the size the airfields in use are built to)
 	auto Ahead = [](double Turn, double Along, double Across) -> FVector
@@ -4281,6 +4290,14 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		// One small aircraft for each group, drawn up in a row on the grass on the side away from the hangars,
 		// their noses to the runway: silver, with wings and fin tipped in their country's colour.
 		const int32 Parked = FMath::Min(Each.Groups, 6);
+		// (These silver ones are what the table shows from working height and above. Close to, each field's aircraft
+		// are its country's own fighters: see ShowParkedPlanes.)
+		FParkedField& Kept = ParkedFields.AddDefaulted_GetRef();
+		Kept.Spot = *Spot;
+		Kept.Nation = Each.Nation;
+		Kept.Turn = Turn;
+		Kept.Wide = Wide;
+		Kept.Parked = Parked;
 		for (int32 K = 0; K < Parked; ++K)
 		{
 			const FVector Foot = At + Ahead(Turn, (K - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field) + FVector(0.0, 0.0, 0.085 * Field);
@@ -4300,6 +4317,79 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		AirSignMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
+void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus)
+{
+	// (The art director's ruling of round 21: a parked aircraft must be recognisably the one on its card, by its
+	// outline, its hood, its blades, its marking and its paint. Close to, each airfield in use shows its country's
+	// own fighter, its plainer model, standing on its wheels, in place of the silver box aircraft. Only close to,
+	// and only the fields near what the eye looks at: every field's aircraft drawn always took a fifth off the
+	// frame rate for something eight pixels long from working height. A field's aircraft are made the first time
+	// they are wanted.)
+	if (!AirSignMesh || ParkedFields.Num() == 0)
+	{
+		return;
+	}
+	const bool bClose = CameraDistance < (bParkedClose ? 3500.0f : 3200.0f);
+	if (bClose != bParkedClose)
+	{
+		bParkedClose = bClose;
+		AirSignMesh->SetVisibility(!bClose);
+	}
+	const FVector2D Eye = WorldToMap(CameraFocus);
+	const double Field = UnitScale * 2.1 * 1.3, Metre = 0.5 * Field / 9.0;
+	const FLinearColor Dural(FColor::FromHex(TEXT("B9BDB6"))), Tyre(FColor::FromHex(TEXT("2E2C2A")));
+	for (FParkedField& Each : ParkedFields)
+	{
+		const bool bShow = bClose && FVector2D::DistSquared(Eye, Each.Spot) < 240.0 * 240.0;
+		if (bShow == Each.bShown)
+		{
+			continue;
+		}
+		Each.bShown = bShow;
+		if (bShow && Each.Mesh == INDEX_NONE)
+		{
+			FMiniatureMesh Planes;
+			const FVector At = SurfacePoint(Each.Spot.X, Each.Spot.Y, 0.02);
+			auto Ahead = [](double Turn, double Along, double Across) -> FVector
+			{
+				const double R = FMath::DegreesToRadians(Turn);
+				return FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, 0.0);
+			};
+			const FString Fighter = FMiniatureMesh::MainFighterOf(Each.Nation);
+			const double Nose = Each.Turn + 90.0; // across the field, toward the runway
+			for (int32 K = 0; K < Each.Parked; ++K)
+			{
+				const FVector Foot = At + Ahead(Each.Turn, (K - (Each.Parked - 1) * 0.5) * 0.62 * Field, -(Each.Wide * 0.5 - 0.42) * Field) + FVector(0.0, 0.0, 0.085 * Field);
+				if (Planes.Vehicle(Fighter, Foot + FVector(0.0, 0.0, 1.35 * Metre), Metre, Nose + 180.0, false))
+				{
+					for (const double Side : { -1.0, 1.0 })
+					{
+						// (its main wheels, down on the grass under the wings, and their legs)
+						const FVector Wheel = Foot + Ahead(Nose, 0.7 * Metre, Side * 1.25 * Metre) + FVector(0.0, 0.0, 0.3 * Metre);
+						Planes.Box(Wheel, FVector(0.62, 0.2, 0.62) * Metre, Tyre, Nose);
+						Planes.Box(Wheel + FVector(0.0, 0.0, 0.45 * Metre), FVector(0.12, 0.12, 0.6) * Metre, Dural * 0.6f, Nose);
+					}
+				}
+			}
+			UProceduralMeshComponent* Made = NewObject<UProceduralMeshComponent>(this);
+			Made->SetupAttachment(Root);
+			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Made->RegisterComponent();
+			Made->SetCastShadow(false);
+			if (Planes.Vertices.Num() > 0)
+			{
+				Made->CreateMeshSection(0, Planes.Vertices, Planes.Triangles, Planes.Normals, TArray<FVector2D>(), Planes.Colors, TArray<FProcMeshTangent>(), false);
+				Made->SetMaterial(0, SceneryMaterial);
+			}
+			Each.Mesh = ParkedMeshes.Add(Made);
+		}
+		if (ParkedMeshes.IsValidIndex(Each.Mesh) && ParkedMeshes[Each.Mesh])
+		{
+			ParkedMeshes[Each.Mesh]->SetVisibility(bShow);
+		}
 	}
 }
 
@@ -5462,6 +5552,9 @@ void ACampaignMapActor::BuildParade()
 	{
 		Names = FMiniatureMesh::ShipNames(Navy);
 	}
+	// "-TheaterParadeTurn=180" turns every aircraft about, to show its other side (the wall hides it otherwise).
+	double ParadeTurn = 0.0;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterParadeTurn="), ParadeTurn);
 	// "-TheaterParadeScale=0.1" draws everything a tenth the size, for ships.
 	double Shrink = 1.0;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterParadeScale="), Shrink);
@@ -5528,7 +5621,7 @@ void ACampaignMapActor::BuildParade()
 			// An aircraft flies over the board on a stand, well out from the wall, with a man under its nose for scale.
 			const double Out = FMiniatureMesh::VehicleRoom(Names[K]) * 0.5 - 1.0;
 			const FVector Flying = Spot + FVector(0.0, -Out * Metre, Aloft * Metre);
-			Model.Vehicle(Names[K], Flying, Metre, 0.0);
+			Model.Vehicle(Names[K], Flying, Metre, ParadeTurn);
 			Model.Rod(Spot + FVector(0.0, -Out * Metre, 0.0), Flying, 0.08 * Metre, Ink, 6);
 			Model.Soldier(FMiniatureMesh::VehicleNation(Names[K]), Spot + FVector(-FMiniatureMesh::VehicleRoom(Names[K]) * 0.32 * Metre, -Out * Metre, 0.0), Metre, 60.0);
 			Write(FMiniatureMesh::VehicleTitle(Names[K]), Spot.X - Middle.X, 9.5, 0.9);
@@ -7517,7 +7610,11 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 			auto Half = [this](const FVector& Axis) { return FMath::Abs(StagedExtent.X * Axis.X) + FMath::Abs(StagedExtent.Y * Axis.Y) + FMath::Abs(StagedExtent.Z * Axis.Z); };
 			const double Wide = Half(Axes.GetUnitAxis(EAxis::Y)), High = Half(Axes.GetUnitAxis(EAxis::Z)), Deep = Half(Axes.GetUnitAxis(EAxis::X));
 			const double TanWide = FMath::Tan(FMath::DegreesToRadians(PortraitCamera->FOVAngle * 0.5)), TanHigh = TanWide * 336.0 / 552.0;
-			const double Back = FMath::Max(Wide / TanWide, High / TanHigh) * 1.1 + Deep * 0.5;
+			// (An aircraft is as deep as it is wide, and set back by half its depth it filled little more than half the
+			// picture. The art director's ruling of round 21: show the plane large. It is set back by a sixth.)
+			FString Kind = Model, Whose;
+			Model.Split(TEXT(":"), &Kind, &Whose);
+			const double Back = FMath::Max(Wide / TanWide, High / TanHigh) * 1.1 + Deep * (FMiniatureMesh::VehicleAloft(Kind) > 0.0 ? 0.16 : 0.5);
 			const FVector Middle = PortraitMesh->GetRelativeLocation(), Eye = Middle + From * Back;
 			PortraitCamera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 		}
@@ -8309,6 +8406,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			}
 		}
 	}
+	ShowParkedPlanes(CameraDistance, CameraFocus);
 	UpdateSinkings(); // (before the smoke, which reads how far each has gone)
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();

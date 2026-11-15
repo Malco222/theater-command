@@ -416,7 +416,7 @@ void FMiniatureMesh::Disc(const FVector& Center, const FVector& Facing, double R
 	}
 }
 
-void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve)
+void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve, bool bMirror)
 {
 	// Drawn lying flat, then stood up against the surface: its top toward the sky (or toward the front, on a roof).
 	FMiniatureMesh Flat;
@@ -425,7 +425,8 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 	// On a wall its top is toward the sky; on a roof or a wing (or under one) its top is toward the front.
 	const FVector Skyward = FMath::Abs(Out.Z) > 0.8 ? FVector(-1.0, 0.0, 0.0) : FVector::UpVector;
 	const FVector Top = (Skyward - Out * (Skyward | Out)).GetSafeNormal();
-	const FVector Side = Top ^ Out;
+	// (bMirror lays it the other way round: a fin flash on the far side of a fin, whose red must still lead)
+	const FVector Side = (Top ^ Out) * (bMirror ? -1.0 : 1.0);
 	const int32 First = Vertices.Num();
 	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
 	{
@@ -445,9 +446,10 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 		}
 		Colors.Add(Flat.Colors[K]);
 	}
-	for (const int32 Index : Flat.Triangles)
+	for (int32 K = 0; K + 2 < Flat.Triangles.Num(); K += 3)
 	{
-		Triangles.Add(First + Index);
+		// (turned the other way round, a triangle faces the other way: its corners are taken in the other order)
+		Triangles.Append({ First + Flat.Triangles[K], First + Flat.Triangles[K + (bMirror ? 2 : 1)], First + Flat.Triangles[K + (bMirror ? 1 : 2)] });
 	}
 }
 
@@ -524,6 +526,82 @@ void FMiniatureMesh::Numerals(const FVector& Where, double High, int32 Number, c
 	}
 }
 
+void FMiniatureMesh::PaintedNumerals(const FVector& Where, double High, int32 Number, const FVector& Facing, const FLinearColor& Ink)
+{
+	// (The art director's round 21: the box figures of a tank's stencil did not read on an aircraft, where a 2 and a
+	// 12 were taken for marks. These are a signwriter's figures, round where a figure is round: each is one or two
+	// strokes of the brush, drawn as lines and arcs in a box 0.6 wide and 1 high and laid as a ribbon of even width.)
+	const FString Text = FString::FromInt(FMath::Abs(Number));
+	const double Wide = 0.6, Gap = 0.2, Thick = 0.075, All = Text.Len() * Wide + (Text.Len() - 1) * Gap;
+	const FColor Paint = Ink.ToFColor(true);
+	FMiniatureMesh Flat;
+	auto Ribbon = [&](const TArray<FVector2D>& Path, double X)
+	{
+		// (a point of a figure, in the sheet's own measure: the reader's right is +Y, up is -X)
+		auto At = [&](const FVector2D& P) { return FVector(-(P.Y - 0.5) * High, (X + P.X - All * 0.5) * High, High * 0.02); };
+		TArray<FVector> Left, Right;
+		for (int32 K = 0; K < Path.Num(); ++K)
+		{
+			const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[FMath::Max(K - 1, 0)]).GetSafeNormal();
+			const FVector2D Across(-Along.Y, Along.X);
+			Left.Add(At(Path[K] + Across * Thick));
+			Right.Add(At(Path[K] - Across * Thick));
+		}
+		for (int32 K = 0; K + 1 < Path.Num(); ++K)
+		{
+			Flat.Quad(Left[K], Right[K], Right[K + 1], Left[K + 1], FVector::UpVector, Paint);
+		}
+	};
+	auto Arc = [](TArray<FVector2D>& Path, double CX, double CY, double RX, double RY, double From, double To)
+	{
+		const int32 Steps = FMath::Max(4, FMath::CeilToInt32(FMath::Abs(To - From) / 18.0));
+		for (int32 K = 0; K <= Steps; ++K)
+		{
+			const double A = FMath::DegreesToRadians(FMath::Lerp(From, To, static_cast<double>(K) / Steps));
+			Path.Add(FVector2D(CX + FMath::Cos(A) * RX, CY + FMath::Sin(A) * RY));
+		}
+	};
+	for (int32 K = 0; K < Text.Len(); ++K)
+	{
+		const double X = K * (Wide + Gap);
+		TArray<FVector2D> One, Two;
+		switch (FMath::Clamp(static_cast<int32>(Text[K] - TEXT('0')), 0, 9))
+		{
+		case 0: Arc(One, 0.3, 0.5, 0.24, 0.43, 0.0, 360.0); break;
+		case 1: One = { FVector2D(0.14, 0.76), FVector2D(0.34, 0.93), FVector2D(0.34, 0.07) }; break;
+		case 2: Arc(One, 0.3, 0.7, 0.23, 0.23, 165.0, -45.0); One.Add(FVector2D(0.07, 0.07)); One.Add(FVector2D(0.55, 0.07)); break;
+		case 3: Arc(One, 0.28, 0.72, 0.22, 0.21, 150.0, -90.0); Arc(Two, 0.28, 0.29, 0.25, 0.22, 90.0, -150.0); break;
+		case 4: One = { FVector2D(0.43, 0.07), FVector2D(0.43, 0.93), FVector2D(0.05, 0.34), FVector2D(0.57, 0.34) }; break;
+		case 5: One = { FVector2D(0.52, 0.93), FVector2D(0.14, 0.93), FVector2D(0.1, 0.56) }; Arc(One, 0.28, 0.33, 0.26, 0.26, 120.0, -150.0); break;
+		case 6: Arc(One, 0.6, 0.31, 0.54, 0.64, 100.0, 180.0); Arc(Two, 0.3, 0.31, 0.24, 0.24, 180.0, -180.0); break;
+		case 7: One = { FVector2D(0.06, 0.93), FVector2D(0.55, 0.93), FVector2D(0.24, 0.07) }; break;
+		case 8: Arc(One, 0.3, 0.72, 0.2, 0.21, 0.0, 360.0); Arc(Two, 0.3, 0.29, 0.24, 0.22, 0.0, 360.0); break;
+		default: Arc(One, 0.3, 0.69, 0.24, 0.24, 0.0, 360.0); Arc(Two, 0.0, 0.69, 0.54, 0.64, 0.0, -80.0); break;
+		}
+		Ribbon(One, X);
+		if (Two.Num() > 1)
+		{
+			Ribbon(Two, X);
+		}
+	}
+	const FVector Out = Facing.GetSafeNormal();
+	const FVector Skyward = FMath::Abs(Out.Z) > 0.8 ? FVector(-1.0, 0.0, 0.0) : FVector::UpVector;
+	const FVector Top = (Skyward - Out * (Skyward | Out)).GetSafeNormal();
+	const FVector Side = Out ^ Top; // (to the reader's right, for one who stands outside and faces the surface)
+	const int32 First = Vertices.Num();
+	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
+	{
+		const FVector V = Flat.Vertices[K];
+		Vertices.Add(Where + Top * -V.X + Side * V.Y + Out * V.Z);
+		Normals.Add(Out);
+		Colors.Add(Flat.Colors[K]);
+	}
+	for (int32 K = 0; K + 2 < Flat.Triangles.Num(); K += 3)
+	{
+		Triangles.Append({ First + Flat.Triangles[K], First + Flat.Triangles[K + 1], First + Flat.Triangles[K + 2], First + Flat.Triangles[K], First + Flat.Triangles[K + 2], First + Flat.Triangles[K + 1] });
+	}
+}
+
 bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
@@ -549,7 +627,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
 		bool bAircraft = false, bNationPaint = false;
 		TArray<FLinearColor> PaintColours;
-		TArray<int32> Wear;
+		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
+		FLinearColor NumberInk = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))); // what the side number is painted in: dark on a pale machine
 		struct FMark
 		{
 			FString Tag;
@@ -633,6 +712,26 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 							Raw->Wear.Add(static_cast<int32>(Value->AsNumber()));
 						}
 					}
+					const TArray<TSharedPtr<FJsonValue>> *BlendList = nullptr, *SootList = nullptr;
+					if ((*Part)->TryGetArrayField(TEXT("blend"), BlendList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *BlendList)
+						{
+							Raw->Blend.Add(static_cast<int32>(Value->AsNumber()));
+						}
+					}
+					if ((*Part)->TryGetArrayField(TEXT("soot"), SootList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *SootList)
+						{
+							Raw->Soot.Add(static_cast<int32>(Value->AsNumber()));
+						}
+					}
+					FString Ink;
+					if (File->TryGetStringField(TEXT("number_ink"), Ink))
+					{
+						Raw->NumberInk = FLinearColor(FColor::FromHex(Ink));
+					}
 					if (File->TryGetArrayField(TEXT("marks"), MarkList))
 					{
 						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
@@ -700,15 +799,27 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			}
 		}
 		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
-		static const bool bPlaneMetal[17] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false };
+		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
 			if (Raw->bAircraft && PlanePaints.Num() > 0)
 			{
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, PlanePaints.Num() - 1);
 				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
-				Fresh.Finish = Kind < 17 && bPlaneMetal[Kind] ? static_cast<uint8>(128 - Worn) : 255;
-				Fresh.Add(Raw->Points[K], Raw->Facings[K], PlanePaints[Kind].ToFColor(true));
+				Fresh.Finish = Kind < 18 && bPlaneMetal[Kind] ? static_cast<uint8>(128 - Worn) : 255;
+				// (The art director's round 21: a camouflage's edge was a staircase and an exhaust's stain a hard spike. A
+				// point of the upper surfaces says how far it is into the second colour, and any point how sooted it is:
+				// mixed here point by point, the patches have a smooth soft edge and the stain feathers away.)
+				FLinearColor Shade = PlanePaints[Kind];
+				if (Kind == 0 && PlanePaints.Num() > 1 && Raw->Blend.IsValidIndex(K) && Raw->Blend[K] > 0)
+				{
+					Shade = FMath::Lerp(PlanePaints[0], PlanePaints[1], FMath::Min(Raw->Blend[K], 100) / 100.0f);
+				}
+				if (PlanePaints.Num() > 11 && Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 0)
+				{
+					Shade = FMath::Lerp(Shade, PlanePaints[11], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Shade.ToFColor(true));
 				continue;
 			}
 			if (bFigure)
@@ -747,11 +858,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.Numerals(At, Mark.Radius, Number, Facing);
+						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, Raw->NumberInk);
 					}
 					else
 					{
-						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve);
+						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve, Hand < 0.0 && What.EndsWith(TEXT("-FIN")));
 					}
 				}
 			}

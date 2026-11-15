@@ -4057,6 +4057,23 @@ namespace
 						];
 					}
 					Row->AddSlot().FillWidth(1.0f)[Words];
+					if (!Entry.Picture.IsEmpty())
+					{
+						// (The art director's ruling of round 21: the fine model of an aircraft earns its keep where the
+						// player reads about it, so an air group's row carries its machine large and well lit, in the
+						// studio's own light: the fighter, or the bomber where the group is mostly bombers.)
+						TArray<FString> Parts;
+						Entry.Picture.ParseIntoArray(Parts, TEXT(":"));
+						const FString Model = Parts.Num() >= 3 && Parts[0] == TEXT("air") ? (Parts[1] == TEXT("bmr") ? FMiniatureMesh::MainBomberOf(Parts[2]) : FMiniatureMesh::MainFighterOf(Parts[2])) : FString();
+						const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : PortraitOf(Model, true);
+						if (Plate.IsValid())
+						{
+							Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(290.0f).HeightOverride(176.0f)[SNew(SImage).Image(Plate.Get())]
+							];
+						}
+					}
 					PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
 					[
 						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(12.0f, 8.0f, 12.0f, 9.0f))[Row]

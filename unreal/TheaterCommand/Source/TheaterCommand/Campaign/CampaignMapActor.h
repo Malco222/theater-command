@@ -760,6 +760,20 @@ private:
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	TMap<int32, FVector2D> AirfieldLie; // and how it lies: X the way it is turned (degrees), Y its size (1 to 4)
 	FString ShownAirSigns; // what the aircraft parked on the airfields were last built from
+	/** An airfield in use, for the aircraft parked on it close to: where it is, whose, how it lies, how many stand there, and its mesh once made. */
+	struct FParkedField
+	{
+		FVector2D Spot = FVector2D::ZeroVector;
+		FString Nation;
+		double Turn = 0.0, Wide = 1.5;
+		int32 Parked = 0, Mesh = INDEX_NONE;
+		bool bShown = false;
+	};
+	TArray<FParkedField> ParkedFields;
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> ParkedMeshes;
+	bool bParkedClose = false;
+	void ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> AirSignMesh; // aircraft parked on the airfields that have air groups based there
 	FLandFeatures Land;

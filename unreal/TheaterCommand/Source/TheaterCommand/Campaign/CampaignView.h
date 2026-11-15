@@ -279,6 +279,7 @@ struct FPageRow
 	TArray<FString> Lines;
 	TArray<FPageButton> Buttons;
 	float Meter = -1.0f; // (rules version 71) a bar under the lines, 0 to 1: how far a test is met. None when less than nothing.
+	FString Picture; // what to show a large picture of beside the row, if anything: "air:ftr:GER" is Germany's fighter, "air:bmr:UK" Britain's bomber
 };
 
 struct FPageSection
