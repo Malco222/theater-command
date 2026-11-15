@@ -1847,5 +1847,6 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
 .nat.claim .tag { white-space: nowrap; }
 @media (max-width: 640px) {
   .dialends { font-size: 10px; }
+  .gclevels.dial .gclevel > .dialmark { display: inline-flex; gap: 3px; }
   .rank .rdial { display: none; }
 }
