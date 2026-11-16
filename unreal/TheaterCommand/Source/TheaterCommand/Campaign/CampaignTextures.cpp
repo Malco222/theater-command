@@ -384,6 +384,83 @@ void CampaignTextures::MakeGroundBumps(TArray<FColor>& OutPixels)
 	}
 }
 
+void CampaignTextures::MakeWaves(TArray<FColor>& OutPixels)
+{
+	// A field of waves is several trains of them laid over one another, all running nearly the same way: where
+	// they agree a crest stands, and where they disagree it dies, so that crests are short and broken and no ridge
+	// runs across the sea. Each train fits the picture a whole number of times each way, so the picture repeats.
+	struct FWaveTrain
+	{
+		int32 Lengthwise, Crosswise;
+		float Phase, Height;
+	};
+	FRandomStream Dice(1947);
+	auto Field = [&Dice](std::initializer_list<FIntPoint> Fits, TArray<float>& Out)
+	{
+		TArray<FWaveTrain> Trains;
+		for (const FIntPoint& Fit : Fits)
+		{
+			Trains.Add({ Fit.X, Fit.Y, Dice.FRandRange(0.0f, UE_TWO_PI), Dice.FRandRange(0.7f, 1.0f) });
+		}
+		Out.SetNumUninitialized(Size * Size);
+		double Squares = 0.0;
+		for (int32 J = 0; J < Size; ++J)
+		{
+			for (int32 I = 0; I < Size; ++I)
+			{
+				const float U = (I + 0.5f) / Size, V = (J + 0.5f) / Size;
+				float Sum = 0.0f;
+				for (const FWaveTrain& Train : Trains)
+				{
+					Sum += Train.Height * FMath::Sin(UE_TWO_PI * (Train.Lengthwise * U + Train.Crosswise * V) + Train.Phase);
+				}
+				Out[J * Size + I] = Sum;
+				Squares += Sum * Sum;
+			}
+		}
+		// (its usual height is about a third of the most the picture can hold)
+		const float Usual = FMath::Max(static_cast<float>(FMath::Sqrt(Squares / (Size * Size))), 0.0001f);
+		for (float& Each : Out)
+		{
+			Each = FMath::Clamp(Each / Usual * 0.35f, -1.0f, 1.0f);
+		}
+	};
+	TArray<float> Swell, Chop;
+	Field({ FIntPoint(6, 0), FIntPoint(5, 2), FIntPoint(7, -2), FIntPoint(6, 3), FIntPoint(5, -3), FIntPoint(7, 1), FIntPoint(4, -1) }, Swell);
+	Field({ FIntPoint(12, 0), FIntPoint(11, 4), FIntPoint(13, -4), FIntPoint(12, 6), FIntPoint(10, -5), FIntPoint(14, 2), FIntPoint(9, -2), FIntPoint(13, 5) }, Chop);
+	// The flecks: soft round spots scattered over the picture, covering about a fifth of it.
+	TArray<float> Flecks;
+	Flecks.Init(0.0f, Size * Size);
+	for (int32 Fleck = 0; Fleck < 290; ++Fleck)
+	{
+		const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Reach = Dice.FRandRange(5.0f, 11.0f);
+		const int32 Box = FMath::CeilToInt32(Reach);
+		for (int32 DJ = -Box; DJ <= Box; ++DJ)
+		{
+			for (int32 DI = -Box; DI <= Box; ++DI)
+			{
+				const int32 I = FMath::FloorToInt32(AtX) + DI, J = FMath::FloorToInt32(AtY) + DJ;
+				const float Off = FMath::Sqrt(FMath::Square(I + 0.5f - AtX) + FMath::Square(J + 0.5f - AtY)) / Reach;
+				if (Off < 1.0f)
+				{
+					float& Here = Flecks[((J % Size + Size) % Size) * Size + (I % Size + Size) % Size];
+					Here = FMath::Max(Here, FMath::Square(1.0f - Off * Off));
+				}
+			}
+		}
+	}
+	OutPixels.SetNumUninitialized(Size * Size);
+	for (int32 J = 0; J < Size; ++J)
+	{
+		for (int32 I = 0; I < Size; ++I)
+		{
+			const int32 Index = J * Size + I;
+			const float Slow = Layered((I + 0.5f) / Size, (J + 0.5f) / Size, 3, 3, 71u) * 0.5f + 0.5f;
+			OutPixels[Index] = FColor(ToByte(Swell[Index] * 0.5f + 0.5f), ToByte(Chop[Index] * 0.5f + 0.5f), ToByte(Flecks[Index]), ToByte(Slow));
+		}
+	}
+}
+
 void CampaignTextures::MakeWaterBumps(TArray<FColor>& OutPixels)
 {
 	TArray<float> First, Second;

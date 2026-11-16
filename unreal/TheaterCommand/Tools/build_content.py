@@ -880,6 +880,32 @@ def build_land():
     # their pale ribbon, which is the accepted look.)
     lesser = one_in(m, unreal.MaterialExpressionOneMinus, sat(times(m, plus(m, half, -0.3, 300, 3400), 2.5, 400, 3400), 500, 3400), 600, 3400)
     water_colour = lerp(m, water_colour, c, times(m, times(m, scalar(m, "WetMoon", 0.0, 300, 3500), scalar(m, "WetNightGround", 0.6, 300, 3580), 450, 3540), lesser, 600, 3500), 700, 3150)
+    # THE MOVING WATERS of the land's own paint (the moving-water brief, section 5). A lake takes the sea's recipe at
+    # about 0.55 of the strength and 0.75 of the size: one swell and one chop from the game's picture of the waves,
+    # sliding downwind. A painted river takes only a faint slide of the same. ("WatersMove" is the game's: half by
+    # night, nothing from high up, nothing on the paper.)
+    import math
+    wet_place = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, -3600, 3700), -3400, 3700, r=True, g=True, b=False, a=False)
+    wet_wind = math.atan2(0.9, 0.25)
+
+    def wet_slide(angle, length, speed, x, y):
+        a = wet_wind + math.radians(angle)
+        u = node(m, unreal.MaterialExpressionDotProduct, x, y)
+        connect(wet_place, "", u, "A")
+        connect(node(m, unreal.MaterialExpressionConstant2Vector, x - 220, y + 80, r=math.cos(a) / length, g=math.sin(a) / length), "", u, "B")
+        v = node(m, unreal.MaterialExpressionDotProduct, x, y + 180)
+        connect(wet_place, "", v, "A")
+        connect(node(m, unreal.MaterialExpressionConstant2Vector, x - 220, y + 260, r=-math.sin(a) / length, g=math.cos(a) / length), "", v, "B")
+        going = node(m, unreal.MaterialExpressionPanner, x + 440, y, speed_x=-speed / length, speed_y=0.0)
+        connect(pair(m, u, v, x + 220, y), "", going, "Coordinate")
+        return going
+
+    wet_wave = plus(m, plus(m, times(m, (picture(m, "Waves", wet_slide(0.0, 198.0, 7.5, -3000, 3700), -2200, 3700, numbers=True), "R"), 1.3, -1900, 3700),
+                            times(m, (picture(m, "Waves", wet_slide(25.0, 144.0, 3.75, -3000, 4150), -2200, 4150, numbers=True), "G"), 0.55, -1900, 4150), -1700, 3900), -0.925, -1550, 3900)
+    wet_heave = plus(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, wet_wave, 1.7, -1400, 3850), -0.3, -1250, 3850), -1100, 3850), 0.34, -950, 3850),
+                     times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, wet_wave, -1.2, -1400, 4000), -1100, 4000), -0.13, -950, 4000), -800, 3900)
+    wet_moved = times(m, times(m, wet_heave, lerp(m, 0.2, 0.55, broadly, -800, 4100), -650, 3950), scalar(m, "WatersMove", 1.0, -800, 4250), -500, 3950)
+    water_colour = times(m, water_colour, plus(m, wet_moved, 1.0, -350, 3950), 850, 3200)
     c = lerp(m, c, water_colour, river, -950, -400)
     waters = river
     wetness = times(m, river, one_in(m, unreal.MaterialExpressionOneMinus, bed, 550, 3250), 700, 3250)
@@ -999,18 +1025,16 @@ def build_land():
 
 def build_sea():
     """The sea: its colour from a picture the game paints (pale over the shoals, dark over the deeps), glossy
-    like poured resin, with two sets of small ripples sliding across each other so that the lamp glints and moves on it."""
+    like poured resin, with two sets of small ripples sliding across each other so that the lamp glints and moves on it;
+    and over that paint a swell, a chop, glints and a wash of foam that move (the moving sea, below)."""
     m = new_material("M_Sea")
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1800, 0)
     water = picture(m, "Water", uv, -1400, 0)
     # A thin white line of surf just off every shore: the picture's alpha is how far offshore a point is (1 at six
     # map units), and the surf lies between about a tenth of a unit and two thirds of one.
-    rising = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), 40.0, -1150, -260), -0.48, -1000, -260), -850, -260)
-    falling = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), -16.0, -1150, -140), 1.76, -1000, -140), -850, -140)
     # (how strong it is on each stretch of shore is in a second picture: it comes and goes, and is strongest where
     # the open ocean runs in)
     shore = picture(m, "Shore", uv, -1400, -500, numbers=True)
-    surf = times(m, times(m, times(m, rising, falling, -700, -200), scalar(m, "Surf", 0.45, -850, -60), -550, -200), (shore, "R"), -400, -250)
     # The hour's grading of the water, all of it nothing by day: by moonlight the game greys it (lit by a blue moon,
     # blue water goes cobalt), tints it and lifts the deeps a little.
     weights = node(m, unreal.MaterialExpressionConstant3Vector, -1250, -760, constant=unreal.LinearColor(0.3, 0.59, 0.11, 0.0))
@@ -1019,7 +1043,95 @@ def build_sea():
     connect(weights, "", brightness, "B")
     greyed = lerp(m, (water, "RGB"), brightness, scalar(m, "Grey", 0.0, -1100, -880), -950, -760)
     graded = plus(m, times(m, greyed, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -950, -960), -800, -760), vector(m, "Lift", (0.0, 0.0, 0.0, 1.0), -800, -960), -650, -760)
-    colour = lerp(m, graded, vector(m, "SurfColour", (0.86, 0.9, 0.86, 1.0), -850, -400), surf, -400, -100)
+    # THE MOVING SEA (Brian, 16 November 2026: "can we make the ocean and water ripple and move so its not stagment?";
+    # the art director's moving-water brief). The chart stays the chart: the colours and the depths he reads stay
+    # where they are, and the surface moves. Four thin layers, all from one picture the game makes ("Waves": red a
+    # swell's heights, green a chop's, blue scattered flecks, alpha a slow unevenness), read several times at
+    # different headings, sizes and speeds, so that nothing is seen to slide or to repeat. Measures are the table's
+    # own units: at playing height a pixel is about a unit and a half.
+    import math
+    SAT, INV, SUB = unreal.MaterialExpressionSaturate, unreal.MaterialExpressionOneMinus, unreal.MaterialExpressionSubtract
+    position = node(m, unreal.MaterialExpressionWorldPosition, -3600, 1400)
+    flat = node_from(m, unreal.MaterialExpressionComponentMask, position, -3400, 1400, r=True, g=True, b=False, a=False)
+    wind = math.degrees(math.atan2(0.9, 0.25))  # (the way the flags fly and the smoke leans)
+    offshore = (water, "A")  # (how far offshore: 1 at six map units, which are sixty of the table's)
+
+    def along(angle, length, speed, x, y):
+        """Where to read the picture so that it lies along a heading (degrees off the wind), one turn of it every
+        `length` units, and slides that way at `speed` units a second."""
+        a = math.radians(wind + angle)
+        u = node(m, unreal.MaterialExpressionDotProduct, x, y)
+        connect(flat, "", u, "A")
+        connect(node(m, unreal.MaterialExpressionConstant2Vector, x - 220, y + 80, r=math.cos(a) / length, g=math.sin(a) / length), "", u, "B")
+        v = node(m, unreal.MaterialExpressionDotProduct, x, y + 180)
+        connect(flat, "", v, "A")
+        connect(node(m, unreal.MaterialExpressionConstant2Vector, x - 220, y + 260, r=-math.sin(a) / length, g=math.cos(a) / length), "", v, "B")
+        slide = node(m, unreal.MaterialExpressionPanner, x + 440, y, speed_x=-speed / length, speed_y=0.0)
+        connect(pair(m, u, v, x + 220, y), "", slide, "Coordinate")
+        return slide
+
+    def waves(uv, x, y):
+        return picture(m, "Waves", uv, x, y, numbers=True)
+
+    def less(a, b, x, y):
+        n = node(m, SUB, x, y)
+        connect(*(a if isinstance(a, tuple) else (a, "")), n, "A")
+        connect(*(b if isinstance(b, tuple) else (b, "")), n, "B")
+        return n
+
+    # 1. The swell and the chop: two fields that travel downwind, each read twice so that its crests are short and
+    # broken and never ridges. The long swell is about 30 px from crest to crest and moves 5 to 10 px a second; the
+    # chop about 11 px, 2 to 5 px a second, heading some 25 degrees off the swell.
+    swell = plus(m, plus(m, (waves(along(0.0, 264.0, 10.0, -2800, 1400), -2000, 1400), "R"), (waves(along(12.0, 330.0, 7.5, -2800, 1850), -2000, 1850), "R"), -1700, 1600), -1.0, -1550, 1600)
+    chop = plus(m, plus(m, (waves(along(25.0, 192.0, 5.0, -2800, 2300), -2000, 2300), "G"), (waves(along(7.0, 150.0, 3.5, -2800, 2750), -2000, 2750), "G"), -1700, 2500), -1.0, -1550, 2500)
+    wave = plus(m, times(m, swell, scalar(m, "Swell", 1.3, -1550, 1750), -1350, 1600), times(m, chop, scalar(m, "Chop", 0.55, -1550, 2650), -1350, 2500), -1150, 2000)
+    crest = one_in(m, SAT, plus(m, times(m, wave, 1.7, -1000, 1900), -0.42, -850, 1900), -700, 1900)
+    trough = one_in(m, SAT, times(m, wave, -1.2, -1000, 2100), -700, 2100)
+    # (the crests' light fades toward the shore, to about a third of its strength at the land)
+    from_shore = lerp(m, 0.33, 1.0, one_in(m, SAT, times(m, offshore, 1.0 / 0.63, -1000, 2300), -850, 2300), -700, 2300)
+    heave = times(m, plus(m, times(m, crest, scalar(m, "Crest", 0.34, -700, 1750), -500, 1900), times(m, trough, scalar(m, "Trough", -0.13, -700, 2200), -500, 2100), -350, 2000), from_shore, -200, 2000)
+    # 2. The shallows flicker: within about 30 px of land a finer chop crosses the first. A flicker, never a net of lines.
+    fine = plus(m, times(m, (waves(along(-40.0, 104.0, 4.0, -2800, 3200), -2000, 3200), "G"), 2.0, -1700, 3200), -1.0, -1550, 3200)
+    shelf = one_in(m, INV, one_in(m, SAT, times(m, offshore, 1.0 / 0.73, -1400, 3400), -1250, 3400), -1100, 3400)
+    flicker = times(m, times(m, plus(m, times(m, one_in(m, SAT, plus(m, times(m, fine, 1.5, -1400, 3100), -0.1, -1250, 3100), -1100, 3100), 0.3, -950, 3100),
+                                     times(m, one_in(m, SAT, times(m, fine, -1.0, -1400, 3250), -1100, 3250), -0.17, -950, 3250), -800, 3150), shelf, -650, 3200),
+                    scalar(m, "Shallows", 1.0, -800, 3400), -500, 3200)
+    moving = times(m, graded, plus(m, plus(m, heave, flicker, -50, 2400), 1.0, 100, 2400), 250, 1200)
+    # 3. Glints: tiny pale flecks that sit only on the chop's crests, where two scatterings of flecks cross (so a
+    # spot of water stays lit for about a quarter of a second, and the band twinkles). Thick in one broad band, whose
+    # heart the game moves with the eye, and thin everywhere else; they thin out toward the land.
+    flecks = times(m, (waves(along(25.0, 96.0, 5.0, -2800, 3700), -2000, 3700), "B"), (waves(along(120.0, 77.0, 7.0, -2800, 4150), -2000, 4150), "B"), -1700, 3900)
+    lit = one_in(m, SAT, plus(m, times(m, flecks, 7.0, -1550, 3900), -0.55, -1400, 3900), -1250, 3900)
+    on_crests = one_in(m, SAT, plus(m, times(m, chop, 3.0, -1550, 4100), 0.25, -1400, 4100), -1250, 4100)
+    heart = vector(m, "GlintAt", (0.0, 0.0, 0.000006, 0.0), -1900, 4500)  # (where the band's heart lies on the table, and one over its reach squared)
+    away = less(flat, node_from(m, unreal.MaterialExpressionComponentMask, heart, -1700, 4500, r=True, g=True, b=False, a=False), -1500, 4500)
+    far = node(m, unreal.MaterialExpressionDotProduct, -1350, 4500)
+    connect(away, "", far, "A")
+    connect(away, "", far, "B")
+    band = lerp(m, scalar(m, "GlintElsewhere", 0.1, -1200, 4650), 1.0, one_in(m, SAT, one_in(m, INV, times(m, far, (heart, "B"), -1200, 4500), -1050, 4500), -900, 4500), -750, 4500)
+    glint = times(m, times(m, times(m, times(m, lit, on_crests, -1100, 4000), band, -950, 4000), one_in(m, SAT, times(m, offshore, 1.0 / 0.24, -1100, 4250), -950, 4250), -800, 4000),
+                  scalar(m, "Glints", 1.0, -950, 4350), -650, 4000)
+    glinting = lerp(m, moving, vector(m, "GlintColour", (0.68, 0.83, 0.96, 1.0), 100, 1450), glint, 400, 1200)
+    # 4. Foam at the shore: a pale line that hugs the land, about 3 px wide at full strength and gone by about 8 px
+    # out. It breathes: every three seconds the wash comes in and ebbs, each stretch of coast at its own moment (the
+    # slow unevenness sets the moment), and a second, broken, fainter line rolls in from about 13 px out with each
+    # wash. It never goes white.
+    slow = waves(times(m, flat, 1.0 / 700.0, -2800, 5000), -2000, 5000)
+    phase = plus(m, times(m, node(m, unreal.MaterialExpressionTime, -2000, 5300), 1.0 / 3.0, -1800, 5300), times(m, (slow, "A"), 2.5, -1800, 5100), -1600, 5200)
+    wash = plus(m, times(m, one_in(m, unreal.MaterialExpressionSine, phase, -1450, 5200), 0.5, -1300, 5200), 0.5, -1150, 5200)
+    inner = lerp(m, 0.02, 0.05, wash, -1000, 5100)
+    outer = lerp(m, 0.075, 0.15, wash, -1000, 5300)
+    reach = node(m, unreal.MaterialExpressionDivide, -700, 5200)
+    connect(less(outer, offshore, -850, 5300), "", reach, "A")
+    connect(less(outer, inner, -850, 5100), "", reach, "B")
+    line = one_in(m, SAT, reach, -550, 5200)
+    strength = times(m, times(m, times(m, lerp(m, 0.72, 1.28, wash, -1000, 5500), scalar(m, "Surf", 0.45, -1000, 5650), -850, 5550), 1.35, -700, 5550), lerp(m, 0.6, 1.0, (shore, "R"), -850, 5750), -550, 5600)
+    roll = one_in(m, unreal.MaterialExpressionFrac, plus(m, phase, 0.75, -1450, 5900), -1300, 5900)
+    near = one_in(m, SAT, one_in(m, INV, times(m, one_in(m, unreal.MaterialExpressionAbs, less(offshore, lerp(m, 0.32, 0.08, roll, -1150, 5900), -1000, 5900), -850, 5900), 1.0 / 0.035, -700, 5900), -550, 5900), -400, 5900)
+    rolling = times(m, times(m, times(m, near, one_in(m, SAT, plus(m, times(m, chop, 2.0, -700, 6100), 0.3, -550, 6100), -400, 6100), -250, 6000),
+                             node_from(m, unreal.MaterialExpressionSine, roll, -400, 6250, period=2.0), -100, 6000), 0.2, 50, 6000)
+    foam = one_in(m, SAT, times(m, plus(m, line, rolling, 200, 5600), strength, 350, 5600), 500, 5600)
+    colour = lerp(m, glinting, vector(m, "SurfColour", (0.54, 0.78, 0.86, 1.0), 400, 1450), foam, 700, 1200)
     # The staff map (art fix 11): from the top of the zoom the sea is pale blue-grey paper, a little darker over the
     # deeps, with the coast drawn in ink and a second line ruled round it a little way out, as a chart has.
     paper = scalar(m, "Paper", 0.0, 0, -900)

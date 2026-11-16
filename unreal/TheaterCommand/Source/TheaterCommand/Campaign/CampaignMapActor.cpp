@@ -1346,6 +1346,40 @@ void ACampaignMapActor::SeaScalar(FName Name, float Value)
 	for (const auto& Pair : FineSheets) { if (Pair.Value->SeaPaint) { Pair.Value->SeaPaint->SetScalarParameterValue(Name, Value); } }
 }
 
+void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& CameraFocus)
+{
+	if (!SeaMaterial)
+	{
+		return;
+	}
+	// ("-TheaterSeaMoves=0" stills the sea, for the frame rate before and after; another number tries another strength)
+	static float Moves = -1.0f;
+	if (Moves < 0.0f)
+	{
+		Moves = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaMoves="), Moves);
+		Moves = FMath::Clamp(Moves, 0.0f, 3.0f);
+	}
+	const float Moon = GetMoonlight();
+	const float Hour = FMath::Lerp(1.0f, 0.5f, Moon); // (by night about half the strength)
+	// (From the top, waves so small crawl like static: the chop goes as its crests come under about six pixels
+	// apart, and the swell after it. On the paper map there is nothing: the material sees to that.)
+	const float Chopping = 1.0f - FMath::SmoothStep(6500.0f, 9500.0f, CameraDistance);
+	const float Swelling = 1.0f - FMath::SmoothStep(13000.0f, 20000.0f, CameraDistance);
+	SeaScalar(TEXT("Swell"), 1.3f * Hour * Swelling * Moves);
+	SeaScalar(TEXT("Chop"), 0.55f * Hour * Chopping * Moves);
+	SeaScalar(TEXT("Shallows"), (1.0f - Moon) * Chopping * Moves); // (no flicker in the shallows by night)
+	LandScalar(TEXT("WatersMove"), Hour * Chopping * FMath::Min(Moves, 1.5f)); // (the land's painted lakes and rivers: the sea's recipe, weaker)
+	SeaScalar(TEXT("Glints"), FMath::Lerp(1.0f, 0.7f, Moon) * FMath::Min(Moves, 1.0f));
+	SeaScalar(TEXT("GlintElsewhere"), FMath::Lerp(0.1f, 0.0f, Moon)); // (by night one band and none outside it)
+	SeaVector(TEXT("GlintColour"), FMath::Lerp(FLinearColor(FColor(215, 235, 250)), FLinearColor(FColor(131, 156, 197)), Moon));
+	// The bright band: a soft patch on the lamp's side of what the eye looks at (the lamp stands to the west and a
+	// little south, and high), which goes with the eye as a light's own reflection does.
+	const double BandReach = FMath::Max(0.1 * CameraDistance, 150.0);
+	const FVector Heart = CameraFocus + FVector(-0.25, -0.55, 0.0) * (0.14 * CameraDistance);
+	SeaVector(TEXT("GlintAt"), FLinearColor(static_cast<float>(Heart.X), static_cast<float>(Heart.Y), static_cast<float>(1.0 / (BandReach * BandReach)), 0.0f));
+}
+
 void ACampaignMapActor::SeaVector(FName Name, const FLinearColor& Value)
 {
 	if (SeaMaterial) { SeaMaterial->SetVectorParameterValue(Name, Value); }
@@ -1711,6 +1745,8 @@ void ACampaignMapActor::PaintGround()
 	}
 	CampaignTextures::MakeWaterBumps(Pixels);
 	RipplesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableRipples"));
+	CampaignTextures::MakeWaves(Pixels);
+	WavesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableWaves"));
 
 	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
@@ -1859,6 +1895,7 @@ void ACampaignMapActor::PaintGround()
 	}
 	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Waves"), WavesPicture); // (its painted lakes and rivers move with the sea)
 	{
 		// "-TheaterSheen=0.1" tries another strength for the sheen of the painted land.
 		float Sheen = 0.0f;
@@ -1893,6 +1930,7 @@ void ACampaignMapActor::PaintGround()
 	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Shore"), ShorePicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Ripples"), RipplesPicture);
+	SeaMaterial->SetTextureParameterValue(TEXT("Waves"), WavesPicture);
 
 	UE_LOG(LogTheater, Log, TEXT("Ground: %d x %d pixels of paint and three detail pictures made in %.2f s"), Paint.NX, Paint.NY, FPlatformTime::Seconds() - StartTime);
 }
@@ -12429,6 +12467,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	ShowParkedPlanes(CameraDistance, CameraFocus);
 	UpdateSinkings(); // (before the smoke, which reads how far each has gone)
 	UpdateSmoke(CameraDistance, CameraFocus);
+	UpdateSeaMotion(CameraDistance, CameraFocus);
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);

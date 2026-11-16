@@ -487,6 +487,13 @@ private:
 	void LandScalar(FName Name, float Value);
 	void LandVector(FName Name, const FLinearColor& Value);
 	void SeaScalar(FName Name, float Value);
+	/**
+	 * (Brian, 16 November 2026: the sea moves.) Sets the moving sea for the hour and the eye's height: half as strong
+	 * by night with no flicker in the shallows and few, cool glints; the chop and then the swell fade as the eye
+	 * rises, before their crests come so close that they crawl; and the glints' bright band keeps to the lamp's
+	 * side of what the eye looks at.
+	 */
+	void UpdateSeaMotion(float CameraDistance, const FVector& CameraFocus);
 	void SeaVector(FName Name, const FLinearColor& Value);
 	void BuildSeaMesh();
 	void BuildBorders();
@@ -1156,6 +1163,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> RipplesPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WavesPicture; // the moving sea's swell, chop, flecks and slow unevenness
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UTexture2D>> FlagTextures;

@@ -52,4 +52,11 @@ namespace CampaignTextures
 
 	/** Which way the water's surface leans: two different sets of ripples, in red and green and in blue and alpha. */
 	void MakeWaterBumps(TArray<FColor>& OutPixels);
+
+	/**
+	 * The moving sea's one picture, which repeats: in red a swell's heights and in green a chop's (mid-grey is level
+	 * water; both run along the picture's breadth, with crests that are short and broken), in blue scattered soft
+	 * flecks for the glints, and in alpha a slow unevenness that sets each stretch of coast its own moment.
+	 */
+	void MakeWaves(TArray<FColor>& OutPixels);
 }
