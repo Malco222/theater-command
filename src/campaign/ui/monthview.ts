@@ -87,7 +87,8 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     ...card.home.filter((h) => !h.next).map((h) => ({ html: goods(h), ready: h.count, next: 0 })),
     ...card.research.map((t) => ({ html: it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`), ready: 0, next: 0 })),
     ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
-    ...card.also.map((t, i) => ({ html: it('<span class="sg"></span>', `<span title="${esc(card.alsoFull[i] ?? t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
+    // (In a box where no line has a sign, the lines start at the box's left edge.)
+    ...card.also.map((t, i) => ({ html: it(card.home.length + card.research.length ? '<span class="sg"></span>' : '', `<span title="${esc(card.alsoFull[i] ?? t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
   ];
   let homeOver = 0;
   let home = homeAll.slice(0, lines).map((x) => x.html);
@@ -102,7 +103,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const firsts = card.staff.filter((s, i) => card.staff.findIndex((x) => x.desk === s.desk) === i);
   const staffAll = [...firsts, ...card.staff.filter((s) => !firsts.includes(s))];
   const staff = staffAll.slice(0, lines).map((s) => it(`<span class="sg">${monthSign(s.sign, s.sign === 'star' ? 13 : 15, BRASS)}</span>`, `<span title="${esc(s.text)}">${esc(s.short)}</span>${!firsts.includes(s) ? '' : s.mayTake ? `<button class="tb" data-act="desk" data-desk="${esc(s.desk)}" data-on="0" title="What your staff did this month stands. From next month this desk is yours again.">TAKE THE DESK BACK</button>` : '<small class="mc-took">yours again from next month</small>'}`, ' st'));
-  const els = card.elsewhere.slice(0, lines).map((e) => it(fl(e.nat, 26), `<span title="${esc(e.text)}">${esc(e.text)}</span>`, ' el'));
+  const els = card.elsewhere.slice(0, lines).map((e) => it(fl(e.nat, 26), `<span title="${esc(e.full ?? e.text)}">${esc(e.text)}</span>`, ' el'));
   const over = homeOver + Math.max(0, staffAll.length - lines) + Math.max(0, card.elsewhere.length - lines);
   const none = (t: string): string => `<div class="mc-it none"><span>${t}</span></div>`;
   const low = `<div class="mc-low">

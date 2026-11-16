@@ -119,7 +119,7 @@ export interface CardRow {
 
 export interface CardHome { sign: string; count: number; text: string; place: string; region?: number; /** Next month's: drawn in grey. */ next?: boolean }
 export interface CardStaff { /** The whole line of news, and its short form for the card: the desk, then what it did ('Research: 2 teams set to work'). */ text: string; short: string; desk: string; sign: string; /** True while the staff still runs that desk: the button takes it back from next month. */ mayTake: boolean }
-export interface CardElse { nat: string; text: string; region?: number }
+export interface CardElse { nat: string; text: string; /** The whole line of news. */ full?: string; region?: number }
 export interface CardLetter { text: string; by: string; unit?: number }
 
 export interface MonthCard {
@@ -174,19 +174,18 @@ const sentence = (text: string, max: number): string => {
   return /[….]$/.test(cut) ? cut : `${cut}.`;
 };
 /**
- * A line for one of the foot boxes, kept to the room two lines have (the boxes are set in a typewriter face, so a
+ * A line for one of the foot boxes, kept to the room its lines have (the boxes are set in a typewriter face, so a
  * line's room is a count of letters). No word is cut and no name is cut in half: the whole sentence where it
- * wraps into the lines it has, else whole clauses, else whole words, backing off from the middle of a name and
- * from a word that leads nowhere.
+ * wraps into the lines it has, else whole words, backing off from the middle of a name and from a word that
+ * leads nowhere. A cut shows itself: it ends after a whole word with "…", never with a full stop where the
+ * sentence did not end (the art director's rider of 2026-11-16).
  */
 const linesAt = (text: string, per: number): number => { let n = 1, at = 0; for (const w of text.split(' ')) { if (at && at + 1 + w.length > per) { n++; at = w.length; } else at += (at ? 1 : 0) + w.length; } return n; };
-const LITTLE = /^(a|an|the|of|at|in|on|to|with|for|from|by|and|or|its|their|his|is|are|was|were|has|have|had|that|which|as|into|over|under|near|round|against|between|who|whose)$/i;
+const LITTLE = /^(a|an|the|of|at|in|on|to|with|for|from|by|and|or|but|its|their|his|is|are|was|were|be|been|has|have|had|can|could|will|would|may|must|not|no|it|they|he|we|that|which|as|if|so|than|then|when|while|before|after|until|because|about|out|up|off|into|over|under|near|round|against|between|who|whose)$/i;
 export const wholeWords = (text: string, per: number, lines = 2): string => {
   const t = text.replace(/\s+/g, ' ').trim().replace(/[.]$/, '');
   const fits = (s: string): boolean => linesAt(s, per) <= lines;
   if (fits(`${t}.`)) return `${t}.`;
-  const stops = [...t.matchAll(/[,;:] | and (?=[a-z])| which | before | after | while /g)].map((m) => m.index!).filter((i) => i >= per * lines * 0.4 && fits(`${t.slice(0, i)}.`));
-  if (stops.length) return `${t.slice(0, stops[stops.length - 1])}.`;
   const all = t.split(' ');
   const kept = [...all];
   const capital = (w: string | undefined): boolean => !!w && /^[A-Z0-9]/.test(w);
@@ -198,8 +197,38 @@ export const wholeWords = (text: string, per: number, lines = 2): string => {
   if (pair > 0 && !kept.slice(pair).includes('and')) { kept.length = pair; back(); }
   return said();
 };
-/** The room the foot boxes have, in letters to a line: at home, elsewhere, and what a staff line may run to in all. */
-const FOOT_ROOM = { home: 30, elsewhere: 36, staff: 44 };
+/**
+ * A cut that still says what the line had to say. A line that leads in with a colon has its point after it: the
+ * cut keeps the whole of the first clause after the last colon, or the line is not cut. Any other keeps most of
+ * its sentence, or it is not shown cut.
+ */
+const keepsPoint = (whole: string, cut: string): boolean => {
+  const kept = cut.replace(/…$/, '');
+  const colon = whole.lastIndexOf(': ');
+  if (colon >= 0) { const end = whole.slice(colon + 2).search(/[,;] /); return end >= 0 && kept.length >= colon + 2 + end; }
+  const all = whole.split(' ').length, n = kept.split(' ').length;
+  return n >= 5 && n >= Math.ceil(all * 0.6);
+};
+/**
+ * Fits lines of news into a foot box (the art director's rider of 2026-11-16, in place of "two lines, then cut").
+ * Each is given whole while the box's lines last. One that will not fit is cut, the last first, and the box ends
+ * there; but a line that loses its point when cut is not cut: it stays in the newsreel and the next is tried in
+ * its place. Returns what is shown, each with its place in the list it came from.
+ */
+export function fitFoot(items: string[], per: number, lines: number, most: number): { text: string; at: number }[] {
+  const out: { text: string; at: number }[] = [];
+  let left = lines;
+  for (let i = 0; i < items.length && out.length < most && left > 0; i++) {
+    const whole = `${items[i].replace(/\s+/g, ' ').trim().replace(/[.]$/, '')}.`;
+    const need = linesAt(whole, per);
+    if (need <= left) { out.push({ text: whole, at: i }); left -= need; continue; }
+    const cut = wholeWords(whole, per, left);
+    if (keepsPoint(whole, cut)) { out.push({ text: cut, at: i }); left = 0; }
+  }
+  return out;
+}
+/** The room the foot boxes have, in letters to a line: at home beside a sign and from the box's edge, elsewhere, and what a staff line may run to in all. */
+const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
 /** "Hamburg's", "Calais'". */
 const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${place}'s`);
@@ -820,6 +849,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
   }
   card.home = [...done, ...coming].map((x) => { const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
+  const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
@@ -828,19 +858,54 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.
     if (h.kind === 'info' && h.arm === 'sea' && !card.foot) { card.foot = h.text; used.add(h); continue; }
-    if (h.kind === 'info' && card.also.length < 2) { card.also.push(wholeWords(first(h.text), FOOT_ROOM.home)); card.alsoFull.push(h.text); used.add(h); }
+    if (h.kind === 'info') news.push(h);
+  }
+  // The other news of home, in the lines the box has left. The three foot boxes share one height: three items of
+  // two lines beside a lead story, five on a quieter card. What was delivered comes first and takes its lines;
+  // each line of news is then given whole while lines last (fitFoot).
+  const slots = card.lead ? 3 : 5;
+  const goodLines = (x: { count: number; text: string; place?: string }): number => (x.text.length + (x.place ? 0.86 * x.place.length + 1 : 0) > 28 ? 2 : 1);
+  const signed = card.home.length + card.research.length;
+  const taken = card.home.reduce((n, x) => n + goodLines(x), 0) + card.research.reduce((n, t) => n + linesAt(`Research complete: ${t}.`, FOOT_ROOM.home), 0);
+  // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
+  // the town held, the staff speaks of the battle there and not of its loss.
+  const held = new Set(ranked.filter((x) => x.row.tag === 'HELD').map((x) => x.row.place));
+  const said: { text: string; full: string; hs: Headline[] }[] = [];
+  for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
+  const arrivals = new Map<string, Headline[]>();
+  for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
+  for (const h of news) {
+    if (said.some((s) => s.hs.includes(h))) continue;
+    const m = /^(.+) has arrived at (.+)\.$/.exec(h.text);
+    const same = m ? arrivals.get(m[2])! : [];
+    if (m && same.length > 1) { said.push({ text: `${m[1]} and ${same.length - 1} more corps have arrived at ${m[2]}`, full: same.map((x) => x.text).join(' '), hs: same }); continue; }
+    const lost = /^Your staff on the loss of ([^:]+):/.exec(h.text);
+    const fixed = lost && held.has(lost[1]) ? h.text.replace(`the loss of ${lost[1]}`, `the battle at ${lost[1]}`) : h.text;
+    // (A directive is said as its chip says it: who set it, and its title.)
+    const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
+    said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
+  }
+  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
+    card.also.push(f.text); card.alsoFull.push(said[f.at].full);
+    for (const h of said[f.at].hs) used.add(h);
   }
 
   // ---- 7. Elsewhere: a flag and one line a war, the greatest event first -------------------------------------
   const weight: Record<Headline['kind'], number> = { war: 0, fall: 1, battle: 2, event: 3, info: 9, goal: 9, honour: 9, letter: 9 };
   const seenNat = new Set<string>();
+  const abroad: Headline[] = [];
   // (Of the same kind of news: the war on land before the sea and the air, and a city's news before a field's.)
   const armRank = (h: Headline): number => (h.arm === 'air' ? 2 : h.arm === 'sea' ? 1 : 0);
   const cityRank = (h: Headline): number => { const r = h.region !== undefined ? g.regions[h.region] : undefined; const s = r ? townSize(g, r) : ''; return s === 'capital' ? 0 : s === 'city' ? 1 : 2; };
   for (const h of [...hs].filter((x) => !used.has(x) && !!x.nat && !!g.nations[x.nat] && !mine(x.nat) && weight[x.kind] < 9 && !x.warn).sort((a, b) => weight[a.kind] - weight[b.kind] || armRank(a) - armRank(b) || cityRank(a) - cityRank(b) || Number(foe(b.nat) || side(b.nat)) - Number(foe(a.nat) || side(a.nat)))) {
-    if (seenNat.has(h.nat!) || card.elsewhere.length >= 4) continue;
+    if (seenNat.has(h.nat!)) continue;
     seenNat.add(h.nat!);
-    card.elsewhere.push({ nat: h.nat!, text: wholeWords(first(h.text), FOOT_ROOM.elsewhere), ...(h.region !== undefined ? { region: h.region } : {}) });
+    abroad.push(h);
+  }
+  // (Each whole while the box's lines last; one that will not fit is cut, or stays in the newsreel: fitFoot.)
+  for (const f of fitFoot(abroad.map((h) => first(h.text)), FOOT_ROOM.elsewhere, slots * 2, slots)) {
+    const h = abroad[f.at];
+    card.elsewhere.push({ nat: h.nat!, text: f.text, full: h.text, ...(h.region !== undefined ? { region: h.region } : {}) });
     used.add(h);
   }
 

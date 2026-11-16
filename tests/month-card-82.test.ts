@@ -19,7 +19,7 @@
 // 6. At home, what his staff did, and elsewhere in the war.
 import { describe, expect, it } from 'vitest';
 import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
-import { markFor, monthCard, monthMark, monthOrders, openingMark, staffShort, wholeWords, type CardRow, type MonthCard } from '../src/campaign/monthcard';
+import { fitFoot, markFor, monthCard, monthMark, monthOrders, openingMark, staffShort, wholeWords, type CardRow, type MonthCard } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { townName, townSize } from '../src/campaign/towns';
@@ -575,16 +575,16 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
     expect(monthCard(g, mark, ME).staff[0]).toMatchObject({ short: said[3][2], text: said[3][1], desk: 'build' });
   });
 
-  it('a line in a foot box keeps to whole clauses or whole words, and never half a name', () => {
+  it('a line in a foot box keeps to whole words, never half a name, and a cut shows itself', () => {
     // (The room is a count of letters to a line, and two lines: the boxes are set in a typewriter face.)
     expect(wholeWords('Engineers finish the bridge at Lodz.', 30)).toBe('Engineers finish the bridge at Lodz.');
     // The whole sentence where it wraps into two lines.
     expect(wholeWords('German troops close round Paris: the capital of France is under siege.', 36)).toBe('German troops close round Paris: the capital of France is under siege.');
-    // Else whole clauses.
-    expect(wholeWords('German troops close round Paris: the capital of France is under siege, with 3 corps inside.', 36)).toBe('German troops close round Paris: the capital of France is under siege.');
+    // Else whole words, and the cut shows itself: never a full stop where the sentence did not end.
+    expect(wholeWords('German troops close round Paris: the capital of France is under siege, with 3 corps inside.', 36)).toBe('German troops close round Paris: the capital of France is under siege…');
     // Else whole words: not a cut word, not a word that leads nowhere, not the first half of a name.
     expect(wholeWords('The coast watch reports that the invasion barges are gathering in the harbours of Danzig Corridor', 44)).toBe('The coast watch reports that the invasion barges are gathering in the harbours…');
-    expect(wholeWords('The staff has studied the lost battle and believes the attack went in against Polish Silesia too early', 40)).toBe('The staff has studied the lost battle.');
+    expect(wholeWords('The staff has studied the lost battle and believes the attack went in against Polish Silesia too early', 40)).toBe('The staff has studied the lost battle and believes the attack went…');
     expect(wholeWords('The staff believes the attack went in against Polish Silesia too early', 30)).toBe('The staff believes the attack went…');
     const wraps = (text: string, per: number): number => { let n = 1, at = 0; for (const w of text.split(' ')) { if (at && at + 1 + w.length > per) { n++; at = w.length; } else at += (at ? 1 : 0) + w.length; } return n; };
     for (const per of [20, 26, 30, 36, 40, 44]) {
@@ -592,13 +592,13 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
       expect(wraps(cut, per), `${per}: ${cut}`).toBeLessThanOrEqual(2);
       expect(cut, `${per}`).not.toMatch(/\b(United|Soviet|the|of|and|a|has|that)[….]$/);
     }
-    // On the card: other news of home is cut the same way, and the whole line is kept for a hover.
+    // On the card: other news of home is given whole where the box has the lines, and the whole line of news is kept for a hover.
     const g = game();
     const mark = monthMark(g, ME);
     const long = 'The staff has studied the lost battle at Polish Silesia and finds that the attack went in too early. It asks for a month to rest the corps.';
     news(g, { kind: 'info', text: long, nat: ME });
     const card = monthCard(g, mark, ME);
-    expect(card.also).toEqual(['The staff has studied the lost battle at Polish Silesia.']);
+    expect(card.also).toEqual(['The staff has studied the lost battle at Polish Silesia and finds that the attack went in too early.']);
     expect(card.alsoFull).toEqual([long]);
   });
 
@@ -827,5 +827,55 @@ describe('the first month of a war (the card for September 1939)', () => {
   });
   it('a line that names two places with "between" ends before the word when it has room for one', () => {
     expect(wholeWords('Polish troops blow the bridges over the Vistula between Danzig Corridor and West Prussia as they fall back', 36)).toBe('Polish troops blow the bridges over the Vistula…');
+  });
+});
+
+describe("the foot boxes give a line whole where the box has room (the art director's rider)", () => {
+  it('each line is whole while the lines last, and the last is cut where they will not fit', () => {
+    const a = 'Polish troops blow the bridges over the Vistula between Danzig Corridor and Elbing', b = 'Force H forms at Gibraltar';
+    // Six lines of 36 letters: three lines and one.
+    expect(fitFoot([a, b], 36, 6, 3)).toEqual([{ text: `${a}.`, at: 0 }, { text: `${b}.`, at: 1 }]);
+    // Two lines: the first is cut after a whole word, with the mark of a cut, and the box ends there.
+    expect(fitFoot([a, b], 36, 2, 3)).toEqual([{ text: 'Polish troops blow the bridges over the Vistula…', at: 0 }]);
+  });
+  it('a line that loses its point when cut is not cut: the next is shown in its place', () => {
+    const lille = 'Your staff on the battle at Lille: the line was dug in and it still broke', short = 'Force H forms at Gibraltar';
+    expect(fitFoot([lille, short], 30, 2, 3)).toEqual([{ text: `${short}.`, at: 1 }]);
+    expect(fitFoot([lille, short], 35, 6, 3).map((x) => x.text)).toEqual([`${lille}.`, `${short}.`]);
+    // A line with a colon may be cut once the first clause after the colon is whole; and no cut ends on a word that leads nowhere.
+    expect(fitFoot(['German troops close round Lille: the city is under siege, with one corps inside'], 36, 2, 3)).toEqual([{ text: 'German troops close round Lille: the city is under siege, with one corps…', at: 0 }]);
+    expect(fitFoot(['German troops seize the bridges over the Meuse at Aube before they can be blown'], 36, 2, 3)).toEqual([{ text: 'German troops seize the bridges over the Meuse at Aube…', at: 0 }]);
+    // (A cut that keeps less than most of the sentence says nothing either.)
+    expect(fitFoot(['The staff believes the attack went in against Polish Silesia a month too early and with too few guns'], 30, 1, 3)).toEqual([]);
+  });
+  it('at home: a directive is said by its title, from the edge of the box, and a quiet card has the lines for it', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    g.nations[ME].gov = { ...(g.nations[ME].gov ?? {}), dir: { id: g.turn, nat: ME, kind: 'agent', from: ME, title: 'Recruit an agent', text: 'x', until: g.turn + 5 } } as never;
+    news(g, { kind: 'info', text: 'A directive from the war cabinet: The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of March 1940. One costs 600 to find and train. The reward: 3 political capital.', nat: ME });
+    const card = monthCard(g, mark, ME);
+    expect(card.also).toEqual(['A directive from the war cabinet: Recruit an agent.']);
+    expect(card.alsoFull[0]).toContain('One costs 600');
+  });
+  it('where the town held, the staff speaks of the battle there, whole', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    const city = germanCity(g);
+    // The field is lost and the town holds: the row is stamped HELD.
+    land(g, city, { attNat: 'POL', defNat: ME, attackers: [unit('POL')], defenders: [unit(ME)], taken: true, siege: true } as never);
+    news(g, { kind: 'info', text: `Your staff on the loss of ${city.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight stronger.`, nat: ME });
+    const card = monthCard(g, mark, ME);
+    const held = [card.lead, ...card.rows].some((r) => r?.place === city.name && r.tag === 'HELD');
+    expect(card.also).toEqual([`Your staff on the ${held ? 'battle at' : 'loss of'} ${city.name}: the line was dug in and it still broke.`]);
+  });
+  it('marches: a halt comes first, and armies that arrive at one place are one line', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'info', text: 'Berlin garrison has arrived at Frankfurt.', nat: ME });
+    news(g, { kind: 'info', text: '1st Engineer Corps has arrived at Frankfurt.', nat: ME });
+    news(g, { kind: 'info', text: '2nd Engineer Corps has arrived at Frankfurt.', nat: ME });
+    news(g, { kind: 'info', text: 'IX Corps has halted at Saxony on its march to Vienna: the way is closed. It waits for orders.', nat: ME });
+    const card = monthCard(g, mark, ME);
+    expect(card.also).toEqual(['IX Corps has halted at Saxony on its march to Vienna: the way is closed.', 'Berlin garrison and 2 more corps have arrived at Frankfurt.']);
   });
 });
