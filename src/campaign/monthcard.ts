@@ -75,6 +75,8 @@ export interface CardBand {
   week: number;
   /** The month the news is dated in, where that is not the card's own ('July'): the days after the month turned, before his own month opened. */
   month?: string;
+  /** Its date as the card prints it: 'week 3', or 'as July opens' for news of the month that has just turned (see dateWords). */
+  when: string;
   /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
 }
@@ -114,6 +116,8 @@ export interface CardRow {
   week: number;
   /** The month the item is dated in, where that is not the card's own ('July'). */
   month?: string;
+  /** Its date as the card prints it: 'week 3', or 'as July opens' (see dateWords). */
+  when: string;
   /** For the lead story: the kind word of its tag, a headline of about eight words, one line on what follows from it, and three figures. */
   kind: string;
   head: string;
@@ -337,6 +341,14 @@ interface Ranked {
   fleet?: boolean; alone?: boolean; great?: boolean;
   /** A siege laid, and the losses of the two sides in it: told with the town's own fight if that came the same month. */ laid?: { region: number; ours: number; theirs: number; first: CardFigure } }
 
+/**
+ * An item's date in the card's words (the design director's ruling 102, on a June card that said "July, week 4").
+ * In the card's own month it is the week. News of the month that has just turned is another country's move, made
+ * before the player's own month opens: its week counts that country's month, not his calendar, so the card says only
+ * "as July opens". Both builds print this and nothing else for a date.
+ */
+export const dateWords = (x: { week: number; month?: string }): string => (x.month ? `as ${x.month} opens` : `week ${x.week}`);
+
 /** The card for everything that has happened since the mark was taken. */
 export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human): MonthCard {
   const me = viewer ?? '';
@@ -367,7 +379,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const airs = g.airReports.slice(mark.a);
   const shores = g.shoreReports.slice(mark.shore);
   const ranked: Ranked[] = [];
-  const blank = (): CardRow => ({ cls: 3, arm: null, picture: null, sign: '', place: '', tag: '', tone: 'plain', ours: null, theirs: null, line: '', figures: [], week: 1, kind: '', head: '', follows: '', facts: [] });
+  const blank = (): CardRow => ({ cls: 3, arm: null, picture: null, sign: '', place: '', tag: '', tone: 'plain', ours: null, theirs: null, line: '', figures: [], week: 1, when: '', kind: '', head: '', follows: '', facts: [] });
 
   // ---- 3. Ground: the battles his own troops fought --------------------------------------------------------
   let battlesWon = 0, battlesLost = 0, menOurs = 0, menTheirs = 0;
@@ -734,7 +746,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (The flags are those of the headline: who did it, and a great power the headline names as entering the war.)
     const head = said ?? first(h.text);
     const nats = warn ? [me] : declarers.length ? declarers.slice(0, 2) : [...new Set([h.nat, ...enters.filter((m) => nameAt(m, head) >= 0), p?.by])].filter((x): x is string => !!x && !!g.nations[x] && x !== 'none').slice(0, 2);
-    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, ...dated(h.turn), region: h.region }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said, good: !!lib && (mine(h.nat) || side(lib.by)) });
+    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, when: '', ...dated(h.turn), region: h.region }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said, good: !!lib && (mine(h.nat) || side(lib.by)) });
     used.add(h);
   });
   // One story, one band. A country's fall is told once, by the line that says the country fell (the capital's own
@@ -937,5 +949,6 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // ---- 8. Letters -------------------------------------------------------------------------------------------
   for (const h of hs) if (h.kind === 'letter') { card.letters.push({ text: h.text, by: h.by ?? 'A soldier', ...(h.unit !== undefined ? { unit: h.unit } : {}) }); used.add(h); }
   card.more = hs.filter((h) => !used.has(h)).length;
+  for (const x of [...card.bands, ...card.rows, ...(card.lead ? [card.lead] : [])]) x.when = dateWords(x);
   return card;
 }

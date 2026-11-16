@@ -943,9 +943,14 @@ describe("the 3D builder's two wording finds", () => {
     expect(card.month).toBe('September 1939');
     const band = (nat: string) => card.bands.find((x) => x.nats[0] === nat)!;
     expect(band('LUX').month).toBeUndefined();
-    expect(band('POL')).toMatchObject({ month: 'October', week: 1 });
+    expect(band('LUX').when).toBe('week 4');
+    // News of the month that has just turned is another country's move: the card gives the month and no week of it
+    // (ruling 102: a June card said "July, week 4" before his own July had opened).
+    expect(band('POL')).toMatchObject({ month: 'October', week: 1, when: 'as October opens' });
     const rows = order(card);
     expect(rows.find((r) => r.region === a.id)!.month).toBeUndefined();
-    expect(rows.find((r) => r.region === b.id)).toMatchObject({ month: 'October', week: 1 });
+    expect(rows.find((r) => r.region === a.id)!.when).toMatch(/^week [1-4]$/);
+    expect(rows.find((r) => r.region === b.id)).toMatchObject({ month: 'October', week: 1, when: 'as October opens' });
+    for (const x of [...card.bands, ...card.rows, ...(card.lead ? [card.lead] : [])]) expect(x.when).toBe(x.month ? `as ${x.month} opens` : `week ${x.week}`);
   });
 });
