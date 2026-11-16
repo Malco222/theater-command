@@ -16,6 +16,7 @@
 // 8. The art director's twelve colours for the small republics, and where the Canal Zone's name is written.
 import { describe, expect, it } from 'vitest';
 import { landingWatch } from '../src/campaign/ai';
+import { STRENGTH } from '../src/campaign/ashore';
 import { AIR, km, whyNotBase } from '../src/campaign/air';
 import { addCorps, allied, atWar, capture, createGame, removeCorps } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
@@ -219,7 +220,11 @@ describe('a front is any harbour its side holds near the enemy', () => {
       // An ocean crossing at this danger would not be made; the hop's own ceiling decides.
       O.risk = Math.min(O.risk, danger / 2);
       O.hop = ceiling < 0 ? 0 : danger + ceiling;
-      try { runTurnAI(g); } finally { O.risk = was.risk; O.hop = was.hop; }
+      // (A test of the hop's own ceiling: the test of strength of Version 83, which would keep one corps out of a
+      // harbour with the German army of 1942 next door, is set aside. strength-83.test.ts is its own.)
+      const asked = { ...STRENGTH! };
+      Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 });
+      try { runTurnAI(g); } finally { O.risk = was.risk; O.hop = was.hop; Object.assign(STRENGTH!, asked); }
       return !c.dead && c.reg === beach.id;
     };
     expect(hop(0.01)).toBe(true);

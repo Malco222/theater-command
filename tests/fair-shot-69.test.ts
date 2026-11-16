@@ -6,10 +6,11 @@
 // that has run out of men puts its idle money into fortifications. A staff whose army is being worn away raises men
 // for the line before guns, and its builders wait. A German staff opens a general offensive only with the numbers
 // and calls a losing one off in time. History's scenarios use none of it.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import arsenalData from '../data/campaign/arsenal.json';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
+import { STRENGTH } from '../src/campaign/ashore';
 import { aiFortify } from '../src/campaign/arsenal';
 import { setStop } from '../src/campaign/history';
 import { PRODUCTION, aiProduction, armyWorn, corpsCost, fortCost, gunsWanted, isHome, orderFort } from '../src/campaign/economy';
@@ -68,6 +69,12 @@ const descent = (): { g: Game; quay: Region; force: Corps[]; shores: Region[] } 
 };
 
 describe('the second front', () => {
+  // (These are tests of the second front as Version 69 built it: the year's wait, the coin, the feeding of a beach.
+  // The test of strength of Version 83 would keep three corps off Germany's own shore, so it is set aside here:
+  // strength-83.test.ts is its own.)
+  const asked = { ...STRENGTH! };
+  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); });
+  afterAll(() => { Object.assign(STRENGTH!, asked); });
   it('is opened by a staff with ships after a year at war with an enemy its home army does not touch', () => {
     const g = opened();
     expect(g.nations.UK.atWar).toContain('GER');
