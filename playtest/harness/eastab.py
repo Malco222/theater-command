@@ -18,7 +18,7 @@ HIST_SOV = {'Bucharest':'August 1944','Warsaw':'January 1945','Budapest':'Februa
 args = [a for a in sys.argv[1:] if not a.startswith('--')]; months = '--months' in sys.argv
 label = sys.argv[sys.argv.index('--label') + 1] if '--label' in sys.argv else args[0]
 if '--label' in sys.argv: args = [a for a in args if a != label]
-east, city, years, F, army, rings, seat = {}, {}, {}, {}, {}, {}, {}
+east, city, years, F, army, rings, seat, rail, menl = {}, {}, {}, {}, {}, {}, {}, {}, {}
 for f in sorted(glob.glob(args[0])):
     for ln in open(f, errors='replace'):
         m = re.match(r'(\w+) seed (\d+)[: ]\s*(.*)', ln)
@@ -31,6 +31,8 @@ for f in sorted(glob.glob(args[0])):
         elif k == 'ARMY': army.setdefault(s, []).append(rest)
         elif k == 'RING': rings.setdefault(s, []).append(rest)
         elif k == 'SEAT': seat[s] = rest
+        elif k == 'RAIL': rail[s] = rest
+        elif k == 'MEN': menl[s] = rest
 n = len(east)
 print(f"THE EASTERN FRONT: {label} ({n} wars, seeds {min(east)} to {max(east)})" if n else 'no wars')
 if not n: sys.exit()
@@ -66,6 +68,7 @@ for c in ['Moscow', 'Leningrad', 'Stalingrad']:
 if seat:
     stands = sum(1 for s in seat if 'stands' in seat[s]); print(f"The seat by hand: stands in {stands} of {len(seat)}")
 print()
+EV = []
 print('TOWNS: fell to the enemy / back in Soviet hands, the middle war (wars it happened in), history beside it')
 cl = {}
 for s in city:
@@ -80,10 +83,12 @@ for nm in HIST_FALL:
             if w != 'SOV': lost = True
             elif lost: back.append(t); break
     print(f"  {nm:10s} fell {dm(fell, n):24s} history {HIST_FALL[nm]:15s} | back {dm(back, n):24s} history {HIST_BACK[nm]}")
+    EV.append((f"{nm} falls", med(fell), len(fell), turn(HIST_FALL[nm]))); EV.append((f"{nm} freed", med(back), len(back), turn(HIST_BACK[nm])))
 print('TOWNS the Red Army took (or freed), the middle war, history beside it')
 for nm in HIST_SOV:
     a = [next(t for w, t in cl[nm][s] if w in ('SOV', 'POL') and t > 20) for s in cl.get(nm, {}) if any(w in ('SOV', 'POL') and t > 20 for w, t in cl[nm][s])]
     print(f"  {nm:10s} {dm(a, n):24s} history {HIST_SOV[nm]}")
+    EV.append((f"{nm} taken", med(a), len(a), turn(HIST_SOV[nm])))
 print()
 print('BY YEAR, all wars together: attacks ordered and won, corps dead')
 tot = {}
@@ -127,3 +132,37 @@ if months:
     for t in sorted(rows):
         a = rows[t]; c = lambda i: med([int(x[i]) for x in a])
         print(f"  {t}\t{date(t)}\t{len(a)}\t{c(1):.0f}\t{c(3):.0f}\t{c(4):.0f}\t{c(5):.0f}\t{c(6):.1f}\t{c(8):.1f}\t{c(12):.1f}\t{c(15):.1f}")
+if rail:
+    print(); print("THE SOVIET STAFF AND ITS RAILWAYS, the middle war by year: lines relaid by engineers, cut lines on Soviet-held ground at the year's worst, engineer corps, corps out of supply a month")
+    ry = {}
+    for s_ in rail:
+        for part in rail[s_].split(' | '):
+            m = re.match(r"(\d{4}): relaid (\d+), cut at the year's worst (\d+), engineers (\d+), unsupplied a month ([\d.]+)", part)
+            if m: ry.setdefault(m.group(1), []).append([float(x) for x in m.groups()[1:]])
+    for y in sorted(ry):
+        a = ry[y]; print(f"  {y}: relaid {med([x[0] for x in a]):.0f} (most {max(x[0] for x in a):.0f}), cut at the worst {med([x[1] for x in a]):.0f} (most {max(x[1] for x in a):.0f}), engineer corps {med([x[2] for x in a]):.0f} (most {max(x[2] for x in a):.0f}), out of supply {st.mean([x[3] for x in a]):.1f} corps a month")
+    causes = {}; rel = []; mon = []; hasty = []; left = []; longest = []
+    for s_ in rail:
+        m = re.search(r'by cause: ([^|]*)', rail[s_])
+        if m:
+            for kv in m.group(1).strip().split(', '):
+                if ' ' in kv: k_, v_ = kv.rsplit(' ', 1); causes[k_] = causes.get(k_, 0) + int(v_)
+        m = re.search(r'relaid by engineers (\d+), after ([\d.-]+) months on average \(longest ([\d-]+)\) \| hasty cuts made good by time (\d+) \| still cut at the end (\d+)', rail[s_])
+        if m:
+            rel.append(int(m.group(1))); hasty.append(int(m.group(4))); left.append(int(m.group(5)))
+            if m.group(2) != '-': mon.append((float(m.group(2)), int(m.group(1)))); longest.append(int(m.group(3)))
+    print(f"  New cuts on Soviet-held ground, all wars: {', '.join(f'{k_} {v_}' for k_, v_ in sorted(causes.items(), key=lambda x: -x[1]))}")
+    print(f"  Relaid by engineers: {sum(rel)} in {len(rel)} wars ({(st.mean(rel) if rel else 0):.0f} a war), after {sum(a * b for a, b in mon) / max(1, sum(b for a, b in mon)):.1f} months on average, longest {max(longest) if longest else '-'}; hasty cuts time made good: {sum(hasty)}; still cut at the end: {(st.mean(left) if left else 0):.0f} a war")
+if menl:
+    print(); print('THE RESERVE OF MEN AT NOTHING: months while at war, by great power (wars it happened in; the middle count over those wars; the middle first month)')
+    pw = {}
+    for s_ in menl:
+        for part in menl[s_].split('; '):
+            m = re.match(r'(\w+) (\d+) of (\d+) months at war(?: \(first (\w+ \d{4})\))?', part.strip())
+            if m: pw.setdefault(m.group(1), []).append((int(m.group(2)), int(m.group(3)), turn(m.group(4)) if m.group(4) else None))
+    for k_ in ['GER', 'SOV', 'UK', 'FRA', 'ITA', 'USA']:
+        a = pw.get(k_, []); z = [x for x in a if x[0] > 0]
+        print(f"  {k_}: at nothing in {len(z)} of {len(a)} wars" + (f"; {med([x[0] for x in z]):.0f} months of {med([x[1] for x in z]):.0f} at war in the middle war (most {max(x[0] for x in z)}); first {date(med([x[2] for x in z]))}" if z else ''))
+if '--events' in sys.argv:
+    print(); print('EVENTS for a chart: name, the middle war (turn), wars, history (turn)')
+    for nm, g_, k, h in sorted([e for e in EV if e[1] is not None], key=lambda e: e[3]): print(f"  {{slug:'{nm.lower().replace(' ', '-')}', what:'{nm}', game:{g_:.0f}, gameDate:'{date(g_)}', wars:{k}, hist:{h}, histDate:'{date(h)}'}},")

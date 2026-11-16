@@ -11,8 +11,13 @@
 //   ARMY  each January: corps by kind, divisions, mean strength and experience, for the Soviet Union and Germany
 //   PRE   what the Soviet Union did before the war with Germany (Finland, the Baltic states, eastern Poland, Bessarabia)
 //   EAST  the war in one line: the opening, the deepest advance, the turn of the tide, the border, German soil, Berlin
+//   RAIL  the Soviet staff and its railways: engineer corps, cut lines on ground it holds each half year, relays by year,
+//         how long a cut stood on its ground, corps out of supply
+//   MEN   months each great power's reserve of men stood at nothing while it was at war
 //   RING  each month the Red Army or its enemy lost three corps or more in the east, with the news of it
 import { start, date, T, atWar, campaign } from './lib';
+import { railCut, onNet, cutCause } from '@tc/campaign/rails';
+import { menLeft } from '@tc/campaign/manpower';
 const [seedsS = '17', untilS = '80', meS = 'none', planS = '{}'] = process.argv.slice(2);
 const UNTIL = Number(untilS), ME = meS === 'none' ? null : meS;
 const CITIES = ['Minsk', 'Kiev', 'Smolensk', 'Leningrad', 'Moscow', 'Kharkov', 'Rostov', 'Stalingrad', 'Crimea', 'Odessa', 'Latvia', 'Warsaw', 'Bucharest', 'Budapest', 'Konigsberg', 'Vienna', 'Berlin'];
@@ -25,6 +30,8 @@ function film(seed: number) {
   const city: Record<string, { id: number; was: string; log: string[] }> = {};
   const F: any[] = []; const pre: string[] = []; const rings: string[] = []; const army: string[] = [];
   let gerFell = 0, berlin = '', seenFin = false; const took = new Set<string>();
+  const cutSince = new Map<number, { t: number; why: string }>(); const relays: { t: number; months: number; why: string }[] = []; const newCuts: Record<string, number> = {};
+  const POW = ['GER', 'SOV', 'UK', 'FRA', 'ITA', 'USA']; const men: Record<string, { war: number; zero: number; first: number }> = {};
   const foe = (n: string): boolean => n !== 'SOV' && !!g.nations[n] && atWar(g, 'SOV', n);
   const open = (game: any): void => {
     g = game; home = new Set(g.regions.filter((r: any) => r.owner === 'SOV').map((r: any) => r.id));
@@ -70,6 +77,14 @@ function film(seed: number) {
     for (let i = lastHead; i < g.headlines.length; i++) { const h = g.headlines[i]; if (/surrender|ring closes|cut off|lays down|encircl|pocket/i.test(h.text) && /Soviet|German|Romanian|Hungarian|Finnish|Italian/i.test(h.text)) news.push(h.text); }
     lastHead = g.headlines.length;
     if (warT && (sd >= 3 || ad >= 3)) rings.push(`RING seed ${seed}: ${date(t)}: Soviet corps dead ${sd}, enemy corps dead in the east ${ad} | ${news.slice(0, 4).join(' | ').slice(0, 420)}`);
+    // railways on ground the Soviet Union holds: new cuts, relays, what stands cut
+    let cutNow = 0, relaidNow = 0;
+    for (const r of g.regions) {
+      if (!onNet(r.id)) continue; const cut = railCut(g, r.id), was = cutSince.get(r.id);
+      if (cut && r.ctrl === 'SOV') { cutNow++; if (!was) { const why = String(cutCause(g, r.id) ?? '?'); cutSince.set(r.id, { t, why }); newCuts[why] = (newCuts[why] ?? 0) + 1; } }
+      else if (was) { if (!cut && r.ctrl === 'SOV') { relays.push({ t, months: t - was.t, why: was.why }); relaidNow++; } cutSince.delete(r.id); }
+    }
+    for (const n of POW) { const N = g.nations[n]; if (!N?.alive || !N.atWar?.length) continue; const m = (men[n] ??= { war: 0, zero: 0, first: 0 }); m.war++; const left = menLeft(g, n); if (Number.isFinite(left) && left < 1) { m.zero++; if (!m.first) m.first = t; } }
     // towns
     for (const n of Object.keys(city)) { const c = city[n], r = g.regions[c.id]; if (r.ctrl !== c.was) { c.log.push(`${r.ctrl} ${date(t)}`); c.was = r.ctrl; if (n === 'Berlin' && !berlin && r.ctrl !== 'GER') berlin = `${r.ctrl} ${date(t)}`; } }
     if (!gerFell && g.nations.GER && !g.nations.GER.alive) gerFell = t;
@@ -89,13 +104,17 @@ function film(seed: number) {
     const eastX = Math.max(0, ...[...line].filter((id) => E(g.regions[id])).map((id) => g.regions[id].x));
     const westX = Math.min(9999, ...g.regions.filter((r: any) => S(r) && !r.overseas && fs.has(r.id)).map((r: any) => r.x));
     const ger = g.corps.filter((c: any) => c.nat === 'GER' && !c.dead).length;
-    F.push({ t, sov: sov.length, sovDivs: sov.reduce((s: number, c: any) => s + c.divs, 0), sf: count(ws, (c) => c.nat === 'SOV'), ef: count(we, (c) => foe(c.nat)), ger, lostHome, lostLine, beyond, eastX: Math.round(eastX), westX: westX === 9999 ? 0 : Math.round(westX), sa, sw, so: mean(so), aa, aw, ao: mean(ao), sd, ad, sp, ap, len: fs.size });
+    F.push({ t, sov: sov.length, sovDivs: sov.reduce((s: number, c: any) => s + c.divs, 0), sf: count(ws, (c) => c.nat === 'SOV'), ef: count(we, (c) => foe(c.nat)), ger, lostHome, lostLine, beyond, eastX: Math.round(eastX), westX: westX === 9999 ? 0 : Math.round(westX), sa, sw, so: mean(so), aa, aw, ao: mean(ao), sd, ad, sp, ap, len: fs.size, cutNow, relaidNow, eng: sov.filter((c: any) => c.kind === 'eng').length, engJob: sov.filter((c: any) => c.kind === 'eng' && c.job?.what === 'rail').length, unsup: sov.filter((c: any) => !c.supplied).length });
   };
   const close = (err: string): void => {
     const nearest = (x: number): string => { let best = '', d = 1e9; for (const n of ['Berlin', 'Warsaw', 'Minsk', 'Kiev', 'Smolensk', 'Moscow', 'Stalingrad']) { const r = g.regions[city[n]?.id]; if (r && Math.abs(r.x - x) < d) { d = Math.abs(r.x - x); best = n; } } return best; };
-    for (const f of F) console.log(`F seed ${seed} t${f.t} ${date(f.t)}: Soviet ${f.sov} corps ${f.sovDivs} divs (front ${f.sf}), enemy front ${f.ef}, German corps ${f.ger}, home lost ${f.lostHome}, line lost ${f.lostLine}, beyond ${f.beyond}, enemy east to ${f.eastX}, Soviet west to ${f.westX}, front ${f.len} provinces | Soviet attacks ${f.sa} won ${f.sw} odds ${f.so.toFixed(2)} | enemy attacks ${f.aa} won ${f.aw} odds ${f.ao.toFixed(2)} | dead Soviet ${f.sd} enemy ${f.ad} | prisoners taken by Soviet ${f.sp} from Soviet ${f.ap}`);
+    for (const f of F) console.log(`F seed ${seed} t${f.t} ${date(f.t)}: Soviet ${f.sov} corps ${f.sovDivs} divs (front ${f.sf}), enemy front ${f.ef}, German corps ${f.ger}, home lost ${f.lostHome}, line lost ${f.lostLine}, beyond ${f.beyond}, enemy east to ${f.eastX}, Soviet west to ${f.westX}, front ${f.len} provinces | Soviet attacks ${f.sa} won ${f.sw} odds ${f.so.toFixed(2)} | enemy attacks ${f.aa} won ${f.aw} odds ${f.ao.toFixed(2)} | dead Soviet ${f.sd} enemy ${f.ad} | prisoners taken by Soviet ${f.sp} from Soviet ${f.ap} | rail: cut ${f.cutNow} on Soviet-held ground, relaid ${f.relaidNow}, engineers ${f.eng} (${f.engJob} on a line), unsupplied ${f.unsup}`);
     for (const a of army) console.log(a);
     for (const r of rings) console.log(r);
+    const ry = [1941, 1942, 1943, 1944, 1945].map((n) => { const m = relays.filter((r) => Math.floor((r.t + 7) / 12) + 1939 === n); const fm = F.filter((f) => Math.floor((f.t + 7) / 12) + 1939 === n); return fm.length ? `${n}: relaid ${m.filter((r) => r.why !== 'hasty').length}, cut at the year's worst ${Math.max(...fm.map((f) => f.cutNow))}, engineers ${Math.max(...fm.map((f) => f.eng))}, unsupplied a month ${(fm.reduce((a, f) => a + f.unsup, 0) / fm.length).toFixed(1)}` : ''; }).filter(Boolean);
+    const eng = relays.filter((r) => r.why !== 'hasty');
+    console.log(`RAIL seed ${seed}: ${ry.join(' | ')} | new cuts on Soviet-held ground by cause: ${Object.entries(newCuts).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'} | relaid by engineers ${eng.length}, after ${eng.length ? (eng.reduce((a, r) => a + r.months, 0) / eng.length).toFixed(1) : '-'} months on average (longest ${eng.length ? Math.max(...eng.map((r) => r.months)) : '-'}) | hasty cuts made good by time ${relays.length - eng.length} | still cut at the end ${cutSince.size}`);
+    console.log(`MEN seed ${seed}: ${POW.filter((n) => men[n]).map((n) => `${n} ${men[n].zero} of ${men[n].war} months at war${men[n].first ? ` (first ${date(men[n].first)})` : ''}`).join('; ')}`);
     console.log(`PRE seed ${seed}: ${pre.join('; ') || 'nothing'}`);
     console.log(`CITY seed ${seed}: ${Object.keys(city).map((n) => `${n}: ${city[n].log.join(', ') || 'never changed hands'}`).join(' | ')}`);
     if (!warT) { console.log(`EAST seed ${seed}: no war between Germany and the Soviet Union by ${date(g.turn)}; Germany ${gerFell ? `fell ${date(gerFell)}` : 'stands'}${err}`); return; }
