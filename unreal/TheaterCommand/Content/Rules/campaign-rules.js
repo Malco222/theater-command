@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a51f010 2026-11-16. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dc8f3ac 2026-11-16. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -907,10 +907,10 @@
   }
   var capPct = (g2) => g2.flags["dk:cap"] ?? DEPTH.cap.start;
   var capOf = (g2) => capPct(g2) / 100;
-  function setCap(g2, pct9) {
-    if (!depthRules(g2) || !DEPTH.cap.steps.includes(pct9) || capPct(g2) === pct9) return false;
-    if (pct9 === DEPTH.cap.start) delete g2.flags["dk:cap"];
-    else g2.flags["dk:cap"] = pct9;
+  function setCap(g2, pct10) {
+    if (!depthRules(g2) || !DEPTH.cap.steps.includes(pct10) || capPct(g2) === pct10) return false;
+    if (pct10 === DEPTH.cap.start) delete g2.flags["dk:cap"];
+    else g2.flags["dk:cap"] = pct10;
     return true;
   }
   var deskRan = (g2, desk) => g2.flags[`dk:ran:${desk}`] === g2.turn;
@@ -1058,7 +1058,7 @@
     works: {
       factory: { label: "Factory", cost: 30, step: 5, months: 8, most: { city: 3, town: 2 }, blurb: "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
       yard: { label: "Shipyard", cost: [0, 20, 30, 45], months: 8, blurb: "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
-      aa: { label: "Anti-aircraft guns", cost: [0, 8, 12, 18], months: 2, upkeep: 0.05, cut: 0.15, flak: 0.012, blurb: "Heavy guns round the factories. Each level stops part of the bombing of this province and brings down more of the bombers." },
+      aa: { label: "Anti-aircraft guns", cost: [0, 8, 12, 18], months: 2, upkeep: 0.05, cut: 0.15, flak: 0.012, blurb: "Heavy guns round the factories and the rail yards. Each level stops part of the bombing of this province, its railway included, and brings down more of the bombers." },
       field: { label: "Airfields", cost: [0, 10, 15, 22], months: 3, upkeep: 0.04, holds: 500, blurb: "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
     },
     yards: {
@@ -6446,8 +6446,8 @@
   }
   var roomIn = (g2, r) => SIEGE.room[townSize(g2, r)] + (r.fort ? SIEGE.fortRoom : 0);
   var breachOf = (g2, r) => clamp((g2.flags[`breach:${r.id}`] ?? 0) / 100, 0, 1);
-  function breach(g2, r, pct9) {
-    const now = Math.min(SIEGE.breach.most, (g2.flags[`breach:${r.id}`] ?? 0) + Math.max(0, pct9));
+  function breach(g2, r, pct10) {
+    const now = Math.min(SIEGE.breach.most, (g2.flags[`breach:${r.id}`] ?? 0) + Math.max(0, pct10));
     if (now > 0) g2.flags[`breach:${r.id}`] = Math.round(now * 10) / 10;
     return now / 100;
   }
@@ -6466,8 +6466,8 @@
     return d > 0 ? d * KIND.inf.def * g2.nations[r.owner].quality * Math.sqrt(0.15 + 0.85 * SIEGE.guardOrg) : 0;
   };
   var guardMen = (g2, r) => Math.round(guardOf(g2, r) * MEN_PER_DIV);
-  function hitGuard(g2, r, pct9) {
-    const now = Math.min(100, (g2.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct9));
+  function hitGuard(g2, r, pct10) {
+    const now = Math.min(100, (g2.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct10));
     if (now > 0) g2.flags[`guard:${r.id}`] = Math.round(now);
   }
   var townHeld = (g2, r) => garrisonOf(r).length > 0 || guardOf(g2, r) > 0;
@@ -7022,8 +7022,8 @@
     const inside2 = garrisonOf(r).length, guard = guardOf(g2, r), bonus = townBonus(g2, r), broken = breachOf(g2, r);
     const left = Math.max(0, stores2 - shut);
     const lines = [];
-    const pct9 = Math.round((bonus - 1) * 100);
-    lines.push(`Troops inside ${townName(r)} fight ${pct9}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
+    const pct10 = Math.round((bonus - 1) * 100);
+    lines.push(`Troops inside ${townName(r)} fight ${pct10}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
     if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : "part of a division"}. It holds the town while no army does.`);
     if (by) {
       const closed = ringClosed(g2, r);
@@ -7091,6 +7091,9 @@
   var WKEYS = [];
   var whyKey = (r) => WKEYS[r] ?? (WKEYS[r] = `railwhy:${r}`);
   var cutCause = (g2, r) => railCut(g2, r) ? CAUSES[(g2.flags[whyKey(r)] ?? 0) - 1] ?? null : null;
+  var AKEYS = [];
+  var gunsKey = (r) => AKEYS[r] ?? (AKEYS[r] = `railaa:${r}`);
+  var cutThroughGuns = (g2, r) => cutCause(g2, r) === "bombed" && g2.flags[gunsKey(r)] !== void 0 ? g2.flags[gunsKey(r)] - 1 : null;
   function cutRail(g2, r, cause, by) {
     var _a;
     if (!groundRules(g2) || !onNet(r) || railCut(g2, r)) return false;
@@ -7104,6 +7107,7 @@
     if (!railCut(g2, r)) return false;
     delete g2.flags[key2(r)];
     delete g2.flags[whyKey(r)];
+    delete g2.flags[gunsKey(r)];
     delete g2.flags[hastyKey(r)];
     g2.supplyDirty = true;
     return true;
@@ -7171,10 +7175,12 @@
     if (!groundRules(g2) || !onNet(target) || railCut(g2, target) || through <= 0) return 0;
     return Math.min(RAILWAYS.bomb.most, through / RAILWAYS.bomb.scale) * (1 - gunsStop2);
   }
-  function bombRail(g2, by, target, through, gunsStop2 = 0) {
+  function bombRail(g2, by, target, through, gunsStop2 = 0, guns2) {
     const p = railBombChance(g2, target, through, gunsStop2);
     if (p <= 0) return false;
-    return new Rng(hashString(`railbomb:${g2.seed}:${g2.turn}:${target}:${by}`)).next() < p && cutRail(g2, target, "bombed", by);
+    if (!(new Rng(hashString(`railbomb:${g2.seed}:${g2.turn}:${target}:${by}`)).next() < p && cutRail(g2, target, "bombed", by))) return false;
+    if (guns2 !== void 0) g2.flags[gunsKey(target)] = Math.max(0, Math.round(guns2)) + 1;
+    return true;
   }
   function railheads(g2, nat) {
     if (!groundRules(g2)) return null;
@@ -7463,7 +7469,9 @@
     if (k.how === "now") {
       const when2 = monthOf(k.since ?? g2.turn);
       const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf(g2.turn + k.hasty)}, or engineers relay the track sooner` : "engineers relay the track"}. Only engineers can be carried up to the break.`;
-      return { head: "Railway cut", line: `${cause ? `${capital(cause)} in ${when2}` : `Cut since ${when2}`}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ""}${when2})` };
+      const guns2 = cutThroughGuns(g2, region);
+      const through = guns2 === null ? "" : guns2 > 0 ? `, through level ${guns2} guns` : ". No guns guarded the railway here";
+      return { head: "Railway cut", line: `${cause ? `${capital(cause)} in ${when2}` : `Cut since ${when2}`}${through}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ""}${when2})` };
     }
     const when = monthOf(k.asOf);
     if (k.how === "seen") return { head: "Railway cut when last seen", line: `Last seen cut in ${when}${cause ? ` (${cause})` : ""}. What has been done to the line since is not known.`, short: `railway cut when last seen (${when})` };
@@ -8284,7 +8292,7 @@
   function bestBlow(g2, nat, lead2, escorts, hit, sure = false) {
     const A = CARRIERS.ai;
     let best = null;
-    const weigh = (m, t) => {
+    const weigh2 = (m, t) => {
       if (hit.has(`${m}:${t}`) || whyNotMission2(g2, lead2, m, t)) return;
       let fleets = [lead2];
       let a = assessAir(g2, fleets, m, t);
@@ -8308,9 +8316,9 @@
         continue;
       }
       const k = fleetFound(g2, x, nat);
-      if (k === "exact" || k === "report" && !sure) weigh("fleet", x.id);
+      if (k === "exact" || k === "report" && !sure) weigh2("fleet", x.id);
     }
-    for (const r of ports) if (shipsInPort(g2, r, nat).length) weigh("harbour", r);
+    for (const r of ports) if (shipsInPort(g2, r, nat).length) weigh2("harbour", r);
     return best;
   }
   function seaStaff(g2, nat, what = "all") {
@@ -10339,11 +10347,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct9 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct10 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct9 >= 100 ? "The target is well inside fighter range" : pct9 > 0 ? `The fighters are at ${pct9}% effect over the target` : "The target is beyond fighter range",
-        effect: pct9 >= 100 ? void 0 : pct9 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct10 >= 100 ? "The target is well inside fighter range" : pct10 > 0 ? `The fighters are at ${pct10}% effect over the target` : "The target is beyond fighter range",
+        effect: pct10 >= 100 ? void 0 : pct10 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -10548,7 +10556,7 @@
         notable2 = true;
         result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`;
       }
-      if (bombRail(g2, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) {
+      if (bombRail(g2, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0)) {
         value += 300;
         notable2 = true;
         result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`;
@@ -10896,7 +10904,7 @@
         if (seen2.has(homeOf(f))) continue;
         seen2.add(homeOf(f));
         const escorts = fightersAt(homeOf(f));
-        const weigh = (m, r, fleets) => {
+        const weigh2 = (m, r, fleets) => {
           if (soured(m, r.id)) return;
           const a = assessAir(g2, fleets, m, r.id);
           if (a.why) return;
@@ -10908,16 +10916,16 @@
         };
         const works = g2.regions.filter((r) => !hit.has(r.id) && atWar(g2, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission2(g2, f, "bomb", r.id) === null).sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id).slice(0, R.look);
         for (const r of works) {
-          weigh("bomb", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "bomb", r.id) === null)]);
-          weigh("night", r, [f]);
+          weigh2("bomb", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "bomb", r.id) === null)]);
+          weigh2("night", r, [f]);
         }
         const troops = [...front.keys()].map((t) => g2.regions[t]).filter((r) => !hit.has(r.id) && whyNotMission2(g2, f, "ground", r.id) === null).sort((a, b) => (front.get(b.id) ?? 0) * foes(b) - (front.get(a.id) ?? 0) * foes(a) || a.id - b.id).slice(0, R.look);
-        for (const r of troops) weigh("ground", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "ground", r.id) === null)]);
-        for (const r of troops) if (pushed(r.id) && whyNotMission2(g2, f, "line", r.id) === null) weigh("line", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "line", r.id) === null)]);
+        for (const r of troops) weigh2("ground", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "ground", r.id) === null)]);
+        for (const r of troops) if (pushed(r.id) && whyNotMission2(g2, f, "line", r.id) === null) weigh2("line", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "line", r.id) === null)]);
         if (siegeRules(g2)) {
           for (const r of g2.regions) {
             if (hit.has(r.id) || !besieged(g2, r) || !allied(g2, nat, besiegerOf(g2, r) ?? "") || breachOf(g2, r) * 100 > SIEGE.breach.most - 10 || whyNotMission2(g2, f, "town", r.id) !== null) continue;
-            weigh("town", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "town", r.id) === null)]);
+            weigh2("town", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "town", r.id) === null)]);
           }
         }
       }
@@ -13852,17 +13860,17 @@
     const own = r.owner === nat;
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
-    const pct9 = (x) => `${Math.round(x * 1e3) / 10}%`;
+    const pct10 = (x) => `${Math.round(x * 1e3) / 10}%`;
     if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED))} more a month`);
-    if (l.trade) bits.push(`trade agreements worth ${pct9(l.trade)} more`);
+    if (l.trade) bits.push(`trade agreements worth ${pct10(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
-    if (l.research) bits.push(`research ${pct9(l.research)} faster`);
+    if (l.research) bits.push(`research ${pct10(l.research)} faster`);
     if (l.xp) bits.push("corps raised here start more experienced");
-    if (l.drafts) bits.push(`replacements ${pct9(l.drafts)} faster`);
-    if (l.rest) bits.push(`corps resting here or beside it recover ${pct9(l.rest)} faster`);
+    if (l.drafts) bits.push(`replacements ${pct10(l.drafts)} faster`);
+    if (l.rest) bits.push(`corps resting here or beside it recover ${pct10(l.rest)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax)} more tax a month`);
     if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
-    if (!own && l.occupiedShare) bits.push(`the province pays ${pct9(l.occupiedShare)} more of its worth`);
+    if (!own && l.occupiedShare) bits.push(`the province pays ${pct10(l.occupiedShare)} more of its worth`);
     const s = bits.join(", ");
     return s ? `${s[0].toUpperCase()}${s.slice(1)}.` : "";
   }
@@ -13871,17 +13879,17 @@
     const share = own ? 1 : OCCUPIED;
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
-    const pct9 = (x) => `${Math.round(x * 1e3) / 10}%`;
+    const pct10 = (x) => `${Math.round(x * 1e3) / 10}%`;
     if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share)} a month`);
-    if (own && l.trade) bits.push(`trade agreements worth ${pct9(l.trade * lv)} more`);
+    if (own && l.trade) bits.push(`trade agreements worth ${pct10(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
-    if (own && l.research) bits.push(`research ${pct9(l.research * lv)} faster`);
+    if (own && l.research) bits.push(`research ${pct10(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
-    if (own && l.drafts) bits.push(`replacements ${pct9(l.drafts * lv)} faster`);
-    if (l.rest) bits.push(`corps resting here or beside it recover ${pct9(l.rest * lv)} faster`);
+    if (own && l.drafts) bits.push(`replacements ${pct10(l.drafts * lv)} faster`);
+    if (l.rest) bits.push(`corps resting here or beside it recover ${pct10(l.rest * lv)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax * lv)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
-    if (!own && l.occupiedShare) bits.push(`the province pays ${pct9(l.occupiedShare * lv)} more of its worth`);
+    if (!own && l.occupiedShare) bits.push(`the province pays ${pct10(l.occupiedShare * lv)} more of its worth`);
     if (!bits.length) return "Stands idle under occupation.";
     const s = bits.join(", ");
     return `${s[0].toUpperCase()}${s.slice(1)}.`;
@@ -15379,6 +15387,7 @@
       const live = (id) => !!g2.nations[id]?.alive && g2.nations[id].atWar.length > 0;
       const stake = (id) => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== "fort") ? 1 : 0), 0);
       const first2 = (list4) => list4.find((id) => live(id) && (!open || stake(id) > 0));
+      const held = new Set(g2.regions.filter((r) => r.ctrl === X.id).map((r) => r.id));
       for (const c of g2.corps.filter((c2) => c2.nat === X.id)) removeCorps(g2, c);
       fleetsOnFall(g2, X.id);
       airOnFall(g2, X.id);
@@ -15412,12 +15421,19 @@
         r.cap = false;
         r.since = g2.turn;
       }
+      const others = /* @__PURE__ */ new Map();
+      for (const r of g2.regions) if (held.has(r.id) && r.ctrl !== heir2) others.set(r.ctrl, [...others.get(r.ctrl) ?? [], r.name]);
       X.alive = false;
       X.align = "independent";
       X.fellOn = { turn: g2.turn, week: g2.week, to: heir2, how: "terms" };
-      if (open && heir2 !== e.partition.shares[0]?.[0]?.[0]) {
+      const asWritten = heir2 === e.partition.shares[0]?.[0]?.[0] && e.partition.shares.every(([takers, names]) => names.every((nm) => {
+        const r = g2.byName[nm];
+        return !r || r.ctrl === takers[0] || allied(g2, r.ctrl, takers[0]);
+      }));
+      if (open && !asWritten) {
         const H = g2.nations[heir2];
-        headline(g2, "event", `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id, void 0, { arm: "land", won: H.id, lost: X.id });
+        const also = [...others.entries()].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).map(([id, names]) => ` ${theName(g2.nations[id], true)} takes ${names.length <= 3 ? listed3(names) : `${names.length} of its provinces`}.`).join("");
+        headline(g2, "event", `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.${also}`, X.id, void 0, { arm: "land", won: H.id, lost: X.id });
         told = true;
       }
       recordFall(g2, X.id, heir2, "terms");
@@ -15574,8 +15590,12 @@
     };
   }
   function romeWaversOwn(g2) {
-    const st = romeStake(g2);
-    if (!st) return;
+    const w = stakeWarning(g2);
+    if (w) warning(g2, w.title, w.text, w.nat, w.region, w.about);
+  }
+  function stakeWarning(g2, viewer = g2.human) {
+    const st = romeStake(g2, viewer);
+    if (!st) return null;
     const { grounds, lost, who, falls } = st;
     const six = listed3(grounds, "or");
     const held = listed3(lost);
@@ -15584,7 +15604,7 @@
     const date2 = turnToDate(falls).label;
     const all = COUNTED[grounds.length] ?? String(grounds.length);
     const text = changed ? lost.length ? `Italy signs an armistice next month unless ${held} ${are} taken back. Mussolini has fallen, and Rome signs while ${who} hold any of ${six}: that ends your campaign. Take back what they hold this month and Italy fights on.` : `Mussolini has fallen. If ${who} hold any of the ${all} as a month opens, Rome signs at once and your campaign ends. ${NO_LAST_MONTH}: hold all ${all}. They are ${listed3(grounds)}.` : lost.length ? `Mussolini falls ${g2.turn < falls ? `in ${date2}` : "next month"} unless ${held} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.` : `Mussolini falls if ${who} take one of six places. They are ${listed3(grounds)}${g2.turn < falls ? `, and they count from ${date2}` : ""}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
-    warning(g2, changed && !lost.length ? ROME_HOLDS : "Rome wavers", text, "ITA", g2.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, "ITA");
+    return { title: changed && !lost.length ? ROME_HOLDS : "Rome wavers", text, nat: "ITA", about: "ITA", region: g2.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, tested: turnToDate(g2.turn + 1).label.split(" ")[0] };
   }
 
   // ../../data/campaign/morale.json
@@ -16394,13 +16414,13 @@
     const share = (n) => all > 0 ? (held[n.id]?.vp ?? 0) / all : 0;
     const top = great[0] ?? [...live].sort((a, b) => share(b) - share(a) || (a.id < b.id ? -1 : 1))[0];
     if (share(top) < DOMINATION.won.share) return;
-    const pct9 = Math.round(share(top) * 100);
+    const pct10 = Math.round(share(top) * 100);
     const rest = live.filter((n) => n.id !== top.id);
     g2.flags["dom:won"] = g2.turn;
     g2.flags["dom:laid"] = rest.length;
     for (const n of rest) layDown(g2, n, top.id);
     g2.supplyDirty = true;
-    headline(g2, "goal", fill3(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct: pct9, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
+    headline(g2, "goal", fill3(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct: pct10, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
   }
   function worldWinner(g2) {
     if (!dominating(g2) || !g2.flags["dom:won"]) return null;
@@ -18308,12 +18328,12 @@
     const wear = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * weight2 * (1 + DEFENCE.wear.guns * soften)) : 0;
     const tired = tiredD > 0 && cmdD > 0 ? Math.min(DEFENCE.tired.most, tiredD / cmdD) : 0;
     if (tiredMost >= 0.05) {
-      const pct9 = Math.round(DEFENCE.tired.per * tiredMost * 100);
+      const pct10 = Math.round(DEFENCE.tired.per * tiredMost * 100);
       const n = Math.max(1, Math.round(tiredMost));
       lines.push({
         label: "Earlier attacks",
         value: opts.after ? "The defenders as the first wave will leave them" : tiredMost < 0.5 ? "The defenders have been attacked lightly already this month" : `The defenders have already stood off ${n === 1 ? "an attack" : `${n} attacks`} this month`,
-        effect: `Tired men: defence down ${pct9 ? `as much as ${pct9}%` : "a little"} for the corps that fought. They are fresh again when their own month begins`
+        effect: `Tired men: defence down ${pct10 ? `as much as ${pct10}%` : "a little"} for the corps that fought. They are fresh again when their own month begins`
       });
     }
     if (wide3 && !town && defenders.length && weight2 < 0.95) lines.push({
@@ -18397,8 +18417,8 @@
     if (heartA !== null || heartD !== null) {
       const say = (m, who) => m === null ? "" : `${who} ${moraleWord(m).toLowerCase()} (${Math.round(m * 100)}%)`;
       const fx = (m, what) => {
-        const pct9 = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
-        return pct9 ? `${what} ${pct9 > 0 ? "up" : "down"} ${Math.abs(pct9)}%` : "";
+        const pct10 = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
+        return pct10 ? `${what} ${pct10 > 0 ? "up" : "down"} ${Math.abs(pct10)}%` : "";
       };
       const value = [say(heartA, "Attackers"), say(heartD, heartA === null ? "Defenders" : "defenders")].filter(Boolean).join(", ");
       const effect = [fx(heartA, "Attack"), fx(heartD, "defence")].filter(Boolean).join(", ");
@@ -19071,7 +19091,7 @@
     if (net && railCut(g2, to)) return news2("cut", `The railway at ${dest.name} is cut${cutAside(g2, to)}.`, `No train runs into it until ${mended(to)}.`, to);
     const INF = 1e9;
     const cost = new Int32Array(g2.regions.length).fill(INF), prev = new Int32Array(g2.regions.length).fill(-1);
-    const weigh = (a2, b) => {
+    const weigh2 = (a2, b) => {
       const r = g2.regions[b];
       return !allied(g2, c.nat, r.ctrl) && !junctionOpenTo(g2, c.nat, r) ? 4 : !open(r) || net && railCut(g2, b) || downBetween(g2, a2, b) ? 1 : 0;
     };
@@ -19081,7 +19101,7 @@
       const a2 = dq.shift();
       for (const b of net ? railsAt(a2) : g2.regions[a2].nb) {
         if (g2.regions[b].terrain === DESERT.terrain) continue;
-        const w = weigh(a2, b);
+        const w = weigh2(a2, b);
         if (cost[a2] + w >= cost[b]) continue;
         cost[b] = cost[a2] + w;
         prev[b] = a2;
@@ -19123,9 +19143,10 @@
     return { code: no.code, line: `${who} cannot go by rail, so nobody rides. ${no.line}`, ...no.at !== void 0 ? { at: no.at } : {} };
   }
   function rideLines(g2, corps, to, press) {
+    const works = corps.length > 0 && corps.every((c) => c.kind === "eng") && railCut(g2, to);
     return {
-      line: `${press}: by rail to ${g2.regions[to].name}, there this month. It takes the whole month.`,
-      relay: corps.length > 0 && corps.every((c) => c.kind === "eng") && railCut(g2, to) ? "Engineers can relay the track here." : ""
+      line: `${press}: by ${works ? "works train" : "rail"} to ${g2.regions[to].name}, there this month. It takes the whole month.`,
+      relay: works ? "Engineers can relay the track here." : ""
     };
   }
   function railReachFor(g2, corps) {
@@ -19167,6 +19188,14 @@
     if (!ride.length) return null;
     const no = whyNoTrainFor(g2, ride);
     if (no) return { can: false, strong: "", line: no.line };
+    if (typeof beyond !== "number") {
+      const names = beyond.map((id) => g2.regions[id].name);
+      if (names.length > 0 && names.length <= 3) {
+        const strong = `By rail this month to ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`}:`;
+        return { can: true, strong, line: `${strong} ${press} ${names.length === 1 ? "it" : where.many}. It takes the whole month.` };
+      }
+      beyond = names.length;
+    }
     if (beyond > 0) {
       const strong = `By rail this month to ${beyond} more place${beyond === 1 ? "" : "s"}:`;
       return { can: true, strong, line: `${strong} ${press} ${beyond === 1 ? where.one : where.many}. It takes the whole month.` };
@@ -19182,18 +19211,23 @@
     }
     return vp ? 1 - held / vp : 0;
   }
-  function collapseScore(g2, nat) {
+  var COLLAPSE = { capital: 0.45, home: 0.35, army: 0.2 };
+  function capitalLost(g2, nat, ahead = 0) {
     const n = g2.nations[nat];
-    if (n.capital < 0) return 0;
     const seat3 = g2.regions[n.capital];
     const shut = siegeRules(g2) && besieged(g2, seat3) && ringClosed(g2, seat3);
     const since = g2.flags[`siege:${seat3.id}`];
-    const sat = since === void 0 ? 0 : Math.max(0, g2.turn - since);
+    const sat = (since === void 0 ? 0 : Math.max(0, g2.turn - since)) + ahead;
     const after = SIEGE.capitalAfter;
     const hold2 = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
-    const capLost = !allied(g2, nat, seat3.ctrl) ? 1 : shut ? Math.min(1, hold2) : 0;
+    return !allied(g2, nat, seat3.ctrl) ? 1 : shut ? Math.min(1, hold2) : 0;
+  }
+  function collapseScore(g2, nat) {
+    const n = g2.nations[nat];
+    if (n.capital < 0) return 0;
+    const capLost = capitalLost(g2, nat);
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
-    const score = 0.45 * capLost + 0.35 * homeLost(g2, nat) + 0.2 * (1 - army) + exhausted(g2, nat);
+    const score = COLLAPSE.capital * capLost + COLLAPSE.home * homeLost(g2, nat) + COLLAPSE.army * (1 - army) + exhausted(g2, nat);
     const worn = willLost(g2, nat);
     return worn > 0 ? score + worn : score;
   }
@@ -20537,16 +20571,20 @@
     if (!airWar(g2) || nat === null || !g2.nations[nat].atWar.length) return [];
     const sea = kind === "strike" || kind === "fleet";
     const sight2 = sightOf(g2, nat);
+    const needs = kindRow(kind).needs;
     const out = [];
     for (const [t, can2] of reachable(g2, nat, kind)) {
       if (lead2 >= 0 && !can2.some((f) => f.id === lead2)) continue;
       const quarry = kind === "fleet" ? g2.fleets.find((x) => x.id === t) : null;
       const zone = quarry ? quarry.zone : kind === "strike" ? t : -1;
       const p = sea ? g2.seas[zone] : g2.regions[t];
-      const d = Math.min(...can2.filter((f) => lead2 < 0 || f.id === lead2).map((f) => distTo(g2, f, kind, t)));
+      const flies = can2.filter((f) => lead2 < 0 ? needs !== "bmr" || f.bmr > 0 : f.id === lead2);
+      const from = (flies.length ? flies : can2).reduce((a, b) => distTo(g2, b, kind, t) < distTo(g2, a, kind, t) ? b : a);
+      const d = distTo(g2, from, kind, t);
+      const far = Math.round(d) > 0 ? `${num2(d)} km` : sea ? from.ship !== void 0 ? "carriers in these waters" : "based on these shores" : from.ship !== void 0 ? "carriers off this coast" : "based at the target";
       const known = quarry && fleetKnown(g2, quarry, nat) !== "exact" ? "report" : "exact";
       const name = kind === "fleet" ? placeOf(g2, kind, t, nat).replace(/^the /, "") : p.name;
-      out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? "" : g2.regions[t].ctrl, x: p.x, y: p.y, km: d, groups: can2.length, what: whatIsThere(g2, nat, kind, t, sight2) });
+      out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? "" : g2.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can2.length, what: whatIsThere(g2, nat, kind, t, sight2) });
     }
     return out.sort((a, b) => a.km - b.km || a.id - b.id);
   }
@@ -21847,14 +21885,23 @@
     const months3 = ["no", "one", "two", "three", "four", "five", "six"][S.months] ?? String(S.months);
     const head = `${months3.charAt(0).toUpperCase()}${months3.slice(1)} months on`;
     const reports = fog ? ", by your reports" : "";
+    const count4 = (x) => Math.max(1, Math.round(x));
     const n = (x) => {
-      const k = Math.max(1, Math.round(x));
+      const k = count4(x);
       return `${k} division${k === 1 ? "" : "s"}`;
     };
-    if (R.theirs <= 0) return { head, line: `No enemy army can reach ${to.name} by land within ${months3} months${reports}.`, tone: "holds", chance: 1 };
+    if (R.theirs <= 0) return { head, line: `No enemy army can reach ${to.name} by land within ${months3} months${reports}.`, tone: "holds", chance: 1, divs: { ours: count4(R.divs.ours), theirs: 0 } };
     const tone = R.chance >= S.sure ? "holds" : R.chance >= S.even ? "even" : "lost";
     const says = tone === "holds" ? "Your staff would expect to hold it." : tone === "even" ? "Your staff calls it an even thing." : "Your staff would not expect this force to be still ashore by then.";
-    return { head, line: `Within ${months3} months the enemy can bring about ${n(R.divs.theirs)} against ${to.name}${reports}; you would have about ${n(R.divs.ours)} there. ${says}`, tone, chance: R.chance };
+    const said = { head, line: `Within ${months3} months the enemy can bring about ${n(R.divs.theirs)} against ${to.name}${reports}; you would have about ${n(R.divs.ours)} there. ${says}`, tone, chance: R.chance, divs: { ours: count4(R.divs.ours), theirs: count4(R.divs.theirs) } };
+    if (tone === "lost") {
+      said.warn = {
+        head: "Ashore, then outnumbered",
+        text: `The force can land, but within ${months3} months the enemy can bring about ${n(R.divs.theirs)} against it${reports}${fog ? "," : ""} and you would have about ${count4(R.divs.ours)} there. Your staff would not expect it to be still ashore.`,
+        also: `And a force that did get ashore would be outnumbered: within ${months3} months the enemy can bring about ${n(R.divs.theirs)} against it${reports}${fog ? "," : ""} and you would have about ${count4(R.divs.ours)} there.`
+      };
+    }
+    return said;
   }
 
   // ../../src/campaign/staff.ts
@@ -25619,7 +25666,7 @@
       fog: g2.flags.nofog !== 1
     };
   }
-  var setStaffCap = (g2, pct9) => setCap(g2, pct9);
+  var setStaffCap = (g2, pct10) => setCap(g2, pct10);
 
   // ../../src/campaign/claims.ts
   var listOf3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
@@ -25996,8 +26043,8 @@
   function orderDepth(g2, id) {
     return g2.human !== null && setDepth(g2, id, humanUp(g2) && !onEve(g2));
   }
-  function orderStaffCap(g2, pct9) {
-    return g2.human !== null && setStaffCap(g2, pct9);
+  function orderStaffCap(g2, pct10) {
+    return g2.human !== null && setStaffCap(g2, pct10);
   }
   function humanUp(g2) {
     return g2.human !== null && current(g2) === g2.human && g2.nations[g2.human].alive;
@@ -27324,6 +27371,31 @@
     return g2;
   }
 
+  // ../../src/campaign/guard.ts
+  var GUARD_TOP = 3;
+  var guardStops = (level) => Math.max(0, level) * ARSENAL.works.aa.cut;
+  function guardSays(g2, region, viewer = g2.human) {
+    const r = g2.regions[region];
+    if (!r || !groundRules(g2) || !onNet(region)) return null;
+    const level = workLevel(g2, "aa", region);
+    const own = !!viewer && !!g2.nations[viewer]?.alive && r.ctrl === viewer;
+    const due = own ? g2.nations[viewer].queue.filter((b) => b.what === "work" && b.item === "aa" && b.region === region).map((b) => b.eta).sort((a, b) => a - b) : [];
+    const coming = due.length, ready = coming ? due[0] : null;
+    const stops = guardStops(level);
+    const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : "No guns guard the railway here.";
+    const building2 = ready !== null ? `Level ${level + 1} guns are being built here: ready in ${turnToDate(ready).label}.` : "";
+    const line = !building2 ? guards : level > 0 ? `${guards} ${building2}` : building2;
+    let order2 = null;
+    if (own && level + coming < GUARD_TOP) {
+      const o = offers(g2, viewer, region).find((x) => x.key === "work:aa");
+      if (o && o.at === region) {
+        const next = level + coming + 1;
+        order2 = { head: level + coming > 0 ? "Guard it better" : "Guard the line", text: `build level ${next} guns`, level: next, cost: o.cost, months: o.months, why: o.why, poor: o.poor };
+      }
+    }
+    return { level, coming, ready, stops, line, order: order2 };
+  }
+
   // ../../src/campaign/gates.ts
   var upFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   var thePlace = (name) => / (Zone|Straits?|Coast|Islands?)$/.test(name) ? `the ${name}` : name;
@@ -27822,7 +27894,7 @@
     const all = raidTargetsFor(g2, kind, group);
     const rows = all.slice(0, 12).map((t) => {
       const p = previewRaid(g2, kind, t.id, lead2);
-      const lines = [`${num3(t.km)} km. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ""} ${t.groups} of your groups could fly it.`];
+      const lines = [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ""} ${t.groups} of your groups could fly it.`];
       if (p.why) lines.push(p.why);
       else if (kind === "recon") lines.push(`${p.verdict}. ${p.effects[0]}`);
       else lines.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(", ")}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
@@ -27875,7 +27947,7 @@
     const rows = raidTargetsFor(g2, "recon", id).slice(0, 14).map((t) => ({ t, p: previewRaid(g2, "recon", t.id, [id]) })).map(({ t, p }) => ({
       nat: t.holder,
       title: t.name,
-      lines: [`${num3(t.km)} km. ${t.what}. ${p.verdict}.`],
+      lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`],
       buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }]
     }));
     return {
@@ -27996,6 +28068,170 @@
       return { ok, note: ok ? `The group moves to ${g2.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.", open: `group:${part[1]}` };
     }
     return null;
+  }
+
+  // ../../src/campaign/danger.ts
+  var IN_DANGER = "The country in danger";
+  var CAPITAL_BESIEGED = "It is your capital: the country will not long outlast it.";
+  var REACH_AT = 2 / 3;
+  var NEAR = 0.05;
+  var pct8 = (x) => `${Math.round(clamp(x, 0, 1) * 100)}%`;
+  var weigh = (capital2, home, army, more) => COLLAPSE.capital * capital2 + COLLAPSE.home * home + COLLAPSE.army * (1 - army) + more;
+  function standing4(g2, nat, ahead = 0) {
+    const n = g2.nations[nat];
+    const capital2 = n.capital < 0 ? 0 : capitalLost(g2, nat, ahead);
+    const home = homeLost(g2, nat);
+    const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
+    const more = exhausted(g2, nat) + willLost(g2, nat);
+    return { capital: capital2, home, army, more, score: weigh(capital2, home, army, more) };
+  }
+  var SHARES = [[0.9, "nine tenths of"], [0.75, "three quarters of"], [2 / 3, "two thirds of"], [0.5, "half"], [1 / 3, "a third of"], [0.25, "a quarter of"], [0.2, "a fifth of"], [0.1, "a tenth of"]];
+  function armyWords(share) {
+    if (share >= 0.95) return "the army is at full strength";
+    if (share < 0.07) return "the army is all but gone";
+    let best = SHARES[0];
+    for (const s of SHARES) if (Math.abs(s[0] - share) < Math.abs(best[0] - share)) best = s;
+    return `the army is at ${best[1]} its strength`;
+  }
+  function atTheGates(g2, nat, seat3, invaded = false) {
+    let best = null;
+    for (const id of [seat3, ...g2.regions[seat3].nb]) {
+      if (invaded && id !== seat3 && (g2.regions[id].owner !== nat || g2.regions[id].overseas)) continue;
+      const w = {};
+      for (const u of g2.regions[id].units) if (!u.dead && u.kind !== "fort" && atWar(g2, u.nat, nat)) w[u.nat] = (w[u.nat] ?? 0) + u.divs * u.str;
+      for (const by of Object.keys(w).sort()) {
+        const weight2 = w[by] + (id === seat3 ? 1e6 : 0);
+        if (!best || weight2 > best.w) best = { by, from: id, w: weight2 };
+      }
+    }
+    return best ? { by: best.by, from: best.from } : null;
+  }
+  function reading(g2, viewer = g2.human) {
+    if (!viewer) return null;
+    const n = g2.nations[viewer];
+    if (!n?.alive || n.capital < 0 || standsFreed(g2, n)) return null;
+    if (!n.atWar.some((e) => g2.nations[e]?.alive)) return null;
+    const seat3 = g2.regions[n.capital];
+    const open = g2.flags.open === 1;
+    const now = standing4(g2, viewer);
+    const limit = n.resilience;
+    const held = allied(g2, viewer, seat3.ctrl);
+    const gates = held ? atTheGates(g2, viewer, seat3.id) : null;
+    const invader = held ? atTheGates(g2, viewer, seat3.id, true) : null;
+    const sieged = held && besieged(g2, seat3);
+    const shut = sieged && siegeRules(g2) && ringClosed(g2, seat3);
+    const state = !held ? "lost" : sieged ? "besieged" : gates ? "reach" : "free";
+    let of2 = 0, lost = 0, vp = 0, vpLost = 0, vpSieged = 0, vpFront = 0;
+    const foeIn = (id) => g2.regions[id].units.some((u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, viewer));
+    for (const r of g2.regions) {
+      if (r.owner !== viewer || r.overseas) continue;
+      of2++;
+      vp += r.vp;
+      if (!allied(g2, viewer, r.ctrl)) {
+        lost++;
+        vpLost += r.vp;
+      } else if (r.id !== seat3.id) {
+        if (besieged(g2, r)) vpSieged += r.vp;
+        if (besieged(g2, r) || r.nb.some(foeIn)) vpFront += r.vp;
+      }
+    }
+    const share = (x) => vp ? x / vp : 0;
+    const city = seat3.name;
+    const byAdj = gates && g2.nations[gates.by] ? g2.nations[gates.by].adj : "Enemy";
+    const capital2 = state === "lost" ? `${city} is lost` : state === "besieged" ? `${city} is besieged` : state === "reach" ? `${byAdj} troops are a march from ${city}` : `${city} is free`;
+    const home = lost === 0 ? "no home province is lost" : `${lost} of ${of2} home provinces ${lost === 1 ? "is" : "are"} lost`;
+    let how = null, sure = false;
+    const next = shut ? standing4(g2, viewer, 1) : now;
+    if (shut && (now.score >= limit || next.score >= limit)) {
+      how = "clock";
+      sure = true;
+    }
+    if (!how && gates) {
+      const inside2 = g2.corps.reduce((s, c) => c.nat === viewer && !c.dead && c.reg === seat3.id ? s + c.divs * c.str : s, 0);
+      const army = n.armyPeak > 0 ? clamp((armySize(g2, viewer) - inside2) / n.armyPeak, 0, 1) : 1;
+      const own = seat3.owner === viewer && !seat3.overseas ? seat3.vp : 0;
+      const alone = weigh(1, share(vpLost + own), army, now.more);
+      const withMore = weigh(1, share(vpLost + own + vpSieged), army, now.more) + NEAR;
+      if (alone >= limit) {
+        how = "taken";
+        sure = true;
+      } else if (withMore >= limit) how = "taken";
+    }
+    if (!how && held && !sieged && open && siegeRules(g2) && now.home < SIEGE.stand) {
+      if (now.score >= limit && victorOf(g2, viewer)) {
+        how = "reached";
+        sure = true;
+      }
+    } else if (!how) {
+      if (!open && now.score >= limit) {
+        how = "now";
+        sure = true;
+      } else if (weigh(now.capital, share(vpLost + vpFront), now.army, now.more) + NEAR >= limit && (!open || victorOf(g2, viewer))) how = "more";
+    }
+    return {
+      nat: viewer,
+      region: seat3.id,
+      score: now.score,
+      limit,
+      near: limit > 0 ? now.score / limit : 0,
+      parts: now,
+      seat: state,
+      by: gates?.by ?? null,
+      from: gates?.from ?? null,
+      reachBy: invader?.by ?? null,
+      reachFrom: invader?.from ?? null,
+      lost,
+      of: of2,
+      capital: capital2,
+      home,
+      army: armyWords(now.army),
+      canFall: how !== null,
+      how,
+      sure,
+      lastMonth: shut && now.score >= limit,
+      within: !!invader,
+      twoThirds: limit > 0 && now.score >= REACH_AT * limit
+    };
+  }
+  function fallWarning(g2, viewer = g2.human, told = false) {
+    const r = reading(g2, viewer);
+    if (!r) return null;
+    const n = g2.nations[r.nat];
+    const seat3 = g2.regions[r.region];
+    const name = theName(n, true), mid = theName(n), city = seat3.name;
+    const parts = `${r.capital[0].toUpperCase()}${r.capital.slice(1)}, ${r.home} and ${r.army}`;
+    const make = (level, head, sub, tail, note4, more = {}) => ({ title: IN_DANGER, level, head, text: `${head}. ${sub} ${tail}`, sub, note: note4, nat: r.nat, region: r.region, reading: r, ...more });
+    const stop = r.seat === "besieged" ? `Break the siege of ${city}, or win back home ground.` : r.seat === "reach" ? `Hold ${city}, or win back home ground.` : r.seat === "lost" ? `Take back ${city} or other home ground.` : "Win back home ground, and keep the army in being.";
+    if (r.lastMonth) {
+      const month2 = turnToDate(g2.turn + 1).label.split(" ")[0];
+      const on = investedOn(g2, seat3);
+      const ring = besiegerOf(g2, seat3);
+      const head = `${name} gives in as ${month2} opens unless the siege of ${city} is broken`;
+      const sub = `Besieged${on > 0 ? ` since ${turnToDate(on).label}` : ""}${ring && g2.nations[ring] ? ` by ${g2.nations[ring].adj} troops` : ""}`;
+      return make("last", head, `${parts}. A government shut in its capital loses its hold on the country month by month, and the siege has now lasted too long. Your campaign ends with it.`, "Break the siege this month, or win back home ground.", `Break the siege of ${city} this month.`, {
+        frame: { head: `${city} is shut in`, sub, sentence: `${head}. Your campaign ends with it.`, figures: [{ n: "1", label: "month left" }, { n: String(r.lost), label: `of ${r.of} home provinces lost` }], month: month2 }
+      });
+    }
+    if (r.canFall) {
+      const ends = r.how === "taken" ? r.sure ? `If ${city} is taken, ${mid} gives in and your campaign ends.` : `If ${city} is taken and the month goes badly besides, ${mid} gives in and your campaign ends.` : r.how === "clock" ? `A government shut in its capital loses its hold on the country month by month: as things stand ${mid} gives in next month, and at once if ${city} is taken. Your campaign ends with it.` : r.how === "reached" ? `That is more than the country will bear, and only a free capital keeps it in the war: ${mid} gives in, and your campaign ends, the month an enemy army stands before ${city}.` : r.how === "now" ? `That is more than the country will bear: as things stand ${mid} gives in when this month closes, and your campaign ends.` : `With a little more lost, ${mid} gives in and your campaign ends.`;
+      const note4 = r.how === "reached" ? `Keep the enemy from ${city}, and win back home ground.` : r.how === "now" ? "Win back home ground this month." : stop;
+      return make("fall", `${name} can fall next month`, `${parts}. ${ends}`, note4, note4);
+    }
+    if ((r.within || r.twoThirds) && !told) {
+      const way = `${name} gives in when the capital, the home provinces and the army lost together pass what the country will bear, and your campaign ends with it: it is ${pct8(r.near)} of the way there.`;
+      if (r.within) {
+        const adj = r.reachBy && g2.nations[r.reachBy] ? g2.nations[r.reachBy].adj : "Enemy";
+        const where = r.reachFrom === r.region ? `${adj} troops are at the gates of ${city}` : `${adj} troops stand in ${g2.regions[r.reachFrom].name}, beside the capital`;
+        const note4 = r.seat === "besieged" ? `Break the siege of ${city}, and win back home ground.` : `Hold ${city}, and win back home ground.`;
+        return make("reach", `The enemy is within reach of ${city}`, `${where}. ${parts}. ${way}`, note4, note4);
+      }
+      return make("reach", `${name} has lost two thirds of what it will bear`, `${parts}. ${way}`, stop, stop);
+    }
+    return null;
+  }
+  function withinReach(g2, viewer = g2.human) {
+    const r = reading(g2, viewer);
+    return !!r && (r.within || r.twoThirds || r.canFall);
   }
 
   // ../../src/campaign/monthcard.ts
@@ -28153,7 +28389,8 @@
       shore: g2.shoreReports.length,
       before: g2.regions.map((r) => r.ctrl),
       warring: Object.values(g2.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
-      orders: monthOrders(g2, viewer)
+      orders: monthOrders(g2, viewer),
+      ...withinReach(g2, viewer) ? { reach: true } : {}
     };
   }
   function openingMark(g2, viewer = g2.human) {
@@ -28176,13 +28413,15 @@
   var GROUND_PROVINCES = 1;
   var GROUND_NEWS = 2;
   var dateWords = (x) => x.month ? `as ${x.month} opens` : `week ${x.week}`;
-  function monthCard(g2, mark, viewer = g2.human) {
+  var NOT_YET_FOUGHT = "Nothing has been fought on your fronts yet.";
+  function monthCard(g2, mark, viewer = g2.human, opts = {}) {
     const me = viewer ?? "";
     const N = g2.nations[me];
     const card = {
       turn: mark.turn,
       month: turnToDate(mark.turn).label,
       viewer: me,
+      ...opts.opening ? { opening: true } : {},
       bands: [],
       boxes: [],
       lead: null,
@@ -28201,7 +28440,7 @@
       more: 0
     };
     if (!N) {
-      card.quiet = "A quiet month.";
+      card.quiet = opts.opening ? NOT_YET_FOUGHT : "A quiet month.";
       return card;
     }
     const mine3 = (nat) => nat === me;
@@ -28340,6 +28579,7 @@
         row2.facts = [still2.men > 0 ? { n: num4(still2.men), label: "men shut in" } : corps ? row2.facts[0] : laid.first, { n: num4(o), label: "men lost" }, { n: num4(t), label: "of theirs" }];
         if (still2.men > 0) row2.follows = shutWords(place2, o, still2);
       }
+      if (reg && reg.id === N?.capital && mine3(reg.ctrl) && besieged(g2, reg) && row2.follows && !row2.follows.includes(CAPITAL_BESIEGED)) row2.follows = `${row2.follows} ${CAPITAL_BESIEGED}`;
       ranked.push({ row: row2, sub: GROUND_FIGHTING, weight: ourMen, place: reg?.cap ? "capital" : size, ...r.siege ? { laid: { region: r.region, ours: oursLost, theirs: theirsLost, first: row2.facts[0] } } : {} });
     }
     const wonFrom = {}, lostTo = {};
@@ -28624,6 +28864,18 @@
       banded.push({ band: { word, title: warn ? h.warn : void 0, nats, head, text: h.text, week: h.week, when: "", ...dated2(h.turn), region: h.region, ...lib && (mine3(h.nat) || side3(lib.by)) ? { good: true } : {} }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said2, good: !!lib && (mine3(h.nat) || side3(lib.by)) });
       used.add(h);
     });
+    const stake = stakeWarning(g2, me);
+    if (stake) {
+      for (const b of banded.filter((x) => x.band.word === "WARNING" && (x.band.title === "Rome wavers" || x.band.title === ROME_HOLDS))) banded.splice(banded.indexOf(b), 1);
+      const h = { turn: g2.turn, week: 1, text: stake.text, kind: "event", nat: stake.nat, region: stake.region, warn: stake.title, about: stake.about };
+      banded.push({ band: { word: "WARNING", title: stake.title, nats: [g2.nations[stake.about] ? stake.about : me], head: first(stake.text), text: stake.text, week: 1, when: "", month: stake.tested, region: stake.region }, rank: 1, h });
+    }
+    const fall2 = fallWarning(g2, me, !opts.opening && !!mark.reach);
+    const due = stakeDue(g2, me);
+    if (fall2 && (fall2.level !== "last" || due)) {
+      const h = { turn: g2.turn, week: 1, text: fall2.text, kind: "event", nat: fall2.nat, region: fall2.region, warn: fall2.title, about: fall2.nat };
+      banded.push({ band: { word: "WARNING", title: fall2.title, nats: [fall2.nat], head: fall2.head, text: fall2.text, sub: fall2.sub, week: 1, when: "", region: fall2.region, note: fall2.note }, rank: fall2.level === "reach" ? 1 : -1, h });
+    }
     for (const nat of new Set(banded.filter((b) => b.h.kind === "fall" && b.h.nat).map((b) => b.h.nat))) {
       const same = banded.filter((b) => b.h.kind === "fall" && b.h.nat === nat);
       const keep = [...same].reverse().find((b) => b.h.region === void 0) ?? same[same.length - 1];
@@ -28673,7 +28925,6 @@
       const short = b.band.text.split(/(?<=\.) /).find((s) => s.startsWith(NO_LAST_MONTH));
       Object.assign(b.band, { head: ROME_HOLDS, spent: true }, short ? { note: short } : {});
     }
-    const due = stakeDue(g2, me);
     if (due) for (const b of banded.filter((x) => x.band.word === "WARNING" && x.band.title === due.title)) banded.splice(banded.indexOf(b), 1);
     const nearness = (b) => b.onHim || !mine3(b.h.nat) && nameAt(me, b.band.head) >= 0 ? 0 : mine3(b.h.nat) ? 1 : 2;
     banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
@@ -28724,6 +28975,23 @@
         facts: due.figures,
         ...due.region !== void 0 ? { region: due.region } : {}
       };
+    } else if (fall2?.level === "last" && fall2.frame) {
+      card.lead = {
+        ...blank2(),
+        cls: 2,
+        stake: true,
+        tag: "LAST MONTH",
+        tone: "bad",
+        ours: fall2.nat,
+        place: g2.nations[fall2.nat]?.name ?? "",
+        kind: "THE CAPITAL",
+        month: fall2.frame.month,
+        head: fall2.frame.head,
+        line: fall2.frame.sub,
+        follows: fall2.frame.sentence,
+        facts: fall2.frame.figures,
+        region: fall2.region
+      };
     }
     card.rows = all.filter((r) => r !== card.lead);
     card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);
@@ -28738,7 +29006,7 @@
       card.rows.splice(card.show, 0, gone);
     }
     for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
-    card.quiet = fighting.length ? "" : card.bands.length || all.some((r) => r.cls === 2) ? "There was no fighting on your fronts this month." : "A quiet month.";
+    card.quiet = fighting.length ? "" : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? "There was no fighting on your fronts this month." : "A quiet month.";
     if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
     const tone = (good, bad) => good > bad ? "good" : bad > good ? "bad" : "plain";
     const words = (n, w) => n ? `${n} ${w}` : `none ${w}`;
@@ -28765,6 +29033,14 @@
       if (still.has(o.id)) continue;
       const c = o.what === "corps" ? g2.corps.filter((x) => x.nat === me && !x.dead && x.name === o.name).sort((x, y) => y.id - x.id)[0] : void 0;
       if (o.what === "corps" ? !c : g2.regions[o.region]?.ctrl !== me) continue;
+      const item = o.what === "work" ? o.label === "anti-aircraft guns" ? "aa" : o.label === "airfields" ? "field" : null : null;
+      if (!o.unit && (item || o.label === "fortifications")) {
+        const level = item ? workLevel(g2, item, o.region) : 0;
+        const town = g2.regions[o.region] ? townName(g2.regions[o.region]) : "";
+        const text = `${cap6(o.label)} ${item === "aa" ? "ready" : "finished"}`, place2 = level > 0 ? `${town}, level ${level}` : town;
+        if (!done.some((x) => x.bare && x.text === text && x.place === place2)) done.push({ sign: o.mark, count: 1, text, place: place2, region: o.region, bare: true });
+        continue;
+      }
       group(done, o.mark, o.unit ? `${o.label}|${o.plural}|ready` : `${o.label}|${o.plural}|finished`, c ? c.reg : o.region, false);
     }
     for (const c of cityOrders(g2, me)) {
@@ -28772,6 +29048,7 @@
       for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
     }
     card.home = [...done, ...coming].map((x) => {
+      if (x.bare) return x;
       const [one, many, tail] = x.text.split("|");
       return { ...x, text: `${x.count === 1 ? one : many} ${tail}` };
     });
@@ -28792,6 +29069,11 @@
       }
       if (h.kind === "info" && h.arm === "sea" && !card.foot) {
         card.foot = h.text;
+        used.add(h);
+        continue;
+      }
+      const built = h.kind === "info" ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
+      if (built && card.home.some((x) => x.bare && x.region !== void 0 && g2.regions[x.region]?.name === built[2] && x.text.toLowerCase().startsWith(built[1]))) {
         used.add(h);
         continue;
       }
@@ -29038,7 +29320,7 @@
         "1941": "At war and losing it: beaten in the desert, stuck in the Greek mountains, the fleet hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
         "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
       } },
-      { id: "USA", under: "America stays out until December 1941 unless you decide otherwise. Start in 1942 to begin at war.", years: {
+      { id: "USA", under: "A long peace comes first: in history the United States was not at war until December 1941. Take over in 1942 to begin at war.", peaceUntil: 28, years: {
         "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Going to war will not turn the factories over in a day: they climb to full war work over many months. Arm while you can, and choose your moment.",
         "1940": "Still at peace. The war in Europe has gone quiet for the winter, your factories are taking orders from London and Paris, and the army is still a cadre.",
         "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. A fifth of your industry is on war work, and war itself will take the rest there only step by step. How long can you stand aside?",
@@ -30285,7 +30567,7 @@
       danger = /* @__PURE__ */ new Set();
     }
     const far = [];
-    let standing4 = [];
+    let standing5 = [];
     let standingTo = -1;
     let spent = false;
     try {
@@ -30301,17 +30583,17 @@
           const on = cs.find((c) => marchOf(s, c) >= 0);
           if (on) {
             standingTo = marchOf(s, on);
-            standing4 = farRoad(s, on, standingTo)?.road ?? [];
+            standing5 = farRoad(s, on, standingTo)?.road ?? [];
           }
         }
       }
     } catch {
       far.length = 0;
-      standing4 = [];
+      standing5 = [];
       standingTo = -1;
       spent = false;
     }
-    return { regions: [...merged.values()], danger: [...danger], far, standing: standing4, standingTo, spent };
+    return { regions: [...merged.values()], danger: [...danger], far, standing: standing5, standingTo, spent };
   }
   function roundOf(s) {
     try {
@@ -30609,7 +30891,7 @@
       const mine3 = corpsById(s, pickedIds), mineLook = mine3.length ? attackOutlook(s, mine3, s.regions[to]) : null;
       opened = `The staff has brought in every corps the roads will carry. ${corps.length === 1 ? "One corps goes" : `${corps.length} corps go`} in at ${look.odds.toFixed(2)} to 1${mineLook ? `, where the ${mine3.length === 1 ? "corps" : `${mine3.length} corps`} you picked ${mine3.length === 1 ? "reads" : "read"} ${mineLook.odds.toFixed(2)} to 1` : ""}.`;
     }
-    const pct9 = {
+    const pct10 = {
       chancePct: oddsPct(look?.chance ?? 0),
       chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0),
       chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0),
@@ -30639,7 +30921,7 @@
         attack: look.odds,
         defence: 1,
         odds: look.odds,
-        ...pct9,
+        ...pct10,
         exact: false,
         lo: look.lo,
         hi: look.hi,
@@ -30654,7 +30936,7 @@
       };
     }
     return {
-      ...pct9,
+      ...pct10,
       allies,
       exact: true,
       lo: a.odds,
@@ -31085,6 +31367,8 @@
       const months3 = ["no", "one", "two", "three", "four", "five", "six"][holdNow?.months ?? 0] ?? String(holdNow?.months ?? 0);
       const warns = [];
       if (holdNow && !holdNow.open && !holdNow.island) warns.push({ tone: "red", head: "Ashore, then cut off", text: `The force can land, but the enemy can close the ${seaBehind} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close the ${seaBehind} behind it.` });
+      const said = ashoreSays(s, cs, s.regions[to]);
+      if (said?.warn) warns.push({ tone: "red", head: said.warn.head, text: said.warn.text, also: said.warn.also });
       if (!p.surprise && !p.air && lossAtSea >= 25) warns.push({ tone: "amber", head: "A costly crossing", text: `About ${lossAtSea}% of the force would be lost at sea before it lands.`, also: `And about ${lossAtSea}% of the force would be lost at sea before it lands.` });
       if (holdNow && !holdNow.open && holdNow.island) warns.push({ tone: "amber", head: "Ashore, but on its own", text: `The force can take ${place2}, but the enemy can close the ${seaBehind} behind it. Cut off, it can hold out for about ${months3} months on what it carries.`, also: `And a force that took ${place2} would be on its own: the enemy can close the ${seaBehind} behind it, and cut off it can hold out for about ${months3} months on what it carries.` });
       if (holdNow && holdNow.contested) warns.push({ tone: "amber", head: "Ashore, on a contested sea", text: `The force can land and the ${seaBehind} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${seaBehind} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
@@ -31111,7 +31395,6 @@ ${next.text}` : ""}` : next ? next.also : "";
       const holding = holdLines(hold2);
       if (holding.length) lines.push("", ...holding);
       if (hold2 && hold2.open && !p.air) lines.push("", `As things stand the enemy cannot close the ${s.seas[hold2.sea]?.name ?? "sea"} behind it.`);
-      const said = ashoreSays(s, cs, s.regions[to]);
       return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines, warn: "", verdict, tone, under, underTone, ashore: said ? { head: said.head, line: said.line, tone: said.tone } : null };
     }
     return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines, warn: "", verdict: "", tone: "", under: "", underTone: "", ashore: null };
@@ -31371,6 +31654,11 @@ ${next.text}` : ""}` : next ? next.also : "";
         if (rail2) {
           const hasty = rail2.hasty ?? 0;
           lines.push(rail2.line ? rail2.cut ? hasty > 0 ? `The railway here is cut: torn up in haste, the railwaymen will have it running in about ${hasty === 1 ? "a month" : `${hasty} months`}.` : "The railway here is cut: it stays cut until engineers relay it." : "A railway runs through here." : rail2.road > 0 ? `No railway: ${rail2.road} province${rail2.road === 1 ? "" : "s"} of road from the railhead.` : "No railway.");
+          const guard = rail2.line ? guardSays(s, r.id) : null;
+          if (guard) {
+            lines.push(guard.line);
+            if (guard.order) lines.push(`${guard.order.head}: ${guard.order.text} · ${inHand(guard.order.cost).toLocaleString("en-US")} · ${guard.order.months} month${guard.order.months === 1 ? "" : "s"}${guard.order.why ? `. ${guard.order.why}` : ""}`);
+          }
           if (rail2.ruined > 0) lines.push(`${rail2.ruined} of its ${rail2.factories} factories lie in ruins from bombing.`);
         }
         return lines;
@@ -31844,7 +32132,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     return out;
   }
-  var pct8 = (x) => `${Math.round(x * 100)}%`;
+  var pct9 = (x) => `${Math.round(x * 100)}%`;
   function spiesPage(s, region) {
     const room2 = secretService(s);
     if (!room2) return null;
@@ -31856,13 +32144,13 @@ ${next.text}` : ""}` : next ? next.also : "";
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
         ok: up && m.ok && !m.now,
-        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct8(m.success)}.` : ""} Chance of being caught ${pct8(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
+        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct9(m.success)}.` : ""} Chance of being caught ${pct9(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
       }));
       buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? "the province selected on the map"} and sets to work there.` });
       buttons.push({ label: "RETIRE", act: `spy:retire:${a.id}`, ok: up, tip: "The agent leaves the service, which frees a place in it.", danger: true });
       const lines = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
       if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
-      if (a.atWork) lines.push(`Chance of being caught this month: ${pct8(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
+      if (a.atWork) lines.push(`Chance of being caught this month: ${pct9(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
       for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
     });
@@ -31871,7 +32159,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
-      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct8(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home."}`,
+      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct9(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
@@ -31890,7 +32178,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const row2 = (r) => ({
       nat: r.nat,
       title: r.you ? `${r.name} (you)` : r.name,
-      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct8(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
+      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct9(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
       buttons: []
     });
     const top = [];
@@ -31903,7 +32191,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const laidWords = laid === 1 ? "the last country still standing has laid down its arms" : `the last ${laid} countries still standing have laid down their arms`;
     if (act2.winner) {
       const name = s.nations[act2.winner]?.name ?? act2.winner, top1 = board.rows[0];
-      note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct8(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct8(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
+      note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct9(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct9(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
     } else if (act2.on) note4 = need > 0 ? `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.` : `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
     else {
       const why = whyNotOrderDomination(s);
@@ -31932,7 +32220,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             },
             {
               nat: "",
-              title: `${pct8(mine3.share)} of the world is yours`,
+              title: `${pct9(mine3.share)} of the world is yours`,
               lines: [`It takes ${Math.round(need * 100)}%.${mine3.share >= need ? " The second test is met." : ""}`],
               buttons: [],
               meter: Math.min(1, mine3.share / need)
@@ -32314,11 +32602,11 @@ ${next.text}` : ""}` : next ? next.also : "";
       const left = goalEnds(goal) - s.turn;
       if (state === "open") open++;
       if (state === "won") wonAny++;
-      const standing4 = state === "won" ? "Won." : state === "lost" ? "Lost: its time ran out, or the country fell." : state === "out" ? "Not in play in this campaign." : `${done} of ${checks.length} done, ${goalWhen(goal, date2)}${goal.outlast === void 0 && left >= 0 ? ` (${left} month${left === 1 ? "" : "s"} left)` : ""}.`;
+      const standing5 = state === "won" ? "Won." : state === "lost" ? "Lost: its time ran out, or the country fell." : state === "out" ? "Not in play in this campaign." : `${done} of ${checks.length} done, ${goalWhen(goal, date2)}${goal.outlast === void 0 && left >= 0 ? ` (${left} month${left === 1 ? "" : "s"} left)` : ""}.`;
       sections.push({
         heading: `${key6 === "short" ? "THE SHORT CAMPAIGN" : "THE LONG CAMPAIGN"}  ·  ${goal.title.toUpperCase()}`,
         text: `${goal.text}
-${standing4}`,
+${standing5}`,
         rows: checks.map((c) => {
           const r = s.byName[c.label];
           return {
@@ -32771,13 +33059,13 @@ ${standing4}`,
       ...word ? [word] : []
     ];
     const secure = !!x.secure;
-    const standing4 = secure && falling ? `The cabinet has no trust left in you. Your office is secure, so it cannot bring you down, but it still withholds. ${v.withheld ?? ""}` : secure ? `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. Your office is secure: the cabinet cannot fall.` : falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months3(v.crisisMonths)} running the cabinet falls (it has been there for ${months3(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months3(v.crisisMonths)} running, the cabinet falls.`;
+    const standing5 = secure && falling ? `The cabinet has no trust left in you. Your office is secure, so it cannot bring you down, but it still withholds. ${v.withheld ?? ""}` : secure ? `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. Your office is secure: the cabinet cannot fall.` : falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months3(v.crisisMonths)} running the cabinet falls (it has been there for ${months3(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months3(v.crisisMonths)} running, the cabinet falls.`;
     return {
       id: "cabinet",
       title: "THE CABINET",
       // (the headline is one short line: the screen cuts a long one off. Trust is shown rounded down, as the cabinet reckons it.)
       headline: `Trust ${Math.floor(v.trust)} of 100  ·  ${v.trustWord}`,
-      note: `${v.form.name}${v.since !== void 0 ? `, in office since ${turnToDate(v.since).label}` : ""}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.doubts && !(secure && falling) ? `THE CABINET DOUBTS YOU. ${v.withheld ?? ""} ` : ""}${cabinetTab === "now" ? `${v.form.blurb} ` : ""}${standing4} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
+      note: `${v.form.name}${v.since !== void 0 ? `, in office since ${turnToDate(v.since).label}` : ""}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.doubts && !(secure && falling) ? `THE CABINET DOUBTS YOU. ${v.withheld ?? ""} ` : ""}${cabinetTab === "now" ? `${v.form.blurb} ` : ""}${standing5} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
       top: [
         ...tabs.map((t) => ({ label: t.label, act: `cabinet:tab:${t.id}`, ok: t.id !== cabinetTab, tip: t.id === cabinetTab ? "This page is open." : t.tip })),
         secure ? { label: "YOUR OFFICE IS SECURE", act: "cabinet:office:fall", ok: true, tip: "The cabinet never falls and you are never turned out of office, though a cabinet that doubts you still holds back money and political capital. Press to let it bring you down again: a cabinet left with no trust in you for months running then falls." } : { label: "YOU CAN BE BROUGHT DOWN", act: "cabinet:office:secure", ok: true, tip: `A cabinet left with no trust in you for ${months3(v.crisisMonths)} running falls. Press to make your office secure: the cabinet, its ministers, directives and trust all work as they do, and it still withholds when it doubts you, but it never falls.` },
@@ -32838,7 +33126,7 @@ ${standing4}`,
     } catch {
       vs = [];
     }
-    const pct9 = (x) => `${Math.round(x * 100)}%`;
+    const pct10 = (x) => `${Math.round(x * 100)}%`;
     const num5 = (n) => Math.round(n).toLocaleString("en");
     const corpsOfId = (id) => s.corps.find((c) => c.id === id);
     const pairs = /* @__PURE__ */ new Map();
@@ -32850,12 +33138,12 @@ ${standing4}`,
       const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
       return {
         heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : "TWO CORPS",
-        text: a && b ? `${a.name}: ${num5(men(a))} men, ${pct9(a.str)} of its strength. ${b.name}: ${num5(men(b))} men, ${pct9(b.str)}.` : "",
+        text: a && b ? `${a.name}: ${num5(men(a))} men, ${pct10(a.str)} of its strength. ${b.name}: ${num5(men(b))} men, ${pct10(b.str)}.` : "",
         rows: p.map((v) => ({
           nat: s.human,
           title: `Keep ${v.keepName}`,
           lines: [
-            `${num5(v.men)} men in one corps at ${pct9(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+            `${num5(v.men)} men in one corps at ${pct10(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
             v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ""}.` : "No general commands it.",
             v.back > 0 ? `${num5(v.back)} men over go back to the reserve.` : "",
             v.works !== void 0 ? `It takes over the fieldworks ${v.goneName} stands in.` : "",
@@ -33703,7 +33991,7 @@ ${standing4}`,
       const ahead = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct9 = Math.round(spec2.per * k * 100);
+      const pct10 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -33713,7 +34001,7 @@ ${standing4}`,
         pace: ahead > 0 ? `${ahead} month${ahead === 1 ? "" : "s"} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct9 > 0 ? "+" : ""}${pct9}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct10 > 0 ? "+" : ""}${pct10}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,

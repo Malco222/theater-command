@@ -76,6 +76,7 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
+import { guardSays } from '../../../src/campaign/guard';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
@@ -2180,6 +2181,10 @@ function landingPlan(ids: number[], to: number) {
     const months = ['no', 'one', 'two', 'three', 'four', 'five', 'six'][holdNow?.months ?? 0] ?? String(holdNow?.months ?? 0);
     const warns: { tone: 'red' | 'amber'; head: string; text: string; also: string }[] = [];
     if (holdNow && !holdNow.open && !holdNow.island) warns.push({ tone: 'red', head: 'Ashore, then cut off', text: `The force can land, but the enemy can close the ${seaBehind} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close the ${seaBehind} behind it.` });
+    // (Version 83.1, ruling 134(d).) The test of strength's own head, in the rules' words: red, third in the order,
+    // after the fight's own and ASHORE, THEN CUT OFF. The order to sail stays his.
+    const said = ashoreSays(s, cs, s.regions[to]);
+    if (said?.warn) warns.push({ tone: 'red', head: said.warn.head, text: said.warn.text, also: said.warn.also });
     if (!p.surprise && !p.air && lossAtSea >= 25) warns.push({ tone: 'amber', head: 'A costly crossing', text: `About ${lossAtSea}% of the force would be lost at sea before it lands.`, also: `And about ${lossAtSea}% of the force would be lost at sea before it lands.` });
     if (holdNow && !holdNow.open && holdNow.island) warns.push({ tone: 'amber', head: 'Ashore, but on its own', text: `The force can take ${place}, but the enemy can close the ${seaBehind} behind it. Cut off, it can hold out for about ${months} months on what it carries.`, also: `And a force that took ${place} would be on its own: the enemy can close the ${seaBehind} behind it, and cut off it can hold out for about ${months} months on what it carries.` });
     if (holdNow && holdNow.contested) warns.push({ tone: 'amber', head: 'Ashore, on a contested sea', text: `The force can land and the ${seaBehind} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${seaBehind} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
@@ -2216,7 +2221,6 @@ function landingPlan(ids: number[], to: number) {
     // (the headline and the line under it now say what the long warning in red said)
     // (Version 83, ruling 89(f).) The test of strength, as the card's last note: the reckoning his rivals' staffs make
     // before they sail, for his own force at that beach. The rules' own words; it never stops him.
-    const said = ashoreSays(s, cs, s.regions[to]);
     return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict, tone, under, underTone, ashore: said ? { head: said.head, line: said.line, tone: said.tone } : null };
   }
   return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '', underTone: '', ashore: null };
@@ -2448,6 +2452,12 @@ function province(id: number) {
         const hasty = (rail as { hasty?: number }).hasty ?? 0;
         lines.push(rail.line ? (rail.cut ? (hasty > 0 ? `The railway here is cut: torn up in haste, the railwaymen will have it running in about ${hasty === 1 ? 'a month' : `${hasty} months`}.` : 'The railway here is cut: it stays cut until engineers relay it.') : 'A railway runs through here.')
           : rail.road > 0 ? `No railway: ${rail.road} province${rail.road === 1 ? '' : 's'} of road from the railhead.` : 'No railway.');
+        // (Version 83.1, ruling 125: the guns that guard the line, and the order the railway's row offers, in the rules' own words.)
+        const guard = rail.line ? guardSays(s, r.id) : null;
+        if (guard) {
+          lines.push(guard.line);
+          if (guard.order) lines.push(`${guard.order.head}: ${guard.order.text} \u00B7 ${inHand(guard.order.cost).toLocaleString('en-US')} \u00B7 ${guard.order.months} month${guard.order.months === 1 ? '' : 's'}${guard.order.why ? `. ${guard.order.why}` : ''}`);
+        }
         if (rail.ruined > 0) lines.push(`${rail.ruined} of its ${rail.factories} factories lie in ruins from bombing.`);
       }
       return lines;
