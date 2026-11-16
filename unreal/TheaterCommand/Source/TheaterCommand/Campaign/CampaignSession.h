@@ -78,6 +78,8 @@ public:
 	FString Stands(int32 RegionId);
 	/** (For the photographer only.) Gives a province anti-aircraft guns of a level, for a picture of the raid card's defences. */
 	void StageGuns(int32 RegionId, int32 Level);
+	/** (For the photographer only.) Cuts a province's railway, with a cause; "report" or "seen" only writes down that the player knows of a cut there. */
+	void StageCut(int32 RegionId, const FString& Cause, const FString& How);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */

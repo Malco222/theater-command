@@ -77,7 +77,8 @@ import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
-import { railCut, railLinks, railNote, workingFactories } from '../../../src/campaign/rails';
+import { cutRail, railCut, railLinks, railNote, workingFactories, type RailCause } from '../../../src/campaign/rails';
+import { cutSays, cutsKnown } from '../../../src/campaign/intel';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
@@ -353,7 +354,17 @@ function view() {
     declare: up ? declarable(s) : [],
     // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
     down: groundRules(s) ? crossingsOf(s).map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
-    cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
+    // (Rulings 113 and 114: the cuts drawn are the cuts he knows of, with how he knows each and the rules' words for it.)
+    ...((): { cut: number[]; cuts: { region: number; how: string; head: string; line: string; short: string }[] } => {
+      if (!groundRules(s)) return { cut: [], cuts: [] };
+      try {
+        const known = [...cutsKnown(s).entries()];
+        return {
+          cut: known.map(([id]) => id),
+          cuts: known.map(([id, k]) => { const said = cutSays(s, id); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
+        };
+      } catch { return { cut: s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id), cuts: [] }; }
+    })(),
     // Each region: who holds it, and the works built there since the war began that the table shows as models:
     // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
     regions: s.regions.map((r) => {
@@ -1333,6 +1344,22 @@ function standOf(reg: number, on: boolean) {
   let stands = '';
   try { stands = armyStands(s, reg) ?? ''; } catch { stands = ''; }
   return { changed, stands, view: view() };
+}
+
+/**
+ * (For the photographer only.) Cuts a province's railway by the rules' own cutRail, with a cause; or, with `how`
+ * "report" or "seen", writes down only that the player knows of a cut there (for the hollow sign of a cut he cannot see).
+ */
+function stageCut(region: number, cause: string, how: string) {
+  const s = game();
+  if (!s.regions[region]) return { ok: false, view: view() };
+  const why = (['bombed', 'agent', 'saboteurs', 'retreat', 'hasty', 'order'].includes(cause) ? cause : 'bombed') as RailCause;
+  if (how === 'report' || how === 'seen') {
+    (s.intel.cuts ??= {})[region] = { t: Math.max(1, s.turn - 1), how, why };
+    return { ok: true, view: view() };
+  }
+  const done = cutRail(s, region, why);
+  return { ok: done, view: view() };
 }
 
 /**
@@ -4840,4 +4867,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, move, previewAttack: preview, attack, endMonth };

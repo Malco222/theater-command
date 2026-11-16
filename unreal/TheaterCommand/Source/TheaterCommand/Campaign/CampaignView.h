@@ -552,6 +552,14 @@ struct FViewGate
 	FString Shut; // for a fleet's route that is refused: "The Panama Canal is shut to your ships: ..."
 };
 
+/** (Rulings 113 and 114.) A cut railway as the player knows it. */
+struct FViewCut
+{
+	int32 Region = INDEX_NONE;
+	FString How; // "now": seen as it is; "seen": as it was when last seen; "report": by his own doing, not seen since
+	FString Head, Line, Short; // the rules' words: "Railway cut"; its sentence; "railway cut (bombed, September 1939)"
+};
+
 /**
  * (Rulings 88, 101 and 102.) The round of armies as the rules count it, the same in both builds: Bright on NEXT
  * ARMY's disc (untouched armies at the front, and armies raised this month with no order), Quiet for the rear, Front
@@ -707,7 +715,8 @@ struct FCampaignView
 	int32 Staffed = 0;
 	TArray<FViewDesk> Desks;
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
-	TArray<int32> RailsCut; // regions whose railway is cut
+	TArray<int32> RailsCut; // regions whose railway is cut, as far as the player knows
+	TArray<FViewCut> Cuts; // (rulings 113 and 114) the same, with how each is known and the rules' words for it
 	TArray<FViewFleet> Fleets;
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	FViewRound Round; // (rulings 88, 101, 102) the round of armies

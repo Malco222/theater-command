@@ -662,6 +662,8 @@ public:
 	FString GetRoundQuestion() const;
 	/** True where the disc counts both armies at the front and armies newly raised. */
 	bool IsRoundMixed() const;
+	/** (For the photographer only.) Cuts a province's railway through the rules and lays the table out again. */
+	void StageCut(int32 RegionId, const FString& Cause, const FString& How);
 	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
 	void StandThisMonth();
 	bool IsStandingThisMonth() const;

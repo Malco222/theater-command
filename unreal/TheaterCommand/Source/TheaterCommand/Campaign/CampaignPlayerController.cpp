@@ -2478,6 +2478,15 @@ bool ACampaignPlayerController::IsRoundMixed() const
 	return Session && Session->GetView().Round.Front > 0 && Session->GetView().Round.Bright > Session->GetView().Round.Front;
 }
 
+void ACampaignPlayerController::StageCut(int32 RegionId, const FString& Cause, const FString& How)
+{
+	if (FCampaignSession* Session = GetSession())
+	{
+		Session->StageCut(RegionId, Cause, How);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+}
+
 void ACampaignPlayerController::StandThisMonth()
 {
 	FCampaignSession* Session = GetSession();
@@ -3936,6 +3945,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			if (Worth.Num() > 0)
 			{
 				Line += TEXT("\n") + FString::Join(Worth, TEXT("  \u00B7  "));
+			}
+			// (Rulings 112 to 114: a railway known to be cut says so, with its cause and month, in the rules' words.)
+			if (const FViewCut* Cut = View.Cuts.FindByPredicate([TipRegion](const FViewCut& Each) { return Each.Region == TipRegion; }))
+			{
+				if (!Cut->Short.IsEmpty())
+				{
+					Line += TEXT("\n") + Cut->Short.Left(1).ToUpper() + Cut->Short.Mid(1) + (Cut->How == TEXT("now") ? TEXT(": no train runs through") : TEXT(""));
+				}
 			}
 			// (Ruling 46: pointing at a city lists everything it has on order, the total first.)
 			if (const FCityOrders* City = View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; }))
@@ -5847,6 +5864,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
+		Map->ShowCuts(View.Cuts);
 		Map->ShowCivic(View.Civic);
 		Map->ShowScars(View.Scars);
 		Map->ShowSieges(View.Sieges);

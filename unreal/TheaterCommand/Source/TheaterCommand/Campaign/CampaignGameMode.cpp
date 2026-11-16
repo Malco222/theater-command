@@ -178,6 +178,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
+		Table->ShowCuts(Session->GetView().Cuts);
 		Table->ShowWorksGoing(Session->GetView().Going);
 		Table->ShowBuildings(Session->GetView().RegionWorks);
 		Table->ShowAirfieldSigns(Session->GetView().Airfields);

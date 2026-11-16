@@ -1131,6 +1131,30 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		PressAsked(Shot.Months);
 	}
+	// ("-TheaterCutAt=Neumark:bombed;Lodz:agent:report" cuts those railways before the first picture, each with its
+	// cause; a third part, "report" or "seen", only writes down that the player knows of a cut there.)
+	{
+		static bool bCutsStaged = false;
+		FString CutsAsked;
+		if (!bCutsStaged && Controller->GetSession() && FParse::Value(FCommandLine::Get(), TEXT("TheaterCutAt="), CutsAsked, false))
+		{
+			bCutsStaged = true;
+			TArray<FString> CutPlaces;
+			CutsAsked.ParseIntoArray(CutPlaces, TEXT(";"));
+			for (const FString& CutPlace : CutPlaces)
+			{
+				TArray<FString> CutParts;
+				CutPlace.ParseIntoArray(CutParts, TEXT(":"));
+				if (CutParts.Num() >= 1)
+				{
+					if (const int32* CutRegion = Table->GetData().RegionByName.Find(CutParts[0]))
+					{
+						Controller->StageCut(*CutRegion, CutParts.IsValidIndex(1) ? CutParts[1] : FString(TEXT("bombed")), CutParts.IsValidIndex(2) ? CutParts[2] : FString(TEXT("now")));
+					}
+				}
+			}
+		}
+	}
 	// ("-TheaterGunsAt=Polish Silesia:2;Krakow:1" gives those places anti-aircraft guns of that level before the first
 	// picture: for the raid card's defences, since no start has a place with guns.)
 	{

@@ -250,6 +250,12 @@ public:
 	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
 	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);
 	/**
+	 * (Rulings 112 to 114; the art director's railway brief, section 7.) The lamps of the cuts the player knows of: a
+	 * red disc with a broken rail across it where he sees the cut, the same sign hollow where he knows it from a
+	 * report or as it was when last seen.
+	 */
+	void ShowCuts(const TArray<FViewCut>& Cuts);
+	/**
 	 * Stands the towns' own buildings on the table, each at its town's edge: four numbers for each, the region,
 	 * the line (0 market, 1 farm, 2 school, 3 camp, 4 hospital, 5 hall), the level that stands, and 1 while the
 	 * next is going up.
@@ -600,6 +606,12 @@ private:
 	 * it, by its guns, and their beams, light added over the scene. Some search and some hold a bomber.
 	 */
 	void UpdateSearchlights(float CameraDistance);
+	void UpdateCutLamps(float CameraDistance);
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> CutLampMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CutLampInk; // a sign, not a light: its own ink, which the night does not touch
+	TArray<TPair<int32, bool>> CutLamps; // the province, and whether the sign is the hollow one
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> BeamMesh;
 	UPROPERTY()

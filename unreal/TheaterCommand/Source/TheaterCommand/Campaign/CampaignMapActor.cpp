@@ -126,6 +126,7 @@ ACampaignMapActor::ACampaignMapActor()
 	FlakSmokeMesh = MakeMesh(TEXT("FlakSmoke"), false);
 	BeamMesh = MakeMesh(TEXT("Searchlights"), false);
 	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
+	CutLampMesh = MakeMesh(TEXT("CutLamps"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
 
@@ -1497,6 +1498,7 @@ void ACampaignMapActor::LoadMaterials()
 	RailInk = MakeInk();
 	SleeperInk = MakeInk();
 	GunEarthInk = MakeInk(); // (the trodden earth under an army's guns)
+	CutLampInk = MakeInk(); // (the lamp of a cut railway)
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
 	FMiniatureMesh::bTrialTank = FParse::Param(FCommandLine::Get(), TEXT("TheaterTrialTank")); // (the sculpted trial tank on every armoured base, to be judged)
@@ -3283,6 +3285,127 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		BuildingsMesh->SetMaterial(0, SceneryMaterial);
 	}
 	UE_LOG(LogTheater, Log, TEXT("Works on the table: %d, in %d points"), Count, Model.Vertices.Num());
+}
+
+void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
+{
+	CutLamps.Reset();
+	for (const FViewCut& Cut : Cuts)
+	{
+		if (Data.Regions.IsValidIndex(Cut.Region))
+		{
+			CutLamps.Emplace(Cut.Region, Cut.How != TEXT("now"));
+		}
+	}
+}
+
+void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
+{
+	UWorld* World = GetWorld();
+	if (!CutLampMesh || !World)
+	{
+		return;
+	}
+	if (CutLamps.Num() == 0 || !CutLampInk)
+	{
+		if (CutLampMesh->GetNumSections() > 0)
+		{
+			CutLampMesh->ClearAllMeshSections();
+		}
+		return;
+	}
+	FVector Right = FVector::RightVector, Up = FVector::UpVector;
+	if (const APlayerController* Player = World->GetFirstPlayerController())
+	{
+		if (Player->PlayerCameraManager)
+		{
+			const FRotationMatrix Looking(Player->PlayerCameraManager->GetCameraRotation());
+			Right = Looking.GetUnitAxis(EAxis::Y);
+			Up = Looking.GetUnitAxis(EAxis::Z);
+		}
+	}
+	const FVector Near = FVector::CrossProduct(Up, Right); // (toward the eye: each layer of the sign a hair nearer than the last)
+	const double U = UnitScale;
+	// (A pixel of the 1600 view in the table's measure. The lamp is 8.5 px in radius from where he plays and nearer,
+	// and is never under 6 px from any height.)
+	const double Pixel = 0.00037 * CameraDistance;
+	const double Radius = FMath::Lerp(8.5, 6.0, FMath::SmoothStep(4800.0, 9500.0, static_cast<double>(CameraDistance))) * Pixel;
+	const FLinearColor Red(FColor(226, 62, 44)), Dark(FColor(18, 20, 24)), CreamRail(FColor(240, 228, 196));
+	FCampaignMeshBuffers Sign;
+	auto Inked = [](const FLinearColor& Colour, float Alpha)
+	{
+		FLinearColor Out = Colour;
+		Out.A = Alpha;
+		return Out.ToFColor(false);
+	};
+	// A disc, or a ring, or one dash of a ring, facing the eye: from one radius to another, between two angles.
+	auto Arc = [&](const FVector& Middle, double Inner, double Outer, double From, double To, const FColor& InnerInk, const FColor& OuterInk)
+	{
+		const int32 Steps = FMath::Max(2, FMath::CeilToInt32((To - From) / (PI / 12.0)));
+		int32 BeforeIn = INDEX_NONE, BeforeOut = INDEX_NONE;
+		for (int32 Step = 0; Step <= Steps; ++Step)
+		{
+			const double Angle = FMath::Lerp(From, To, static_cast<double>(Step) / Steps);
+			const FVector Out = Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle);
+			const int32 In = Sign.AddVertex(Middle + Out * Inner, FVector::UpVector, InnerInk);
+			const int32 Rim = Sign.AddVertex(Middle + Out * Outer, FVector::UpVector, OuterInk);
+			if (Step > 0)
+			{
+				Sign.Triangles.Append({ BeforeIn, BeforeOut, Rim, BeforeIn, Rim, In });
+			}
+			BeforeIn = In;
+			BeforeOut = Rim;
+		}
+	};
+	// A bar facing the eye, from one point to another.
+	auto Bar = [&](const FVector& From, const FVector& To, double HalfWide, const FColor& Ink)
+	{
+		const FVector Along = (To - From).GetSafeNormal();
+		const FVector Side = FVector::CrossProduct(Near, Along).GetSafeNormal() * HalfWide;
+		const int32 A0 = Sign.AddVertex(From - Side, FVector::UpVector, Ink), A1 = Sign.AddVertex(From + Side, FVector::UpVector, Ink);
+		const int32 B0 = Sign.AddVertex(To - Side, FVector::UpVector, Ink), B1 = Sign.AddVertex(To + Side, FVector::UpVector, Ink);
+		Sign.Triangles.Append({ A0, A1, B1, A0, B1, B0 });
+	};
+	for (const TPair<int32, bool>& Lamp : CutLamps)
+	{
+		const FCampaignRegion& Region = Data.Regions[Lamp.Key];
+		// (on a short post over the crossed board, which stands a little to one side of the town)
+		const FVector Foot = SurfacePointOver(Region.Center.X - 3.0, Region.Center.Y + 3.0, 0.1);
+		const FVector Middle = Foot + FVector(0.0, 0.0, 2.4 * U) + Up * (Radius * 1.25);
+		const double Hair = 0.004 * CameraDistance; // (a step toward the eye, so that the layers lie in their order)
+		if (!Lamp.Value)
+		{
+			// Seen: a faint red glow, a dark rim, the red disc, and the broken rail in cream.
+			Arc(Middle, Radius * 1.2, Radius * 2.0, 0.0, 2.0 * PI, Inked(Red, 0.22f), Inked(Red, 0.0f));
+			Arc(Middle + Near * Hair, 0.0, Radius * 1.26, 0.0, 2.0 * PI, Inked(Dark, 0.95f), Inked(Dark, 0.95f));
+			Arc(Middle + Near * (2.0 * Hair), 0.0, Radius, 0.0, 2.0 * PI, Inked(Red, 1.0f), Inked(Red, 1.0f));
+		}
+		else
+		{
+			// Known from a report, or as it was when last seen: the same size, hollow, a dashed red ring on a dark ground.
+			Arc(Middle + Near * Hair, 0.0, Radius * 1.26, 0.0, 2.0 * PI, Inked(Dark, 0.55f), Inked(Dark, 0.55f));
+			for (int32 Dash = 0; Dash < 8; ++Dash)
+			{
+				const double From = (Dash + 0.14) * 2.0 * PI / 8.0, To = (Dash + 0.74) * 2.0 * PI / 8.0;
+				Arc(Middle + Near * (2.0 * Hair), Radius * 0.8, Radius, From, To, Inked(Red, 1.0f), Inked(Red, 1.0f));
+			}
+		}
+		// The broken rail: one half level, the other dropped.
+		const FColor BrokenInk = Inked(Lamp.Value ? Red : CreamRail, 1.0f);
+		const FVector Rail = Middle + Near * (3.0 * Hair);
+		const double Thick = Radius * 0.13;
+		Bar(Rail - Right * (0.62 * Radius), Rail - Right * (0.07 * Radius), Thick, BrokenInk);
+		Bar(Rail + Right * (0.1 * Radius) - Up * (0.06 * Radius), Rail + Right * (0.58 * Radius) - Up * (0.36 * Radius), Thick, BrokenInk);
+	}
+	if (!Sign.Commit(CutLampMesh, 0, CutLampInk))
+	{
+		CutLampMesh->ClearAllMeshSections();
+	}
+	else
+	{
+		CutLampMesh->SetCastShadow(false);
+		CutLampMesh->SetTranslucentSortPriority(2); // (over the washes and the smoke; under the searchlights)
+	}
 }
 
 void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut)
@@ -9957,8 +10080,9 @@ void ACampaignMapActor::UpdateSearchlights(float CameraDistance)
 			const FVector Sight = (Lamp - Eye).GetSafeNormal();
 			const double Seen = FMath::Max((Way - Sight * FVector::DotProduct(Way, Sight)).Size(), 0.2);
 			// (round 37: asked for two hundred points they measured 150 to 175 px, with their upper half faded out)
-			// (the measure of a point here is about half a pixel of the 1600 picture from playing height)
-			const double Long = FMath::Max(1.6 * ToHeight, FMath::Min(480.0 * Point * Playing / Seen, 9.0 * ToHeight)) * Grown;
+			// (in true pixels of the 1600 view, whatever the height: the measure `Point` stops growing above 6,500, and
+			// the raid's own picture is taken from higher than that)
+			const double Long = FMath::Max(1.6 * ToHeight, FMath::Min(230.0 * (0.00037 * CameraDistance) * Playing / Seen, 9.0 * ToHeight)) * Grown;
 			FLitBeam& Kept = LitBeams.AddDefaulted_GetRef();
 			Kept.Lamp = Lamp;
 			Kept.Way = Way;
@@ -10575,7 +10699,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (The art director's round 36: from playing height she counted four or five where the brief asks nine to
 			// eleven for heavy guns. A burst is seen for six seconds from there, so the heavy guns fire about every six
 			// tenths of a second.)
-			const double Every = Flight.Sortie.Flak >= 3 ? 0.6 : Flight.Sortie.Flak == 2 ? 1.0 : 1.9;
+			// (Round 37: at 0.6 s six or seven of ten could be counted from playing height, where nine to eleven are asked.)
+			const double Every = Flight.Sortie.Flak >= 3 ? 0.45 : Flight.Sortie.Flak == 2 ? 0.8 : 1.5;
 			const FVector Onward = FVector(Flight.Dir.X, Flight.Dir.Y, 0.0).GetSafeNormal();
 			const FVector Abeam(-Onward.Y, Onward.X, 0.0);
 			auto FireOne = [&](double Ago)
@@ -10610,7 +10735,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 					FireOne(Ago);
 				}
 			}
-			if (Now >= Flight.NextFlak && FlakBursts.Num() < 72)
+			if (Now >= Flight.NextFlak && FlakBursts.Num() < 70)
 			{
 				FireOne(0.0);
 				Flight.NextFlak = Now + Every * FMath::FRandRange(0.6, 1.4);
@@ -11071,6 +11196,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
+	UpdateCutLamps(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();

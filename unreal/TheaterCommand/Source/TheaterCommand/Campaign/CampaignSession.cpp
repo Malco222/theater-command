@@ -723,6 +723,26 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	{
+		const TArray<TSharedPtr<FJsonValue>>* CutsTold = nullptr;
+		if (Object->TryGetArrayField(TEXT("cuts"), CutsTold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *CutsTold)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FViewCut& Cut = Out.Cuts.AddDefaulted_GetRef();
+				Entry->TryGetNumberField(TEXT("region"), Cut.Region);
+				Entry->TryGetStringField(TEXT("how"), Cut.How);
+				Entry->TryGetStringField(TEXT("head"), Cut.Head);
+				Entry->TryGetStringField(TEXT("line"), Cut.Line);
+				Entry->TryGetStringField(TEXT("short"), Cut.Short);
+			}
+		}
+	}
 	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("down"), &Out.BridgesDown), TPair<const TCHAR*, TArray<int32>*>(TEXT("cut"), &Out.RailsCut) })
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -1304,6 +1324,15 @@ FString FCampaignSession::Stand(int32 RegionId, bool bOn)
 		TakeView(Object);
 	}
 	return Now;
+}
+
+void FCampaignSession::StageCut(int32 RegionId, const FString& Cause, const FString& How)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stageCut"), FString::Printf(TEXT("[%d,\"%s\",\"%s\"]"), RegionId, *Cause, *How), Object))
+	{
+		TakeView(Object);
+	}
 }
 
 void FCampaignSession::StageGuns(int32 RegionId, int32 Level)

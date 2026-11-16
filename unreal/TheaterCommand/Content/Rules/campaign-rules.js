@@ -7080,6 +7080,14 @@
   var railCut = (g2, r) => groundRules(g2) && g2.flags[key2(r)] !== void 0;
   var cutOn = (g2, r) => groundRules(g2) ? g2.flags[key2(r)] : void 0;
   var CAUSES = ["bombed", "agent", "saboteurs", "retreat", "hasty", "order"];
+  var CAUSE_WORDS = {
+    bombed: "bombed",
+    agent: "blown by an agent",
+    saboteurs: "blown by saboteurs",
+    retreat: "torn up in a retreat",
+    hasty: "burnt in a hasty retreat",
+    order: "cut by order"
+  };
   var WKEYS = [];
   var whyKey = (r) => WKEYS[r] ?? (WKEYS[r] = `railwhy:${r}`);
   var cutCause = (g2, r) => railCut(g2, r) ? CAUSES[(g2.flags[whyKey(r)] ?? 0) - 1] ?? null : null;
@@ -7415,6 +7423,23 @@
     }
     return out;
   }
+  function cutsKnown(g2, viewer = g2.human) {
+    const out = /* @__PURE__ */ new Map();
+    if (!intelRules(g2)) return out;
+    const fog = viewer !== null && viewer === g2.human && fogOn(g2, viewer);
+    const sight2 = fog ? sightOf(g2, viewer) : null;
+    const kept = fog ? g2.intel.cuts ?? {} : {};
+    for (const r of g2.regions) {
+      if (!sight2 || sight2[r.id] !== SIGHT.none) {
+        if (railCut(g2, r.id)) out.set(r.id, { how: "now", asOf: g2.turn, since: cutOn(g2, r.id), cause: cutCause(g2, r.id), hasty: hastyLeft(g2, r.id) });
+      } else {
+        const k = kept[r.id];
+        if (k) out.set(r.id, { how: k.how, asOf: k.t, cause: k.why ?? null, hasty: 0 });
+      }
+    }
+    return out;
+  }
+  var cutKnown = (g2, region, viewer = g2.human) => cutsKnown(g2, viewer).get(region) ?? null;
   function seeCuts(g2) {
     var _a;
     const me = g2.human;
@@ -7428,6 +7453,22 @@
       else delete kept[r.id];
     }
     if (!Object.keys(kept).length) delete g2.intel.cuts;
+  }
+  var monthOf = (t) => turnToDate(t).label;
+  var capital = (s) => s[0].toUpperCase() + s.slice(1);
+  function cutSays(g2, region, viewer = g2.human) {
+    const k = cutKnown(g2, region, viewer);
+    if (!k) return null;
+    const name = g2.regions[region].name, cause = k.cause ? CAUSE_WORDS[k.cause] : "";
+    if (k.how === "now") {
+      const when2 = monthOf(k.since ?? g2.turn);
+      const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf(g2.turn + k.hasty)}, or engineers relay the track sooner` : "engineers relay the track"}. Only engineers can be carried up to the break.`;
+      return { head: "Railway cut", line: `${cause ? `${capital(cause)} in ${when2}` : `Cut since ${when2}`}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ""}${when2})` };
+    }
+    const when = monthOf(k.asOf);
+    if (k.how === "seen") return { head: "Railway cut when last seen", line: `Last seen cut in ${when}${cause ? ` (${cause})` : ""}. What has been done to the line since is not known.`, short: `railway cut when last seen (${when})` };
+    const who = k.cause === "bombed" ? "Your bombers cut it" : k.cause === "agent" ? "Your agent blew it" : k.cause ? "Your troops tore it up" : "Reported cut";
+    return { head: "Railway reported cut", line: `${who} in ${when}. The line has not been seen since.`, short: `railway reported cut (${when})` };
   }
   function identify(g2, corps, by, how = "battle") {
     var _a, _b;
@@ -12140,7 +12181,7 @@
     const base = { id: g2.turn, nat, issued: g2.turn };
     const wing = wingOf2(st);
     const options = [];
-    const takeJob = (t, from, kind, title, lead2, months3, capital, money, corps) => {
+    const takeJob = (t, from, kind, title, lead2, months3, capital2, money, corps) => {
       const r = g2.regions[t.p.region], more = t.hard ? D.take.hard.months : 0, mul = t.hard ? D.take.hard.reward : 1;
       const due = g2.turn + months3 + more;
       return {
@@ -12149,7 +12190,7 @@
         from,
         region: r.id,
         due,
-        capital: Math.round(capital * mul),
+        capital: Math.round(capital2 * mul),
         money: Math.round(money * mul * 10) / 10,
         ...corps ? { corps } : {},
         ...t.hard ? { hard: true } : {},
@@ -12491,10 +12532,10 @@
     const band = P.bands.find((b) => score < b.under) ?? P.bands[P.bands.length - 1];
     const size = P.size[townSize(g2, r)] ?? 1;
     const longest = P.months[P.months.length - 1], haste = 1 + P.haste * (longest - months3) / Math.max(1, longest - P.months[0]);
-    const capital = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g2, nat) * band.money * size * haste);
+    const capital2 = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g2, nat) * band.money * size * haste);
     const due = g2.turn + months3 - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
     const parts = [`the cabinet's trust rises ${trust}`];
-    if (capital) parts.push(`it votes ${capital} political capital`);
+    if (capital2) parts.push(`it votes ${capital2} political capital`);
     if (money) parts.push(`${moneyShown(money)} for the treasury`);
     const reward = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
     const oddsWord = odds >= 10 ? "better than 10 to 1" : `${odds >= 1 ? round1(odds) : Math.round(odds * 100) / 100} to 1`;
@@ -12511,7 +12552,7 @@
       band: band.id,
       bandName: band.name,
       trust,
-      capital,
+      capital: capital2,
       money,
       price,
       back,
@@ -13669,8 +13710,8 @@
     if (!budgeted(g2)) return Math.round(r.fac * BUDGET.scale);
     const k = r.overseas ? BUDGET.overseas : 1;
     const seat3 = g2.nations[r.owner];
-    const capital = r.cap && seat3 && seat3.capital === r.id ? BUDGET.capital : 0;
-    return Math.round((BUDGET.land[r.terrain] * k + (r.port ? BUDGET.port * k : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital) * BUDGET.scale);
+    const capital2 = r.cap && seat3 && seat3.capital === r.id ? BUDGET.capital : 0;
+    return Math.round((BUDGET.land[r.terrain] * k + (r.port ? BUDGET.port * k : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital2) * BUDGET.scale);
   }
   var rankOf3 = (worth3) => TOWNS.ranks.filter((x) => worth3 >= x).length;
   function signsOf(g2, r) {
@@ -15594,14 +15635,14 @@
   var resting = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort";
   var restedDrafts = (g2, c) => restedMonth(g2, c) ? MORALE.rested.drafts : 1;
   var restedOrg = (g2, c) => restedMonth(g2, c) ? MORALE.rested.org : 0;
-  function moraleBattle(g2, attackers2, defenders, odds, win, lost, capital) {
+  function moraleBattle(g2, attackers2, defenders, odds, win, lost, capital2) {
     if (!moraleRules(g2)) return;
     const B2 = MORALE.battle;
     for (const c of attackers2) {
       if (win) feel(c, odds >= 2 ? "decisive" : "won", odds >= 2 ? B2.decisive : B2.won);
       else feel(c, odds < 0.8 ? "thrown" : "repulsed", odds < 0.8 ? B2.thrown : B2.repulsed);
       if ((lost.get(c.id) ?? 0) >= B2.bloodyAt) feel(c, "bloody", B2.bloody);
-      if (win && capital) feel(c, "capital", B2.capital);
+      if (win && capital2) feel(c, "capital", B2.capital);
     }
     for (const c of defenders) {
       if (win) feel(c, odds >= 2 ? "routed" : "lost", odds >= 2 ? B2.routed : B2.lost);
@@ -15705,12 +15746,12 @@
     const land2 = BUDGET.land[r.terrain] * k;
     const port = r.port && (whole || prizeOut(g2, r, "harbour") <= 0) ? BUDGET.port * k : 0;
     const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g2, r)) : 0;
-    const capital = own && g2.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+    const capital2 = own && g2.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
     if (!whole && nat === r.ctrl && besieged(g2, r)) {
       const p = SIEGE.pay;
-      return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land2 + port + oil + fac + capital) * p, siege: true };
+      return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital2 * p, total: (land2 + port + oil + fac + capital2) * p, siege: true };
     }
-    return { land: land2, port, oil, fac, capital, total: land2 + port + oil + fac + capital };
+    return { land: land2, port, oil, fac, capital: capital2, total: land2 + port + oil + fac + capital2 };
   }
   var KIND_LABEL = { inf: "Infantry", mtn: "Mountain troops", cav: "Cavalry", mot: "Motorized troops", art: "Artillery", eng: "Engineers", arm: "Armour", fort: "Fortress troops" };
   var SHIP_LABEL = { bb: "Battleships", cv: "Carriers", ca: "Cruisers", dd: "Destroyers", ss: "Submarines" };
@@ -15752,7 +15793,7 @@
     const n = g2.nations[nat];
     const budget = budgeted(g2);
     const provinces = [];
-    let facHome = 0, facOcc = 0, nHome = 0, nOcc = 0, land2 = 0, ports = 0, oil = 0, capital = 0, held = 0, nPorts = 0, nOil = 0;
+    let facHome = 0, facOcc = 0, nHome = 0, nOcc = 0, land2 = 0, ports = 0, oil = 0, capital2 = 0, held = 0, nPorts = 0, nOil = 0;
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const y = provinceYield(g2, r, nat);
@@ -15768,13 +15809,13 @@
       land2 += y.land;
       ports += y.port;
       oil += y.oil;
-      capital += y.capital;
+      capital2 += y.capital;
       if (y.port) nPorts++;
       if (y.oil) nOil++;
     }
     provinces.sort((a, b) => b.total - a.total || a.id - b.id);
     const away = n.offmap?.industry ?? 0;
-    const seat3 = budget ? n.offmap ? BUDGET.capital : capital : PRODUCTION.baseIncome;
+    const seat3 = budget ? n.offmap ? BUDGET.capital : capital2 : PRODUCTION.baseIncome;
     const partners = budget ? dealsOf(g2, nat).length : tradePartners(g2, nat).length;
     const trade = budget ? tradeIncome(g2, nat) : partners * DIPLOMACY.tradeIncome;
     const towns2 = budget ? civicSum(g2, nat, keepsStores(g2, nat)) : null;
@@ -17304,7 +17345,7 @@
       prev: null
     };
   }
-  function nationOf(id, d, capital) {
+  function nationOf(id, d, capital2) {
     return {
       id,
       name: d.name,
@@ -17323,7 +17364,7 @@
       alive: !d.dormant,
       dormant: !!d.dormant,
       offmap: d.offmap ?? null,
-      capital,
+      capital: capital2,
       pp: 0,
       queue: [],
       corpsNo: firstCorpsNumber(id),
@@ -17336,10 +17377,10 @@
       lab: null
     };
   }
-  function capitalDistances(g2, capital) {
+  function capitalDistances(g2, capital2) {
     const d = new Int16Array(g2.regions.length).fill(999);
-    d[capital] = 0;
-    const q = [capital];
+    d[capital2] = 0;
+    const q = [capital2];
     for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (d[j] === 999) {
       d[j] = d[q[i]] + 1;
       q.push(j);
@@ -27558,10 +27599,10 @@
     if (fits2(`${t}.`)) return `${t}.`;
     const all = t.split(" ");
     const kept = [...all];
-    const capital = (w) => !!w && /^[A-Z0-9]/.test(w);
+    const capital2 = (w) => !!w && /^[A-Z0-9]/.test(w);
     const said = () => `${kept.join(" ").replace(/[,;:]$/, "")}…`;
     const back = () => {
-      while (kept.length > 1 && (!fits2(said()) || LITTLE.test(kept[kept.length - 1]) || capital(kept[kept.length - 1]) && capital(all[kept.length]))) kept.pop();
+      while (kept.length > 1 && (!fits2(said()) || LITTLE.test(kept[kept.length - 1]) || capital2(kept[kept.length - 1]) && capital2(all[kept.length]))) kept.pop();
     };
     back();
     const pair2 = kept.lastIndexOf("between");
@@ -28817,7 +28858,22 @@
       declare: up ? declarable(s) : [],
       // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
       down: groundRules(s) ? crossingsOf(s).map((c, i) => bridgeDown(s, c) ? i : -1).filter((i) => i >= 0) : [],
-      cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
+      // (Rulings 113 and 114: the cuts drawn are the cuts he knows of, with how he knows each and the rules' words for it.)
+      ...(() => {
+        if (!groundRules(s)) return { cut: [], cuts: [] };
+        try {
+          const known = [...cutsKnown(s).entries()];
+          return {
+            cut: known.map(([id]) => id),
+            cuts: known.map(([id, k]) => {
+              const said = cutSays(s, id);
+              return { region: id, how: k.how, head: said?.head ?? "", line: said?.line ?? "", short: said?.short ?? "" };
+            })
+          };
+        } catch {
+          return { cut: s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id), cuts: [] };
+        }
+      })(),
       // Each region: who holds it, and the works built there since the war began that the table shows as models:
       // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
       regions: s.regions.map((r) => {
@@ -29820,6 +29876,18 @@
       stands = "";
     }
     return { changed, stands, view: view2() };
+  }
+  function stageCut(region, cause, how) {
+    var _a;
+    const s = game();
+    if (!s.regions[region]) return { ok: false, view: view2() };
+    const why = ["bombed", "agent", "saboteurs", "retreat", "hasty", "order"].includes(cause) ? cause : "bombed";
+    if (how === "report" || how === "seen") {
+      ((_a = s.intel).cuts ?? (_a.cuts = {}))[region] = { t: Math.max(1, s.turn - 1), how, why };
+      return { ok: true, view: view2() };
+    }
+    const done = cutRail(s, region, why);
+    return { ok: done, view: view2() };
   }
   function stageGuns(region, level) {
     const s = game();
@@ -33440,6 +33508,7 @@ ${standing4}`,
     stand: standOf,
     stands: standsOf,
     stageGuns,
+    stageCut,
     move,
     previewAttack: preview,
     attack,
