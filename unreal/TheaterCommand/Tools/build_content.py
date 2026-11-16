@@ -1101,8 +1101,10 @@ def build_sea():
     # spot of water stays lit for about a quarter of a second, and the band twinkles). Thick in one broad band, whose
     # heart the game moves with the eye, and thin everywhere else; they thin out toward the land.
     flecks = times(m, (waves(along(25.0, 96.0, 5.0, -2800, 3700), -2000, 3700), "B"), (waves(along(120.0, 77.0, 7.0, -2800, 4150), -2000, 4150), "B"), -1700, 3900)
-    lit = one_in(m, SAT, plus(m, times(m, flecks, 8.0, -1550, 3900), -0.35, -1400, 3900), -1250, 3900)
-    on_crests = one_in(m, SAT, plus(m, times(m, chop, 3.0, -1550, 4100), 0.45, -1400, 4100), -1250, 4100)
+    lit = one_in(m, SAT, plus(m, times(m, flecks, 8.0, -1550, 3900), -0.45, -1400, 3900), -1250, 3900)
+    # (The review of build 1446: they were about three times too many and spread evenly, like snow. They gather on the
+    # crests of the waves he sees, the swell's and the chop's together, and nowhere else.)
+    on_crests = one_in(m, SAT, plus(m, times(m, wave, 3.4, -1550, 4100), -0.62, -1400, 4100), -1250, 4100)
     heart = vector(m, "GlintAt", (0.0, 0.0, 0.000006, 0.0), -1900, 4500)  # (where the band's heart lies on the table, and one over its reach squared)
     away = less(flat, node_from(m, unreal.MaterialExpressionComponentMask, heart, -1700, 4500, r=True, g=True, b=False, a=False), -1500, 4500)
     far = node(m, unreal.MaterialExpressionDotProduct, -1350, 4500)

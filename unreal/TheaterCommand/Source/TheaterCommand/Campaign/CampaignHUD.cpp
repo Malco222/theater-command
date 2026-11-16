@@ -314,6 +314,13 @@ namespace
 			case 7: // a tick
 				Line({ { 0.14, 0.55 }, { 0.4, 0.8 }, { 0.88, 0.2 } });
 				break;
+			case 9: // an agent: a hat with its brim pulled down, over a raised collar
+				Line({ { 0.1, 0.42 }, { 0.9, 0.42 } });
+				Line({ { 0.27, 0.42 }, { 0.31, 0.16 }, { 0.44, 0.1 }, { 0.56, 0.1 }, { 0.69, 0.16 }, { 0.73, 0.42 } });
+				Line({ { 0.29, 0.31 }, { 0.71, 0.31 } });
+				Line({ { 0.2, 0.92 }, { 0.3, 0.6 }, { 0.5, 0.78 }, { 0.7, 0.6 }, { 0.8, 0.92 } });
+				Line({ { 0.5, 0.78 }, { 0.5, 0.92 } });
+				break;
 			case 8: // a chevron, pointing on
 				Line({ { 0.36, 0.2 }, { 0.66, 0.5 }, { 0.36, 0.8 } });
 				break;
@@ -1200,12 +1207,13 @@ namespace
 						}
 						else
 						{
-							Stroke({ FVector2D(Along + 0.5, 934.0), FVector2D(Along + 8.0, 941.5) }, Alarm, 1.8f, 4);
-							Stroke({ FVector2D(Along + 0.5, 941.5), FVector2D(Along + 8.0, 934.0) }, Alarm, 1.8f, 4);
+							// (ruling 160: red means act by a date or lose. A need not yet met is said in paper.)
+							Stroke({ FVector2D(Along + 0.5, 934.0), FVector2D(Along + 8.0, 941.5) }, Dim, 1.8f, 4);
+							Stroke({ FVector2D(Along + 0.5, 941.5), FVector2D(Along + 8.0, 934.0) }, Dim, 1.8f, 4);
 						}
 						Along += 13.0;
 						const FString Name = Node.NeedNames.IsValidIndex(K) ? Node.NeedNames[K] : Node.NeedIds[K];
-						Write(Name, Along, 930.0, Plain, bHas ? Cream : Alarm, 3);
+						Write(Name, Along, 930.0, Plain, bHas ? Cream : Muted, 3);
 						Along += Wide(Name, Plain) + 14.0;
 					}
 					Along += 12.0;
@@ -1236,14 +1244,14 @@ namespace
 				}
 				{
 					// (what it is and what it does; and when it is locked, what it waits on, in the alarm's colour)
-					const FSlateFontInfo Body = Serif(TEXT("Regular"), Px(12.5f));
+					const FSlateFontInfo Body = Serif(TEXT("Regular"), Px(15.0f));
 					const FString Waits = Node.State == TEXT("locked") && !Node.Needs.IsEmpty() ? FString::Printf(TEXT("Needs %s first."), *Node.Needs.Replace(TEXT(", "), TEXT(" and "))) : FString();
 					const double WaitsW = Waits.IsEmpty() ? 0.0 : Wide(Waits, Body) + 12.0;
 					const FString Says = Fitted(Node.Text + TEXT(" ") + Node.Rule, Body, 1290.0 - 66.0 - WaitsW);
-					Write(Says, 66.0, 943.0, Body, Muted, 3);
+					Write(Says, 66.0, 941.0, Body, Muted, 3);
 					if (!Waits.IsEmpty())
 					{
-						Write(Waits, 66.0 + Wide(Says, Body) + 12.0, 943.0, Body, Alarm, 3);
+						Write(Waits, 66.0 + Wide(Says, Body) + 12.0, 941.0, Body, Cream, 3);
 					}
 				}
 				// (the one brass button: RESEARCH and its months, dimmed when the card is locked or every team is busy; STOP on a card in work)
@@ -1263,7 +1271,7 @@ namespace
 						// (why it cannot be begun now, whole, on the strip's first line and ending where the button begins)
 						const FSlateFontInfo WhyFace = Typed(Px(11.0f));
 						const FString WhySays = Fitted(Node.Why, WhyFace, 560.0);
-						Write(WhySays, Button.Min.X - 18.0 - Wide(WhySays, WhyFace), 912.0, WhyFace, Amber, 5);
+						Write(WhySays, Button.Min.X - 18.0 - Wide(WhySays, WhyFace), 912.0, WhyFace, Cream, 5);
 					}
 				}
 			}
@@ -1291,6 +1299,9 @@ namespace
 				}
 				Round(Along + 7.0, 974.0, 6.5, Dim, 1.0f, 3, 3.0, 2.5);
 				Write(TEXT("A rivet: it also needs a technology from elsewhere"), Along + 20.0, 967.0, Typed10, Muted, 3);
+				Along += 20.0 + Wide(TEXT("A rivet: it also needs a technology from elsewhere"), Typed10) + 22.0;
+				Sign(TEXT("clock"), Along + 6.0, 974.0, 0.9, Amber, 3);
+				Write(TEXT("Ahead of its time: it takes longer now"), Along + 18.0, 967.0, Typed10, Amber, 3);
 			}
 			return LayerId + 11;
 		}
@@ -2620,6 +2631,15 @@ namespace
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(1, TEXT("GENERALS"), TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody. (2)"), [this]() { Controller->OpenGenerals(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(2, TEXT("RESEARCH"), TEXT("The design offices: put design teams on the branches whose new weapons you want early. The number is the teams standing idle. (3)"), [this]() { Controller->OpenResearch(); }, [this]() { return Controller->GetIdleTeams(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(3, TEXT("DIPLOMACY"), TEXT("The foreign office: who is at war, where every neutral stands, courting them, and declaring war. (4)"), [this]() { Controller->OpenDiplomacy(); })]
+									// (Ruling 163: the secret service's own door, where the rules open that room. The room keeps its name.)
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetSession() && Controller->GetSession()->GetView().PageIds.Contains(TEXT("spies")) ? EVisibility::Visible : EVisibility::Collapsed; })
+										[
+											MakeDoor(9, TEXT("SPIES"), TEXT("The secret service: your agents, where they are and what they report, and recruiting more."), [this]() { Controller->OpenPage(TEXT("spies")); })
+										]
+									]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(4, TEXT("LEDGER"), TEXT("The ledger: where the money comes from, what the forces cost, and what every province gives. (5)"), [this]() { Controller->OpenLedger(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(5, TEXT("HONOURS"), TEXT("The roll of honour: the formations that have made a name, and the men who have fallen."), [this]() { Controller->OpenRoll(); })]
 								]

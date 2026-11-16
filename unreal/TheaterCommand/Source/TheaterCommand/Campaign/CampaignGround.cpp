@@ -118,6 +118,22 @@ namespace
 	}
 
 	/** How far the finest relief is calmed on the low ground: 1 halves it, 0 leaves it. ("-TheaterLowland=0" tries without.) */
+	/**
+	 * How much of the land's small folds is kept in its light and shade, over the broad shape of the hills, which is
+	 * kept whole: about a third (the art director's land and light brief). ("-TheaterFolds=1" tries them as they were.)
+	 */
+	float SmallFolds()
+	{
+		static float Kept = -1.0f;
+		if (Kept < 0.0f)
+		{
+			Kept = 0.33f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterFolds="), Kept);
+			Kept = FMath::Clamp(Kept, 0.0f, 1.0f);
+		}
+		return Kept;
+	}
+
 	float LowlandCalm()
 	{
 		static float Kept = -1.0f;
@@ -1233,6 +1249,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	// (the same heights with their finest detail smoothed away, for the low ground: see where the sun is worked out)
 	TArray<float> Gentle = Squeezed;
 	FCampaignTerrain::Smooth(Gentle, NX, NY, FMath::Max(1, FMath::RoundToInt32(3.0 / Terrain.Cell)), 2);
+	// (SMOOTH HILLS. The broad shape of the land: the heights softened by about three of their own cells. The light
+	// and shade is taken from this, with a third of the small folds laid back over it; and so is the lean the lamp sees.)
+	TArray<float> Broad = Squeezed, BroadLie = Terrain.Height;
+	FCampaignTerrain::Smooth(Broad, NX, NY, 3, 2);
+	FCampaignTerrain::Smooth(BroadLie, NX, NY, 3, 2);
 	// Shadows thrown by the high ground: from each point a march toward the sun, over about twenty-six map
 	// units, to see whether anything on the way stands above the line of its light.
 	TArray<float> Thrown;
@@ -1290,7 +1311,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 			}
 		});
-		FCampaignTerrain::Smooth(Thrown, NX, NY, 1, 2);
+		// (a thrown shadow's edge is spread over two cells each way: no stair step is to be counted along it)
+		FCampaignTerrain::Smooth(Thrown, NX, NY, 2, 2);
 	}
 
 	Ground.SetNumUninitialized(Count);
@@ -1400,8 +1422,15 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// the hills rough, not the other way about, and the fields can be seen.)
 			const float Lowland = (1.0f - FMath::SmoothStep(200.0f, 400.0f, Metres[Idx])) * LowlandCalm();
 			auto Fall = [&](const TArray<float>& Heights, int32 IA, int32 JA, int32 IB, int32 JB, int32 Steps) { return (Heights[Terrain.Index(IA, JA)] - Heights[Terrain.Index(IB, JB)]) / static_cast<float>(Steps * Terrain.Cell); };
-			const float SlopeX = FMath::Lerp(Fall(Squeezed, IE, J, IW, J, IE - IW), Fall(Gentle, IE, J, IW, J, IE - IW), Lowland) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
-			const float SlopeY = FMath::Lerp(Fall(Squeezed, I, JS, I, JN, JS - JN), Fall(Gentle, I, JS, I, JN, JS - JN), Lowland) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
+			// (SMOOTH HILLS: the broad shape whole, and a third of the small folds over it; the broken ground of the steeps is a fold too)
+			const float Folds = SmallFolds();
+			auto Hill = [&](int32 IA, int32 JA, int32 IB, int32 JB, int32 Steps)
+			{
+				const float Shape = Fall(Broad, IA, JA, IB, JB, Steps);
+				return Shape + (Fall(Squeezed, IA, JA, IB, JB, Steps) - Shape) * Folds;
+			};
+			const float SlopeX = FMath::Lerp(Hill(IE, J, IW, J, IE - IW), Fall(Gentle, IE, J, IW, J, IE - IW), Lowland) + Rough * 0.13f * Folds * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
+			const float SlopeY = FMath::Lerp(Hill(I, JS, I, JN, JS - JN), Fall(Gentle, I, JS, I, JN, JS - JN), Lowland) + Rough * 0.13f * Folds * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
 			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
 			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
 			Sun *= 1.0f - 0.42f * Thrown[Idx];
@@ -1424,7 +1453,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 
 			// Which way the ground leans, as the lamp sees it: north is +X and east is +Y in the world.
 			// (on the low ground the lamp, too, sees the land leaning only half as much as it does)
-			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, -Slope.X * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, 1.0f).GetSafeNormal();
+			// (SMOOTH HILLS: and the lamp sees the broad lean whole and a third of the small folds, as the painted shade does)
+			const FVector2f BroadLean(Fall(BroadLie, IE, J, IW, J, IE - IW), Fall(BroadLie, I, JS, I, JN, JS - JN));
+			const FVector2f Lean = BroadLean + (Slope - BroadLean) * Folds;
+			const FVector3f Normal = FVector3f(Lean.Y * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, -Lean.X * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, 1.0f).GetSafeNormal();
 
 			const FVector3f Toned = Tone();
 			// (A sixth of the ground shows through any canopy. Under the broadleaf woods of the temperate lands beyond
