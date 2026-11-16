@@ -1131,6 +1131,29 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		PressAsked(Shot.Months);
 	}
+	// ("-TheaterGunsAt=Polish Silesia:2;Krakow:1" gives those places anti-aircraft guns of that level before the first
+	// picture: for the raid card's defences, since no start has a place with guns.)
+	{
+		static bool bGunsStaged = false;
+		FString GunsAsked;
+		if (!bGunsStaged && Controller->GetSession() && FParse::Value(FCommandLine::Get(), TEXT("TheaterGunsAt="), GunsAsked, false))
+		{
+			bGunsStaged = true;
+			TArray<FString> StagedPlaces;
+			GunsAsked.ParseIntoArray(StagedPlaces, TEXT(";"));
+			for (const FString& Staged : StagedPlaces)
+			{
+				FString StagedWhere, StagedLevel;
+				if (Staged.Split(TEXT(":"), &StagedWhere, &StagedLevel))
+				{
+					if (const int32* StagedRegion = Table->GetData().RegionByName.Find(StagedWhere))
+					{
+						Controller->GetSession()->StageGuns(*StagedRegion, FCString::Atoi(*StagedLevel));
+					}
+				}
+			}
+		}
+	}
 	// ("-TheaterOrders=Ruhr:corps:inf+corps:inf+corps:arm;Hamburg:ship:dd" places orders from the Arsenal before the
 	// first picture, each list with its province in mind, after any months the first picture asks to be played (so
 	// that there is money for them): for pictures of what the cities have on order.)
@@ -1786,7 +1809,9 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		ACampaignCameraPawn* Eye = Controller ? Cast<ACampaignCameraPawn>(Controller->GetPawn()) : nullptr;
 		FVector2D Spot;
 		float High = 0.0f;
-		if (Eye && Controller->GetMap() && Controller->GetMap()->FirstFlight(Spot, High))
+		// ("-TheaterRaidFixed" keeps the eye over the place being raided, so that stills a second apart are framed alike)
+		static const bool bRaidFixed = FParse::Param(FCommandLine::Get(), TEXT("TheaterRaidFixed"));
+		if (Eye && Controller->GetMap() && (bRaidFixed ? Controller->GetMap()->FirstRaidTarget(Spot, High) : Controller->GetMap()->FirstFlight(Spot, High)))
 		{
 			Eye->FocusHeight = High;
 			Eye->GoTo(Controller->GetMap()->MapToWorld(Spot.X, Spot.Y), Shots[Current].Zoom, true);

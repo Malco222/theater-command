@@ -794,6 +794,8 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		(*Round)->TryGetNumberField(TEXT("front"), Out.Round.Front);
 		(*Round)->TryGetNumberField(TEXT("all"), Out.Round.All);
 		(*Round)->TryGetNumberField(TEXT("idle"), Out.Round.Idle);
+		(*Round)->TryGetStringField(TEXT("words"), Out.Round.Words);
+		(*Round)->TryGetStringField(TEXT("question"), Out.Round.Question);
 	}
 	// (Ruling 86.) The sea gates.
 	const TArray<TSharedPtr<FJsonValue>>* Gates = nullptr;
@@ -1302,6 +1304,12 @@ FString FCampaignSession::Stand(int32 RegionId, bool bOn)
 		TakeView(Object);
 	}
 	return Now;
+}
+
+void FCampaignSession::StageGuns(int32 RegionId, int32 Level)
+{
+	TSharedPtr<FJsonObject> Object;
+	CallRules(TEXT("stageGuns"), FString::Printf(TEXT("[%d,%d]"), RegionId, Level), Object);
 }
 
 FString FCampaignSession::Stands(int32 RegionId)
@@ -2917,6 +2925,8 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetNumberField(TEXT("fighters"), Card.Fighters);
 		Told->TryGetNumberField(TEXT("fighterLoss"), Card.FighterLoss);
 		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
+		Told->TryGetStringField(TEXT("gunsWords"), Card.GunsWords);
+		Told->TryGetStringField(TEXT("toGuns"), Card.ToGuns);
 		// (Ruling 107(d).) A bombing raid by day and by night.
 		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
 		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())
@@ -2925,6 +2935,11 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			(*WaysObject)->TryGetStringField(TEXT("foes"), Card.WaysFoes);
 			(*WaysObject)->TryGetStringField(TEXT("foesWords"), Card.WaysFoesWords);
 			(*WaysObject)->TryGetNumberField(TEXT("bombers"), Card.WaysBombers);
+			(*WaysObject)->TryGetNumberField(TEXT("guns"), Card.WaysGuns);
+			(*WaysObject)->TryGetStringField(TEXT("gunsFigure"), Card.WaysGunsFigure);
+			(*WaysObject)->TryGetStringField(TEXT("gunsNoun"), Card.WaysGunsNoun);
+			(*WaysObject)->TryGetStringField(TEXT("gunsTail"), Card.WaysGunsTail);
+			(*WaysObject)->TryGetStringField(TEXT("gunsTip"), Card.WaysGunsTip);
 			for (const TCHAR* Which : { TEXT("day"), TEXT("night") })
 			{
 				const TSharedPtr<FJsonObject>* WayObject = nullptr;
@@ -2939,6 +2954,9 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				(*WayObject)->TryGetStringField(TEXT("lost"), Way.Lost);
 				(*WayObject)->TryGetStringField(TEXT("fightersLost"), Way.FightersLost);
 				(*WayObject)->TryGetStringField(TEXT("foot"), Way.Foot);
+				(*WayObject)->TryGetStringField(TEXT("toGuns"), Way.ToGuns);
+				(*WayObject)->TryGetStringField(TEXT("gunsWords"), Way.GunsWords);
+				(*WayObject)->TryGetStringField(TEXT("stopNote"), Way.StopNote);
 				(*WayObject)->TryGetStringField(TEXT("act"), Way.Act);
 				(*WayObject)->TryGetStringField(TEXT("tip"), Way.Tip);
 				(*WayObject)->TryGetNumberField(TEXT("success"), Way.Success);
@@ -2974,6 +2992,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			Entry->TryGetStringField(TEXT("title"), Stop.Title);
 			Entry->TryGetStringField(TEXT("who"), Stop.Who);
 			Entry->TryGetNumberField(TEXT("km"), Stop.Km);
+			Entry->TryGetNumberField(TEXT("guns"), Stop.Guns);
 			Entry->TryGetBoolField(TEXT("now"), Stop.bNow);
 		};
 		const TSharedPtr<FJsonObject>* TargetObject = nullptr;

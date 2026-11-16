@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 858716b 2026-11-16. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 926a66d 2026-11-16. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -6209,10 +6209,10 @@
     return out;
   }
   var monthsWord = (n) => n <= 1 ? "a month" : `${n} months`;
-  function wreckPrize(g2, r, kind, months3) {
+  function wreckPrize(g2, r, kind, months3, by) {
     if (!hasPrize(g2, r, kind) || prizeOut(g2, r, kind) > 0) return false;
     if (kind === "oil") return fireField(g2, r, months3, 1);
-    if (kind === "junction") return cutRail(g2, r.id);
+    if (kind === "junction") return cutRail(g2, r.id, "order", by);
     g2.flags[outKey(r, kind)] = g2.turn + months3;
     g2.supplyDirty = true;
     return true;
@@ -6245,7 +6245,7 @@
     const r = g2.regions[region];
     const months3 = kind === "junction" ? 0 : PRIZES.wreck[kind];
     const c = handsAt(g2, nat, r, kind).filter((u) => u.ap >= PRIZES.ap && u.leave === void 0).sort((a, b) => (b.kind === "eng" ? 1 : 0) - (a.kind === "eng" ? 1 : 0) || b.ap - a.ap)[0];
-    if (!wreckPrize(g2, r, kind, months3)) return false;
+    if (!wreckPrize(g2, r, kind, months3, nat)) return false;
     c.ap = 0;
     tellPrize(g2, r, `${g2.nations[nat].adj} troops ${wreckWords(g2, r, kind, months3)}.`, nat, [nat, r.ctrl, r.owner]);
     return true;
@@ -6295,7 +6295,7 @@
   function railOnScorch(g2, r, by, from) {
     if (!prizeRules(g2) || !g2.nations[from] || !atWar(g2, by, from) || !onNet(r.id) || railCut(g2, r.id) || !willBurn(g2, from, r)) return false;
     const roll2 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
-    if (roll2 >= burnChance(g2, r, by, from) || !cutRailHasty(g2, r.id, PRIZES.burn.months.rail)) return false;
+    if (roll2 >= burnChance(g2, r, by, from) || !cutRailHasty(g2, r.id, PRIZES.burn.months.rail, from)) return false;
     noteBurnt(g2, r, from, by, ["rail"]);
     return true;
   }
@@ -7079,15 +7079,23 @@
   var key2 = (r) => KEYS[r] ?? (KEYS[r] = `rail:${r}`);
   var railCut = (g2, r) => groundRules(g2) && g2.flags[key2(r)] !== void 0;
   var cutOn = (g2, r) => groundRules(g2) ? g2.flags[key2(r)] : void 0;
-  function cutRail(g2, r) {
+  var CAUSES = ["bombed", "agent", "saboteurs", "retreat", "hasty", "order"];
+  var WKEYS = [];
+  var whyKey = (r) => WKEYS[r] ?? (WKEYS[r] = `railwhy:${r}`);
+  var cutCause = (g2, r) => railCut(g2, r) ? CAUSES[(g2.flags[whyKey(r)] ?? 0) - 1] ?? null : null;
+  function cutRail(g2, r, cause, by) {
+    var _a;
     if (!groundRules(g2) || !onNet(r) || railCut(g2, r)) return false;
     g2.flags[key2(r)] = g2.turn;
+    if (cause) g2.flags[whyKey(r)] = CAUSES.indexOf(cause) + 1;
+    if (by && by === g2.human && g2.intel) ((_a = g2.intel).cuts ?? (_a.cuts = {}))[r] = cause ? { t: g2.turn, how: "report", why: cause } : { t: g2.turn, how: "report" };
     g2.supplyDirty = true;
     return true;
   }
   function mendRail(g2, r) {
     if (!railCut(g2, r)) return false;
     delete g2.flags[key2(r)];
+    delete g2.flags[whyKey(r)];
     delete g2.flags[hastyKey(r)];
     g2.supplyDirty = true;
     return true;
@@ -7096,8 +7104,8 @@
   var hastyKey = (r) => HKEYS[r] ?? (HKEYS[r] = `railhasty:${r}`);
   var GKEYS = [];
   var goodKey = (r) => GKEYS[r] ?? (GKEYS[r] = `railgood:${r}`);
-  function cutRailHasty(g2, r, months3) {
-    if (!cutRail(g2, r)) return false;
+  function cutRailHasty(g2, r, months3, by) {
+    if (!cutRail(g2, r, "hasty", by)) return false;
     g2.flags[hastyKey(r)] = g2.turn + months3;
     return true;
   }
@@ -7133,7 +7141,7 @@
     return null;
   }
   function tearUp(g2, nat, region) {
-    if (whyNotCutRail(g2, nat, region) || !cutRail(g2, region)) return false;
+    if (whyNotCutRail(g2, nat, region) || !cutRail(g2, region, "order", nat)) return false;
     const r = g2.regions[region];
     if (concerns2(g2, nat)) headline(g2, "info", `${g2.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region, { arm: "land" });
     return true;
@@ -7148,17 +7156,17 @@
   function railOnCapture(g2, taken2, by, from) {
     if (!groundRules(g2) || !onNet(taken2.id) || railCut(g2, taken2.id)) return;
     const roll2 = new Rng(hashString(`rail:${g2.seed}:${g2.turn}:${taken2.id}`)).next();
-    if (roll2 >= wreckChance(g2, taken2, by) || !cutRail(g2, taken2.id)) return;
+    if (roll2 >= wreckChance(g2, taken2, by) || !cutRail(g2, taken2.id, "retreat", from)) return;
     if (concerns2(g2, by, from)) headline(g2, "battle", `${g2.nations[from].adj} troops tear up the railway at ${taken2.name} as they fall back.`, from, taken2.id, { arm: "land", won: by, lost: from });
   }
-  function railBombChance(g2, target, through, gunsStop = 0) {
+  function railBombChance(g2, target, through, gunsStop2 = 0) {
     if (!groundRules(g2) || !onNet(target) || railCut(g2, target) || through <= 0) return 0;
-    return Math.min(RAILWAYS.bomb.most, through / RAILWAYS.bomb.scale) * (1 - gunsStop);
+    return Math.min(RAILWAYS.bomb.most, through / RAILWAYS.bomb.scale) * (1 - gunsStop2);
   }
-  function bombRail(g2, by, target, through, gunsStop = 0) {
-    const p = railBombChance(g2, target, through, gunsStop);
+  function bombRail(g2, by, target, through, gunsStop2 = 0) {
+    const p = railBombChance(g2, target, through, gunsStop2);
     if (p <= 0) return false;
-    return new Rng(hashString(`railbomb:${g2.seed}:${g2.turn}:${target}:${by}`)).next() < p && cutRail(g2, target);
+    return new Rng(hashString(`railbomb:${g2.seed}:${g2.turn}:${target}:${by}`)).next() < p && cutRail(g2, target, "bombed", by);
   }
   function railheads(g2, nat) {
     if (!groundRules(g2)) return null;
@@ -7406,6 +7414,20 @@
       }
     }
     return out;
+  }
+  function seeCuts(g2) {
+    var _a;
+    const me = g2.human;
+    if (!intelRules(g2) || me === null || !g2.nations[me]?.alive) return;
+    const sight2 = g2.flags.nofog === 1 ? null : sightOf(g2, me);
+    const kept = (_a = g2.intel).cuts ?? (_a.cuts = {});
+    for (const r of g2.regions) {
+      if (sight2 && sight2[r.id] === SIGHT.none) continue;
+      const why = cutCause(g2, r.id);
+      if (railCut(g2, r.id)) kept[r.id] = why ? { t: g2.turn, how: "seen", why } : { t: g2.turn, how: "seen" };
+      else delete kept[r.id];
+    }
+    if (!Object.keys(kept).length) delete g2.intel.cuts;
   }
   function identify(g2, corps, by, how = "battle") {
     var _a, _b;
@@ -7742,7 +7764,7 @@
     if (ok && m === "factory" && wreckFactory(g2, r)) {
       done = true;
       text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`;
-    } else if (ok && m === "rail" && cutRail(g2, r.id)) {
+    } else if (ok && m === "rail" && cutRail(g2, r.id, "agent", a.nat)) {
       done = true;
       text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`;
     } else if (ok && m === "oil" && fireField(g2, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) {
@@ -7803,7 +7825,7 @@
         learn(g2, G.by, 1);
         continue;
       }
-      const struck = rail2 ? cutRail(g2, r.id) : wreckFactory(g2, r);
+      const struck = rail2 ? cutRail(g2, r.id, "saboteurs") : wreckFactory(g2, r);
       if (!struck) continue;
       const text = rail2 ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.` : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.`;
       note2(g2, who, r.id, "struck", text, false);
@@ -9722,6 +9744,7 @@
   var hasAirfield = (g2, region) => !airWar(g2) || airfieldsHold(g2, region) > 0;
   var gunsAt = (g2, region) => g2.flags[`wk:aa:${region}`] ?? 0;
   var WORKS = arsenal_default.works;
+  var gunsStop = (level) => Math.max(0, Math.min(1, level * WORKS.aa.cut));
   var leaderMul = (f) => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
   var worth = (g2, f) => reach(f).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g2, f.nat, "fighters") * storyEdge(g2, f) * fuelAir(g2, f.nat);
   function skyOver(g2, region) {
@@ -10184,7 +10207,7 @@
     const zone = m === "fleet" ? quarry?.zone ?? -1 : target;
     const nat = fleets[0]?.nat ?? "";
     const place2 = sea ? `the ${g2.seas[zone]?.name ?? "sea"}` : g2.regions[target]?.name ?? "";
-    const out = { why: null, place: place2, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
+    const out = { why: null, place: place2, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
     if (!fleets.length) {
       out.why = "No air fleet has these orders.";
       return out;
@@ -10263,6 +10286,7 @@
       const before = Math.max(0, ...out.ships.map((x) => x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0));
       out.again = Math.pow(CARRIERS.strike.again, before);
     }
+    if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C2.night.flak : C2.flak) + out.aa * WORKS.aa.flak * unready + out.flak) * I);
     const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
     const ab = out.att.reduce((s, a) => s + (a.bmr > 0 ? a.f.bmr : 0), 0);
     const df2 = out.def.reduce((s, x) => s + x.f.ftr, 0);
@@ -15464,7 +15488,7 @@
     const six = listed3(grounds, "or");
     const when = g2.turn < falls.from ? `in ${turnToDate(falls.from).label}` : "next month";
     const ground = "Italy's ground then goes to whoever has an army on Italian soil, your own corps included.";
-    const text = changed ? `Italy signs an armistice next month unless ${listed3(lost)} ${lost.length === 1 ? "is" : "are"} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}` : `Italy makes peace if ${who} hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
+    const text = changed ? `Italy signs an armistice next month unless ${listed3(lost)} ${lost.length === 1 ? "is" : "are"} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}` : `Italy makes peace if ${who} still hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
     warning(g2, "Rome wavers", text, me, g2.byName[lost[0]]?.id, "ITA");
   }
 
@@ -19401,6 +19425,7 @@
     }
   }
   function endPhase(g2, nat) {
+    if (nat === g2.human) seeCuts(g2);
     digIn(g2, nat);
     if (g2.nations[nat].alive) desertWorks(g2, nat, true);
     siegeEmpties(g2);
@@ -19436,6 +19461,7 @@
     techTick(g2, nat);
     resourcesTick(g2, nat);
     intelTick(g2, nat);
+    if (nat === g2.human) seeCuts(g2);
     siegeMonth(g2, nat);
     pocketMonth(g2, nat);
     tellSettled(g2, nat);
@@ -20355,6 +20381,7 @@
       foeLossN: 0,
       effects: [],
       figures: {},
+      guns: { level: 0, loss: 0, lossN: 0, stop: 0 },
       massed: "",
       offPatrol: ""
     };
@@ -20447,6 +20474,7 @@
     plan.foeLossN = Math.round(fc.foeLoss);
     plan.effects = effectsOf2(g2, kind, target, fc, nat);
     plan.figures = figuresOf(g2, kind, target, fc, nat);
+    plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== "harbour" ? gunsStop(a.aa) : 0 };
     if (kind === "line") plan.wear = fc.cut;
     const bombers = going.filter((f) => f.bmr > 0);
     if (bombers.length >= 2) {
@@ -20491,6 +20519,12 @@
         fighterLossN: p.fighterLossN,
         lost: flown ? `${pct6(p.bomberLoss)} · about ${num2(p.bomberLossN)}` : "",
         fightersLost: flown && p.fighters > 0 ? `${pct6(fighterLoss)} · about ${num2(p.fighterLossN)}` : "",
+        gunLoss: flown ? p.guns.loss : 0,
+        gunLossN: flown ? p.guns.lossN : 0,
+        toGuns: flown ? `about ${num2(p.guns.lossN)}` : "",
+        gunsStop: flown ? p.guns.stop : 0,
+        gunsWords: !flown ? "" : p.guns.level ? "of them to flak and guns" : "of them to flak",
+        stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct6(p.guns.stop)} of the bombing` : "",
         figures: f,
         hits,
         foot: k === "bomb" ? "Escorts can fly with them." : "No escorts. Fewer lost, fewer hits.",
@@ -20498,14 +20532,26 @@
       };
     };
     const day = way("bomb"), night = way("night");
+    if (!day.why && !night.why) {
+      const ORDER3 = ["output, for a month", "chance the railway is cut", "chance a factory is wrecked"];
+      for (const [w, o] of [[day, night], [night, day]]) {
+        const lacks = ORDER3.filter((words) => o.hits.some((h) => h.words === words && !h.dim) && !w.hits.some((h) => h.words === words));
+        if (!lacks.length) continue;
+        const mine3 = [...w.hits.filter((h) => ORDER3.includes(h.words)), ...lacks.map((words) => ({ n: "0%", words, dim: true }))];
+        w.hits = mine3.sort((a, b) => ORDER3.indexOf(a.words) - ORDER3.indexOf(b.words));
+      }
+    }
     const lead2 = !plans.bomb.why ? plans.bomb : plans.night;
     const fighter = (id) => plans.bomb.seats.some((s) => s.id === id && s.kind === "ftr");
+    const level = g2.regions[target] ? gunsAt(g2, target) : 0;
     return {
       chosen: kind,
       day,
       night,
       bombers: lead2.bombers,
       foes: lead2.meets.reduce((n, x) => n + x.ftr, 0),
+      guns: level,
+      gunsLabel: level ? `Level ${level} anti-aircraft guns` : "No anti-aircraft guns",
       home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
       barred: plans.bomb.seats.filter((s) => s.kind === "ftr" && !s.why && !s.picked).map((s) => s.id)
     };
@@ -20703,7 +20749,8 @@
       name: b.name,
       holds: holds3,
       elite: !!b.elite,
-      mark: !unit ? "" : sign === "dd" || sign === "ca" || sign === "bb" ? "hull" : sign,
+      // (A work has no sign of its own but one: anti-aircraft guns take the art director's gun sign.)
+      mark: !unit ? b.what === "work" && sign === "aa" ? "aa" : "" : sign === "dd" || sign === "ca" || sign === "bb" ? "hull" : sign,
       ordered: b.ordered,
       eta: b.eta,
       ready: turnToDate(b.eta).label,
@@ -27156,6 +27203,15 @@
     const bright = all.filter((a) => a.bright);
     return { bright: bright.length, quiet: all.filter((a) => !a.bright && a.untouched).length, front: bright.filter((a) => a.front).length };
   }
+  function roundWords(c) {
+    const raised = c.bright - c.front;
+    return c.front && raised ? `${c.front} at the front and ${raised} newly raised` : c.front ? `${c.front} at the front` : raised ? `${raised} newly raised` : "";
+  }
+  function roundQuestion(c) {
+    const n = c.bright, raised = n - c.front;
+    if (c.front && raised) return `${n} armies still have moves left: ${roundWords(c)}`;
+    return `${n} ${n === 1 ? "army" : "armies"} ${c.front ? "at the front" : "newly raised"} still ${n === 1 ? "has" : "have"} moves left`;
+  }
   function nextArmy(g2, seen2, from, span = 0) {
     const all = armyRound(g2);
     if (!all.length) return { army: null, seen: [], again: false };
@@ -27464,9 +27520,14 @@
   var plural8 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   var WORDS2 = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
   var count3 = (n) => WORDS2[n] ?? String(n);
+  var ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$/;
   var first = (text) => {
-    const m = /^(.*?[.!?])(\s|$)/.exec(text);
-    return (m ? m[1] : text).replace(/[.!]$/, "");
+    const stop = /[.!?](?=\s|$)/g;
+    for (let m = stop.exec(text); m; m = stop.exec(text)) {
+      const head = text.slice(0, m.index + 1);
+      if (m[0] !== "." || !ABBR.test(head)) return head.replace(/[.!]$/, "");
+    }
+    return text.replace(/[.!]$/, "");
   };
   var brief = (text, max) => {
     if (text.length <= max) return text;
@@ -27589,6 +27650,11 @@
   var an = (adj) => `${/^[AEIOU]/i.test(adj) ? "An" : "A"} ${adj}`;
   var SIGNS = /* @__PURE__ */ new Set(["inf", "arm", "mot", "cav", "mtn", "art", "eng"]);
   var DESK_SIGN = { research: "star", build: "inf", diplomacy: "star", spies: "star", air: "ftr", navy: "hull" };
+  function buildSign(text) {
+    const what = /ordered (.+?)(?: at |, | and |\.|$)/.exec(text)?.[1] ?? "";
+    if (/anti-aircraft/i.test(what)) return "aa";
+    return /corps/i.test(what) && !/armou?red|panzer|tank|artillery|engineer|mountain|airborne|parachute|marine|cavalry|mechani[sz]ed|motori[sz]ed/i.test(what) ? "inf" : "star";
+  }
   function monthOrders(g2, viewer = g2.human) {
     if (!viewer || !g2.nations[viewer]) return [];
     return cityOrders(g2, viewer).filter((c) => !c.spied).flatMap((c) => c.lines.map((l) => ({ id: l.id, what: l.what, unit: l.unit, mark: l.mark, label: l.label, plural: l.plural, name: l.name, region: l.stands })));
@@ -27685,7 +27751,7 @@
     const shutWords = (place2, lost2, shut) => {
       const corps = shut.corps ? `${plural8(shut.corps, "corps", "corps")} ${shut.corps === 1 ? "is" : "are"} shut in` : "";
       if (lost2 >= HEAVY_MEN || lost2 > shut.men) return `${place2} holds, at a cost of ${num4(lost2)} men. ${corps ? `${corps}.` : "Only its guard is inside."}`;
-      return `${corps ? `${corps} at ${place2}.` : `Only its guard holds ${place2}.`} The province is yours while the town holds.`;
+      return `${corps ? `${corps} at ${place2}.` : `${place2} is held by its guard alone.`} The province is yours while the town holds.`;
     };
     const besiegedTowns = /* @__PURE__ */ new Set();
     const fought = /* @__PURE__ */ new Set();
@@ -27727,7 +27793,7 @@
       row2.picture = forTown || r.taken && city ? "town" : def ? "fieldworks" : "troops";
       row2.kind = forTown ? "SIEGE" : "BATTLE";
       row2.figures = [{ n: num4(oursLost), label: "lost" }, { n: num4(theirsLost), label: "theirs" }];
-      row2.facts = [corps ? { n: plural8(corps, "corps", "corps"), label: att ? "went in" : "held the line" } : { n: "The guard", label: "stood alone" }, { n: num4(oursLost), label: "men lost" }, { n: num4(theirsLost), label: "of theirs" }];
+      row2.facts = [corps ? { n: plural8(corps, "corps", "corps"), label: att ? "went in" : good ? "held the line" : "fought" } : { n: "The guard", label: "stood alone" }, { n: num4(oursLost), label: "men lost" }, { n: num4(theirsLost), label: "of theirs" }];
       const prize2 = reg ? prizeOf(g2, reg.id, me) : null;
       const worth3 = (gone) => {
         if (!prize2) return "";
@@ -27748,7 +27814,7 @@
         row2.tone = att ? "good" : "bad";
         row2.line = att ? "The field was won, and the town fell after it." : "The field was lost, and the town fell after it.";
         row2.head = att ? `${place2} is taken` : `${place2} is lost`;
-        row2.follows = worth3(!att) || (att ? "The front moves forward." : "The front falls back.");
+        row2.follows = `${row2.line} ${worth3(!att) || (att ? "The front moves forward." : "The front falls back.")}`;
         if (!att && corps) row2.facts[0] = { n: plural8(corps, "corps", "corps"), label: "fought outside" };
       } else if (r.siege) {
         row2.tag = att ? "WON" : "HELD";
@@ -28205,7 +28271,7 @@
       if (used.has(h) || !mine3(h.nat)) continue;
       if (h.kind === "letter") continue;
       if (h.desk) {
-        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
+        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: h.desk === "build" ? buildSign(h.text) : DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
         used.add(h);
         continue;
       }
@@ -29726,9 +29792,9 @@
   function roundOf(s) {
     try {
       const c = roundCount(s);
-      return { bright: c.bright, quiet: c.quiet, front: c.front, all: armyRound(s).length, idle: frontIdle(s).length };
+      return { bright: c.bright, quiet: c.quiet, front: c.front, all: armyRound(s).length, idle: frontIdle(s).length, words: roundWords(c), question: c.bright > 0 ? roundQuestion(c) : "" };
     } catch {
-      return { bright: 0, quiet: 0, front: 0, all: 0, idle: 0 };
+      return { bright: 0, quiet: 0, front: 0, all: 0, idle: 0, words: "", question: "" };
     }
   }
   function nextArmyOf(seen2, x, y) {
@@ -29754,6 +29820,11 @@
       stands = "";
     }
     return { changed, stands, view: view2() };
+  }
+  function stageGuns(region, level) {
+    const s = game();
+    if (s.regions[region]) s.flags[`wk:aa:${region}`] = Math.max(0, Math.min(3, Math.round(level)));
+    return { ok: !!s.regions[region] };
   }
   function standsOf(reg) {
     try {
@@ -32213,6 +32284,7 @@ ${standing4}`,
       const keep = (list4) => dn && kind === "night" ? [...list4, ...dn.home.filter((id) => !list4.includes(id))] : list4;
       const carry = keep(p.picked);
       const picture = (t, holder) => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || "X"}`;
+      const gunsOf = (t) => sea || !s.regions[t] ? -1 : gunsAt(s, t);
       const stops = raidTargetsFor(s, k, -1);
       const here = stops.find((t) => t.id === target);
       const lead2 = p.seats.find((x) => x.picked && x.kind !== "ftr") ?? p.seats.find((x) => x.picked);
@@ -32266,7 +32338,7 @@ ${standing4}`,
         strip: stops.slice(0, 10).map((t) => {
           let q = previewRaid(s, k, t.id, p.picked);
           if (q.why || !q.picked.length) q = previewRaid(s, k, t.id);
-          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
+          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf(t.id), ...titled(t, t.name) };
         }),
         seats: p.seats.map((x) => {
           const stays = !!dn && kind === "night" && dn.home.includes(x.id);
@@ -32292,13 +32364,6 @@ ${standing4}`,
           };
         }),
         ways: dn ? (() => {
-          const words = [];
-          for (const w of [dn.day, dn.night]) for (const h of w.hits) if (h.n && !words.includes(h.words)) words.push(h.words);
-          const figure = (w, word) => {
-            const f = w.figures;
-            const x = word.startsWith("output") ? f.output : word.includes("railway") ? f.rail : word.includes("factory") ? f.factory : void 0;
-            return x === void 0 || x <= 0 ? "0%" : x < 5e-3 ? "<1%" : `${Math.round(x * 100)}%`;
-          };
           const one = (w) => ({
             label: w.label,
             night: w.kind === "night",
@@ -32310,10 +32375,13 @@ ${standing4}`,
             lostShare: w.bomberLoss,
             fightersLost: w.fightersLost,
             fighterShare: w.fighterLoss,
-            hits: w.why ? [] : w.hits.some((h) => !h.n) ? w.hits.map((h) => ({ n: h.n, words: h.words, dim: false })) : words.map((word) => {
-              const h = w.hits.find((y) => y.words === word);
-              return h ? { n: h.n, words: word, dim: false } : { n: figure(w, word), words: word, dim: true };
-            }),
+            hits: w.why ? [] : w.hits.map((h) => ({ n: h.n, words: h.words, dim: !!h.dim })),
+            // (the guns' part: the line under the bombers lost, and the note on the WHAT A HIT DOES line; the 3D card's
+            // column is narrower than the browser's, so the note stops at the figure)
+            // (the art director's words where the place has no guns, 16 November: "of them to light flak")
+            toGuns: w.toGuns,
+            gunsWords: w.gunsWords === "of them to flak" ? "of them to light flak" : w.gunsWords,
+            stopNote: w.stopNote.replace(/ of the bombing$/, ""),
             foot: w.foot,
             act: w.kind === kind ? "" : `open:plan:${w.kind}:${target}:${carry.join(".")}`,
             tip: w.kind === kind ? `The raid is planned ${w.kind === "night" ? "by night" : "by day"}.` : `Plan it ${w.kind === "night" ? "by night" : "by day"} instead. Nobody you picked is dropped.`
@@ -32324,6 +32392,12 @@ ${standing4}`,
             bombers: Math.round(dn.bombers),
             foes: foes > 0 ? `${foes.toLocaleString("en-US")}` : "No",
             foesWords: foes > 0 ? "enemy fighters in reach" : "fighters in reach",
+            // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
+            guns: dn.guns,
+            gunsFigure: dn.guns > 0 ? `Level ${dn.guns}` : "No",
+            gunsNoun: "AA guns",
+            gunsTail: dn.guns > 0 ? "" : "· light flak only",
+            gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
             day: one(dn.day),
             night: one(dn.night)
           };
@@ -32340,6 +32414,9 @@ ${standing4}`,
         massed: p.massed,
         offPatrol: p.offPatrol,
         ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"),
+        // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast)
+        gunsWords: p.why || p.bombers <= 0 ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
+        toGuns: p.why || p.bombers <= 0 ? "" : `about ${Math.round(p.guns.lossN).toLocaleString("en-US")}`,
         fly: { label: dn ? kind === "night" ? "FLY THE RAID BY NIGHT" : "FLY THE RAID BY DAY" : "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." }
       };
       if (card.hits.length === 1 && card.effect.includes(` ${card.hits[0].n.replace(/[^0-9.]/g, "")}`)) card.effect = "";
@@ -33362,6 +33439,7 @@ ${standing4}`,
     nextArmy: nextArmyOf,
     stand: standOf,
     stands: standsOf,
+    stageGuns,
     move,
     previewAttack: preview,
     attack,

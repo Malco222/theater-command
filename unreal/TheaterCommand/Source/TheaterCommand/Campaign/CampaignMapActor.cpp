@@ -9598,6 +9598,17 @@ bool ACampaignMapActor::FirstFlight(FVector2D& OutSpot, float& OutHeight) const
 	return true;
 }
 
+bool ACampaignMapActor::FirstRaidTarget(FVector2D& OutSpot, float& OutHeight) const
+{
+	if (Flights.Num() == 0 || Flights[0].At.IsZero())
+	{
+		return false;
+	}
+	OutSpot = Flights[0].Sortie.To;
+	OutHeight = static_cast<float>(Flights[0].At.Z);
+	return true;
+}
+
 void ACampaignMapActor::UpdateSorties()
 {
 	UWorld* World = GetWorld();
@@ -9736,7 +9747,10 @@ void ACampaignMapActor::UpdateSorties()
 			TArray<FVector2D> Stroke;
 			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.15) / Dashes));
 			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.75) / Dashes));
-			AppendRibbon(Courses, Stroke, 0.45, 0.4, FLinearColor(1.0f, 0.86f, 0.4f, 0.75f).ToFColor(false), false);
+			// (The art director's round 37: close up the dashes were cream slabs 30 px wide through the middle of the
+			// bombers, and by night the brightest thing after the beams. Thinned below playing height, let down by night.)
+			const double Thin = FMath::Lerp(0.3, 1.0, FMath::SmoothStep(2600.0, 4600.0, static_cast<double>(SortieSeenFrom)));
+			AppendRibbon(Courses, Stroke, 0.45 * Thin, 0.4, FLinearColor(1.0f, 0.86f, 0.4f, 0.75f * FMath::Lerp(1.0f, 0.4f, GetMoonlight())).ToFColor(false), false);
 		}
 	}
 	if (!Courses.Commit(SortieMesh, 0, HighlightMaterial))
@@ -9942,7 +9956,9 @@ void ACampaignMapActor::UpdateSearchlights(float CameraDistance)
 			// nine times the bombers' height, however nearly the eye looks along it.)
 			const FVector Sight = (Lamp - Eye).GetSafeNormal();
 			const double Seen = FMath::Max((Way - Sight * FVector::DotProduct(Way, Sight)).Size(), 0.2);
-			const double Long = FMath::Max(1.6 * ToHeight, FMath::Min(200.0 * Point * Playing / Seen, 9.0 * ToHeight)) * Grown;
+			// (round 37: asked for two hundred points they measured 150 to 175 px, with their upper half faded out)
+			// (the measure of a point here is about half a pixel of the 1600 picture from playing height)
+			const double Long = FMath::Max(1.6 * ToHeight, FMath::Min(480.0 * Point * Playing / Seen, 9.0 * ToHeight)) * Grown;
 			FLitBeam& Kept = LitBeams.AddDefaulted_GetRef();
 			Kept.Lamp = Lamp;
 			Kept.Way = Way;
@@ -10566,8 +10582,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			{
 				FRandomStream Chance(++FlakFired * 7919 + F * 131);
 				// (round the formation as it is now, a little more behind than ahead: the wake is made by the bombers flying on)
-				const double Ahead = Chance.FRandRange(-1.6f, 1.3f), Rise = Chance.FRandRange(-0.4f, 0.3f);
-				double Aside = Chance.FRandRange(-2.0f, 2.0f);
+				// (The art director's round 37: from playing height the bursts over heavy guns ran together into about
+				// four. They are fired over a wider piece of sky, about two and a half wingspans either side.)
+				const double Ahead = Chance.FRandRange(-2.1f, 1.7f), Rise = Chance.FRandRange(-0.6f, 0.45f);
+				double Aside = Chance.FRandRange(-2.6f, 2.6f);
 				// (the leader, and the two that fly behind it and to its sides)
 				for (const FVector2D& Machine : { FVector2D(0.0, 0.0), FVector2D(-1.1, 0.95), FVector2D(-1.1, -0.95) })
 				{
@@ -10601,26 +10619,44 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		if (Flight.bEngaged)
 		{
 			// Bursts of tracer: the fighters at the bombers, and the bombers' gunners (and their escort) back at them.
-			for (int32 K = 0; K < 6; ++K)
+			// (The art director's round 37: round dots among the bombers read as stray lamps. Tracer is short streaks
+			// along the line of fire, each about four times as long as it is wide, three or four in a row from the
+			// fighter's nose toward its bomber, and only while that side fires.)
+			const FVector FireLine = Flight.At - Flight.RivalAt;
+			const double Lead = FMath::Frac(Now * 2.6);
+			for (int32 K = 0; K < 4; ++K)
 			{
-				const double T = FMath::Frac(Now * 2.6 + K / 6.0);
+				const double T = Lead - K * 0.085;
+				if (T < 0.05 || T > 0.95)
+				{
+					continue;
+				}
 				if (FMath::Frac(Now * 0.9) < 0.6)
 				{
-					Draw(FMath::Lerp(Flight.RivalAt, Flight.At, T), 0.26 * Table, Tracer, 0.95f);
+					DrawSmear(FMath::Lerp(Flight.RivalAt, Flight.At, T), FireLine, 0.34 * Table, 0.085 * Table, Tracer, 0.95f, 0.6);
 				}
-				if (FMath::Frac(Now * 0.9 + 0.5) < 0.6)
+				if (K < 3 && FMath::Frac(Now * 0.9 + 0.5) < 0.6)
 				{
-					Draw(FMath::Lerp(Flight.At + FVector(0.0, 0.0, 0.6 * Table), Flight.RivalAt, T), 0.2 * Table, FLinearColor(1.0f, 0.5f, 0.3f), 0.9f);
+					DrawSmear(FMath::Lerp(Flight.At + FVector(0.0, 0.0, 0.6 * Table), Flight.RivalAt, T), FireLine, 0.28 * Table, 0.07 * Table, FLinearColor(1.0f, 0.62f, 0.3f), 0.9f, 0.6);
 				}
 			}
 		}
 		if (Flight.Sortie.Loss >= 0.1f && Flight.Share > 0.5)
 		{
-			// One of them has been hit: it trails smoke behind the formation all the way home.
+			// One of them has been hit: it trails smoke all the way home. (The art director's round 37: by night it is
+			// the one the searchlights held as the bombs fell: the leader or one of the two behind it, by the place.)
+			FVector Hit = Flight.At;
+			double Behind = 7.0;
+			if (Flight.Formation && Flight.Sortie.bBombers)
+			{
+				static const FVector Seats[3] = { FVector(0.0, 0.0, 0.0), FVector(26.0, 22.0, 3.0), FVector(26.0, -22.0, 3.0) };
+				Hit = Flight.Formation->GetComponentTransform().TransformPosition(Seats[FMath::Max(Flight.Sortie.Region, 0) % 3] * (0.34 * Table));
+				Behind = 3.0;
+			}
 			for (int32 K = 0; K < 7; ++K)
 			{
-				const double Back = (7.0 + K * 1.9) * Table;
-				Draw(Flight.At - Flight.Dir * Back + FVector(0.0, 0.0, -0.25 * Table * K + 0.4 * Table * FMath::Sin(Now * 2.0 + K)), (0.7 + 0.3 * K) * Table, Dark, 0.55f - 0.06f * K);
+				const double Back = (Behind + K * 1.9) * Table;
+				Draw(Hit - Flight.Dir * Back + FVector(0.0, 0.0, -0.25 * Table * K + 0.4 * Table * FMath::Sin(Now * 2.0 + K)), (0.7 + 0.3 * K) * Table, Dark, 0.55f - 0.06f * K);
 			}
 		}
 	}
@@ -10786,7 +10822,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			FRandomStream Shape(Burst.Seed);
 			const double W = Burst.Wings;
 			// (larger than life from playing height; and from the top never under about fourteen points by nine)
-			const double Held = FMath::Lerp(1.0, 1.55, Playing);
+			// (round 37: at 1.55 a burst was 40 by 34 px from playing height and eleven of them ran together; the brief's 28 by 21)
+			const double Held = FMath::Lerp(1.0, 1.1, Playing);
 			// (it fades out, it does not pop: over its last second and a half; from playing height from the four-and-a-half-second look)
 			const double Going = 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.6, Playing), SmokeLife, Age);
 			// (it drifts the way the flags fly: about half a wingspan over its life)
@@ -10796,7 +10833,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// at about a tenth of a burst's nine seconds, middle at under a half, old at nine tenths: each melts into the
 			// next, drawn at the one width the smoke has reached (0.77, 1.17 and 1.70 wingspans at those ages).
 			static const double SheetAge[3] = { 0.1, 0.45, 0.9 }, SheetSquare[3] = { 1.21, 2.22, 3.95 }, SheetSmoke[3] = { 0.77, 1.17, 1.70 };
-			const double Lived = FMath::Clamp(Age / 9.0, 0.0, 1.0);
+			// (Round 37, the count from playing height: seen from there a burst keeps the look of its first seconds,
+			// small and dark, for the six seconds it is shown; its wide pale age could not be counted.)
+			const double Lived = FMath::Clamp(Age / FMath::Lerp(9.0, 20.0, Playing), 0.0, 1.0);
 			const double SmokeWide = Lived < SheetAge[0] ? FMath::Lerp(0.55, SheetSmoke[0], Lived / SheetAge[0])
 				: Lived < SheetAge[1] ? FMath::Lerp(SheetSmoke[0], SheetSmoke[1], (Lived - SheetAge[0]) / (SheetAge[1] - SheetAge[0]))
 				: Lived < SheetAge[2] ? FMath::Lerp(SheetSmoke[1], SheetSmoke[2], (Lived - SheetAge[1]) / (SheetAge[2] - SheetAge[1]))
@@ -10878,11 +10917,16 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// The flash: about a fifth of a second, soft, with no sparks, off the middle of the smoke; at full strength at every hour.
 			if (Age < 0.2 && !bTop)
 			{
-				const float Lit0 = static_cast<float>(1.0 - FMath::SmoothStep(0.1, 0.2, Age));
+				// (The art director's round 37: at dusk one showed as a pale cream disc 85 to 90 px across. A flash is
+				// small, warm and uneven: two warm smears a little off one another and a small hot heart; and by dusk
+				// and night, when the eye is wide open, it is let down so that it does not bleach.)
+				const float Lit0 = static_cast<float>(1.0 - FMath::SmoothStep(0.1, 0.2, Age)) * FMath::Lerp(1.0f, 0.6f, Moonlit);
 				const FVector FlashAt = Heartland - Downwind * (0.12 * Long) + FVector(0.0, 0.0, 0.05 * Wide);
-				Draw(FlashAt, 0.25 * W, FLinearColor(FColor(150, 70, 14)), 0.55f * Lit0);
-				Draw(FlashAt, 0.11 * W, FLinearColor(FColor(255, 170, 60)), 0.85f * Lit0);
-				Draw(FlashAt, 0.05 * W, FLinearColor(FColor(255, 245, 215)), Lit0);
+				const double Skew = Shape.FRandRange(0.0f, 6.283f);
+				const FVector Lean = Right * FMath::Cos(Skew) + Up * FMath::Sin(Skew);
+				DrawSmear(FlashAt + Lean * (0.03 * W), Lean, 0.16 * W, 0.1 * W, FLinearColor(FColor(150, 70, 14)), 0.5f * Lit0);
+				DrawSmear(FlashAt - Lean * (0.02 * W), FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up)), 0.08 * W, 0.055 * W, FLinearColor(FColor(255, 160, 50)), 0.8f * Lit0);
+				Draw(FlashAt, 0.03 * W, FLinearColor(FColor(255, 222, 150)), 0.9f * Lit0);
 			}
 		}
 	}
@@ -11024,6 +11068,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	ShowParkedPlanes(CameraDistance, CameraFocus);
 	UpdateSinkings(); // (before the smoke, which reads how far each has gone)
 	UpdateSmoke(CameraDistance, CameraFocus);
+	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);

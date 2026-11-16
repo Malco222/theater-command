@@ -76,6 +76,8 @@ public:
 	FString Stand(int32 RegionId, bool bOn);
 	/** How the army in a province stands this month, without changing it. */
 	FString Stands(int32 RegionId);
+	/** (For the photographer only.) Gives a province anti-aircraft guns of a level, for a picture of the raid card's defences. */
+	void StageGuns(int32 RegionId, int32 Level);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */

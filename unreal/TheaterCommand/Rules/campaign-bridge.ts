@@ -80,8 +80,8 @@ import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../..
 import { railCut, railLinks, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
-import { armyRound, armyStands, frontIdle, nextArmy, roundCount, settleStands, standArmy } from '../../../src/campaign/round';
-import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
+import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
+import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
@@ -1312,8 +1312,9 @@ function reachOf(ids: number[]) {
 function roundOf(s: Game) {
   try {
     const c = roundCount(s);
-    return { bright: c.bright, quiet: c.quiet, front: c.front, all: armyRound(s).length, idle: frontIdle(s).length };
-  } catch { return { bright: 0, quiet: 0, front: 0, all: 0, idle: 0 }; }
+    // (rulings 111(f) and 116: the bright count in the rules' own words, the same beside NEXT ARMY and in the question)
+    return { bright: c.bright, quiet: c.quiet, front: c.front, all: armyRound(s).length, idle: frontIdle(s).length, words: roundWords(c), question: c.bright > 0 ? roundQuestion(c) : '' };
+  } catch { return { bright: 0, quiet: 0, front: 0, all: 0, idle: 0, words: '', question: '' }; }
 }
 
 /** The army Tab goes to next, given those already visited this round and where the eye is (the rules' nextArmy). */
@@ -1332,6 +1333,16 @@ function standOf(reg: number, on: boolean) {
   let stands = '';
   try { stands = armyStands(s, reg) ?? ''; } catch { stands = ''; }
   return { changed, stands, view: view() };
+}
+
+/**
+ * (For the photographer only: no start has a place with anti-aircraft guns, and the raid card's defences need a
+ * picture.) Gives a province guns of a level, as if they had been built there.
+ */
+function stageGuns(region: number, level: number) {
+  const s = game();
+  if (s.regions[region]) s.flags[`wk:aa:${region}`] = Math.max(0, Math.min(3, Math.round(level)));
+  return { ok: !!s.regions[region] };
 }
 
 /** How much of the army in a province stands this month: 'all', 'some', 'none', or '' where it has nothing to stand. */
@@ -3846,6 +3857,9 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
     const keep = (list: number[]): number[] => (dn && kind === 'night' ? [...list, ...dn.home.filter((id) => !list.includes(id))] : list);
     const carry = keep(p.picked);
     const picture = (t: number, holder: string): string => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || 'X'}`;
+    // (The art director's defences brief: a place's anti-aircraft guns, 0 to 3, which the rules never hide; -1 for a
+    // target that is not a place.)
+    const gunsOf = (t: number): number => (sea || !s.regions[t] ? -1 : gunsRound(s, t));
     const stops = raidStopsFor(s, k, -1);
     const here = stops.find((t) => t.id === target);
     const lead = p.seats.find((x) => x.picked && x.kind !== 'ftr') ?? p.seats.find((x) => x.picked);
@@ -3893,7 +3907,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (the same groups against the next target where they can fly it; the rules' own pick where they cannot)
         let q = weighRaid(s, k, t.id, p.picked);
         if (q.why || !q.picked.length) q = weighRaid(s, k, t.id);
-        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
+        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf(t.id), ...titled(t, t.name) };
       }),
       seats: p.seats.map((x) => {
         // (by night: an escort that was picked stays on the card and stays at home; one that could join by day says so)
@@ -3907,20 +3921,16 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         };
       }),
       ways: dn ? ((): unknown => {
-        // (a line that one column has, the other prints too, with its own figure: he compares row for row)
-        const words: string[] = [];
-        for (const w of [dn.day, dn.night]) for (const h of w.hits) if (h.n && !words.includes(h.words)) words.push(h.words);
-        const figure = (w: RaidWay, word: string): string => {
-          const f = w.figures;
-          const x = word.startsWith('output') ? f.output : word.includes('railway') ? f.rail : word.includes('factory') ? f.factory : undefined;
-          return x === undefined || x <= 0 ? '0%' : x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`;
-        };
+        // (a line that one column has, the other prints too, dim, with its own figure: the rules' own since 82.2)
         const one = (w: RaidWay) => ({
           label: w.label, night: w.kind === 'night', chosen: w.kind === kind,
           why: w.why ? `Cannot fly ${w.kind === 'night' ? 'by night' : 'by day'}: ${w.why.charAt(0).toLowerCase()}${w.why.slice(1)}` : '',
           success: w.success, verdict: w.verdict, lost: w.lost, lostShare: w.bomberLoss, fightersLost: w.fightersLost, fighterShare: w.fighterLoss,
-          hits: w.why ? [] : w.hits.some((h) => !h.n) ? w.hits.map((h) => ({ n: h.n, words: h.words, dim: false }))
-            : words.map((word) => { const h = w.hits.find((y) => y.words === word); return h ? { n: h.n, words: word, dim: false } : { n: figure(w, word), words: word, dim: true }; }),
+          hits: w.why ? [] : w.hits.map((h) => ({ n: h.n, words: h.words, dim: !!h.dim })),
+          // (the guns' part: the line under the bombers lost, and the note on the WHAT A HIT DOES line; the 3D card's
+          // column is narrower than the browser's, so the note stops at the figure)
+          // (the art director's words where the place has no guns, 16 November: "of them to light flak")
+          toGuns: w.toGuns, gunsWords: w.gunsWords === 'of them to flak' ? 'of them to light flak' : w.gunsWords, stopNote: w.stopNote.replace(/ of the bombing$/, ''),
           foot: w.foot,
           act: w.kind === kind ? '' : `open:plan:${w.kind}:${target}:${carry.join('.')}`,
           tip: w.kind === kind ? `The raid is planned ${w.kind === 'night' ? 'by night' : 'by day'}.` : `Plan it ${w.kind === 'night' ? 'by night' : 'by day'} instead. Nobody you picked is dropped.`,
@@ -3929,6 +3939,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         return {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
           foes: foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
+          // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
+          guns: dn.guns, gunsFigure: dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.guns > 0 ? '' : '\u00B7 light flak only', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
           day: one(dn.day), night: one(dn.night),
         };
       })() : null,
@@ -3936,6 +3948,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
       meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
       massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
+      // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast)
+      gunsWords: p.why || p.bombers <= 0 ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to light flak', toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
       fly: { label: dn ? (kind === 'night' ? 'FLY THE RAID BY NIGHT' : 'FLY THE RAID BY DAY') : 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
     // (the same round: the one line of prose is dropped when it only repeats a lone box)
@@ -4826,4 +4840,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, move, previewAttack: preview, attack, endMonth };

@@ -239,6 +239,8 @@ public:
 	void HoldRaids(double Share) { RaidHeldAt = Share; }
 	/** Where the first raid in the air is, on the map, and how high above the table. False when none is flying. */
 	bool FirstFlight(FVector2D& OutSpot, float& OutHeight) const;
+	/** Where the first raid in the air is bound, and how high it flies: for a picture framed on the place, not on the bombers. */
+	bool FirstRaidTarget(FVector2D& OutSpot, float& OutHeight) const;
 
 	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
 	void AddBattleSmoke(int32 RegionId);
@@ -569,6 +571,7 @@ private:
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
+	float SortieSeenFrom = 6000.0f; // (how high the eye stands: the raid's pencilled course is thinned close up)
 	/**
 	 * (Brian, 16 November 2026; rulings 108 and 109; the art director's brief.) The gun lines: for every army that
 	 * holds artillery, its guns on the ground behind its base, on the side away from the enemy, barrels over the base.

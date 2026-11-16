@@ -349,6 +349,7 @@ struct FRaidStop
 	FString Title; // its short title: its name, or for a fleet the sea it is in
 	FString Who; // for a fleet, whose ships they are ("British ships"); empty otherwise
 	int32 Km = 0;
+	int32 Guns = -1; // the anti-aircraft guns round it, 0 to 3; -1 for a target that is not a place
 	bool bNow = false;
 };
 
@@ -370,6 +371,8 @@ struct FRaidWay
 	FString Verdict;
 	FString Lost, FightersLost; // "2% · about 7"; the second empty where no fighters fly
 	FString Foot;
+	FString ToGuns, GunsWords; // the guns' part of the bombers lost: "about 23", "of them to flak and guns"
+	FString StopNote; // "after the guns stop 30%"; empty with no guns
 	FString Act; // what to pass back to choose it; empty for the one chosen
 	FString Tip;
 	float Success = 0.0f, LostShare = 0.0f, FighterShare = 0.0f;
@@ -407,6 +410,10 @@ struct FRaidCard
 	TArray<FRaidWay> Ways;
 	FString WaysLabel, WaysFoes, WaysFoesWords;
 	int32 WaysBombers = 0;
+	// (The defences brief.) The guns round the target: the level for the pips (0 to 3), "Level 2" and "AA guns".
+	int32 WaysGuns = 0;
+	FString WaysGunsFigure, WaysGunsNoun, WaysGunsTail, WaysGunsTip;
+	FString GunsWords, ToGuns; // on the single forecast of any other raid: the one line under the bombers lost
 };
 
 /** A figure on the month's card: "3,000" over "lost". */
@@ -554,6 +561,8 @@ struct FViewGate
 struct FViewRound
 {
 	int32 Bright = 0, Quiet = 0, Front = 0, All = 0, Idle = 0;
+	FString Words; // the bright count in the rules' words: "10 at the front and 1 newly raised"
+	FString Question; // the headline of the question before the month ends: "11 armies still have moves left: ..."
 };
 
 /** An airfield as the player knows it (the grand campaign). */

@@ -1325,6 +1325,9 @@ namespace
 			WayQuietStyle = MakeButtonStyle(CardFill, CardHover, FLinearColor(FColor(104, 92, 72)), 1.0f);
 			WayRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 9.0f, BrightBrass, 1.5f);
 			WayTagBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, Faint, 1.0f);
+			// (The defences brief.) A pip of a place's guns: brass up to its level, a hollow ring in a quiet grey after it.
+			PipBrush = FSlateRoundedBoxBrush(FLinearColor::White, 4.0f);
+			PipRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 4.0f, FLinearColor(FColor(128, 116, 96)), 1.0f);
 			DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 6.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.7f), 1.0f);
 			PickedCard = MakeButtonStyle(CardFill, CardHover, Brass, 1.5f);
 			LeftCard = MakeButtonStyle(CardFill.CopyWithNewOpacity(0.7f), CardHover, Faint.CopyWithNewOpacity(0.6f), 1.0f);
@@ -3127,6 +3130,13 @@ namespace
 										SNew(STextBlock).Font(Serif(TEXT("Bold"), 22)).ColorAndOpacity(Cream).AutoWrapText(true)
 										.Text_Lambda([this]()
 										{
+											// (Ruling 116: the rules' own headline, true of every army counted: an army that has fought
+											// with one corps has had an order, but it still has moves left.)
+											const FString Asked = Controller.IsValid() ? Controller->GetRoundQuestion() : FString();
+											if (!Asked.IsEmpty())
+											{
+												return FText::FromString(Asked);
+											}
 											const int32 Count = Controller.IsValid() ? Controller->GetEndAsk().Count : 0;
 											// (where some are armies raised this month, they are not all "at the front")
 											const bool bAllAtFront = !Controller.IsValid() || Controller->GetEndAsk().Raised <= 0;
@@ -3140,6 +3150,11 @@ namespace
 										.Text_Lambda([this]()
 										{
 											const int32 Raised = Controller.IsValid() ? Controller->GetEndAsk().Raised : 0;
+											// (the headline says who they are; the line beneath says what it means and what is left out)
+											if (Controller.IsValid() && !Controller->GetRoundQuestion().IsEmpty())
+											{
+												return FText::FromString(TEXT("No order stands for them, and they can still move or fight this month. Armies in the rear are not counted."));
+											}
 											return FText::FromString(Raised <= 0 ? FString(TEXT("They have not moved this month and no order stands for them. Armies in the rear are not counted."))
 												: FString::Printf(TEXT("They have not moved this month and no order stands for them: %d newly raised, the rest at the front. Armies in the rear are not counted."), Raised));
 										})
@@ -4754,7 +4769,15 @@ namespace
 										[
 											// (where the disc counts only armies raised this month, and none at the front, the line says so)
 											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
-											.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsRoundNewlyRaised() ? TEXT("newly raised") : TEXT("at the front")); })
+											// (ruling 111(f): where it counts both kinds, the rules' own words say how many of each)
+											.Text_Lambda([this]()
+											{
+												if (Controller.IsValid() && Controller->IsRoundMixed() && !Controller->GetRoundWords().IsEmpty())
+												{
+													return FText::FromString(Controller->GetRoundWords());
+												}
+												return FText::FromString(Controller.IsValid() && Controller->IsRoundNewlyRaised() ? TEXT("newly raised") : TEXT("at the front"));
+											})
 										]
 										// (Ruling 101.) The quieter number, at about 60 percent of the ink's strength: the rest that can
 										// still move. With nobody in the rear the line reads "at the front" alone.
@@ -5604,6 +5627,23 @@ namespace
 				];
 		}
 
+		/** (The defences brief.) A place's anti-aircraft guns as three pips: brass up to the level, a hollow ring after it. */
+		TSharedRef<SWidget> GunPips(int32 Level, float Size, float Gap)
+		{
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(K == 0 ? 0.0f : Gap, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(Size).HeightOverride(Size)
+					[
+						K < Level ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(&PipBrush).ColorAndOpacity(BrightBrass)) : StaticCastSharedRef<SWidget>(SNew(SImage).Image(&PipRingBrush))
+					]
+				];
+			}
+			return Row;
+		}
+
 		/**
 		 * One air group on the raid card (the art director's sheet): its machine's picture, its name, its airfield and how
 		 * far it has to fly, how many aircraft as the largest thing on it, and how ready it is. One flying the raid has a
@@ -5831,21 +5871,48 @@ namespace
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)[SNew(STextBlock).Text(FText::FromString(Figure)).Font(Font(TEXT("Bold"), 16)).ColorAndOpacity(Cream)]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(7.0f, 0.0f, 0.0f, 2.0f)[SNew(STextBlock).Text(FText::FromString(Of)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)];
 					};
-					TSharedRef<SHorizontalBox> Common = SNew(SHorizontalBox);
-					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Number(Card.WaysBombers), Card.WaysBombers == 1 ? TEXT("bomber") : TEXT("bombers"))];
-					Common->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
+					// (The art director's defences brief: three items in a row, with a thin rule between them: the bombers
+					// going, the enemy's fighters in reach, and the guns round the target.)
+					auto Rule = [this]() -> TSharedRef<SWidget>
+					{
+						return SNew(SBox).WidthOverride(1.0f).HeightOverride(20.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Faint.CopyWithNewOpacity(0.5f))];
+					};
+					TSharedRef<SHorizontalBox> Fighters = SNew(SHorizontalBox).ToolTipText(FText::FromString(Card.Meets.Num() == 0 ? FString(TEXT("No enemy fighters are in reach of the target.")) : Who));
 					if (Card.Meets.Num() > 0 && !Card.Meets[0].Tag.IsEmpty())
 					{
-						Common->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						Fighters->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 						[
-							SNew(SBox).WidthOverride(24.0f).HeightOverride(16.0f)[SNew(SImage).Image(FlagBrush(Card.Meets[0].Tag))]
+							SNew(SBox).WidthOverride(21.0f).HeightOverride(14.0f)[SNew(SImage).Image(FlagBrush(Card.Meets[0].Tag))]
 						];
 					}
-					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Card.WaysFoes, Card.WaysFoesWords)];
+					Fighters->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Card.WaysFoes, Card.WaysFoesWords.Replace(TEXT("enemy fighters"), TEXT("fighters")))];
+					TSharedRef<SHorizontalBox> Guns = SNew(SHorizontalBox).ToolTipText(FText::FromString(Card.WaysGunsTip));
+					if (const FSlateBrush* Sign = OrderSignBrush(TEXT("aa")))
+					{
+						Guns->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(23.0f).HeightOverride(15.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Card.WaysGuns > 0 ? Cream : Faint)]
+						];
+					}
+					Guns->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)[GunPips(Card.WaysGuns, 7.0f, 3.5f)];
+					Guns->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Card.WaysGunsFigure, Card.WaysGunsNoun)];
+					if (!Card.WaysGunsTail.IsEmpty())
+					{
+						// (with no guns: "· light flak only", small and dim)
+						Guns->AddSlot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 4.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Card.WaysGunsTail)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Faint)
+						];
+					}
+					TSharedRef<SHorizontalBox> Common = SNew(SHorizontalBox);
+					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Number(Card.WaysBombers), Card.WaysBombers == 1 ? TEXT("bomber") : TEXT("bombers"))];
+					Common->AddSlot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)[Rule()];
+					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Fighters];
+					Common->AddSlot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)[Rule()];
+					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Guns];
 					Forecast->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 					[
 						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(13.0f, 6.0f, 13.0f, 6.0f))
-						.ToolTipText(FText::FromString(Card.Meets.Num() == 0 ? FString(TEXT("No enemy fighters are in reach of the target.")) : Who))
 						[
 							Common
 						]
@@ -5916,12 +5983,25 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[RaidMeter(Share, Red, 4.0f)];
 						};
-						Inside->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)[Lost(TEXT("BOMBERS LOST"), Way.Lost, Way.LostShare)];
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Lost(TEXT("BOMBERS LOST"), Way.Lost, Way.LostShare)];
+						if (!Way.GunsWords.IsEmpty())
+						{
+							// (The defences brief: what is left of the bombers lost fell to fighters, and he can see that at a
+							// glance, which is the reason to add an escort.)
+							Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.GunsWords)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.ToGuns)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Cream)]
+							];
+						}
 						if (Way.Hits.Num() > 0)
 						{
-							Inside->AddSlot().AutoHeight().Padding(0.0f, 11.0f, 0.0f, 3.0f)
+							Inside->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.StopNote)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))]
 							];
 							for (int32 K = 0; K < Way.Hits.Num() && K < 3; ++K)
 							{
@@ -6072,6 +6152,15 @@ namespace
 				if (Card.Bombers > 0)
 				{
 					Forecast->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[Lost(TEXT("BOMBERS LOST"), Card.BomberShare, Card.BomberLoss, Card.Massed)];
+					if (!Card.GunsWords.IsEmpty())
+					{
+						Forecast->AddSlot().AutoHeight().Padding(130.0f, 3.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Card.GunsWords)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Card.ToGuns)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Cream)]
+						];
+					}
 				}
 				if (Card.Fighters > 0)
 				{
@@ -6129,6 +6218,16 @@ namespace
 									.Visibility(Stop.Holder.IsEmpty() || Stop.Holder == TEXT("X") ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
 									[
 										SNew(SImage).Image(FlagBrush(Stop.Holder))
+									]
+								]
+								// (The defences brief: its guns as three small pips on a dark tab, so that he can pick the
+								// softer target before he clicks through them. A target with no guns has no tab.)
+								+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(0.0f, 4.0f, 4.0f, 0.0f)
+								[
+									SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(5.0f, 3.0f, 5.0f, 3.0f))
+									.Visibility(Stop.Guns > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed)
+									[
+										GunPips(Stop.Guns, 6.0f, 3.0f)
 									]
 								]
 							]
@@ -9021,6 +9120,7 @@ namespace
 		FSlateBrush CardBrush;
 		FButtonStyle WayChosenStyle, WayQuietStyle;
 		FSlateBrush WayRingBrush, WayTagBrush;
+		FSlateBrush PipBrush, PipRingBrush;
 		FButtonStyle PickedCard;
 		FButtonStyle LeftCard;
 		FButtonStyle EndMonthStyle;

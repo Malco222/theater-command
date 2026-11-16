@@ -2460,6 +2460,24 @@ bool ACampaignPlayerController::IsRoundNewlyRaised() const
 	return Session && Session->GetView().Round.Bright > 0 && Session->GetView().Round.Front <= 0;
 }
 
+FString ACampaignPlayerController::GetRoundWords() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session ? Session->GetView().Round.Words : FString();
+}
+
+FString ACampaignPlayerController::GetRoundQuestion() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session ? Session->GetView().Round.Question : FString();
+}
+
+bool ACampaignPlayerController::IsRoundMixed() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().Round.Front > 0 && Session->GetView().Round.Bright > Session->GetView().Round.Front;
+}
+
 void ACampaignPlayerController::StandThisMonth()
 {
 	FCampaignSession* Session = GetSession();

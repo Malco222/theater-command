@@ -657,6 +657,11 @@ public:
 	int32 ArmiesInRear() const;
 	/** True when the armies on the disc are all newly raised and none stands at the front: the line under NEXT ARMY then says so. */
 	bool IsRoundNewlyRaised() const;
+	/** (Rulings 111(f) and 116.) The bright count in the rules' own words, and the question's headline; empty where the rules give none. */
+	FString GetRoundWords() const;
+	FString GetRoundQuestion() const;
+	/** True where the disc counts both armies at the front and armies newly raised. */
+	bool IsRoundMixed() const;
 	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
 	void StandThisMonth();
 	bool IsStandingThisMonth() const;
