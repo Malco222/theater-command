@@ -99,7 +99,11 @@ public:
 	TArray<int32> RailReach(const TArray<int32>& CorpsIds);
 
 	/** Sends the given corps by rail. Returns the ones that went. */
-	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId);
+	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutSaid = nullptr);
+	/** (Rulings 110, 112, 118.) What the trains will do for these corps this month; March is where they can walk to. */
+	FRailShow RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March);
+	/** The pointer's words for a province beyond their march. */
+	FRailTip RailTip(const TArray<int32>& CorpsIds, int32 RegionId);
 
 	/** Where these corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
 	void SeaReach(const TArray<int32>& CorpsIds, TArray<int32>& OutPorts, TArray<int32>& OutBeaches);

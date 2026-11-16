@@ -129,6 +129,10 @@ struct FArmyTray
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
+	// (Ruling 118; the art director's railway brief, section 2a.) The one line that says what the trains will do for
+	// the army this month, in the rules' words; and the opening of it that takes the railway's colour.
+	bool bRailCan = false;
+	FString RailStrong, RailLine;
 	bool bLean = false; // the picked corps take no drafts
 	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
 	FText FoldButton, FoldTip; // (Version 64) two corps of the army are worn thin and could be folded into one. Empty when there are none
@@ -872,6 +876,7 @@ private:
 	void KeepView(int32 Slot);
 	void GoToKeptView(int32 Slot);
 	TMap<int32, int32> FarMonths; // and friendly ground beyond this month's reach: about how many months the march there would take
+	TSet<int32> RailBeyond; // (rulings 110, 112, 118) and the provinces beyond its march that a train would take it to this month
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army

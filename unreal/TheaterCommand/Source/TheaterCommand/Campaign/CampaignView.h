@@ -552,6 +552,39 @@ struct FViewGate
 	FString Shut; // for a fleet's route that is refused: "The Panama Canal is shut to your ships: ..."
 };
 
+/**
+ * (Rulings 110, 112 and 118; the art director's railway brief.) What the railway shows for the army in hand: the
+ * second reach is light on the line itself.
+ */
+struct FRailLight
+{
+	int32 From = INDEX_NONE; // where the army stands
+	TArray<FIntPoint> Tracks; // every working track a train could carry it along: the two provinces a line joins, the lower first
+	TArray<int32> Dots; // provinces beyond its march that a train would take it to: a station dot each
+	TArray<int32> Tint; // the provinces that take the faint cool tint
+	TArray<FIntPoint> Bars; // a lit line that stops at a cut: the province it comes from, and the cut one
+	TArray<int32> Ringed; // cut provinces that engineers in hand can be carried to: the lamp wears a white ring
+};
+
+/** What the trains will do for the army in hand this month: the rules' one line, and what the table lights. */
+struct FRailShow
+{
+	bool bCan = false;
+	FString Strong; // the opening that takes the railway's colour: "By rail this month to 3 more places:"
+	FString Line; // the whole line
+	FRailLight Light;
+};
+
+/** The pointer's words for a province beyond the march of the army in hand. */
+struct FRailTip
+{
+	FString Ride; // "Right-click: by rail to Hanover, there this month. It takes the whole month."; empty where no train goes
+	FString Relay; // "Engineers can relay the track here."
+	FString No; // why no train will take it there
+	FString Strong; // the opening of that reason that takes the emphasis, where it is a break he can act on
+	bool bCutHere = false; // the reason is a cut at this very province
+};
+
 /** (Rulings 113 and 114.) A cut railway as the player knows it. */
 struct FViewCut
 {

@@ -1303,6 +1303,11 @@ namespace
 				TipStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterTipMarks"));
 				TipStyles->Set("Brass", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(BrightBrass)));
 				TipStyles->Set("Red", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(Alarm)));
+				// (the railway brief, section 8: a train's line in the lit railway's blue-white; a break's opening with the
+				// box's emphasis; the kept march's line after it, dim)
+				TipStyles->Set("Rail", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor(198, 228, 255)))));
+				TipStyles->Set("Strong", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)));
+				TipStyles->Set("Dim", FTextBlockStyle(TipPlain).SetColorAndOpacity(FSlateColor(Muted)));
 			}
 			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
 			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
@@ -2047,6 +2052,11 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)
 								[
 									SAssignNew(TrayOrders, SHorizontalBox)
+								]
+								// (Ruling 118; the railway brief, section 2a.) Under the chips: what the trains will do for the army this month.
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SAssignNew(TrayRail, SHorizontalBox)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 								[
@@ -3947,6 +3957,65 @@ namespace
 				// The army's standing order for the day the enemy comes, and the railway.
 				TrayOrders->ClearChildren();
 				const FArmyTray& Army = Controller->GetArmyTray();
+				// (Ruling 118; the art director's railway brief, section 2a.) One line of words, not a button: whether the
+				// army can ride this month, in the rules' words. At its head a piece of railway: lit in the railway's
+				// blue-white when it can, dark and ending in the red buffer bar when it cannot.
+				if (TrayRail.IsValid())
+				{
+					TrayRail->ClearChildren();
+					if (!Army.bLook && !Army.bFleet && !Army.RailLine.IsEmpty())
+					{
+						const FLinearColor RailLit(FColor(198, 228, 255)), RailDark(FColor(128, 116, 96)), Buffer(FColor(226, 62, 44));
+						const FLinearColor& Metal = Army.bRailCan ? RailLit : RailDark;
+						TSharedRef<SOverlay> Piece = SNew(SOverlay)
+							+ SOverlay::Slot().VAlign(VAlign_Center)[SNew(SBox).HeightOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(FColor(18, 20, 24)).CopyWithNewOpacity(0.8f))]]
+							+ SOverlay::Slot().VAlign(VAlign_Center)[SNew(SBox).HeightOverride(2.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Metal)]];
+						for (int32 K = 0; K < 4; ++K)
+						{
+							Piece->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(3.0f + 6.5f * K, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(1.5f).HeightOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Metal)]
+							];
+						}
+						if (!Army.bRailCan)
+						{
+							Piece->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Center)
+							[
+								SNew(SBox).WidthOverride(3.0f).HeightOverride(9.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Buffer)]
+							];
+						}
+						// (as many whole sentences as the line holds, never a sentence cut: the rest is in its tip)
+						FString Shown = Army.RailLine;
+						while (Shown.Len() > 104)
+						{
+							int32 Stop = INDEX_NONE;
+							const FString Shorter = Shown.LeftChop(1);
+							if (!Shorter.FindLastChar(TEXT('.'), Stop) || Stop < 20)
+							{
+								break;
+							}
+							Shown = Shown.Left(Stop + 1);
+						}
+						const bool bStrong = Army.bRailCan && !Army.RailStrong.IsEmpty() && Shown.StartsWith(Army.RailStrong);
+						TrayRail->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 7.0f, 9.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(27.0f).HeightOverride(10.0f)[Piece]
+						];
+						if (bStrong)
+						{
+							TrayRail->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Army.RailStrong)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(RailLit)
+							];
+						}
+						TrayRail->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(bStrong ? Shown.Mid(Army.RailStrong.Len()) : Shown)).Font(Font(TEXT("Regular"), 10))
+							.ColorAndOpacity(Army.bRailCan ? FLinearColor(FColor(214, 206, 188)) : FLinearColor(FColor(162, 153, 135)))
+							.ToolTipText(FText::FromString(Army.RailLine))
+						];
+					}
+				}
 				auto OrderButton = [this](const TCHAR* Label, bool bOn, TFunction<void()> Do)
 				{
 					return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
@@ -4130,11 +4199,9 @@ namespace
 				[
 					SNew(STextBlock).Text(FText::FromString(TEXT("Travel:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
 				];
+				// (Ruling 118: the BY RAIL switch is gone. Inside the march's reach a right-click marches; beyond it a
+				// right-click takes the train. The line under the chips says what the trains will do.)
 				TrayOrders->AddSlot().AutoWidth()
-				[
-					OrderButton(TEXT("BY RAIL"), Army.bByRail, [this]() { if (Controller.IsValid()) { Controller->ToggleRail(); } })
-				];
-				TrayOrders->AddSlot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
 				[
 					OrderButton(TEXT("BY SEA"), Army.bBySea, [this]() { if (Controller.IsValid()) { Controller->ToggleSea(); } })
 				];
@@ -4768,7 +4835,9 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 										[
 											// (where the disc counts only armies raised this month, and none at the front, the line says so)
-											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
+											SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
+											// (the longer line of both kinds is set a size smaller, to stay on the pill)
+											.Font_Lambda([this]() { return Typed(Controller.IsValid() && Controller->IsRoundMixed() ? 8 : 9); })
 											// (ruling 111(f): where it counts both kinds, the rules' own words say how many of each)
 											.Text_Lambda([this]()
 											{
@@ -4784,7 +4853,7 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(7.0f, 0.0f, 0.0f, 0.0f)
 										[
 											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.6f))
-											.Visibility_Lambda([this]() { return ArmiesBesides() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											.Visibility_Lambda([this]() { return ArmiesBesides() > 0 && !(Controller.IsValid() && Controller->IsRoundMixed()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 											.Text_Lambda([this]() { return FText::FromString(FString::Printf(TEXT("· rear %d"), ArmiesBesides())); })
 										]
 									]
@@ -9174,6 +9243,7 @@ namespace
 		int32 ShownOpening = -1;
 		TSharedPtr<SVerticalBox> ProvinceBox;
 		TSharedPtr<SHorizontalBox> TrayOrders;
+		TSharedPtr<SHorizontalBox> TrayRail;
 		TSharedPtr<SVerticalBox> TownBarBox;
 		int32 ShownTownBar = -1;
 		int32 ShownProvince = -1;

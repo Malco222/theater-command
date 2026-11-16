@@ -2244,7 +2244,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
 		TEXT("NEXT ARMY (Tab), under END THE MONTH, goes round every army that still waits for an order, so that none is missed; STAND THIS MONTH on an army's card tells it to wait where it is. ")
 		TEXT("Right-click friendly ground too far for this month and the army marches there by itself over the months, halting if the enemy comes near. An army with no moves left can be sent on the same way: it sets off as the next month opens.\n")
-		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port.\n")
+		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY SEA from a port. Beyond its march, a right-click on a place with a station dot sends it by rail along the lit lines, which takes its whole month.\n")
 		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is dug in behind its fieldworks (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
 		TEXT("a lorry and crates while supply reaches it, and a red barred board when it is cut off. The dotted line to where an army would go has a ring for each province on the way, and ends in red where there would be a battle."));
 	Add(TEXT("WAR AND PEACE"),
@@ -3947,11 +3947,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Line += TEXT("\n") + FString::Join(Worth, TEXT("  \u00B7  "));
 			}
 			// (Rulings 112 to 114: a railway known to be cut says so, with its cause and month, in the rules' words.)
+			FString CutLine;
 			if (const FViewCut* Cut = View.Cuts.FindByPredicate([TipRegion](const FViewCut& Each) { return Each.Region == TipRegion; }))
 			{
 				if (!Cut->Short.IsEmpty())
 				{
-					Line += TEXT("\n") + Cut->Short.Left(1).ToUpper() + Cut->Short.Mid(1) + (Cut->How == TEXT("now") ? TEXT(": no train runs through") : TEXT(""));
+					CutLine = Cut->Short.Left(1).ToUpper() + Cut->Short.Mid(1) + (Cut->How == TEXT("now") ? TEXT(": no train runs through") : TEXT(""));
+					Line += TEXT("\n") + CutLine;
 				}
 			}
 			// (Ruling 46: pointing at a city lists everything it has on order, the total first.)
@@ -4079,6 +4081,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				else if (!bByRail && !bBySea && RailBeyond.Contains(TipRegion))
+				{
+					// (The railway brief, section 8.) A province it can ride to: the rules' one line, in the lit railway's
+					// own blue-white; and what engineers can do at a cut they are carried to.
+					const FRailTip Train = Session->RailTip(PickedCorps, TipRegion);
+					if (!Train.Ride.IsEmpty())
+					{
+						TipMarked = TEXT("<Rail>") + PlainInMarked(Train.Ride) + TEXT("</>") + (Train.Relay.IsEmpty() ? FString() : TEXT("\n") + PlainInMarked(Train.Relay));
+					}
+				}
 				else if (bHandSpent && !bByRail && !bBySea)
 				{
 					// (Ruling 87.) An army with no moves left. On friendly ground a right-click is kept, and it sets off
@@ -4095,8 +4107,28 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 				else if (const int32* Months = (!bByRail && !bBySea) ? FarMonths.Find(TipRegion) : nullptr)
 				{
-					Line += FString::Printf(TEXT("\nOut of reach this month. Right-click: march here over about %s. The army goes on by itself as each month opens, and halts if the enemy comes near."),
+					const FString Kept = FString::Printf(TEXT("Out of reach this month. Right-click: march here over about %s. The army goes on by itself as each month opens, and halts if the enemy comes near."),
 						*Months == 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), *Months));
+					// (The railway brief, section 8.) Why no train will take it there. A break he can act on (a cut, a
+					// siege, bridges down) comes first, its opening with the box's emphasis, and the kept march's line
+					// after it, dim; any other reason is an aside after the march's line. A cut is said once.
+					const FRailTip Train = Session->RailTip(PickedCorps, TipRegion);
+					if (!Train.Strong.IsEmpty() && Train.No.StartsWith(Train.Strong))
+					{
+						TipMarked = TEXT("<Strong>") + PlainInMarked(Train.Strong) + TEXT("</>") + PlainInMarked(Train.No.Mid(Train.Strong.Len())) + TEXT("\n<Dim>") + PlainInMarked(Kept) + TEXT("</>");
+						if (Train.bCutHere && !CutLine.IsEmpty())
+						{
+							Line.ReplaceInline(*(TEXT("\n") + CutLine), TEXT(""));
+						}
+					}
+					else
+					{
+						Line += TEXT("\n") + Kept;
+						if (!Train.No.IsEmpty())
+						{
+							Line += TEXT("\n") + Train.No;
+						}
+					}
 				}
 				else
 				{
@@ -5462,6 +5494,30 @@ void ACampaignPlayerController::RefreshOrders()
 	FarMonths = MoveTemp(Far);
 	StandingRoad = MoveTemp(Road);
 	Map->SetReach(Reach, bByRail || bBySea);
+	// (Rulings 110, 112, 118; the art director's railway brief.) The second reach, with no switch to press: where a
+	// train would take the army this month beyond its march, shown as light on the railway itself.
+	RailBeyond.Reset();
+	Tray.bRailCan = false;
+	Tray.RailStrong.Reset();
+	Tray.RailLine.Reset();
+	if (!bBySea && !bByRail && Session && PickedCorps.Num() > 0 && ArmyRegion != INDEX_NONE)
+	{
+		TArray<int32> Walked;
+		for (const FReachRegion& Step : Reach)
+		{
+			if (!Step.bAttack && !Step.IsWar())
+			{
+				Walked.Add(Step.Region);
+			}
+		}
+		FRailShow Trains = Session->RailShow(PickedCorps, Walked);
+		Trains.Light.From = ArmyRegion;
+		RailBeyond = TSet<int32>(Trains.Light.Tint);
+		Tray.bRailCan = Trains.bCan;
+		Tray.RailStrong = Trains.Strong;
+		Tray.RailLine = Trains.Line;
+		Map->SetRailLight(Trains.Light);
+	}
 	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
@@ -5483,6 +5539,8 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 		return;
 	}
 	RouteTarget = RegionId;
+	// (the railway brief, section 8: the route a train would take to the province under the pointer turns white)
+	Map->SetRailRoute(RailBeyond.Contains(RegionId) ? RegionId : INDEX_NONE);
 	if (bByRail)
 	{
 		Map->SetRoute(FVector::ZeroVector, TArray<int32>());
@@ -5588,6 +5646,33 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	if (Target && Target->IsWar())
 	{
 		Notify(TEXT("War cannot be declared on them this month."));
+		return;
+	}
+	if (!Target && !bByRail && !bBySea && RailBeyond.Contains(RegionId))
+	{
+		// (Ruling 118.) Beyond its march a right-click takes the train: there this month, the whole month spent.
+		FString Said;
+		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId, &Said);
+		if (Trains.Num() == 0)
+		{
+			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
+			return;
+		}
+		ShowWar(Session->GetView(), Trains, CarriedFrom);
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
+		PickedCorps.Reset();
+		for (const FCorpsMove& Train : Trains)
+		{
+			PickedCorps.Add(Train.CorpsId);
+		}
+		ArmyRegion = RegionId;
+		if (!Said.IsEmpty())
+		{
+			Notify(Said, 8.0);
+		}
+		RefreshOrders();
+		SelectRegion(RegionId);
 		return;
 	}
 	if (!Target && !bByRail && FarMonths.Contains(RegionId))

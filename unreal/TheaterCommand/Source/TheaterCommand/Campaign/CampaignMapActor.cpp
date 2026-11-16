@@ -127,6 +127,7 @@ ACampaignMapActor::ACampaignMapActor()
 	BeamMesh = MakeMesh(TEXT("Searchlights"), false);
 	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
 	CutLampMesh = MakeMesh(TEXT("CutLamps"), false);
+	RailLightMesh = MakeMesh(TEXT("RailLight"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
 
@@ -1499,6 +1500,9 @@ void ACampaignMapActor::LoadMaterials()
 	SleeperInk = MakeInk();
 	GunEarthInk = MakeInk(); // (the trodden earth under an army's guns)
 	CutLampInk = MakeInk(); // (the lamp of a cut railway)
+	RailLightInk = MakeInk(); // (the lit railway of the army in hand)
+	RailLightInk->SetScalarParameterValue(TEXT("Brightness"), 1.2f);
+	RailTintInk = MakeInk();
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
 	FMiniatureMesh::bTrialTank = FParse::Param(FCommandLine::Get(), TEXT("TheaterTrialTank")); // (the sculpted trial tank on every armoured base, to be judged)
@@ -3287,6 +3291,190 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	UE_LOG(LogTheater, Log, TEXT("Works on the table: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
+void ACampaignMapActor::SetRailLight(const FRailLight& Light)
+{
+	RailLight = Light;
+	RailRouteTo = INDEX_NONE;
+	RailRoute.Reset();
+	bRailLightDirty = true;
+}
+
+void ACampaignMapActor::SetRailRoute(int32 ToRegion)
+{
+	if (ToRegion == RailRouteTo)
+	{
+		return;
+	}
+	RailRouteTo = ToRegion;
+	RailRoute.Reset();
+	// The way a train would take: the fewest lines from where the army stands, over the lit tracks.
+	if (ToRegion != INDEX_NONE && RailLight.From != INDEX_NONE && RailLight.Tracks.Num() > 0)
+	{
+		TMap<int32, int32> Came;
+		TArray<int32> Queue;
+		Queue.Add(RailLight.From);
+		Came.Add(RailLight.From, INDEX_NONE);
+		for (int32 Head = 0; Head < Queue.Num() && !Came.Contains(ToRegion); ++Head)
+		{
+			const int32 Here = Queue[Head];
+			for (const FIntPoint& Track : RailLight.Tracks)
+			{
+				const int32 Next = Track.X == Here ? Track.Y : Track.Y == Here ? Track.X : INDEX_NONE;
+				if (Next != INDEX_NONE && !Came.Contains(Next))
+				{
+					Came.Add(Next, Here);
+					Queue.Add(Next);
+				}
+			}
+		}
+		for (int32 At = ToRegion; Came.Contains(At) && Came[At] != INDEX_NONE; At = Came[At])
+		{
+			RailRoute.Add(FIntPoint(FMath::Min(At, Came[At]), FMath::Max(At, Came[At])));
+		}
+	}
+	bRailLightDirty = true;
+}
+
+void ACampaignMapActor::UpdateRailLight(float CameraDistance)
+{
+	if (!RailLightMesh)
+	{
+		return;
+	}
+	if (RailLight.Tracks.Num() == 0 && RailLight.Tint.Num() == 0 && RailLight.Bars.Num() == 0)
+	{
+		if (RailLightMesh->GetNumSections() > 0)
+		{
+			RailLightMesh->ClearAllMeshSections();
+		}
+		RailLightBuiltFor = -1.0f;
+		bRailLightDirty = false;
+		return;
+	}
+	if (RailTintInk)
+	{
+		// (the tint is a help and never the signal: by night it does not show at all)
+		RailTintInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Clamp(1.0f - 1.6f * GetMoonlight(), 0.0f, 1.0f));
+	}
+	// (The lines keep their width on the screen as the eye rises; close up they keep the width they have from the
+	// lowest playing height, and lie along the model's own rails.)
+	const float Seen = FMath::Clamp(CameraDistance, 2600.0f, 20000.0f);
+	if (!bRailLightDirty && RailLightBuiltFor > 0.0f && FMath::Abs(Seen - RailLightBuiltFor) < 0.04f * RailLightBuiltFor)
+	{
+		return;
+	}
+	bRailLightDirty = false;
+	RailLightBuiltFor = Seen;
+	const double Pixel = 0.00037 * Seen / UnitScale; // (a pixel of the 1600 view, in the map's units)
+	const bool bRoute = RailRoute.Num() > 0;
+	auto Inked = [](const FLinearColor& Colour, float Alpha)
+	{
+		FLinearColor Out = Colour;
+		Out.A = FMath::Clamp(Alpha, 0.0f, 1.0f);
+		return Out.ToFColor(false);
+	};
+	const FLinearColor Lit(FColor(198, 228, 255)), RouteLit(FColor(255, 253, 244)), Casing(FColor(18, 20, 24)), BarRed(FColor(226, 62, 44));
+	FCampaignMeshBuffers Tints, Lines, Stops;
+	// The faint cool tint, on the fields as the march wash is laid; the province under the pointer brightens.
+	for (const int32 RegionId : RailLight.Tint)
+	{
+		FLinearColor Fill(FColor(120, 170, 235));
+		Fill.A = 0.16f;
+		AppendRegionFill(Tints, RegionId, Fill);
+		if (RegionId == RailRouteTo)
+		{
+			FLinearColor Bright(FColor(190, 214, 240));
+			Bright.A = 0.26f;
+			AppendRegionFill(Tints, RegionId, Bright);
+		}
+	}
+	// The lines, in three passes so that one line's glow never lies over another's rail: the glow, the dark casing,
+	// then the rail and its sleepers.
+	auto RailOf = [this](const FIntPoint& Track) -> const FLandRail*
+	{
+		for (const FLandRail& Rail : Land.Rails)
+		{
+			if ((Rail.A == Track.X && Rail.B == Track.Y) || (Rail.A == Track.Y && Rail.B == Track.X))
+			{
+				return Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) ? &Rail : nullptr;
+			}
+		}
+		return nullptr;
+	};
+	for (int32 Pass = 0; Pass < 3; ++Pass)
+	{
+		for (const FIntPoint& Track : RailLight.Tracks)
+		{
+			const FLandRail* Rail = RailOf(Track);
+			if (!Rail)
+			{
+				continue;
+			}
+			const bool bOnRoute = RailRoute.Contains(Track);
+			// (with a route shown the other lines fall to about seven tenths of their strength)
+			const float Strength = bRoute && !bOnRoute ? 0.7f : 1.0f;
+			const FLinearColor& Ink = bOnRoute ? RouteLit : Lit;
+			const double Core = (bOnRoute ? 1.5 : 1.0) * Pixel, TickLong = (bOnRoute ? 4.3 : 3.2) * Pixel, GlowOut = (bOnRoute ? 14.0 : 10.0) * Pixel;
+			const float Glow = (bOnRoute ? 0.55f : 0.30f) * Strength;
+			const FVector2D Stops3[3] = { Data.Regions[Rail->A].Center, Rail->At, Data.Regions[Rail->B].Center };
+			for (int32 Leg = 0; Leg < 2; ++Leg)
+			{
+				const FVector2D A = Stops3[Leg], B = Stops3[Leg + 1];
+				const double Length = FVector2D::Distance(A, B);
+				if (Length < 0.5)
+				{
+					continue;
+				}
+				const TArray<FVector2D> Way = { A, B };
+				if (Pass == 0)
+				{
+					AppendRibbon(Lines, Way, Core + GlowOut, 0.2, Inked(Ink, 0.4f * Glow), false);
+					AppendRibbon(Lines, Way, Core + 0.45 * GlowOut, 0.21, Inked(Ink, 0.6f * Glow), false);
+				}
+				else if (Pass == 1)
+				{
+					AppendRibbon(Lines, Way, 3.2 * Pixel, 0.22, Inked(Casing, 0.66f * Strength), false);
+				}
+				else
+				{
+					AppendRibbon(Lines, Way, Core, 0.24, Inked(Ink, Strength), false);
+					// (sleepers across it every eight pixels: without them and the casing it reads as a province's border)
+					const FVector2D Dir = (B - A) / Length, Side(Dir.Y, -Dir.X);
+					const int32 Ticks = FMath::Clamp(FMath::FloorToInt32(Length / (8.0 * Pixel)), 1, 400);
+					for (int32 K = 0; K < Ticks; ++K)
+					{
+						const FVector2D At = A + Dir * (Length * (K + 0.5) / Ticks);
+						const TArray<FVector2D> Sleeper = { At - Side * TickLong, At + Side * TickLong };
+						AppendRibbon(Lines, Sleeper, 0.75 * Pixel, 0.25, Inked(Ink, Strength), false);
+					}
+				}
+			}
+		}
+	}
+	// Where a lit line reaches a cut: a red buffer bar across the track at that province's border.
+	for (const FIntPoint& Bar : RailLight.Bars)
+	{
+		const FLandRail* Rail = RailOf(Bar);
+		if (!Rail)
+		{
+			continue;
+		}
+		const FVector2D From = Data.Regions[Bar.X].Center;
+		const FVector2D Dir = (Rail->At - From).GetSafeNormal(), Side(Dir.Y, -Dir.X);
+		// (a step short of the border, on the side the train comes from)
+		const FVector2D At = Rail->At - Dir * (2.0 * Pixel);
+		const TArray<FVector2D> Across = { At - Side * (5.0 * Pixel), At + Side * (5.0 * Pixel) };
+		AppendRibbon(Stops, Across, 2.9 * Pixel, 0.27, Inked(Casing, 0.8f), false);
+		AppendRibbon(Stops, Across, 1.7 * Pixel, 0.28, Inked(BarRed, 1.0f), false);
+	}
+	RailLightMesh->ClearAllMeshSections();
+	Tints.Commit(RailLightMesh, 0, RailTintInk ? static_cast<UMaterialInterface*>(RailTintInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	Lines.Commit(RailLightMesh, 1, RailLightInk ? static_cast<UMaterialInterface*>(RailLightInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	Stops.Commit(RailLightMesh, 2, RailLightInk ? static_cast<UMaterialInterface*>(RailLightInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	RailLightMesh->SetCastShadow(false);
+	RailLightMesh->SetTranslucentSortPriority(1); // (over every wash; under the cut lamps and the searchlights)
+}
+
 void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 {
 	CutLamps.Reset();
@@ -3306,7 +3494,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	{
 		return;
 	}
-	if (CutLamps.Num() == 0 || !CutLampInk)
+	if ((CutLamps.Num() == 0 && RailLight.Dots.Num() == 0) || !CutLampInk)
 	{
 		if (CutLampMesh->GetNumSections() > 0)
 		{
@@ -3369,8 +3557,27 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	for (const TPair<int32, bool>& Lamp : CutLamps)
 	{
 		const FCampaignRegion& Region = Data.Regions[Lamp.Key];
-		// (on a short post over the crossed board, which stands a little to one side of the town)
-		const FVector Foot = SurfacePointOver(Region.Center.X - 3.0, Region.Center.Y + 3.0, 0.1);
+		// (On a short post over the crossed board, which stands a little to one side of the town. The art director's
+		// section 7: a lamp sits inside its province by at least its own width; where the post would stand too near the
+		// border the lamp stands over the town, and failing that at the middle of the province.)
+		const double Clear = 2.0 * Radius / U;
+		auto Inside = [&](const FVector2D& Spot)
+		{
+			for (const FVector2D& Step : { FVector2D(Clear, 0.0), FVector2D(-Clear, 0.0), FVector2D(0.0, Clear), FVector2D(0.0, -Clear) })
+			{
+				if (Data.FindRegionAt(Spot.X + Step.X, Spot.Y + Step.Y) != Lamp.Key)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		FVector2D Stands = Region.Center + FVector2D(-3.0, 3.0);
+		if (!Inside(Stands))
+		{
+			Stands = Inside(Region.Center) ? Region.Center : Region.Centroid;
+		}
+		const FVector Foot = SurfacePointOver(Stands.X, Stands.Y, 0.1);
 		const FVector Middle = Foot + FVector(0.0, 0.0, 2.4 * U) + Up * (Radius * 1.25);
 		const double Hair = 0.004 * CameraDistance; // (a step toward the eye, so that the layers lie in their order)
 		if (!Lamp.Value)
@@ -3390,12 +3597,39 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 				Arc(Middle + Near * (2.0 * Hair), Radius * 0.8, Radius, From, To, Inked(Red, 1.0f), Inked(Red, 1.0f));
 			}
 		}
+		if (RailLight.Ringed.Contains(Lamp.Key))
+		{
+			// (Ruling 118: engineers in hand can be carried up to this break and mend it. A white ring two pixels wide,
+			// just outside the lamp's dark rim.)
+			const FLinearColor White(FColor(236, 246, 255));
+			Arc(Middle + Near * (2.0 * Hair), Radius * 1.26 + 0.4 * Pixel, Radius * 1.26 + 2.4 * Pixel, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
+		}
 		// The broken rail: one half level, the other dropped.
 		const FColor BrokenInk = Inked(Lamp.Value ? Red : CreamRail, 1.0f);
 		const FVector Rail = Middle + Near * (3.0 * Hair);
 		const double Thick = Radius * 0.13;
 		Bar(Rail - Right * (0.62 * Radius), Rail - Right * (0.07 * Radius), Thick, BrokenInk);
 		Bar(Rail + Right * (0.1 * Radius) - Up * (0.06 * Radius), Rail + Right * (0.58 * Radius) - Up * (0.36 * Radius), Thick, BrokenInk);
+	}
+	// The station dots (the art director's railway brief, section 4): one in each province beyond the march that a
+	// train would take the army to, over its town. White, 5.2 px in radius with a dark rim and a soft glow; never
+	// under 4 px; the one at the end of the route under the pointer grows to 7.4.
+	{
+		const FLinearColor White(FColor(236, 246, 255));
+		for (const int32 RegionId : RailLight.Dots)
+		{
+			if (!Data.Regions.IsValidIndex(RegionId))
+			{
+				continue;
+			}
+			const double Dot = (RegionId == RailRouteTo ? 7.4 : FMath::Lerp(5.2, 4.0, FMath::SmoothStep(4800.0, 9500.0, static_cast<double>(CameraDistance)))) * Pixel;
+			const FCampaignRegion& Region = Data.Regions[RegionId];
+			const FVector Middle = SurfacePointOver(Region.Center.X, Region.Center.Y, 0.1) + FVector(0.0, 0.0, 2.8 * U) + Up * Dot;
+			const double Hair = 0.004 * CameraDistance;
+			Arc(Middle, Dot * 1.2, Dot * 2.6, 0.0, 2.0 * PI, Inked(White, 0.26f), Inked(White, 0.0f));
+			Arc(Middle + Near * Hair, 0.0, Dot + 2.6 * Pixel, 0.0, 2.0 * PI, Inked(Dark, 0.9f), Inked(Dark, 0.9f));
+			Arc(Middle + Near * (2.0 * Hair), 0.0, Dot, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
+		}
 	}
 	if (!Sign.Commit(CutLampMesh, 0, CutLampInk))
 	{
@@ -8379,6 +8613,10 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
 {
+	if (RailLight.Tracks.Num() + RailLight.Tint.Num() + RailLight.Bars.Num() + RailLight.Dots.Num() + RailLight.Ringed.Num() > 0)
+	{
+		SetRailLight(FRailLight()); // (the railway's light goes out with the reach it belongs to: whoever shows a reach lights it again)
+	}
 	OrdersMesh->ClearMeshSection(0);
 	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
 	if (EnemyReachMesh)
@@ -11197,6 +11435,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
 	UpdateCutLamps(CameraDistance);
+	UpdateRailLight(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();

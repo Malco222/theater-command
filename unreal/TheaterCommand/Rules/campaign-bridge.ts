@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, moveCost, railReach as railReachOf, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -77,7 +77,7 @@ import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
-import { cutRail, railCut, railLinks, railNote, workingFactories, type RailCause } from '../../../src/campaign/rails';
+import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { cutSays, cutsKnown } from '../../../src/campaign/intel';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
@@ -2055,8 +2055,72 @@ function rail(ids: number[], to: number) {
   const s = game();
   forgetMarch(s, ids); // (any other order ends a standing march)
   const moved: { id: number; path: number[] }[] = [];
-  for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
-  return { moved, view: view() };
+  const asked = corpsById(s, ids).filter((c) => c.reg !== to);
+  const went: string[] = [];
+  for (const c of asked) if (orderRail(s, c, to)) { moved.push({ id: c.id, path: [to] }); went.push(c.name); }
+  // (the message line, as the browser says it)
+  const place = s.regions[to]?.name ?? '', left = asked.length - went.length;
+  const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}` : '';
+  return { moved, said, view: view() };
+}
+
+/**
+ * (Brian, 16 November 2026; rulings 110, 112, 116, 118; the art director's railway brief.) What the railway shows
+ * for the army in hand, all of it from the rules' shared functions: whether it can ride and the one line that says
+ * so; every working track a train could carry it along; where a train would take it beyond its march (`march` is the
+ * provinces it can walk to this month, which the table has from the march's reach); the provinces that take a station
+ * dot (none on the steepest ground for armour, and none on a cut, which has its lamp); the lit lines that stop at a
+ * cut; and the cuts engineers in hand can be carried to.
+ */
+function railShow(ids: number[], march: number[]) {
+  const s = game();
+  const none = { can: false, strong: '', line: '', tracks: [] as number[][], reach: [] as number[], dots: [] as number[], tint: [] as number[], bars: [] as number[][], ringed: [] as number[] };
+  try {
+    if (!humanUp(s) || onEve(s)) return none;
+    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c));
+    if (!cs.length) return none;
+    const walked = new Set<number>(march);
+    const reach = [...railReachFor(s, cs)];
+    const beyond = reach.filter((id) => !walked.has(id));
+    const said = railSays(s, cs, beyond.length, 'right-click', { one: 'the station dot', many: 'a station dot' });
+    const tracks = litTracks(s, cs);
+    const cuts = cutsKnown(s);
+    const steep = new Set<string>(GROUND.steep.regions);
+    const barred = cs.some((c) => GROUND.steep.barred.includes(c.kind));
+    const lit = new Set<number>(), pair = new Set<string>();
+    for (const [a, b] of tracks) { lit.add(a); lit.add(b); pair.add(`${Math.min(a, b)}:${Math.max(a, b)}`); }
+    const bars: number[][] = [];
+    for (const a of lit) {
+      if (cuts.has(a)) continue;
+      for (const b of railsAt(a)) if (cuts.has(b) && !pair.has(`${Math.min(a, b)}:${Math.max(a, b)}`)) bars.push([a, b]);
+    }
+    return {
+      can: !!said?.can, strong: said?.strong ?? '', line: said?.line ?? '', tracks, reach,
+      dots: beyond.filter((id) => !cuts.has(id) && !(barred && steep.has(s.regions[id].name))),
+      tint: beyond, bars, ringed: reach.filter((id) => cuts.has(id)),
+    };
+  } catch { return none; }
+}
+
+/**
+ * The words under the pointer for a province beyond the march of the army in hand (the art director's railway brief,
+ * section 8): the rules' one line where a train would take it there; or why none will, with the opening that takes
+ * the emphasis where the reason is a break he can act on, and whether that reason is a cut at this very province (so
+ * that the cut is said once).
+ */
+function railTip(ids: number[], to: number) {
+  const s = game();
+  const none = { ride: '', relay: '', no: '', strong: '', cutHere: false };
+  try {
+    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+    if (!cs.length || !s.regions[to] || !humanUp(s)) return none;
+    if (railReachFor(s, cs).has(to)) {
+      const said = rideLines(s, cs, to, 'Right-click');
+      return { ...none, ride: said.line, relay: said.relay };
+    }
+    const no = whyNoTrainFor(s, cs, to);
+    return no ? { ...none, no: no.line, strong: no.strong ?? '', cutHere: no.code === 'cut' && no.at === to } : none;
+  } catch { return none; }
 }
 
 /** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
@@ -3956,8 +4020,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
           hits: w.why ? [] : w.hits.map((h) => ({ n: h.n, words: h.words, dim: !!h.dim })),
           // (the guns' part: the line under the bombers lost, and the note on the WHAT A HIT DOES line; the 3D card's
           // column is narrower than the browser's, so the note stops at the figure)
-          // (the art director's words where the place has no guns, 16 November: "of them to light flak")
-          toGuns: w.toGuns, gunsWords: w.gunsWords === 'of them to flak' ? 'of them to light flak' : w.gunsWords, stopNote: w.stopNote.replace(/ of the bombing$/, ''),
+          toGuns: w.toGuns, gunsWords: w.gunsWords, stopNote: w.stopNote.replace(/ of the bombing$/, ''),
           foot: w.foot,
           act: w.kind === kind ? '' : `open:plan:${w.kind}:${target}:${carry.join('.')}`,
           tip: w.kind === kind ? `The raid is planned ${w.kind === 'night' ? 'by night' : 'by day'}.` : `Plan it ${w.kind === 'night' ? 'by night' : 'by day'} instead. Nobody you picked is dropped.`,
@@ -3967,7 +4030,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
           foes: foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
           // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
-          guns: dn.guns, gunsFigure: dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.guns > 0 ? '' : '\u00B7 light flak only', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
+          guns: dn.guns, gunsFigure: dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.gunsTail ? `\u00B7 ${dn.gunsTail}` : '', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
           day: one(dn.day), night: one(dn.night),
         };
       })() : null,
@@ -4867,4 +4930,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, move, previewAttack: preview, attack, endMonth };

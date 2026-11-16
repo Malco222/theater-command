@@ -1881,7 +1881,7 @@ TArray<int32> FCampaignSession::RailReach(const TArray<int32>& CorpsIds)
 	return Out;
 }
 
-TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 RegionId)
+TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutSaid)
 {
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() == 0 || !CallRules(TEXT("rail"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
@@ -1889,7 +1889,71 @@ TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 R
 		return TArray<FCorpsMove>();
 	}
 	TArray<FCorpsMove> Out = ReadMoves(Object);
+	if (OutSaid)
+	{
+		Object->TryGetStringField(TEXT("said"), *OutSaid);
+	}
 	TakeView(Object);
+	return Out;
+}
+
+FRailShow FCampaignSession::RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March)
+{
+	FRailShow Out;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("railShow"), FString::Printf(TEXT("[[%s],[%s]]"), *IdList(CorpsIds), *IdList(March)), Object))
+	{
+		return Out;
+	}
+	Object->TryGetBoolField(TEXT("can"), Out.bCan);
+	Object->TryGetStringField(TEXT("strong"), Out.Strong);
+	Object->TryGetStringField(TEXT("line"), Out.Line);
+	auto Numbers = [&Object](const TCHAR* Name, TArray<int32>& Into)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(Name, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				Into.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
+	};
+	auto Pairs = [&Object](const TCHAR* Name, TArray<FIntPoint>& Into)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(Name, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Two = nullptr;
+				if (Value.IsValid() && Value->TryGetArray(Two) && Two->Num() >= 2)
+				{
+					Into.Emplace(FMath::RoundToInt32((*Two)[0]->AsNumber()), FMath::RoundToInt32((*Two)[1]->AsNumber()));
+				}
+			}
+		}
+	};
+	Pairs(TEXT("tracks"), Out.Light.Tracks);
+	Numbers(TEXT("dots"), Out.Light.Dots);
+	Numbers(TEXT("tint"), Out.Light.Tint);
+	Pairs(TEXT("bars"), Out.Light.Bars);
+	Numbers(TEXT("ringed"), Out.Light.Ringed);
+	return Out;
+}
+
+FRailTip FCampaignSession::RailTip(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FRailTip Out;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("railTip"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("ride"), Out.Ride);
+		Object->TryGetStringField(TEXT("relay"), Out.Relay);
+		Object->TryGetStringField(TEXT("no"), Out.No);
+		Object->TryGetStringField(TEXT("strong"), Out.Strong);
+		Object->TryGetBoolField(TEXT("cutHere"), Out.bCutHere);
+	}
 	return Out;
 }
 

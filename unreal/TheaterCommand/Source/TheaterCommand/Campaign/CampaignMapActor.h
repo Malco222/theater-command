@@ -255,6 +255,10 @@ public:
 	 * report or as it was when last seen.
 	 */
 	void ShowCuts(const TArray<FViewCut>& Cuts);
+	/** (The art director's railway brief, sections 3 to 6.) The lit railway of the army in hand; an empty one puts it out. */
+	void SetRailLight(const FRailLight& Light);
+	/** The province under the pointer that the army could ride to: its route turns white. INDEX_NONE for none. */
+	void SetRailRoute(int32 ToRegion);
 	/**
 	 * Stands the towns' own buildings on the table, each at its town's edge: four numbers for each, the region,
 	 * the line (0 market, 1 farm, 2 school, 3 camp, 4 hospital, 5 hall), the level that stands, and 1 while the
@@ -607,6 +611,18 @@ private:
 	 */
 	void UpdateSearchlights(float CameraDistance);
 	void UpdateCutLamps(float CameraDistance);
+	void UpdateRailLight(float CameraDistance);
+	FRailLight RailLight;
+	int32 RailRouteTo = INDEX_NONE;
+	TSet<FIntPoint> RailRoute; // the tracks of the route to the province under the pointer
+	bool bRailLightDirty = false;
+	float RailLightBuiltFor = -1.0f; // (the eye's height the lines were last drawn for: they keep their width on the screen)
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> RailLightMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> RailLightInk; // the lit line: light of its own, by day and by night
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> RailTintInk; // the faint cool tint of the provinces it can ride to: gone by night
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> CutLampMesh;
 	UPROPERTY()
