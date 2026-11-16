@@ -172,7 +172,7 @@
     },
     {
       "id": "mussolini-falls", "from": 48, "to": 70,
-      "if": ["alive:ITA", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
+      "if": ["alive:ITA", "computer:ITA", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
       "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
     },
     {
@@ -201,12 +201,12 @@
     },
     {
       "id": "gustav-line-broken", "from": 50, "to": 90, "past": true,
-      "if": ["flag:event:italian-armistice", "allHeld:allies,Cassino"],
+      "if": ["flag:event:italian-armistice", "taken:allies,Cassino,event:italian-armistice"],
       "text": "The Gustav Line is broken. The ruins of the abbey on Monte Cassino are in Allied hands, and the road to Rome lies open."
     },
     {
       "id": "rome-liberated", "from": 50, "to": 90, "past": true,
-      "if": ["flag:event:italian-armistice", "allHeld:allies,Rome"],
+      "if": ["flag:event:italian-armistice", "taken:allies,Rome,event:italian-armistice"],
       "text": "Rome is free: the first of the Axis capitals to fall. Allied columns drive past the Colosseum through cheering crowds."
     },
     {
