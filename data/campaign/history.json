@@ -17,13 +17,13 @@
     {
       "stop": 3, "id": "shape", "name": "History's shape", "under": "The usual game",
       "blurb": "The war starts as it did and nobody follows the book after that. Staffs attack when they like their chances.",
-      "lines": ["Each staff decides for itself when to strike, so the west may open in March or wait for 1941.", "Neutrals drift with the fortunes of war and can be courted.", "The character of each staff is dealt afresh every war, with a national lean."],
+      "lines": ["Each staff decides for itself when to strike, so the west may open in March or wait for 1941.", "The western Allies' staffs keep history's order for their great landings: the Italian mainland from July 1943, France from May 1944, or sooner once Germany itself is invaded. Islands and colonies at any time, and you land when you like.", "Neutrals drift with the fortunes of war and can be courted.", "The character of each staff is dealt afresh every war, with a national lean."],
       "mood": 1, "lean": 0, "other": 1, "league": 1, "join": 1
     },
     {
       "stop": 4, "id": "loose", "name": "Loose", "under": "Neutrals with ambitions",
       "blurb": "History's shape, and neutrals with ambitions of their own: a weakened neighbour is an opportunity.",
-      "lines": ["Countries with a claim on a neighbour's ground press it when that neighbour is weakened, and may march for it. Which claims are alive differs from war to war.", "You can read every claim beforehand on the Powers tab, and the news warns you before anyone marches.", "Staffs are less predictable, and choices history never took come up more often."],
+      "lines": ["Countries with a claim on a neighbour's ground press it when that neighbour is weakened, and may march for it. Which claims are alive differs from war to war.", "You can read every claim beforehand on the Powers tab, and the news warns you before anyone marches.", "Staffs are less predictable, and choices history never took come up more often: the western Allies no longer wait for history's dates to land in Italy or France."],
       "mood": 1.5, "lean": 0.5, "other": 1.5, "league": 1.5, "join": 1, "ambitions": true, "share": 0.6
     },
     {

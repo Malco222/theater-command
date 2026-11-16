@@ -28,7 +28,7 @@ import { WORLD, beyondEurope, overseasOf } from '../src/campaign/world';
 import open from '../data/campaign/open.json';
 
 const DESCENT = (open as unknown as { descent: { front?: number; planned: Record<string, { open: string[]; join: string[]; with?: number }> } }).descent;
-const JAN_42 = 29, JAN_43 = 41, JUL_44 = 59, SEP_44 = 61;
+const JAN_42 = 29, JAN_43 = 41, MAY_44 = 57, JUL_44 = 59, SEP_44 = 61;
 const wide = (seed = 1, human: string | null = null): Game => startOpen(createGame(seed, human));
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
 const across = (g: Game, nat: string): Corps[] => field(g, nat).filter((c) => !beyondEurope(g.regions[c.reg]));
@@ -62,6 +62,8 @@ describe('history\'s shores (rulings 39 and 40)', () => {
     expect(P.BRA.open).toEqual([]);
     expect(P.BRA.join).toEqual(['ITA', 'FRA']);
     const g = wide();
+    // (May 1944: history's dates for these shores, Version 79, are past. See shores-79.test.ts.)
+    g.turn = MAY_44;
     const R = (name: string): Region => { const r = g.byName[name]; expect(r, name).toBeDefined(); return r; };
     expect(opensOn(g, 'USA', R('Brittany'))).toBe(true);
     expect(opensOn(g, 'USA', R('Sicily'))).toBe(true);
@@ -74,8 +76,8 @@ describe('history\'s shores (rulings 39 and 40)', () => {
     expect(opensOn(g, 'USA', R('Tripoli'))).toBe(true);
     expect(joinsOn(g, 'CAN', R('Tripoli'))).toBe(true);
     expect(opensOn(g, 'CAN', R('Brittany'))).toBe(false);
-    // A staff with no list goes where it judges best.
-    for (const nat of ['UK', 'GER', 'ITA']) for (const name of ['Bergen', 'Brittany', 'Holland']) { expect(opensOn(g, nat, R(name))).toBe(true); expect(joinsOn(g, nat, R(name))).toBe(true); }
+    // A staff with no list goes where it judges best. (Britain's has one since Version 79.)
+    for (const nat of ['GER', 'ITA', 'SOV']) for (const name of ['Bergen', 'Brittany', 'Holland']) { expect(opensOn(g, nat, R(name))).toBe(true); expect(joinsOn(g, nat, R(name))).toBe(true); }
     // And where nobody has read the books, so does America's.
     const bold = wide();
     expect(setStop(bold, 5, true)).toBe(true);
@@ -226,6 +228,9 @@ describe('a front is any harbour its side holds near the enemy', () => {
 describe('a quay must have room', () => {
   it('a staff abroad never keeps its landing force at a harbour its allies\' corps fill', () => {
     const g = at(JAN_43);
+    // (In January 1943 history's dates, Version 79, leave America's staff no mainland shore to open on: the quay is
+    // weighed here at the stop of the dial where the list has no dates.)
+    expect(setStop(g, 4)).toBe(true);
     const force = landingForce();
     const roomAt = (p: Region): number => STACK - p.units.filter((u) => !u.dead && u.nat !== 'USA' && allied(g, 'USA', u.nat)).length;
     // Americans enough in Britain for a landing force, standing idle.

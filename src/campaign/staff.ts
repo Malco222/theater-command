@@ -59,6 +59,14 @@ export interface Op {
   join?: 'allies' | 'axis';
 }
 
+/**
+ * History's shores for one staff (open.json, 'descent.planned'). 'open': the countries on whose own shores it may open
+ * a front by a landing of its own; 'join': those on whose ground it goes by ship to a front its side holds (left out:
+ * anywhere); 'with': the build-up. Version 79: 'from' gives a mainland shore the month it opens and 'lapse' the
+ * country whose invasion ends the wait; 'book' keeps the whole list for the stops where history's dates hold;
+ * 'behind', 'base' and 'joinFrom' are for a staff that waits on its base behind the allies named.
+ */
+interface Planned { open: string[]; join?: string[]; with?: number; from?: Record<string, number>; lapse?: Record<string, string>; not?: string[]; book?: boolean; behind?: string[]; base?: string[]; joinFrom?: number }
 const OPEN = openData as unknown as {
   mood: number; major: number; rest: number; stall: number; headOn: number; commit: number; bound: number; boundOverseas: number; thrust: [number, number]; weak: number; foothold: number; general: number; guard: number; guardWithin: number;
   temper: Record<string, Partial<Temper>>;
@@ -66,7 +74,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; planned?: Record<string, { open: string[]; join: string[]; with?: number }> };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1212,9 +1220,32 @@ const harbours = (g: Game, e: string): Region[] => g.regions.filter((r) => r.ctr
  * always. A staff with no list goes where it judges best, and so does every staff at the stop of the history dial
  * where nobody has read the books.
  */
-const planned = (g: Game, nat: string): { open: string[]; join: string[]; with?: number } | null => (stopDef(g).bold ? null : OPEN.descent?.planned?.[nat] ?? null);
-/** True where a staff may open a second front by a landing of its own (see `planned`). */
-export const opensOn = (g: Game, nat: string, r: Region): boolean => { const P = planned(g, nat); return !P || !!r.overseas || P.open.includes(r.owner); };
+const planned = (g: Game, nat: string): Planned | null => {
+  if (stopDef(g).bold) return null;
+  const P = OPEN.descent?.planned?.[nat] ?? null;
+  // (A list kept by the book only is put away at the stops where neutrals have ambitions.)
+  return P && P.book && !dated(g) ? null : P;
+};
+/** True at the stops of the history dial where history's dates hold for a staff's own landings: all but the two loosest. */
+const dated = (g: Game): boolean => !stopDef(g).ambitions;
+/** True once an enemy of a country stands on its home ground, or holds any of it. */
+const entered = (g: Game, id: string): boolean => g.regions.some((r) => r.owner === id && !r.overseas && (atWar(g, id, r.ctrl) || r.units.some((u) => !u.dead && atWar(g, id, u.nat))));
+/**
+ * True where a staff may open a second front by a landing of its own (see `planned`). History's dates (Version 79,
+ * the design director's ruling 60): at the stops where they hold, a mainland shore with a date under 'from' is not
+ * opened before that month. An island is open always, and a date lapses for as long as an enemy of the country
+ * named for it under 'lapse' stands on that country's home ground (France's, once Germany itself is entered). A
+ * province named under 'not' is no part of the list, whoever owns it (Albania is not the Italian mainland).
+ */
+export function opensOn(g: Game, nat: string, r: Region): boolean {
+  const P = planned(g, nat);
+  if (!P || r.overseas) return true;
+  if (!P.open.includes(r.owner) || P.not?.includes(r.name)) return false;
+  const from = P.from?.[r.owner];
+  if (from === undefined || !dated(g) || !r.nb.length || g.turn >= from) return true;
+  const lapse = P.lapse?.[r.owner];
+  return !!lapse && entered(g, lapse);
+}
 /**
  * The build-up (open.json, 'descent.planned', 'with'): a staff with history's list opens no front of its own on a
  * mainland until this many of its field corps stand across the ocean: the landing force, and as many again to
@@ -1243,8 +1274,25 @@ export function massing(g: Game, nat: string): boolean {
 }
 /** True for ground on a nation's own side of the ocean: beyond the old chart for a country whose capital is, on it for the others. */
 const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap = g.nations[nat].capital; return cap < 0 || beyondEurope(cap) === beyondEurope(reg); };
-/** True where a staff sends its corps by ship to a front its side already holds (see `planned`). */
-export const joinsOn = (g: Game, nat: string, r: Region): boolean => { const P = planned(g, nat); return !P || !!r.overseas || P.join.includes(r.owner); };
+/**
+ * True where a staff sends its corps by ship to a front its side already holds (see `planned`); `by` names the ally
+ * whose landing the harbour is, where it is one. A staff that waits behind its allies (Version 79, ruling 60:
+ * Canada, the island's guard) goes on from its base not before 'joinFrom', and only behind one of the allies named
+ * under 'behind': into that ally's landing, a harbour he holds, or one where his field corps stand in it or next to
+ * it. That holds at the stops of the history dial where history's dates do.
+ */
+export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
+  const P = planned(g, nat);
+  if (!P || r.overseas) return true;
+  if (P.join && !P.join.includes(r.owner)) return false;
+  if (!P.behind || !dated(g) || based(P, r)) return true;
+  const B = P.behind;
+  if (g.turn < (P.joinFrom ?? 0)) return false;
+  return (by !== undefined && B.includes(by)) || B.includes(r.ctrl)
+    || [r.id, ...r.nb].some((j) => g.regions[j].units.some((u) => !u.dead && u.kind !== 'fort' && B.includes(u.nat)));
+}
+/** True for the home ground of a country a staff is based on while it waits behind its allies (open.json, 'base'). */
+const based = (P: Planned, r: Region): boolean => !!P.base?.includes(r.owner) && !r.overseas;
 
 /**
  * Whom a staff with shipping means to cross the sea against, and the rules it lands by. On the hardest level a
@@ -1508,7 +1556,7 @@ export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]
   let best: { at: Region; ports: Region[] } | null = null, bs = -1;
   const look = (id: string, slot: number, own: boolean): void => {
     const l = lodgment(g, id, slot);
-    if (!l || !l.ports.length || (!own && !joinsOn(g, nat, l.at))) return;
+    if (!l || !l.ports.length || (!own && !joinsOn(g, nat, l.at, id))) return;
     const s = (own ? 2 : 0) + (l.short ? 1 : 0);
     if (s > bs) { bs = s; best = { at: l.at, ports: l.ports }; }
   };
@@ -1575,8 +1623,12 @@ function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: 
 function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boolean): Region | null {
   const n = g.nations[nat];
   const key = `st:base:${nat}:${ocean}`, at = `st:baseAt:${nat}:${ocean}`;
+  // (A staff that waits behind its allies builds its army up on its base's home ground and nowhere else.)
+  const P = planned(g, nat);
+  const waits = !!P?.behind && !!P.base && dated(g);
   const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g, nat, p.ctrl)
-    && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p);
+    && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p)
+    && (!waits || based(P!, p));
   const kept = g.regions[flag(g, key) - 1];
   if (kept && serves(kept) && g.turn - flag(g, at) < 6) return kept;
   // (The shores history planned for it, where it has such a list and the enemy holds any of them: otherwise all his harbours.)
