@@ -1,0 +1,413 @@
+{
+ "note": "Round one: recordings for the six test sounds, all from Wikimedia Commons. Licences were read from Commons when found; fetch_recording.mjs reads them again and refuses anything a game may not use.",
+ "recordings": [
+  {
+   "id": "b17_paine_2011",
+   "for": "bomber",
+   "title": "File:B-17 Flying Fortress and B-25 Bomber start-up and take off at Paine Field USA Aug 2011 with sound.ogv",
+   "licence": "CC0",
+   "seconds": 111,
+   "mb": 21.3
+  },
+  {
+   "id": "b25_paine_2011",
+   "for": "bomber",
+   "title": "File:B-25 Mitchell Bomber start-up and fly-by at Paine Field USA Sept 2011 with sound.ogv",
+   "licence": "CC0",
+   "seconds": 87,
+   "mb": 19.6
+  },
+  {
+   "id": "b25_p38_hahnweide",
+   "for": "bomber",
+   "title": "File:Hahnweide Vintage Air Show 2011 - B-25 And P-38.ogv",
+   "licence": "CC BY 3.0",
+   "seconds": 178,
+   "mb": 78.9
+  },
+  {
+   "id": "b25_p38_flyingbulls",
+   "for": "bomber",
+   "title": "File:Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38.ogv",
+   "licence": "CC BY 3.0",
+   "seconds": 90,
+   "mb": 33.9
+  },
+  {
+   "id": "prop_plane_ezwa",
+   "for": "bomber",
+   "title": "File:Propeller plane and birds singing.ogg",
+   "licence": "Public domain",
+   "seconds": 56,
+   "mb": 0.7
+  },
+  {
+   "id": "m119_10mtn_lfx",
+   "for": "artillery",
+   "title": "File:10th Mountain Division Conducts M119A3 Howitzer LFX at AAAB (953744).webm",
+   "licence": "Public domain",
+   "seconds": 46,
+   "mb": 21.8
+  },
+  {
+   "id": "m119_kenya_broll",
+   "for": "artillery",
+   "title": "File:B-roll- US, Kenya artillery crews train on M119A2 Table V procedures during Justified Accord 2026 (998983).webm",
+   "licence": "Public domain",
+   "seconds": 60,
+   "mb": 26.3
+  },
+  {
+   "id": "paladin_329far_broll",
+   "for": "artillery",
+   "title": "File:3-29 FAR live fire B-Roll.webm",
+   "licence": "Public domain",
+   "seconds": 98,
+   "mb": 92.7
+  },
+  {
+   "id": "m119_4_319_lfx",
+   "for": "artillery",
+   "title": "File:4-319th AFAR 173rd Airborne Brigade LFX.webm",
+   "licence": "Public domain",
+   "seconds": 214,
+   "mb": 125
+  },
+  {
+   "id": "barrage_usrok",
+   "for": "artillery",
+   "title": "File:Artillery Battery Barrage \u2022 U.S.-ROK Marines Live-Fire.webm",
+   "licence": "Public domain",
+   "seconds": 237,
+   "mb": 28.4
+  },
+  {
+   "id": "croatian_artillery",
+   "for": "artillery",
+   "title": "File:Croatian artillery units fire artillery.webm",
+   "licence": "Public domain",
+   "seconds": 45,
+   "mb": 32.1
+  },
+  {
+   "id": "m777_2cav_livefire",
+   "for": "artillery",
+   "title": "File:2d Cavalry Regiment Artillery live-fire (1000809).webm",
+   "licence": "Public domain",
+   "seconds": 30,
+   "mb": 25.5
+  },
+  {
+   "id": "cannon_130mm_finnish",
+   "for": "artillery",
+   "title": "File:913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon.webm",
+   "licence": "Public domain",
+   "seconds": 31,
+   "mb": 10.3
+  },
+  {
+   "id": "m2_browning_range",
+   "for": "rifle",
+   "title": "File:M2 browning.webm",
+   "licence": "Public domain",
+   "seconds": 149,
+   "mb": 181.2
+  },
+  {
+   "id": "m240_range_173rd",
+   "for": "rifle",
+   "title": "File:M240 Machine Gun range (955234).webm",
+   "licence": "Public domain",
+   "seconds": 38,
+   "mb": 18.2
+  },
+  {
+   "id": "rifle_mg_range_singapore",
+   "for": "rifle",
+   "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+   "licence": "Public domain",
+   "seconds": 202,
+   "mb": 416.5
+  },
+  {
+   "id": "mg_range_anglico",
+   "for": "rifle",
+   "title": "File:5th ANGLICO Marines Sharpen Skills on Live-Fire Machine Gun Range (980555).webm",
+   "licence": "Public domain",
+   "seconds": 60,
+   "mb": 48.2
+  },
+  {
+   "id": "mg_native_fury",
+   "for": "rifle",
+   "title": "File:Native Fury 25- Machine Gun Familiarization Fire (975798).webm",
+   "licence": "Public domain",
+   "seconds": 27,
+   "mb": 8.6
+  },
+  {
+   "id": "m240g_prime_cuts",
+   "for": "rifle",
+   "title": "File:M240G Live Fire Prime Cuts.ogv",
+   "licence": "Public domain",
+   "seconds": 308,
+   "mb": 263.4
+  },
+  {
+   "id": "gepard_32s",
+   "for": "flak",
+   "title": "File:Flakpanzer Gepards engage long range simulated targets.webm",
+   "licence": "Public domain",
+   "seconds": 32,
+   "mb": 26.1
+  },
+  {
+   "id": "gepard_stryker_84s",
+   "for": "flak",
+   "title": "File:Flakpanzer Gepards and Strykers engage long range simulated targets.webm",
+   "licence": "Public domain",
+   "seconds": 84,
+   "mb": 223.1
+  },
+  {
+   "id": "oerlikon_35mm_broll",
+   "for": "flak",
+   "title": "File:Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll.ogv",
+   "licence": "Public domain",
+   "seconds": 170,
+   "mb": 615.6
+  },
+  {
+   "id": "explosion_ls100155",
+   "for": "flak",
+   "title": "File:Explosion-LS100155.ogg",
+   "licence": "Public domain",
+   "seconds": 2,
+   "mb": 0
+  },
+  {
+   "id": "explosions_ls100155",
+   "for": "flak",
+   "title": "File:Explosions-LS100155.ogg",
+   "licence": "Public domain",
+   "seconds": 10,
+   "mb": 0.2
+  },
+  {
+   "id": "explosions_ls100152",
+   "for": "flak",
+   "title": "File:Explosions-LS100152.ogg",
+   "licence": "Public domain",
+   "seconds": 7,
+   "mb": 0.1
+  },
+  {
+   "id": "steam_berkshire_765",
+   "for": "train",
+   "title": "File:Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12.webm",
+   "licence": "CC BY 3.0",
+   "seconds": 77,
+   "mb": 13
+  },
+  {
+   "id": "steam_tornado_mortimer",
+   "for": "train",
+   "title": "File:Steam Train- 60163 \"Tornado\" whistles past Mortimer, Cathedrals Express to Worcester, 28 Jun 2012.webm",
+   "licence": "CC BY 3.0",
+   "seconds": 38,
+   "mb": 53.5
+  },
+  {
+   "id": "steam_mala_morava",
+   "for": "train",
+   "title": "File:Mala Morava Steam locomotive 2024-07-27.webm",
+   "licence": "CC0",
+   "seconds": 16,
+   "mb": 34.9
+  },
+  {
+   "id": "steam_grand_canyon_depot",
+   "for": "train",
+   "title": "File:Steam Locomotive Leaving Depot 10-01-2022.webm",
+   "licence": "CC BY 2.0",
+   "seconds": 27,
+   "mb": 74.8
+  },
+  {
+   "id": "steam_53808_somerset",
+   "for": "train",
+   "title": "File:Locomotive 53808 West Somerset Steam Railway.webm",
+   "licence": "CC BY 3.0",
+   "seconds": 13,
+   "mb": 19
+  },
+  {
+   "id": "steam_dorset_4492",
+   "for": "train",
+   "title": "File:Steam locomotive Train Dorset Cost Express No.4492.webm",
+   "licence": "CC BY 3.0",
+   "seconds": 130,
+   "mb": 30.6
+  },
+  {
+   "id": "wws_steam_s06_starting",
+   "for": "train",
+   "title": "File:WWS SteamlocomotiveS06-0188211starting.ogg",
+   "licence": "CC BY 4.0",
+   "seconds": 57,
+   "mb": 0.7
+  },
+  {
+   "id": "wws_steam_anna6",
+   "for": "train",
+   "title": "File:WWS Steamlocomotive.ogg",
+   "licence": "CC BY 4.0",
+   "seconds": 35,
+   "mb": 0.5
+  },
+  {
+   "id": "wws_steam_p8",
+   "for": "train",
+   "title": "File:WWS PrussianpassengersteamlocomotiveP-8.ogg",
+   "licence": "CC BY 4.0",
+   "seconds": 27,
+   "mb": 0.4
+  },
+  {
+   "id": "train_iowa_glaneur",
+   "for": "train",
+   "title": "File:Train sounds from Iowa - Glaneur de sons.ogg",
+   "licence": "CC BY 3.0",
+   "seconds": 94,
+   "mb": 1.3
+  }
+ ],
+ "searches": [
+  {
+   "slug": "tank_t72",
+   "words": "T-72 tank driving",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_leopard",
+   "words": "Leopard 2 tank driving",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_bradley",
+   "words": "Bradley fighting vehicle maneuver B-roll",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_m88",
+   "words": "M88 recovery vehicle",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_paladin_move",
+   "words": "M109 Paladin moving convoy",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_museum",
+   "words": "tank museum running engine Sherman OR Panzer OR T-34 OR Churchill",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_t34",
+   "words": "T-34 parade driving",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "tank_abrams_live",
+   "words": "tank live fire gunnery",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "rifle_garand_salute",
+   "words": "rifle volley salute honor guard",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "rifle_range",
+   "words": "rifle range live fire marksmanship B-roll",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "rifle_reenact",
+   "words": "reenactment World War II battle",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "flak_bofors",
+   "words": "Bofors 40 mm firing",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "flak_aa_live",
+   "words": "air defense live fire gun",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "flak_zu23",
+   "words": "ZU-23 firing",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "bomber_b17_more",
+   "words": "B-17 flyover engines",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "bomber_lancaster",
+   "words": "Lancaster bomber flypast",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "bomber_c47",
+   "words": "C-47 Skytrain engine start takeoff",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "bomber_dc3",
+   "words": "DC-3 takeoff",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "bomber_warbird",
+   "words": "warbird radial engine start",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "train_steam_pass",
+   "words": "steam locomotive passing whistle",
+   "video": true,
+   "limit": 50
+  },
+  {
+   "slug": "mortar",
+   "words": "mortar live fire B-roll",
+   "video": true,
+   "limit": 50
+  }
+ ]
+}
