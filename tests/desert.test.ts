@@ -3,12 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar,
-  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase,
+  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksShare,
 } from '../src/campaign/game';
 import { theatrePhases } from '../src/campaign/ai';
 import { canRaise, orderCorps } from '../src/campaign/economy';
 import { closedTo, convoyWar, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 /** September 1939 with Italy already in the war, which is what most of these rules need. */
@@ -267,6 +268,48 @@ describe('open desert', () => {
     expect(marching.lines.some((l) => l.label === 'Open desert')).toBe(false);
     // Same defenders, same ground: against a mobile attack they are worth 'open' of what they are against infantry.
     expect(tanks.D / marching.D).toBeCloseTo(DESERT.open, 6);
+  });
+
+  it('a dug-in box is not driven round: the cut falls only on men on foot who have not dug in', () => {
+    const { g, armour, foot, target } = frontier();
+    const camps = corps(g, 'Sidi Barrani camps');
+    const open = assess(g, [armour], target);
+    camps.dug = true;
+    const boxed = assess(g, [armour], target), marching = assess(g, [foot], target);
+    expect(open.lines.some((l) => l.label === 'Open desert')).toBe(true);
+    expect(boxed.lines.some((l) => l.label === 'Open desert')).toBe(false);
+    // Against tanks the box is worth what it is worth against men on foot, and the card no longer says both
+    // that the defenders are dug in and that they have no works to anchor on.
+    expect(boxed.D).toBeCloseTo(marching.D, 6);
+    expect(boxed.D).toBeGreaterThan(open.D);
+  });
+
+  it('in the grand campaign the cut fades as the works are finished: a box is months of digging', () => {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    const target = g.byName['Sidi Barrani'];
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true;
+    const armour = addCorps(g, 'UK', 'Desert armour', 'arm', 2, 'Mersa Matruh', {});
+    // The cut as the battle ticket prints it, in hundredths: 100 when the ticket has no such row.
+    const cut = (): number => {
+      const row = assess(g, [armour], target).lines.find((l) => l.label === 'Open desert');
+      return row ? Number(/(\d+)%/.exec(row.effect ?? '')![1]) : 100;
+    };
+    const due = (months: number): number => Math.round(100 * (DESERT.open + (1 - DESERT.open) * worksShare(months)));
+    expect(cut()).toBe(Math.round(100 * DESERT.open));
+    const got: number[] = [];
+    for (const months of [1, 2, 3]) { camps.dug = true; camps.dugFor = months; got.push(cut()); }
+    expect(got).toEqual([due(1), due(2), 100]);
+    expect(got[0]).toBeGreaterThan(Math.round(100 * DESERT.open));
+    expect(got[0]).toBeLessThan(got[1]);
+    // While the works are unfinished the card says so, and never 'no works to anchor on' of men who are dug in.
+    camps.dugFor = 1;
+    const line = assess(g, [armour], target).lines.find((l) => l.label === 'Open desert')!;
+    expect(line.value).toContain('whose works are not finished');
+    expect(line.value).not.toContain('no works to anchor on');
   });
 
   it('does not apply inside a fortress, or to troops with their own wheels', () => {

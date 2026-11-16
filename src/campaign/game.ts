@@ -751,7 +751,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const defHasArmor = defenders.some((d) => d.kind === 'arm');
   // Open desert has no flanks: infantry on foot outside prepared works can be driven round by anything on wheels or tracks.
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
-  let turned = false;
+  let turned = false, turnedTo = 1;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
   let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
@@ -866,7 +866,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (blows > 0) p *= 1 - DEFENCE.tired.per * blows;
     if (thicken && d.kind !== 'art') p *= 1 + thicken;
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
-    if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') { p *= DESERT.open; turned = true; }
+    // A dug-in box is not driven round (ruling 146, the Historian's third fix): the cut falls only on men on foot who
+    // have not dug in, and in the grand campaign it fades as their works are finished.
+    if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') {
+      const box = !d.dug ? 0 : wide ? worksShare(worksNow(d)) : 1;
+      if (box < 1) { const cut = DESERT.open + (1 - DESERT.open) * box; p *= cut; turned = true; turnedTo = Math.min(turnedTo, cut); }
+    }
     const dl = lineStrength(g, d).mul;
     const share = inDesert(target) ? DESERT.lineDefence : EASTERN.lineDefence;
     if (dl < 1) { p *= 1 - (1 - dl) * share; thin = Math.min(thin, 1 - (1 - dl) * share); }
@@ -1077,7 +1082,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
   if (railA < 1) lines.push({ label: 'Railhead', value: `Attackers as far as ${roadA} provinces by road beyond their nearest working railway`, effect: `Attack cut to as little as ${Math.round(railA * 100)}% until engineers bring the line forward` });
   if (railD < 1) lines.push({ label: 'Railhead', value: `Defenders as far as ${roadD} provinces by road beyond their nearest working railway`, effect: `Defence cut to as little as ${Math.round(railD * 100)}% until their line is relaid` });
-  if (turned) lines.push({ label: 'Open desert', value: 'Infantry on foot with no works to anchor on, against tanks and lorried troops', effect: `Foot infantry defends at ${Math.round(DESERT.open * 100)}%` });
+  if (turned) lines.push(turnedTo > DESERT.open
+    ? { label: 'Open desert', value: 'Infantry on foot whose works are not finished, against tanks and lorried troops', effect: `Foot infantry defends at as little as ${Math.round(turnedTo * 100)}% until the box is dug` }
+    : { label: 'Open desert', value: 'Infantry on foot with no works to anchor on, against tanks and lorried troops', effect: `Foot infantry defends at ${Math.round(DESERT.open * 100)}%` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
   if (coldDef) lines.push({ label: 'Winter', value: 'Defenders without winter equipment', effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
