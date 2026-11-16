@@ -11,9 +11,9 @@
 // 4. The question as the month ends counts only armies at the front that have not moved at all and have no orders.
 // 5. It is the player's book-keeping: asking changes nothing, no computer country uses it, and it is saved with the game.
 import { describe, expect, it } from 'vitest';
-import { atWar, createGame } from '../src/campaign/game';
+import { addCorps, atWar, createGame } from '../src/campaign/game';
 import { orderMarch, planMarch } from '../src/campaign/marches';
-import { armyRound, armyStands, atFront, frontIdle, nextArmy, settleStands, standArmy, standsThisMonth, wantsOrder } from '../src/campaign/round';
+import { armyRound, armyStands, atFront, frontIdle, nextArmy, roundCount, settleStands, standArmy, standsThisMonth, wantsOrder } from '../src/campaign/round';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, canOrder, endHuman, humanUp, orderMove, orderStance, reach, stepAI } from '../src/campaign/turn';
@@ -229,5 +229,86 @@ describe('the question as the month ends', () => {
     }
     if (joined >= 0) expect(frontIdle(g)).not.toContain(joined);
     else expect(idle.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the two numbers beside NEXT ARMY (ruling 101(e))', () => {
+  it('the bright number is the untouched armies at the front; the rear is the quieter one and never holds the light', () => {
+    const g = game();
+    const round = armyRound(g), n = roundCount(g);
+    const front = round.filter((a) => a.front), rear = round.filter((a) => !a.front);
+    expect(n).toEqual({ bright: front.length, quiet: rear.length, front: front.length });
+    expect(round.filter((a) => a.bright)).toEqual(front);
+    expect(round.some((a) => a.raised)).toBe(false);
+    // Every army at the front told to stand: the bright number is nought with the whole rear still in the round.
+    for (const a of front) standArmy(g, a.reg, true);
+    expect(roundCount(g)).toEqual({ bright: 0, quiet: rear.length, front: 0 });
+    expect(armyRound(g).map((a) => a.reg).sort((a, b) => a - b)).toEqual(rear.map((a) => a.reg).sort((a, b) => a - b));
+    // Tab still visits the rear.
+    expect(nextArmy(g, [], null).army?.front).toBe(false);
+    // An army in the rear that has marched part of its month has had an order: it leaves the rear's number, and Tab
+    // still finds it after all the untouched while it can go somewhere.
+    const moved = rear[0];
+    for (const c of field(g, moved.reg)) c.ap = c.apMax - 1;
+    expect(roundCount(g)).toEqual({ bright: 0, quiet: rear.length - 1, front: 0 });
+    const after = armyRound(g);
+    expect(after[after.length - 1].reg).toBe(moved.reg);
+    // The whole rear told to stand as well: both numbers are nought.
+    for (const a of rear) standArmy(g, a.reg, true);
+    expect(roundCount(g)).toEqual({ bright: 0, quiet: 0, front: 0 });
+    expect(armyRound(g)).toEqual([]);
+  });
+
+  it('an army at the front that he has touched leaves the bright number while it still has a move', () => {
+    const g = game();
+    const before = roundCount(g);
+    const a = armyRound(g).find((x) => x.front)!;
+    // Every corps of it has marched a little of its month (a short step), and can march again.
+    for (const c of field(g, a.reg)) c.ap = c.apMax - 1;
+    const at = armyRound(g).find((x) => x.reg === a.reg)!;
+    expect(at).toMatchObject({ front: true, untouched: false, bright: false });
+    // It joins neither number: the rear's is the untouched too.
+    expect(roundCount(g)).toEqual({ bright: before.bright - 1, quiet: before.quiet, front: before.front - 1 });
+    expect(armyRound(g).some((x) => x.reg === a.reg)).toBe(true);
+    // The question as the month ends does not count it either: it has had his eye.
+    expect(frontIdle(g)).not.toContain(a.reg);
+  });
+
+  it('a country at peace opens with nothing bright: every army is the quieter number', () => {
+    const g = startOpen(createGame(25, 'BRA'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 400) stepAI(g);
+    beginHuman(g);
+    const round = armyRound(g);
+    expect(round.length).toBeGreaterThan(0);
+    expect(roundCount(g)).toEqual({ bright: 0, quiet: round.length, front: 0 });
+    expect(frontIdle(g)).toEqual([]);
+  });
+
+  it('an army raised this month is bright until it has an order, wherever it stands; the armies a campaign opens with are not', () => {
+    const g = game();
+    expect(armyRound(g).some((a) => a.raised)).toBe(false);
+    nextMonth(g);
+    const rear = armyRound(g).find((a) => !a.front && !a.raised)!;
+    const before = roundCount(g);
+    expect(rear.bright).toBe(false);
+    // A corps raised in a quiet province behind the front, this month.
+    const quietPlace = g.regions.find((r) => r.ctrl === ME && r.owner === ME && !atFront(g, r.id) && !field(g, r.id).length && r.units.length === 0)!;
+    const c = addCorps(g, ME, 'XXX Corps', 'inf', 2, quietPlace.id, {});
+    c.ap = c.apMax;
+    if (!wantsOrder(g, c)) throw new Error('the new corps is not in the round');
+    const at = armyRound(g).find((a) => a.reg === quietPlace.id)!;
+    expect(at).toMatchObject({ front: false, raised: true, bright: true });
+    // (It is bright and not at the front: the page says "newly raised" when none of the bright is at the front.)
+    expect(roundCount(g)).toEqual({ bright: before.bright + 1, quiet: before.quiet, front: before.front });
+    // It is shown before the rest of the rear.
+    const order = armyRound(g).map((a) => a.reg);
+    expect(order.indexOf(quietPlace.id)).toBeLessThan(order.indexOf(rear.reg));
+    // STAND THIS MONTH is an order: it is bright no longer.
+    standArmy(g, quietPlace.id, true);
+    expect(roundCount(g)).toEqual(before);
+    // And next month it is an army like any other.
+    nextMonth(g);
+    expect(armyRound(g).find((a) => a.reg === quietPlace.id)?.raised ?? false).toBe(false);
   });
 });

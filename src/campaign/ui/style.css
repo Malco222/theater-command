@@ -2111,6 +2111,18 @@ kbd { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Cour
 .nextarmy .chev { font-size: 24px; font-weight: 700; line-height: 1; margin-top: -3px; }
 .allset { display: flex; align-items: center; gap: 7px; min-height: 25px; padding: 3px 10px; margin-bottom: 3px; border-radius: 4px; background: rgba(46, 36, 26, .96); border: 1px solid #4b391c; color: #9cc08a; font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 .allset .tick { font-size: 14px; line-height: 1; }
+/* The rear's quieter number (ruling 101(e)): dimmer beside "at the front", and a quiet chip that is still a button
+   once the front has its orders. It never lights and never holds the light from END MONTH. */
+.nextarmy .top { display: flex; align-items: center; }
+.nextarmy .top kbd { margin-left: 8px; }
+.nextarmy small { white-space: nowrap; }
+.nextarmy small i { font-style: normal; opacity: .62; }
+.nextrear { display: flex; align-items: center; gap: 8px; width: 236px; min-height: 25px; padding: 2px 9px 2px 6px; margin-bottom: 3px; border-radius: 4px; background: rgba(46, 36, 26, .96); border: 1px solid #6f5d38; color: #b9a06a; font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; text-align: left; white-space: nowrap; cursor: pointer; }
+.nextrear:hover { border-color: #8a7245; }
+.nextrear .ring { flex: none; min-width: 24px; height: 17px; padding: 0 5px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 9px; font-family: var(--head); font-size: 12px; letter-spacing: 0; }
+.nextrear b { flex: 1 1 auto; font: inherit; }
+.nextrear kbd { margin-left: 0; }
+.nextrear .chev { font-size: 16px; line-height: 1; margin-top: -2px; }
 .btn.go.wait { background: #2e241a; border-color: #8a7245; color: #e0b872; }
 .btn.go.lit { background: #e9c679; border-color: #f0d28a; color: #2b2118; box-shadow: 0 0 0 2px rgba(240, 210, 138, .5), 0 0 18px rgba(240, 210, 138, .5); animation: litgo 3.4s ease-in-out infinite; }
 @keyframes litgo { 50% { box-shadow: 0 0 0 2px rgba(240, 210, 138, .5), 0 0 26px rgba(240, 210, 138, .75); } }
@@ -2132,6 +2144,7 @@ kbd { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Cour
 .asktick .box { flex: none; width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--ink-3); border-radius: 2px; font-size: 12px; line-height: 1; color: var(--brass); }
 @media (max-width: 820px) {
   .nextarmy { width: 190px; min-height: 40px; }
+  .nextrear { width: 190px; letter-spacing: .04em; }
   .nextarmy b { font-size: 15px; }
   .tray.slim .tnow { display: none; }
 }

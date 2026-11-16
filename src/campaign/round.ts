@@ -14,8 +14,16 @@
  * that nobody plays can move. It is kept with the saved game in one flag for each corps:
  *   stood:ID            the month it was told to stand and where, as MONTH * 100000 + the region's id + 1
  *
+ * The two numbers (ruling 88(c) as amended by ruling 101(e)): the round is every army with a move, but the count that
+ * keeps NEXT ARMY bright and holds the light from END THE MONTH is only the armies at the front not yet touched, and
+ * any army raised this month that has had no order. The rear is a second, quieter number: the other armies not yet
+ * touched. Tab visits them after the front, and they never keep END THE MONTH dark. A country at peace opens with
+ * END THE MONTH lit. (An army that has marched part of its month stays in the round while it can still go somewhere,
+ * after all the untouched, and is in neither number: it has had an order.)
+ *
  * What an interface calls:
- *   armyRound(g)             the armies still wanting an order, in the round's order (its length is the button's count)
+ *   armyRound(g)             the armies still wanting an order, in the round's order
+ *   roundCount(g)            the two numbers beside NEXT ARMY: bright (it holds the light) and quiet (the rear's)
  *   nextArmy(g, seen, from)  the army to show next, given those already visited this round and where the eye is
  *   standArmy(g, reg, on)    STAND THIS MONTH for the army in that province, or taking it back
  *   armyStands(g, reg)       'all', 'some' or 'none' of the army there is standing this month (null: nothing to stand)
@@ -62,19 +70,42 @@ export interface RoundArmy {
   untouched: boolean;
   /** It stands beside the enemy. */
   front: boolean;
+  /** A corps of it was raised this month and has had no order yet (never the armies a campaign opens with). */
+  raised: boolean;
+  /** It keeps NEXT ARMY bright and holds the light from END THE MONTH: untouched at the front, or newly raised. */
+  bright: boolean;
 }
 
-const rank = (a: RoundArmy): number => (a.untouched ? 0 : 2) + (a.front ? 0 : 1);
+const rank = (a: RoundArmy): number => (a.bright ? 0 : 4) + (a.untouched ? 0 : 2) + (a.front ? 0 : 1);
 
 /** The player's armies that still want an order: the untouched first, the front before the rear. Empty when it is not his month. */
 export function armyRound(g: Game): RoundArmy[] {
   if (!g.human || !humanUp(g) || onEve(g)) return [];
   const out: RoundArmy[] = [];
+  // (The month a campaign opens every corps is new: none of them is "raised this month".)
+  const opening = g.corps.every((c) => c.nat !== g.human || c.dead || c.born === g.turn);
   for (const r of g.regions) {
     const cs = r.units.filter((c) => wantsOrder(g, c));
-    if (cs.length) out.push({ reg: r.id, corps: cs.map((c) => c.id), untouched: cs.some(fresh), front: atFront(g, r.id) });
+    if (!cs.length) continue;
+    const untouched = cs.some(fresh), front = atFront(g, r.id), raised = !opening && cs.some((c) => c.born === g.turn && fresh(c));
+    out.push({ reg: r.id, corps: cs.map((c) => c.id), untouched, front, raised, bright: (front && untouched) || raised });
   }
   return out.sort((a, b) => rank(a) - rank(b) || a.reg - b.reg);
+}
+
+/** The two numbers beside NEXT ARMY. */
+export interface RoundCount {
+  /** Armies at the front not yet touched, and armies raised this month with no order yet: they keep NEXT ARMY bright and hold the light from END THE MONTH. */
+  bright: number;
+  /** The rear's quieter number, the other armies not yet touched: Tab visits them after the bright, and they never hold the light. */
+  quiet: number;
+  /** Of the bright, those that stand beside the enemy (the others are newly raised, in the rear). */
+  front: number;
+}
+export function roundCount(g: Game): RoundCount {
+  const all = armyRound(g);
+  const bright = all.filter((a) => a.bright);
+  return { bright: bright.length, quiet: all.filter((a) => !a.bright && a.untouched).length, front: bright.filter((a) => a.front).length };
 }
 
 export interface NextArmy {

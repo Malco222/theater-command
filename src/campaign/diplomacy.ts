@@ -703,10 +703,13 @@ function romeWavers(g: Game): void {
   if (!now || !(fresh || changed || g.turn >= falls.from - 2)) return;
   const who = side === 'allies' ? 'the Allies' : 'the Axis';
   const held = lost.length <= 2 ? listed(lost) : `${lost[0]} and ${lost.length - 1} more of its grounds`;
-  const any = `while an enemy holds any of ${listed(grounds, 'or')}`;
+  const six = listed(grounds, 'or');
+  // (The art director's words of 2026-11-16, the condition first. "Or later" and "if one is still held" are the
+  // rule: in a grand campaign both events stay armed from their month on.)
+  const when = g.turn < falls.from ? `in ${turnToDate(falls.from).label}` : 'next month';
   const ground = 'Italy\'s ground then goes to whoever has an army on Italian soil, your own corps included.';
   const text = changed
-    ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs ${any}. ${ground}`
-    : `Italy makes peace if ${who} hold ${held} ${g.turn < falls.from ? `in ${turnToDate(falls.from).label}` : 'next month'}. Rome changes its government that month and signs an armistice the month after, ${any}. ${ground}`;
+    ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}`
+    : `Italy makes peace if ${who} hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
   warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id);
 }

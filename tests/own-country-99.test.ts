@@ -110,7 +110,7 @@ describe('a player at war beside the computer\'s Italy is warned', () => {
     expect(warns(g)).toEqual([]);
     g.byName.Sardinia.ctrl = 'UK';
     month(g, DEC_42);
-    expect(warns(g)).toEqual([`Italy makes peace if the Allies hold Sardinia in August 1943. Rome changes its government that month and signs an armistice the month after, ${ANY}. ${GROUND}`]);
+    expect(warns(g)).toEqual([`Italy makes peace if the Allies hold Sardinia in August 1943. If an enemy holds any of Sicily, Sardinia, Calabria, Apulia, Naples or Rome in August 1943 or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${GROUND}`]);
     const h = g.headlines.find((x) => x.warn === 'Rome wavers')!;
     expect(h).toMatchObject({ nat: 'GER', region: g.byName.Sardinia.id, turn: DEC_42 });
     // Not every month: said once, until something changes or the date is near.
