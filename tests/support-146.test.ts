@@ -731,9 +731,10 @@ describe('the computer\'s staffs', () => {
     expect(sent).toContain(i1);
     expect(limitAttackers(g, sent, l.target).length).toBe(sent.length);
     // Where the staff can run only two corps in a battle, the infantry takes the weaker tank corps' place.
+    const most = g.nations.GER.maxAttack;
     g.nations.GER.maxAttack = 2;
     expect(footBeside(g, [p1, p2], l.att, l.target)).toEqual([p1, i1]);
-    delete g.nations.GER.maxAttack;
+    g.nations.GER.maxAttack = most;
     // Nobody on foot to send: the stroke is not made.
     expect(footBeside(g, [p1, p2], [p1, p2], l.target)).toBeNull();
     // A force that has its infantry already is left as it was.
