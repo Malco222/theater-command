@@ -4988,20 +4988,20 @@ function openModal(m: typeof ui.modal): void {
 
 /**
  * The month's report is one look. Where the window is too short for it the whole card is drawn a little smaller
- * rather than scrolled, down to three quarters of its size; below that, and on a narrow screen, it scrolls.
+ * rather than scrolled, down to four fifths of its size; below that, and on a narrow screen, it scrolls.
  */
 function fitMonth(): void {
   const card = document.getElementById('card');
   const mc = card?.querySelector<HTMLElement>(':scope > .mc');
   if (!card || !mc) return;
-  mc.style.removeProperty('zoom'); mc.style.removeProperty('width');
-  if (!card.classList.contains('month') || window.innerWidth < 1000 || card.scrollHeight <= card.clientHeight + 1) return;
+  mc.style.removeProperty('zoom');
+  // (Every row asked for is a list to scroll, at its full size.)
+  if (!card.classList.contains('month') || ui.monthAll || window.innerWidth < 1000 || card.scrollHeight <= card.clientHeight + 1) return;
   const cs = getComputedStyle(card);
   const room = card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  const k = Math.max(0.75, Math.min(1, room / Math.max(1, mc.offsetHeight)));
+  const k = Math.max(0.8, Math.min(1, room / Math.max(1, mc.offsetHeight)));
   if (k >= 1) return;
   mc.style.setProperty('zoom', k.toFixed(3));
-  mc.style.width = `${(100 / k).toFixed(2)}%`;
 }
 
 // ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----

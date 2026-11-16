@@ -46,14 +46,14 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const bands = card.bands.map((b) => `<div class="mc-banner"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small>week ${b.week}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
 
   const tileSign: Record<string, string> = { provinces: glyph(PENNANT, 13, DIM), men: monthSign('inf', 11, DIM), sea: monthSign('hull', 11, DIM), air: monthSign('ftr', 11, DIM) };
-  const tally = card.boxes.length ? `<div class="mc-tally" style="--n:${card.boxes.length}">${card.boxes.map((b) => `<div class="mc-tile ${toneClass(b.tone)}"><u>${tileSign[b.key] ?? ''}${esc(b.label)}</u><b>${esc(b.figure)}</b><small>${esc(b.sub)}</small></div>`).join('')}</div>` : '';
+  const tally = card.boxes.length ? `<div class="mc-tally" style="--n:${Math.max(4, card.boxes.length)}">${card.boxes.map((b) => `<div class="mc-tile ${toneClass(b.tone)}"><u>${tileSign[b.key] ?? ''}${esc(b.label)}</u><b>${esc(b.figure)}</b><small>${esc(b.sub)}</small></div>`).join('')}</div>` : '';
 
   const row = (r: CardRow): string => {
     const pic = r.picture ? `<i class="tpic k-${r.picture}"></i>` : `<span class="mc-nopic">${r.cls === 2 ? fl(r.ours, 34) : ''}</span>`;
     const disc = r.cls === 2 ? '' : `<span class="mc-disc">${monthSign(r.sign || 'star', r.sign === 'star' || !r.sign ? 16 : 15, PALE)}</span>`;
     const flags = r.cls === 2 ? fl(r.theirs, 30) : versus(r, 30);
     return `<div class="mc-row ${toneClass(r.tone)}${r.cls === 2 ? ' red' : ''}${r.report ? ' opens' : ''}"${act(r)}>${pic}${disc || '<span></span>'}
-      <div class="mc-rtx"><div class="r1"><b class="pl">${esc(r.place)}</b>${r.tag ? `<span class="mc-chip">${esc(r.tag)}</span>` : ''}<span class="vs">${flags}</span></div><div class="r2" title="${esc(r.line)}">${esc(r.line)}</div></div>
+      <div class="mc-rtx"><div class="r1"><b class="pl${r.place.length > 16 ? ' long' : ''}">${esc(r.place)}</b>${r.tag ? `<span class="mc-chip">${esc(r.tag)}</span>` : ''}<span class="vs">${flags}</span></div><div class="r2" title="${esc(r.line)}">${esc(r.line)}</div></div>
       <div class="mc-nums">${nums(r.figures)}</div>${pin(r.region)}</div>`;
   };
 
@@ -77,20 +77,30 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const it = (sign: string, body: string, cls = ''): string => `<div class="mc-it${cls}">${sign}${body}</div>`;
   // Each box holds three lines beside a lead story and five on a quieter card; what is over is counted, not lost.
   const lines = L ? 3 : 5;
-  const goods = (h: MonthCard['home'][number]): string => it(`<span class="sg">${monthSign(h.sign, 15, h.next ? DIM : BRASS)}</span>`, `<b>${h.count}</b><span>${esc(h.text)}</span>${h.place ? `<small>· ${esc(h.place)}</small>` : ''}`, h.next ? ' next' : '');
-  const homeAll = [
-    ...card.home.filter((h) => !h.next).map(goods),
-    ...card.research.map((t) => it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`)),
-    ...card.home.filter((h) => h.next).map(goods),
-    ...card.also.map((t) => it('<span class="sg"></span>', `<span title="${esc(t)}">${esc(t)}</span>`, ' also')),
+  const goods = (h: MonthCard['home'][number]): string => it(`<span class="sg">${monthSign(h.sign, 15, h.next ? DIM : BRASS)}</span>`, `<b>${h.count}</b><span>${esc(h.text)}</span>${h.place ? `<small>· ${esc(h.place)}</small>` : ''}`, h.next ? ' gd next' : ' gd');
+  // (What is ready first, then research, then what next month brings, then the other news of home. Deliveries
+  // that find no line are counted in one; news that finds none is in the Newsreel.)
+  const homeAll: { html: string; ready: number; next: number }[] = [
+    ...card.home.filter((h) => !h.next).map((h) => ({ html: goods(h), ready: h.count, next: 0 })),
+    ...card.research.map((t) => ({ html: it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`), ready: 0, next: 0 })),
+    ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
+    ...card.also.map((t) => ({ html: it('<span class="sg"></span>', `<span title="${esc(t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
   ];
-  const home = homeAll.length > lines ? [...homeAll.slice(0, lines - 1), `<div class="mc-it over"><span>and ${homeAll.length - lines + 1} more at home: the Build tab has them</span></div>`] : homeAll;
+  let homeOver = 0;
+  let home = homeAll.slice(0, lines).map((x) => x.html);
+  if (homeAll.length > lines) {
+    const hid = homeAll.slice(lines - 1);
+    const ready = hid.reduce((n, x) => n + x.ready, 0), next = hid.reduce((n, x) => n + x.next, 0);
+    const said = [ready ? `${ready} more ready` : '', next ? `${next} due next month` : ''].filter(Boolean).join(' · ');
+    if (said) home = [...homeAll.slice(0, lines - 1).map((x) => x.html), `<div class="mc-it over"><span>${said}</span></div>`];
+    homeOver = (said ? hid : homeAll.slice(lines)).filter((x) => !x.ready && !x.next).length;
+  }
   // (A desk's first line carries its button, and the first lines of the desks come first.)
   const firsts = card.staff.filter((s, i) => card.staff.findIndex((x) => x.desk === s.desk) === i);
   const staffAll = [...firsts, ...card.staff.filter((s) => !firsts.includes(s))];
   const staff = staffAll.slice(0, lines).map((s) => it(`<span class="sg">${monthSign(s.sign, s.sign === 'star' ? 13 : 15, BRASS)}</span>`, `<span title="${esc(s.text)}">${esc(s.text)}</span>${!firsts.includes(s) ? '' : s.mayTake ? `<button class="tb" data-act="desk" data-desk="${esc(s.desk)}" data-on="0" title="What your staff did this month stands. From next month this desk is yours again.">TAKE THE DESK BACK</button>` : '<small class="mc-took">yours again from next month</small>'}`, ' st'));
   const els = card.elsewhere.slice(0, lines).map((e) => it(fl(e.nat, 26), `<span title="${esc(e.text)}">${esc(e.text)}</span>`, ' el'));
-  const over = Math.max(0, staffAll.length - lines) + Math.max(0, card.elsewhere.length - lines);
+  const over = homeOver + Math.max(0, staffAll.length - lines) + Math.max(0, card.elsewhere.length - lines);
   const none = (t: string): string => `<div class="mc-it none"><span>${t}</span></div>`;
   const low = `<div class="mc-low">
     <div class="mc-box"><div class="mc-lab">At home</div>${home.join('') || none('Nothing was delivered this month.')}</div>

@@ -461,7 +461,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (h.region !== undefined) row.region = h.region;
     // (News from the sea names its sea: the row's place takes it, and the line is the shorter for it.)
     const where = h.region === undefined ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
-    row.place = h.region !== undefined ? g.regions[h.region].name : where ? cap(where[1]) : h.arm === 'sea' ? 'At sea' : 'In the air';
+    row.place = h.region !== undefined ? g.regions[h.region].name : where ? cap(where[1].replace(/^the /, '')) : h.arm === 'sea' ? 'At sea' : 'In the air';
     row.sign = h.arm === 'land' ? (bridges ? 'eng' : /airborne/.test(h.text) ? 'para' : 'inf') : h.arm === 'sea' ? (/submarine|torpedo|convoy|shipping/i.test(h.text) ? 'ss' : 'hull') : 'bmr';
     row.picture = h.arm === 'land' ? (bridges || /\b(town|city|garrison|siege)\b/.test(h.text) ? 'town' : 'troops') : h.arm === 'sea' ? 'fleet' : h.region !== undefined ? 'factories' : 'fleet';
     const sinking = h.arm !== 'land' && /\b(sinks?|sunk|torpedoes|scuttled)\b/.test(h.text);
@@ -547,14 +547,17 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const m = b.h.kind === 'war' ? DECLARES.exec(b.band.head) : null;
     if (!m || !banded.includes(b)) continue;
     const more = banded.filter((x) => x !== b && x.h.kind === 'war' && x.h.nat === b.h.nat && DECLARES.exec(x.band.head)?.[1] === m[1]);
-    if (!more.length) continue;
+    // (Its other declarations of the month belong to the same band, though they would have had none of their own.)
+    const echo = hs.filter((h) => !used.has(h) && h.kind === 'war' && h.nat === b.h.nat && DECLARES.exec(first(h.text))?.[1] === m[1]);
+    if (!more.length && !echo.length) continue;
+    for (const h of echo) used.add(h);
     // (His own country is named first, and the band takes the highest place any of them had.)
-    const on = [m[2], ...more.map((x) => DECLARES.exec(x.band.head)![2])];
+    const on = [...new Set([m[2], ...more.map((x) => DECLARES.exec(x.band.head)![2]), ...echo.map((h) => DECLARES.exec(first(h.text))![2])])];
     const own = on.findIndex((x) => x.includes(N.name));
     if (own > 0) on.unshift(...on.splice(own, 1));
     b.band.head = `${m[1]} declares war on ${listOf(on)}`;
     b.rank = Math.min(b.rank, ...more.map((x) => x.rank));
-    b.band.text = [b, ...more].map((x) => x.band.text).join(' ');
+    b.band.text = [...[b, ...more].map((x) => x.band.text), ...echo.map((h) => h.text)].join(' ');
     b.band.nats = [...new Set([...b.band.nats, ...more.flatMap((x) => x.band.nats)])].slice(0, 2);
     for (const x of more) banded.splice(banded.indexOf(x), 1);
   }

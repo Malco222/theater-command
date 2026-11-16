@@ -1941,7 +1941,7 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .tip .otip b { font-family: inherit; font-size: 12.5px; letter-spacing: 0; font-weight: 600; }
 
 /* ---- The month's report on one card (Version 82): the art director's mock-up, class for class ---- */
-.card.month { width: min(1300px, 100%); background: rgba(47, 36, 27, .975); border: 1px solid #6b5a36; border-radius: 6px; padding: 18px 24px 12px; box-shadow: 0 18px 60px rgba(0, 0, 0, .65); }
+.card.month { width: min(1300px, 100%); background: rgba(47, 36, 27, .975); border: 1px solid #6b5a36; border-radius: 6px; padding: 15px 24px 10px; box-shadow: 0 18px 60px rgba(0, 0, 0, .65); }
 .mc { --mc-ink: #ede5d5; --mc-soft: #d9cfba; --mc-dim: #a89e8e; --mc-brass: #d8aa62; --mc-red: #d0563d; --mc-green: #93b56c; --mc-amber: #e0a13c; --mc-panel: #3e3a36; --mc-serif: Georgia, 'DejaVu Serif', serif;
   font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; color: var(--mc-ink); font-size: 14px; line-height: 1.25; }
 .mc .t-good { --c: var(--mc-green); } .mc .t-bad { --c: var(--mc-red); } .mc .t-warn { --c: var(--mc-amber); } .mc .t-plain { --c: #6b6252; }
@@ -1963,13 +1963,13 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-banner b { font: 700 23px/1.15 var(--mc-serif); color: #fff3e6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-banner small { font-size: 14px; color: #f0cdbd; white-space: nowrap; }
 .mc-banner .mc-alt { margin-left: auto; background: rgba(0, 0, 0, .25); border-color: #c98a78; }
-.mc-tally { display: grid; grid-template-columns: repeat(var(--n, 6), 1fr); gap: 10px; margin-top: 12px; }
+.mc-tally { display: grid; grid-template-columns: repeat(var(--n, 6), 1fr); gap: 10px; margin-top: 10px; }
 .mc-tile { background: var(--mc-panel); border-radius: 4px; padding: 8px 12px 9px; border-top: 3px solid #57503f; min-width: 0; }
 .mc-tile u { display: flex; align-items: center; gap: 7px; text-decoration: none; font-size: 12px; letter-spacing: .14em; color: var(--mc-dim); font-weight: 700; }
 .mc-tile b { display: block; font: 700 30px/1.1 var(--mc-serif); margin-top: 3px; color: var(--c); white-space: nowrap; }
 .mc-tile.t-plain b { color: var(--mc-ink); }
 .mc-tile small { font-size: 13px; color: var(--mc-soft); }
-.mc-main { display: grid; grid-template-columns: 470px minmax(0, 1fr); gap: 22px; margin-top: 14px; }
+.mc-main { display: grid; grid-template-columns: 470px minmax(0, 1fr); gap: 22px; margin-top: 12px; }
 .mc-main.solo { grid-template-columns: minmax(0, 1fr); }
 .mc-rt { min-width: 0; }
 .tpic { display: block; background: #2a2019 center / cover no-repeat; }
@@ -1996,6 +1996,7 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-rtx { min-width: 0; }
 .mc-rtx .r1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .mc-rtx .pl { font: 700 20px var(--mc-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mc-rtx .pl.long { font-size: 17px; }
 .mc-rtx .vs { display: flex; align-items: center; gap: 6px; margin-left: 2px; flex: none; }
 .mc-chip { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #1b1610; background: var(--c); padding: 3px 8px; border-radius: 2px; flex: none; }
 .mc-rtx .r2 { font-size: 13.5px; color: var(--mc-soft); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2008,9 +2009,9 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-more span { min-width: 0; }
 .mc-all { border: 0; background: none; padding: 0; color: var(--mc-brass); font-weight: 700 !important; letter-spacing: .08em; white-space: nowrap; margin-left: auto; }
 .mc-quiet { font: 700 22px/1.2 var(--mc-serif); color: var(--mc-ink); margin: 12px 0 6px; }
-.mc-low { display: grid; grid-template-columns: 1fr 1.22fr 1.08fr; gap: 14px; margin-top: 13px; }
-.mc-box { background: rgba(62, 58, 54, .6); border: 1px solid #57503f; border-radius: 4px; padding: 9px 12px 10px; min-width: 0; }
-.mc-it { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-top: 8px; color: #e4dccb; min-width: 0; }
+.mc-low { display: grid; grid-template-columns: .94fr 1.32fr 1.04fr; gap: 14px; margin-top: 10px; }
+.mc-box { background: rgba(62, 58, 54, .6); border: 1px solid #57503f; border-radius: 4px; padding: 8px 12px 8px; min-width: 0; }
+.mc-it { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-top: 5px; color: #e4dccb; min-width: 0; }
 .mc-it > span:not(.sg):not(.mc-flag) { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .mc-it b { font: 700 19px var(--mc-serif); color: var(--mc-brass); min-width: 22px; text-align: right; }
 .mc-it small { color: var(--mc-dim); font-size: 12.5px; white-space: nowrap; }
@@ -2023,7 +2024,7 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-letters blockquote { margin: 7px 0 0; padding: 8px 12px; border-left: 3px solid #6b5a36; background: rgba(62, 58, 54, .45); font-size: 13.5px; color: var(--mc-soft); }
 .mc-letters blockquote p { margin: 0; font-style: italic; }
 .mc-letters cite { display: block; margin-top: 4px; font-style: normal; font-size: 12.5px; color: var(--mc-dim); }
-.mc-foot { margin-top: 12px; font-size: 12.5px; color: var(--mc-dim); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mc-foot { margin-top: 8px; font-size: 12.5px; color: var(--mc-dim); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 1100px) {
   .mc-main { grid-template-columns: minmax(0, 1fr); }
   .mc-photo { width: 100%; }
@@ -2051,7 +2052,9 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
   .mc-it .tb { white-space: normal; }
 }
 .mc-it .mc-took { margin-left: auto; font-style: italic; }
-.mc-it.over { color: var(--mc-dim); font-size: 12.5px; padding-left: 39px; margin-top: 6px; }
+.mc-it.over { color: var(--mc-dim); font-size: 13px; padding-left: 39px; }
+.mc-it.gd > span:not(.sg) { display: block; flex: none; white-space: nowrap; }
+.mc-it.gd small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mc-rt .mc-letters blockquote p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* A second band: everything under it gives up a little room, so the month is still one look. */
 .mc.two .mc-banner { padding-top: 6px; padding-bottom: 6px; margin-top: 10px; }

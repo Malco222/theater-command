@@ -272,6 +272,18 @@ describe('one story is told once, and in the room the card has', () => {
     expect(card.rows.filter((r) => r.cls === 2)).toHaveLength(0);
   });
 
+  it('and to a country at peace the same month is one band still: the second declaration is not news from elsewhere', () => {
+    const g = game();
+    const mark = monthMark(g, 'BRA');
+    g.nations.ITA.atWar.push('FRA', 'UK'); g.nations.FRA.atWar.push('ITA'); g.nations.UK.atWar.push('ITA');
+    news(g, { kind: 'war', text: 'Italy declares war on France.', nat: 'ITA' });
+    news(g, { kind: 'war', text: 'Italy declares war on the United Kingdom.', nat: 'ITA' });
+    const card = monthCard(g, mark, 'BRA');
+    expect(card.bands.map((b) => b.head)).toEqual(['Italy declares war on France and the United Kingdom']);
+    expect(card.elsewhere.map((e) => e.nat)).not.toContain('ITA');
+    expect(card.quiet).toBe('There was no fighting on your fronts this month.');
+  });
+
   it('a country falls once: its capital taken and its surrender are one band', () => {
     const g = game();
     const mark = monthMark(g, ME);
@@ -325,7 +337,7 @@ describe('one story is told once, and in the room the card has', () => {
     const mark = monthMark(g, ME);
     news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 2 German submarines in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
     const card = monthCard(g, mark, ME);
-    expect(card.lead).toMatchObject({ place: 'The Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Command.' });
+    expect(card.lead).toMatchObject({ place: 'Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Command.' });
     expect(card.lead!.figures).toEqual([{ n: '2', label: 'submarines lost' }]);
   });
 
