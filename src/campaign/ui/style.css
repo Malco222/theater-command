@@ -2135,3 +2135,13 @@ kbd { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Cour
   .nextarmy b { font-size: 15px; }
   .tray.slim .tnow { display: none; }
 }
+
+/* The gate marks (Version 82, rulings 86 and 90): the holder's flag and a lamp on the water at the Panama Canal and
+   the three straits. With its name close up, the flag and the lamp at the height he plays at, the lamp alone from far up. */
+#gates .gatemark { cursor: help; }
+.gatemark .gfull, .gatemark .gmid, .gatemark .gfar { display: none; }
+svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark .gfar { display: inline; }
+.gatemark .gplate { fill: #261f1a; fill-opacity: .96; stroke: #120e0b; stroke-width: 1.5; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .5)); }
+.gatemark:hover .gplate { stroke: #b6924e; }
+.gatemark .gfl { fill: none; stroke: rgba(10, 12, 14, .6); stroke-width: .8; }
+.gatemark .gname { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 13px; fill: #f2e8d5; }

@@ -8,6 +8,7 @@ import { markFor, monthCard, monthOrders, type MonthCard, type MonthMark } from 
 import { monthCardHtml } from './monthview';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
 import { armyRound, armyStands, frontIdle, nextArmy, settleStands, standArmy } from '../round';
+import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
@@ -551,7 +552,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
@@ -661,9 +662,41 @@ function drawLabels(): void {
     const ly = place === 'under' ? Math.max(t.y + 13, r.y + (busy ? 26.5 : 3)) : place === 'west' ? t.y + 2 : r.y + (busy ? 26.5 : 3);
     // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
+    // Where the name and the worth line under it lie, for the marks that give way to them (Version 82).
+    const nw = r.name.length * (r.cap ? 4.5 : 3.4), nx = place === 'west' ? lx - nw : lx - nw / 2;
+    const fw = figuresWide(t), fx = place === 'west' ? lx - fw : lx - fw / 2;
+    labelBox[r.id] = { name: { x0: nx, y0: ly - 5.6, x1: nx + nw, y1: ly + 1.6 }, figs: fw ? { x0: fx, y0: ly + 2, x1: fx + fw, y1: ly + 7.6 } : null, cap: !!r.cap, size: t.size };
     return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
   }).join('');
+  badgeDrawn = { cities, list };
   $('#obadges').innerHTML = orderBadges(cities, list);
+}
+
+/** How wide a town's worth line is drawn (townFigures). */
+function figuresWide(t: TownView): number {
+  const parts: number[] = [];
+  if (t.name !== t.province) parts.push(t.name.length * 2.75);
+  if (t.worth > 0) parts.push(4.4, String(t.worth).length * 2.9);
+  if (t.factories > 0) { parts.push(4.4); if (t.factories > 1) parts.push(String(t.factories).length * 2.9); }
+  if (t.signs.includes('harbour')) parts.push(4.4);
+  if (t.signs.includes('oil')) parts.push(4.4);
+  return parts.length ? parts.reduce((s, w) => s + w, 0) + 1.5 * (parts.length - 1) : 0;
+}
+/** Each province's name and the worth line under it as boxes on the map, written down as they are drawn. */
+const labelBox: { name: Box; figs: Box | null; cap: boolean; size: string }[] = [];
+/** What was last drawn as city badges, so they can find their places again when the map comes nearer and names appear. */
+let badgeDrawn: { cities: CityOrders[]; list: TownView[] } | null = null;
+let namesShown = '';
+/** The names and worth lines showing at this height of the map: all of them close in, the cities' and capitals' at the middle distance, the capitals' names from farther up. */
+function shownLabels(only?: number): Box[] {
+  const svg = $('#map'), near = svg.classList.contains('near'), mid = svg.classList.contains('mid'), lens = mid && svg.classList.contains('lensworth');
+  const out: Box[] = [];
+  labelBox.forEach((l, id) => {
+    if (!l || (only !== undefined && id !== only)) return;
+    if (l.cap || near || lens || (mid && l.size === 'city')) out.push(l.name);
+    if (l.figs && (near || lens || (mid && (l.size === 'capital' || l.size === 'city')))) out.push(l.figs);
+  });
+  return out;
 }
 
 // ---- What each city has on order (Version 78) -------------------------------------------------
@@ -715,6 +748,92 @@ function markBox(t: TownView): Box {
   const [hw, up, k] = t.size === 'capital' ? [7, 5.9, 1.2] : t.size === 'city' ? [6, 6.5, 1.2] : t.size === 'town' ? [4.7, 3.9, 1] : [2.3, 1.1, 1];
   return { x0: t.x - hw * k, y0: t.y - up * k, x1: t.x + hw * k, y1: t.y + 3.4 * k };
 }
+/** How many map units one pixel of the screen covers just now. */
+const unitsPerPixel = (): number => ui.view.w / Math.max(1, $('#map').clientWidth);
+
+/** The gate mark's lamps (the art director's drawing of 16 November 2026), each in a box 16 across; the far lamps in a box 10 across. */
+const LAMP = {
+  open: '<circle cx="8" cy="8" r="7.3" fill="#9CC08A" stroke="#1d2a17" stroke-width="1"/><rect x="4.3" y="7.6" width="7.4" height="5.2" rx="1" fill="#1d2a17"/><path d="M5.9 7.6V5a2.1 2.1 0 0 1 4.2 -.5" fill="none" stroke="#1d2a17" stroke-width="1.5" stroke-linecap="round"/>',
+  shut: '<circle cx="8" cy="8" r="7.3" fill="#CF5A41" stroke="#2a110b" stroke-width="1"/><rect x="4.3" y="7.6" width="7.4" height="5.2" rx="1" fill="#2a110b"/><path d="M5.9 7.6V5.6a2.1 2.1 0 0 1 4.2 0V7.6" fill="none" stroke="#2a110b" stroke-width="1.5"/>',
+  farOpen: '<circle cx="5" cy="5" r="4.2" fill="#9CC08A" stroke="#17210f" stroke-width="1.3"/>',
+  farShut: '<circle cx="5" cy="5" r="4.2" fill="#CF5A41" stroke="#2a110b" stroke-width="1.3"/><rect x="2.3" y="4.1" width="5.4" height="1.8" fill="#F2E8D5"/>',
+};
+let gateTimer = 0;
+
+/**
+ * The gate marks (Version 82, rulings 86 and 90): on the water at the Panama Canal and the three straits, the
+ * holder's flag and a lamp, green and unlocked where the player's ships may pass and red and locked where they may
+ * not. Close up the gate's name follows the lamp; from far up the lamp stands alone. The mark keeps its size on the
+ * screen at every height, and slides clear of the flags, fleets and town marks beside it, staying on the water.
+ */
+function drawGates(): void {
+  const el = $('#gates');
+  if (!g.gates.length) { el.innerHTML = ''; return; }
+  const k = unitsPerPixel();
+  const views = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null);
+  // What a mark must not lie on: every army's flag, every fleet at sea or in port, and the marks of the towns.
+  const solid: Box[] = [...flagBoxes()];
+  for (const f of document.querySelectorAll('#fleets g.ctr')) {
+    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(f.getAttribute('transform') ?? '');
+    if (m) solid.push({ x0: +m[1] - 13, y0: +m[2] - 11, x1: +m[1] + 13, y1: +m[2] + 9 });
+  }
+  const list = towns(g);
+  for (const t of list) if (t.size !== 'village') solid.push(markBox(t));
+  solid.push(...shownLabels());
+  const stage = k < 0.42 ? 1 : k < 1.25 ? 2 : 3;
+  let out = '';
+  views.forEach((v, i) => {
+    const spot = gateSpot(g, g.gates[i]);
+    const lamp = v.open !== null;
+    const wide = 5 + 24 + (lamp ? 5 + 18 : 0) + 5, tall = 22;
+    const nameW = Math.ceil(v.name.length * 7.1) + 8, full = wide + nameW;
+    // (The room it needs is the room of what is shown at this height: the lamp alone from far up, the name too close in.)
+    const w = (stage === 3 ? 14 : stage === 1 ? full : wide) * k, h = (stage === 3 ? 14 : tall) * k;
+    // Close in the plate grows to the east of the flag, so its middle lies east of the mark's own point.
+    const shift = stage === 1 ? ((full - wide) / 2) * k : 0;
+    const box = (x: number, y: number): Box => ({ x0: x + shift - w / 2, y0: y - h / 2, x1: x + shift + w / 2, y1: y + h / 2 });
+    const over = (x: number, y: number): number => solid.reduce((s, o) => s + boxOver(box(x, y), o), 0);
+    let at = spot, worst = over(spot.x, spot.y);
+    // The nearest place on the water that lies on nothing: sideways first, then up and down, then the corners.
+    for (const far of [0.65, 1.1, 1.6, 2.2]) {
+      if (worst <= 0) break;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+        const x = spot.x + dx * far * w * (dy ? 0.75 : 1), y = spot.y + dy * far * h * 1.5;
+        if (seaAt(x, y, g) < 0 || onLand(g, x, y)) continue;
+        const o = over(x, y);
+        if (o < worst - 1e-6) { worst = o; at = { x, y }; }
+      }
+    }
+    solid.push(box(at.x, at.y));
+    const flag = `<g transform="translate(5 3)">${flagUse(v.holder, natColor(v.holder), 24, 16)}<rect class="gfl" width="24" height="16"/></g>`;
+    const lampAt = (x: number): string => (lamp ? `<g transform="translate(${x} 2) scale(1.125)">${v.open ? LAMP.open : LAMP.shut}</g>` : '');
+    out += `<g class="gatemark${v.open === false ? ' shut' : ''}" data-id="${i}" data-x="${at.x.toFixed(1)}" data-y="${at.y.toFixed(1)}" transform="translate(${at.x.toFixed(1)} ${at.y.toFixed(1)}) scale(${k.toFixed(4)})">
+      <g class="gmid" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${wide}" height="${tall}" rx="4"/>${flag}${lampAt(34)}</g>
+      <g class="gfull" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${full}" height="${tall}" rx="4"/>${flag}${lampAt(34)}<text class="gname" x="${wide + 1}" y="15.6">${esc(v.name)}</text></g>
+      ${lamp ? `<g class="gfar" transform="translate(-6 -6) scale(1.2)">${v.open ? LAMP.farOpen : LAMP.farShut}</g>` : ''}</g>`;
+  });
+  el.innerHTML = out;
+}
+/** As the map is brought nearer or sent farther: the gate marks keep their size on the screen, and find their places again once it rests. */
+function sizeGates(): void {
+  const k = unitsPerPixel().toFixed(4);
+  for (const m of document.querySelectorAll<SVGGElement>('#gates .gatemark')) m.setAttribute('transform', `translate(${m.dataset.x} ${m.dataset.y}) scale(${k})`);
+  clearTimeout(gateTimer);
+  gateTimer = window.setTimeout(() => {
+    drawGates();
+    // The city badges give way to names only while names show: they find their places again as that changes.
+    const svg = $('#map'), now = `${svg.classList.contains('near')}${svg.classList.contains('mid')}`;
+    if (now !== namesShown && badgeDrawn) { namesShown = now; $('#obadges').innerHTML = orderBadges(badgeDrawn.cities, badgeDrawn.list); }
+  }, 180);
+}
+/** What pointing at a gate says: its name, who holds it, and whether the player's ships may pass, in that gate's own words. */
+function gateTip(id: number): string {
+  const v = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null)[id];
+  if (!v) return '';
+  const line = esc(v.line).replace(/(Open to your ships)/, '<span class="tipgo"><b>$1</b></span>').replace(/(Shut to your ships)/, '<span class="tipno"><b>$1</b></span>');
+  return `<b>${esc(v.name)}</b><br>${line}`;
+}
+
 /** The box of every army's flag on the map just now, with the size it carries over it: read from what is drawn, so only what the player sees. */
 function flagBoxes(): Box[] {
   const out: Box[] = [];
@@ -746,6 +865,7 @@ function orderBadges(cities: CityOrders[], list: TownView[]): string {
     for (const c of order) {
       const b = orderBadge(c, stage), t = list[c.region], area = b.w * b.h;
       const spot = badgeSpot[c.region] ?? { x: g.regions[c.region].x, y: g.regions[c.region].y + 8 };
+      const names = shownLabels();
       const solid = [...placed, ...marks.filter((m) => m.id !== c.region).map((m) => m.box)];
       const onFlags = (x: Box): number => flags.reduce((s, f) => s + boxOver(x, f), 0);
       // (One map unit clear of every other badge and every other town's mark.)
@@ -774,6 +894,26 @@ function orderBadges(cities: CityOrders[], list: TownView[]): string {
           if (ok && onFlags(x) <= area / 3 && (!best || Math.abs(x.x0 - box.x0) < Math.abs(best.x0 - box.x0))) best = x;
         }
         if (best) box = best;
+      }
+      // While names are showing, a name and the worth line under it count as marks do (the art director's rider on
+      // Version 80; her two cases were a badge on its own province's name, and one on a neighbour's worth figure).
+      // A badge that lies on one moves the least way that clears it: a little lower, or sideways, never onto a
+      // mark, another badge or a flag, and never far from its own town. A corner's touch is let be.
+      const onNames = (x: Box): number => names.reduce((s, o) => { const v = boxOver(x, o); return s + (v > area * 0.03 ? v : 0); }, 0);
+      if (names.length && onNames(box) > 0) {
+        const own = markBox(t), flagged = Math.max(area / 3, onFlags(box));
+        const free = (x: Box): boolean => !hit(x) && boxOver(x, own) <= 0 && onFlags(x) <= flagged;
+        let best = box, cost = (onNames(box) / area) * 30;
+        const tryAt = (x: Box, moved: number): void => {
+          if (!free(x)) return;
+          const v = (onNames(x) / area) * 30 + moved;
+          if (v < cost - 1e-9) { cost = v; best = x; }
+        };
+        for (const dy of [0, 0.2, 0.4, 0.6]) for (let k = -12; k <= 12; k++) tryAt(at(box.x0 + (k / 10) * b.w, box.y0 + dy * b.h), Math.abs(k) / 10 + dy * 1.5);
+        // (And the two sides of its own town's mark.)
+        tryAt(at(own.x0 - 1 - b.w, own.y1 - b.h), 0.8);
+        tryAt(at(own.x1 + 1, own.y1 - b.h), 0.8);
+        box = best;
       }
       placed.push(box);
       out += b.draw(box.x0, box.y0);
@@ -993,6 +1133,7 @@ function refresh(): void {
   const hint = hintText();
   if (hint.startsWith(NO_MOVES)) $('#hint').innerHTML = `<span class="nomoves">${esc(NO_MOVES)}</span>${esc(hint.slice(NO_MOVES.length))}`; else $('#hint').textContent = hint;
   $('#alerts').innerHTML = roundPill() + alertButtons();
+  drawGates();
   const pass = $('#passing');
   if (passing) {
     const n = passing.nat ? g.nations[passing.nat] : null;
@@ -4450,7 +4591,8 @@ function seaPane(): string {
     if (gt.a !== z.id && gt.b !== z.id) continue;
     const other = g.seas[gt.a === z.id ? gt.b : gt.a];
     const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
-    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}, held by ${esc(natName(holder))}.${me ? ` ${canPass(g, gt.a, gt.b, me) ? 'Open to your ships.' : 'Closed to your ships.'}` : ''}</div>`;
+    const gv = gateViews(g, me || null)[g.gates.indexOf(gt)];
+    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(natName(holder))}.`}</div>`;
   }
   return `<h2>${esc(z.name)}</h2>${head}${straits}
     <h3>Fleets at sea here</h3>${here.length ? here.map(rowOf).join('') : `<div class="empty">${pic ? 'No fleet has been found at sea here.' : 'No fleet at sea here.'}</div>`}
@@ -6747,7 +6889,7 @@ function onSea(z: number): void {
   if (fl) {
     if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
     else if (!g.nations[fl.nat].atWar.length) ui.msg = 'At peace the fleet stays in harbour.';
-    else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
+    else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
     refresh();
     return;
   }
@@ -7838,6 +7980,12 @@ function applyView(): void {
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
+  // The gate marks: with the name close up, the flag and the lamp at the height he plays at, the lamp alone from far up.
+  const upp = v.w / Math.max(1, svg.clientWidth);
+  svg.classList.toggle('gk1', upp < 0.42);
+  svg.classList.toggle('gk2', upp >= 0.42 && upp < 1.25);
+  svg.classList.toggle('gk3', upp >= 1.25);
+  sizeGates();
   // The city order badge in three sizes: whole, without its count, and the sign alone; beyond that it is put away.
   svg.classList.toggle('ob1', v.w < 700);
   svg.classList.toggle('ob2', v.w >= 700 && v.w < 900);
@@ -7926,9 +8074,11 @@ function wireMap(): void {
       if (z < 0) { tip.style.display = 'none'; return; }
       const by = new Map<string, number>();
       for (const f of g.fleets) if (f.zone === z && atSea(f)) by.set(f.nat, (by.get(f.nat) ?? 0) + shipCount(f.ships));
-      tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}${spentInHand() && !mapBusy() && ui.tab === 'region' ? `<br><span class="tipno">${esc(NO_MOVES)} A kept march goes through friendly ground only.</span>` : ''}`;
+      tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}${spentInHand() && !mapBusy() && ui.tab === 'region' ? `<br><span class="tipno">${esc(NO_MOVES)} A kept march goes through friendly ground only.</span>` : ''}${((): string => { const fl = ui.tab === 'navy' && !ui.rebase ? myFleet() : null, bar = fl ? gateBar(g, fl, z) : null; return bar ? `<br><span class="tipno">${esc(bar.line)}</span>` : ''; })()}`;
     } else if (el.classList.contains('obadge')) {
       tip.innerHTML = ordersTip(Number(el.dataset.id));
+    } else if (el.classList.contains('gatemark')) {
+      tip.innerHTML = gateTip(Number(el.dataset.id));
     } else {
     const r = g.regions[Number(el.dataset.id)];
     const armies = new Map<string, Corps[]>();
@@ -7993,6 +8143,12 @@ function wireMap(): void {
           document.querySelector('#forming')?.scrollIntoView({ block: 'nearest' });
           if (e.pointerType !== 'mouse') { $('#tip').innerHTML = ordersTip(id); placeTip(e.clientX, e.clientY, true); }
         }
+      }
+      else if (el && el.classList.contains('gatemark')) {
+        // A gate's mark: with a fleet in hand the click is for the sea under it; otherwise it says what pointing says (a finger has no pointing).
+        const p = mapPoint(e.clientX, e.clientY), z = seaAt(p.x, p.y, g);
+        if (ui.tab === 'navy' && myFleet() && z >= 0) onSea(z);
+        else { const v = gateViews(g)[Number(el.dataset.id)]; if (v) { ui.msg = `${v.name}. ${v.line}`; refresh(); } }
       }
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
