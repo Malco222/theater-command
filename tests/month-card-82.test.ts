@@ -879,3 +879,73 @@ describe("the foot boxes give a line whole where the box has room (the art direc
     expect(card.also).toEqual(['IX Corps has halted at Saxony on its march to Vienna: the way is closed.', 'Berlin garrison and 2 more corps have arrived at Frankfurt.']);
   });
 });
+
+describe("the 3D builder's two wording finds", () => {
+  const freed = (g: Game, nat: string, by: string, week: number): void => {
+    const cap = g.nations[nat].capital;
+    g.passings.push({ id: g.passings.length + 1, turn: g.turn, week, kind: 'freed', nat, by, how: 'freed', capital: cap, provinces: 1, corps: 0, side: 'allies' } as unknown as Game['passings'][number]);
+    news(g, { kind: 'event', week, text: `${g.nations[nat].name} is liberated. ${g.nations[by].adj} troops hold ${g.regions[cap].name}, and ${g.nations[nat].name} returns to the war.`, nat, region: cap, arm: 'land', won: by });
+  };
+  const fell = (g: Game, nat: string, by: string, week: number): void => {
+    g.passings.push({ id: g.passings.length + 1, turn: g.turn, week, kind: 'fell', nat, by, how: 'beaten', capital: g.nations[nat].capital, provinces: 1, weeks: (g.turn - 1) * 4 + week } as unknown as Game['passings'][number]);
+    news(g, { kind: 'fall', week, text: `${g.nations[nat].name} capitulates to ${g.nations[by].name}.`, nat, arm: 'land', won: by, lost: nat });
+  };
+  const tagged = (c: MonthCard, tag: string): CardRow[] => order(c).filter((r) => r.tag === tag);
+
+  it('a country that falls is FALLEN though it was freed earlier the same month, under the flag of whoever took it', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    // Poland frees Luxembourg in the first week, and Germany takes it back in the third.
+    freed(g, 'LUX', 'POL', 1);
+    fell(g, 'LUX', ME, 3);
+    const card = monthCard(g, mark, ME);
+    expect(card.bands.map((b) => [b.word, b.head, b.nats])).toEqual([['FALLEN', 'Luxembourg capitulates to Germany', ['LUX', ME]]]);
+    expect(tagged(card, 'FREED')).toEqual([]);
+    // With two warnings above it the fall is a red row, and it is FALLEN there too.
+    const h = game();
+    const m2 = monthMark(h, ME);
+    news(h, { kind: 'event', warn: 'Coast watch', text: 'Transports are gathering at Dover.', nat: ME });
+    news(h, { kind: 'event', warn: 'Oil', text: 'The oil will last two months.', nat: ME });
+    freed(h, 'LUX', 'POL', 1);
+    fell(h, 'LUX', ME, 3);
+    const c2 = monthCard(h, m2, ME);
+    expect(tagged(c2, 'FREED')).toEqual([]);
+    expect(tagged(c2, 'FALLEN')[0]).toMatchObject({ place: 'Luxembourg', ours: 'LUX', theirs: ME, tone: 'bad', line: 'Luxembourg capitulates to Germany.' });
+  });
+
+  it('a liberation that touches his war is FREED, under the flags of the country and of who freed it, and is no row besides', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    freed(g, 'LUX', 'POL', 2);
+    const card = monthCard(g, mark, ME);
+    expect(card.bands).toHaveLength(1);
+    expect(card.bands[0]).toMatchObject({ word: 'FREED', head: 'Luxembourg is liberated', nats: ['LUX', 'POL'], region: g.nations.LUX.capital });
+    expect(order(card).filter((r) => /liberated/.test(r.line))).toEqual([]);
+    // Freed and fallen: whichever came later is the news.
+    const h = game();
+    const m2 = monthMark(h, ME);
+    fell(h, 'LUX', ME, 1);
+    freed(h, 'LUX', 'POL', 3);
+    expect(monthCard(h, m2, ME).bands.map((b) => b.word)).toEqual(['FREED']);
+  });
+
+  it('news dated after the month turned names its month, on a band and on a row', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    const [a, b] = fields(g);
+    land(g, a);
+    fell(g, 'LUX', ME, 4);
+    // The month turns: those who move before him have their first week of October.
+    g.turn++;
+    fell(g, 'POL', ME, 1);
+    land(g, b, { week: 1 });
+    const card = monthCard(g, mark, ME);
+    expect(card.month).toBe('September 1939');
+    const band = (nat: string) => card.bands.find((x) => x.nats[0] === nat)!;
+    expect(band('LUX').month).toBeUndefined();
+    expect(band('POL')).toMatchObject({ month: 'October', week: 1 });
+    const rows = order(card);
+    expect(rows.find((r) => r.region === a.id)!.month).toBeUndefined();
+    expect(rows.find((r) => r.region === b.id)).toMatchObject({ month: 'October', week: 1 });
+  });
+});

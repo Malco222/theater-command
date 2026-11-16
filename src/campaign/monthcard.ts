@@ -73,6 +73,8 @@ export interface CardBand {
   head: string;
   text: string;
   week: number;
+  /** The month the news is dated in, where that is not the card's own ('July'): the days after the month turned, before his own month opened. */
+  month?: string;
   /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
 }
@@ -110,6 +112,8 @@ export interface CardRow {
   sea?: number;
   report?: CardReport;
   week: number;
+  /** The month the item is dated in, where that is not the card's own ('July'). */
+  month?: string;
   /** For the lead story: the kind word of its tag, a headline of about eight words, one line on what follows from it, and three figures. */
   kind: string;
   head: string;
@@ -348,6 +352,16 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const foe = (nat?: string | null): boolean => !!nat && !!g.nations[nat] && atWar(g, nat, me);
   const hs = g.headlines.slice(mark.h);
   const used = new Set<Headline>();
+  // The card tells everything since the mark, so its last items are dated in the month that has just opened: the
+  // moves of those who go before him. Such an item names its month, or "week 1" under June's title reads as June's.
+  const dated = (turn: number): { month?: string } => (turn !== mark.turn ? { month: turnToDate(turn).label.split(' ')[0] } : {});
+  // The roll's own entries since the mark. A fall's is the one that says who took the country; and the line that
+  // tells a liberation is the roll's line for it: the same week, at the country's capital.
+  const roll = g.passings.filter((p) => p.turn >= mark.turn);
+  const fellOf = (h: Headline) => { const ps = roll.filter((p) => p.kind === 'fell' && p.nat === h.nat); return ps.find((p) => p.turn === h.turn && p.week === h.week) ?? ps[ps.length - 1]; };
+  const freedOf = (h: Headline) => (h.kind === 'event' && h.nat ? roll.find((p) => p.kind === 'freed' && p.nat === h.nat && p.turn === h.turn && p.week === h.week && p.capital === h.region) : undefined);
+  /** A country freed that touches his war: its line is a band's, never a row's. */
+  const freedBand = (h: Headline) => { const p = freedOf(h); return p && (mine(h.nat) || side(h.nat) || foe(h.nat) || side(p.by) || foe(p.by)) ? p : undefined; };
   const lands = g.reports.slice(mark.r);
   const seas = g.seaReports.slice(mark.s);
   const airs = g.airReports.slice(mark.a);
@@ -381,6 +395,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.arm = 'land';
     row.place = place;
     row.week = r.week;
+    Object.assign(row, dated(r.turn));
     row.region = r.region;
     row.report = { type: 'land', id: r.id };
     row.ours = me;
@@ -600,7 +615,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const involves = (h: Headline): boolean => mine(h.nat) || mine(h.won) || mine(h.lost) || (h.region !== undefined && (g.regions[h.region]?.ctrl === me || mark.before[h.region] === me)) || hisRing(h);
   for (const h of hs) {
     if (!h.arm || h.warn || (h.kind !== 'battle' && h.kind !== 'event')) continue;
-    if (!involves(h)) continue;
+    if (!involves(h) || freedBand(h)) continue;
     // One story, one row: the battle report tells it better.
     const told = h.arm === 'land' ? h.region !== undefined && fought.has(h.region)
       : h.arm === 'air' ? (h.region !== undefined ? airAt.has(h.region) || shelled.has(h.region) : airAtSea.includes(h.nat ?? '') || airs.some((r) => r.zone >= 0))
@@ -612,6 +627,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const row = blank();
     row.cls = h.arm === 'land' ? 3 : 4; row.arm = h.arm;
     row.week = h.week;
+    Object.assign(row, dated(h.turn));
     if (h.region !== undefined) row.region = h.region;
     // (News from the sea names its sea: the row's place takes it, and the line is the shorter for it.)
     const where = h.region === undefined ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
@@ -672,6 +688,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.cls = 5;
     row.sign = 'star';
     row.week = h.week;
+    Object.assign(row, dated(h.turn));
     row.place = h.kind === 'goal' ? 'Campaign goal' : 'Honour';
     row.tone = 'good';
     row.ours = me;
@@ -685,9 +702,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
 
   // ---- 1 and 2. The red bands -------------------------------------------------------------------------------
   const majors = new Set(majorsOf(g));
-  const freed = new Set(g.passings.filter((p) => p.turn >= mark.turn && p.kind === 'freed').map((p) => p.nat));
-  const passed = (nat?: string) => g.passings.find((p) => p.turn >= mark.turn && p.nat === nat);
-  const banded: { band: CardBand; rank: number; h: Headline; onHim?: boolean }[] = [];
+  const banded: { band: CardBand; rank: number; h: Headline; onHim?: boolean; good?: boolean }[] = [];
   /** Whether a line names a country, by its name or by another the news gives it; and the countries a line names, in its order. */
   const nameAt = (id: string, text: string): number => {
     const n = g.nations[id];
@@ -705,10 +720,13 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const enters = h.kind === 'war' ? [...entered].filter((m) => m === h.nat || nameAt(m, h.text) >= 0) : [];
     for (const m of enters) entered.delete(m);
     const great = enters.length > 0 || (h.kind === 'fall' && !!h.nat && majors.has(h.nat));
-    const p = h.kind === 'fall' ? passed(h.nat) : undefined;
-    const touches = (h.kind === 'war' || h.kind === 'fall') && (mine(h.nat) || side(h.nat) || foe(h.nat) || (!!p && (side(p.by) || foe(p.by))));
+    // (A fall is FALLEN whatever else the month did to the country, under the flag of whoever took it; FREED is the
+    // liberation's own line.)
+    const lib = warn ? undefined : freedBand(h);
+    const p = h.kind === 'fall' ? fellOf(h) : lib;
+    const touches = !!lib || ((h.kind === 'war' || h.kind === 'fall') && (mine(h.nat) || side(h.nat) || foe(h.nat) || (!!p && (side(p.by) || foe(p.by)))));
     if (!warn && !great && !touches) return;
-    const word: CardBand['word'] = warn ? 'WARNING' : h.kind === 'war' ? 'WAR' : h.nat && freed.has(h.nat) ? 'FREED' : 'FALLEN';
+    const word: CardBand['word'] = warn ? 'WARNING' : h.kind === 'war' ? 'WAR' : lib ? 'FREED' : 'FALLEN';
     // For him the news is the declaration on him: where a line of news says more than one thing, the sentence
     // that names war on his country is the headline, under the flags of those who declare it.
     const said = h.kind === 'war' && !warn ? (h.text.match(/[^.!?]+/g) ?? []).map((s) => s.trim()).find((s) => { const at = s.search(/\bwar on\b/); return at >= 0 && nameAt(me, s.slice(at)) >= 0; }) : undefined;
@@ -716,7 +734,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (The flags are those of the headline: who did it, and a great power the headline names as entering the war.)
     const head = said ?? first(h.text);
     const nats = warn ? [me] : declarers.length ? declarers.slice(0, 2) : [...new Set([h.nat, ...enters.filter((m) => nameAt(m, head) >= 0), p?.by])].filter((x): x is string => !!x && !!g.nations[x] && x !== 'none').slice(0, 2);
-    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, region: h.region }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said });
+    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, ...dated(h.turn), region: h.region }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said, good: !!lib && (mine(h.nat) || side(lib.by)) });
     used.add(h);
   });
   // One story, one band. A country's fall is told once, by the line that says the country fell (the capital's own
@@ -725,6 +743,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const same = banded.filter((b) => b.h.kind === 'fall' && b.h.nat === nat);
     const keep = [...same].reverse().find((b) => b.h.region === undefined) ?? same[same.length - 1];
     for (const b of same) if (b !== keep) banded.splice(banded.indexOf(b), 1);
+  }
+  // A country freed and fallen in the same month is one story too: the later news stands.
+  for (const nat of new Set(banded.filter((b) => b.band.word === 'FREED' && b.h.nat).map((b) => b.h.nat!))) {
+    const both = banded.filter((b) => (b.band.word === 'FREED' || b.band.word === 'FALLEN') && b.h.nat === nat);
+    const keep = both.reduce((a, b) => (hs.indexOf(b.h) > hs.indexOf(a.h) ? b : a));
+    for (const b of both) if (b !== keep) banded.splice(banded.indexOf(b), 1);
   }
   const DECLARES = /^(.+?) declares war on (.+)$/;
   for (const b of [...banded]) {
@@ -776,7 +800,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.week = b.band.week;
     row.place = b.band.word === 'WARNING' ? b.band.title ?? 'Warning' : g.nations[b.band.nats[0] ?? '']?.name ?? cap(b.band.word.toLowerCase());
     row.tag = b.band.word;
-    row.tone = 'bad';
+    row.tone = b.good ? 'good' : 'bad';
+    if (b.band.month) row.month = b.band.month;
     row.ours = b.band.nats[0] ?? null;
     row.theirs = b.band.nats[1] ?? null;
     row.line = `${b.band.head}.`;
