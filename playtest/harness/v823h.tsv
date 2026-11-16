@@ -1,0 +1,10 @@
+hand-GER-7	node out82/probe88.mjs 7 76
+base-GER-7	node out82/probe88.mjs 7 76 '{"byHand":[],"opt":{"raids":false,"tear":false,"aa":false}}'
+noeng-GER-7	node out82/probe88.mjs 7 76 '{"byHand":[],"engs":0,"guns":0,"opt":{"raids":false,"tear":false,"aa":false}}'
+eng6-GER-7	node out82/probe88.mjs 7 76 '{"engs":6}'
+airstaff-GER-7	node out82/probe88.mjs 7 76 '{"byHand":[],"opt":{"raids":false}}'
+hand-GER-3	node out82/probe88.mjs 3 76
+base-GER-3	node out82/probe88.mjs 3 76 '{"byHand":[],"opt":{"raids":false,"tear":false,"aa":false}}'
+hand-GER-25	node out82/probe88.mjs 25 76
+base-GER-25	node out82/probe88.mjs 25 76 '{"byHand":[],"opt":{"raids":false,"tear":false,"aa":false}}'
+noeng-GER-25	node out82/probe88.mjs 25 76 '{"byHand":[],"engs":0,"guns":0,"opt":{"raids":false,"tear":false,"aa":false}}'

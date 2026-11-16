@@ -1,0 +1,7 @@
+seat-UK-25	node out82b/probe88.mjs 25 76 '{"minOdds":1.5,"land":true,"guns":0.5,"opt":{"human":true,"aaMost":10}}' UK
+seat-SOV-25	node out82b/probe88.mjs 25 76 '{"minOdds":1.5,"guns":0.5,"opt":{"human":true,"aaMost":10}}' SOV
+seat-ITA-25	node out82b/probe88.mjs 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"guns":0.5,"opt":{"human":true,"aaMost":10}}' ITA
+seat-FRA-25	node out82b/probe88.mjs 25 76 '{"minOdds":1.6,"homeOnly":true,"guns":0.5,"opt":{"human":true,"aaMost":10}}' FRA
+seat-USA-25	node out82b/probe88.mjs 25 76 '{"minOdds":1.5,"land":true,"stage":true,"guns":0.5,"opt":{"human":true,"aaMost":10}}' USA
+human-GER-25	node out82b/probe88.mjs 25 76 '{"guns":0.5,"opt":{"human":true,"aaMost":10}}'
+human-GER-26	node out82b/probe88.mjs 26 76 '{"guns":0.5,"opt":{"human":true,"aaMost":10}}'
