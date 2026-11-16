@@ -1101,8 +1101,8 @@ def build_sea():
     # spot of water stays lit for about a quarter of a second, and the band twinkles). Thick in one broad band, whose
     # heart the game moves with the eye, and thin everywhere else; they thin out toward the land.
     flecks = times(m, (waves(along(25.0, 96.0, 5.0, -2800, 3700), -2000, 3700), "B"), (waves(along(120.0, 77.0, 7.0, -2800, 4150), -2000, 4150), "B"), -1700, 3900)
-    lit = one_in(m, SAT, plus(m, times(m, flecks, 7.0, -1550, 3900), -0.55, -1400, 3900), -1250, 3900)
-    on_crests = one_in(m, SAT, plus(m, times(m, chop, 3.0, -1550, 4100), 0.25, -1400, 4100), -1250, 4100)
+    lit = one_in(m, SAT, plus(m, times(m, flecks, 8.0, -1550, 3900), -0.35, -1400, 3900), -1250, 3900)
+    on_crests = one_in(m, SAT, plus(m, times(m, chop, 3.0, -1550, 4100), 0.45, -1400, 4100), -1250, 4100)
     heart = vector(m, "GlintAt", (0.0, 0.0, 0.000006, 0.0), -1900, 4500)  # (where the band's heart lies on the table, and one over its reach squared)
     away = less(flat, node_from(m, unreal.MaterialExpressionComponentMask, heart, -1700, 4500, r=True, g=True, b=False, a=False), -1500, 4500)
     far = node(m, unreal.MaterialExpressionDotProduct, -1350, 4500)
@@ -1131,7 +1131,7 @@ def build_sea():
     rolling = times(m, times(m, times(m, near, one_in(m, SAT, plus(m, times(m, chop, 2.0, -700, 6100), 0.3, -550, 6100), -400, 6100), -250, 6000),
                              node_from(m, unreal.MaterialExpressionSine, roll, -400, 6250, period=2.0), -100, 6000), 0.2, 50, 6000)
     foam = one_in(m, SAT, times(m, plus(m, line, rolling, 200, 5600), strength, 350, 5600), 500, 5600)
-    colour = lerp(m, glinting, vector(m, "SurfColour", (0.54, 0.78, 0.86, 1.0), 400, 1450), foam, 700, 1200)
+    colour = lerp(m, glinting, vector(m, "SurfColour", (0.46, 0.74, 0.9, 1.0), 400, 1450), foam, 700, 1200)
     # The staff map (art fix 11): from the top of the zoom the sea is pale blue-grey paper, a little darker over the
     # deeps, with the coast drawn in ink and a second line ruled round it a little way out, as a chart has.
     paper = scalar(m, "Paper", 0.0, 0, -900)

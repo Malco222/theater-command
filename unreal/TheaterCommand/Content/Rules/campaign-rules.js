@@ -33770,6 +33770,11 @@ ${standing4}`,
         left: n.left,
         of: n.of,
         needs: n.needs.filter((x) => !x.done).map((x) => x.name),
+        // (The research tree's chart.) Its year and its months in its own time; every need, met or not; and its tag.
+        year: n.year,
+        base: n.base,
+        all: n.needs.map((x) => ({ id: x.id, name: x.name, done: x.done })),
+        tag: ((raw) => raw?.unlock?.length ? "NEW UNIT" : raw?.slots ? `+${raw.slots} TEAM${raw.slots === 1 ? "" : "S"}` : "")(TECH.techs.find((x) => x.id === n.id)),
         can: up && n.state === "ready" && n.why === null,
         why: n.state === "ready" ? !up ? "It is not your month." : n.why ?? "" : "",
         stop: up && n.state === "work"

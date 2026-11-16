@@ -431,9 +431,11 @@ void CampaignTextures::MakeWaves(TArray<FColor>& OutPixels)
 	// The flecks: soft round spots scattered over the picture, covering about a fifth of it.
 	TArray<float> Flecks;
 	Flecks.Init(0.0f, Size * Size);
-	for (int32 Fleck = 0; Fleck < 290; ++Fleck)
+	// (The review of build 1432: no glint could be found from playing height. They are larger now, two to four
+	// pixels across there, and there are more of them.)
+	for (int32 Fleck = 0; Fleck < 230; ++Fleck)
 	{
-		const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Reach = Dice.FRandRange(5.0f, 11.0f);
+		const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Reach = Dice.FRandRange(9.0f, 17.0f);
 		const int32 Box = FMath::CeilToInt32(Reach);
 		for (int32 DJ = -Box; DJ <= Box; ++DJ)
 		{

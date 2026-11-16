@@ -40,7 +40,7 @@ import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, fro
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
-import { hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
+import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
 import * as everyRule from '../../../src/campaign/turn';
@@ -4716,6 +4716,10 @@ function tech() {
       id: n.id, branch: n.branch, tier: n.tier, name: n.name, text: n.text, rule: n.rule, state: n.state,
       months: n.months, left: n.left, of: n.of,
       needs: n.needs.filter((x) => !x.done).map((x) => x.name),
+      // (The research tree's chart.) Its year and its months in its own time; every need, met or not; and its tag.
+      year: n.year, base: n.base,
+      all: n.needs.map((x) => ({ id: x.id, name: x.name, done: x.done })),
+      tag: ((raw) => (raw?.unlock?.length ? 'NEW UNIT' : raw?.slots ? `+${raw.slots} TEAM${raw.slots === 1 ? '' : 'S'}` : ''))(TECH_TREE.techs.find((x) => x.id === n.id) as { unlock?: string[]; slots?: number } | undefined),
       can: up && n.state === 'ready' && n.why === null,
       why: n.state === 'ready' ? (!up ? 'It is not your month.' : n.why ?? '') : '',
       stop: up && n.state === 'work',

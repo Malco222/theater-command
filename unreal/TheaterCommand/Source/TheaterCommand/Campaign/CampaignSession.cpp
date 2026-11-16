@@ -3609,6 +3609,25 @@ FResearch FCampaignSession::Research()
 				TArray<FString> Needs;
 				Entry->TryGetStringArrayField(TEXT("needs"), Needs);
 				Node.Needs = FString::Join(Needs, TEXT(", "));
+				Entry->TryGetNumberField(TEXT("year"), Node.Year);
+				Entry->TryGetNumberField(TEXT("base"), Node.Base);
+				Entry->TryGetStringField(TEXT("tag"), Node.Tag);
+				const TArray<TSharedPtr<FJsonValue>>* All = nullptr;
+				if (Entry->TryGetArrayField(TEXT("all"), All))
+				{
+					for (const TSharedPtr<FJsonValue>& Each : *All)
+					{
+						const TSharedPtr<FJsonObject> Need = Each->AsObject();
+						if (Need.IsValid())
+						{
+							bool bDone = false;
+							Need->TryGetBoolField(TEXT("done"), bDone);
+							Node.NeedIds.Add(Need->GetStringField(TEXT("id")));
+							Node.NeedNames.Add(Need->GetStringField(TEXT("name")));
+							Node.NeedDone.Add(bDone);
+						}
+					}
+				}
 			}
 		}
 		return Out;

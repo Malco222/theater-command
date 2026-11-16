@@ -9,6 +9,10 @@
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
+#include "Dom/JsonObject.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Misc/Paths.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Rendering/SlateRenderer.h"
@@ -554,6 +558,841 @@ namespace
 		FString Words;
 		FSlateFontInfo Face;
 		FLinearColor Ink = FLinearColor::White;
+	};
+
+	/**
+	 * THE RESEARCH TREE AS A WALL CHART (Brian, 16 November 2026: "make the research tree a lot more visually
+	 * appealing"; the art director's research-tree brief). One chart that holds every technology with no scrolling:
+	 * five shelves, one a branch, run left to right through the four eras. Brass is finished, a lit card is being
+	 * worked on, a cream edge is ready to begin, a faint dashed card is locked. One line runs into each card from the
+	 * technology it grows from; any other need is a rivet on the card; no line ever crosses a card. A look only: every
+	 * number and sentence on it is one the game already has. The places are the art director's own
+	 * (Content/UI/research-tree-layout.json), on the 1600 by 1000 frame.
+	 */
+	struct FChartCard
+	{
+		FString Lane;
+		int32 Row = 1, Step = 1;
+		double X = 0.0, Y = 0.0;
+		FString From, Line;
+		TArray<FString> Also;
+	};
+	struct FChartLane
+	{
+		FString Id, Label;
+		double Top = 0.0, High = 0.0;
+		int32 Rows = 3;
+	};
+	struct FChartLayout
+	{
+		bool bRead = false, bGood = false;
+		TMap<FString, FChartCard> Cards;
+		TArray<FChartLane> Lanes;
+	};
+	const FChartLayout& ChartLayout()
+	{
+		static FChartLayout Kept;
+		if (Kept.bRead)
+		{
+			return Kept;
+		}
+		Kept.bRead = true;
+		FString Text;
+		TSharedPtr<FJsonObject> Root;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("UI/research-tree-layout.json")))
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("The research chart's layout (Content/UI/research-tree-layout.json) could not be read: the list is shown instead"));
+			return Kept;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Lanes = nullptr;
+		if (Root->TryGetArrayField(TEXT("lanes"), Lanes))
+		{
+			for (const TSharedPtr<FJsonValue>& Each : *Lanes)
+			{
+				const TSharedPtr<FJsonObject> Lane = Each->AsObject();
+				if (Lane.IsValid())
+				{
+					FChartLane& Out = Kept.Lanes.AddDefaulted_GetRef();
+					Lane->TryGetStringField(TEXT("id"), Out.Id);
+					Lane->TryGetStringField(TEXT("label"), Out.Label);
+					Lane->TryGetNumberField(TEXT("top"), Out.Top);
+					Lane->TryGetNumberField(TEXT("h"), Out.High);
+					Lane->TryGetNumberField(TEXT("rows"), Out.Rows);
+				}
+			}
+		}
+		const TSharedPtr<FJsonObject>* Cards = nullptr;
+		if (Root->TryGetObjectField(TEXT("cards"), Cards) && Cards && Cards->IsValid())
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Cards)->Values)
+			{
+				const TSharedPtr<FJsonObject> Card = Each.Value->AsObject();
+				if (Card.IsValid())
+				{
+					FChartCard& Out = Kept.Cards.Add(FString(Each.Key));
+					Card->TryGetStringField(TEXT("lane"), Out.Lane);
+					Card->TryGetNumberField(TEXT("row"), Out.Row);
+					Card->TryGetNumberField(TEXT("step"), Out.Step);
+					Card->TryGetNumberField(TEXT("x"), Out.X);
+					Card->TryGetNumberField(TEXT("y"), Out.Y);
+					Card->TryGetStringField(TEXT("line_from"), Out.From);
+					Card->TryGetStringField(TEXT("line"), Out.Line);
+					Card->TryGetStringArrayField(TEXT("also_needs"), Out.Also);
+				}
+			}
+		}
+		Kept.bGood = Kept.Lanes.Num() > 0 && Kept.Cards.Num() > 0;
+		return Kept;
+	}
+
+	class SResearchChart : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SResearchChart) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Player)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Player = Args._Player;
+		}
+
+		// (the panel's own place and size on the 1600 by 1000 frame)
+		static constexpr double PanelX = 14.0, PanelY = 12.0, PanelW = 1572.0, PanelH = 976.0, CardW = 292.0, CardH = 38.0;
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(PanelW, PanelH); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FChartLayout& Chart = ChartLayout();
+			if (!Player.IsValid() || !Chart.bGood)
+			{
+				return LayerId;
+			}
+			const FResearch& Labs = Player->GetResearch();
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			// (The brief's sizes are in pixels of the 1600 by 1000 frame; a face here is asked for in points, which are a third larger.)
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			const FLinearColor Desk900(FColor::FromHex(TEXT("1D1610"))), Desk800(FColor::FromHex(TEXT("2A2118"))), Desk700(FColor::FromHex(TEXT("3A2E22"))), Brass700(FColor::FromHex(TEXT("7A6038")));
+			const FLinearColor Lit(FColor::FromHex(TEXT("F2D79A"))), Amber(FColor::FromHex(TEXT("E0A13C"))), Track(FColor::FromHex(TEXT("5D4C37"))), Dim(FColor::FromHex(TEXT("8F8573")));
+			const FLinearColor BrassGround(FColor::FromHex(TEXT("4A3A20")));
+			// Everything below is set out on the frame's own measures: a point of the frame is a point here, less the panel's corner.
+			auto At = [](double X, double Y) { return FVector2D(X - PanelX, Y - PanelY); };
+			auto Fill = [&](double X, double Y, double W, double H, const FLinearColor& Ink, int32 Layer)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(At(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+			};
+			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1200.0, 40.0), FSlateLayoutTransform(At(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+			};
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			// (words that must fit a breadth lose whole words from the end, never a letter)
+			auto Fitted = [&](FString Words, const FSlateFontInfo& Face, double Room)
+			{
+				// (ruling 149: no sentence is ever cut with dots. Words that must fit a breadth lose whole words from the end.)
+				while (Wide(Words, Face) > Room)
+				{
+					int32 Space = INDEX_NONE;
+					if (!Words.FindLastChar(TEXT(' '), Space) || Space <= 0)
+					{
+						break;
+					}
+					Words = Words.Left(Space);
+					while (Words.Len() > 1 && (Words.EndsWith(TEXT(",")) || Words.EndsWith(TEXT(":")) || Words.EndsWith(TEXT(";")) || Words.EndsWith(TEXT(" "))))
+					{
+						Words.LeftChopInline(1);
+					}
+				}
+				return Words;
+			};
+			// A line through points; dashed where a dash and a gap are given.
+			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer, double Dash = 0.0, double Gap = 0.0)
+			{
+				TArray<FVector2D> Local;
+				for (const FVector2D& Point : Points)
+				{
+					Local.Add(At(Point.X, Point.Y));
+				}
+				if (Dash <= 0.0)
+				{
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Local, ESlateDrawEffect::None, Ink, true, Thick);
+					return;
+				}
+				double Carried = 0.0;
+				for (int32 K = 0; K + 1 < Local.Num(); ++K)
+				{
+					const FVector2D From = Local[K], To = Local[K + 1];
+					const double Long = FVector2D::Distance(From, To);
+					if (Long < 0.01)
+					{
+						continue;
+					}
+					const FVector2D Way = (To - From) / Long;
+					for (double Along = -Carried; Along < Long; Along += Dash + Gap)
+					{
+						const double A = FMath::Max(Along, 0.0), B = FMath::Min(Along + Dash, Long);
+						if (B > A)
+						{
+							FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), { From + Way * A, From + Way * B }, ESlateDrawEffect::None, Ink, true, Thick);
+						}
+					}
+					Carried = FMath::Fmod(Long + Carried, Dash + Gap);
+				}
+			};
+			auto Edge = [&](double X, double Y, double W, double H, const FLinearColor& Ink, float Thick, int32 Layer, double Dash = 0.0, double Gap = 0.0)
+			{
+				Stroke({ FVector2D(X, Y), FVector2D(X + W, Y), FVector2D(X + W, Y + H), FVector2D(X, Y + H), FVector2D(X, Y) }, Ink, Thick, Layer, Dash, Gap);
+			};
+			auto Round = [&](double X, double Y, double R, const FLinearColor& Ink, float Thick, int32 Layer, double Dash = 0.0, double Gap = 0.0)
+			{
+				TArray<FVector2D> Points;
+				for (int32 K = 0; K <= 24; ++K)
+				{
+					const double Angle = K * UE_DOUBLE_TWO_PI / 24.0;
+					Points.Add(FVector2D(X + FMath::Cos(Angle) * R, Y + FMath::Sin(Angle) * R));
+				}
+				Stroke(Points, Ink, Thick, Layer, Dash, Gap);
+			};
+			auto Disc = [&](double X, double Y, double R, const FLinearColor& Ink, int32 Layer)
+			{
+				Round(X, Y, R * 0.5, Ink, static_cast<float>(R), Layer);
+			};
+			// The signs: a state's (tick, hourglass, open ring, padlock), a clock, and a branch's.
+			auto Sign = [&](const FString& What, double X, double Y, double S, const FLinearColor& Ink, int32 Layer)
+			{
+				auto P = [X, Y, S](double DX, double DY) { return FVector2D(X + DX * S, Y + DY * S); };
+				const float Pen = static_cast<float>(FMath::Max(1.4 * S, 1.2));
+				if (What == TEXT("done"))
+				{
+					Stroke({ P(-5.0, 0.2), P(-1.6, 3.8), P(5.2, -4.2) }, Ink, Pen * 1.3f, Layer);
+				}
+				else if (What == TEXT("work"))
+				{
+					Stroke({ P(-3.8, -5.0), P(3.8, -5.0), P(-3.8, 5.0), P(3.8, 5.0), P(-3.8, -5.0) }, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("ready"))
+				{
+					Round(X, Y, 4.4 * S, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("locked"))
+				{
+					Stroke({ P(-4.2, -0.6), P(4.2, -0.6), P(4.2, 5.2), P(-4.2, 5.2), P(-4.2, -0.6) }, Ink, Pen, Layer);
+					Stroke({ P(-2.8, -0.6), P(-2.8, -3.2), P(-1.4, -5.0), P(1.4, -5.0), P(2.8, -3.2), P(2.8, -0.6) }, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("clock"))
+				{
+					Round(X, Y, 4.6 * S, Ink, Pen, Layer);
+					Stroke({ P(0.0, -2.8), P(0.0, 0.0), P(2.2, 1.2) }, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("land"))
+				{
+					// (a tank, side on: its hull, its turret and its gun)
+					Stroke({ P(-5.6, 1.0), P(5.6, 1.0), P(4.4, 4.2), P(-4.4, 4.2), P(-5.6, 1.0) }, Ink, Pen, Layer);
+					Stroke({ P(-2.6, 1.0), P(-2.0, -2.2), P(2.2, -2.2), P(2.8, 1.0) }, Ink, Pen, Layer);
+					Stroke({ P(2.2, -1.0), P(6.4, -1.0) }, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("air"))
+				{
+					// (an aircraft from above: its body, its wings and its tail)
+					Stroke({ P(0.0, -5.8), P(0.0, 5.4) }, Ink, Pen * 1.2f, Layer);
+					Stroke({ P(-6.0, -0.4), P(0.0, -2.2), P(6.0, -0.4) }, Ink, Pen, Layer);
+					Stroke({ P(-2.6, 4.8), P(0.0, 3.6), P(2.6, 4.8) }, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("naval"))
+				{
+					// (an anchor)
+					Stroke({ P(0.0, -3.6), P(0.0, 5.2) }, Ink, Pen, Layer);
+					Stroke({ P(-2.8, -1.6), P(2.8, -1.6) }, Ink, Pen, Layer);
+					Stroke({ P(-5.0, 1.6), P(-3.6, 4.2), P(0.0, 5.4), P(3.6, 4.2), P(5.0, 1.6) }, Ink, Pen, Layer);
+					Round(X, Y - 4.8 * S, 1.3 * S, Ink, Pen, Layer);
+				}
+				else if (What == TEXT("industry"))
+				{
+					// (a works: a saw-toothed roof and a chimney)
+					Stroke({ P(-5.8, 4.6), P(-5.8, -0.6), P(-2.6, 1.6), P(-2.6, -0.6), P(0.6, 1.6), P(0.6, -0.6), P(3.0, 1.2), P(3.0, -5.2), P(5.4, -5.2), P(5.4, 4.6), P(-5.8, 4.6) }, Ink, Pen, Layer);
+				}
+				else
+				{
+					// (doctrine: an open book)
+					Stroke({ P(0.0, -3.4), P(-5.8, -4.6), P(-5.8, 3.4), P(0.0, 4.6), P(5.8, 3.4), P(5.8, -4.6), P(0.0, -3.4), P(0.0, 4.6) }, Ink, Pen, Layer);
+				}
+			};
+			const FSlateFontInfo Label11 = Typed(Px(11.0f), true, 60), Typed10 = Typed(Px(11.0f)), Typed12 = Typed(Px(12.0f)), Name14 = Serif(TEXT("Bold"), Px(14.0f)), Name18 = Serif(TEXT("Bold"), Px(18.0f));
+			TMap<FString, const FTechNode*> ById;
+			for (const FTechNode& Node : Labs.Nodes)
+			{
+				ById.Add(Node.Id, &Node);
+			}
+			const FTechNode* Picked = ById.FindRef(ChosenId());
+			const FString PointedId = Player->StagedChartPoint.IsEmpty() ? Hovered : Player->StagedChartPoint;
+			auto StateInk = [&](const FString& State) { return State == TEXT("done") ? BrightBrass : State == TEXT("work") ? Lit : State == TEXT("ready") ? Cream : Dim; };
+
+			// ---- The panel: solid, edged, with its four clamps.
+			Fill(PanelX, PanelY, PanelW, PanelH, Desk900, 0);
+			Edge(PanelX + 0.5, PanelY + 0.5, PanelW - 1.0, PanelH - 1.0, Brass700, 1.0f, 1);
+			for (const FVector2D& Corner : { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) })
+			{
+				const double CX = PanelX + 5.0 + Corner.X * (PanelW - 10.0), CY = PanelY + 5.0 + Corner.Y * (PanelH - 10.0);
+				const double DX = Corner.X > 0.5 ? -14.0 : 14.0, DY = Corner.Y > 0.5 ? -14.0 : 14.0;
+				Stroke({ FVector2D(CX + DX, CY), FVector2D(CX, CY), FVector2D(CX, CY + DY) }, Brass, 2.0f, 2);
+			}
+
+			// ---- The head: whose laboratories and when, how many are done, and a plate for each research team.
+			Write(FString::Printf(TEXT("THE LABORATORIES \u00B7 %s \u00B7 %s"), *Labs.Nation.ToUpper(), *Labs.Date.ToUpper()), 30.0, 22.0, Typed(Px(11.0f), true, 30), Brass, 2);
+			Write(FString::Printf(TEXT("%d of %d technologies"), Labs.Done, Labs.Total), 30.0, 38.0, Serif(TEXT("Bold"), Px(24.0f)), Cream, 2);
+			{
+				TArray<const FTechNode*> AtWork;
+				for (const FTechNode& Node : Labs.Nodes)
+				{
+					if (Node.State == TEXT("work"))
+					{
+						AtWork.Add(&Node);
+					}
+				}
+				const int32 Plates = FMath::Clamp(FMath::Max(Labs.Teams, AtWork.Num()), 1, 4);
+				const double PlateW = Plates <= 2 ? 340.0 : (912.0 - (Plates - 1) * 8.0) / Plates, PlateX = 372.0;
+				for (int32 Team = 0; Team < Plates; ++Team)
+				{
+					const double X = PlateX + Team * (PlateW + 8.0), Y = 23.0;
+					const FTechNode* Work = AtWork.IsValidIndex(Team) ? AtWork[Team] : nullptr;
+					Fill(X, Y, PlateW, 44.0, Work ? Desk700 : Desk800, 1);
+					Edge(X + 0.5, Y + 0.5, PlateW - 1.0, 43.0, Work ? Lit : Cream.CopyWithNewOpacity(0.7f), 1.0f, 2);
+					Write(FString::Printf(TEXT("TEAM %d"), Team + 1), X + 10.0, Y + 5.0, Typed(Px(11.0f), true, 60), Brass, 3);
+					if (Work)
+					{
+						const FString Months = FString::Printf(TEXT("%d of %d months"), FMath::Max(Work->Of - Work->Left, 0), Work->Of);
+						Write(Months, X + PlateW - 10.0 - Wide(Months, Typed10), Y + 5.0, Typed10, Muted, 3);
+						Write(Fitted(Work->Name, Name14, PlateW - 20.0), X + 10.0, Y + 17.0, Name14, Cream, 3);
+						Fill(X + 10.0, Y + 38.0, PlateW - 20.0, 3.0, Track, 3);
+						Fill(X + 10.0, Y + 38.0, (PlateW - 20.0) * FMath::Clamp(Work->Of > 0 ? static_cast<double>(Work->Of - Work->Left) / Work->Of : 0.0, 0.0, 1.0), 3.0, Lit, 4);
+					}
+					else
+					{
+						// (ruling 140: an idle team's plate reads NO WORK)
+						Write(TEXT("NO WORK"), X + PlateW - 10.0 - Wide(TEXT("NO WORK"), Typed(Px(11.0f), true, 60)), Y + 5.0, Typed(Px(11.0f), true, 60), Amber, 3);
+						Write(TEXT("Choose a technology for it"), X + 10.0, Y + 19.0, Serif(TEXT("Italic"), Px(13.0f)), Cream, 3);
+					}
+				}
+			}
+			// (the two buttons of the head: the staff's, and the stud that closes the chart)
+			{
+				const FViewDesk* Desk = Player->FindDesk(TEXT("research"));
+				if (Desk)
+				{
+					const FBox2D Box = StaffBox();
+					const bool bOver = Over == 2;
+					Fill(Box.Min.X, Box.Min.Y, Box.GetSize().X, Box.GetSize().Y, bOver ? Desk700 : Desk800, 1);
+					Edge(Box.Min.X + 0.5, Box.Min.Y + 0.5, Box.GetSize().X - 1.0, Box.GetSize().Y - 1.0, Desk->bStaff ? BrightBrass : Brass700, 1.0f, 2);
+					const FString Says = Desk->bStaff ? TEXT("TAKE IT BACK") : TEXT("LET MY STAFF RUN IT");
+					Write(Says, Box.GetCenter().X - Wide(Says, Typed(Px(11.0f), true, 60)) * 0.5, Box.Min.Y + 10.0, Typed(Px(11.0f), true, 60), Desk->bStaff ? BrightBrass : Muted, 3);
+				}
+				const FBox2D Stud = CloseBox();
+				Round(Stud.GetCenter().X, Stud.GetCenter().Y, 13.0, Over == 3 ? BrightBrass : Brass, 1.5f, 2);
+				Stroke({ Stud.GetCenter() + FVector2D(-5.0, -5.0), Stud.GetCenter() + FVector2D(5.0, 5.0) }, Over == 3 ? BrightBrass : Cream, 1.8f, 3);
+				Stroke({ Stud.GetCenter() + FVector2D(-5.0, 5.0), Stud.GetCenter() + FVector2D(5.0, -5.0) }, Over == 3 ? BrightBrass : Cream, 1.8f, 3);
+			}
+
+			// ---- The ruler of years: each era's name under a brass rule, a pointer at this month, amber dots over the years ahead.
+			{
+				int32 Year = 1939, Month = 0;
+				{
+					static const TCHAR* Names[] = { TEXT("January"), TEXT("February"), TEXT("March"), TEXT("April"), TEXT("May"), TEXT("June"), TEXT("July"), TEXT("August"), TEXT("September"), TEXT("October"), TEXT("November"), TEXT("December") };
+					FString MonthName, YearText;
+					if (Labs.Date.Split(TEXT(" "), &MonthName, &YearText))
+					{
+						Year = FCString::Atoi(*YearText);
+						for (int32 K = 0; K < 12; ++K)
+						{
+							Month = MonthName == Names[K] ? K : Month;
+						}
+					}
+				}
+				// (the years each step spans: before the war, 1940 to 1941, 1942 to 1943, 1944 to 1945)
+				auto WhereIs = [](double When)
+				{
+					const double Starts[5] = { 1938.0, 1940.0, 1942.0, 1944.0, 1946.0 };
+					for (int32 Step = 0; Step < 4; ++Step)
+					{
+						if (When < Starts[Step + 1] || Step == 3)
+						{
+							const double Share = FMath::Clamp((When - Starts[Step]) / (Starts[Step + 1] - Starts[Step]), 0.0, 1.0);
+							return 172.0 + Step * 368.0 + Share * CardW;
+						}
+					}
+					return 172.0;
+				};
+				for (int32 Step = 0; Step < 4; ++Step)
+				{
+					const double X = 172.0 + Step * 368.0;
+					Fill(X, 84.0, CardW, 1.5, Brass, 2);
+					Write(Labs.Eras.IsValidIndex(Step + 1) ? Labs.Eras[Step + 1].ToUpper() : FString(), X, 91.0, Label11, Muted, 2);
+				}
+				const double Today = Year + Month / 12.0;
+				for (int32 Ahead = FMath::Max(Year + 1, 1940); Ahead <= 1945; ++Ahead)
+				{
+					Disc(WhereIs(Ahead), 84.5, 2.6, Amber, 3);
+				}
+				const double PointerX = WhereIs(Today);
+				Stroke({ FVector2D(PointerX - 5.0, 76.0), FVector2D(PointerX + 5.0, 76.0), FVector2D(PointerX, 83.0), FVector2D(PointerX - 5.0, 76.0) }, BrightBrass, 2.0f, 4);
+			}
+
+			// ---- The shelves, each with its plate: the branch's sign in a ring, its name, how many are done, and a meter.
+			for (const FChartLane& Lane : Chart.Lanes)
+			{
+				Fill(22.0, Lane.Top, PanelW - 16.0, Lane.High, Desk800.CopyWithNewOpacity(0.55f), 1);
+				Fill(22.0, Lane.Top, 128.0, Lane.High, Desk800, 2);
+				Edge(22.5, Lane.Top + 0.5, 127.0, Lane.High - 1.0, Brass700, 1.0f, 3);
+				Round(52.0, Lane.Top + 34.0, 15.0, Brass, 1.5f, 3);
+				Sign(Lane.Id, 52.0, Lane.Top + 34.0, 1.45, BrightBrass, 4);
+				Write(Lane.Label, 34.0, Lane.Top + 56.0, Name18, Cream, 3);
+				for (const FTechBranch& Branch : Labs.Branches)
+				{
+					if (Branch.Id == Lane.Id)
+					{
+						Write(FString::Printf(TEXT("%d OF %d"), Branch.Done, Branch.Total), 34.0, Lane.Top + 84.0, Typed(Px(11.0f), true, 60), Brass, 3);
+						Fill(34.0, Lane.Top + 100.0, 104.0, 4.0, Track, 3);
+						Fill(34.0, Lane.Top + 100.0, 104.0 * (Branch.Total > 0 ? static_cast<double>(Branch.Done) / Branch.Total : 0.0), 4.0, BrightBrass, 4);
+					}
+				}
+			}
+
+			// ---- The lines. One runs into each card from the technology it grows from, and wears the state of the card it leads to.
+			auto LaneOf = [&Chart](const FString& Id) -> const FChartLane*
+			{
+				return Chart.Lanes.FindByPredicate([&Id](const FChartLane& Each) { return Each.Id == Id; });
+			};
+			auto Road = [&](const FChartCard& From, const FChartCard& To)
+			{
+				TArray<FVector2D> Points;
+				if (To.Line == TEXT("under"))
+				{
+					// (it ducks under the card between, in the band below the shelf's last row, leaving and entering by the foot of each card)
+					const FChartLane* Lane = LaneOf(To.Lane);
+					const double Band = Lane ? Lane->Top + Lane->High - 3.0 : To.Y + CardH + 7.0;
+					Points = { FVector2D(From.X + CardW - 22.0, From.Y + CardH), FVector2D(From.X + CardW - 22.0, Band), FVector2D(To.X + 22.0, Band), FVector2D(To.X + 22.0, To.Y + CardH) };
+				}
+				else if (FMath::Abs(From.Y - To.Y) > 0.5)
+				{
+					// (it bends in the gutter before the card it leads to)
+					const double Gutter = To.X - 38.0;
+					Points = { FVector2D(From.X + CardW, From.Y + CardH * 0.5), FVector2D(Gutter, From.Y + CardH * 0.5), FVector2D(Gutter, To.Y + CardH * 0.5), FVector2D(To.X, To.Y + CardH * 0.5) };
+				}
+				else
+				{
+					Points = { FVector2D(From.X + CardW, From.Y + CardH * 0.5), FVector2D(To.X, To.Y + CardH * 0.5) };
+				}
+				return Points;
+			};
+			// (a need that is not the card's own line: out by the gutter after the card it comes from, along the gap
+			// above the row it goes to, and in by the gutter before it. It may cross lines; it never crosses a card.)
+			auto RivetRoad = [&](const FChartCard& From, const FChartCard& To)
+			{
+				const double Out = From.X + CardW + 30.0, In = To.X - 30.0, Gap = To.Y - 5.0;
+				return TArray<FVector2D>({ FVector2D(From.X + CardW, From.Y + CardH * 0.5), FVector2D(Out, From.Y + CardH * 0.5), FVector2D(Out, Gap), FVector2D(In, Gap), FVector2D(In, To.Y + CardH * 0.5), FVector2D(To.X, To.Y + CardH * 0.5) });
+			};
+			for (const TPair<FString, FChartCard>& Each : Chart.Cards)
+			{
+				const FChartCard& Card = Each.Value;
+				const FChartCard* From = Card.From.IsEmpty() ? nullptr : Chart.Cards.Find(Card.From);
+				const FTechNode* Node = ById.FindRef(Each.Key);
+				if (!From || !Node)
+				{
+					continue;
+				}
+				const TArray<FVector2D> Points = Road(*From, Card);
+				if (Node->State == TEXT("done"))
+				{
+					Stroke(Points, BrightBrass.CopyWithNewOpacity(0.9f), 2.5f, 3);
+				}
+				else if (Node->State == TEXT("work"))
+				{
+					Stroke(Points, Lit, 2.0f, 3, 7.0, 5.0);
+				}
+				else if (Node->State == TEXT("ready"))
+				{
+					Stroke(Points, Cream.CopyWithNewOpacity(0.75f), 1.2f, 3);
+				}
+				else
+				{
+					Stroke(Points, Dim.CopyWithNewOpacity(0.8f), 1.6f, 3, 1.6, 4.0);
+				}
+				Disc(Points[0].X, Points[0].Y, 2.6, StateInk(Node->State), 4);
+				Disc(Points.Last().X, Points.Last().Y, 2.6, StateInk(Node->State), 4);
+			}
+			// (when a card is chosen or pointed at, all its roads light: every line in and out, and the rivets' lines too)
+			for (const FString& Shown : { ChosenId(), PointedId })
+			{
+				const FChartCard* Mine = Shown.IsEmpty() ? nullptr : Chart.Cards.Find(Shown);
+				const FTechNode* Node = ById.FindRef(Shown);
+				if (!Mine || !Node)
+				{
+					continue;
+				}
+				const FLinearColor Pale(FColor::FromHex(TEXT("F0DCA8")));
+				if (const FChartCard* From = Mine->From.IsEmpty() ? nullptr : Chart.Cards.Find(Mine->From))
+				{
+					Stroke(Road(*From, *Mine), Pale, 2.0f, 5);
+				}
+				for (const FString& Need : Node->NeedIds)
+				{
+					const FChartCard* Other = Need == Mine->From ? nullptr : Chart.Cards.Find(Need);
+					if (Other)
+					{
+						Stroke(RivetRoad(*Other, *Mine), Pale, 2.0f, 5);
+					}
+				}
+				for (const FTechNode& Later : Labs.Nodes)
+				{
+					const FChartCard* Next = Later.NeedIds.Contains(Shown) ? Chart.Cards.Find(Later.Id) : nullptr;
+					if (Next)
+					{
+						Stroke(Next->From == Shown ? Road(*Mine, *Next) : RivetRoad(*Mine, *Next), Pale, 2.0f, 5);
+					}
+				}
+			}
+
+			// ---- The cards.
+			for (const TPair<FString, FChartCard>& Each : Chart.Cards)
+			{
+				const FChartCard& Card = Each.Value;
+				const FTechNode* Node = ById.FindRef(Each.Key);
+				if (!Node)
+				{
+					continue;
+				}
+				const bool bChosen = Picked == Node, bPointed = PointedId == Node->Id;
+				const FString& State = Node->State;
+				const double X = Card.X, Y = Card.Y;
+				if (State == TEXT("done"))
+				{
+					Fill(X, Y, CardW, CardH, bPointed ? BrassGround * 1.25f : BrassGround, 6);
+					Edge(X + 0.5, Y + 0.5, CardW - 1.0, CardH - 1.0, Brass, 1.2f, 7);
+				}
+				else if (State == TEXT("work"))
+				{
+					Fill(X, Y, CardW, CardH, bPointed ? Desk700 * 1.2f : Desk700, 6);
+					Edge(X + 0.5, Y + 0.5, CardW - 1.0, CardH - 1.0, Lit, 1.6f, 7);
+				}
+				else if (State == TEXT("ready"))
+				{
+					Fill(X, Y, CardW, CardH, bPointed ? Desk700 : Desk800, 6);
+					Edge(X + 0.5, Y + 0.5, CardW - 1.0, CardH - 1.0, Cream.CopyWithNewOpacity(0.85f), 1.0f, 7);
+				}
+				else
+				{
+					Fill(X, Y, CardW, CardH, bPointed ? Desk800 : Desk900, 6);
+					Edge(X + 0.5, Y + 0.5, CardW - 1.0, CardH - 1.0, Dim.CopyWithNewOpacity(0.7f), 1.0f, 7, 4.0, 3.0);
+				}
+				if (bChosen)
+				{
+					// (the chosen card: a pale edge, and a second line inside it)
+					Edge(X - 1.5, Y - 1.5, CardW + 3.0, CardH + 3.0, FLinearColor(FColor::FromHex(TEXT("F0DCA8"))), 1.6f, 8);
+					Edge(X + 3.5, Y + 3.5, CardW - 7.0, CardH - 7.0, Cream.CopyWithNewOpacity(0.45f), 1.0f, 8);
+				}
+				// (its state's sign in a disc: a state is never told by colour alone)
+				const FLinearColor Ink = StateInk(State);
+				Round(X + 19.0, Y + 19.0, 11.0, Ink.CopyWithNewOpacity(State == TEXT("locked") ? 0.6f : 0.9f), 1.2f, 8);
+				Sign(State, X + 19.0, Y + 19.0, 1.0, Ink, 9);
+				// The right end of the card: the months (amber after a small clock when it is ahead of its time), or
+				// the work done with a bar along the card's foot; then its tag and its rivets, right to left.
+				double Right = X + CardW - 9.0;
+				if (State == TEXT("ready"))
+				{
+					const bool bAhead = Node->Base > 0 && Node->Months > Node->Base;
+					const FString Months = FString::Printf(TEXT("%d mo"), Node->Months);
+					Right -= Wide(Months, Typed12);
+					Write(Months, Right, Y + 12.0, Typed12, bAhead ? Amber : Muted, 9);
+					if (bAhead)
+					{
+						Right -= 12.0;
+						Sign(TEXT("clock"), Right + 3.0, Y + 19.0, 0.9, Amber, 9);
+					}
+					Right -= 8.0;
+				}
+				else if (State == TEXT("work"))
+				{
+					const FString Months = FString::Printf(TEXT("%d of %d"), FMath::Max(Node->Of - Node->Left, 0), Node->Of);
+					Right -= Wide(Months, Typed12);
+					Write(Months, Right, Y + 12.0, Typed12, Lit, 9);
+					Right -= 8.0;
+					Fill(X + 1.0, Y + CardH - 4.0, CardW - 2.0, 3.0, Track, 8);
+					Fill(X + 1.0, Y + CardH - 4.0, (CardW - 2.0) * FMath::Clamp(Node->Of > 0 ? static_cast<double>(Node->Of - Node->Left) / Node->Of : 0.0, 0.0, 1.0), 3.0, Lit, 9);
+				}
+				if (!Node->Tag.IsEmpty() && State != TEXT("done"))
+				{
+					const FSlateFontInfo TagFace = Typed(Px(10.0f), true, 40);
+					const double TagW = Wide(Node->Tag, TagFace) + 10.0;
+					Right -= TagW;
+					Edge(Right + 0.5, Y + 11.5, TagW - 1.0, 15.0, Brass, 1.0f, 8);
+					Write(Node->Tag, Right + 5.0, Y + 14.0, TagFace, BrightBrass, 9);
+					Right -= 6.0;
+				}
+				for (int32 K = Node->NeedIds.Num() - 1; K >= 0; --K)
+				{
+					// (a rivet: a need that is not the card's own line, with the sign of the branch it comes from; brass
+					// when he has that technology, a faint dashed ring when he has not)
+					if (Node->NeedIds[K] == Card.From)
+					{
+						continue;
+					}
+					const FChartCard* Other = Chart.Cards.Find(Node->NeedIds[K]);
+					const bool bHas = Node->NeedDone.IsValidIndex(K) && Node->NeedDone[K];
+					Right -= 17.0;
+					if (bHas)
+					{
+						Disc(Right + 8.5, Y + 19.0, 8.5, BrassGround * 1.6f, 8);
+						Round(Right + 8.5, Y + 19.0, 8.5, BrightBrass, 1.2f, 9);
+					}
+					else
+					{
+						Round(Right + 8.5, Y + 19.0, 8.5, Dim, 1.2f, 9, 3.0, 2.5);
+					}
+					Sign(Other ? Other->Lane : FString(TEXT("doctrine")), Right + 8.5, Y + 19.0, 0.78, bHas ? BrightBrass : Dim, 10);
+					Right -= 5.0;
+				}
+				Write(Fitted(Node->Name, Name14, Right - (X + 38.0)), X + 38.0, Y + 10.0, Name14, State == TEXT("locked") ? Dim : Cream, 9);
+			}
+
+			// ---- The chosen technology's strip, in the game's own words.
+			Fill(22.0, 903.0, PanelW - 16.0, 56.0, Desk800, 1);
+			Edge(22.5, 903.5, PanelW - 17.0, 55.0, Brass700, 1.0f, 2);
+			if (Picked)
+			{
+				const FTechNode& Node = *Picked;
+				Round(46.0, 921.0, 11.0, StateInk(Node.State), 1.2f, 3);
+				Sign(Node.State, 46.0, 921.0, 1.0, StateInk(Node.State), 4);
+				Write(Node.Name, 66.0, 906.0, Name18, Cream, 3);
+				double Cursor = 66.0 + Wide(Node.Name, Name18) + 16.0;
+				{
+					FString BranchName = Node.Branch.ToUpper();
+					for (const FTechBranch& Branch : Labs.Branches)
+					{
+						BranchName = Branch.Id == Node.Branch ? Branch.Label.ToUpper() : BranchName;
+					}
+					const FString Where = BranchName + TEXT("  \u00B7  ") + (Labs.Eras.IsValidIndex(Node.Tier) ? Labs.Eras[Node.Tier].ToUpper() : FString());
+					Write(Where, Cursor, 912.0, Typed(Px(11.0f), true, 60), Brass, 3);
+					Cursor += Wide(Where, Typed(Px(11.0f), true, 60)) + 18.0;
+				}
+				{
+					const bool bAhead = Node.Base > 0 && Node.Months > Node.Base;
+					const FString Months = Node.State == TEXT("done") ? FString(TEXT("Researched."))
+						: Node.State == TEXT("work") ? FString::Printf(TEXT("A team is at work on it: %d of %d months."), FMath::Max(Node.Of - Node.Left, 0), Node.Of)
+						: bAhead ? FString::Printf(TEXT("%d months now: it is ahead of its time. %d months from %d."), Node.Months, Node.Base, Node.Year)
+						: FString::Printf(TEXT("%d months of one team's work."), Node.Months);
+					Write(Months, Cursor, 911.0, Typed12, bAhead && Node.State != TEXT("done") && Node.State != TEXT("work") ? Amber : Muted, 3);
+				}
+				// (what it needs, a tick or a cross by each name; and what it leads to, naming the branch when it is another one)
+				double Along = 66.0;
+				const FSlateFontInfo Small = Typed(Px(11.0f), true, 60), Plain = Typed(Px(11.0f));
+				if (Node.NeedIds.Num() > 0)
+				{
+					Write(TEXT("NEEDS"), Along, 931.0, Small, Brass, 3);
+					Along += Wide(TEXT("NEEDS"), Small) + 10.0;
+					for (int32 K = 0; K < Node.NeedIds.Num(); ++K)
+					{
+						const bool bHas = Node.NeedDone.IsValidIndex(K) && Node.NeedDone[K];
+						if (bHas)
+						{
+							Stroke({ FVector2D(Along, 938.0), FVector2D(Along + 3.0, 941.5), FVector2D(Along + 8.5, 933.5) }, BrightBrass, 1.8f, 4);
+						}
+						else
+						{
+							Stroke({ FVector2D(Along + 0.5, 934.0), FVector2D(Along + 8.0, 941.5) }, Alarm, 1.8f, 4);
+							Stroke({ FVector2D(Along + 0.5, 941.5), FVector2D(Along + 8.0, 934.0) }, Alarm, 1.8f, 4);
+						}
+						Along += 13.0;
+						const FString Name = Node.NeedNames.IsValidIndex(K) ? Node.NeedNames[K] : Node.NeedIds[K];
+						Write(Name, Along, 930.0, Plain, bHas ? Cream : Alarm, 3);
+						Along += Wide(Name, Plain) + 14.0;
+					}
+					Along += 12.0;
+				}
+				{
+					TArray<FString> Leads;
+					for (const FTechNode& Later : Labs.Nodes)
+					{
+						if (Later.NeedIds.Contains(Node.Id))
+						{
+							FString Says = Later.Name;
+							if (Later.Branch != Node.Branch)
+							{
+								for (const FTechBranch& Branch : Labs.Branches)
+								{
+									Says = Branch.Id == Later.Branch ? Later.Name + TEXT(" (") + Branch.Label + TEXT(")") : Says;
+								}
+							}
+							Leads.Add(Says);
+						}
+					}
+					if (Leads.Num() > 0)
+					{
+						Write(TEXT("LEADS TO"), Along, 931.0, Small, Brass, 3);
+						Along += Wide(TEXT("LEADS TO"), Small) + 10.0;
+						Write(Fitted(FString::Join(Leads, TEXT(", ")), Plain, 1290.0 - Along), Along, 930.0, Plain, Cream, 3);
+					}
+				}
+				{
+					// (what it is and what it does; and when it is locked, what it waits on, in the alarm's colour)
+					const FSlateFontInfo Body = Serif(TEXT("Regular"), Px(12.5f));
+					const FString Waits = Node.State == TEXT("locked") && !Node.Needs.IsEmpty() ? FString::Printf(TEXT("Needs %s first."), *Node.Needs.Replace(TEXT(", "), TEXT(" and "))) : FString();
+					const double WaitsW = Waits.IsEmpty() ? 0.0 : Wide(Waits, Body) + 12.0;
+					const FString Says = Fitted(Node.Text + TEXT(" ") + Node.Rule, Body, 1290.0 - 66.0 - WaitsW);
+					Write(Says, 66.0, 943.0, Body, Muted, 3);
+					if (!Waits.IsEmpty())
+					{
+						Write(Waits, 66.0 + Wide(Says, Body) + 12.0, 943.0, Body, Alarm, 3);
+					}
+				}
+				// (the one brass button: RESEARCH and its months, dimmed when the card is locked or every team is busy; STOP on a card in work)
+				const FBox2D Button = ActBox();
+				const bool bStop = Node.State == TEXT("work") && Node.bStop, bCan = Node.bCan;
+				if (Node.State != TEXT("done"))
+				{
+					const bool bLive = bStop || bCan;
+					const FLinearColor Ground = !bLive ? Desk700 : bStop ? Desk700 : (Over == 1 ? BrightBrass : Brass);
+					Fill(Button.Min.X, Button.Min.Y, Button.GetSize().X, Button.GetSize().Y, Ground, 3);
+					Edge(Button.Min.X + 0.5, Button.Min.Y + 0.5, Button.GetSize().X - 1.0, Button.GetSize().Y - 1.0, bLive ? BrightBrass : Brass700, 1.0f, 4);
+					const FString Says = bStop ? FString(TEXT("STOP")) : FString::Printf(TEXT("RESEARCH  \u00B7  %d MONTHS"), Node.Months);
+					const FSlateFontInfo Face = Typed(Px(12.0f), true, 80);
+					Write(Says, Button.GetCenter().X - Wide(Says, Face) * 0.5, Button.Min.Y + 12.0, Face, !bLive ? Dim : bStop ? Cream : FLinearColor(FColor::FromHex(TEXT("1F1808"))), 5);
+					if (!bLive && !Node.Why.IsEmpty())
+					{
+						// (why it cannot be begun now, whole, on the strip's first line and ending where the button begins)
+						const FSlateFontInfo WhyFace = Typed(Px(11.0f));
+						const FString WhySays = Fitted(Node.Why, WhyFace, 560.0);
+						Write(WhySays, Button.Min.X - 18.0 - Wide(WhySays, WhyFace), 912.0, WhyFace, Amber, 5);
+					}
+				}
+			}
+			else
+			{
+				Write(TEXT("Choose a technology to read what it is and what it leads to."), 46.0, 922.0, Serif(TEXT("Italic"), Px(15.0f)), Muted, 3);
+			}
+
+			// ---- The key; and, where the staff runs research, its own line.
+			{
+				double Along = 30.0;
+				const FViewDesk* Desk = Player->FindDesk(TEXT("research"));
+				if (Desk && Desk->bStaff && !Desk->Line.IsEmpty())
+				{
+					Write(Fitted(Desk->Line, Serif(TEXT("Italic"), Px(12.0f)), 760.0), Along, 966.0, Serif(TEXT("Italic"), Px(12.0f)), Cream, 3);
+					Along = 820.0;
+				}
+				static const TCHAR* States[] = { TEXT("done"), TEXT("work"), TEXT("ready"), TEXT("locked") };
+				static const TCHAR* Words[] = { TEXT("Researched"), TEXT("Being worked on"), TEXT("Ready to begin"), TEXT("Locked") };
+				for (int32 K = 0; K < 4; ++K)
+				{
+					Sign(States[K], Along + 6.0, 974.0, 0.8, StateInk(States[K]), 3);
+					Write(Words[K], Along + 18.0, 967.0, Typed10, Muted, 3);
+					Along += 18.0 + Wide(Words[K], Typed10) + 22.0;
+				}
+				Round(Along + 7.0, 974.0, 6.5, Dim, 1.0f, 3, 3.0, 2.5);
+				Write(TEXT("A rivet: it also needs a technology from elsewhere"), Along + 20.0, 967.0, Typed10, Muted, 3);
+			}
+			return LayerId + 11;
+		}
+
+		virtual FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			const FVector2D Here = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()) + FVector2D(PanelX, PanelY);
+			Hovered = CardAt(Here);
+			Over = ActBox().IsInside(Here) ? 1 : StaffBox().IsInside(Here) ? 2 : CloseBox().IsInside(Here) ? 3 : 0;
+			return FReply::Handled();
+		}
+
+		virtual void OnMouseLeave(const FPointerEvent& Event) override
+		{
+			Hovered.Reset();
+			Over = 0;
+		}
+
+		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (!Player.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+			{
+				return FReply::Handled();
+			}
+			const FVector2D Here = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()) + FVector2D(PanelX, PanelY);
+			const FString Card = CardAt(Here);
+			if (!Card.IsEmpty())
+			{
+				Chosen = Card;
+			}
+			else if (CloseBox().IsInside(Here))
+			{
+				Player->CloseResearch();
+			}
+			else if (StaffBox().IsInside(Here) && Player->FindDesk(TEXT("research")))
+			{
+				Player->PressDesk(TEXT("research"));
+			}
+			else if (ActBox().IsInside(Here))
+			{
+				const FString Id = ChosenId();
+				for (const FTechNode& Node : Player->GetResearch().Nodes)
+				{
+					if (Node.Id == Id && Node.State == TEXT("work") && Node.bStop)
+					{
+						Player->StopTech(Id);
+					}
+					else if (Node.Id == Id && Node.bCan)
+					{
+						Player->StartTech(Id);
+					}
+				}
+			}
+			return FReply::Handled();
+		}
+
+	private:
+		static FBox2D ActBox() { return FBox2D(FVector2D(1318.0, 911.0), FVector2D(1568.0, 951.0)); }
+		static FBox2D StaffBox() { return FBox2D(FVector2D(1300.0, 28.0), FVector2D(1500.0, 62.0)); }
+		static FBox2D CloseBox() { return FBox2D(FVector2D(1530.0, 30.0), FVector2D(1562.0, 62.0)); }
+
+		FString CardAt(const FVector2D& Here) const
+		{
+			for (const TPair<FString, FChartCard>& Each : ChartLayout().Cards)
+			{
+				if (Here.X >= Each.Value.X && Here.X <= Each.Value.X + CardW && Here.Y >= Each.Value.Y && Here.Y <= Each.Value.Y + CardH)
+				{
+					return Each.Key;
+				}
+			}
+			return FString();
+		}
+
+		/** The card whose strip is shown: the one he chose; before he has chosen, a team's work, or the first he could begin. */
+		FString ChosenId() const
+		{
+			if (Player.IsValid() && !Player->StagedChartChoice.IsEmpty())
+			{
+				return Player->StagedChartChoice; // (for the photographer)
+			}
+			if (!Chosen.IsEmpty() || !Player.IsValid())
+			{
+				return Chosen;
+			}
+			FString First;
+			for (const FTechNode& Node : Player->GetResearch().Nodes)
+			{
+				if (Node.State == TEXT("work"))
+				{
+					return Node.Id;
+				}
+				if (First.IsEmpty() && Node.State == TEXT("ready"))
+				{
+					First = Node.Id;
+				}
+			}
+			return First;
+		}
+
+		TWeakObjectPtr<ACampaignPlayerController> Player;
+		FString Chosen, Hovered;
+		int32 Over = 0; // the button under the pointer: 1 the strip's, 2 the staff's, 3 the stud that closes
 	};
 
 	/**
@@ -2813,11 +3652,29 @@ namespace
 						]
 					]
 
+					// The research tree as a wall chart (the grand campaign): the whole screen, with the map dimmed behind.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() && Controller->GetResearch().bTree && ChartLayout().bGood ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							// (fitted to the screen whatever its size: the chart is never cut and never scrolls)
+							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+							[
+								SNew(SBox).WidthOverride(1572.0f).HeightOverride(976.0f)
+								[
+									SNew(SResearchChart).Player(Controller)
+								]
+							]
+						]
+					]
+
 					// The design offices: every branch of the armed forces, and the teams at work on it.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() && !(Controller->GetResearch().bTree && ChartLayout().bGood) ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1220.0f).HeightOverride(800.0f)

@@ -1768,6 +1768,17 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 	if (Shot.bResearch)
 	{
+		// ("-TheaterChart=mobile:radar" chooses a card of the research chart and rests the pointer on another)
+		{
+			FString Staged;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterChart="), Staged, false))
+			{
+				if (!Staged.Split(TEXT(":"), &Controller->StagedChartChoice, &Controller->StagedChartPoint))
+				{
+					Controller->StagedChartChoice = Staged;
+				}
+			}
+		}
 		Controller->OpenResearch();
 		if (Controller->GetResearch().bTree)
 		{

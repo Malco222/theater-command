@@ -1361,7 +1361,9 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 		Moves = FMath::Clamp(Moves, 0.0f, 3.0f);
 	}
 	const float Moon = GetMoonlight();
-	const float Hour = FMath::Lerp(1.0f, 0.5f, Moon); // (by night about half the strength)
+	// (The art director's review of build 1432: by night the swell measured about 3.5% either way and she asked for
+	// about twice that. The night's own light already halves what a crest adds, so the sea keeps its day's strength.)
+	const float Hour = 1.0f;
 	// (From the top, waves so small crawl like static: the chop goes as its crests come under about six pixels
 	// apart, and the swell after it. On the paper map there is nothing: the material sees to that.)
 	const float Chopping = 1.0f - FMath::SmoothStep(6500.0f, 9500.0f, CameraDistance);
@@ -1375,7 +1377,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	SeaVector(TEXT("GlintColour"), FMath::Lerp(FLinearColor(FColor(215, 235, 250)), FLinearColor(FColor(131, 156, 197)), Moon));
 	// The bright band: a soft patch on the lamp's side of what the eye looks at (the lamp stands to the west and a
 	// little south, and high), which goes with the eye as a light's own reflection does.
-	const double BandReach = FMath::Max(0.1 * CameraDistance, 150.0);
+	const double BandReach = FMath::Max(0.13 * CameraDistance, 190.0);
 	const FVector Heart = CameraFocus + FVector(-0.25, -0.55, 0.0) * (0.14 * CameraDistance);
 	SeaVector(TEXT("GlintAt"), FLinearColor(static_cast<float>(Heart.X), static_cast<float>(Heart.Y), static_cast<float>(1.0 / (BandReach * BandReach)), 0.0f));
 }
@@ -9846,7 +9848,10 @@ void ACampaignMapActor::UpdateClouds()
 	const double Now = World->GetTimeSeconds();
 	const double Wide = Data.Width, High = Data.Height, Span = Wide * 1.5;
 	// ("-TheaterClouds=0.6" on the command line makes them darker, to see where they lie)
-	static const float Depth = []() { float Asked = 0.17f; FParse::Value(FCommandLine::Get(), TEXT("TheaterClouds="), Asked); return FMath::Clamp(Asked, 0.0f, 0.9f); }();
+	// (The art director's land and light brief, 16 November 2026: close up the shadows were the heaviest thing on the
+	// screen. A clear day is to have none, and they will belong to a sky in cloud; until the weather is in the game
+	// they are half as dark as they were.)
+	static const float Depth = []() { float Asked = 0.085f; FParse::Value(FCommandLine::Get(), TEXT("TheaterClouds="), Asked); return FMath::Clamp(Asked, 0.0f, 0.9f); }();
 	const double Lift = 9.0; // above the highest ground, so that the shade falls on the land and on the pieces alike
 	for (int32 Cloud = 0; Cloud < Clouds; ++Cloud)
 	{

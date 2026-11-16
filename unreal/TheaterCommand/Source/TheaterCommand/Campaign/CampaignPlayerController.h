@@ -547,6 +547,8 @@ public:
 	void OpenResearch();
 	void CloseResearch();
 	void SetResearchTeams(const FString& Field, int32 Teams);
+	/** (For the photographer.) On the research chart: the card chosen, and the card the pointer rests on. */
+	FString StagedChartChoice, StagedChartPoint;
 	void StartTech(const FString& Id);
 	void StopTech(const FString& Id);
 	/** Research teams of the player's with nothing to do, for the badge on the button. */

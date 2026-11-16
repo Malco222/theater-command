@@ -1186,6 +1186,14 @@ struct FTechNode
 	int32 Of = 0; // and the months it was begun with
 	bool bCan = false;
 	bool bStop = false;
+	// (The research tree's chart.) Its year in history; a team's months in its own time (fewer than Months when it
+	// is begun ahead of its time); every technology it needs, by id and by name, and whether he has it; and its tag
+	// ("NEW UNIT", "+1 TEAM") until it is researched.
+	int32 Year = 0;
+	int32 Base = 0;
+	TArray<FString> NeedIds, NeedNames;
+	TArray<bool> NeedDone;
+	FString Tag;
 };
 
 struct FTechBranch
