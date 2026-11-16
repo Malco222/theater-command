@@ -169,9 +169,12 @@ export function theName(n: Nation, start = false): string {
   return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
-export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number): void {
-  g.headlines.push({ turn: g.turn, week: g.week, text, kind, nat, region });
+export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
+  g.headlines.push({ turn: g.turn, week: g.week, text, kind, nat, region, ...tag });
 }
+
+/** The two tags on news of fighting (Version 80, display only): the arm that fought, and who had the better and the worse of it. */
+export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number): void {
@@ -190,12 +193,12 @@ const ROUTINE_GAP = 3;
  * closes (foldNews), so that the feed does not say the same thing for years. What the player himself ordered is
  * always told in full, and so is everything outside the grand campaign.
  */
-export function routineNews(g: Game, key: string, kind: Headline['kind'], text: string, brief: string, nat: string, region?: number): void {
-  if (g.flags.open !== 1 || nat === g.human) { headline(g, kind, text, nat, region); return; }
+export function routineNews(g: Game, key: string, kind: Headline['kind'], text: string, brief: string, nat: string, region?: number, tag?: NewsTag): void {
+  if (g.flags.open !== 1 || nat === g.human) { headline(g, kind, text, nat, region, tag); return; }
   const k = `told:${key}`;
   const last = g.flags[k] ?? 0;
   g.flags[k] = g.turn;
-  if (!last || g.turn - last > ROUTINE_GAP) { headline(g, kind, text, nat, region); return; }
+  if (!last || g.turn - last > ROUTINE_GAP) { headline(g, kind, text, nat, region, tag); return; }
   let kept = routineKept.get(g);
   if (!kept) routineKept.set(g, (kept = []));
   kept.push({ nat, brief });
@@ -1505,7 +1508,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         place(g, c, dest);
         c.str *= 0.75; c.org = 0.2; c.ap = 0;
         defU[i].fate = 'evacuated';
-        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id); }
+        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
       } else {
         const left = men(c);
         defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
@@ -1571,7 +1574,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (prisoners >= 40000) {
     const who = new Set(defU.filter((u) => u.fate === 'surrendered' || u.fate === 'destroyed').map((u) => u.nat));
     const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : bloc(g.nations[defNat]) === 'league' ? 'League' : 'Axis';
-    headline(g, 'battle', `${prisoners.toLocaleString('en-US')} ${adj} troops surrender at ${target.name}.`, defNat, target.id);
+    headline(g, 'battle', `${prisoners.toLocaleString('en-US')} ${adj} troops surrender at ${target.name}.`, defNat, target.id, { arm: 'land', won: attackers[0]?.nat, lost: defNat });
   }
   for (const d of affected) checkCollapse(g, d, attNat);
   return rep;
@@ -1642,9 +1645,9 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
   const rep: ProbeReport = { turn: g.turn, region: target.id, nat, corps: c.id, name: c.name, lost, found: defenders.map((d) => d.name), fresh, wear, works: Math.round(left * 10) / 10 };
   const months = (m: number): string => (m === 1 ? 'a month' : `${m} months`);
   const worksNews = works <= 0 ? 'They are not dug in.' : `Their fieldworks are ${months(wear)} the worse for it${rep.works < 0.05 ? ', and nothing is left of them' : `: ${months(rep.works)} of work ${rep.works === 1 ? 'is' : 'are'} left in them`}.`;
-  if (nat === g.human) headline(g, 'battle', `${c.name} probes the line at ${target.name} and finds ${listAnd(rep.found)}. ${worksNews} It cost ${lost.toLocaleString('en-US')} men.`, nat, target.id);
+  if (nat === g.human) headline(g, 'battle', `${c.name} probes the line at ${target.name} and finds ${listAnd(rep.found)}. ${worksNews} It cost ${lost.toLocaleString('en-US')} men.`, nat, target.id, { arm: 'land' });
   const mine = defenders.find((d) => d.nat === g.human);
-  if (mine) headline(g, 'battle', `${g.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works > 0 ? `, and your fieldworks there are ${months(wear)} the worse` : ''}.`, mine.nat, target.id);
+  if (mine) headline(g, 'battle', `${g.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works > 0 ? `, and your fieldworks there are ${months(wear)} the worse` : ''}.`, mine.nat, target.id, { arm: 'land' });
   return rep;
 }
 
@@ -1666,9 +1669,9 @@ export function capture(g: Game, r: Region, nat: string): void {
     liftMines(g, r);
     if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); railOnScorch(g, r, nat, old); }
   }
-  if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
+  if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
-  else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
+  else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   checkCollapse(g, old, nat);
   // The grand campaign: a fallen country whose capital its conqueror's enemies now hold comes back into the war.
   retaken(g, r, nat);
@@ -1947,9 +1950,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
     V.alive = true; V.dormant = false;
     const cap = g.regions.find((r) => r.owner === 'VIC' && r.name === 'Auvergne') ?? g.regions.find((r) => r.owner === 'VIC');
     if (cap) { cap.cap = true; V.capital = cap.id; }
-    headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA');
+    headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
-    headline(g, 'fall', `${X.name} capitulates to ${g.nations[by].name}.`, nat);
+    headline(g, 'fall', `${X.name} capitulates to ${g.nations[by].name}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
   }
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
@@ -1968,7 +1971,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (N.seaSupply && N.capital >= 0 && (!r.seas.length || seaOpenAt(g, c.nat, r))) {
       place(g, c, g.regions[N.capital]);
       c.str *= 0.7; c.org = 0.3; c.ap = 0;
-      if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are evacuated from the Continent, leaving their heavy equipment behind.`, c.nat); }
+      if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are evacuated from the Continent, leaving their heavy equipment behind.`, c.nat, undefined, { arm: 'land', lost: c.nat }); }
     } else {
       const to = nearestFriendly(g, c);
       if (to) { place(g, c, to); c.ap = 0; } else removeCorps(g, c);
@@ -1997,7 +2000,7 @@ export function evacuate(g: Game, c: Corps): boolean {
   c.str *= 0.75; c.org = 0.3; c.ap = 0;
   if (!g.flags[`evac:${g.turn}`]) {
     g.flags[`evac:${g.turn}`] = 1;
-    headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id);
+    headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id, { arm: 'land', lost: c.nat });
   }
   return true;
 }
@@ -2343,7 +2346,7 @@ function cutOffNews(g: Game): void {
     const spent = g.flags[`pktx:${reg}`] === 1;
     headline(g, 'battle', spent
       ? `The stores of ${pocketView(g, reg)?.town ?? townName(g.regions[reg])} are spent: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString('en-US')} men, are out of supply and cannot hold out long.`
-      : `The ring closes at ${g.regions[reg].name}: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString('en-US')} men, are cut off from all supply.`, who[0], reg);
+      : `The ring closes at ${g.regions[reg].name}: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString('en-US')} men, are cut off from all supply.`, who[0], reg, { arm: 'land', lost: who[0] });
   }
 }
 
@@ -2532,8 +2535,8 @@ export function startPhase(g: Game, nat: string): void {
     // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.
     if (lost.men <= 30000 && g.flags[`ring:${reg}`] === undefined) continue;
     const place = g.regions[reg].name;
-    if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg);
-    else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg);
+    if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg, { arm: 'land', lost: nat });
+    else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg, { arm: 'land', lost: nat });
   }
   // Replacements can spend the treasury to the last point: a rounding error below nothing is not a debt.
   n.pp = budgeted(g) ? (n.pp > -1e-9 ? Math.max(0, n.pp) : Math.max(-credit, n.pp)) : Math.max(0, n.pp);

@@ -331,7 +331,7 @@ export function traitsMonth(g: Game): void {
     // The player hears of it when it is his army that bleeds, or his partisans that draw the blood: twice a year is enough.
     if (hit && g.turn % 6 === 0) {
       const mine = nat === g.human;
-      headline(g, 'info', mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? 'one enemy corps' : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? 'one of your corps there' : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g.human ?? undefined, where);
+      headline(g, 'info', mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? 'one enemy corps' : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? 'one of your corps there' : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g.human ?? undefined, where, { arm: 'land' });
     }
   }
 }

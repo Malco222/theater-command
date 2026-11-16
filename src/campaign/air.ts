@@ -641,7 +641,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
   if (!best) {
     g.airFleets.splice(g.airFleets.indexOf(f), 1);
     p.lostFtr += f.ftr; p.lostBmr += f.bmr;
-    headline(g, 'event', `With nowhere left to fly from, ${f.name} is disbanded.`, f.nat, old.id);
+    headline(g, 'event', `With nowhere left to fly from, ${f.name} is disbanded.`, f.nat, old.id, { arm: 'air', lost: f.nat });
     return false;
   }
   const lf = Math.round(f.ftr * 0.1), lb = Math.round(f.bmr * 0.1);
@@ -1168,8 +1168,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     : m === 'line' ? `the ${adj} fieldworks at ${a.place} bombed`
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;
-  if (full) headline(g, 'battle', text, nat, sea ? undefined : target);
-  else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target);
+  // Who had the better of it, for an interface that sets the news out as won and lost (Version 80, display only).
+  const fought = { arm: 'air' as const, ...(defNat ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  if (full) headline(g, 'battle', text, nat, sea ? undefined : target, fought);
+  else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target, fought);
   return rep;
 }
 

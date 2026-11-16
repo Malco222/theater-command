@@ -679,9 +679,9 @@ function effortOver(g: Game, e: Effort): void {
   const got = e.won === 1 ? 'one province' : `${e.won} provinces`;
   const name = e.name.replace(/^the /, '');
   if (atWar(g, me, e.nat) && (e.enemy === me || allied(g, me, e.enemy))) {
-    headline(g, 'event', `${who}'s ${name} is over. ${e.won ? `It took ${got}, and the staff that planned it will be looking for the next place.` : 'The line held, and the staff that planned it will be looking for another place.'}`, e.nat, e.first);
+    headline(g, 'event', `${who}'s ${name} is over. ${e.won ? `It took ${got}, and the staff that planned it will be looking for the next place.` : 'The line held, and the staff that planned it will be looking for another place.'}`, e.nat, e.first, { arm: 'land', ...(e.won ? { won: e.nat, lost: e.enemy } : { won: e.enemy, lost: e.nat }) });
   } else if (allied(g, me, e.nat)) {
-    headline(g, 'info', `${who}'s ${name} is over: ${e.won ? `it took ${got}` : 'it gained no ground'}.`, e.nat, e.first);
+    headline(g, 'info', `${who}'s ${name} is over: ${e.won ? `it took ${got}` : 'it gained no ground'}.`, e.nat, e.first, { arm: 'land', ...(e.won ? { won: e.nat, lost: e.enemy } : { won: e.enemy, lost: e.nat }) });
   }
 }
 

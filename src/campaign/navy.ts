@@ -386,7 +386,7 @@ export function shipCorps(g: Game, c: Corps, to: Region): boolean {
   relocate(g, c, to);
   c.ap = 0;
   g.week = 2;
-  if (lost >= 500) headline(g, 'battle', `${c.name} loses ${lost.toLocaleString('en-US')} men to enemy ships and aircraft on the crossing to ${to.name}.`, c.nat, to.id);
+  if (lost >= 500) headline(g, 'battle', `${c.name} loses ${lost.toLocaleString('en-US')} men to enemy ships and aircraft on the crossing to ${to.name}.`, c.nat, to.id, { arm: 'sea', lost: c.nat });
   return true;
 }
 
@@ -733,6 +733,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   const why = whyNotLand(g, cs, to);
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
+  const held = to.ctrl;
   const air = airborne(cs);
   const surprise = !air && surpriseOn(g, nat, to);
   let lostAtSea = 0;
@@ -756,8 +757,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
   const adj = g.nations[nat].adj;
-  if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id);
-  else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id);
+  if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
+  else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   return { ok: true, taken, lostAtSea, report, surprise, air };
 }
 
@@ -1207,7 +1208,7 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     const who = groups.length ? `Destroyers of the ${groups[0].name}` : h.fleets.length ? `The escorts of the ${h.fleets[0].name}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
-    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk in the ${zone.name}`, nat);
+    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk in the ${zone.name}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
   }
   return out;
 }
@@ -1242,7 +1243,7 @@ function torpedoes(g: Game, nat: string): void {
     if (f.ships[cls] <= 0) continue;
     f.ships[cls]--; f.lost[cls]++;
     f.ready = Math.max(0, f.ready - 0.05);
-    headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat);
+    headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
 }
 
@@ -1261,7 +1262,7 @@ function newBase(g: Game, f: Fleet): boolean {
     return true;
   }
   g.fleets.splice(g.fleets.indexOf(f), 1);
-  if (shipCount(f.ships) >= 5) headline(g, 'event', `With no port left to it, the ${f.name} is scuttled.`, f.nat, old.id);
+  if (shipCount(f.ships) >= 5) headline(g, 'event', `With no port left to it, the ${f.name} is scuttled.`, f.nat, old.id, { arm: 'sea', lost: f.nat });
   return false;
 }
 
@@ -1273,7 +1274,7 @@ function airAttack(g: Game, f: Fleet): void {
   // Carrier fighters on patrol over the fleet keep a share of them off it (the grand campaign).
   const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE);
   f.ready = Math.max(0, f.ready - 0.1);
-  if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat);
+  if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat, undefined, { arm: 'air', lost: f.nat });
 }
 
 /** How much of its raiding strength a fleet at sea brings against cargoes: all of it when it is raiding, part when it is on patrol, none on other work. */
@@ -1348,7 +1349,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {
-      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat);
+      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat, undefined, { arm: 'sea', lost: nat });
     }
   }
 }
@@ -1413,7 +1414,7 @@ function afterAction(g: Game, f: Fleet, side: SeaSide, won: boolean, rng: Rng): 
   const a = f.admiral;
   if (!a) return;
   if (!won && side.sunk.bb + side.sunk.cv > 0 && rng.chance(NAVY.admiral.lostWithFlagship)) {
-    headline(g, 'event', `Admiral ${a.name} is lost with his flagship.`, f.nat);
+    headline(g, 'event', `Admiral ${a.name} is lost with his flagship.`, f.nat, undefined, { arm: 'sea', lost: f.nat });
     const pool = COMMAND.names[f.nat];
     f.admiral = pool ? { name: `${rng.pick(pool.first)} ${rng.pick(pool.last)}`, level: 1, xp: 0 } : null;
     return;
@@ -1446,7 +1447,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const names = (fs: Fleet[]): string => { const l = fs.map((f) => `the ${f.name}`); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
     if (A >= NAVY.battle.evadeAt * D && rng.chance(NAVY.battle.evade)) {
       for (const f of met) sail(g, f, f.home, 'port');
-      headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle in the ${zone.name} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat);
+      headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle in the ${zone.name} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat, undefined, { arm: 'sea', won: nat, lost: met[0].nat });
       continue;
     }
     const att = mine.map(sideOf), def = met.map(sideOf);
@@ -1488,7 +1489,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const win = won ? mine : met, lose = won ? met : mine;
     const ws = total(won ? att : def), ls = total(won ? def : att);
     storySea(g, z, win, lose, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
-    headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.`, win[0].nat);
+    headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
   }
   return out;
 }

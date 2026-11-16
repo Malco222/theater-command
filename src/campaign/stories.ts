@@ -507,7 +507,7 @@ export function storyFallen(g: Game, c: Corps, how: Fallen['how'], by: string, r
   if (c.nat === g.human) {
     moment(g, 9, 'fallen', c, reg, { foe: g.nations[by]?.adj });
     const said = months >= STORIES.lastStand ? ` It had been cut off for ${months} months.` : '';
-    headline(g, 'info', `${c.name}${c.nick ? `, ${c.nick},` : ''} is struck off the army's list and written on the memorial wall.${said}`, c.nat, reg);
+    headline(g, 'info', `${c.name}${c.nick ? `, ${c.nick},` : ''} is struck off the army's list and written on the memorial wall.${said}`, c.nat, reg, { arm: 'land', lost: c.nat });
   }
 }
 

@@ -570,7 +570,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     // Where the terms went to somebody history's treaty does not name, the news is told as it happened here.
     if (open && heir !== e.partition.shares[0]?.[0]?.[0]) {
       const H = g.nations[heir];
-      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id);
+      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id, undefined, { arm: 'land', won: H.id, lost: X.id });
       told = true;
     }
     recordFall(g, X.id, heir, 'terms');
