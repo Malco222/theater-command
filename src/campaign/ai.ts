@@ -1090,7 +1090,9 @@ function ferry(g: Game, nat: string): void {
       if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g, nat, here.ctrl)) continue;
       // One with the enemy next to it has a front of its own already.
       if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
-      if (portsFor(c).some((p) => sails(c, p))) went(c);
+      // It goes on over a narrow sea, never back across the ocean: a harbour beside an enemy on the other shore (an
+      // ally's colony next to an Axis Brazil) is no place to feed the army in a corps at a time (Version 78).
+      if (portsFor(c).some((p) => beyondEurope(p) === beyondEurope(here) && sails(c, p))) went(c);
     }
   }
   // The ocean runs.

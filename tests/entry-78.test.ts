@@ -6,11 +6,13 @@
 // (b) A League is a pact of neighbours: a founder or a member may ask only countries of its own part of the world.
 import { describe, expect, it } from 'vitest';
 import worldData from '../data/campaign/world.json';
+import { runAI } from '../src/campaign/ai';
 import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { atWar, bloc, createGame, declareWar, setWar } from '../src/campaign/game';
+import { addCorps, atWar, bloc, capture, createGame, declareWar, setWar } from '../src/campaign/game';
 import { enrol, founders, invites, partName, partOf, pathOptions, takePath, willing } from '../src/campaign/league';
-import { startOpen } from '../src/campaign/staff';
+import { frontAshore, startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
+import { WORLD, armyIdle, beyondEurope, enemyAtTheDoor, overseasOf } from '../src/campaign/world';
 
 const DEC_41 = 28;
 /** A grand campaign in which Germany and Italy are at war with Britain, as they were by 1941. */
@@ -68,6 +70,61 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     // And the republics that follow America follow it still.
     expect(atWar(g, 'CUB', 'GER')).toBe(true);
     expect(atWar(g, 'PAN', 'GER')).toBe(true);
+  });
+
+  it('does not let an enemy beyond the water keep America\'s army at home: only one across a land frontier does', () => {
+    const O = WORLD.overseas.USA;
+    // The Playtester's case again, with America run by the computer: an Axis Brazil at war with it since 1940.
+    const g = war();
+    g.nations.BRA.align = 'axis';
+    g.turn = 13;
+    declareWar(g, 'BRA', 'USA');
+    expect(g.regions.some((r) => r.ctrl === 'BRA' && r.nb.some((j) => g.regions[j].ctrl === 'USA'))).toBe(false);
+    expect(enemyAtTheDoor(g, 'USA')).toBe(false);
+    // At war, with shipping, and no enemy it can march at: the army is for the far shore, and no more is raised than the ships will carry.
+    expect(overseasOf(g, 'USA')).toBe(O);
+    for (let k = 0; k < 40; k++) addCorps(g, 'USA', `Idle Corps ${k}`, 'inf', 1, 'Chicago', {});
+    expect(armyIdle(g, 'USA')).toBe(true);
+    // Brazil's conquests beyond the water change nothing: an island or a colony lost is not a road for the army.
+    const guiana = g.byName['French Guiana'];
+    expect(guiana).toBeDefined();
+    capture(g, guiana, 'BRA');
+    expect(overseasOf(g, 'USA')).toBe(O);
+    // An enemy across a land frontier is the army's first business: a hostile Mexico, or an invader ashore.
+    const m = war();
+    setWar(m, 'USA', 'MEX');
+    expect(enemyAtTheDoor(m, 'USA')).toBe(true);
+    expect(overseasOf(m, 'USA')).toBeNull();
+    expect(armyIdle(m, 'USA')).toBe(false);
+    const inv = war();
+    setWar(inv, 'USA', 'GER');
+    expect(overseasOf(inv, 'USA')).toBe(O);
+    capture(inv, inv.byName.Miami ?? inv.regions.find((r) => r.owner === 'USA' && !r.overseas && r.port)!, 'GER');
+    expect(enemyAtTheDoor(inv, 'USA')).toBe(true);
+    expect(overseasOf(inv, 'USA')).toBeNull();
+    // A country with no war and a player's own country are as they were.
+    expect(overseasOf(war(), 'USA')).toBeNull();
+    expect(enemyAtTheDoor(war(), 'USA')).toBe(false);
+  });
+
+  it('sends no corps back across the ocean from the far shore: the army gathered in Britain is not fed into Brazil a corps at a time', () => {
+    const g = war();
+    g.turn = 30;
+    declareWar(g, 'GER', 'USA');
+    g.nations.BRA.align = 'axis';
+    declareWar(g, 'BRA', 'USA');
+    expect(g.nations.USA.atWar).toEqual(expect.arrayContaining(['GER', 'BRA']));
+    g.nations.USA.sealift = Math.max(g.nations.USA.sealift, 4);
+    // A harbour Britain holds beside Brazil is, by the rule for fronts, a front its side holds near the enemy.
+    const guiana = g.byName['British Guiana'];
+    expect(guiana.port && guiana.ctrl === 'UK' && guiana.nb.some((j) => g.regions[j].ctrl === 'BRA')).toBe(true);
+    expect(frontAshore(g, 'USA')?.ports ?? []).toContain(guiana);
+    // Corps across the ocean, standing idle in Britain where the ocean run put them down.
+    const there = [0, 1, 2].map((k) => addCorps(g, 'USA', `Corps ${k}`, 'inf', 2, 'Cornwall', {}));
+    for (const c of there) g.flags[`sf:${c.id}`] = 1;
+    runAI(g, 'USA');
+    for (const c of there) expect(beyondEurope(g.regions[c.reg]), `${c.name} at ${g.regions[c.reg].name}`).toBe(false);
+    expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && g.regions[c.reg].owner === 'BRA')).toEqual([]);
   });
 
   it('gives an Axis that declares on America early the same America, early: at war with Germany, then with Italy in its turn', () => {
