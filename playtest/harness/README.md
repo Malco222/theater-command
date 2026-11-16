@@ -187,3 +187,24 @@ Traps met on Version 76:
 - A scripted Latin player's buy list has no mountain corps or engineers. Do not read "the arsenal sells nothing" or a falling war income from it: `peek76` shows what is on offer, and saboteurs wreck factories the script cannot repair.
 - The `attacked` months of a Latin player at war are corps the script shipped overseas. Read `provinces lost` and "an enemy beside a corps" for the home country.
 - `army-USA-*` and `watch49s3-*` files hold three wars each.
+
+## Version 77 (the staffs cross where history planned it) and Version 78 (America early, not never)
+
+Version 77 (a991695) gives each staff a list of history's shores and has America wait for nine corps across the ocean before a mainland landing. Version 78 (924c249) mends ruling 58(a) and (b): a computer-led America at war with any Axis member joins the Allies that month, and a League asks only its own part of the world. Build with `./build70.sh NAME /home/user/tc77 out77` (or `tc78`, `out78`); build anything new into a second folder (`out77b`) while a queue is using the first.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `mk77.py` | Writes the Version 77 queues: `v77w.tsv` (nobody playing on seeds 17 to 40: the armies and the watch, three wars a file), `v77a.tsv` (the hemisphere set, the American and British seats on seeds 25 to 48, the Americans beside a British player), `v77b.tsv` (par from Germany, the Soviet Union, France and Italy), `v77c.tsv` (world domination), `v77d.tsv` (the idle player, Canada by hand), `v77l.tsv` (Brazil and Argentina by hand) | `python3 mk77.py && ./jobs.sh v77w.tsv out/v77 4` |
+| `probe78.ts` | Every staff landing in a war nobody plays, through the rules' own hook (`landingWatch.tell` in `src/campaign/ai.ts`): a `LAND` line a landing (who, month, place, owner, corps, first or later wave, warned, thrown back, and six months on: dead of the corps that landed, who holds the beach) and a `FIRST` line a war. Queues `v77n.tsv` and `v76n.tsv` | `node out77/probe78.mjs 17,18,19 80` |
+| `landtab.py` | The table of those lines: first landing by country, ground and year, corps dead within six months, beaches lost | `python3 landtab.py 'out/v77/land-*.txt' --nats=UK,USA,CAN,BRA` |
+| `mk78.py` | Writes `v78a.tsv`: the small Axis player's early declaration (probe76), Germany or Italy at war with America from September 1939 by hand and with nobody playing, a League's partners (probe75) | `python3 mk78.py && ./jobs.sh v78a.tsv out/v78 3` |
+| `probe79.ts` | A great Axis power led by hand at war with the United States from month T: a `U` line each January and an `END` line (America among the Allies, at war with Germany and Italy, the December 1941 event, first corps across, ashore in the west to stay, the small Allies, Germany's fall). The plan's `"force":true` declares by the rules' own call | `node out78/probe79.mjs GER 25 76 1 '{"minOdds":1.4,"land":true,"force":true}'` |
+| `probe80.ts` | The same with nobody playing: modes `ger39`, `ita39`, `bra40`, `base`; one `EARLY` line a war | `node out78/probe80.mjs 17,18,19 80 ger39` |
+| `peek78.ts` | In which months the page offers a player war on a given country | `node out78/peek78.mjs GER 25 46 USA '{"minOdds":1.4,"land":true}'` |
+
+Traps met on Versions 77 and 78:
+
+- `probe68 SEEDS UNTIL NAT` counts Britain "on the continent" from September 1939, because of its army in France. Read Britain's landings from `probe78`.
+- The rules builder's two: the memorial wall is `g.stories.fallen`, and a `Fallen.id` is the wall's own count, not the corps id; "ashore to stay" counted by who controls French ground breaks the month France is freed (count by owner, as `probe78` and `probe79` do).
+- A German or Italian player is never offered war on the United States (`declarable` lists only countries in reach of a frontier or a landing), so "Germany declares in September 1939" can only be played forced (`declareWar`).
+- The British and American landings in France in 1943 on Version 77 total the same (18 landings, 22 of 54 dead) by chance: they are two sets.
