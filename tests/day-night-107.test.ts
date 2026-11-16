@@ -1,7 +1,8 @@
-// Ruling 107(d): where a bombing raid is ordered, BY DAY and BY NIGHT stand side by side, each with the bombers likely
-// lost and the damage expected, in the counts and odds the raid card gives. One shared function, `dayOrNight`, weighs
-// the same bombers against the same target both ways, so the browser's raid card and the 3D game's say the same thing.
-// Display only: it changes nothing in the game, and no rule of the night raid is touched here.
+// Ruling 107(d): where a bombing raid is ordered, BY DAY and BY NIGHT stand side by side, each a whole small forecast:
+// the chance, the bombers lost and what a hit does, in the counts and odds the raid card gives (the art director's
+// brief of 16 November). One shared function, `dayOrNight`, weighs the same groups against the same target both ways,
+// so the browser's raid card and the 3D game's say the same thing. Display only: it changes nothing in the game, and
+// no rule of the night raid is touched here.
 import { describe, expect, it } from 'vitest';
 import { dayOrNight, planRaid, type RaidKind } from '../src/campaign/airwar';
 import { createGame, setWar } from '../src/campaign/game';
@@ -11,6 +12,7 @@ import { previewDayNight, previewRaid, raidTargetsFor } from '../src/campaign/tu
 import type { Game } from '../src/campaign/types';
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
+const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 /** A German campaign at war with Britain and France too, so both kinds of bombing raid have targets. */
 function west(seed = 7): Game {
   const g = startOpen(createGame(seed, 'GER'));
@@ -22,6 +24,11 @@ function west(seed = 7): Game {
 function targets(g: Game, most = 8): number[] {
   const all = raidTargetsFor(g, 'bomb').filter((t) => !previewRaid(g, 'bomb', t.id).why).map((t) => t.id);
   return [...all.filter((t) => g.regions[t].fac > 0), ...all.filter((t) => g.regions[t].fac <= 0)].slice(0, most);
+}
+/** The staff's bombers for a target, and every fighter group that could go with them by day. */
+function withEscorts(g: Game, t: number): number[] {
+  const day = planRaid(g, 'bomb', t);
+  return [...day.picked, ...day.seats.filter((s) => !s.why && !s.picked && s.kind === 'ftr').map((s) => s.id)];
 }
 
 describe('a bombing raid by day and by night, side by side (ruling 107(d))', () => {
@@ -35,93 +42,109 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
 
   it('gives each way the very numbers the raid card gives for it', () => {
     const g = west();
-    const ts = targets(g);
+    const ts = targets(g, 60);
     expect(ts.length).toBeGreaterThan(2);
+    let works = 0, yards = 0;
     for (const t of ts) {
-      const day = planRaid(g, 'bomb', t), night = planRaid(g, 'night', t, day.picked);
-      const dn = dayOrNight(g, 'bomb', t, day.picked)!;
+      const ask = withEscorts(g, t);
+      const day = planRaid(g, 'bomb', t, ask), night = planRaid(g, 'night', t, ask);
+      const dn = dayOrNight(g, 'bomb', t, ask)!;
       expect(dn.chosen).toBe('bomb');
       expect(dn.day.label).toBe('BY DAY');
       expect(dn.night.label).toBe('BY NIGHT');
+      expect(dn.day.foot).toBe('Escorts can fly with them.');
+      expect(dn.night.foot).toBe('No escorts. Fewer lost, fewer hits.');
       for (const [w, p] of [[dn.day, day], [dn.night, night]] as const) {
         expect(w.why).toBe(p.why);
         expect(w.picked).toEqual(p.picked);
         expect(w.bombers).toBe(p.bombers);
+        expect(w.fighters).toBe(p.fighters);
+        expect(w.success).toBe(p.success);
+        expect(w.verdict).toBe(p.verdict);
         expect(w.bomberLoss).toBe(p.bomberLoss);
         expect(w.bomberLossN).toBe(p.bomberLossN);
+        expect(w.fighterLossN).toBe(p.fighterLossN);
         expect(w.figures).toEqual(p.figures);
-        expect(w.success).toBe(p.success);
         if (p.why) continue;
-        // Counts and odds, as the card prints them.
-        expect(w.lost).toEqual({ n: `${p.bomberLossN.toLocaleString('en-US')} of ${p.bombers.toLocaleString('en-US')}`, label: 'Bombers likely lost', sub: `${pct(p.bomberLoss)} of them` });
-        if (g.regions[t].fac > 0) {
-          expect(w.harm.n).toBe(pct(p.figures.output!));
-          expect(w.harm.label).toBe(`${g.regions[t].name}'s output stopped`);
-          expect(w.harm.sub).toContain(`${(p.figures.national! * 100).toFixed(1)}% of ${g.nations[g.regions[t].ctrl].adj} production`);
-          // The card's own sentence carries the same two numbers.
-          expect(p.effects[0]).toContain(`about ${w.harm.n} of`);
-        } else {
-          expect(p.figures.output).toBeUndefined();
-          expect(w.harm.sub).toContain('No industry at');
-        }
+        // The share and the aircraft, as the card prints them.
+        expect(w.lost).toBe(`${pct(p.bomberLoss)} · about ${num(p.bomberLossN)}`);
+        expect(w.fightersLost).toBe(p.fighters > 0 ? `${pct(p.fighterLossN / p.fighters)} · about ${num(p.fighterLossN)}` : '');
+        expect(w.prose).toBe(p.effects[0]);
+        // What a hit does: the card's three figures as lines, in the card's order, and never more than three.
+        const want: string[] = [];
+        if (p.figures.output !== undefined) want.push(`${p.figures.output <= 0 ? '0%' : p.figures.output < 0.005 ? '<1%' : `−${pct(p.figures.output)}`} output, for a month`);
+        if (p.figures.rail) want.push(`${pct(p.figures.rail)} chance the railway is cut`);
+        if (p.figures.factory) want.push(`${pct(p.figures.factory)} chance a factory is wrecked`);
+        if (!want.length) want.push(' No industry there, and too few bombers to cut the railway.');
+        expect(w.hits.map((h) => `${h.n} ${h.words}`)).toEqual(want);
+        expect(w.hits.length).toBeLessThanOrEqual(3);
+        if (g.regions[t].fac > 0) { works++; expect(p.effects[0]).toContain(`about ${pct(p.figures.output!)} of`); } else { yards++; expect(p.figures.output).toBeUndefined(); }
       }
     }
+    expect(works).toBeGreaterThan(0);
+    expect(yards).toBeGreaterThan(0);
   });
 
-  it('flies the same bombers both ways: by day with their escort, by night alone', () => {
+  it('flies the same bombers both ways: by day with their escort, by night alone, and a change of mind drops nobody', () => {
     const g = west();
-    let withEscort = 0;
+    let escorted = 0;
     for (const t of targets(g, 60)) {
-      const day = planRaid(g, 'bomb', t);
-      // Every fighter group that could go is asked for as well.
-      const ask = [...day.picked, ...day.seats.filter((s) => !s.why && s.kind === 'ftr').map((s) => s.id)];
+      const ask = withEscorts(g, t);
       const dn = dayOrNight(g, 'bomb', t, ask)!;
       if (dn.day.why || dn.night.why) continue;
       expect(dn.night.fighters).toBe(0);
+      expect(dn.night.fightersLost).toBe('');
       expect(dn.night.bombers).toBe(dn.day.bombers);
-      expect(dn.night.with).toBe('The bombers go alone: no escort flies by night.');
+      expect(dn.bombers).toBe(dn.day.bombers);
       for (const id of dn.night.picked) expect(dn.day.picked).toContain(id);
-      if (dn.day.fighters > 0) { withEscort++; expect(dn.day.with).toBe(`${dn.day.fighters.toLocaleString('en-US')} fighters go as escort.`); }
-      else expect(dn.day.with).toBe('No escort goes with them.');
+      // The fighters picked stay at home by night; every group that flies by day is either going by night or staying home.
+      expect([...dn.night.picked, ...dn.home].sort((a, b) => a - b)).toEqual([...dn.day.picked].sort((a, b) => a - b));
+      for (const id of dn.home) expect(g.airFleets.find((f) => f.id === id)!.bmr).toBe(0);
+      if (dn.day.fighters > 0) { escorted++; expect(dn.home.length).toBeGreaterThan(0); expect(dn.day.fightersLost).not.toBe(''); }
       // Asked from the night side with the same groups, the two ways are the same two ways.
       const back = dayOrNight(g, 'night', t, ask)!;
       expect(back.chosen).toBe('night');
-      expect(back.day).toEqual(dn.day);
-      expect(back.night).toEqual(dn.night);
+      expect({ ...back, chosen: 'bomb' }).toEqual(dn);
+      // A fighter group that could go by day and was not asked for is offered by day only.
+      const bombersOnly = dayOrNight(g, 'night', t, dn.night.picked)!;
+      for (const id of dn.home) if (!bombersOnly.day.picked.includes(id)) expect(bombersOnly.barred).toContain(id);
     }
-    expect(withEscort).toBeGreaterThan(0);
+    expect(escorted).toBeGreaterThan(0);
   });
 
-  it('says in one sentence what the choice is, and by night fewer bombs find the target', () => {
+  it('names what is common to both, and by night fewer bombs find the target', () => {
     const g = west();
     let seen = 0;
     for (const t of targets(g)) {
       const dn = dayOrNight(g, 'bomb', t)!;
-      expect(dn.note).toBe('By night the fighters and the guns find fewer of the bombers, and the bombers find less of the target.');
-      if (dn.day.why || dn.night.why || g.regions[t].fac <= 0 || dn.day.bombers !== dn.night.bombers) continue;
+      if (dn.day.why || dn.night.why) continue;
+      const day = planRaid(g, 'bomb', t);
+      expect(dn.bombers).toBe(day.bombers);
+      expect(dn.foes).toBe(day.meets.reduce((n, x) => n + x.ftr, 0));
+      if (g.regions[t].fac <= 0 || dn.day.bombers !== dn.night.bombers) continue;
       seen++;
       expect(dn.night.figures.output!).toBeLessThan(dn.day.figures.output! + 1e-9);
     }
     expect(seen).toBeGreaterThan(0);
   });
 
-  it('says why a way cannot be flown, and still shows the other', () => {
+  it('keeps a way that cannot be flown, with the rules\' own reason in place of its figures', () => {
     const g = west();
     const t = targets(g)[0];
-    const day = planRaid(g, 'bomb', t);
-    // Fighters alone: by day they have no bombers to escort, by night they do not fly at all.
-    const ftr = day.seats.filter((s) => !s.why && s.kind === 'ftr').map((s) => s.id);
-    if (ftr.length) {
-      const dn = dayOrNight(g, 'bomb', t, ftr)!;
-      expect(dn.day.why).not.toBeNull();
-      expect(dn.night.why).not.toBeNull();
-      expect(dn.day.lost.n).toBe('');
-      expect(dn.day.harm.n).toBe('');
-    }
-    // Nobody picked.
     const none = dayOrNight(g, 'night', t, [])!;
-    expect(none.day.why).toBe('Pick at least one air group.');
-    expect(none.night.why).toBe('Pick at least one air group.');
+    for (const w of [none.day, none.night]) {
+      expect(w.why).toBe('Pick at least one air group.');
+      expect(w.lost).toBe('');
+      expect(w.fightersLost).toBe('');
+      expect(w.hits).toEqual([]);
+      expect(w.prose).toBe('');
+    }
+    // Fighters alone: by day they have no bombers to escort, by night they do not fly at all.
+    const ftr = planRaid(g, 'bomb', t).seats.filter((s) => s.kind === 'ftr').map((s) => s.id);
+    expect(ftr.length).toBeGreaterThan(0);
+    const alone = dayOrNight(g, 'bomb', t, ftr)!;
+    expect(alone.day.why).not.toBeNull();
+    expect(alone.night.why).not.toBeNull();
   });
 
   it('changes nothing, and is plain data both builds can read', () => {

@@ -738,13 +738,13 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   return plan;
 }
 
-/** One figure on a way of flying a raid: the number, what it counts, and a smaller line beneath it. */
-export interface WayFigure { n: string; label: string; sub: string }
+/** One line of WHAT A HIT DOES: a number and a few words. */
+export interface HitLine { n: string; words: string }
 
 /**
- * One way of flying a bombing raid, by day or by night, as the choice between the two shows it (ruling 107(d)).
- * The words are ready to print, so both builds say the same thing; the numbers behind them are there for a card
- * that draws them.
+ * One way of flying a bombing raid, by day or by night: a whole small forecast, as the raid card's two columns show
+ * it (ruling 107(d), the art director's brief of 16 November). The words are ready to print, so both builds say the
+ * same thing; the numbers behind them are there for a card that draws them.
  */
 export interface RaidWay {
   kind: 'bomb' | 'night';
@@ -752,67 +752,85 @@ export interface RaidWay {
   label: string;
   /** Why it cannot be flown this way with these groups, or null. */
   why: string | null;
-  /** Who would go this way: by day the escorts sworn to the bombers go too, by night the bombers alone. */
+  /** Who would go this way: by day the escorts go too, by night the bombers alone. */
   picked: number[];
   bombers: number;
   fighters: number;
-  /** The share and the count of the bombers likely lost, as the raid card gives them. */
-  bomberLoss: number;
-  bomberLossN: number;
-  /** The damage expected, as the raid card's figures give it: output, national, rail, factory. */
-  figures: RaidFigures;
-  /** Bombers likely lost, and the damage expected, ready to print. */
-  lost: WayFigure;
-  harm: WayFigure;
-  /** The smaller chances that go with the damage: the railway cut, a factory wrecked. */
-  more: string[];
-  /** Who flies with the bombers, in a few words. */
-  with: string;
+  /** The chance of success and its verdict, as the raid card gives them. */
   success: number;
   verdict: string;
+  /** The share and the count of the bombers likely lost, and of the fighters where fighters fly. */
+  bomberLoss: number;
+  bomberLossN: number;
+  fighterLoss: number;
+  fighterLossN: number;
+  /** BOMBERS LOST and FIGHTERS LOST in print: the share and the aircraft, "2% · about 7". The second is '' where no fighters fly. */
+  lost: string;
+  fightersLost: string;
+  /** The damage expected, as the raid card's figures give it: output, national, rail, factory. */
+  figures: RaidFigures;
+  /** WHAT A HIT DOES: up to three lines, the output stopped, the railway cut, a factory wrecked. */
+  hits: HitLine[];
+  /** The line at the column's foot. */
+  foot: string;
+  /** The card's one line of prose for this way. */
+  prose: string;
 }
 
-/** A bombing raid weighed by day and by night, side by side: the same bombers against the same target. */
+/** A bombing raid weighed by day and by night, side by side: the same groups against the same target. */
 export interface DayNight {
   /** The way the plan on the card is flown. */
   chosen: 'bomb' | 'night';
   day: RaidWay;
   night: RaidWay;
-  /** What the choice is, in a sentence. */
-  note: string;
+  /** What is common to both: the bombers going, and the enemy's fighters in reach. */
+  bombers: number;
+  foes: number;
+  /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
+  home: number[];
+  /** Fighter groups that could join by day and cannot by night: "Cannot fly: no escort by night". */
+  barred: number[];
 }
 
 /**
- * BY DAY and BY NIGHT for one bombing raid (ruling 107(d)): the same groups against the same target, each way with
- * the bombers likely lost and the damage expected, in the counts and odds the raid card gives. Fighters asked for go
- * by day and stay at home by night. Null for any other kind of raid. Nothing is changed.
+ * BY DAY and BY NIGHT for one bombing raid (ruling 107(d)): the same groups against the same target, each way a whole
+ * small forecast in the counts and odds the raid card gives. Fighters asked for go by day and stay at home by night,
+ * so `ids` may hold both and a change of mind drops nobody. Null for any other kind of raid. Nothing is changed.
  */
 export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human): DayNight | null {
   if (kind !== 'bomb' && kind !== 'night') return null;
+  const plans = { bomb: planRaid(g, 'bomb', target, ids, nat), night: planRaid(g, 'night', target, ids, nat) };
   const way = (k: 'bomb' | 'night'): RaidWay => {
-    const p = planRaid(g, k, target, ids, nat);
+    const p = plans[k];
     const f = p.figures;
     const flown = !p.why;
-    const owner = g.regions[target] ? g.nations[g.regions[target].ctrl]?.adj ?? '' : '';
-    const harm: WayFigure = !flown ? { n: '', label: '', sub: '' }
-      : f.output !== undefined ? { n: pct(f.output), label: `${p.place}'s output stopped`, sub: `for a month: ${((f.national ?? 0) * 100).toFixed(1)}% of ${owner} production` }
-        : f.rail ? { n: pct(f.rail), label: 'Chance of cutting the railway', sub: `No industry at ${p.place}: the bombers go for its rail yards.` }
-          : { n: 'None', label: 'Damage expected', sub: `No industry at ${p.place}, and too few bombers to cut its railway.` };
-    const more: string[] = [];
-    if (flown && f.output !== undefined && f.rail) more.push(`${pct(f.rail)} chance of cutting the railway`);
-    if (flown && f.factory) more.push(`${pct(f.factory)} chance of wrecking a factory`);
+    const hits: HitLine[] = [];
+    // A share that rounds to nothing is still something: "<1%", never "−0%".
+    if (flown && f.output !== undefined) hits.push({ n: f.output <= 0 ? '0%' : f.output < 0.005 ? '<1%' : `−${pct(f.output)}`, words: 'output, for a month' });
+    if (flown && f.rail) hits.push({ n: pct(f.rail), words: 'chance the railway is cut' });
+    if (flown && f.factory) hits.push({ n: pct(f.factory), words: 'chance a factory is wrecked' });
+    if (flown && !hits.length) hits.push({ n: '', words: 'No industry there, and too few bombers to cut the railway.' });
+    const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
     return {
       kind: k, label: k === 'bomb' ? 'BY DAY' : 'BY NIGHT', why: p.why, picked: p.picked, bombers: p.bombers, fighters: p.fighters,
-      bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, figures: f,
-      lost: flown ? { n: `${num(p.bomberLossN)} of ${num(p.bombers)}`, label: 'Bombers likely lost', sub: `${pct(p.bomberLoss)} of them` } : { n: '', label: '', sub: '' },
-      harm, more,
-      with: !flown ? '' : k === 'night' ? 'The bombers go alone: no escort flies by night.' : p.fighters ? `${num(p.fighters)} fighters go as escort.` : 'No escort goes with them.',
       success: p.success, verdict: p.verdict,
+      bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, fighterLoss, fighterLossN: p.fighterLossN,
+      lost: flown ? `${pct(p.bomberLoss)} · about ${num(p.bomberLossN)}` : '',
+      fightersLost: flown && p.fighters > 0 ? `${pct(fighterLoss)} · about ${num(p.fighterLossN)}` : '',
+      figures: f, hits,
+      foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
+      prose: flown ? p.effects[0] ?? '' : '',
     };
   };
+  const day = way('bomb'), night = way('night');
+  const lead = !plans.bomb.why ? plans.bomb : plans.night;
+  const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
   return {
-    chosen: kind, day: way('bomb'), night: way('night'),
-    note: 'By night the fighters and the guns find fewer of the bombers, and the bombers find less of the target.',
+    chosen: kind, day, night,
+    bombers: lead.bombers,
+    foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
+    home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
+    barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };
 }
 

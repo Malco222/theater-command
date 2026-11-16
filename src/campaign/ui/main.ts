@@ -5127,9 +5127,9 @@ const myGroupRow = (f: AirFleet): GroupRow => (f.ship !== undefined ? groupRow(g
   leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
 });
 
-/** The signs for a raid by day and a raid by night on the raid card's choice: a plain sun and a plain moon. */
-const SUN_SIGN = '<svg class="wayic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="currentColor"/><path d="M8 1.2v2M8 12.8v2M1.2 8h2M12.8 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>';
-const MOON_SIGN = '<svg class="wayic" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.9 1.9a6.3 6.3 0 1 0 3.2 9.9 5.4 5.4 0 0 1-3.2-9.9z" fill="currentColor"/></svg>';
+/** The art director's signs for a raid by day and a raid by night: a sun and a moon, one filled path each in a 24 by 16 box. */
+const SUN_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><path d="M8.7 8.0A3.3 3.3 0 1 1 15.3 8.0A3.3 3.3 0 1 1 8.7 8.0ZM16.7 7.25L19.4 7.59L19.4 8.41L16.7 8.75ZM15.85 10.79L17.52 12.94L16.94 13.52L14.79 11.85ZM12.75 12.7L12.41 15.4L11.59 15.4L11.25 12.7ZM9.21 11.85L7.06 13.52L6.48 12.94L8.15 10.79ZM7.3 8.75L4.6 8.41L4.6 7.59L7.3 7.25ZM8.15 5.21L6.48 3.06L7.06 2.48L9.21 4.15ZM11.25 3.3L11.59 0.6L12.41 0.6L12.75 3.3ZM14.79 4.15L16.94 2.48L17.52 3.06L15.85 5.21Z"/></svg>';
+const MOON_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><path d="M15.4 1.2A7.0 7.0 0 1 0 18.4 12.4A5.9 5.9 0 0 1 15.4 1.2ZM19.03 4.03L17.5 4.6L19.03 5.17L19.6 6.7L20.17 5.17L21.7 4.6L20.17 4.03L19.6 2.5Z"/></svg>';
 
 /** The raid planner's card: the target, the chance of success and the losses to expect, and who flies it. Ticking groups works the odds out again. */
 function raidCard(): string {
@@ -5137,24 +5137,38 @@ function raidCard(): string {
   const kind = m.raid as RaidKind;
   const p: RaidPlan = previewRaid(g, kind, m.target, m.ids);
   m.ids = p.picked;
-  // Day and night side by side (ruling 107(d)). Escorts ticked by hand are kept while the card shows the night, so a change back to day brings them along.
+  // BY DAY and BY NIGHT side by side (ruling 107(d)). Escorts picked are kept while the card shows the night, so a change back to day drops nobody.
   if (kind === 'bomb') m.esc = p.seats.filter((s) => s.picked && s.kind === 'ftr').map((s) => s.id);
   const dn = previewDayNight(g, kind, m.target, kind === 'night' ? [...p.picked, ...((m.esc as number[] | undefined) ?? [])] : p.picked);
-  const wayFact = (f: RaidWay['lost']): string => `<div class="fact"><span>${esc(f.label)}</span><b>${esc(f.n)}</b><small>${esc(f.sub)}</small></div>`;
-  const wayHtml = (w: RaidWay, on: boolean): string => {
-    const inner = w.why ? `<div class="waywhy">${esc(w.why)}</div>`
-      : `<div class="wayfigs">${wayFact(w.lost)}${wayFact(w.harm)}</div>${w.more.length ? `<div class="waymore">${esc(upFirst(w.more.join(' · ')))}</div>` : ''}<div class="waymore">${esc(w.with)}</div>`;
-    const foot = on ? '<span class="tag good">This plan</span>' : w.why ? '' : `<span class="tag">Change to ${w.kind === 'bomb' ? 'day' : 'night'}</span>`;
-    return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${foot}</span>${inner}</button>`;
-  };
-  const choice = dn && !(p.why && !p.picked.length && dn.day.why && dn.night.why) ? `<div class="daynight">${wayHtml(dn.day, dn.chosen === 'bomb')}${wayHtml(dn.night, dn.chosen === 'night')}</div><p class="sub" style="margin:0 0 10px">${esc(dn.note)}</p>` : '';
   const me = g.human!;
-  const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
+  // By night no escort flies: the fighters picked stay at home, and those that could join by day cannot.
+  const home = new Set(dn && kind === 'night' ? dn.home : []), barred = new Set(dn && kind === 'night' ? dn.barred : []);
+  const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why && !home.has(s.id) && !barred.has(s.id));
+  const ghost = (s: RaidPlan['seats'][number], stays: boolean): string => `<div class="pickrow seat ghost"><span class="tick"></span>${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(kindWord(s.kind, s.aircraft))} · ${esc(s.baseName)} · ${stays ? 'Stays home: no escort by night' : 'Cannot fly: no escort by night'}</span></span><span class="tag">${stays ? 'Stays home' : 'By day only'}</span></div>`;
+  const stayers = p.seats.filter((s) => home.has(s.id)).map((s) => ghost(s, true)).join(''), daytime = p.seats.filter((s) => barred.has(s.id)).map((s) => ghost(s, false)).join('');
   const seat = (s: RaidPlan['seats'][number]): string => `<button class="pickrow seat${s.picked ? ' pick' : ''}" data-act="raidtick" data-id="${s.id}" ${s.locked ? 'disabled title="It goes because it is ordered to stick with its bombers. Change its standing order to take it off escort."' : ''}>
     <span class="tick">${s.picked ? '✓' : ''}</span>${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(kindWord(s.kind, s.aircraft))} · ${esc(s.baseName)} · ${esc(s.note)}${s.ready < 0.8 ? ` · readiness ${pctOf(s.ready)}` : ''}${s.locked ? ' · escort, sticks with its bombers' : ''}</span></span>
     <span class="tag${s.picked ? ' good' : ''}">${s.picked ? 'Going' : s.kind === 'ftr' ? 'Add as escort' : 'Add'}</span></button>`;
   let head: string;
-  if (p.why && !going.length) head = `<div class="empty">${esc(p.why)}</div>`;
+  if (dn) {
+    const column = (w: RaidWay, on: boolean): string => {
+      const tone = w.success >= 0.6 ? 'win' : w.success >= 0.4 ? '' : 'loss';
+      const bar = (x: number, red = false): string => `<div class="waybar${red ? ' red' : ''}"><i style="width:${Math.max(0, Math.min(100, Math.round(x * 100)))}%"></i></div>`;
+      const body = w.why ? `<div class="waywhy"><b>Cannot fly ${w.kind === 'bomb' ? 'by day' : 'by night'}:</b> ${esc(w.why)}</div>`
+        : `<div class="waytop"><b>${pctOf(w.success)}</b><span class="${tone}">${esc(w.verdict)}</span></div>${bar(w.success)}
+          <div class="wayrow"><span>Bombers lost</span><b>${esc(w.lost)}</b></div>${bar(w.bomberLoss, true)}
+          ${w.fightersLost ? `<div class="wayrow"><span>Fighters lost</span><b>${esc(w.fightersLost)}</b></div>${bar(w.fighterLoss, true)}` : ''}
+          <div class="wayrow"><span>What a hit does</span></div><div class="wayhits">${w.hits.map((h) => `<div class="wayhit">${h.n ? `<b>${esc(h.n)}</b>` : ''}<span>${esc(h.words)}</span></div>`).join('')}</div>
+          <div class="wayfoot">${esc(w.foot)}</div>`;
+      return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" aria-pressed="${on}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${on ? '<span class="waytag">Chosen</span>' : '<span class="wayring"></span>'}</span>${body}</button>`;
+    };
+    head = `<h3 style="margin-top:0">The forecast · by day or by night</h3>
+      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach</span></div>
+      <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>
+      ${p.why ? '' : `<div class="sub">${p.effects.map(esc).join(' ')}</div>`}
+      ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
+      ${p.offPatrol ? `<div class="note" style="border-left-color:var(--red)"><b>Off patrol.</b> ${esc(upFirst(p.offPatrol))}</div>` : ''}`;
+  } else if (p.why && !going.length) head = `<div class="empty">${esc(p.why)}</div>`;
   else if (p.why) head = `<div class="verdict loss" style="font-size:22px">${esc(p.why)}</div>`;
   else {
     const cls = p.success >= 0.6 ? 'win' : p.success >= 0.4 ? '' : 'loss';
@@ -5168,15 +5182,15 @@ function raidCard(): string {
   }
   const meets = p.meets.length ? p.meets.map((x) => `<div class="pickrow">${groupIcon('ftr', x.nat)}<span class="grow"><b>${esc(x.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.nat].adj}, ${x.afloat ? 'from the carriers of the' : 'from'} ${esc(x.baseName)} · ${num(x.ftr)} fighters, about ${num(x.able)} able to meet the raid</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
-    <div class="body">${choice}${head}
-      <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}
-      ${could.length ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}` : ''}
+    <div class="body">${head}
+      <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}${stayers}
+      ${could.length || daytime ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}${daytime}` : ''}
       ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
       ${cannot.length ? `<details class="cannot"><summary>${cannot.length} group${cannot.length === 1 ? '' : 's'} cannot go</summary>${cannot.map((s) => `<div class="pickrow">${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(s.baseName)} · ${esc(s.why ?? '')}</span></span></div>`).join('')}</details>` : ''}
       ${kind === 'fleet' || kind === 'harbour' ? `<div class="note"><b>Ships are sunk whole.</b> The ticket counts hits; a ship goes down when it has taken enough of them, so a strike that is likely to succeed can still come home with nothing sunk. ${kind === 'fleet' ? 'A fleet that is only reported is harder to find: part of the strike never sees it.' : 'Ships in harbour cannot manoeuvre, and a harbour raided in the month war is declared is caught unready.'}</div>` : ''}
       <div class="note"><b>Flown at once.</b> Every group that goes is away for the rest of the month: it flies no second raid and meets no raid on its own sky. It is back at its airfield${going.some((s) => s.ship >= 0) ? ' or aboard its carrier' : ''}, on patrol as before, next month.</div>
     </div>
-    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doraid" ${p.why ? 'disabled' : ''}>Fly the raid</button></footer>`;
+    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doraid" ${p.why ? 'disabled' : ''}>Fly the raid${dn ? (kind === 'bomb' ? ' by day' : ' by night') : ''}</button></footer>`;
 }
 
 const ticketTable = (lines: { label: string; value: string; effect?: string }[]): string => `<table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
