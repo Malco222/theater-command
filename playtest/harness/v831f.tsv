@@ -1,0 +1,4 @@
+one-danger-FRA-28	TC_DETAIL=4 node out831b/probe91.mjs FRA 1 28 80 '{"minOdds":1.6,"homeOnly":true}'
+one-danger-ITA-32	TC_DETAIL=4 node out831b/probe91.mjs ITA 1 32 80 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+one-danger-GER-35	TC_DETAIL=4 node out831b/probe91.mjs GER 1 35 80 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+one-dangerfield-GER-26	TC_DETAIL=4 node out831b/probe91.mjs GER 1 26 80 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"depth":"field"}'
