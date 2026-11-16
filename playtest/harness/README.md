@@ -231,6 +231,7 @@ Version 81 is main 4814ebf (`/home/user/tc81`, bundles in `out81`). The 24 no-pl
 | Script | What it does | Example |
 | --- | --- | --- |
 | `probe83.ts` | Nobody playing; a computer-led FOE (COL, VEN, BRA, MEX, PER, PAN, CUB, ARG, or `none`) turns to the Axis and declares war on the United States in month T. One `FOE` line a war: the first American corps on its soil, when it falls, Americans across the ocean and ashore in the west to stay (frozen the month Germany falls), Germany's fall, American corps at home then and at the end | `node out81/probe83.mjs 17,18,19 80 COL 13` |
+| `foetab.py` | The table of `FOE` lines by enemy: when it falls, Americans ashore in the west to stay by year, Germany's fall against the same seeds with no such enemy (`foe-none-*`) | `python3 foetab.py 'out/v81/foe-*.txt'` |
 | `v81.tsv` | The measure of rulings 75, 76 and 80(b): `probe83` on Version 81 and, for Colombia, Venezuela and Brazil, on Version 79 (`out79b`); `probe76` by hand; `peek79 17`; two watch jobs; the hemisphere set; Brazil and Argentina by hand | `./jobs.sh v81.tsv out/v81 3` |
 
 ## The two counts of rulings 92 and 94 (Version 79)
