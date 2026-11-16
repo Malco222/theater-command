@@ -15,8 +15,11 @@ const out = await build({
   legalComments: 'none',
 });
 const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
-const css = readFileSync('src/campaign/ui/style.css', 'utf8');
-const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">';
+// The eight target pictures of the month's report card (the art director's own drawings), each once, as a style rule.
+const PICTURES = ['troops', 'fieldworks', 'town', 'fleet', 'factories', 'rail-yard', 'harbour', 'airfield'];
+const pictures = PICTURES.map((k) => `.tpic.k-${k} { background-image: url("data:image/svg+xml;base64,${readFileSync(`src/campaign/ui/pictures/target-${k}.svg`).toString('base64')}"); }`).join('\n');
+const css = `${readFileSync('src/campaign/ui/style.css', 'utf8')}\n${pictures}\n`;
+const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">';
 const page = `<title>Theater Command</title>
 ${fonts}
 <style>

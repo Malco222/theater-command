@@ -4,6 +4,8 @@
 
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
+import { monthCard, monthMark, monthOrders, type MonthCard, type MonthMark } from '../monthcard';
+import { monthCardHtml } from './monthview';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
@@ -158,6 +160,10 @@ const ui = {
   flash: [] as number[],
   auto: 0 as number,
   modal: null as null | { kind: string; [k: string]: any },
+  /** The month's report on one card (Version 82): the mark kept as the player's month opened, the card last shown (R opens it again), and whether its rows are unfolded. */
+  mark: null as MonthMark | null,
+  lastCard: null as MonthCard | null,
+  monthAll: false,
   /** The start screen: the grand campaign's front door, or the list of historical scenarios behind it. */
   menu: 'grand' as 'grand' | 'scenarios',
   /** Which shelf of the arsenal the Build tab shows in the grand campaign. */
@@ -565,6 +571,7 @@ function mount(): void {
   wireMap();
   window.addEventListener('resize', applyView);
   window.addEventListener('resize', drawTechLines);
+  window.addEventListener('resize', fitMonth);
 }
 
 function drawStatic(): void {
@@ -980,6 +987,10 @@ function refresh(): void {
   if (passing) {
     const n = passing.nat ? g.nations[passing.nat] : null;
     pass.innerHTML = `<div class="prow">${n ? `${chip(passing.nat)}<b>${esc(natName(passing.nat))}</b>` : '<b>The month goes on</b>'}<span class="grow">${esc(passing.note || 'The other nations give their orders.')}</span><button class="btn small" data-act="skip">Skip ▸▸</button></div><div class="pbar"><i style="width:${Math.round(100 * Math.min(1, passing.done / Math.max(1, passing.total)))}%"></i></div>`;
+    pass.classList.add('open');
+  } else if (tour) {
+    const s = tour.stops[Math.min(tour.i, tour.stops.length - 1)];
+    pass.innerHTML = `<div class="prow">${s.who && g.nations[s.who] ? chip(s.who) : ''}<b>${esc(s.place)}</b><span class="grow">${esc(s.text)}</span><button class="btn small" data-act="skip">Back to the report ▸</button></div><div class="pbar"><i style="width:${Math.round((100 * (tour.i + 1)) / tour.stops.length)}%"></i></div>`;
     pass.classList.add('open');
   } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   queueSave();
@@ -4848,6 +4859,7 @@ function openModal(m: typeof ui.modal): void {
   const card = $('#card');
   card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'siege' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'town' || m.kind === 'trade' || m.kind === 'cabinet' || m.kind === 'tech' || m.kind === 'stores' || m.kind === 'books' || m.kind === 'raid');
   card.classList.toggle('techcard', m.kind === 'tech');
+  card.classList.toggle('month', m.kind === 'news' && !!m.card);
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
@@ -4878,6 +4890,12 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'siege') card.innerHTML = siegeCard();
   else if (m.kind === 'fold') card.innerHTML = foldCard(m.reg);
   else if (m.kind === 'swap') card.innerHTML = swapCard(m.corps, m.target);
+  else if (m.kind === 'news' && m.card) {
+    const mc = m.card as MonthCard;
+    // (A desk taken back on the card stays taken: the button is offered only while the staff still runs it.)
+    for (const s of mc.staff) s.mayTake = !!g.human && isOpen(g) && g.nations[g.human].alive && staffRunsDesk(g, s.desk as DeskId);
+    card.innerHTML = monthCardHtml(mc, { esc, flag: (nat, w) => flagIcon(nat, g.nations[nat]?.color ?? '#888', w), name: natName, all: ui.monthAll, orders: !!g.human && humanUp(g), tour: tourStops(mc).length > 0 });
+  }
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'invade') {
@@ -4965,6 +4983,25 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = awardCard(a);
   }
   card.scrollTop = 0;
+  fitMonth();
+}
+
+/**
+ * The month's report is one look. Where the window is too short for it the whole card is drawn a little smaller
+ * rather than scrolled, down to three quarters of its size; below that, and on a narrow screen, it scrolls.
+ */
+function fitMonth(): void {
+  const card = document.getElementById('card');
+  const mc = card?.querySelector<HTMLElement>(':scope > .mc');
+  if (!card || !mc) return;
+  mc.style.removeProperty('zoom'); mc.style.removeProperty('width');
+  if (!card.classList.contains('month') || window.innerWidth < 1000 || card.scrollHeight <= card.clientHeight + 1) return;
+  const cs = getComputedStyle(card);
+  const room = card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const k = Math.max(0.75, Math.min(1, room / Math.max(1, mc.offsetHeight)));
+  if (k >= 1) return;
+  mc.style.setProperty('zoom', k.toFixed(3));
+  mc.style.width = `${(100 / k).toFixed(2)}%`;
 }
 
 // ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----
@@ -6193,12 +6230,25 @@ function continueGame(): boolean {
   const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
   applyView();
-  if (me && !humanUp(g)) advanceToHuman(false); else refresh();
+  if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = monthMark(g); refresh(); }
   return true;
 }
 
 /** Lets the computer play until it is the player's month again. */
-type Since = { h: number; r: number; s: number; a: number; shore?: number; /** The player's orders as his month ended. */ q?: { id: number; region: number; name: string; what: string }[] };
+type Since = { h: number; r: number; s: number; a: number; shore?: number; /** The player's orders as his month ended. */ q?: { id: number; region: number; name: string; what: string }[]; /** The mark the month's report is told from. */ mark?: MonthMark };
+
+/**
+ * The mark for the month's report as the player hands his month over: the one kept when it opened, while it is still
+ * this month's and this game's (else one taken now), with what he has on order at this moment.
+ */
+function markNow(): MonthMark | undefined {
+  if (!g.human) return undefined;
+  const m = ui.mark;
+  const ok = !!m && m.turn === g.turn && m.before.length === g.regions.length && m.h <= g.headlines.length && m.r <= g.reports.length && m.s <= g.seaReports.length && m.a <= g.airReports.length && m.shore <= g.shoreReports.length;
+  const mark = ok ? m! : monthMark(g);
+  mark.orders = monthOrders(g);
+  return mark;
+}
 
 /** The other nations' months being played out in front of the player, one nation at a time. */
 let passing: { since: Since; before: string[]; show: boolean; view: { x: number; y: number; w: number }; timer: number; nat: string; note: string; done: number; total: number } | null = null;
@@ -6210,7 +6260,7 @@ function watchPref(): boolean {
 }
 
 function advanceToHuman(show: boolean, since?: Since): void {
-  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
+  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
   const before = g.regions.map((r) => r.ctrl);
   if (show && g.human && watchPref() && !humanUp(g)) {
     passing = { since: from, before, show, view: { ...ui.view }, timer: 0, nat: '', note: '', done: 0, total: g.order.length - 1 };
@@ -6289,6 +6339,9 @@ function endPassing(): void {
 /** Drops a watched month without finishing it: a new game is about to replace this one. */
 function dropPassing(): void {
   if (passing) clearTimeout(passing.timer);
+  // (A new game: the month's report of the old one goes with it.)
+  dropTour();
+  ui.mark = null; ui.lastCard = null; ui.monthAll = false;
   passing = null;
   glideToken++;
 }
@@ -6312,6 +6365,10 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
+  // The month's report on one card (Version 82), for a player still in the war; and the mark for the month now opening.
+  const card = !lost && g.human && from.mark ? monthCard(g, from.mark) : null;
+  ui.mark = g.human && humanUp(g) ? monthMark(g) : null;
+  if (card) { ui.lastCard = card; ui.monthAll = false; }
   refresh();
   if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
@@ -6325,8 +6382,76 @@ function arrive(show: boolean, from: Since, before: string[]): void {
       : `${natName(lost)} has fallen. The war goes on without you.`) + back;
     return;
   }
-  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
+  if (show && card) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom, card });
+  else if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
   else { const next = nextCard(); if (next) openModal(next); }
+}
+
+/** The card a battle report goes back to when it is put down: the month's report it was opened from. */
+const monthBack = (): typeof ui.modal | undefined => (ui.modal?.kind === 'news' && ui.modal.card ? ui.modal : ui.modal?.back ?? undefined);
+
+/** The month's report again (the R key): the card last shown, as it was. */
+function reopenMonth(): void {
+  if (ui.lastCard) openModal({ kind: 'news', from: g.headlines.length, reports: g.reports.length, card: ui.lastCard });
+}
+
+/**
+ * WATCH IT AGAIN (Version 82). The browser keeps no film of the month's moves to run a second time, so the map
+ * visits the places on the card in the card's own order, each under the line that says what happened there, and
+ * then the card comes back. Space or the button ends it at once.
+ */
+let tour: { card: MonthCard; stops: { region: number; who: string; place: string; text: string }[]; i: number; timer: number; view: { x: number; y: number; w: number } } | null = null;
+const TOUR_PAUSE = 2400;
+
+function tourStops(card: MonthCard): { region: number; who: string; place: string; text: string }[] {
+  const out: { region: number; who: string; place: string; text: string }[] = [];
+  const add = (region: number | undefined, who: string | null | undefined, place: string, text: string): void => {
+    if (region === undefined || !g.regions[region] || out.some((s) => s.region === region) || out.length >= 9) return;
+    out.push({ region, who: who ?? '', place, text });
+  };
+  for (const b of card.bands) add(b.region, b.nats[0], g.regions[b.region ?? -1]?.name ?? '', b.head);
+  if (card.lead) add(card.lead.region, card.lead.theirs ?? card.lead.ours, card.lead.place, card.lead.head);
+  for (const r of card.rows) add(r.region, r.theirs ?? r.ours, r.place, r.line);
+  return out;
+}
+
+function startTour(): void {
+  const card = ui.modal?.kind === 'news' ? (ui.modal.card as MonthCard | undefined) : undefined;
+  if (!card) return;
+  const stops = tourStops(card);
+  if (!stops.length) return;
+  dropTour();
+  ui.modal = null;
+  $('#veil').classList.remove('open');
+  tour = { card, stops, i: 0, timer: 0, view: { ...ui.view } };
+  ui.sel = -1; ui.picked.clear();
+  tourStep();
+}
+
+function tourStep(): void {
+  const t = tour;
+  if (!t) return;
+  if (t.i >= t.stops.length) { endTour(true); return; }
+  ui.flash = [t.stops[t.i].region];
+  refresh();
+  glide(viewFor([t.stops[t.i].region]), 420);
+  t.timer = window.setTimeout(() => { if (tour !== t) return; t.i++; tourStep(); }, TOUR_PAUSE);
+}
+
+/** Ends the tour: back to where the map stood, and to the card when asked. */
+function endTour(reopen: boolean): void {
+  const t = tour;
+  if (!t) return;
+  clearTimeout(t.timer);
+  tour = null;
+  ui.flash = [];
+  if (reopen) { glide(t.view, 260); refresh(); openModal({ kind: 'news', from: g.headlines.length, reports: g.reports.length, card: t.card }); }
+  else refresh();
+}
+
+function dropTour(): void {
+  if (tour) clearTimeout(tour.timer);
+  tour = null;
 }
 
 function nextMonth(): void {
@@ -6497,8 +6622,10 @@ function stopAuto(): void {
 
 function onClick(e: MouseEvent): void {
   const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
-  if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(null); return; }
+  if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(ui.modal.back ?? null); return; }
   const act = t.dataset.act!;
+  // Any other order ends the tour of the month's places where it stands.
+  if (tour && act !== 'skip') endTour(false);
   const id = Number(t.dataset.id ?? t.dataset.agent);
   ui.msg = '';
   switch (act) {
@@ -6514,7 +6641,7 @@ function onClick(e: MouseEvent): void {
     }
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
-    case 'skip': endPassing(); break;
+    case 'skip': if (tour) endTour(true); else endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
     case 'ledger': openModal({ kind: 'ledger', nat: t.dataset.nat || g.human || '' }); if (t.dataset.part === 'men') document.querySelector('#card #lmen')?.scrollIntoView({ block: 'start' }); break;
     case 'stores': {
@@ -6685,7 +6812,9 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'watchpref': { try { localStorage.setItem('tc-watch', watchPref() ? '0' : '1'); } catch { /* storage is off: the choice lasts as long as the default */ } refresh(); break; }
-    case 'close': openModal(null); refresh(); break;
+    case 'close': openModal(ui.modal?.back ?? null); refresh(); break;
+    case 'monthall': { ui.monthAll = true; if (ui.modal) { const keep = $('#card').scrollTop; openModal(ui.modal); $('#card').scrollTop = keep; } break; }
+    case 'watchagain': startTour(); break;
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
       if (ui.tab === 'reel') ui.unread = 0;
@@ -6705,7 +6834,8 @@ function onClick(e: MouseEvent): void {
       break;
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
-      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
+      // (The month's report counts from the month's opening instead: his own attacks are part of his month.)
+      const since: Since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
       if (onEve(g)) endEve(g); else { judgeGoals(g, g.human!); endHuman(g); }
       advanceToHuman(true, since);
       break;
@@ -6847,7 +6977,7 @@ function onClick(e: MouseEvent): void {
       if (rep) openModal({ kind: 'shorereport', id: rep.id }); else { ui.msg = 'The bombardment could not be made.'; openModal(null); refresh(); }
       break;
     }
-    case 'shorereport': openModal({ kind: 'shorereport', id }); break;
+    case 'shorereport': openModal({ kind: 'shorereport', id, back: monthBack() }); break;
     case 'fleetsplit': {
       const f = myFleet();
       if (f) openModal({ kind: 'split', fleet: f.id, take: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 } });
@@ -6886,7 +7016,7 @@ function onClick(e: MouseEvent): void {
     case 'toport': { const f = myFleet(); if (f) orderFleet(g, f.id, f.home, 'port'); ui.rebase = false; refresh(); break; }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
     case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
-    case 'seareport': openModal({ kind: 'seareport', id }); break;
+    case 'seareport': openModal({ kind: 'seareport', id, back: monthBack() }); break;
     case 'airfleet': {
       ui.air = ui.air === id ? -1 : id;
       ui.airMode = ''; ui.raid = ''; ui.lead = -1;
@@ -7003,7 +7133,7 @@ function onClick(e: MouseEvent): void {
       if (orderAir(g, m.fleet, m.mission, m.target)) ui.airMode = ''; else ui.msg = 'That order could not be given.';
       openModal(null); refresh(); break;
     }
-    case 'airreport': openModal({ kind: 'airreport', id }); break;
+    case 'airreport': openModal({ kind: 'airreport', id, back: monthBack() }); break;
     case 'doland': {
       const m = ui.modal!;
       const h = g.headlines.length;
@@ -7044,7 +7174,7 @@ function onClick(e: MouseEvent): void {
       for (const c of pickedCorps()) orderEvacuate(g, c);
       ui.picked.clear(); refresh(); break;
     }
-    case 'report': openModal({ kind: 'report', id }); break;
+    case 'report': openModal({ kind: 'report', id, back: monthBack() }); break;
     case 'general': openModal({ kind: 'general', id }); break;
     case 'appoint': openModal({ kind: 'appoint', corps: id }); break;
     case 'assign': orderAssign(g, id, Number(t.dataset.corps)); refresh(); openModal({ kind: 'general', id }); break;
@@ -7312,13 +7442,18 @@ function onKey(e: KeyboardEvent): void {
   const el = e.target as HTMLElement | null;
   if (e.ctrlKey || e.metaKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
   if (e.key === 'Escape') {
-    if (ui.modal) { if (ui.modal.kind !== 'start' || ui.live) { openModal(null); refresh(); } }
+    if (tour) endTour(true);
+    else if (ui.modal) { if (ui.modal.kind !== 'start' || ui.live) { openModal(ui.modal.back ?? null); refresh(); } }
     else if (ui.picked.size || ui.sel >= 0) { ui.picked.clear(); ui.sel = -1; ui.rail = ui.ship = ui.land = false; ui.msg = ''; refresh(); }
     return;
   }
   // A key pressed on a button belongs to that button.
   if (el && el.tagName === 'BUTTON') return;
-  if (e.key === ' ' && passing) { e.preventDefault(); endPassing(); }
+  // The month's report: Enter puts it down (GIVE ORDERS), and R opens it again at any time.
+  if (e.key === 'Enter' && ui.modal?.kind === 'news' && ui.modal.card) { e.preventDefault(); openModal(null); refresh(); return; }
+  if ((e.key === 'r' || e.key === 'R') && !ui.modal && !passing && !tour && ui.lastCard && g.human) { e.preventDefault(); reopenMonth(); return; }
+  if (e.key === ' ' && tour) { e.preventDefault(); endTour(true); }
+  else if (e.key === ' ' && passing) { e.preventDefault(); endPassing(); }
   else if (e.key === 'Enter' && !ui.modal && !passing && g.human && humanUp(g)) { e.preventDefault(); ($('#barbtns').querySelector('[data-act="end"]') as HTMLElement | null)?.click(); }
 }
 
@@ -7332,6 +7467,7 @@ function selectRegion(id: number): void {
 
 function onRegion(id: number): void {
   const r = g.regions[id];
+  if (tour) endTour(false);
   ui.flash = [];
   ui.msg = '';
   // The raid planner is open on a kind of raid: a click on the map is its target.
