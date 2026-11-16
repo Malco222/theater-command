@@ -64,6 +64,8 @@ import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth,
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { staffRuns, type DeskId } from './depth';
+import { minesKnown, whatYouFace } from './facing';
+import type { FaceLine } from './support';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -401,6 +403,8 @@ export interface Outlook {
    */
   cost: { won: CostSeen | null; lost: CostSeen | null };
   lines: TicketLine[];
+  /** WHAT YOU FACE, as his reports know it (the grand campaign; null in a history campaign): a sign and a sentence a line, four at most. */
+  face: FaceLine[] | null;
 }
 /** One result's bill as the player's staff can state it before the fight. */
 export interface CostSeen { ours: number; theirs: number | null; share: number }
@@ -442,7 +446,8 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   if (!band.exact && !bill.lost) bill.lost = billAt(band.lo).lost;
   const seen = (c: CostOf | null): CostSeen | null => (c ? { ours: c.ours, theirs: band.exact ? c.theirs : null, share: c.share } : null);
   const cost = { won: seen(bill.won), lost: seen(bill.lost) };
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines };
+  const face = whatYouFace(g, a, target, g.human);
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines, face };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
@@ -454,8 +459,10 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     }
     if (l.label === 'Troops') return { label: l.label, value: 'How good the defenders are is not known', effect: 'Training and experience count for as much as numbers: identify them first' };
     if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
+    // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
+    if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
     return l;
-  });
+  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
   const nn = k.none.length, old = k.report.length;
   const count = (x: number): string => ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][x] ?? `${x}`;
   const dark = !nn ? '' : nn < n ? `${count(nn)} of the ${n} defending corps ${nn === 1 ? 'is' : 'are'} not identified`
@@ -479,7 +486,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     unidentified: k.none.length, stale: k.report.length,
     note: `${what}, so the odds are the staff's estimate. ${probeRules(g) ? 'A probe by one corps' : 'A battle'}, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
     wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow, cost,
-    lines,
+    lines, face,
   };
 }
 

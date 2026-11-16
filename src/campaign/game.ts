@@ -32,7 +32,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
-import { antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
+import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
@@ -1146,7 +1146,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   if (spied) lines.push({ label: 'Intelligence', value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
-  if (armorShock) lines.push(at ? { label: 'Armor', value: 'Tanks against the defence\'s anti-tank strength', effect: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
+  // (In the grand campaign WHAT YOU FACE says why, and the ticket keeps the figure alone: ruling 149(e).)
+  if (armorShock) lines.push(at ? { label: 'Armor', value: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
   if (streets) lines.push({ label: 'Armor', value: 'Tanks in the streets of the town', effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
   if (hasty) lines.push({ label: 'A hasty assault', value: 'The army has only just come up to the town: it goes in off the march', effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
@@ -1163,6 +1164,21 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       machineGuns: toll.why.machineGuns > 0 && onFoot > 0, mgDug: facing ? defenders.some((d) => machineGuns(g, d, 1, 0) > 1 && facing.works(d) > 0) : false,
       worksCut: dugNow ? 1 - (1 - soften) * (1 - mortar) : 0, mortars: mortar > 0, gunsIn: soften > 0, snipers: sniped,
     };
+    // The figures, for the ticket: the words are on the card.
+    if (facing) {
+      let w = 0, up = 0;
+      for (const d of defenders) { const k = d.divs * d.str; w += k; up += k * (machineGuns(g, d, onFoot, facing.works(d)) - 1); }
+      if (w > 0 && up / w >= 0.005) lines.push({ label: 'Machine guns', value: `Defence up ${Math.round((up / w) * 100)}% against the men on foot` });
+      if (mortar >= 0.005 && dugNow) lines.push({ label: 'Mortars', value: `The fieldworks count for ${Math.round(mortar * 100)}% less` });
+      if (attackers.some((c) => assaultFire(g, c) > 1)) lines.push({ label: 'Assault rifles', value: `Infantry attack up ${Math.round(SUPPORT.assault.attack * 100)}%` });
+    }
+    const share = (x: number): string => `${Math.round(x * 100)}%`;
+    // (Only the arms that go in, and no row where each of them pays the usual share.)
+    const arms: [string, number][] = [];
+    if (tanksIn) arms.push(['tanks', toll.tanks]);
+    if (attackers.some((c) => c.kind !== 'arm' && c.kind !== 'art')) arms.push(['men on foot', toll.foot]);
+    if (attackers.some((c) => c.kind === 'art')) arms.push(['guns', toll.guns]);
+    if (arms.some((x) => Math.abs(x[1] - 1) >= 0.005)) lines.push({ label: 'Who pays', value: `Of the usual share of losses: ${listAnd(arms.map((x) => `${x[0]} ${share(x[1])}`))}` });
   }
   return { A, D, odds: A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced };
 }
@@ -1607,7 +1623,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.faced) {
     const lost = { foot: 0, tanks: 0, guns: 0 };
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
-    rep.paid = { att: whoPaid(a.faced, lost, true), def: whoPaid(a.faced, lost, false) };
+    const said = whoPaid(a.faced, lost, true);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;

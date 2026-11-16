@@ -466,7 +466,7 @@ export interface BattleReport {
    * Who paid, and to what (the grand campaign, rulings 146 and 149): the result's line as the attacker reads it and as
    * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
    */
-  paid?: { att: string; def: string };
+  paid?: { att: string; def: string; sign?: 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
 }
 
 // ---- The war at sea ---------------------------------------------------------------------

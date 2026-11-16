@@ -214,7 +214,7 @@ export function winterAhead(g: Game, nat: string): boolean {
 
 const SUPPORT_TECH = (supportData as unknown as { tech: { antiTank: string } }).tech;
 /** True when a country is at war with one that has a tank corps in the field. */
-function facesTanks(g: Game, nat: string): boolean {
+export function facesTanks(g: Game, nat: string): boolean {
   const foes = g.nations[nat]?.atWar ?? [];
   return foes.length > 0 && g.corps.some((c) => !c.dead && c.kind === 'arm' && foes.includes(c.nat));
 }

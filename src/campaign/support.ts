@@ -239,15 +239,14 @@ export function antiTankParts(at: AntiTank): string[] {
   return parts.filter((p) => p[0] >= 0.03).sort((a, b) => b[0] - a[0]).slice(0, 3).map((p) => p[1]);
 }
 
-export type FaceSign = 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'scouted';
+export type FaceSign = 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted';
 /** One line of WHAT YOU FACE: a sign and a sentence. 'unknown' marks the line that stands alone when nothing is scouted. */
 export interface FaceLine { sign: FaceSign; text: string; unknown?: boolean }
 
-export const NOT_SCOUTED: FaceLine = { sign: 'scouted', text: 'Not scouted: their guns and works are unknown.', unknown: true };
-
 /**
  * WHAT YOU FACE (rulings 146(d)(8), 149(d) and 152): a line for each thing the defence will do to what he brings, four
- * at most, facts first and never a warning. The caller shows NOT_SCOUTED alone where his reports do not know the defence.
+ * at most, facts first and never a warning. These are the lines for a defence that is identified: what his reports do
+ * not know is left out in facing.ts.
  */
 export function faceLines(f: Faced): FaceLine[] {
   const out: FaceLine[] = [];
@@ -269,21 +268,22 @@ export interface Paid { foot: number; tanks: number; guns: number }
  * The result's line (ruling 149 as settled at 21:14Z): who paid most and to what, then the tanks' shock if tanks went
  * in. Two sentences at most, shares in words. 'mine' is true when the reader attacked, false when he defended.
  */
-export function whoPaid(f: Faced, lost: Paid, mine: boolean): string {
+export function whoPaid(f: Faced, lost: Paid, mine: boolean): { text: string; sign: FaceSign | null } {
   const all = lost.foot + lost.tanks + lost.guns;
   const who = mine ? 'Your' : 'Their', whose = mine ? 'their' : 'your';
   let first = `The cost fell evenly on ${mine ? 'your' : 'their'} corps.`;
+  let sign: FaceSign | null = null;
   if (all > 0) {
     const w = f.toll.why;
     if (lost.foot > all / 2 && f.toll.foot > 1.03) {
       const causes = ([[w.machineGuns, 'machine guns'], [w.guns, 'guns'], [w.snipers, 'snipers']] as [number, string][]).filter((c) => c[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 2).map((c) => c[1]);
-      if (causes.length) first = `${who} infantry paid most of it, to ${whose} ${listAnd(causes)}.`;
+      if (causes.length) { first = `${who} infantry paid most of it, to ${whose} ${listAnd(causes)}.`; sign = causes[0] === 'machine guns' ? 'machine-gun' : causes[0] === 'snipers' ? 'sniper' : 'gun'; }
     } else if (lost.tanks > all / 2 && f.toll.tanks > 1.03 && f.antiTank) {
       const causes = antiTankParts(f.antiTank).slice(0, 2);
-      if (causes.length) first = `${who} tanks paid most of it, to ${whose} ${listAnd(causes).replace('tanks of their own', 'tanks')}.`;
+      if (causes.length) { first = `${who} tanks paid most of it, to ${whose} ${listAnd(causes).replace('tanks of their own', 'tanks')}.`; sign = 'anti-tank'; }
     }
   }
-  return f.shock === null ? first : `${first} ${mine ? 'The' : 'Their'} tanks' shock counted ${shareWords(f.shock)}.`;
+  return { text: f.shock === null ? first : `${first} ${mine ? 'The' : 'Their'} tanks' shock counted ${shareWords(f.shock)}.`, sign };
 }
 
 /** The weapons a corps carries, for the row of signs on its card: null for a corps the rule counts none for, and outside the grand campaign. */
