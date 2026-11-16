@@ -254,21 +254,46 @@ export function warWorkLeft(g: Game, nat: string): number {
 export const oilAtHome = (g: Game, nat: string): number | null => (worldOn(g) ? WORLD.oilHome[nat] ?? null : null);
 
 /**
+ * True for a neighbour by the map, beyond the old chart: his homeland touches the country's own homeland, so its
+ * army at home can march on him. Ground the country owns across the sea makes no neighbour of him (Panama beside
+ * the Canal Zone: no army of America's walks there from home).
+ */
+export function neighbourByLand(g: Game, nat: string, e: string): boolean {
+  for (let i = WORLD_FIRST; i < g.regions.length; i++) {
+    const r = g.regions[i];
+    if (r.owner === e && !r.overseas && r.nb.some((j) => g.regions[j].owner === nat && !g.regions[j].overseas)) return true;
+  }
+  return false;
+}
+
+/**
  * True where an enemy is at the door of a country beyond the old chart: an invader from across the ocean ashore
  * anywhere on its side of the water (an enemy whose own capital stands on the old chart), or a hostile country of
  * its own side of the water across a land frontier from ground it holds. He is its army's first business. A hostile
  * country beyond the sea on its own side is not: the army has no road to him, and he does not keep it at home
  * (Version 78, ruling 58a: an Axis Brazil at war with the United States no longer holds America's army back from
- * Europe, whatever colonies Brazil has taken).
+ * Europe, whatever colonies Brazil has taken). Nor does he become a neighbour by land because a force was put
+ * ashore on his coast (Version 81, ruling 80: the war on its own side of the ocean must not become its only
+ * business): the frontier counts where the ground on the country's side of it is its own, or where he is a
+ * neighbour by the map, his homeland touching the country's own homeland. Ground the country owns across the sea
+ * is no part of the door: an enemy Panama beside the Canal Zone is reached by ship, and an army held at home could
+ * not march to him.
  */
 export function enemyAtTheDoor(g: Game, nat: string): boolean {
   const n = g.nations[nat];
   if (!n) return false;
+  const byMap = new Map<string, boolean>();
+  const neighbour = (e: string): boolean => {
+    let v = byMap.get(e);
+    if (v === undefined) { v = neighbourByLand(g, nat, e); byMap.set(e, v); }
+    return v;
+  };
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
     if (!n.atWar.includes(r.ctrl)) continue;
     const cap = g.nations[r.ctrl]?.capital ?? -1;
-    if ((cap >= 0 && !beyondEurope(cap)) || r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
+    if (cap >= 0 && !beyondEurope(cap)) return true;
+    if (r.nb.some((j) => g.regions[j].ctrl === nat && ((g.regions[j].owner === nat && !g.regions[j].overseas) || neighbour(r.ctrl)))) return true;
   }
   return false;
 }
