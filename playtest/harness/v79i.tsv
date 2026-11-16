@@ -1,0 +1,26 @@
+arm-25	node out79b/probe85.mjs 25 76
+arm-26	node out79b/probe85.mjs 26 76
+arm-27	node out79b/probe85.mjs 27 76
+arm-28	node out79b/probe85.mjs 28 76
+arm-29	node out79b/probe85.mjs 29 76
+arm-30	node out79b/probe85.mjs 30 76
+arm-31	node out79b/probe85.mjs 31 76
+arm-32	node out79b/probe85.mjs 32 76
+arm-33	node out79b/probe85.mjs 33 76
+arm-34	node out79b/probe85.mjs 34 76
+arm-35	node out79b/probe85.mjs 35 76
+arm-36	node out79b/probe85.mjs 36 76
+arm-37	node out79b/probe85.mjs 37 76
+arm-38	node out79b/probe85.mjs 38 76
+arm-39	node out79b/probe85.mjs 39 76
+arm-40	node out79b/probe85.mjs 40 76
+arm-41	node out79b/probe85.mjs 41 76
+arm-42	node out79b/probe85.mjs 42 76
+arm-43	node out79b/probe85.mjs 43 76
+arm-44	node out79b/probe85.mjs 44 76
+arm-45	node out79b/probe85.mjs 45 76
+arm-46	node out79b/probe85.mjs 46 76
+arm-47	node out79b/probe85.mjs 47 76
+arm-48	node out79b/probe85.mjs 48 76
+armsecure-25	node out79b/probe85.mjs 25 76 '{"secure":true}'
+armsecure-28	node out79b/probe85.mjs 28 76 '{"secure":true}'
