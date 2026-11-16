@@ -9,6 +9,7 @@
 // courted, moved along the track or annexed by treaty.
 
 import data from '../../data/campaign/league.json';
+import worldData from '../../data/campaign/world.json';
 import { hashString } from '../core/rng';
 import type { Game, Nation } from './types';
 import { atWar, bloc, headline } from './game';
@@ -25,6 +26,15 @@ export const LEAGUE = data as unknown as {
 
 /** True for every country but the great powers: the ones that can belong to the League, and choose their own path in a player's hands. */
 export const small = (id: string): boolean => !LEAGUE.never.includes(id);
+
+const PARTS = worldData as unknown as { nations: Record<string, unknown>; parts: { names: Record<string, string>; of: Record<string, string>; new: string } };
+/**
+ * The part of the world a country lies in: Europe and the Mediterranean, or the Americas. A League is a pact of
+ * neighbours (ruling 58): a founder or a member may ask only countries of its own part, so Brazil founds none with Belgium.
+ */
+export const partOf = (id: string): string => PARTS.parts.of[id] ?? (PARTS.nations[id] ? PARTS.parts.new : 'europe');
+export const partName = (id: string): string => PARTS.parts.names[partOf(id)] ?? partOf(id);
+const farFrom = (id: string, members: string[]): string | undefined => members.find((m) => partOf(m) !== partOf(id));
 
 /** The nation whose place among the powers only its player decides: a small country in the player's hands, in the grand campaign. */
 export const ownPath = (g: Game, id: string): boolean => g.flags.open === 1 && id === g.human && small(id);
@@ -78,6 +88,8 @@ export function willing(g: Game, id: string, members: string[]): { ok: boolean; 
   if (!n || !n.alive || n.dormant) return no('Not there to ask.');
   if (!small(id)) return no('A great power joins no league of small nations.');
   if (n.league) return no('Already a member.');
+  const far = farFrom(id, members);
+  if (far) return no(`A pact of neighbours: ${g.nations[far]?.name ?? 'its founder'} lies in ${partName(far)}, another part of the world.`);
   const b = bloc(n);
   if (b) return no(`Already belongs to ${b === 'axis' ? 'the Axis' : 'the Allies'}.`);
   if (n.atWar.length) return no('At war: the League takes in no country that is already fighting.');
@@ -167,6 +179,7 @@ export function pathOptions(g: Game, nat: string): PathOption[] {
     else if (!members.length) why = 'The League has fallen: none of its members is left.';
     else if (n.atWar.length) why = 'The League takes in no country that is already at war.';
     else if (members.length >= LEAGUE.join.most) why = 'The League is as large as it can hold together.';
+    else if (farFrom(nat, members.map((m) => m.id))) why = `The League is a pact of neighbours, and its members lie in ${partName(members[0].id)}.`;
     out.push({ id: 'join', ok: why === '', why, now: mine === 'league' });
   }
   return out;
@@ -188,6 +201,8 @@ function asked(g: Game, members: string[]): Invite[] {
   const out: Invite[] = [];
   for (const n of Object.values(g.nations)) {
     if (!n.alive || n.dormant || n.league || members.includes(n.id) || !small(n.id) || bloc(n)) continue;
+    // Only neighbours are asked: a country in another part of the world is not on the list at all.
+    if (farFrom(n.id, members)) continue;
     out.push({ nat: n.id, ...willing(g, n.id, members) });
   }
   return out.sort((a, b) => Number(b.ok) - Number(a.ok) || Number(b.friend) - Number(a.friend) || g.nations[a.nat].name.localeCompare(g.nations[b.nat].name));

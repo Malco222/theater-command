@@ -155,7 +155,8 @@ describe('the army sent across the ocean', () => {
     mine.human = 'USA';
     expect(overseasOf(mine, 'USA')).toBeNull();
     expect(shipsItsOwn(mine, 'USA')).toBe(false);
-    // Nor a country with an enemy on its own side of the ocean: its army has work at home.
+    // Nor a country with an invader on its own side of the ocean: its army has work at home.
+    // (A hostile country of its own side beyond the sea is not that: Version 78, entry-78.test.ts.)
     const near = at(JAN_42);
     capture(near, near.byName.Havana ?? near.regions.find((r) => r.owner === 'CUB')!, 'GER');
     expect(overseasOf(near, 'USA')).toBeNull();

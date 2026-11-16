@@ -193,6 +193,22 @@ export function worldMonth(g: Game): void {
       headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
     }
   }
+  // No declaration switches such a country off (ruling 58). A computer-led country whose industry goes to war by
+  // steps (the United States), at war with a member of the Axis and standing on no side, joins the Allies that
+  // month: the Axis is one enemy. Its war work is climbing already, and its staff ships its army as an Ally's.
+  for (const id of Object.keys(WORLD.warWork)) {
+    const n = g.nations[id];
+    if (!n?.alive || n.dormant || id === g.human || bloc(n) !== null) continue;
+    const foes = n.atWar.map((e) => g.nations[e]).filter((x) => x?.alive);
+    const foe = foes.find((x) => bloc(x) === 'axis');
+    if (!foe || foes.some((x) => bloc(x) === 'allies')) continue;
+    if (!Object.values(g.nations).some((x) => x.id !== id && x.alive && !x.dormant && bloc(x) === 'allies')) continue;
+    n.align = 'allies';
+    n.opinion = n.home = -100;
+    g.flags[`step:${id}`] = g.turn;
+    g.supplyDirty = true;
+    headline(g, 'event', `${theName(n, true)} joins the Allies: it is at war with ${theName(foe)}, and the Axis is one enemy.`, id);
+  }
 }
 
 /** The share of a country's industry on war work while it is at peace, where the wider world gives it one of its own, or null where the ordinary rule stands. */
@@ -238,18 +254,38 @@ export function warWorkLeft(g: Game, nat: string): number {
 export const oilAtHome = (g: Game, nat: string): number | null => (worldOn(g) ? WORLD.oilHome[nat] ?? null : null);
 
 /**
+ * True where an enemy is at the door of a country beyond the old chart: an invader from across the ocean ashore
+ * anywhere on its side of the water (an enemy whose own capital stands on the old chart), or a hostile country of
+ * its own side of the water across a land frontier from ground it holds. He is its army's first business. A hostile
+ * country beyond the sea on its own side is not: the army has no road to him, and he does not keep it at home
+ * (Version 78, ruling 58a: an Axis Brazil at war with the United States no longer holds America's army back from
+ * Europe, whatever colonies Brazil has taken).
+ */
+export function enemyAtTheDoor(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  if (!n) return false;
+  for (let i = WORLD_FIRST; i < g.regions.length; i++) {
+    const r = g.regions[i];
+    if (!n.atWar.includes(r.ctrl)) continue;
+    const cap = g.nations[r.ctrl]?.capital ?? -1;
+    if ((cap >= 0 && !beyondEurope(cap)) || r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
+  }
+  return false;
+}
+
+/**
  * True for a computer-run staff across the ocean from every enemy that already has as many field corps at home as
- * it has any use for: it raises no more to stand on the quay. An enemy ashore on its side of the water ends that.
+ * it has any use for: it raises no more to stand on the quay. An enemy at the door ends that (`enemyAtTheDoor`).
  */
 export function armyIdle(g: Game, nat: string): boolean {
   if (!worldOn(g) || nat === g.human) return false;
   const n = g.nations[nat];
   if (!n || n.capital < 0 || !beyondEurope(n.capital)) return false;
+  if (enemyAtTheDoor(g, nat)) return false;
   // Corps on order count as if they had already formed.
   let home = n.queue.reduce((s, b) => s + (b.what === 'corps' && b.kind !== 'eng' ? 1 : 0), 0);
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
-    if (n.atWar.includes(r.ctrl)) return false;
     for (const c of r.units) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
     for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
   }
@@ -261,8 +297,9 @@ export function armyIdle(g: Game, nat: string): boolean {
 
 /**
  * The rules a computer-run country ships its army across the ocean by, while they apply: it is at war, it has
- * shipping, its capital stands in its own hands beyond the old chart, and no enemy holds ground on its side of the
- * water (an invader at home is the army's first business). Null for the player's country, whose army is his to ship.
+ * shipping, its capital stands in its own hands beyond the old chart, and no enemy is at its door there
+ * (`enemyAtTheDoor`: an invader ashore or a hostile neighbour is the army's first business). Null for the
+ * player's country, whose army is his to ship.
  */
 export function overseasOf(g: Game, nat: string): OverseasRules | null {
   const O = worldOn(g) && nat !== g.human ? WORLD.overseas[nat] : undefined;
@@ -270,8 +307,7 @@ export function overseasOf(g: Game, nat: string): OverseasRules | null {
   if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g.regions[n.capital].ctrl !== nat) return null;
   // (A small country's expeditionary force sails from history's month and not before: 'from'.)
   if (O.from !== undefined && g.turn < O.from) return null;
-  for (let i = WORLD_FIRST; i < g.regions.length; i++) if (n.atWar.includes(g.regions[i].ctrl)) return null;
-  return O;
+  return enemyAtTheDoor(g, nat) ? null : O;
 }
 
 /** True for a computer-run country that ships its own army overseas, at war or not: history's dated formations are not sent to it as well. */

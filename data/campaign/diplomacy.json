@@ -99,21 +99,21 @@
     },
     {
       "id": "pearl-harbor-world", "from": 28, "to": 99, "mode": "open",
-      "if": ["flag:world", "alive:GER", "alive:USA", "peace:USA,GER", "notInBloc:USA"],
+      "if": ["flag:world", "alive:GER", "alive:USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"],
       "enter": { "nations": ["USA"], "align": "allies" },
       "war": [["USA", "GER"], ["USA", "ITA"]],
       "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
     },
     {
       "id": "cuba-war", "from": 28, "to": 99, "mode": "open",
-      "if": ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "atPeace:CUB", "notInBloc:CUB"],
+      "if": ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "peace:CUB,GER", "openTo:CUB,allies"],
       "enter": { "nations": ["CUB"], "align": "allies" },
       "war": [["CUB", "GER"]],
       "text": "Cuba follows the United States into the war: Havana declares war on Germany and opens its harbours and airfields to the American fleet."
     },
     {
       "id": "mexico-war", "from": 33, "to": 99, "mode": "open",
-      "if": ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "atPeace:MEX", "notInBloc:MEX"],
+      "if": ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "peace:MEX,GER", "openTo:MEX,allies"],
       "enter": { "nations": ["MEX"], "align": "allies" },
       "war": [["MEX", "GER"]],
       "text": "German submarines have sunk Mexican tankers in the Gulf. Mexico declares war on the Axis and joins the Allies."
@@ -127,7 +127,7 @@
     },
     {
       "id": "brazil-war", "from": 36, "to": 99, "mode": "open",
-      "if": ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "atPeace:BRA", "notInBloc:BRA"],
+      "if": ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "peace:BRA,GER", "openTo:BRA,allies"],
       "enter": { "nations": ["BRA"], "align": "allies" },
       "war": [["BRA", "GER"]],
       "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."

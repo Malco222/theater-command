@@ -27,7 +27,7 @@ import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { onNet, railCut, railsAt } from './rails';
-import { besiegerOf, siegeRules, siegeView, townHeld, townHitText } from './siege';
+import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
@@ -541,12 +541,34 @@ export interface RaidPlan {
   foeLossN: number;
   /** What the raid should do, a sentence each. */
   effects: string[];
+  /**
+   * The numbers behind those sentences, for a card that draws them rather than reads them (Version 78). Each is there
+   * only where this kind of raid can do it; shares and chances are 0 to 1.
+   * `output`: the share of the place's output stopped for a month, and `national`: that as a share of the holder's
+   * whole production. `rail`: the chance of cutting the railway. `factory`: the chance of wrecking a factory outright.
+   * `odds`: fighter odds going in (9 or more reads "overwhelming"). `readiness`: the readiness the air groups based
+   * there lose. `ships`: the share of the warships at sea there that could be lost. `hits`: the bombs and torpedoes
+   * that should hit, and `sunk`: the ships of each class they should sink (the whole part is sure, the rest a chance).
+   * `works`: the months taken off the fieldworks, and `worksLeft`: the months of work left in them.
+   * `organisation`: the organisation the troops there lose. `town`: a raid on a town, as the siege rules record it
+   * (the percent of its works broken down, what the garrison's organisation loses, the percent of the guard out of action).
+   */
+  figures: RaidFigures;
   /** What flying it together is worth beside sending each bomber group alone, or '' where only one goes. */
   massed: string;
   /** What the raid costs at home: fighter groups taken off patrol for the rest of the month. */
   offPatrol: string;
   /** Bombing the line: the months the raid should take off the fieldworks there. */
   wear?: number;
+}
+
+export interface RaidFigures {
+  output?: number; national?: number; rail?: number; factory?: number;
+  odds?: number; readiness?: number;
+  ships?: number; hits?: number; sunk?: Record<string, number>;
+  works?: number; worksLeft?: number;
+  organisation?: number;
+  town?: TownHit;
 }
 
 const VERDICT: [number, string][] = [[0.8, 'Very likely to succeed'], [0.6, 'Likely to succeed'], [0.4, 'It could go either way'], [0.2, 'Likely to fail'], [0, 'Very likely to fail']];
@@ -587,6 +609,33 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
   return out;
 }
 
+/** The numbers `effectsOf` puts into words, read off the same forecast. */
+function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): RaidFigures {
+  const f: RaidFigures = {};
+  if (kind === 'bomb' || kind === 'night') {
+    if (g.regions[target].fac > 0) { f.output = fc.cut; f.national = fc.nation; }
+    if (fc.rail) f.rail = fc.rail;
+    if (fc.ruin) f.factory = fc.ruin;
+  } else if (kind === 'superiority') {
+    f.odds = fc.odds;
+    if (fc.cut > 0) f.readiness = fc.cut;
+  } else if (kind === 'strike') {
+    f.ships = fc.cut;
+  } else if (kind === 'fleet' || kind === 'harbour') {
+    f.hits = fc.hits ?? 0;
+    if (fc.ships) f.sunk = { ...fc.ships };
+  } else if (kind === 'line') {
+    const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
+    f.works = Math.min(fc.cut, most);
+    f.worksLeft = Math.max(0, most - fc.cut);
+  } else if (kind === 'town') {
+    if (fc.town) f.town = { ...fc.town };
+  } else if (kind === 'ground') {
+    f.organisation = fc.cut;
+  }
+  return f;
+}
+
 /**
  * A raid weighed up for the planner. `ids` are the groups asked to fly it; left out, the staff proposes every bomber
  * group that can reach (for a raid without bombers, the nearest fighter group). Fighter groups ordered to stick with
@@ -598,7 +647,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === target) ?? null : null;
   const plan: RaidPlan = {
     kind, target, place, title: `${row.short}: ${place}`, why: null, seats: [], picked: [], bombers: 0, fighters: 0, meets: [], lines: [],
-    success: 0, verdict: '', bomberLoss: 0, bomberLossN: 0, fighterLossN: 0, foeLossN: 0, effects: [], massed: '', offPatrol: '',
+    success: 0, verdict: '', bomberLoss: 0, bomberLossN: 0, fighterLossN: 0, foeLossN: 0, effects: [], figures: {}, massed: '', offPatrol: '',
   };
   if (!airWar(g) || nat === null) { plan.why = 'Raids are planned only in the grand campaign.'; return plan; }
   if (!(kind === 'strike' ? g.seas[target] : kind === 'fleet' ? quarry : g.regions[target])) { plan.why = kind === 'strike' ? 'Pick a sea.' : kind === 'fleet' ? 'Pick a fleet.' : 'Pick a province.'; return plan; }
@@ -668,6 +717,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.fighterLossN = Math.round(fc.ftrLoss);
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
+  plan.figures = figuresOf(g, kind, target, fc, nat);
   if (kind === 'line') plan.wear = fc.cut;
   // What meeting up is worth: each bomber group alone, with the fighters from its own airfield, beside all of them together.
   const bombers = going.filter((f) => f.bmr > 0);
