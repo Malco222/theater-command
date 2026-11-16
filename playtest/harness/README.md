@@ -232,3 +232,10 @@ Version 81 is main 4814ebf (`/home/user/tc81`, bundles in `out81`). The 24 no-pl
 | --- | --- | --- |
 | `probe83.ts` | Nobody playing; a computer-led FOE (COL, VEN, BRA, MEX, PER, PAN, CUB, ARG, or `none`) turns to the Axis and declares war on the United States in month T. One `FOE` line a war: the first American corps on its soil, when it falls, Americans across the ocean and ashore in the west to stay (frozen the month Germany falls), Germany's fall, American corps at home then and at the end | `node out81/probe83.mjs 17,18,19 80 COL 13` |
 | `v81.tsv` | The measure of rulings 75, 76 and 80(b): `probe83` on Version 81 and, for Colombia, Venezuela and Brazil, on Version 79 (`out79b`); `probe76` by hand; `peek79 17`; two watch jobs; the hemisphere set; Brazil and Argentina by hand | `./jobs.sh v81.tsv out/v81 3` |
+
+## The two counts of rulings 92 and 94 (Version 79)
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `probe84.ts`, `v79x.tsv` | Nobody playing: every British, American and Canadian corps that comes to the continent by ship (a landing told by the rules' hook, a ferry into ground its side held, or a ferry that ends the month on enemy ground), dead or alive six months on, where it died against its arrival and whether cut off. One `ITALY` line a war: when Italy signed, who held its mainland that month, the first western corps on Germany's home ground and how they had come | `TC_DIAL=4 node out79b/probe84.mjs 17,18,19 80` |
+| `shiptab.py` | The tables of both counts from `SHIP` and `ITALY` lines; `--list N` lists the groups that lost N corps or more | `python3 shiptab.py 'out/v79x/ship3-*.txt' --list 2` |
