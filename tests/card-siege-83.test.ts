@@ -162,6 +162,37 @@ describe('a siege laid on his town that holds', () => {
     expect(box(card, 'battles')).toBeUndefined();
   });
 
+  it('a town that fell after the siege was laid, with no fight of its own, is LOST and a battle lost: it did not hold', () => {
+    // (The find on Britain's July 1940: Rouen's guard was broken from the air after the field was lost, the province
+    // was German as the card was made, and the row still said HELD, "The town holds out.")
+    const g = game();
+    const mark = monthMark(g, ME);
+    const city = germanCity(g);
+    land(g, city, { siege: true, taken: true, attLost: 2635, defLost: 41188 } as Partial<BattleReport>);
+    city.ctrl = 'POL';
+    const card = monthCard(g, mark, ME);
+    const row = order(card).find((r) => r.region === city.id)!;
+    expect(row).toMatchObject({ tag: 'LOST', tone: 'bad', line: 'The field was lost, and the town fell after it.', head: `${townName(city)} is lost` });
+    expect(row.facts).toEqual([{ n: '1 corps', label: 'fought outside' }, { n: '41,188', label: 'men lost' }, { n: '2,635', label: 'of theirs' }]);
+    expect(box(card, 'battles')).toMatchObject({ figure: '0 – 1', sub: '0 won · 1 lost' });
+    // The besieger's side of the same month: the town he laid siege to is his as the card is made.
+    const h = game();
+    const m2 = monthMark(h, ME);
+    const theirs = h.regions.find((r) => r.owner === 'POL' && r.ctrl === 'POL' && isCity(h, r) && !r.cap)!;
+    land(h, theirs, { attNat: ME, defNat: 'POL', attackers: [unit(ME)], defenders: [unit('POL')], siege: true, taken: true, attLost: 900, defLost: 4000 } as Partial<BattleReport>);
+    theirs.ctrl = ME;
+    const c2 = monthCard(h, m2, ME);
+    const won = order(c2).find((r) => r.region === theirs.id)!;
+    expect(won).toMatchObject({ tag: 'WON', tone: 'good', line: 'The field was won, and the town fell after it.', head: `${townName(theirs)} is taken` });
+    expect(box(c2, 'battles')).toMatchObject({ figure: '1 – 0' });
+    // Still besieged, it is as before: the field is won and the town is under siege.
+    const k = game();
+    const m3 = monthMark(k, ME);
+    const still = k.regions.find((r) => r.owner === 'POL' && r.ctrl === 'POL' && isCity(k, r) && !r.cap)!;
+    land(k, still, { attNat: ME, defNat: 'POL', attackers: [unit(ME)], defenders: [unit('POL')], siege: true, taken: true, attLost: 900, defLost: 4000 } as Partial<BattleReport>);
+    expect(order(monthCard(k, m3, ME)).find((r) => r.region === still.id)).toMatchObject({ tag: 'WON', line: 'The field is won. The town is besieged.', head: `${townName(still)} is under siege` });
+  });
+
   it('weighs its men shut in, once: a great garrison outranks an ordinary battle lost that it did not outrank before', () => {
     const stage = (inside: number): string[] => {
       const g = game();

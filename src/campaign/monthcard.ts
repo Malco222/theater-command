@@ -426,7 +426,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const good = r.siege ? att : att ? r.taken : !r.taken;
     // A siege laid on his town that holds is neither a battle won nor a battle lost (ruling 104): the score's small
     // line says a town is besieged, while the siege stands.
-    const laidOnHim = !!r.siege && def && !r.yielded;
+    // (A town that fell after the siege was laid, with no fight of its own, did not hold: its guard was broken from
+    // the air or it opened its gates, and the province has changed hands as the card is made. That row is LOST, or
+    // WON for the besieger, and the field battle is counted.)
+    const fellSince = !!r.siege && !r.yielded && !!reg && (def ? !side(reg.ctrl) : side(reg.ctrl));
+    const laidOnHim = !!r.siege && def && !r.yielded && !fellSince;
     const shut = laidOnHim ? shutIn(reg) : { men: 0, corps: 0 };
     if (laidOnHim && shut.men > 0) besiegedTowns.add(r.region);
     if (!r.yielded && !laidOnHim) { if (good) battlesWon++; else battlesLost++; }
@@ -460,6 +464,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.line = att ? 'Taken without a fight.' : 'Given up under orders.';
       row.head = att ? `${place} is taken without a fight` : `${place} is given up`;
       row.follows = worth(!att) || (att ? 'The enemy fell back before the attack.' : 'Your troops fell back before the attack.');
+    } else if (r.siege && fellSince) {
+      row.tag = att ? 'WON' : 'LOST'; row.tone = att ? 'good' : 'bad';
+      row.line = att ? 'The field was won, and the town fell after it.' : 'The field was lost, and the town fell after it.';
+      row.head = att ? `${place} is taken` : `${place} is lost`;
+      row.follows = worth(!att) || (att ? 'The front moves forward.' : 'The front falls back.');
+      if (!att && corps) row.facts[0] = { n: plural(corps, 'corps', 'corps'), label: 'fought outside' };
     } else if (r.siege) {
       row.tag = att ? 'WON' : 'HELD'; row.tone = att ? 'good' : 'warn';
       row.line = att ? 'The field is won. The town is besieged.' : shut.men > 0 ? 'The town is besieged and holds.' : 'The field is lost. The town holds out.';
