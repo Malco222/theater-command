@@ -1,0 +1,496 @@
+<title>Sound Listening Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+/* One look, on purpose: a map table under a lamp, the same as the game. */
+:root {
+  color-scheme: dark;
+  --bg: #0e0b08; --panel: #17120d; --panel-2: #211a13; --panel-3: #2d241a; --line: #4b3d2d; --rule: #8a6b3b;
+  --ink: #ede6d6; --ink-2: #a89f8d; --ink-3: #8f8573;
+  --brass: #e0b872; --brass-hi: #ecc884; --brass-ink: #1e1608; --red: #e08a6a; --green: #9cc08a;
+  --paper: #e2d7bc; --paper-ink: #2a2118; --lamp: rgba(224, 184, 114, .11);
+  --serif: "PT Serif", Georgia, "Times New Roman", serif;
+  --typed: "Courier Prime", "Courier New", ui-monospace, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { background-color: var(--bg); background-image: radial-gradient(1100px 460px at 50% -140px, var(--lamp), transparent 72%); background-repeat: no-repeat;
+  color: var(--ink); font-family: var(--serif); font-size: 16px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 1060px; margin: 0 auto; padding-block: 30px 90px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.eyebrow, .label { font-family: var(--typed); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 6px 0 12px; text-wrap: balance; }
+h2 { font-size: 24px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+h3 { font-size: 18px; line-height: 1.25; margin: 0; }
+p { margin: 0; }
+.lede { max-width: 66ch; color: var(--ink-2); font-size: 17px; }
+.lede b { color: var(--ink); }
+section { margin-top: 46px; }
+section, .fam { scroll-margin-top: 150px; }
+.sec-head { border-top: 1px solid var(--rule); padding-top: 16px; margin-bottom: 18px; }
+.sec-head p { color: var(--ink-2); max-width: 70ch; }
+.sec-head .label { color: var(--brass); margin-bottom: 4px; }
+blockquote { margin: 10px 0 0; padding: 10px 14px; background: var(--paper); color: var(--paper-ink); font-style: italic; border-radius: 2px; max-width: 70ch; }
+
+/* The bar that stays in view: the count, the volume, stop. */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; margin-top: 22px; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .55); padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.tally { flex: 1 1 260px; min-width: 0; }
+.tally-line { font-family: var(--typed); font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.tally-line b { color: var(--ink); }
+.tally-line .g { color: var(--green); } .tally-line .f { color: var(--brass); } .tally-line .c { color: var(--red); }
+.meter { height: 6px; background: var(--panel-3); border-radius: 3px; overflow: hidden; display: flex; margin-top: 6px; }
+.meter i { display: block; height: 100%; width: 0; transition: width .2s; }
+.meter .g { background: var(--green); } .meter .f { background: var(--brass); } .meter .c { background: var(--red); }
+.status { font-family: var(--typed); font-size: 12.5px; color: var(--ink-3); margin-top: 5px; min-height: 1.3em; }
+.status.bad { color: var(--red); }
+.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.controls label { font-family: var(--typed); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+input[type=range] { accent-color: var(--brass); width: 110px; }
+.btn { border: 1px solid var(--rule); background: linear-gradient(180deg, var(--panel-3), var(--panel-2)); color: var(--ink); border-radius: 4px; padding: 8px 12px; box-shadow: 0 2px 0 var(--bg);
+  font-family: var(--typed); font-size: 13px; letter-spacing: .06em; min-height: 38px; }
+.btn:hover { border-color: var(--brass); }
+.btn.go { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--brass-ink); border-color: #f4dea8; font-weight: 700; }
+.btn[disabled] { opacity: .45; cursor: default; }
+.now { font-family: var(--typed); font-size: 12.5px; color: var(--brass); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* Play key */
+.play { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid #f4dea8; background: radial-gradient(circle at 35% 30%, var(--brass-hi), var(--brass) 60%, #b08d57);
+  color: var(--brass-ink); display: grid; place-items: center; box-shadow: 0 2px 0 #5a4420, 0 3px 6px rgba(0, 0, 0, .45); padding: 0; }
+.play svg { width: 16px; height: 16px; fill: currentColor; }
+.play .i-stop, .play .i-wait { display: none; }
+[data-state=playing] > .play .i-play, [data-state=playing] .head .play .i-play { display: none; }
+[data-state=playing] > .play .i-stop, [data-state=playing] .head .play .i-stop { display: block; }
+[data-state=loading] > .play, [data-state=loading] .head .play { opacity: .6; }
+[data-state=error] > .play, [data-state=error] .head .play { background: var(--panel-3); color: var(--red); border-color: var(--red); }
+.play.big { width: 54px; height: 54px; } .play.big svg { width: 20px; height: 20px; }
+
+/* A sound's shape, with a line that runs along it while it plays. */
+.wave { position: relative; height: 30px; min-width: 0; }
+.wave svg { display: block; width: 100%; height: 100%; }
+.wave path { fill: var(--rule); }
+[data-state=playing] .wave path { fill: var(--brass); }
+.ph { position: absolute; top: -2px; bottom: -2px; left: 0; width: 2px; background: var(--ink); opacity: 0; pointer-events: none; }
+[data-state=playing] .ph { opacity: 1; }
+
+/* The three stamps */
+.stamps { display: flex; gap: 6px; flex: none; }
+.stamp { font-family: var(--typed); font-weight: 700; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; min-width: 54px; min-height: 38px; padding: 6px 8px 4px;
+  border: 1.5px solid var(--line); color: var(--ink-3); background: transparent; border-radius: 3px; transition: transform .08s; }
+.stamp:hover { border-color: var(--ink-2); color: var(--ink); }
+.stamp[aria-pressed=true] { transform: rotate(-4deg); border-style: double; border-width: 4px; padding: 3px 6px 1px; }
+.stamp.good[aria-pressed=true] { color: var(--green); border-color: var(--green); }
+.stamp.fix[aria-pressed=true] { color: var(--brass); border-color: var(--brass); }
+.stamp.cut[aria-pressed=true] { color: var(--red); border-color: var(--red); }
+.note { width: 100%; background: var(--paper); color: var(--paper-ink); border: 1px solid #cdbf9c; border-radius: 2px; padding: 7px 10px; font-family: var(--typed); font-size: 14px; }
+.note::placeholder { color: #6d6250; font-style: italic; }
+
+/* Scenes */
+.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.scene { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; box-shadow: 0 8px 22px rgba(0, 0, 0, .45); }
+.scene .head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.scene .meta, .row .meta { font-family: var(--typed); font-size: 12.5px; color: var(--ink-3); }
+.scene .about { color: var(--ink-2); font-size: 15px; flex: 1; }
+.scene .wave { height: 44px; }
+.foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* The eyes-shut test */
+.tests { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.test { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.side { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 10px; min-width: 0; }
+.side b { display: block; } .side span { font-family: var(--typed); font-size: 12px; color: var(--ink-3); }
+.blind { border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.blind .ask { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.result { font-family: var(--typed); font-size: 14px; min-height: 1.5em; color: var(--ink-2); }
+.result.right { color: var(--green); } .result.wrong { color: var(--red); }
+
+/* Every sound */
+.filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--typed); font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--ink-2); border-radius: 3px; padding: 6px 10px; min-height: 36px; }
+.chip:hover { border-color: var(--rule); color: var(--ink); }
+.chip[aria-pressed=true] { background: var(--panel-3); border-color: var(--brass); color: var(--ink); }
+.chip small { color: var(--ink-3); font-size: 12px; }
+.search { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 7px 10px; font-family: var(--typed); font-size: 14px; min-height: 36px; width: min(100%, 260px); }
+.fam { margin-top: 26px; }
+.fam > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.fam > header p { color: var(--ink-3); font-size: 14.5px; }
+.row { display: grid; grid-template-columns: 42px minmax(0, 1fr) 150px auto; gap: 6px 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--panel-3); }
+.row .what { min-width: 0; }
+.row .name { font-family: var(--typed); font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.row .about { color: var(--ink-2); font-size: 14.5px; margin-top: 2px; }
+.row .note-wrap { grid-column: 2 / -1; }
+.empty { color: var(--ink-3); font-style: italic; padding: 20px 0; }
+footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--ink-3); font-size: 14px; max-width: 72ch; }
+.copy-out { width: 100%; min-height: 120px; background: var(--paper); color: var(--paper-ink); font-family: var(--typed); font-size: 13px; border-radius: 2px; border: 1px solid #cdbf9c; padding: 8px; margin-top: 8px; }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 42px minmax(0, 1fr); }
+  .row .wave { grid-column: 1 / -1; }
+  .row .stamps { grid-column: 1 / -1; }
+  .row .note-wrap { grid-column: 1 / -1; }
+  .pair { grid-template-columns: 1fr; }
+  .bar { padding: 8px 12px; gap: 6px 14px; }
+  section, .fam { scroll-margin-top: 190px; }
+  input[type=range] { width: 90px; }
+}
+@media (prefers-reduced-motion: reduce) { .stamp, .meter i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Theater Command &middot; Sound department &middot; 16 November 2026</p>
+    <h1>Sound Listening Board</h1>
+    <p class="lede">Every sound made for the game, and seven scenes that show how they play together. Nobody who built them can hear, so the last check is yours. Press play, then stamp each one <b>Good</b>, <b>Fix</b> or <b>Cut</b>. Your stamps save by themselves. Listen once on headphones and once on the laptop's own speakers, which is how most players will hear it.</p>
+  </header>
+
+  <div class="bar" role="region" aria-label="Count and volume">
+    <div class="tally">
+      <div class="tally-line"><span><b id="t-done">0</b> of <b id="t-all">0</b> stamped</span><span class="g">Good <b id="t-good">0</b></span><span class="f">Fix <b id="t-fix">0</b></span><span class="c">Cut <b id="t-cut">0</b></span></div>
+      <div class="meter" aria-hidden="true"><i class="g" id="m-good"></i><i class="f" id="m-fix"></i><i class="c" id="m-cut"></i></div>
+      <div class="status" id="status" role="status">Looking for your stamps.</div>
+    </div>
+    <div class="controls">
+      <span class="now" id="now" aria-live="polite"></span>
+      <label>Volume <input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume"></label>
+      <button class="btn" id="stop" disabled>Stop</button>
+    </div>
+  </div>
+
+  <section id="scenes-sec">
+    <div class="sec-head">
+      <p class="label">One &middot; start here</p>
+      <h2>Seven scenes</h2>
+      <p>Each scene is the real sounds, mixed the way the game should play them. They are the target the builders work to, so if a scene is wrong the plan is wrong.</p>
+    </div>
+    <div class="scenes" id="scenes"></div>
+  </section>
+
+  <section id="tests-sec">
+    <div class="sec-head">
+      <p class="label">Two &middot; the finish line's test</p>
+      <h2>Eyes shut</h2>
+      <blockquote>With your eyes shut you can tell a march from a train, and a raid by day from a raid by night.</blockquote>
+      <p style="margin-top:10px">Listen to each side first. Then let the board play one without telling you which, and say what you heard.</p>
+    </div>
+    <div class="tests" id="tests"></div>
+  </section>
+
+  <section id="all-sec">
+    <div class="sec-head">
+      <p class="label">Three &middot; the whole set</p>
+      <h2>Every sound</h2>
+      <p>A sound marked <i>loop</i> goes round until you stop it; leave one running a while to judge whether it grates.</p>
+    </div>
+    <div class="filters">
+      <div class="chips" id="fam-chips" role="group" aria-label="Family"></div>
+      <div class="chips" id="show-chips" role="group" aria-label="Show"></div>
+      <input class="search" id="q" type="search" placeholder="Find a sound by name" aria-label="Find a sound by name">
+    </div>
+    <div id="list"></div>
+    <p class="empty" id="empty" hidden>Nothing matches. Clear the filters to see every sound.</p>
+  </section>
+
+  <footer>
+    <p>Every sound here is original: synthesised from tones and noise by the project's own program. Nothing is recorded, sampled or borrowed, and nothing is taken from any other game. The licence log and the sound brief are in the project files, folder <span style="font-family:var(--typed)">sound</span>.</p>
+    <div id="local-out" hidden>
+      <p style="margin-top:12px">Your stamps are kept in this browser only. To hand them over, copy this list into the thread.</p>
+      <button class="btn" id="copy" style="margin-top:8px">Copy my stamps</button>
+      <textarea class="copy-out" id="copy-out" readonly hidden aria-label="Your stamps as text"></textarea>
+    </div>
+  </footer>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+
+// ---------- small helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const ICONS = '<svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.2v11.6L14 8z"/></svg><svg class="i-stop" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5h9v9h-9z"/></svg>';
+const secs = (s) => (s >= 10 ? Math.round(s) : Math.round(s * 10) / 10) + ' s';
+function wavePath(w) {
+  const n = w.length, bw = 100 / n; let d = '';
+  for (let i = 0; i < n; i++) { const h = Math.max(1, (parseInt(w[i], 36) / 35) * 30); d += `M${(i * bw).toFixed(2)} ${(15 - h / 2).toFixed(1)}h${(bw * 0.72).toFixed(2)}v${h.toFixed(1)}h-${(bw * 0.72).toFixed(2)}z`; }
+  return d;
+}
+function waveEl(w) {
+  const box = el('div', 'wave');
+  box.innerHTML = `<svg viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><path d="${wavePath(w)}"/></svg><span class="ph"></span>`;
+  return box;
+}
+
+// ---------- the player: one sound at a time ----------
+let ctx = null, master = null, current = null, volume = 0.8;
+const buffers = new Map();
+function wake() {
+  if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return false; ctx = new C(); master = ctx.createGain(); master.gain.value = volume; master.connect(ctx.destination); }
+  if (ctx.state === 'suspended') ctx.resume();
+  return true;
+}
+function load(name) {
+  let p = buffers.get(name);
+  if (!p) {
+    p = fetch('audio/' + name + '.mp3').then((r) => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); }).then((b) => ctx.decodeAudioData(b));
+    buffers.set(name, p); p.catch(() => buffers.delete(name));
+  }
+  return p;
+}
+function setState(host, state) { if (host) { host.dataset.state = state; const b = $('.play', host); if (b) b.setAttribute('aria-pressed', state === 'playing' ? 'true' : 'false'); } }
+function showNow() { $('#now').textContent = current ? 'Playing ' + current.label : ''; $('#stop').disabled = !current; }
+function stop() {
+  const c = current; if (!c) return;
+  current = null; setState(c.host, 'idle'); showNow();
+  if (c.src) { const t = ctx.currentTime; c.gain.gain.setValueAtTime(c.gain.gain.value, t); c.gain.gain.linearRampToValueAtTime(0, t + 0.06); try { c.src.stop(t + 0.08); } catch (e) {} }
+}
+// opts: host (the element that shows the state), label, loop [from, length], max (seconds), onend
+async function start(name, opts) {
+  if (!wake()) return;
+  stop();
+  const c = current = { name, host: opts.host, label: opts.label || name };
+  setState(c.host, 'loading'); showNow();
+  let buf;
+  try { buf = await load(name); } catch (e) { if (current === c) { current = null; showNow(); } setState(c.host, 'error'); return; }
+  if (current !== c) return;
+  const src = ctx.createBufferSource(), gain = ctx.createGain();
+  src.buffer = buf; src.connect(gain).connect(master);
+  const lp = opts.loop;
+  if (lp) { src.loop = true; src.loopStart = lp[0]; src.loopEnd = lp[0] + lp[1]; src.start(0, lp[0]); } else src.start(0);
+  c.src = src; c.gain = gain; c.t0 = ctx.currentTime; c.len = lp ? lp[1] : buf.duration;
+  if (opts.max && (lp || buf.duration > opts.max)) { const t = c.t0 + opts.max; gain.gain.setValueAtTime(1, t - 0.4); gain.gain.linearRampToValueAtTime(0, t); src.stop(t + 0.02); }
+  src.onended = () => { if (current === c) { current = null; setState(c.host, 'idle'); showNow(); } if (opts.onend) opts.onend(); };
+  setState(c.host, 'playing'); showNow(); requestAnimationFrame(tick);
+}
+function tick() {
+  const c = current; if (!c || !c.src) return;
+  const ph = c.host && $('.ph', c.host);
+  if (ph) { const t = ctx.currentTime - c.t0; ph.style.left = Math.min(100, ((c.src.loop ? t % c.len : t) / c.len) * 100) + '%'; }
+  requestAnimationFrame(tick);
+}
+function toggle(name, opts) { if (current && current.host === opts.host && current.name === name) stop(); else start(name, opts); }
+$('#stop').addEventListener('click', stop);
+$('#vol').addEventListener('input', (e) => { volume = e.target.value / 100; if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.03); });
+
+// ---------- the stamps: kept in the artifact's own store, or in this browser if there is none ----------
+const marks = new Map();            // name -> { mark: 'good' | 'fix' | 'cut' | '', note: '' }
+const hosts = new Map();            // name -> the element that carries its stamps
+const inflight = new Set(), dirty = new Set(), waiting = new Set();
+let db = null, mode = 'loading';
+const LOCAL = 'tc-sound-board';
+const statusEl = $('#status');
+function say(text, bad) { statusEl.textContent = text; statusEl.classList.toggle('bad', !!bad); }
+function get(name) { return marks.get(name) || { mark: '', note: '' }; }
+function saveLocal() { try { localStorage.setItem(LOCAL, JSON.stringify(Object.fromEntries(marks))); } catch (e) {} }
+async function save(name) {
+  if (mode === 'local') { saveLocal(); return; }
+  if (mode === 'loading' || !db) { waiting.add(name); return; }
+  if (inflight.has(name)) { dirty.add(name); return; }
+  const m = get(name), ref = db.doc('verdicts/' + name);
+  inflight.add(name); say('Saving.');
+  try {
+    if (m.mark || m.note) await ref.set({ mark: m.mark, note: m.note, at: new Date().toISOString() }); else await ref.delete();
+    if (!inflight.size || (inflight.size === 1 && !dirty.size)) say('Saved. Your stamps are kept with this page.');
+  } catch (e) {
+    say(e && (e.code === 'quota_exceeded' || e.code === 'resource_exhausted') ? 'Not saved: the store is full or busy. Try again in a moment.' : 'Not saved. You may be able to listen but not to stamp; your stamps stay on this screen only.', true);
+  } finally {
+    inflight.delete(name);
+    if (dirty.delete(name)) save(name);
+  }
+}
+function paint(name) {
+  const host = hosts.get(name); if (!host) return;
+  const m = get(name);
+  for (const b of host.querySelectorAll('.stamp')) b.setAttribute('aria-pressed', b.dataset.mark === m.mark ? 'true' : 'false');
+  host.dataset.mark = m.mark;
+  const wrap = $('.note-wrap', host), input = $('.note', host);
+  if (wrap) wrap.hidden = !(m.mark === 'fix' || m.mark === 'cut' || m.note);
+  if (input && document.activeElement !== input && input.value !== m.note) input.value = m.note;
+}
+function tally() {
+  let g = 0, f = 0, c = 0;
+  for (const name of hosts.keys()) { const k = get(name).mark; if (k === 'good') g++; else if (k === 'fix') f++; else if (k === 'cut') c++; }
+  const all = hosts.size;
+  $('#t-done').textContent = g + f + c; $('#t-all').textContent = all; $('#t-good').textContent = g; $('#t-fix').textContent = f; $('#t-cut').textContent = c;
+  $('#m-good').style.width = (g / all * 100) + '%'; $('#m-fix').style.width = (f / all * 100) + '%'; $('#m-cut').style.width = (c / all * 100) + '%';
+  const n = { all: 0, todo: 0, good: 0, fix: 0, cut: 0 };
+  for (const r of rows) { n.all++; n[get(r.s.n).mark || 'todo']++; }
+  for (const b of document.querySelectorAll('#show-chips .chip')) { const k = $('small', b); if (k) k.textContent = n[b.dataset.show]; }
+}
+const noteTimers = new Map();
+const pinned = new Set();      // rows stamped under the present filter stay in view until the filter changes
+function stampsFor(name, kinds) {
+  const box = el('div', 'stamps'); box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Your verdict on ' + name);
+  for (const [k, t] of kinds || [['good', 'Good'], ['fix', 'Fix'], ['cut', 'Cut']]) {
+    const b = el('button', 'stamp ' + k, t); b.type = 'button'; b.dataset.mark = k; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => { const m = get(name); marks.set(name, { mark: m.mark === k ? '' : k, note: m.note }); pinned.add(name); paint(name); tally(); applyFilters(); save(name); });
+    box.appendChild(b);
+  }
+  const wrap = el('div', 'note-wrap'); wrap.hidden = true;
+  const input = el('input', 'note'); input.type = 'text'; input.maxLength = 400; input.placeholder = 'What should change?'; input.setAttribute('aria-label', 'A note on ' + name);
+  const commit = () => { clearTimeout(noteTimers.get(name)); const m = get(name); if (m.note === input.value) return; marks.set(name, { mark: m.mark, note: input.value }); save(name); };
+  input.addEventListener('input', () => { clearTimeout(noteTimers.get(name)); noteTimers.set(name, setTimeout(commit, 900)); });
+  input.addEventListener('blur', commit);
+  wrap.appendChild(input);
+  return { box, wrap };
+}
+
+// ---------- one: the scenes ----------
+for (const s of DATA.scenes) {
+  const card = el('article', 'scene'); hosts.set(s.n, card);
+  const head = el('div', 'head');
+  const play = el('button', 'play big'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Play the scene: ' + s.t);
+  play.addEventListener('click', () => toggle(s.n, { host: card, label: s.t }));
+  const tt = el('div'); tt.appendChild(el('h3', '', s.t)); tt.appendChild(el('p', 'meta', secs(s.s) + ' · ' + s.k + ' sounds'));
+  head.append(play, tt);
+  const foot = el('div', 'foot');
+  const st = stampsFor(s.n); foot.appendChild(st.box);
+  card.append(head, waveEl(s.w), el('p', 'about', s.a), foot, st.wrap);
+  $('#scenes').appendChild(card);
+}
+
+// ---------- two: the eyes-shut test ----------
+for (const t of DATA.tests) {
+  const card = el('article', 'test'); hosts.set(t.key, card);
+  card.appendChild(el('h3', '', t.q));
+  const pair = el('div', 'pair');
+  for (const side of [t.a, t.b]) {
+    const box = el('div', 'side');
+    const play = el('button', 'play'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Listen: ' + side.label);
+    const clip = side.clips[0];
+    play.addEventListener('click', () => toggle(clip.n, { host: box, label: side.label, loop: clip.lp || null, max: clip.lp ? 8 : 0 }));
+    const txt = el('div'); txt.appendChild(el('b', '', side.label)); txt.appendChild(el('span', '', side.hint));
+    box.append(play, txt); pair.appendChild(box);
+  }
+  card.appendChild(pair);
+  const blind = el('div', 'blind'), ask = el('div', 'ask'), result = el('p', 'result');
+  result.setAttribute('role', 'status');
+  const go = el('button', 'btn go', 'Play one without telling me'); go.type = 'button';
+  const btnA = el('button', 'btn', t.a.label), btnB = el('button', 'btn', t.b.label);
+  btnA.type = btnB.type = 'button'; btnA.disabled = btnB.disabled = true;
+  let truth = null, right = 0, tries = 0, last = '';
+  go.addEventListener('click', () => {
+    const pool = [...t.a.clips.map((c) => ['a', c]), ...t.b.clips.map((c) => ['b', c])].filter(([, c]) => c.n !== last || t.a.clips.length + t.b.clips.length <= 2);
+    const [side, clip] = pool[Math.floor(Math.random() * pool.length)];
+    truth = { side, clip }; last = clip.n; btnA.disabled = btnB.disabled = false;
+    result.className = 'result'; result.textContent = 'Listen. Which was it?';
+    start(clip.n, { host: blind, label: 'the mystery sound', loop: clip.lp || null, max: clip.lp ? 7 : 9 });
+  });
+  const answer = (side) => () => {
+    if (!truth) return;
+    tries++; const ok = side === truth.side; if (ok) right++;
+    const was = truth.side === 'a' ? t.a.label : t.b.label;
+    result.className = 'result ' + (ok ? 'right' : 'wrong');
+    result.textContent = (ok ? 'Right. ' : 'No. ') + 'That was: ' + was.toLowerCase() + ' (' + truth.clip.n + '). ' + right + ' right of ' + tries + '.';
+    truth = null; btnA.disabled = btnB.disabled = true;
+  };
+  btnA.addEventListener('click', answer('a')); btnB.addEventListener('click', answer('b'));
+  ask.append(go, btnA, btnB); blind.append(ask, result); card.appendChild(blind);
+  const foot = el('div', 'foot'); foot.appendChild(el('span', 'label', 'Can you tell them apart?'));
+  const st = stampsFor(t.key, [['good', 'Yes'], ['fix', 'No']]); foot.appendChild(st.box); card.append(foot, st.wrap);
+  $('#tests').appendChild(card);
+}
+
+// ---------- three: every sound ----------
+const filter = { fam: 'all', show: 'all', q: '' };
+const rows = [];
+for (const [key, title, blurb] of DATA.families) {
+  const list = DATA.sounds.filter((s) => s.f === key);
+  if (!list.length) continue;
+  const fam = el('div', 'fam'); fam.dataset.fam = key;
+  const head = el('header'); head.appendChild(el('h3', '', title)); head.appendChild(el('p', '', blurb)); fam.appendChild(head);
+  for (const s of list) {
+    const row = el('div', 'row'); hosts.set(s.n, row);
+    const play = el('button', 'play'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Play ' + s.n);
+    play.addEventListener('click', () => toggle(s.n, { host: row, loop: s.lp || null }));
+    const what = el('div', 'what');
+    what.appendChild(el('div', 'name', s.n));
+    what.appendChild(el('div', 'meta', [secs(s.s), s.lp ? 'loop' : '', s.st ? 'stereo' : '', s.b ? 'also in the browser game' : ''].filter(Boolean).join(' · ')));
+    what.appendChild(el('div', 'about', s.a));
+    const st = stampsFor(s.n);
+    row.append(play, what, waveEl(s.w), st.box, st.wrap);
+    fam.appendChild(row); rows.push({ s, row, fam });
+  }
+  $('#list').appendChild(fam);
+}
+function chip(group, key, label, count, attr) {
+  const b = el('button', 'chip'); b.type = 'button'; b.dataset[attr] = key; b.append(label + ' ');
+  b.appendChild(el('small', '', count == null ? '' : String(count)));
+  b.setAttribute('aria-pressed', filter[attr] === key ? 'true' : 'false');
+  b.addEventListener('click', () => { filter[attr] = key; pinned.clear(); for (const o of group.children) o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); applyFilters(); });
+  group.appendChild(b);
+}
+const famChips = $('#fam-chips'), showChips = $('#show-chips');
+chip(famChips, 'all', 'All', DATA.sounds.length, 'fam');
+for (const [key, title] of DATA.families) { const n = DATA.sounds.filter((s) => s.f === key).length; if (n) chip(famChips, key, title, n, 'fam'); }
+chip(famChips, 'browser', 'The browser game’s set', DATA.sounds.filter((s) => s.b).length, 'fam');
+for (const [key, label] of [['all', 'Everything'], ['todo', 'Not yet stamped'], ['good', 'Good'], ['fix', 'Fix'], ['cut', 'Cut']]) chip(showChips, key, label, 0, 'show');
+$('#q').addEventListener('input', (e) => { filter.q = e.target.value.trim().toLowerCase(); pinned.clear(); applyFilters(); });
+function applyFilters() {
+  const seen = new Set(); let any = false;
+  for (const { s, row, fam } of rows) {
+    const k = get(s.n).mark;
+    const ok = (filter.fam === 'all' || (filter.fam === 'browser' ? !!s.b : s.f === filter.fam))
+      && (filter.show === 'all' || (filter.show === 'todo' ? !k : k === filter.show))
+      && (!filter.q || s.n.includes(filter.q) || s.a.toLowerCase().includes(filter.q));
+    // A row just stamped, playing, or whose note is being written stays where it is until the filter next changes.
+    const keep = pinned.has(s.n) || (current && current.host === row) || (row.contains(document.activeElement) && document.activeElement.classList.contains('note'));
+    row.hidden = !(ok || keep);
+    if (!row.hidden) { seen.add(fam); any = true; }
+  }
+  for (const f of document.querySelectorAll('.fam')) f.hidden = !seen.has(f);
+  $('#empty').hidden = any;
+}
+
+// ---------- fetch the stamps ----------
+function useLocal(why) {
+  mode = 'local';
+  try { const saved = JSON.parse(localStorage.getItem(LOCAL) || '{}'); for (const k in saved) if (!marks.has(k) && hosts.has(k)) marks.set(k, { mark: saved[k].mark || '', note: saved[k].note || '' }); } catch (e) {}
+  saveLocal(); waiting.clear();
+  for (const k of hosts.keys()) paint(k);
+  tally(); applyFilters();
+  say(why || 'Your stamps are kept in this browser only.');
+  $('#local-out').hidden = false;
+}
+function summary() {
+  const out = [];
+  for (const k of hosts.keys()) { const m = get(k); if (m.mark || m.note) out.push(k + ': ' + (m.mark || 'note').toUpperCase() + (m.note ? '. ' + m.note : '')); }
+  return out.length ? out.join('\n') : 'Nothing stamped yet.';
+}
+$('#copy').addEventListener('click', async () => {
+  const text = summary(), box = $('#copy-out');
+  box.value = text; box.hidden = false;
+  try { await navigator.clipboard.writeText(text); $('#copy').textContent = 'Copied'; } catch (e) { box.focus(); box.select(); }
+});
+tally(); applyFilters();
+(async () => {
+  let store = null;
+  try { store = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { store = null; }
+  if (!store) { useLocal(); return; }
+  db = store;
+  let settled = false;
+  const slow = setTimeout(() => { if (!settled) say('Your saved stamps cannot be reached yet. New ones may not be kept until they can.', true); }, 10000);
+  db.collection('verdicts').limit(1000).onSnapshot((snap) => {
+    if (mode === 'loading') { mode = 'db'; for (const k of [...waiting]) { waiting.delete(k); save(k); } }
+    const there = new Set();
+    for (const d of snap.docs) {
+      there.add(d.id);
+      if (!hosts.has(d.id) || inflight.has(d.id) || dirty.has(d.id)) continue;
+      const v = d.data() || {}, was = get(d.id), now = { mark: ['good', 'fix', 'cut'].includes(v.mark) ? v.mark : '', note: typeof v.note === 'string' ? v.note.slice(0, 400) : '' };
+      const typing = document.activeElement && document.activeElement.classList.contains('note') && hosts.get(d.id).contains(document.activeElement);
+      if (typing) now.note = was.note;
+      if (was.mark !== now.mark || was.note !== now.note) { marks.set(d.id, now); paint(d.id); }
+    }
+    if (!snap.metadata.fromCache) for (const k of [...marks.keys()]) if (!there.has(k) && !inflight.has(k) && !dirty.has(k)) { marks.delete(k); paint(k); }
+    tally(); applyFilters();
+    if (!snap.metadata.fromCache && !settled) { settled = true; clearTimeout(slow); if (!inflight.size) say('Your stamps save by themselves.'); }
+  }, (err) => {
+    settled = true; clearTimeout(slow);
+    if (mode === 'loading') useLocal('The page’s store cannot be reached, so your stamps are kept in this browser only.');
+    else say('The link to your saved stamps was lost. Stamps made from now on stay on this screen only.', true);
+  });
+})();
+</script>

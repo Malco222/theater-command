@@ -1,0 +1,810 @@
+[
+ {
+  "name": "click",
+  "file": "click.mp3",
+  "bytes": 2061,
+  "seconds": 0.22,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.press",
+  "on": "any data-act click that has no sound of its own",
+  "about": "Any button pressed: a small firm click, like a bakelite switch. The commonest sound in the game, so it is short and soft."
+ },
+ {
+  "name": "ui_primary",
+  "file": "ui_primary.mp3",
+  "bytes": 2349,
+  "seconds": 0.28,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.primary",
+  "on": "the brass button of a screen: act end, dodeclare, doraid, attack confirmed",
+  "about": "The one brass button of a screen pressed (END THE MONTH, Attack, Send): a heavier click with brass in it, and its release."
+ },
+ {
+  "name": "ui_dial",
+  "file": "ui_dial.mp3",
+  "bytes": 1893,
+  "seconds": 0.2,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.dial",
+  "on": "act gchist, gclevel, gcdepth: a dial moved one stop",
+  "about": "A dial moved one stop (the history dial, the difficulty, a volume): the small sharp click of a detent."
+ },
+ {
+  "name": "ui_back",
+  "file": "ui_back.mp3",
+  "bytes": 1917,
+  "seconds": 0.22,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act close, unpick, wreckno, govkeep; any Cancel or Back",
+  "about": "Close, cancel, step back: the same click, lower and softer, so that going back sounds like going back."
+ },
+ {
+  "name": "ui_tab",
+  "file": "ui_tab.mp3",
+  "bytes": 2349,
+  "seconds": 0.27,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.tab",
+  "on": "act tab, lens, menu, tradeall, ledgerall, monthall",
+  "about": "A tab chosen: a card flicked forward in an index."
+ },
+ {
+  "name": "switch_on",
+  "file": "switch_on.mp3",
+  "bytes": 2013,
+  "seconds": 0.24,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.toggle (on); ui.month.ready at -6 dB",
+  "on": "a setting turned on: act fog, setask (on), watchpref, auto (on)",
+  "about": "A setting turned on, the lamp lit, night to day: a heavy toggle thrown over."
+ },
+ {
+  "name": "switch_off",
+  "file": "switch_off.mp3",
+  "bytes": 1989,
+  "seconds": 0.23,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.toggle (off)",
+  "on": "a setting turned off: the same acts, off",
+  "about": "A setting turned off, the lamp put out, day to night: the toggle thrown back, a shade lower."
+ },
+ {
+  "name": "ui_error",
+  "file": "ui_error.mp3",
+  "bytes": 2757,
+  "seconds": 0.45,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.error",
+  "on": "an order the rules refuse (the function returns false or a reason)",
+  "about": "That cannot be done: two dull knocks on the desk. Never a buzzer."
+ },
+ {
+  "name": "ui_notify",
+  "file": "ui_notify.mp3",
+  "bytes": 7509,
+  "seconds": 1.6,
+  "bus": "interface",
+  "gain": 0,
+  "on": "one thing that wants the player now and is not an alert slip (an offer on the telephone, a question from the cabinet)",
+  "about": "Something wants attention: one touch on a desk bell."
+ },
+ {
+  "name": "alert_slip",
+  "file": "alert_slip.mp3",
+  "bytes": 4293,
+  "seconds": 0.57,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.alert.in",
+  "on": "a new alert appears in the alert strip (once for a batch)",
+  "about": "An alert slip arrives: a telegraph sounder rattles out three strokes. Dry and short, so that several alerts in a month do not nag."
+ },
+ {
+  "name": "card_open",
+  "file": "card_open.mp3",
+  "bytes": 3069,
+  "seconds": 0.4,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.open.card",
+  "on": "openModal for a small card: town, unit, fallen, award, shell, raid planner steps",
+  "about": "A card laid on the table: it slides in and lands. For every card that opens (an army's, a town's, a report)."
+ },
+ {
+  "name": "card_close",
+  "file": "card_close.mp3",
+  "bytes": 2733,
+  "seconds": 0.32,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.close.card",
+  "on": "openModal(null) when a card was open",
+  "about": "A card taken up again: the same slide, backwards and lighter."
+ },
+ {
+  "name": "screen_open",
+  "file": "screen_open.mp3",
+  "bytes": 3645,
+  "seconds": 0.52,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.open.panel",
+  "on": "openModal for a page: ledger, books, staffs, cabinet, trade, tech, level",
+  "about": "A whole room of the game opened (the arsenal, research, diplomacy, the ledger): a deep drawer pulled out and a book set down."
+ },
+ {
+  "name": "screen_close",
+  "file": "screen_close.mp3",
+  "bytes": 3909,
+  "seconds": 0.64,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.close.panel",
+  "on": "that page closed",
+  "about": "That room closed: the book shut and the drawer pushed home."
+ },
+ {
+  "name": "page_turn",
+  "file": "page_turn.mp3",
+  "bytes": 4245,
+  "seconds": 0.63,
+  "bus": "interface",
+  "gain": 0,
+  "on": "moving from one report to the next; a page of the ledger or the guide",
+  "about": "A page of a heavy book turned: for the ledger, the roll of honour, the guide, and moving from one report to the next."
+ },
+ {
+  "name": "stamp",
+  "file": "stamp.mp3",
+  "bytes": 3309,
+  "seconds": 0.49,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.stamp.won",
+  "on": "the WON stamp lands; an order that cannot be undone: doraid, doshell, govdecree",
+  "about": "An order confirmed, and the WON stamp: a rubber stamp brought down firmly on paper. The sound of \"it is done\". Fire it as the stamp lands, not as it starts to fall."
+ },
+ {
+  "name": "stamp_low",
+  "file": "stamp_low.mp3",
+  "bytes": 3645,
+  "seconds": 0.56,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.stamp.lost",
+  "on": "the LOST stamp lands",
+  "about": "The LOST stamp: the same stamp as \"stamp\", lower and heavier, so that good and bad are told apart before the word is read."
+ },
+ {
+  "name": "stamp_light",
+  "file": "stamp_light.mp3",
+  "bytes": 3021,
+  "seconds": 0.45,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.order.placed",
+  "on": "something bought or ordered: an arsenal order, a job, dosplit, govappoint",
+  "about": "Something bought or ordered: the same stamp, lightly, as a clerk marks a chit. For the everyday order; \"stamp\" is for the ones that matter."
+ },
+ {
+  "name": "pickup",
+  "file": "pickup.mp3",
+  "bytes": 2397,
+  "seconds": 0.29,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act pick, pickall, fleet, airfleet, wing (something taken in hand)",
+  "about": "A piece lifted off the table: an army or a fleet taken in the hand. (The 3D game already calls this name; it has been silent until now.)"
+ },
+ {
+  "name": "putdown",
+  "file": "putdown.mp3",
+  "bytes": 2061,
+  "seconds": 0.26,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act standmonth, joinarmy, joinall, gotmarch (the piece set down)",
+  "about": "A piece set down on the table: wood on wood, and it settles."
+ },
+ {
+  "name": "order_march",
+  "file": "order_march.mp3",
+  "bytes": 3621,
+  "seconds": 0.43,
+  "bus": "interface",
+  "gain": 0,
+  "on": "march() when the player orders a move by road",
+  "about": "An order to march drawn on the map: one stroke of a wax pencil."
+ },
+ {
+  "name": "order_attack",
+  "file": "order_attack.mp3",
+  "bytes": 5397,
+  "seconds": 0.73,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act attack, storm, sally, probe (an attack ordered)",
+  "about": "An attack ordered: two hard strokes of the red pencil, an arrowhead, and the pencil rapped on the map."
+ },
+ {
+  "name": "order_cancel",
+  "file": "order_cancel.mp3",
+  "bytes": 4269,
+  "seconds": 0.55,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act stopmarch, stopjob, cancelbuild, sendback",
+  "about": "An order taken back: the mark rubbed out."
+ },
+ {
+  "name": "select_region",
+  "file": "select_region.mp3",
+  "bytes": 1893,
+  "seconds": 0.22,
+  "bus": "interface",
+  "gain": 0,
+  "on": "selectRegion() from a click on the map",
+  "about": "A province chosen on the map: a fingertip on paper."
+ },
+ {
+  "name": "coin_run",
+  "file": "coin_run.mp3",
+  "bytes": 3477,
+  "seconds": 0.54,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.coin",
+  "on": "the treasury figure counts",
+  "about": "The treasury figure counts to its new value: one short run of coins, done inside the 400 ms the figure takes."
+ },
+ {
+  "name": "coins",
+  "file": "coins.mp3",
+  "bytes": 8253,
+  "seconds": 1.24,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act cash, drafts: money raised by the player's own order",
+  "about": "Money spent: a few coins counted down onto the desk."
+ },
+ {
+  "name": "pen_sign",
+  "file": "pen_sign.mp3",
+  "bytes": 5901,
+  "seconds": 0.85,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.research.start",
+  "on": "a technology goes into work; act tradesign, govpromise: a treaty or a promise signed",
+  "about": "A paper signed: a steel nib across it and a full stop. For treaties, pacts, promotions, a save made."
+ },
+ {
+  "name": "radio",
+  "file": "radio.mp3",
+  "bytes": 15213,
+  "seconds": 3.03,
+  "bus": "interface",
+  "gain": 0,
+  "on": "act spygo, spymission; an intelligence report opened",
+  "about": "A wireless message through the static: dots and dashes (they spell the game's initials). For intelligence, spies, a ship's report."
+ },
+ {
+  "name": "month_ask",
+  "file": "month_ask.mp3",
+  "bytes": 10845,
+  "seconds": 2.43,
+  "bus": "interface",
+  "gain": 0,
+  "on": "openModal({kind: \"askend\"})",
+  "about": "The question before the month ends (\"armies at the front have no orders\"): a clock's single soft chime, and two ticks. A pause, not an alarm."
+ },
+ {
+  "name": "month_end",
+  "file": "month_end.mp3",
+  "bytes": 12957,
+  "seconds": 2.81,
+  "bus": "interface",
+  "gain": 0,
+  "hook": "ui.month.end",
+  "on": "nextMonth() when the month really ends",
+  "about": "The month is ended: the calendar page torn off, the day book shut, one stroke of the clock. Played once when END THE MONTH is pressed."
+ },
+ {
+  "name": "month_passing_loop",
+  "file": "month_passing_loop.mp3",
+  "bytes": 30765,
+  "seconds": 4.4,
+  "bus": "interface",
+  "gain": 0,
+  "loop": {
+   "from": 0.25,
+   "length": 4.4
+  },
+  "on": "runOthers() starts it, the end of passStep() stops it",
+  "about": "The other countries moving, very fast: a clock running quick and a teleprinter chattering somewhere. Goes round under the playback of everyone else's month."
+ },
+ {
+  "name": "month_yours",
+  "file": "month_yours.mp3",
+  "bytes": 13245,
+  "seconds": 2.54,
+  "bus": "calls",
+  "gain": -2,
+  "on": "arrive(): the month is the player's again",
+  "about": "The others have moved and the month is yours: two notes, like a hand on the shoulder. Never loud."
+ },
+ {
+  "name": "month_card_open",
+  "file": "month_card_open.mp3",
+  "bytes": 5757,
+  "seconds": 0.91,
+  "bus": "interface",
+  "gain": 0,
+  "on": "openModal({kind: \"news\"}) with a month card",
+  "about": "The month's report laid before you: a dispatch case unlatched and the card drawn out onto the table."
+ },
+ {
+  "name": "month_card_good",
+  "file": "month_card_good.mp3",
+  "bytes": 19269,
+  "seconds": 3.64,
+  "bus": "calls",
+  "gain": -2,
+  "on": "0.6 s after month_card_open, when the card has more good rows than bad",
+  "about": "The month went your way: two soft rising chords, a light touch of the bell. Under the month card when the news is good."
+ },
+ {
+  "name": "month_card_bad",
+  "file": "month_card_bad.mp3",
+  "bytes": 17709,
+  "seconds": 4.16,
+  "bus": "calls",
+  "gain": -2,
+  "on": "the same, more bad than good",
+  "about": "The month went against you: two chords that sink, low strings, a muffled stroke. Under the month card when the news is bad."
+ },
+ {
+  "name": "month_card_quiet",
+  "file": "month_card_quiet.mp3",
+  "bytes": 15549,
+  "seconds": 3.58,
+  "bus": "calls",
+  "gain": -2,
+  "on": "the same, even or nearly empty",
+  "about": "A month in which nothing was settled: one held chord, neither up nor down. Under the month card when the news is mixed or thin."
+ },
+ {
+  "name": "note_arrives",
+  "file": "note_arrives.mp3",
+  "bytes": 4293,
+  "seconds": 0.63,
+  "bus": "interface",
+  "gain": 0,
+  "on": "a staff note appears",
+  "about": "A staff note arrives: a slip of paper slid onto the desk and a knuckle's tap to say \"read me\". For each lesson of the first hour."
+ },
+ {
+  "name": "note_done",
+  "file": "note_done.mp3",
+  "bytes": 7029,
+  "seconds": 1.4,
+  "bus": "interface",
+  "gain": 0,
+  "on": "a staff note is stamped DONE",
+  "about": "A staff note stamped DONE: the stamp, and a small bright touch of the desk bell after it. The stamp alone is \"stamp\"."
+ },
+ {
+  "name": "note_closing",
+  "file": "note_closing.mp3",
+  "bytes": 31941,
+  "seconds": 5.94,
+  "bus": "calls",
+  "gain": -2,
+  "on": "the closing note appears",
+  "about": "The last staff note of the first hour (\"the command is yours\"): the command figure, gently, with a bell on its last note. Heard once in a player's life."
+ },
+ {
+  "name": "campaign_start",
+  "file": "campaign_start.mp3",
+  "bytes": 32637,
+  "seconds": 6.43,
+  "bus": "calls",
+  "gain": -2,
+  "on": "newGame() from the opening screen (act start)",
+  "about": "You take command: a kettledrum roll and the whole command figure from the full band. For the moment a country and a year are chosen."
+ },
+ {
+  "name": "drums",
+  "file": "drums.mp3",
+  "bytes": 23133,
+  "seconds": 3.74,
+  "bus": "calls",
+  "gain": -2,
+  "on": "openModal({kind: \"attack\"}): the two sides drawn up",
+  "about": "The two sides are drawn up: a roll on the side drum and four strokes, the bass drum under them. Before a battle is joined."
+ },
+ {
+  "name": "victory",
+  "file": "victory.mp3",
+  "bytes": 19821,
+  "seconds": 3.55,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a battle report opens and the player won; a town taken",
+  "about": "A battle won, a town taken: the last three notes of the command figure, rising, with the band under them. Short, because it is heard often."
+ },
+ {
+  "name": "defeat",
+  "file": "defeat.mp3",
+  "bytes": 22869,
+  "seconds": 5.35,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a battle report opens and the player lost; a town fallen",
+  "about": "A battle lost, a town fallen: the same three notes turned down instead of up, low brass and strings, a muffled drum."
+ },
+ {
+  "name": "war_declared",
+  "file": "war_declared.mp3",
+  "bytes": 32685,
+  "seconds": 6.43,
+  "bus": "calls",
+  "gain": -2,
+  "on": "act dodeclare; any declaration of war in the month card",
+  "about": "War is declared: a kettledrum roll that swells, a dark chord from the low brass, and one heavy stroke. For you, on you, or between two others."
+ },
+ {
+  "name": "treaty_signed",
+  "file": "treaty_signed.mp3",
+  "bytes": 28245,
+  "seconds": 6.06,
+  "bus": "calls",
+  "gain": -2,
+  "on": "an alliance, a peace or a pact made",
+  "about": "A treaty signed, an alliance made, a peace: two warm chords from the brass and a bell. Calm after \"war_declared\"."
+ },
+ {
+  "name": "city_taken",
+  "file": "city_taken.mp3",
+  "bytes": 29373,
+  "seconds": 6.12,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a capital or prize city taken by the player",
+  "about": "A great city is yours: three tower bells and the rising figure over them. For a capital or a prize city, not for every town."
+ },
+ {
+  "name": "city_lost",
+  "file": "city_lost.mp3",
+  "bytes": 25869,
+  "seconds": 6.26,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a capital or prize city lost by the player",
+  "about": "A great city is lost: one bell tolls twice, low strings under it."
+ },
+ {
+  "name": "nation_falls",
+  "file": "nation_falls.mp3",
+  "bytes": 41277,
+  "seconds": 8.28,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a country is eliminated (the announcement)",
+  "about": "A country is beaten and leaves the war: the command figure broken off and falling, muffled drums, a last low note."
+ },
+ {
+  "name": "nation_freed",
+  "file": "nation_freed.mp3",
+  "bytes": 36477,
+  "seconds": 7.08,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a country is liberated (the announcement)",
+  "about": "A country is set free and comes back into the war: bells from every tower and the figure whole again."
+ },
+ {
+  "name": "alert",
+  "file": "alert.mp3",
+  "bytes": 12453,
+  "seconds": 2.13,
+  "bus": "calls",
+  "gain": -2,
+  "on": "openModal({kind: \"invade\"}) or \"landing\" against the player; followAlert for an urgent alert",
+  "about": "Something needs you now (a landing on your shore, an attack on you, a government in danger): two quick notes and a drum tap."
+ },
+ {
+  "name": "research_done",
+  "file": "research_done.mp3",
+  "bytes": 10077,
+  "seconds": 2.08,
+  "bus": "calls",
+  "gain": -2,
+  "hook": "ui.research.done",
+  "on": "research finished, in the month card",
+  "about": "The workshops have something new: three small bells climbing, like a good idea arriving."
+ },
+ {
+  "name": "medal",
+  "file": "medal.mp3",
+  "bytes": 16965,
+  "seconds": 2.91,
+  "bus": "calls",
+  "gain": -2,
+  "on": "openModal({kind: \"award\"}); act appoint, promote",
+  "about": "A medal pinned on, a general promoted: a ruffle on the drum and two bright notes."
+ },
+ {
+  "name": "drum_low",
+  "file": "drum_low.mp3",
+  "bytes": 11373,
+  "seconds": 2.58,
+  "bus": "calls",
+  "gain": -2,
+  "hook": "ui.band.war",
+  "on": "a red band appears, when the moment has no call of its own",
+  "about": "A red band crosses the screen (war, a country that may fall): one low drum stroke in the hall. When the moment has its own call (\"war_declared\", \"nation_falls\"), play the call and not this."
+ },
+ {
+  "name": "unit_lost",
+  "file": "unit_lost.mp3",
+  "bytes": 17205,
+  "seconds": 4.05,
+  "bus": "calls",
+  "gain": -2,
+  "on": "openModal({kind: \"fallen\"}); a division or a named ship lost",
+  "about": "A division is destroyed, a ship goes down with her name: one muffled stroke and a low note falling."
+ },
+ {
+  "name": "world_won",
+  "file": "world_won.mp3",
+  "bytes": 71781,
+  "seconds": 11.75,
+  "bus": "calls",
+  "gain": -2,
+  "on": "openModal({kind: \"worldwon\"})",
+  "about": "The campaign is won: the whole of our march, four bars, drums and all. Heard once, at the very end."
+ },
+ {
+  "name": "campaign_lost",
+  "file": "campaign_lost.mp3",
+  "bytes": 51141,
+  "seconds": 11.88,
+  "bus": "calls",
+  "gain": -2,
+  "on": "the campaign is lost",
+  "about": "The campaign is lost: the figure once more, slow and in the dark, the drum with a cloth on it, and silence after."
+ },
+ {
+  "name": "marching",
+  "file": "marching.mp3",
+  "bytes": 27117,
+  "seconds": 4.33,
+  "bus": "world",
+  "gain": -4,
+  "on": "march() by road, after order_march (0.3 s later)",
+  "about": "Infantry steps off: eight paces of a column on a road, boots together and the rattle of kit. Played when infantry is picked up or ordered to march."
+ },
+ {
+  "name": "rail_move",
+  "file": "rail_move.mp3",
+  "bytes": 36813,
+  "seconds": 5.5,
+  "bus": "world",
+  "gain": -4,
+  "on": "a move by rail ordered (ui.rail is on when the move is made)",
+  "about": "For the browser game when an army is sent by rail: the whistle and the engine pulling away. Set against \"marching\", it is how a rail move and a march are told apart with the eyes shut."
+ },
+ {
+  "name": "ship_horn",
+  "file": "ship_horn.mp3",
+  "bytes": 23877,
+  "seconds": 4.51,
+  "bus": "world",
+  "gain": -4,
+  "on": "act shipto, sail, toport, fleetgo: a fleet or a convoy sails",
+  "about": "A big ship's horn: deep, slow to speak, carrying over the water. Played when a fleet is picked up, sails or changes its orders."
+ },
+ {
+  "name": "ship_guns",
+  "file": "ship_guns.mp3",
+  "bytes": 35181,
+  "seconds": 7.37,
+  "bus": "world",
+  "gain": -4,
+  "on": "openModal({kind: \"seareport\"})",
+  "about": "A salvo from a turret of heavy guns: three reports close together and the long roll back across the water."
+ },
+ {
+  "name": "shore_bombardment",
+  "file": "shore_bombardment.mp3",
+  "bytes": 40341,
+  "seconds": 8.57,
+  "bus": "world",
+  "gain": -4,
+  "on": "act doshell; openModal({kind: \"shorereport\"})",
+  "about": "A fleet shells the coast: the salvo, the shells rumbling away overhead, and the bursts inland a few seconds later."
+ },
+ {
+  "name": "torpedo_hit",
+  "file": "torpedo_hit.mp3",
+  "bytes": 32613,
+  "seconds": 5.66,
+  "bus": "world",
+  "gain": -4,
+  "on": "a ship torpedoed, in a sea report",
+  "about": "A torpedo strikes: a blow against the hull, a column of water, and plates ringing."
+ },
+ {
+  "name": "ship_sinking",
+  "file": "ship_sinking.mp3",
+  "bytes": 62325,
+  "seconds": 10.09,
+  "bus": "world",
+  "gain": -4,
+  "on": "a capital ship sunk, in a sea report",
+  "about": "A ship goes down: her plates groan, the sea pours in, air and steam come roaring up, and she is gone. Played with the picture of a ship sinking."
+ },
+ {
+  "name": "landing_craft",
+  "file": "landing_craft.mp3",
+  "bytes": 42045,
+  "seconds": 6.7,
+  "bus": "world",
+  "gain": -4,
+  "on": "act doland; openModal({kind: \"landing\"})",
+  "about": "Troops go ashore: the craft's engines, the surf, the ramp chains running and the ramp down on the beach. For a landing ordered and a landing made."
+ },
+ {
+  "name": "raid_day",
+  "file": "raid_day.mp3",
+  "bytes": 39525,
+  "seconds": 7.5,
+  "bus": "world",
+  "gain": -4,
+  "on": "openModal({kind: \"raid\"}) or \"airreport\" for a raid flown by day (mission bomb, strike, ground, line, fleet, harbour, town)",
+  "about": "For the raid card (and the browser game) when the raid was flown by day: the steady drone of heavy bombers, a fighter going through, flak, the bombs. No siren, no lamps."
+ },
+ {
+  "name": "raid_night",
+  "file": "raid_night.mp3",
+  "bytes": 53277,
+  "seconds": 9,
+  "bus": "world",
+  "gain": -4,
+  "on": "the same for a raid flown by night (mission night)",
+  "about": "For the raid card (and the browser game) when the raid was flown by night: the siren, a lamp struck, the uneven beat of the night bombers, flak, the bombs, and fire after."
+ },
+ {
+  "name": "siren",
+  "file": "siren.mp3",
+  "bytes": 33333,
+  "seconds": 6.97,
+  "bus": "calls",
+  "gain": -2,
+  "on": "a raid on one of the player's own towns, in the month card",
+  "about": "The same warning, shorter, under the name the 3D game already calls."
+ },
+ {
+  "name": "fighter_pass",
+  "file": "fighter_pass.mp3",
+  "bytes": 23205,
+  "seconds": 4.57,
+  "bus": "world",
+  "gain": -4,
+  "on": "act doair for a patrol, an escort, a scouting flight; mission superiority",
+  "about": "The same as fighter_pass_01, under the name the 3D game already calls."
+ },
+ {
+  "name": "parachutes",
+  "file": "parachutes.mp3",
+  "bytes": 32493,
+  "seconds": 5.83,
+  "bus": "world",
+  "gain": -4,
+  "on": "airborne troops dropped",
+  "about": "Airborne troops go out over their target: a transport overhead and the canopies cracking open one after another."
+ },
+ {
+  "name": "artillery_salvo_01",
+  "file": "artillery_salvo_01.mp3",
+  "bytes": 32493,
+  "seconds": 6.56,
+  "bus": "world",
+  "gain": -4,
+  "on": "act bombline, dosiege; openModal({kind: \"siege\"})",
+  "about": "The whole gun line fires, gun after gun down the line in a second or two. For a bombardment ordered, or a battle opened by an army with artillery."
+ },
+ {
+  "name": "battle",
+  "file": "battle.mp3",
+  "bytes": 44469,
+  "seconds": 7.81,
+  "bus": "world",
+  "gain": -4,
+  "on": "a battle report opens (before victory or defeat)",
+  "about": "A fight heard from a little way off, five seconds of it: rifles, machine guns, shells bursting, a tank gun. Played once when a battle is resolved."
+ },
+ {
+  "name": "bridge_blown",
+  "file": "bridge_blown.mp3",
+  "bytes": 33789,
+  "seconds": 5.79,
+  "bus": "world",
+  "gain": -4,
+  "on": "act blow, wreck",
+  "about": "A bridge is blown: the charges go, the span groans and drops into the river."
+ },
+ {
+  "name": "rail_cut",
+  "file": "rail_cut.mp3",
+  "bytes": 26133,
+  "seconds": 5.45,
+  "bus": "world",
+  "gain": -4,
+  "on": "act cutrail",
+  "about": "A railway is cut: the charge or the bomb, rails wrenched and ringing, ballast coming down."
+ },
+ {
+  "name": "rail_mended",
+  "file": "rail_mended.mp3",
+  "bytes": 22293,
+  "seconds": 4.46,
+  "bus": "world",
+  "gain": -4,
+  "on": "rails mended, in the month card",
+  "about": "A line is open again: the last spikes driven home and an engine's whistle to try the road."
+ },
+ {
+  "name": "fire_start",
+  "file": "fire_start.mp3",
+  "bytes": 29037,
+  "seconds": 3.52,
+  "bus": "world",
+  "gain": -4,
+  "on": "act burnorder, scorch",
+  "about": "Something is set alight: the whoosh as it catches and the first crackle. For the order to burn stores, bridges or a town's works before a retreat."
+ },
+ {
+  "name": "dig_in",
+  "file": "dig_in.mp3",
+  "bytes": 22365,
+  "seconds": 3.39,
+  "bus": "world",
+  "gain": -4,
+  "on": "act fortify, garrison",
+  "about": "An army digs in: shovels going into earth, a pick, spoil thrown on the parapet. For the order to fortify or to hold."
+ },
+ {
+  "name": "build_works",
+  "file": "build_works.mp3",
+  "bytes": 24357,
+  "seconds": 4.14,
+  "bus": "world",
+  "gain": -4,
+  "on": "works finished, in the month card; act job",
+  "about": "A building going up: a saw, hammering on timber, a winch's ratchet. For a town building ordered or finished."
+ },
+ {
+  "name": "room_day_loop",
+  "file": "room_day_loop.mp3",
+  "bytes": 113301,
+  "seconds": 24,
+  "bus": "ambience",
+  "gain": 0,
+  "loop": {
+   "from": 0.25,
+   "length": 24
+  },
+  "on": "from the first click to the end, very quietly: the war room",
+  "about": "The war room by day: the air of a big panelled room, the wall clock, somebody typing two rooms away. Heard when the camera is high above the map, and under every card."
+ }
+]
