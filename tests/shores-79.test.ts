@@ -211,11 +211,15 @@ describe('Canada\'s corps are the island\'s guard', () => {
     expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(true);
   });
 
-  it('at the two loosest stops Canada goes on as it did', () => {
+  it('at the two loosest stops Canada keeps no date, and goes only into a British or American landing that is ashore to stay (Version 83)', () => {
     for (const stop of [4, 5]) {
       const g = wide(1, null, stop);
-      expect(joinsOn(g, 'CAN', R(g, 'Holland')), `stop ${stop}`).toBe(true);
-      expect(joinsOn(g, 'CAN', R(g, 'Brittany')), `stop ${stop}`).toBe(true);
+      // A harbour an ally merely holds is no longer enough (ruling 89(e); the landing ashore to stay: strength-83.test.ts).
+      expect(joinsOn(g, 'CAN', R(g, 'Holland')), `stop ${stop}`).toBe(false);
+      expect(joinsOn(g, 'CAN', R(g, 'Brittany')), `stop ${stop}`).toBe(false);
+      // Its base in Britain is open as ever, and so is a colony overseas.
+      expect(joinsOn(g, 'CAN', R(g, 'Kent')), `stop ${stop}`).toBe(true);
+      expect(joinsOn(g, 'CAN', R(g, 'Tripoli')), `stop ${stop}`).toBe(true);
     }
   });
 

@@ -4,9 +4,10 @@
 // would then be; a nation's sea lift is a number it can read; a crossing can be named as the plan, and staff that
 // run the air war or the navy prepare it; and the coast watch reports troops and shipping gathering on a quay a
 // month before they can sail. History's scenarios use none of it.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
+import { STRENGTH } from '../src/campaign/ashore';
 import { liftView } from '../src/campaign/arsenal';
 import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
@@ -500,6 +501,11 @@ describe('staff who prepare the plan', () => {
 
 describe('the computer under the same rule', () => {
   const D = (openData as unknown as { descent: { after: number; risk: number; chance: number } }).descent;
+  // (These are tests of the crossing. The test of strength of Version 83 would keep three corps off Germany's own
+  // shore whatever the sea, so it is set aside here: strength-83.test.ts is its own.)
+  const asked = { ...STRENGTH! };
+  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); });
+  afterAll(() => { Object.assign(STRENGTH!, asked); });
   /**
    * Britain's staff a quiet year into its war with a landing force by its quay, every German harbour in reach emptied
    * with the country behind it, no German aircraft, and the German fleet in harbour.

@@ -25,6 +25,7 @@ import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
+import { STRENGTH, reckon, type Reckoning } from './ashore';
 import { NAVY, canPass, closedTo, seaPath, seaRisk } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
@@ -74,7 +75,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1095,7 +1096,10 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const lod = sea.second ? lodgment(g, nat, slot) : null;
     // (With its men ashore on its own side of the ocean and not short, a staff keeps nobody more at that quay.)
     if (!slot && lod && !lod.short && neighbourAcrossTheWater(g, nat, sea.foe)) continue;
-    const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : sea.L.force;
+    // (And where only its strength kept its force from every beach last month, it builds up: the quay is filled,
+    // and the shipping desk builds the ships to lift what stands there. Version 83, the test of strength.)
+    const more = !!STRENGTH && flag(g, `st:more:${nat}${SLOT[slot]}`) > 0 && g.turn - flag(g, `st:more:${nat}${SLOT[slot]}`) <= 2;
+    const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : more ? Math.max(sea.L.force, Math.min(STRENGTH!.wave, STACK)) : sea.L.force;
     phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
   }
   // A force kept ready for a stroke still to come.
@@ -1246,6 +1250,8 @@ const entered = (g: Game, id: string): boolean => g.regions.some((r) => r.owner 
  */
 export function opensOn(g: Game, nat: string, r: Region): boolean {
   const P = planned(g, nat);
+  // (A staff that waits behind its allies opens no front of its own on a mainland at any stop: Version 83, ruling 89(e).)
+  if (!P && waitsUndated(g, nat) && !r.overseas && r.nb.length > 0 && !ownShore(g, nat, r)) return false;
   if (!P || r.overseas || ownShore(g, nat, r)) return true;
   if (!P.open.includes(r.owner) || P.not?.includes(r.name)) return false;
   const from = P.from?.[r.owner];
@@ -1317,6 +1323,14 @@ export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolea
  */
 export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
   const P = planned(g, nat);
+  // (Version 83, ruling 89(e): at the stops where history's dates do not hold, a staff that waits behind its allies
+  // has no date to wait for, and goes on from its base only into a landing of theirs that is ashore to stay.)
+  const W = waitsUndated(g, nat);
+  if (W) {
+    if (r.overseas || ownShore(g, nat, r) || based(W, r)) return true;
+    if (P?.join && !P.join.includes(r.owner)) return false;
+    return behindToStay(g, nat, r, W.behind ?? []);
+  }
   if (!P || r.overseas || ownShore(g, nat, r)) return true;
   if (P.join && !P.join.includes(r.owner)) return false;
   if (!P.behind || !dated(g) || based(P, r)) return true;
@@ -1327,6 +1341,75 @@ export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
 }
 /** True for the home ground of a country a staff is based on while it waits behind its allies (open.json, 'base'). */
 const based = (P: Planned, r: Region): boolean => !!P.base?.includes(r.owner) && !r.overseas;
+/**
+ * The list of a staff that waits behind its allies, at the stops of the history dial where history's dates do not
+ * hold (Version 83, the design director's ruling 89(e): Canada at the two loosest stops). Null for every other
+ * staff, at the other stops, and where the rules have no test of strength.
+ */
+const waitsUndated = (g: Game, nat: string): Planned | null => {
+  if (!STRENGTH || dated(g)) return null;
+  const P = OPEN.descent?.planned?.[nat];
+  return P?.behind ? P : null;
+};
+/**
+ * True for a harbour on the ground of a landing that one of the allies named has made and that is ashore to stay:
+ * the men on that ground pass the test of strength as they stand, with nobody more sent to them.
+ */
+function behindToStay(g: Game, nat: string, r: Region, behind: string[]): boolean {
+  for (const b of behind) {
+    if (!g.nations[b]?.alive) continue;
+    for (const slot of [0, 1]) {
+      const l = lodgment(g, b, slot);
+      if (l && (l.at === r || l.ports.includes(r)) && staysAshore(g, nat, b, l.at)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The chance a computer staff asks for before it puts a force across the sea (Version 83, the test of strength;
+ * open.json, 'descent.strength', and ashore.ts): 'sure', or 'bold' for a staff of bold character, and never less
+ * than an even chance. Null where no test is made: in history's campaigns, and for the player's own country.
+ */
+export function strengthAsked(g: Game, nat: string): number | null {
+  const S = STRENGTH;
+  if (!S || !isOpen(g) || nat === g.human) return null;
+  return Math.max(S.even, rivalRules(g) && characterOf(g, nat) === 'bold' ? S.bold : S.sure);
+}
+/**
+ * True where a force put down at a place passes the staff's test of strength: against what the defender can bring
+ * there within three months, its chance of being still ashore is what the staff asks for or better. `follow` is the
+ * strength its ships can bring in after it within the time (ashore.ts, `followUp`). True wherever no test is made.
+ */
+export function holdsAshore(g: Game, nat: string, at: Region, force: Corps[], follow = 0): boolean {
+  const ask = strengthAsked(g, nat);
+  if (ask === null) return true;
+  const R = reckon(g, nat, at, force, follow);
+  if (R) strengthWatch.tell?.({ nat, at, force, ask, R });
+  return !R || R.chance >= ask;
+}
+/**
+ * The main front first (Version 83, the design director's ruling 98(e); open.json, 'descent.strength.first'): for the
+ * staffs named there, of the harbours of a front their side holds, those on the home ground named come before every
+ * other, a harbour gained by a treaty among them, each in the order it had. Every one is still put to the test of
+ * strength in its turn. For any other staff the list is as it was.
+ */
+export function mainFirst(nat: string, ports: Region[]): Region[] {
+  const F = STRENGTH?.first;
+  if (!F || !F.for.includes(nat)) return ports;
+  const main = (p: Region): boolean => F.ground.includes(p.owner) && !p.overseas;
+  return ports.some(main) ? [...ports.filter(main), ...ports.filter((p) => !main(p))] : ports;
+}
+
+/** For the measuring harness: told of every reckoning a staff makes before it sails, and what it asked for. Nothing in the game listens. */
+export const strengthWatch: { tell: ((e: { nat: string; at: Region; force: Corps[]; ask: number; R: Reckoning }) => void) | null } = { tell: null };
+/** True where the men an ally has on the ground round a place are ashore to stay, as the asking staff reckons it: they pass the test with nobody more sent. */
+function staysAshore(g: Game, nat: string, ally: string, at: Region): boolean {
+  const S = STRENGTH;
+  if (!S) return true;
+  const R = reckon(g, ally, at, []);
+  return !R || R.chance >= (strengthAsked(g, nat) ?? S.sure);
+}
 
 /**
  * Whom a staff with shipping means to cross the sea against, and the rules it lands by. On the hardest level a
@@ -1589,7 +1672,12 @@ function seaHops(g: Game, from: number[], shores: Region[]): number {
 // way is open (`abroad`, above). It never lands on a defended shore straight from the ocean.
 
 /** One ocean's run this month: the quay at home, and the harbours the corps can be put down in, the best first. */
-export interface OceanRun { ocean: string; share: number; from: Region; to: Region[]; front: boolean }
+export interface OceanRun {
+  ocean: string; share: number; from: Region; to: Region[]; front: boolean;
+  /** How many of `to`, from the first, are harbours of a front; and the harbours farther back on that front's ground (Version 83: for a corps the test of strength keeps out of the first). */
+  ahead: number;
+  rear: Region[];
+}
 
 /** The ground a nation's side holds in one piece with a province, by whose army holds the country. */
 function groundFrom(g: Game, nat: string, at: Region): Uint8Array {
@@ -1608,7 +1696,7 @@ function groundFrom(g: Game, nat: string, at: Region): Uint8Array {
  * harbour handed back to the country it was freed for, one reached overland, or an ally's own that the war has
  * come to. A staff with history's list of shores joins a front only on those (`joinsOn`). Null where there is none.
  */
-export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number } | null {
+export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number; rear: Region[] } | null {
   const n = g.nations[nat];
   if (!n?.alive) return null;
   let best: { at: Region; ports: Region[] } | null = null, bs = -1;
@@ -1629,9 +1717,9 @@ export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]
   if (!best) return held;
   const b = best as { at: Region; ports: Region[] };
   const ground = groundFrom(g, nat, b.at);
-  if (!held) return { ...b, ground, lodged: b.ports.length };
+  if (!held) return { ...b, ground, lodged: b.ports.length, rear: [] };
   for (let i = 0; i < ground.length; i++) if (held.ground[i]) ground[i] = 1;
-  return { at: b.at, ports: [...b.ports, ...held.ports.filter((p) => !b.ports.includes(p))], ground, lodged: b.ports.length };
+  return { at: b.at, ports: [...b.ports, ...held.ports.filter((p) => !b.ports.includes(p))], ground, lodged: b.ports.length, rear: held.rear.filter((p) => !b.ports.includes(p)) };
 }
 
 /**
@@ -1640,11 +1728,12 @@ export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]
  * that many marches of the quay over ground its side holds. The nearest to the enemy first, and the ground they
  * stand on. Null where there is none.
  */
-function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number } | null {
+function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number; rear: Region[] } | null {
   const n = g.nations[nat];
   const home = homeGround(g, nat).on;
   const ours = (c: string): boolean => c === nat || (allied(g, nat, c) && !!g.nations[c]?.atWar.some((e) => n.atWar.includes(e)));
   const found: { p: Region; d: number }[] = [];
+  const back: Region[] = [];
   for (const p of g.regions) {
     if (!p.port || !p.seas.length || home[p.id] || !ours(p.ctrl) || !joinsOn(g, nat, p) || hostileUnits(g, p, nat).length) continue;
     const d = new Map<number, number>([[p.id, 0]]);
@@ -1660,6 +1749,7 @@ function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: 
       }
     }
     if (near <= marches) found.push({ p, d: near });
+    else back.push(p);
   }
   if (!found.length) return null;
   found.sort((a, b) => a.d - b.d || a.p.id - b.p.id);
@@ -1669,7 +1759,17 @@ function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: 
     const on = groundFrom(g, nat, f.p);
     for (let i = 0; i < on.length; i++) if (on[i]) ground[i] = 1;
   }
-  return { at: found[0].p, ports: found.map((f) => f.p), ground, lodged: 0 };
+  // (Version 83, the test of strength: the harbours farther back on the same ground, the nearest to those first. A
+  // corps the staff will not put into a harbour within the enemy's reach goes into one of these and marches up.)
+  let rear: Region[] = [];
+  if (STRENGTH && back.some((p) => ground[p.id])) {
+    const d = new Int16Array(g.regions.length).fill(-1);
+    const q = found.map((f) => f.p.id);
+    for (const id of q) d[id] = 0;
+    for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (d[j] < 0 && ground[j]) { d[j] = d[q[i]] + 1; q.push(j); }
+    rear = back.filter((p) => ground[p.id] && d[p.id] > 0).sort((a, b) => d[a.id] - d[b.id] || a.id - b.id);
+  }
+  return { at: found[0].p, ports: found.map((f) => f.p), ground, lodged: 0, rear };
 }
 
 /**
@@ -1682,11 +1782,15 @@ function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boo
   const n = g.nations[nat];
   const key = `st:base:${nat}:${ocean}`, at = `st:baseAt:${nat}:${ocean}`;
   // (A staff that waits behind its allies builds its army up on its base's home ground and nowhere else.)
-  const P = planned(g, nat);
-  const waits = !!P?.behind && !!P.base && dated(g);
+  // (At the stops where history's dates do not hold it waits there too, with no date: Version 83, ruling 89(e).)
+  const P = waitsUndated(g, nat) ?? planned(g, nat);
+  const waits = !!P?.behind && !!P.base && (dated(g) || !!waitsUndated(g, nat));
+  // (Nor is an army built up in a harbour the enemy could take from it: the base passes the test of strength as it stands.)
+  const strong = new Map<number, boolean>();
+  const holds = (p: Region): boolean => { let s = strong.get(p.id); if (s === undefined) { s = holdsAshore(g, nat, p, []); strong.set(p.id, s); } return s; };
   const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g, nat, p.ctrl)
     && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p)
-    && (!waits || based(P!, p));
+    && (!waits || based(P!, p)) && holds(p);
   const kept = g.regions[flag(g, key) - 1];
   if (kept && serves(kept) && g.turn - flag(g, at) < 6) return kept;
   // (The shores history planned for it, where it has such a list and the enemy holds any of them: otherwise all his harbours.)
@@ -1749,7 +1853,8 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
   const out: OceanRun[] = [];
   for (const [ocean, share] of Object.entries(O.oceans)) {
     const to = front ? front.ports.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
-    const atFront = to.length > 0;
+    const atFront = to.length > 0, ahead = to.length;
+    const rear = front ? front.rear.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
     const base = oceanBase(g, nat, ocean, safe);
     if (base) {
       // The ports within three marches of it over friendly ground, the nearest first.
@@ -1771,7 +1876,7 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
       const path = seaPath(g, nat, r, to[0]);
       if (path && (path.length < len || (path.length === len && from !== null && r.fac > from.fac))) { from = r; len = path.length; }
     }
-    if (from) out.push({ ocean, share, from, to, front: atFront });
+    if (from) out.push({ ocean, share, from, to, front: atFront, ahead, rear: rear.filter((p) => !to.includes(p)) });
   }
   return out;
 }
