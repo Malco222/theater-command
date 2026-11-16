@@ -122,7 +122,6 @@ ACampaignMapActor::ACampaignMapActor()
 	RoomMesh = MakeMesh(TEXT("WarRoom"), false);
 	CloudMesh = MakeMesh(TEXT("Clouds"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
-	FlakMesh = MakeMesh(TEXT("Flak"), true);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
 
@@ -9345,7 +9344,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	{
 		return;
 	}
-	const int32 MaxPuffs = 2400, Rim = 8, PerPuff = Rim + 1; // (room for the columns over bombed places, which are dense)
+	// (A puff is a middle point and two rings of eight: the inner ring lets a puff be thick across its heart and fade
+	// only across its rim. With one ring a puff was thick at its very middle alone, a third as thick as it was meant
+	// taken all over, and smoke built of such puffs was a haze of thin streaks.)
+	const int32 MaxPuffs = 2400, Rim = 8, PerPuff = 2 * Rim + 1; // (room for the columns over bombed places, which are dense)
 	if (!bSmokeMade)
 	{
 		// The mesh is made once, with room for every puff; after that only its points and colours change.
@@ -9356,19 +9358,22 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
 		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
 		TArray<int32> Triangles;
-		Triangles.Reserve(MaxPuffs * Rim * 3);
+		Triangles.Reserve(MaxPuffs * Rim * 18);
 		for (int32 Puff = 0; Puff < MaxPuffs; ++Puff)
 		{
 			const int32 First = Puff * PerPuff;
+			// (both faces of every triangle, so that a puff shows whichever way it is wound to the eye)
+			auto Both = [&Triangles](int32 A, int32 B, int32 C)
+			{
+				Triangles.Append({ A, B, C, A, C, B });
+			};
 			for (int32 K = 0; K < Rim; ++K)
 			{
-				// Both faces, so that a puff shows whichever way it is wound to the eye.
-				Triangles.Add(First);
-				Triangles.Add(First + 1 + (K + 1) % Rim);
-				Triangles.Add(First + 1 + K);
-				Triangles.Add(First);
-				Triangles.Add(First + 1 + K);
-				Triangles.Add(First + 1 + (K + 1) % Rim);
+				const int32 Next = (K + 1) % Rim;
+				const int32 In0 = First + 1 + K, In1 = First + 1 + Next, Out0 = First + 1 + Rim + K, Out1 = First + 1 + Rim + Next;
+				Both(First, In1, In0); // the heart
+				Both(In0, In1, Out1); // and the rim round it
+				Both(In0, Out1, Out0);
 			}
 		}
 		TArray<FVector> Normals;
@@ -9393,30 +9398,37 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	const double Unit = UnitScale * 2.1;
 	const FVector Wind(0.25, 0.9, 0.0); // the wind is from the west
 	int32 Puff = 0;
-	auto Draw = [&](const FVector& Where, double Radius, const FLinearColor& Colour, float Alpha)
+	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its
+	// middle, at the heart's edge and at its rim. The two axes are its half-length and half-width as the eye sees it.
+	auto DrawPuff = [&](const FVector& Where, const FVector& AxisA, const FVector& AxisB, const FLinearColor& Colour, float AtMiddle, double HeartOut, float AtHeart, float AtRim)
 	{
-		if (Puff >= MaxPuffs || Alpha <= 0.004f)
+		if (Puff >= MaxPuffs || FMath::Max3(AtMiddle, AtHeart, AtRim) <= 0.004f)
 		{
 			return;
 		}
 		const int32 First = Puff * PerPuff;
-		FLinearColor Middle = Colour;
-		Middle.A = Alpha;
-		FLinearColor Edge = Colour;
-		Edge.A = 0.0f;
+		auto Inked = [&Colour](float Alpha) { FLinearColor Ink = Colour; Ink.A = Alpha; return Ink.ToFColor(false); };
+		const FColor MiddleInk = Inked(AtMiddle), HeartInk = Inked(AtHeart), RimInk = Inked(AtRim);
 		SmokeVertices[First] = Where;
-		SmokeColours[First] = Middle.ToFColor(false);
+		SmokeColours[First] = MiddleInk;
 		for (int32 K = 0; K < Rim; ++K)
 		{
 			const double Angle = K * 2.0 * PI / Rim;
-			SmokeVertices[First + 1 + K] = Where + (Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle)) * Radius;
-			SmokeColours[First + 1 + K] = Edge.ToFColor(false);
+			const FVector Out = AxisA * FMath::Cos(Angle) + AxisB * FMath::Sin(Angle);
+			SmokeVertices[First + 1 + K] = Where + Out * HeartOut;
+			SmokeColours[First + 1 + K] = HeartInk;
+			SmokeVertices[First + 1 + Rim + K] = Where + Out;
+			SmokeColours[First + 1 + Rim + K] = RimInk;
 		}
 		++Puff;
 	};
-
-	// (A puff is thick at its middle and nothing at its rim: one alone is a soft glow or a soft shadow, never a body.
-	// A firm one, for a ball of smoke that is to read as a thing: a core that is still half as thick at its own edge,
+	// (A soft puff: thick at its middle and nothing at its rim, thinning evenly between. One alone is a soft glow or a
+	// soft shadow, never a body.)
+	auto Draw = [&](const FVector& Where, double Radius, const FLinearColor& Colour, float Alpha)
+	{
+		DrawPuff(Where, Right * Radius, Up * Radius, Colour, Alpha, 0.5, 0.5f * Alpha, 0.0f);
+	};
+	// (A firm one, for a ball of smoke that is to read as a thing: a core that is still half as thick at its own edge,
 	// inside a soft one that gives it its outline.)
 	auto DrawFirm = [&](const FVector& Where, double Radius, const FLinearColor& Colour, float Alpha)
 	{
@@ -9424,21 +9436,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		{
 			return;
 		}
-		const int32 First = Puff * PerPuff;
-		FLinearColor Middle = Colour;
-		Middle.A = Alpha;
-		FLinearColor Edge = Colour;
-		Edge.A = 0.55f * Alpha;
-		SmokeVertices[First] = Where;
-		SmokeColours[First] = Middle.ToFColor(false);
-		for (int32 K = 0; K < Rim; ++K)
-		{
-			const double Angle = K * 2.0 * PI / Rim;
-			SmokeVertices[First + 1 + K] = Where + (Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle)) * (Radius * 0.72);
-			SmokeColours[First + 1 + K] = Edge.ToFColor(false);
-		}
-		++Puff;
+		DrawPuff(Where, Right * (Radius * 0.72), Up * (Radius * 0.72), Colour, Alpha, 0.5, 0.775f * Alpha, 0.55f * Alpha);
 		Draw(Where, Radius, Colour, 0.8f * Alpha);
+	};
+	// (A puff drawn out along a line, as the wind draws smoke out: longer one way than the other, the line taken as the
+	// eye sees it. Thick across its heart, which reaches the given share of the way out, and fading to nothing over its rim.)
+	auto DrawSmear = [&](const FVector& Where, const FVector& Along, double HalfLong, double HalfWide, const FLinearColor& Colour, float Alpha, double HeartOut = 0.5, float AtHeart = -1.0f)
+	{
+		FVector Seen = Right * FVector::DotProduct(Along, Right) + Up * FVector::DotProduct(Along, Up);
+		Seen = Seen.IsNearlyZero() ? Right : Seen.GetSafeNormal();
+		const FVector Across = (Right * -FVector::DotProduct(Seen, Up) + Up * FVector::DotProduct(Seen, Right)).GetSafeNormal();
+		DrawPuff(Where, Seen * HalfLong, Across * HalfWide, Colour, Alpha, HeartOut, AtHeart < 0.0f ? static_cast<float>(1.0 - HeartOut) * Alpha : AtHeart, 0.0f);
 	};
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterSmokeTest")))
@@ -9799,60 +9807,59 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// rise to meet them, and a damaged bomber trailing smoke on the way home.
 	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f), Tracer(1.0f, 0.86f, 0.35f);
 	const double Table = UnitScale;
-	struct FBurst { FVector At; double Radius; double Turn; };
-	TArray<FBurst> Bursts;
-	const int32 MaxBursts = 64;
 	for (int32 F = 0; F < Flights.Num(); ++F)
 	{
-		const FFlight& Flight = Flights[F];
+		FFlight& Flight = Flights[F];
 		if (Flight.At.IsZero())
 		{
 			continue;
 		}
 		if (Flight.Sortie.Flak > 0 && Flight.Share > 0.3 && Flight.Share < 0.64)
 		{
-			// (Brian, 16 November 2026: "dont forget to show flak when bombers go to a target with AA guns". The art
-			// director's brief.) Bursts at the bombers' height, within about two wingspans of the formation, more of
-			// them behind than ahead and never dead on a machine. Each is a flash, then a black ball that swells for
-			// four seconds and thins away, hanging where it burst while the formation flies on: a dark belly under a
-			// crown the sun catches, or it vanishes over dark ground; and a small shadow under it. More guns, more
-			// bursts alive at once: four, seven, twelve.
-			// (The art director's round 34: from close by the see-through bursts were as blurred as the ground while
-			// the bombers were sharp, and from working height they were pale grey puffs, six alive where a heavy
-			// defence wants ten to fourteen. Each is a solid ball now, black in its belly with a crown the sun
-			// catches: it pops out, hangs and swells for four seconds, and shrinks away. Six, ten, sixteen at once.)
+			// (Brian, 16 November 2026: "dont forget to show flak when bombers go to a target with AA guns"; and of the
+			// solid bursts, "its solid", "and looks like a ball": he picked hanging smoke. The art director's brief.)
+			// The guns fire while the bombers are over a defended target: light guns about every two and a half seconds,
+			// medium every one and a half, heavy every second, in ragged time. Each burst is born at the bombers'
+			// height within about two wingspans of the formation, more of them behind than ahead and never dead on a
+			// machine; and there it stays. When the bombers turn for home no more are fired, and those in the air
+			// finish their fade.
 			const double Wings = (Flight.Sortie.bBombers ? 8.0 : 5.0) * Table; // (a bomber's wings as it is built for a raid)
-			const int32 AliveNow = Flight.Sortie.Flak >= 3 ? 16 : Flight.Sortie.Flak == 2 ? 10 : 6;
-			const double BurstLasts = 4.5;
+			const double Every = Flight.Sortie.Flak >= 3 ? 0.9 : Flight.Sortie.Flak == 2 ? 1.4 : 2.5;
 			const FVector Onward = FVector(Flight.Dir.X, Flight.Dir.Y, 0.0).GetSafeNormal();
 			const FVector Abeam(-Onward.Y, Onward.X, 0.0);
-			for (int32 K = 0; K < AliveNow; ++K)
+			auto FireOne = [&](double Ago)
 			{
-				const double BurstClock = Now / BurstLasts + static_cast<double>(K) / AliveNow + F * 0.31;
-				const double BurstAge = FMath::Frac(BurstClock);
-				FRandomStream BurstRandom(static_cast<int32>(FMath::FloorToDouble(BurstClock)) * 7919 + K * 131 + F * 17);
-				// (level with the machines or under them, seldom over: a burst over a machine hides it from the eye above)
-				const double BurstAlong = BurstRandom.FRandRange(-2.1f, 0.9f), BurstRise = BurstRandom.FRandRange(-0.55f, 0.2f);
-				double BurstAside = BurstRandom.FRandRange(-2.1f, 2.1f);
-				// (never dead on a machine: the leader, or either of the two that fly behind it and to its sides)
+				FRandomStream Chance(++FlakFired * 7919 + F * 131);
+				const double Ahead = Chance.FRandRange(-1.9f, 0.9f), Rise = Chance.FRandRange(-0.4f, 0.3f);
+				double Aside = Chance.FRandRange(-2.0f, 2.0f);
+				// (the leader, and the two that fly behind it and to its sides)
 				for (const FVector2D& Machine : { FVector2D(0.0, 0.0), FVector2D(-1.1, 0.95), FVector2D(-1.1, -0.95) })
 				{
-					if (FMath::Abs(BurstAlong - 1.5 * BurstAge - Machine.X) < 0.75 && FMath::Abs(BurstAside - Machine.Y) < 0.6)
+					if (FMath::Abs(Ahead - Machine.X) < 0.8 && FMath::Abs(Aside - Machine.Y) < 0.65)
 					{
-						BurstAside += BurstAside < Machine.Y ? -0.7 : 0.7;
+						Aside += Aside < Machine.Y ? -0.75 : 0.75;
 					}
 				}
-				const FVector BurstAt = Flight.At + (Onward * (BurstAlong - 1.5 * BurstAge) + Abeam * BurstAside + FVector(0.0, 0.0, BurstRise + 0.12 * BurstAge)) * Wings;
-				const double BurstRadius = Wings * FMath::Lerp(0.08, 0.15, FMath::Sqrt(BurstAge))
-					* FMath::SmoothStep(0.0, 0.05, BurstAge) * (1.0 - FMath::SmoothStep(0.8, 1.0, BurstAge));
-				if (BurstAge < 0.025)
+				FFlakBurst& Burst = FlakBursts.AddDefaulted_GetRef();
+				// (one fired some seconds ago was fired where the formation then was: about a third of a wingspan a second back)
+				Burst.At = Flight.At + (Onward * (Ahead - 0.33 * Ago) + Abeam * Aside + FVector(0.0, 0.0, Rise)) * Wings;
+				Burst.Born = Now - Ago;
+				Burst.Seed = Chance.RandRange(1, 1 << 20);
+				Burst.Wings = Wings;
+			};
+			if (Flight.NextFlak <= 0.0)
+			{
+				Flight.NextFlak = Now;
+				// (a raid held still for its picture is shown as it would be some seconds into the fire, with its wake)
+				for (double Ago = 8.2; RaidHeldAt >= 0.0 && Ago > 0.4; Ago -= Every)
 				{
-					Draw(BurstAt, 0.24 * Wings, Fire, 0.95f);
+					FireOne(Ago);
 				}
-				if (Bursts.Num() < MaxBursts && BurstRadius > 0.0)
-				{
-					Bursts.Add({ BurstAt, BurstRadius, BurstRandom.FRandRange(0.0f, 6.28f) });
-				}
+			}
+			if (Now >= Flight.NextFlak && FlakBursts.Num() < 64)
+			{
+				FireOne(0.0);
+				Flight.NextFlak = Now + Every * FMath::FRandRange(0.6, 1.4);
 			}
 		}
 		if (Flight.bEngaged)
@@ -9882,72 +9889,140 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 	}
 
-	// The flak's solid bursts: one lump of balls built once, laid at each burst's place at its size and turn.
-	if (FlakMesh && PieceMaterial && (Bursts.Num() > 0 || bFlakShown))
+	// Flak: every burst in the air, as hanging smoke. Sizes are in the bombers' wingspans, long (down the wind) by
+	// across, as the art director painted them: new, nearly black and 0.7 by 0.5; at eight seconds grey, 2.1 by 0.8 and
+	// half see-through; gone by nine. From playing height a burst is held larger than life and darker, and is gone by
+	// six; from the top it is a mark of smoke, never smaller than about fourteen points by nine, with no flash.
 	{
-		if (FlakLump.Num() == 0)
+		static const bool bFlakTest = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakTest"));
+		if (bFlakTest)
 		{
-			FMiniatureMesh Lump;
-			const FLinearColor Belly(FColor(9, 8, 9));
-			Lump.Ball(FVector(0.0, 0.0, 0.0), FVector(2.0, 2.0, 1.8), Belly, 5, 9);
-			Lump.Ball(FVector(0.55, 0.3, 0.3), FVector(1.25), Belly, 4, 8);
-			Lump.Ball(FVector(-0.5, -0.35, 0.22), FVector(1.3), Belly, 4, 8);
-			Lump.Ball(FVector(0.1, -0.6, -0.2), FVector(1.15), Belly, 4, 8);
-			Lump.Ball(FVector(-0.2, 0.55, 0.42), FVector(1.1), Belly, 4, 8);
-			FlakLump = Lump.Vertices;
-			FlakLumpNormals = Lump.Normals;
-			const int32 Each = FlakLump.Num();
-			FlakVertices.Init(FVector::ZeroVector, Each * MaxBursts);
-			FlakNormals.Init(FVector::UpVector, Each * MaxBursts);
-			FlakColours.Init(Belly.ToFColor(true), Each * MaxBursts);
-			TArray<int32> Triangles;
-			Triangles.Reserve(Lump.Triangles.Num() * MaxBursts);
-			for (int32 B = 0; B < MaxBursts; ++B)
+			// ("-TheaterFlakTest": three bursts held at half a second, three seconds and eight, side by side over whatever
+			// the eye is looking at, to be looked at)
+			FlakBursts.Reset();
+			for (int32 K = 0; K < 3; ++K)
 			{
-				for (const int32 Index : Lump.Triangles)
-				{
-					Triangles.Add(B * Each + Index);
-				}
-			}
-			FlakMesh->CreateMeshSection(0, FlakVertices, Triangles, FlakNormals, TArray<FVector2D>(), FlakColours, TArray<FProcMeshTangent>(), false);
-			FlakMesh->SetMaterial(0, PieceMaterial);
-			FlakMesh->SetCastShadow(true);
-		}
-		const int32 Each = FlakLump.Num();
-		const FLinearColor FlakBelly(FColor(9, 8, 9)), FlakCrown(FColor(150, 140, 124));
-		const FVector SunFacing = FVector(-0.55, -0.25, 0.8).GetSafeNormal(); // (the afternoon sun of the table: from the west, and high)
-		// (a burst not in use is folded to a point at the first one's place, so that the mesh's bounds stay about the raid)
-		const FVector Fold = Bursts.Num() > 0 ? Bursts[0].At : FlakVertices[0];
-		for (int32 B = 0; B < MaxBursts; ++B)
-		{
-			if (B < Bursts.Num())
-			{
-				const double Cos = FMath::Cos(Bursts[B].Turn), Sin = FMath::Sin(Bursts[B].Turn);
-				for (int32 K = 0; K < Each; ++K)
-				{
-					const FVector& P = FlakLump[K];
-					const FVector& N = FlakLumpNormals[K];
-					const FVector Turned(N.X * Cos - N.Y * Sin, N.X * Sin + N.Y * Cos, N.Z);
-					FlakVertices[B * Each + K] = Bursts[B].At + FVector(P.X * Cos - P.Y * Sin, P.X * Sin + P.Y * Cos, P.Z) * Bursts[B].Radius;
-					FlakNormals[B * Each + K] = Turned;
-					// (The belly black, to be seen at about (14, 12, 14); the crown only where a burst's top shoulder
-					// faces the sun, at about (176, 165, 147). Painted all over its upper half, a burst seen from above
-					// was a pale puff again.)
-					const float Lit = static_cast<float>(FMath::SmoothStep(0.72, 0.97, FVector::DotProduct(Turned, SunFacing)));
-					FlakColours[B * Each + K] = FMath::Lerp(FlakBelly, FlakCrown, 0.9f * Lit).ToFColor(true);
-				}
-			}
-			else
-			{
-				for (int32 K = 0; K < Each; ++K)
-				{
-					FlakVertices[B * Each + K] = Fold;
-				}
+				FFlakBurst& Burst = FlakBursts.AddDefaulted_GetRef();
+				Burst.Wings = 8.0 * Table;
+				// (over the ground itself, wherever the table's top stands)
+				const FVector2D TestUnder = WorldToMap(CameraFocus + Right * ((K - 1) * 2.6 * Burst.Wings));
+				Burst.At = SurfacePoint(TestUnder.X, TestUnder.Y, 0.0) + FVector(0.0, 0.0, 0.7 * Burst.Wings);
+				Burst.Born = -(K == 0 ? 0.5 : K == 1 ? 3.0 : 8.0); // (a time before the game began: such a burst is held at that age)
+				Burst.Seed = 4711 + K * 977;
 			}
 		}
-		FlakMesh->UpdateMeshSection(0, FlakVertices, FlakNormals, TArray<FVector2D>(), FlakColours, TArray<FProcMeshTangent>());
-		FlakMesh->SetVisibility(Bursts.Num() > 0);
-		bFlakShown = Bursts.Num() > 0;
+		static const double Ages[] = { 0.0, 1.0, 2.5, 4.0, 6.0, 8.0 };
+		static const double Longs[] = { 0.7, 0.75, 1.0, 1.35, 1.45, 2.1 }, Wides[] = { 0.5, 0.5, 0.55, 0.55, 0.6, 0.8 }, Hearts[] = { 0.96, 0.90, 0.82, 0.72, 0.59, 0.49 };
+		auto Read = [](const double* Values, double Age)
+		{
+			for (int32 K = 0; K < 5; ++K)
+			{
+				if (Age <= Ages[K + 1])
+				{
+					return FMath::Lerp(Values[K], Values[K + 1], (Age - Ages[K]) / (Ages[K + 1] - Ages[K]));
+				}
+			}
+			return Values[5];
+		};
+		const double Playing = FMath::SmoothStep(2600.0, 4600.0, static_cast<double>(CameraDistance)); // (0 from close by, 1 from playing height and above)
+		const bool bTop = CameraDistance > 9000.0f;
+		const double SmokeLife = FMath::Lerp(9.0, 6.0, Playing);
+		const float Moonlit = GetMoonlight();
+		const FVector Downwind = Wind.GetSafeNormal();
+		const FVector SunSide = FVector(-0.55, -0.25, 0.8).GetSafeNormal(); // (the lamp of the table: from the west, and high)
+		const FLinearColor NewDark(FColor(12, 11, 12)), NewLit(FColor(134, 125, 112)), OldDark(FColor(82, 78, 74)), OldLit(FColor(182, 174, 162));
+		// (by dusk and by night the smoke takes the scene's light, as the bombers do: dark and blue. The flash does not.)
+		const FLinearColor Night(0.32f, 0.38f, 0.56f);
+		int32 Shown = 0;
+		for (int32 B = FlakBursts.Num() - 1; B >= 0; --B)
+		{
+			const FFlakBurst& Burst = FlakBursts[B];
+			const double Age = Burst.Born < 0.0 ? -Burst.Born : Now - Burst.Born;
+			if (Age >= SmokeLife + 0.5 && Burst.Born >= 0.0)
+			{
+				if (Age >= 9.5)
+				{
+					FlakBursts.RemoveAtSwap(B, EAllowShrinking::No);
+				}
+				continue;
+			}
+			if (bTop && ++Shown > 5)
+			{
+				continue; // (from the top: three to five, the newest)
+			}
+			FRandomStream Shape(Burst.Seed);
+			const double W = Burst.Wings;
+			// (larger than life from playing height; and from the top never under about fourteen points by nine)
+			const double Held = FMath::Lerp(1.0, 1.3, Playing);
+			const double Long = FMath::Max(Read(Longs, Age) * W * Held, bTop ? 0.0052 * CameraDistance : 0.0);
+			const double Wide = FMath::Max(Read(Wides, Age) * W * Held, bTop ? 0.0034 * CameraDistance : 0.0);
+			// (it fades out, it does not pop: over its last second and a half; from playing height from the four-and-a-half-second look)
+			const double Going = 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.6, Playing), SmokeLife, Age);
+			const float Heart = static_cast<float>(FMath::Min(Read(Hearts, Age) * FMath::Lerp(1.0, 1.33, Playing), 1.0) * Going * FMath::SmoothStep(0.0, 0.12, Age));
+			// (it greys slowly at first: a burst three seconds old is still a dark thing against the ground)
+			const float Greyed = FMath::Pow(static_cast<float>(FMath::Clamp(Age / 8.0, 0.0, 1.0)), 1.5f);
+			const FLinearColor SootDark = FMath::Lerp(NewDark, OldDark, Greyed), SootLit = FMath::Lerp(NewLit, OldLit, Greyed);
+			// (it drifts the way the flags fly: about half a wingspan over its life)
+			const FVector Heartland = Burst.At + Downwind * (0.055 * W * Age) + FVector(0.0, 0.0, 0.01 * W * Age);
+			const FVector Lobeside = FVector::CrossProduct(Downwind, FVector::UpVector).GetSafeNormal();
+			auto Inked = [&](double Sunward)
+			{
+				// (The smoke is dark, and only its top takes the light: mixed half and half the two made a mid grey, and a
+				// burst of mid greys was a haze. The light's share is squared, so that it gathers on the sunward lobes.)
+				const FLinearColor Day = FMath::Lerp(SootDark, SootLit, static_cast<float>(FMath::Square(FMath::Clamp(Sunward, 0.0, 1.0))));
+				// (the smoke's material brightens what it is given by six tenths: given as painted, the smoke came out
+				// paler than the ground it hung over, and could not be seen against it)
+				return FMath::Lerp(Day, FLinearColor(Day.R * Night.R, Day.G * Night.G, Day.B * Night.B), Moonlit) * (1.0f / 1.6f);
+			};
+			// (its shadow first, on the ground where the bombers' shadows fall, at about three parts in ten; none from the top)
+			if (!bTop)
+			{
+				const FVector2D Under = WorldToMap(Heartland + SunSide * (-(Heartland.Z - GetActorLocation().Z) / SunSide.Z));
+				DrawSmear(SurfacePoint(Under.X, Under.Y, 0.2), Downwind, 0.5 * Long, 0.45 * Wide, FLinearColor(0.0f, 0.0f, 0.0f), 0.3f * Heart);
+			}
+			// The lobes: a crooked chain down the wind, no two the same size, each a little drawn out; the heart toward
+			// the windward end, and nearly solid when new.
+			const int32 Lobes = Shape.RandRange(5, 8);
+			const double Crook = Shape.FRandRange(-1.0f, 1.0f);
+			for (int32 K = 0; K < Lobes; ++K)
+			{
+				const double T = Lobes > 1 ? static_cast<double>(K) / (Lobes - 1) : 0.5; // (0 the windward end, 1 the lee)
+				const double Size = Shape.FRandRange(0.55f, 1.0f) * (1.0 - 0.35 * T);
+				const double Sideways = (FMath::Sin(T * 5.3 + Crook * 3.0) * 0.3 + Shape.FRandRange(-0.14f, 0.14f)) * Wide;
+				const double Lifted = (FMath::Cos(T * 4.1 + Crook * 2.0) * 0.22 + Shape.FRandRange(-0.1f, 0.1f)) * Wide;
+				const double Raggedness = Shape.FRandRange(0.0f, 1.0f); // (the more ragged a lobe, the sooner it thins: the cloud tears as it ages)
+				const FVector At = Heartland + Downwind * ((T - 0.4) * 0.82 * Long) + Lobeside * Sideways + FVector(0.0, 0.0, Lifted);
+				const float Thick = Heart * static_cast<float>((1.0 - 0.3 * T) * FMath::Lerp(1.0, 1.0 - 0.75 * Raggedness, Greyed));
+				// (A lobe is thick across its heart, and its outer third fades to nothing.)
+				// (as it ages and thins the light comes through it: it pales as well as greys)
+				const FLinearColor LobeInk = Inked(0.1 + 0.3 * Greyed + 2.0 * (Lifted / Wide) - 0.6 * (Sideways / Wide) * SunSide.Y);
+				DrawSmear(At, Downwind, 0.5 * Wide * Size * 1.15, 0.5 * Wide * Size, LobeInk, Thick, 0.62, 0.92f * Thick);
+			}
+			// The wisps: thin, drawn out, trailing off the lee end; and a few shreds round the edge.
+			const int32 Wisps = Shape.RandRange(3, 5);
+			for (int32 K = 0; K < Wisps; ++K)
+			{
+				const double Trail = Shape.FRandRange(0.35f, 0.75f) * Long;
+				const FVector At = Heartland + Downwind * Trail + Lobeside * (Shape.FRandRange(-0.4f, 0.4f) * Wide) + FVector(0.0, 0.0, Shape.FRandRange(-0.3f, 0.3f) * Wide);
+				DrawSmear(At, Downwind + Lobeside * Shape.FRandRange(-0.35f, 0.35f) + FVector(0.0, 0.0, Shape.FRandRange(-0.25f, 0.25f)),
+					Shape.FRandRange(0.16f, 0.3f) * Long, Shape.FRandRange(0.06f, 0.11f) * Wide, Inked(0.2 + 0.3 * Greyed), 0.7f * Heart, 0.6, 0.8f * 0.7f * Heart);
+			}
+			for (int32 K = 0; K < 5; ++K)
+			{
+				const double Turned = Shape.FRandRange(0.0f, 6.28f);
+				const FVector At = Heartland + Downwind * (FMath::Cos(Turned) * 0.5 * Long + 0.1 * Long) + Lobeside * (FMath::Sin(Turned) * 0.55 * Wide) + FVector(0.0, 0.0, Shape.FRandRange(-0.45f, 0.45f) * Wide);
+				DrawSmear(At, Downwind, Shape.FRandRange(0.1f, 0.2f) * Wide * 1.5, Shape.FRandRange(0.1f, 0.2f) * Wide, Inked(0.15 + 0.3 * Greyed), 0.6f * Heart, 0.5, 0.7f * 0.6f * Heart);
+			}
+			// The flash: about a fifth of a second, soft, with no sparks, off the middle of the smoke; at full strength at every hour.
+			if (Age < 0.2 && !bTop)
+			{
+				const float Lit0 = static_cast<float>(1.0 - FMath::SmoothStep(0.1, 0.2, Age));
+				const FVector FlashAt = Heartland - Downwind * (0.12 * Long) + FVector(0.0, 0.0, 0.05 * Wide);
+				Draw(FlashAt, 0.25 * W, FLinearColor(FColor(150, 70, 14)), 0.55f * Lit0);
+				Draw(FlashAt, 0.11 * W, FLinearColor(FColor(255, 170, 60)), 0.85f * Lit0);
+				Draw(FlashAt, 0.05 * W, FLinearColor(FColor(255, 245, 215)), Lit0);
+			}
+		}
 	}
 
 	// The puffs not used this time are folded away to nothing.

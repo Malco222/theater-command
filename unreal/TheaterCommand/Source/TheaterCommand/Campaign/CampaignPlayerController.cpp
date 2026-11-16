@@ -1701,29 +1701,9 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			FTownPlate* Wears = Out.FindByPredicate([&City](const FTownPlate& Each) { return Each.Region == City.Region && !Each.Name.IsEmpty(); });
 			if (!Wears)
 			{
-				// (its name plate is not shown from here: the badge hangs where the plate would)
-				FVector At = Map->MapToWorld(Data.Regions[City.Region].Center.X, Data.Regions[City.Region].Center.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale);
-				for (const ACampaignMapActor::FPlateSpot& Spot : Map->GetPlateSpots())
-				{
-					if (Spot.Region == City.Region)
-					{
-						At = Spot.World + Toward * Spot.Reach;
-					}
-				}
-				FVector2D Screen;
-				if (!ProjectWorldLocationToScreen(At, Screen, false) || Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
-				{
-					continue;
-				}
-				Wears = &Out.AddDefaulted_GetRef();
-				Wears->At = Screen;
-				Wears->Region = City.Region;
-				Wears->Rank = -1;
-				const FString Holder = View.RegionHolder.IsValidIndex(City.Region) ? View.RegionHolder[City.Region] : Data.Regions[City.Region].Owner;
-				if (const FCampaignNation* Nation = Data.FindNation(Holder))
-				{
-					Wears->Colour = FLinearColor(Nation->Color);
-				}
+				// (The art director's round 35: a badge hung where its city's name plate is not shown floated alone, and
+				// Bielefeld's fighter read as an airfield. A badge goes away with its plate.)
+				continue;
 			}
 			Wears->bOrders = true;
 			Wears->Sign = City.Sign;
@@ -3230,6 +3210,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
+	// (Ruling 64.) The month's card, once nothing else has the screen.
+	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
+	{
+		bMonthCardDue = false;
+		OpenPage(TEXT("reports"));
+	}
 	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{
 		MomentGlideUntil = 0.0;
@@ -6007,6 +5993,13 @@ void ACampaignPlayerController::EndMonth()
 		EndNewsreel();
 		Announcements.Reset();
 	}
+	// (Ruling 64.) With the month's card up, the key that ends the month is GIVE ORDERS: it puts the card away, and
+	// must not end another month unseen.
+	if (!bScripted && bPageOpen && Page.Month.bValid)
+	{
+		ClosePage();
+		return;
+	}
 	PutDownArmy();
 	PutDownFleet();
 	ClosePage();
@@ -6190,6 +6183,37 @@ void ACampaignPlayerController::WatchNextStep()
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }
 
+void ACampaignPlayerController::WatchAgain()
+{
+	if (bWatching || Month.Steps.Num() == 0 || !Map.IsValid())
+	{
+		return;
+	}
+	ClosePage();
+	bRewatching = true;
+	WatchStood.Reset();
+	for (const FViewCorps& Unit : Month.Steps[0].View.Corps)
+	{
+		WatchStood.Add(Unit.Id, Unit.Region);
+	}
+	WatchIndex = 0;
+	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		WatchReturnFocus = Eye->GetFocus();
+		WatchReturnZoom = Eye->GetZoom();
+	}
+	bWatching = true;
+	WatchNext = 0.0;
+	for (TActorIterator<ACampaignEnvironment> Room(GetWorld()); Room; ++Room)
+	{
+		Room->SetMonthsEnd(true);
+	}
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		Eye->SetHurry(true);
+	}
+}
+
 void ACampaignPlayerController::SkipWatching()
 {
 	if (bWatching)
@@ -6226,6 +6250,13 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	RefreshOrders();
 	RefreshRegionPanel(Map->GetSelectedRegion());
+	if (bRewatching)
+	{
+		// (watched again from the month's card: nothing is kept or told twice, and the card comes back)
+		bRewatching = false;
+		bMonthCardDue = true;
+		return;
+	}
 
 	// The campaign is kept every month, so it can be continued another day.
 	if (ACampaignGameMode* Mode = GetMode())
@@ -6274,7 +6305,13 @@ void ACampaignPlayerController::FinishMonth()
 		Lines.Add(FString::Printf(TEXT("And %d more: press R for the month's report."), Month.Headlines.Num() - 5));
 	}
 	DispatchText = FString::Join(Lines, TEXT("\n\n"));
-	DispatchUntil = FPlatformTime::Seconds() + 25.0;
+	// (Ruling 64; Brian, 16 November 2026: "i dont love the turn update UI telling you what happend. its very plain
+	// and hard to read".) The month's card takes the typed strip's place: it opens once the newsreel and the great
+	// moments are over (see PlayerTick). The strip is kept only where there is no card, which is when the
+	// player's country has fallen. While pictures are being taken the card is opened by asking for it.
+	const bool bCard = Month.Fallen.IsEmpty() && !View.Human.IsEmpty();
+	DispatchUntil = bCard ? 0.0 : FPlatformTime::Seconds() + 25.0;
+	bMonthCardDue = bCard && !bScripted;
 
 	if (!Month.Fallen.IsEmpty())
 	{

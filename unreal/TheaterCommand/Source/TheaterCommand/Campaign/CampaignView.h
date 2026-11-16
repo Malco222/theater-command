@@ -384,10 +384,90 @@ struct FRaidCard
 	FPageButton Fly;
 };
 
+/** A figure on the month's card: "3,000" over "lost". */
+struct FMonthFigure
+{
+	FString Value;
+	FString Label;
+};
+
+/** A red band on the month's card: news that changes the war. */
+struct FMonthBand
+{
+	FString Kind; // WAR, WARNING, FALLEN, FREED
+	TArray<FString> Flags;
+	FString Text, Tip;
+	int32 Week = 0;
+	int32 Region = INDEX_NONE;
+};
+
+/** One box of the month's score. */
+struct FMonthScore
+{
+	FString Label, Sign, Figure, Sub;
+	int32 Tone = 0; // 1 the month went the player's way, -1 it did not, 0 neither
+};
+
+/** One of the player's fronts on the month's card. */
+struct FMonthRow
+{
+	FString Picture, Sign, Place, Tag;
+	int32 Tone = 0; // 1 good news, -1 bad, 2 something that blocks or warns
+	FString A, B; // the two flags, the attacker's first
+	FString Text;
+	TArray<FMonthFigure> Figures;
+	int32 Region = INDEX_NONE;
+};
+
+/** The month's lead story. */
+struct FMonthLead
+{
+	bool bValid = false;
+	FString Tag, Stamp;
+	int32 Tone = 0;
+	FString Headline, A, AName, B, BName, Picture, Line;
+	TArray<FMonthFigure> Figures;
+	int32 Region = INDEX_NONE;
+	int32 Report = INDEX_NONE; // the battle report to read, where it was a battle on land
+};
+
+struct FMonthHome
+{
+	FString Sign, Count, Text, Where;
+	bool bGrey = false; // next month's, not this month's
+};
+
+struct FMonthStaff
+{
+	FString Text, Act;
+	bool bOk = true; // false once the desk has been taken back
+};
+
+struct FMonthElse
+{
+	FString Tag, Text;
+};
+
+/** (Rulings 64 and 65.) The month on one card: it takes the place of the typed strip and of the month's report. */
+struct FMonthCard
+{
+	bool bValid = false;
+	FString Date;
+	TArray<FMonthBand> Bands;
+	TArray<FMonthScore> Score;
+	FMonthLead Lead;
+	TArray<FMonthRow> Rows;
+	FString None, Foot, Count;
+	TArray<FMonthHome> Home;
+	TArray<FMonthStaff> Staff;
+	TArray<FMonthElse> Elsewhere;
+};
+
 struct FOfficePage
 {
 	bool bValid = false;
 	FRaidCard Card; // (ruling 54) set where the page is a raid being planned
+	FMonthCard Month; // (ruling 64) set where the page is the month's report
 	FString Id;
 	FString Title;
 	FString Headline;

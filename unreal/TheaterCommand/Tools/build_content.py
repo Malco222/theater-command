@@ -832,13 +832,13 @@ def build_land():
                              one_in(m, unreal.MaterialExpressionSaturate,
                                     plus(m, times(m, plus(m, tint_b, times(m, tint_r, -0.62, -2400, -1780), -2300, -1780), 12.0, -2200, -1780), 0.2, -2100, -1780), -2000, -1780), -1950, -1720), tropic, -1900, -1660)
     woods = lerp(m, leaf,
-                 times(m, tint_rgb, lerp(m, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), scalar(m, "WoodsPurpleDepth", 1.15, -2300, -940), purple, -2200, -970), -2100, -1000),
+                 times(m, tint_rgb, lerp(m, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), scalar(m, "WoodsPurpleDepth", 1.0, -2300, -940), purple, -2200, -970), -2100, -1000),
                  # (round 31: the trees of a blue or violet country beyond Europe take no wash, or its creek lines read as channels of water)
                  times(m, times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080),
                        # (but the canopy of the tropics still takes it: a jungle country that took none, as Colombia, lost its
                        # colour altogether, and every tile is a shade of its holder's)
                        one_in(m, unreal.MaterialExpressionOneMinus, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, tropic, -2050, -1180), -1950, -1140), -1850, -1140), -1850, -1100), -1650, -950)
-    woods = lerp(m, woods, times(m, tint_rgb, scalar(m, "WoodsPurpleDepth", 1.15, -1700, -880), -1600, -880), times(m, purple, scalar(m, "WoodsPurpleShare", 0.84, -1700, -820), -1600, -820), -1500, -900)
+    woods = lerp(m, woods, times(m, tint_rgb, scalar(m, "WoodsPurpleDepth", 1.0, -1700, -880), -1600, -880), times(m, purple, scalar(m, "WoodsPurpleShare", 0.84, -1700, -820), -1600, -820), -1500, -900)
     c = lerp(m, c, woods,
              one_in(m, unreal.MaterialExpressionSaturate,
                     times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),

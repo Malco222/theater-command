@@ -2629,6 +2629,132 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	Object->TryGetStringField(TEXT("note"), Out.Note);
 	ReadButtons(Object, TEXT("top"), Out.Top);
 	// (Ruling 54.) A raid being planned comes with its card: the target, the groups and the forecast, as the rules reckon them.
+	// (Ruling 64.) The month's report comes as one card.
+	const TSharedPtr<FJsonObject>* MonthObject = nullptr;
+	if (Object->TryGetObjectField(TEXT("month"), MonthObject) && MonthObject && MonthObject->IsValid())
+	{
+		const TSharedPtr<FJsonObject>& Told = *MonthObject;
+		FMonthCard& Month = Out.Month;
+		Month.bValid = true;
+		Told->TryGetStringField(TEXT("date"), Month.Date);
+		Told->TryGetStringField(TEXT("none"), Month.None);
+		Told->TryGetStringField(TEXT("foot"), Month.Foot);
+		Told->TryGetStringField(TEXT("count"), Month.Count);
+		auto ReadFigures = [](const TSharedPtr<FJsonObject>& From, TArray<FMonthFigure>& Into)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Figures = nullptr;
+			if (From->TryGetArrayField(TEXT("figures"), Figures))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Figures)
+				{
+					const TSharedPtr<FJsonObject> Each = Value->AsObject();
+					FMonthFigure& Figure = Into.AddDefaulted_GetRef();
+					Each->TryGetStringField(TEXT("value"), Figure.Value);
+					Each->TryGetStringField(TEXT("label"), Figure.Label);
+				}
+			}
+		};
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (Told->TryGetArrayField(TEXT("bands"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthBand& Band = Month.Bands.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("kind"), Band.Kind);
+				Each->TryGetStringArrayField(TEXT("flags"), Band.Flags);
+				Each->TryGetStringField(TEXT("text"), Band.Text);
+				Each->TryGetStringField(TEXT("tip"), Band.Tip);
+				Each->TryGetNumberField(TEXT("week"), Band.Week);
+				Each->TryGetNumberField(TEXT("region"), Band.Region);
+			}
+		}
+		if (Told->TryGetArrayField(TEXT("score"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthScore& Box = Month.Score.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("label"), Box.Label);
+				Each->TryGetStringField(TEXT("sign"), Box.Sign);
+				Each->TryGetStringField(TEXT("figure"), Box.Figure);
+				Each->TryGetStringField(TEXT("sub"), Box.Sub);
+				Each->TryGetNumberField(TEXT("tone"), Box.Tone);
+			}
+		}
+		const TSharedPtr<FJsonObject>* LeadObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("lead"), LeadObject) && LeadObject && LeadObject->IsValid())
+		{
+			const TSharedPtr<FJsonObject>& Each = *LeadObject;
+			FMonthLead& Lead = Month.Lead;
+			Lead.bValid = true;
+			Each->TryGetStringField(TEXT("tag"), Lead.Tag);
+			Each->TryGetStringField(TEXT("stamp"), Lead.Stamp);
+			Each->TryGetNumberField(TEXT("tone"), Lead.Tone);
+			Each->TryGetStringField(TEXT("headline"), Lead.Headline);
+			Each->TryGetStringField(TEXT("a"), Lead.A);
+			Each->TryGetStringField(TEXT("aName"), Lead.AName);
+			Each->TryGetStringField(TEXT("b"), Lead.B);
+			Each->TryGetStringField(TEXT("bName"), Lead.BName);
+			Each->TryGetStringField(TEXT("picture"), Lead.Picture);
+			Each->TryGetStringField(TEXT("line"), Lead.Line);
+			Each->TryGetNumberField(TEXT("region"), Lead.Region);
+			Each->TryGetNumberField(TEXT("report"), Lead.Report);
+			ReadFigures(Each, Lead.Figures);
+		}
+		if (Told->TryGetArrayField(TEXT("rows"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthRow& Row = Month.Rows.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("picture"), Row.Picture);
+				Each->TryGetStringField(TEXT("sign"), Row.Sign);
+				Each->TryGetStringField(TEXT("place"), Row.Place);
+				Each->TryGetStringField(TEXT("tag"), Row.Tag);
+				Each->TryGetNumberField(TEXT("tone"), Row.Tone);
+				Each->TryGetStringField(TEXT("a"), Row.A);
+				Each->TryGetStringField(TEXT("b"), Row.B);
+				Each->TryGetStringField(TEXT("text"), Row.Text);
+				Each->TryGetNumberField(TEXT("region"), Row.Region);
+				ReadFigures(Each, Row.Figures);
+			}
+		}
+		if (Told->TryGetArrayField(TEXT("home"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthHome& Line = Month.Home.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("sign"), Line.Sign);
+				Each->TryGetStringField(TEXT("count"), Line.Count);
+				Each->TryGetStringField(TEXT("text"), Line.Text);
+				Each->TryGetStringField(TEXT("where"), Line.Where);
+				Each->TryGetBoolField(TEXT("grey"), Line.bGrey);
+			}
+		}
+		if (Told->TryGetArrayField(TEXT("staff"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthStaff& Line = Month.Staff.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("text"), Line.Text);
+				Each->TryGetStringField(TEXT("act"), Line.Act);
+				Each->TryGetBoolField(TEXT("ok"), Line.bOk);
+			}
+		}
+		if (Told->TryGetArrayField(TEXT("elsewhere"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Each = Value->AsObject();
+				FMonthElse& Line = Month.Elsewhere.AddDefaulted_GetRef();
+				Each->TryGetStringField(TEXT("nat"), Line.Tag);
+				Each->TryGetStringField(TEXT("text"), Line.Text);
+			}
+		}
+	}
 	const TSharedPtr<FJsonObject>* CardObject = nullptr;
 	if (Object->TryGetObjectField(TEXT("card"), CardObject) && CardObject && CardObject->IsValid())
 	{

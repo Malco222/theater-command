@@ -561,6 +561,7 @@ private:
 		FVector RivalAt = FVector::ZeroVector;
 		double Share = 0.0; // how far through its flight it is, 0 to 1
 		bool bEngaged = false; // the defender's fighters are among the bombers
+		double NextFlak = 0.0; // when the guns under it fire next (nothing until it comes under fire)
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
@@ -751,16 +752,18 @@ private:
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
 	bool bSmokeMade = false;
-	// Flak (the art director's round 34): each burst is a solid ball of smoke in the pieces' own paint, so that it is
-	// as sharp as the machine beside it and throws its shadow on the ground. A puff of the smoke's mesh is see-through
-	// and soft, and from close by read as a dark ball lying out of focus on the ground. One mesh for every burst, its
-	// points moved each frame.
-	UPROPERTY()
-	TObjectPtr<UProceduralMeshComponent> FlakMesh;
-	TArray<FVector> FlakLump, FlakLumpNormals; // one burst as it is built, two units across
-	TArray<FVector> FlakVertices, FlakNormals;
-	TArray<FColor> FlakColours;
-	bool bFlakShown = false;
+	// Flak (Brian picked "hanging smoke" on 16 November 2026, after the solid bursts: "its solid", "and looks like a
+	// ball"). A burst is soft see-through smoke drawn with the smoke's own puffs, never a mesh or a ball. It is born
+	// at a place and stays there, drifting slowly downwind, while the bombers fly on and leave a greying wake.
+	struct FFlakBurst
+	{
+		FVector At = FVector::ZeroVector; // where it burst
+		double Born = 0.0;
+		int32 Seed = 0; // no two alike
+		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
+	};
+	TArray<FFlakBurst> FlakBursts;
+	int32 FlakFired = 0;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;

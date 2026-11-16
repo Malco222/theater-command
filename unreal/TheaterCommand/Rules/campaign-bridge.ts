@@ -86,6 +86,11 @@ import { airAct, airPage } from '../../../src/campaign/airpages';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
+import { townName } from '../../../src/campaign/towns';
+import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarch, marchMonths, marchOf, marchState, orderMarch, planMarch } from '../../../src/campaign/marches';
+import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
+import { keepsStores } from '../../../src/campaign/resources';
+import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan } from '../../../src/campaign/airwar';
 import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
@@ -386,7 +391,7 @@ function view() {
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
-      marchTo: marchOf(s, c), marchMonths: marchOf(s, c) >= 0 ? monthsOf(c, farRoad(s, c, marchOf(s, c))?.cost ?? 1) : 0,
+      marchTo: marchOf(s, c), marchMonths: marchState(s, c)?.months ?? 0,
       canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0,
       // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
       works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
@@ -998,6 +1003,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   fallenNation = null;
   lastMonth = null;
   lastReel = -9;
+  monthBook = null;
+  lastCard = null;
   if (options?.view === 'grand') {
     g = grandGame(from, seed, human);
   } else {
@@ -1027,6 +1034,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
       arrive(g);
     }
   }
+  try { openMonthBook(g); } catch { monthBook = null; }
   return view();
 }
 
@@ -1050,6 +1058,8 @@ function load(text: string) {
   fallenNation = null;
   lastMonth = null;
   lastReel = -9;
+  monthBook = null;
+  lastCard = null;
   if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
@@ -1217,148 +1227,15 @@ function dialSection(s: Game): { heading: string; text: string; rows: PageRow[] 
   };
 }
 
-// ---- Marches that carry on (release 1) ----------------------------------------------------------
-// A march to friendly ground too far for one month is a standing order: the corps goes as far as it can at once,
-// and on again as each of the player's months opens, until it arrives. Any other order to the corps ends it.
-// The design director's rules for it (2026-11-15): a march never walks into the enemy (it halts where it stands
-// if the enemy the player can see reaches its province or its next leg, or if it has fought since last month);
-// the road is found again each month by the rules' own costs, so railways, rivers, mud and lost ground all
-// count; friendly ground is wherever the rules let the army march, its own country's and its allies'; where the
-// road is full it waits one month and then halts; and a march that ends always tells the player. The order is
-// kept with the game, as flags for each corps.
-
-const marchKey = (id: number): string => `march:${id}`;
-/** Where a corps is marching to on a standing order, or -1. */
-const marchOf = (s: Game, c: Corps): number => { const v = s.flags[marchKey(c.id)]; return v !== undefined && v > 0 ? v - 1 : -1; };
-const forgetMarch = (s: Game, ids: number[]): void => { for (const id of ids) { delete s.flags[marchKey(id)]; delete s.flags[`marchRep:${id}`]; delete s.flags[`marchWait:${id}`]; } };
-const friendlyTo = (s: Game, c: Corps, id: number): boolean => { const r = s.regions[id]; return !!r && allied(s, c.nat, r.ctrl); };
-const lastReportId = (s: Game): number => (s.reports.length ? s.reports[s.reports.length - 1].id : 0);
-
-/**
- * Every province a corps could march to over friendly ground, however many months it took, by the rules' own
- * cost of each step (what a normal move pays, and what it cannot cross): the weeks it is off, and the province
- * before it on the cheapest way.
- */
-function farGround(s: Game, c: Corps): Map<number, { cost: number; prev: number }> {
-  const out = new Map<number, { cost: number; prev: number }>();
-  out.set(c.reg, { cost: 0, prev: -1 });
-  const open = [c.reg], done = new Set<number>();
-  while (open.length && done.size < 900) {
-    let best = 0;
-    for (let i = 1; i < open.length; i++) if (out.get(open[i])!.cost < out.get(open[best])!.cost) best = i;
-    const a = open.splice(best, 1)[0];
-    if (done.has(a)) continue;
-    done.add(a);
-    const ca = out.get(a)!.cost;
-    for (const j of s.regions[a].nb) {
-      if (done.has(j) || !friendlyTo(s, c, j)) continue;
-      const r = s.regions[j];
-      let step = 1;
-      try { if (blocked(s, c, r, a)) continue; step = Math.max(1, moveCost(s, c, r, a)); } catch { step = 1; }
-      const old = out.get(j);
-      if (old && old.cost <= ca + step) continue;
-      out.set(j, { cost: ca + step, prev: a });
-      open.push(j);
-    }
-  }
-  return out;
-}
-
-/** The road over friendly ground from where a corps stands to a place, the place itself last, and the weeks it costs; null if there is none. */
-function farRoad(s: Game, c: Corps, to: number): { road: number[]; cost: number } | null {
-  if (to === c.reg || !friendlyTo(s, c, to)) return null;
-  const ground = farGround(s, c);
-  const end = ground.get(to);
-  if (!end) return null;
-  const road: number[] = [];
-  for (let at = to; at !== c.reg && at >= 0; at = ground.get(at)!.prev) road.unshift(at);
-  return { road, cost: end.cost };
-}
-
-/** About how many months a march of so many weeks takes this corps. */
-const monthsOf = (c: Corps, cost: number): number => Math.max(1, Math.ceil(cost / Math.max(1, c.apMax ?? 4)));
-const inMonths = (n: number): string => (n === 1 ? 'about a month' : `about ${n} months`);
-
-/** The leg of its road a corps can cover this month: the provinces it would pass through, the last the one it stops in. Empty if it cannot move along it. */
-function marchLeg(s: Game, c: Corps, road: number[]): number[] {
-  const m = reach(s, c);
-  let far = -1;
-  for (let i = 0; i < road.length; i++) { const r = m.get(road[i]); if (r && !r.attack) far = i; }
-  if (far < 0) return [];
-  const path: number[] = [];
-  for (let at = road[far]; at !== c.reg && at >= 0; at = m.get(at)!.prev) path.unshift(at);
-  return path;
-}
-
-/**
- * How far the enemy corps the player can see could strike next month, were each of them fresh: the ground it
- * could march onto, and the ground beside any place it could reach with a week still in hand. Kept to the ground
- * that matters to the asker.
- */
-function enemyReach(s: Game, matters: (id: number) => boolean): Set<number> {
-  const danger = new Set<number>();
-  const me = s.human;
-  if (!me) return danger;
-  const seen = sight(s);
-  for (const e of s.corps) {
-    if (e.dead || e.kind === 'fort' || !(seen[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
-    const had = e.ap;
-    e.ap = Math.max(e.ap, e.apMax ?? e.ap);
-    try {
-      for (const [id, r] of reach(s, e)) {
-        if (id !== e.reg && matters(id)) danger.add(id);
-        if (!r.attack && e.ap - r.cost >= 1) {
-          for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
-        }
-      }
-    } finally { e.ap = had; }
-  }
-  return danger;
-}
-
-/**
- * As the player's month opens: every corps with a standing march goes on, or halts. Returns the lines for the
- * marches that ended (each with the province to jump to), and the provinces armies marched into, for the table.
- */
-function advanceMarches(s: Game): { ended: { note: string; region: number }[]; went: number[] } {
-  const ended: { note: string; region: number }[] = [], went: number[] = [];
-  try {
-    const me = s.human;
-    if (!me || !humanUp(s) || onEve(s)) return { ended, went };
-    const keys = Object.keys(s.flags).filter((k) => k.startsWith('march:'));
-    if (!keys.length) return { ended, went };
-    const danger = enemyReach(s, (id) => { const r = s.regions[id]; return r.ctrl === me || allied(s, r.ctrl, me); });
-    for (const key of keys) {
-      const id = Number(key.slice(6)), c = s.corps.find((x) => x.id === id && !x.dead);
-      const to = c ? marchOf(s, c) : -1;
-      if (!c || to < 0 || !s.regions[to]) { forgetMarch(s, [id]); continue; } // (the corps is no more: there is nobody to tell of)
-      const here = s.regions[c.reg].name, goal = s.regions[to].name;
-      const halt = (why: string): void => { forgetMarch(s, [id]); ended.push({ note: `${c.name} has halted at ${here}, ${why}. It waits for orders.`, region: c.reg }); };
-      if (c.reg === to) { forgetMarch(s, [id]); ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to }); continue; }
-      if (!canOrder(s, c)) { halt('the way is closed'); continue; }
-      // It never walks into the enemy: not where his reach covers it, nor after a fight.
-      const since = s.flags[`marchRep:${id}`] ?? 0;
-      const fought = s.reports.some((r) => r.id > since && [...r.attackers, ...r.defenders].some((u) => u.name === c.name && u.nat === c.nat));
-      if (fought || danger.has(c.reg)) { halt('the enemy is near'); continue; }
-      const way = farRoad(s, c, to);
-      if (!way) { halt('the way is closed'); continue; }
-      const leg = marchLeg(s, c, way.road);
-      if (leg.some((r) => danger.has(r))) { halt('the enemy is near'); continue; }
-      if (!leg.length) {
-        // The next province is full, or cannot be entered this month: it waits one month, and then halts.
-        if (s.flags[`marchWait:${id}`]) halt('the way is closed');
-        else s.flags[`marchWait:${id}`] = 1;
-        continue;
-      }
-      delete s.flags[`marchWait:${id}`];
-      const n = orderMove(s, c, leg[leg.length - 1]);
-      s.flags[`marchRep:${id}`] = lastReportId(s);
-      if (n > 0) went.push(c.reg);
-      if (c.reg === to) { forgetMarch(s, [id]); ended.push({ note: `${c.name} has arrived at ${goal}.`, region: to }); }
-    }
-  } catch { /* a march that cannot be worked out is left where it stands, its order kept */ }
-  return { ended, went };
-}
+// ---- Marches that carry on ------------------------------------------------------------------------
+// (Rules Version 82; the design director's rulings 87, 93 and 94.) A march to friendly ground is a standing order:
+// the corps goes as far as it can at once, and on again as each of the player's months opens, until it arrives. A
+// corps with no moves left sets off as the next month opens, to the province next door as to any other. Its first
+// leg always marches; after that it halts only for news (the enemy can now reach its next halt, it was attacked, or
+// the way is closed), and says which. Any other order ends it. All of it is the rules' own (src/campaign/marches.ts),
+// kept with the game as flags, so that a saved game reads the same in the browser and here.
+const monthsOf = marchMonths;
+const inMonths = aboutMonths;
 
 /** Where a picked-up army could go: anywhere any one of its corps could, and what it could attack. */
 function reachOf(ids: number[]) {
@@ -1441,18 +1318,18 @@ function move(ids: number[], to: number) {
     const end = m.get(to);
     if (to === c.reg || end?.attack) continue;
     if (!end) {
-      // (release 1) Friendly ground too far for this month: a march that carries on. The corps sets off at once.
-      const way = canOrder(s, c) && !onEve(s) && !s.regions[c.reg].nb.includes(to) ? farRoad(s, c, to) : null;
-      if (way) {
-        forgetMarch(s, [c.id]);
-        const leg = marchLeg(s, c, way.road);
-        const n = leg.length ? orderMove(s, c, leg[leg.length - 1]) : 0;
-        if (n > 0) moved.push({ id: c.id, path: leg.slice(0, n) });
-        if (c.reg !== to) {
-          s.flags[marchKey(c.id)] = to + 1;
-          s.flags[`marchRep:${c.id}`] = lastReportId(s);
-          const left = farRoad(s, c, to);
-          note = `${c.name} marches for ${s.regions[to].name}, ${inMonths(left ? monthsOf(c, left.cost) : 1)} more. It goes on by itself as each month opens, and halts if the enemy comes near. Any other order stops the march.`;
+      // (Rules Version 82.) Friendly ground it cannot reach this month: a march that carries on. The corps sets off at
+      // once with the moves it has; with none left it sets off as the next month opens, to the province next door
+      // as to any other. (A province next door that is only full is another matter: there the two change places.)
+      const full = c.ap > 0 && s.regions[c.reg].nb.includes(to);
+      const plan = full ? null : planMarch(s, c, to);
+      if (plan && plan.ok && !plan.now) {
+        const done = orderMarch(s, c, to);
+        if (done.moved > 0) moved.push({ id: c.id, path: plan.road.slice(0, done.moved) });
+        if (done.kept) {
+          note = plan.spent
+            ? `${c.name} has no moves left this month. It marches for ${s.regions[to].name} as next month opens, ${inMonths(done.months)}, and goes on by itself until it arrives. Any other order stops the march.`
+            : `${c.name} marches for ${s.regions[to].name}, ${inMonths(done.months)} more. It goes on by itself as each month opens, and halts if the enemy comes to bar its way. Any other order stops the march.`;
         }
         continue;
       }
@@ -1720,6 +1597,75 @@ function attack(ids: number[], to: number) {
   return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : '', price: report ? priceLine(s, report) : '', moved, view: view() };
 }
 
+// ---- The month on one card ---------------------------------------------------------------------------
+// (Brian, 16 November 2026: "i dont love the turn update UI telling you what happend. its very plain and hard to
+// read". The design director's rulings 64, 65, 84 and 95 set what is on the card, in what order and by what weight;
+// the art director's brief sets its look.) The card is the rules' own (src/campaign/monthcard.ts, Version 82): the
+// same card, in the same order, as the browser's. The bridge keeps the mark the rules ask an interface to keep (as
+// the player's month opens, and what he has on order as he ends it) and hands the card to the screen in the shape
+// the screen reads. Display only.
+
+interface CardFigure { value: string; label: string }
+interface MonthCard {
+  date: string;
+  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; region: number }[];
+  score: { label: string; sign: string; figure: string; sub: string; tone: number }[];
+  lead: null | { tag: string; stamp: string; tone: number; headline: string; a: string; aName: string; b: string; bName: string; picture: string; line: string; figures: CardFigure[]; region: number; report: number };
+  rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; text: string; figures: CardFigure[]; region: number }[];
+  none: string; foot: string; count: string;
+  home: { sign: string; count: string; text: string; where: string; grey: boolean }[];
+  staff: { text: string; act: string }[];
+  elsewhere: { nat: string; text: string }[];
+}
+
+/** The mark kept as the player's month opened: what the card that closes it is counted from. */
+let monthBook: MonthMark | null = null;
+/** The last month's card, kept so that the report can be opened again. */
+let lastCard: MonthCard | null = null;
+
+function openMonthBook(s: Game): void {
+  // (the rules' own mark: in a campaign's first month it reaches back to the war's opening, so that the declaration
+  // that began it is on the first card)
+  monthBook = s.human && s.nations[s.human] ? markOfRules(s) : null;
+}
+
+const cardNum = (n: number): string => Math.round(n).toLocaleString('en-US');
+
+/** A mark for a month whose opening was not seen (a game picked up from its file): everything of that month counts, and nothing of who held what before. */
+function markBackTo(s: Game, month0: number): MonthMark {
+  const before = <T extends { turn: number }>(list: T[]): number => { const i = list.findIndex((x) => x.turn >= month0); return i < 0 ? list.length : i; };
+  return { ...monthMark(s), turn: month0, h: before(s.headlines), r: before(s.reports), s: before(s.seaReports), a: before(s.airReports), shore: before(s.shoreReports ?? []), orders: [] };
+}
+
+/** The rules' card in the shape the screen reads. */
+function shownCard(s: Game, c: RuleCard): MonthCard {
+  const tone = (x: CardTone): number => (x === 'good' ? 1 : x === 'bad' ? -1 : x === 'warn' ? 2 : 0);
+  const figures = (fs: RuleFigure[]): CardFigure[] => fs.map((f) => ({ value: f.n, label: f.label }));
+  const name = (nat: string | null): string => (nat ? s.nations[nat]?.name ?? nat : '');
+  const boxSign: Record<string, string> = { provinces: 'flag', battles: '', men: 'inf', sea: 'hull', air: 'ftr', treasury: '' };
+  const lead = c.lead;
+  return {
+    date: c.month,
+    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, region: x.region ?? -1 })),
+    score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? '', figure: x.figure, sub: x.sub, tone: x.tone === 'good' ? 1 : x.tone === 'bad' ? -1 : 0 })),
+    lead: lead ? {
+      tag: lead.week > 0 ? `${lead.kind.toUpperCase()}  ·  WEEK ${lead.week}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
+      a: lead.ours ?? '', aName: name(lead.ours), b: lead.theirs ?? '', bName: name(lead.theirs), picture: lead.picture ?? '',
+      line: lead.follows || lead.line, figures: figures(lead.facts), region: lead.region ?? -1, report: lead.report?.type === 'land' ? lead.report.id : -1,
+    } : null,
+    rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1 })),
+    none: c.quiet, foot: c.foot, count: c.count,
+    home: [
+      ...c.home.filter((x) => !x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: false })),
+      ...c.research.map((text) => ({ sign: '', count: '', text: `Researched: ${text}`, where: '', grey: false })),
+      ...c.also.map((text) => ({ sign: '', count: '', text, where: '', grey: false })),
+      ...c.home.filter((x) => x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: true })),
+    ].slice(0, 6),
+    staff: c.staff.slice(0, 3).map((x) => ({ text: x.short || x.text, act: `desk:${x.desk}:own` })),
+    elsewhere: c.elsewhere.slice(0, 3).map((x) => ({ nat: x.nat, text: x.text })),
+  };
+}
+
 function endMonth() {
   const s = game();
   const h0 = s.headlines.length;
@@ -1751,6 +1697,7 @@ function endMonth() {
     if (onEve(s)) endEve(s);
     else {
       judgeGoals(s, s.human);
+      try { if (monthBook) monthBook.orders = monthOrders(s); } catch { /* the card tells of home without it */ }
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
@@ -1888,7 +1835,16 @@ function endMonth() {
     const months = s.turn - 1;
     return { year: String(d.year), title: foes.length ? `${me.name} at war` : `${me.name} at peace`, kicker: months > 0 ? `${months} month${months === 1 ? '' : 's'} since September 1939` : '', lines };
   })();
-  return { steps, headlines, events, fallen, announce, newsreel, year, view: view() };
+  // (Rulings 64 and 65.) The month on one card; and the book is opened for the month that now begins.
+  let month: MonthCard | null = null;
+  try {
+    const freed = cards.filter((c) => c.kind === 'freed').map((c) => ({ nat: c.nat, text: c.text, region: typeof c.region === 'number' ? c.region : -1 }));
+    void freed;
+    month = fallen || !s.human ? null : shownCard(s, cardOfRules(s, monthBook ?? markBackTo(s, month0)));
+  } catch { month = null; }
+  lastCard = month;
+  try { openMonthBook(s); } catch { monthBook = null; }
+  return { steps, headlines, events, fallen, announce, newsreel, year, month, view: view() };
 }
 
 /** The player's standing order for the picked corps on the day the enemy comes. */
@@ -2951,6 +2907,35 @@ let lastReel = -9;
 
 let lastMonth: { date: string; rows: { nat: string; note: string; region: number; mine: boolean }[]; news: string[] } | null = null;
 
+/** The month's card as it is shown now: a desk the player has since taken back no longer offers to be taken. */
+function monthShown(s: Game, card: MonthCard) {
+  let run: string[] = [];
+  try { run = (commandOf(s)?.desks ?? []).filter((d) => d.staff).map((d) => String(d.id)); } catch { run = []; }
+  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.act.split(':')[1] ?? '') })) };
+}
+
+/** A battle's report set out to be read: who fought, what each lost, and what the map fed into the fight. */
+function battleReportPage(s: Game, id: number): Page | null {
+  const r = s.reports.find((x) => x.id === id);
+  if (!r) return null;
+  const nameOf = (nat: string): string => s.nations[nat]?.name ?? nat;
+  const side = (units: BattleReport['attackers']): PageRow[] => units.map((u) => ({
+    nat: u.nat, title: `${u.name}${u.guard ? '' : `  \u00B7  ${u.divs} division${u.divs === 1 ? '' : 's'}`}`,
+    lines: [`${cardNum(u.men)} men, ${cardNum(u.lost)} lost${u.fate ? `  \u00B7  ${u.fate}` : ''}`], buttons: [],
+  }));
+  return {
+    id: `battle:${id}`, title: `THE BATTLE REPORT  \u00B7  ${r.regionName.toUpperCase()}`,
+    headline: r.yielded ? 'The defenders gave ground without a fight' : r.taken ? `${nameOf(r.attNat)} takes ${r.regionName}` : r.siege ? `${r.regionName} is besieged` : `${nameOf(r.defNat)} holds ${r.regionName}`,
+    note: `${turnToDate(r.turn).label}, week ${r.week}. Odds ${r.odds.toFixed(1)} to 1. The attack lost ${cardNum(r.attLost)} men and the defence ${cardNum(r.defLost)}${r.prisoners ? `, with ${cardNum(r.prisoners)} taken prisoner` : ''}.`,
+    top: [{ label: "BACK TO THE MONTH'S REPORT", act: 'open:reports', ok: true, tip: '' }, { label: `GO TO ${r.regionName.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }],
+    sections: [
+      { heading: 'THE ATTACK', text: '', rows: side(r.attackers) },
+      { heading: 'THE DEFENCE', text: '', rows: side(r.defenders) },
+      { heading: 'WHAT THE MAP FED INTO THE FIGHT', text: r.lines.map((l) => `${l.label}: ${l.value}${l.effect ? `  (${l.effect})` : ''}`).join('\n'), rows: [] },
+    ].filter((x) => x.rows.length || x.text),
+  };
+}
+
 /** The month's report: what every nation did while the player waited, each with a way to go and look. */
 function reportsPage(s: Game): Page | null {
   if (!lastMonth) return null;
@@ -3774,7 +3759,7 @@ function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
   const p = id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
-    : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
+    : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
@@ -3805,6 +3790,10 @@ function page(id: string, region = -1) {
   const card = p && part[0] === 'plan' ? raidCardOf(s, part[1], Number(part[2]), (part[3] ?? '').split('.').filter(Boolean).map(Number).filter((n) => Number.isFinite(n))) : null;
   if (p && card) {
     return { ok: true, ...p, headline: '', note: '', top: [], card };
+  }
+  // (Ruling 64.) The month's report is one card: the page's own lists stay behind it for a game with none.
+  if (p && id === 'reports' && lastCard) {
+    try { return { ok: true, ...p, month: monthShown(s, lastCard) }; } catch { /* the page as it was */ }
   }
   return p ? { ok: true, ...p } : { ok: false };
 }

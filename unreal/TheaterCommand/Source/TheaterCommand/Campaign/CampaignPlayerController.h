@@ -720,6 +720,9 @@ public:
 
 	/** Cuts short the watching of the other nations' month. */
 	void SkipWatching();
+	/** (Ruling 64.) The month's replay, shown again from the month's card. Nothing is told twice: the card comes back when it is over. */
+	void WatchAgain();
+	bool CanWatchAgain() const { return !bWatching && Month.Steps.Num() > 0; }
 
 	/**
 	 * The hand on a flag, as three steps a script can take too: take hold of the player's army in a region,
@@ -829,6 +832,8 @@ private:
 
 	// The other nations' month, being played out one nation at a time.
 	bool bWatching = false;
+	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
+	bool bRewatching = false; // the month is being watched again from its card
 	FMonthResult Month;
 	int32 WatchIndex = 0;
 	double WatchNext = 0.0;

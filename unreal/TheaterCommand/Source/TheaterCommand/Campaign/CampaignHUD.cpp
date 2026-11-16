@@ -621,7 +621,7 @@ namespace
 				{
 					if (const FSlateBrush* Star = OrderSignBrush(TEXT("star")))
 					{
-						const double StarWide = Tall * 0.36;
+						const double StarWide = FMath::Max(Tall * 0.4, 7.5); // (round 35: about seven points, on the small plate too)
 						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(FVector2D(StarWide, StarWide), FSlateLayoutTransform(Corner + FVector2D(X + SignWide - StarWide * 0.6, 1.0))), Star, ESlateDrawEffect::None, BadgeBrass);
 					}
 				}
@@ -1135,6 +1135,12 @@ namespace
 			// (The raid card, to the art director's brief: a cream border like a print's round the target's picture, a
 			// round brass ring for its plus and minus, and one button of solid brass that flies the raid.)
 			PrintBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("E9E0C8"))), 1.0f);
+			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
+			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
+			MonthBandBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(104, 34, 26)), 3.0f, FLinearColor(FColor(208, 86, 61)), 1.0f);
+			MonthStampBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), 3.0f, FLinearColor::White, 2.5f);
+			MonthDiscBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.3f), 18.0f, BrightBrass, 1.5f);
+			MonthTagBrush = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f);
 			RoundStyle.SetNormal(FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.25f), 17.0f, BrightBrass, 2.0f));
 			RoundStyle.SetHovered(FSlateRoundedBoxBrush(Brass.CopyWithNewOpacity(0.45f), 17.0f, BrightBrass, 2.0f));
 			RoundStyle.SetPressed(FSlateRoundedBoxBrush(Brass.CopyWithNewOpacity(0.7f), 17.0f, BrightBrass, 2.5f));
@@ -2399,7 +2405,9 @@ namespace
 						[
 							// (the raid card is laid out to the art director's sheet, about 1176 by 932: the room is larger for it,
 							// and keeps only its title and CLOSE at its head)
-							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
+							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
+							// (the month's card is as tall as what it has to tell, and no taller than the screen: a quiet month is a small card)
+							.MaxDesiredHeight_Lambda([this]() { return IsMonthCard() ? FOptionalSize(956.0f) : FOptionalSize(); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
 								[
@@ -2407,6 +2415,8 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(SHorizontalBox)
+											// (the month's card has its own title row and its own buttons)
+											.Visibility_Lambda([this]() { return IsMonthCard() ? EVisibility::Collapsed : EVisibility::Visible; })
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 										[
 											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
@@ -4242,6 +4252,597 @@ namespace
 		/** A room of the rules' own: its buttons, then each section with its words and its rows. */
 		/** Whether the room open is a raid being planned, which is set out as a card of its own. */
 		bool IsRaidCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Card.bValid; }
+		bool IsMonthCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Month.bValid; }
+
+		/**
+		 * (Ruling 64.) The art director's picture for the month's card, by its file's own name ("troops", "town",
+		 * "fieldworks", "fleet", "harbour", "factories", "rail-yard", "airfield"): the small one for a row, the plain
+		 * print for the lead story (the ringed print of the raid card where there is no plain one).
+		 */
+		TSharedPtr<FSlateBrush> MonthPictureOf(const FString& Name, bool bSmall)
+		{
+			if (Name.IsEmpty())
+			{
+				return nullptr;
+			}
+			const FString Key = Name + (bSmall ? TEXT("-small") : TEXT("-plain"));
+			if (const TSharedPtr<FSlateBrush>* Kept = MonthPictures.Find(Key))
+			{
+				return *Kept;
+			}
+			static TMap<FString, UTexture2D*> Read; // (kept for the life of the game, like the target pictures)
+			UTexture2D* Texture = Read.FindRef(Key);
+			if (!Texture && !Read.Contains(Key))
+			{
+				const FString Folder = FPaths::ProjectContentDir() / TEXT("RaidCard");
+				FString File = Folder / (TEXT("target-") + Key + TEXT(".png"));
+				if (!FPaths::FileExists(File) && !bSmall)
+				{
+					File = Folder / (TEXT("target-") + Name + TEXT(".png"));
+				}
+				if (FPaths::FileExists(File))
+				{
+					Texture = FImageUtils::ImportFileAsTexture2D(File);
+				}
+				if (Texture)
+				{
+					Texture->AddToRoot();
+				}
+				Read.Add(Key, Texture);
+			}
+			TSharedPtr<FSlateBrush> Brush;
+			if (Texture)
+			{
+				Brush = MakeShared<FSlateBrush>();
+				Brush->SetResourceObject(Texture);
+				Brush->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+				Brush->DrawAs = ESlateBrushDrawType::Image;
+			}
+			MonthPictures.Add(Key, Brush);
+			return Brush;
+		}
+
+		/** One of the player's fronts on the month's card: its picture, its sign, the place, what happened, the figures and the way to the map. */
+		TSharedRef<SWidget> MonthRowOf(const FMonthRow& Told)
+		{
+			const FLinearColor Good(FColor(147, 181, 108)), Bad(FColor(208, 86, 61)), Warn(FColor(224, 161, 60)), Ink(FColor::FromHex(TEXT("1F1808")));
+			const FLinearColor Edge = Told.Tone == 1 ? Good : Told.Tone == -1 ? Bad : Told.Tone == 2 ? Warn : Muted;
+			TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Told.Place)).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(Cream)
+				];
+			if (!Told.Tag.IsEmpty())
+			{
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&MonthTagBrush).BorderBackgroundColor(Edge).Padding(FMargin(7.0f, 2.0f, 7.0f, 2.0f))
+					[
+						SNew(STextBlock).Text(FText::FromString(Told.Tag)).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(Ink)
+					]
+				];
+			}
+			if (!Told.A.IsEmpty())
+			{
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)[SNew(SImage).Image(FlagBrush(Told.A))]
+				];
+			}
+			if (!Told.A.IsEmpty() && !Told.B.IsEmpty())
+			{
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(7.0f, 0.0f, 7.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("against"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				];
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)[SNew(SImage).Image(FlagBrush(Told.B))]
+				];
+			}
+			TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SBox).WidthOverride(5.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Edge)]
+				];
+			const TSharedPtr<FSlateBrush> Painted = MonthPictureOf(Told.Picture, true);
+			if (Painted.IsValid())
+			{
+				Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(92.0f).HeightOverride(59.0f)[SNew(SImage).Image(Painted.Get())]
+				];
+			}
+			if (const FSlateBrush* Sign = Told.Sign.IsEmpty() ? nullptr : OrderSignBrush(Told.Sign))
+			{
+				Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(36.0f).HeightOverride(36.0f)
+					[
+						SNew(SBorder).BorderImage(&MonthDiscBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+						[
+							SNew(SBox).WidthOverride(22.0f).HeightOverride(15.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Cream)]
+						]
+					]
+				];
+			}
+			Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(12.0f, 0.0f, 8.0f, 0.0f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[Top]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Told.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.88f))
+					.OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Told.Text))
+				]
+			];
+			for (const FMonthFigure& Figure : Told.Figures)
+			{
+				Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+					[
+						SNew(STextBlock).Text(FText::FromString(Figure.Value)).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(Cream)
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+					[
+						SNew(STextBlock).Text(FText::FromString(Figure.Label)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted)
+					]
+				];
+			}
+			if (Told.Region >= 0)
+			{
+				const FString Act = FString::Printf(TEXT("goto:region:%d"), Told.Region);
+				Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Shows the place on the map.")))
+					.OnClicked_Lambda([this, Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } return FReply::Handled(); })
+					[
+						SNew(SBox).WidthOverride(11.0f).HeightOverride(11.0f)[SNew(SImage).Image(&DotBrush).ColorAndOpacity(BrightBrass)]
+					]
+				];
+			}
+			return SNew(SBox).HeightOverride(71.0f)
+				[
+					SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(0.0f))[Line]
+				];
+		}
+
+		/**
+		 * (Rulings 64 and 65; the art director's brief. Brian, 16 November 2026: "i dont love the turn update UI telling
+		 * you what happend. its very plain and hard to read".) The month on one card, top to bottom: the title with WATCH
+		 * IT AGAIN and GIVE ORDERS; the red band, for news that changes the war; the month's score in boxes; the lead
+		 * story with its picture; the player's fronts as rows; and AT HOME, WHAT YOUR STAFF DID and ELSEWHERE along the
+		 * bottom. A front page, not a telegram: the eye gets the headline, the score, the picture, then the small stories.
+		 */
+		void LayOutMonthCard(const FMonthCard& Card)
+		{
+			const FLinearColor Good(FColor(147, 181, 108)), Bad(FColor(208, 86, 61)), Warn(FColor(224, 161, 60)), Ink(FColor::FromHex(TEXT("1F1808")));
+			auto ToneInk = [&](int32 Tone) { return Tone == 1 ? Good : Tone == -1 ? Bad : Tone == 2 ? Warn : Cream; };
+			auto Heading = [this](const FString& Words) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(FText::FromString(Words)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(BrightBrass); };
+			auto Go = [this](const FString& Act) { return [this, Act]() { if (Controller.IsValid() && !Act.IsEmpty()) { Controller->PressPage(Act); } return FReply::Handled(); }; };
+			auto Flag = [this](const FString& Tag, float Wide, float High) -> TSharedRef<SWidget> { return SNew(SBox).WidthOverride(Wide).HeightOverride(High)[SNew(SImage).Image(FlagBrush(Tag))]; };
+			auto ShowOnMap = [this, &Go](int32 Region) -> TSharedRef<SWidget>
+			{
+				return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 8.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Shows the place on the map.")))
+					.OnClicked_Lambda(Go(FString::Printf(TEXT("goto:region:%d"), Region)))
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("SHOW ON MAP"))).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Cream)
+					];
+			};
+			if (ShownMonthDate != Card.Date)
+			{
+				ShownMonthDate = Card.Date;
+				bMonthRowsOpen = false;
+			}
+
+			// 1. The title, and the two buttons.
+			const bool bAgain = Controller.IsValid() && Controller->CanWatchAgain();
+			PageBody->AddSlot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Heading(TEXT("DISPATCHES  ·  THE MONTH IN ONE LOOK"))]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Card.Date)).Font(Serif(TEXT("Bold"), 30)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false).IsEnabled(bAgain)
+					.ToolTipText(FText::FromString(bAgain ? TEXT("Shows the month's moves on the table once more. This report comes back when they are over.") : TEXT("The month's moves are kept only until the game is put away.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->WatchAgain(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("WATCH IT AGAIN"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(bAgain ? Cream : Faint)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(30.0f, 11.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Puts the report away. Enter does the same, and R opens it again.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ClosePage(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("GIVE ORDERS"))).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Ink)
+					]
+				]
+			];
+
+			// 2. The red band: at most two, for news that changes the war.
+			for (const FMonthBand& Band : Card.Bands)
+			{
+				TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Band.Kind)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(Cream)
+					];
+				for (const FString& Tag : Band.Flags)
+				{
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)[Flag(Tag, 38.0f, 24.0f)];
+				}
+				Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Band.Text)).Font(Serif(TEXT("Bold"), 18)).ColorAndOpacity(Cream)
+					.OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Band.Tip.IsEmpty() ? Band.Text : Band.Tip))
+				];
+				if (Band.Week > 0)
+				{
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 14.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("week %d"), Band.Week))).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.8f))
+					];
+				}
+				if (Band.Region >= 0)
+				{
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region)];
+				}
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&MonthBandBrush).Padding(FMargin(0.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Bad)]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(16.0f, 9.0f, 12.0f, 9.0f))[Line]
+					]
+				];
+			}
+
+			// 3. The score: a box for each thing there is to count, one large figure in each.
+			if (Card.Score.Num() > 0)
+			{
+				TSharedRef<SHorizontalBox> Boxes = SNew(SHorizontalBox);
+				for (int32 K = 0; K < Card.Score.Num(); ++K)
+				{
+					const FMonthScore& Box = Card.Score[K];
+					TSharedRef<SHorizontalBox> Label = SNew(SHorizontalBox);
+					if (const FSlateBrush* Sign = Box.Sign.IsEmpty() || Box.Sign == TEXT("flag") ? nullptr : OrderSignBrush(Box.Sign))
+					{
+						Label->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(18.0f).HeightOverride(12.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Muted)]
+						];
+					}
+					Label->AddSlot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Box.Label)).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Muted)
+					];
+					Boxes->AddSlot().FillWidth(1.0f).Padding(K == 0 ? 0.0f : 10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(12.0f, 8.0f, 12.0f, 9.0f))
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[Label]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Box.Figure)).Font(Serif(TEXT("Bold"), 26)).ColorAndOpacity(ToneInk(Box.Tone))
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Box.Sub)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
+							]
+						]
+					];
+				}
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[Boxes];
+			}
+
+			// 4 and 5. The lead story with its picture, and the player's fronts as rows beside it.
+			if (!Card.Lead.bValid && Card.Rows.Num() == 0)
+			{
+				// (a quiet month, or a band and no fighting: one line, and no picture)
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 30.0f, 0.0f, 30.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Card.None.IsEmpty() ? FString(TEXT("A quiet month.")) : Card.None)).Font(Serif(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+				];
+				if (!Card.Foot.IsEmpty())
+				{
+					PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				}
+			}
+			else
+			{
+				TSharedRef<SHorizontalBox> Middle = SNew(SHorizontalBox);
+				if (Card.Lead.bValid)
+				{
+					const FMonthLead& Lead = Card.Lead;
+					const FLinearColor StampInk = ToneInk(Lead.Tone);
+					const TSharedPtr<FSlateBrush> Painted = MonthPictureOf(Lead.Picture, false);
+					TSharedRef<SOverlay> Print = SNew(SOverlay);
+					if (Painted.IsValid())
+					{
+						Print->AddSlot()[SNew(SImage).Image(Painted.Get())];
+					}
+					Print->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(10.0f, 10.0f, 0.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(8.0f, 3.0f, 8.0f, 3.0f))
+						[
+							SNew(STextBlock).Text(FText::FromString(Lead.Tag)).Font(Font(TEXT("Bold"), 9, 220)).ColorAndOpacity(BrightBrass)
+						]
+					];
+					if (!Lead.Stamp.IsEmpty())
+					{
+						Print->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(0.0f, 18.0f, 18.0f, 0.0f)
+						[
+							SNew(SBorder).BorderImage(&MonthStampBrush).BorderBackgroundColor(StampInk).Padding(FMargin(13.0f, 1.0f, 13.0f, 3.0f))
+							.RenderTransform(FSlateRenderTransform(FQuat2D(FMath::DegreesToRadians(-6.0f)))).RenderTransformPivot(FVector2D(0.5f, 0.5f))
+							[
+								SNew(STextBlock).Text(FText::FromString(Lead.Stamp)).Font(Serif(TEXT("Bold"), 20, 120)).ColorAndOpacity(StampInk)
+							]
+						];
+					}
+					{
+						TSharedRef<SHorizontalBox> Whose = SNew(SHorizontalBox);
+						auto Side = [this, &Whose, &Flag](const FString& Tag, const FString& Name)
+						{
+							if (!Tag.IsEmpty())
+							{
+								Whose->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)[Flag(Tag, 26.0f, 17.0f)];
+							}
+							Whose->AddSlot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(Name)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream)
+							];
+						};
+						Side(Lead.A, Lead.AName);
+						if (!Lead.BName.IsEmpty())
+						{
+							Whose->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 8.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("against"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+							];
+							Side(Lead.B, Lead.BName);
+						}
+						Print->AddSlot().VAlign(VAlign_Bottom)
+						[
+							SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(14.0f, 7.0f, 14.0f, 10.0f))
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Text(FText::FromString(Lead.Headline)).Font(Serif(TEXT("Bold"), Lead.Headline.Len() > 30 ? 20 : 24)).ColorAndOpacity(Cream).AutoWrapText(true)
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Whose]
+							]
+						];
+					}
+					TSharedRef<SVerticalBox> LeadBox = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[Heading(TEXT("THE LEAD STORY"))]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(SBorder).BorderImage(&PrintBrush).Padding(FMargin(5.0f))
+							[
+								SNew(SBox).WidthOverride(460.0f).HeightOverride(292.0f)[Print]
+							]
+						];
+					if (!Lead.Line.IsEmpty())
+					{
+						LeadBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Lead.Line)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+						];
+					}
+					if (Lead.Figures.Num() > 0)
+					{
+						TSharedRef<SHorizontalBox> Three = SNew(SHorizontalBox);
+						for (int32 K = 0; K < Lead.Figures.Num(); ++K)
+						{
+							Three->AddSlot().FillWidth(1.0f).Padding(K == 0 ? 0.0f : 8.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(10.0f, 5.0f, 10.0f, 6.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(Lead.Figures[K].Value)).Font(Serif(TEXT("Bold"), 18)).ColorAndOpacity(Cream)
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(Lead.Figures[K].Label)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted)
+									]
+								]
+							];
+						}
+						LeadBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Three];
+					}
+					if (Lead.Region >= 0 || Lead.Report >= 0)
+					{
+						TSharedRef<SHorizontalBox> Doors = SNew(SHorizontalBox);
+						if (Lead.Region >= 0)
+						{
+							Doors->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)[ShowOnMap(Lead.Region)];
+						}
+						if (Lead.Report >= 0)
+						{
+							Doors->AddSlot().AutoWidth()
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 8.0f)).IsFocusable(false)
+								.ToolTipText(FText::FromString(TEXT("Who fought, what each lost, and what the map fed into the fight.")))
+								.OnClicked_Lambda(Go(FString::Printf(TEXT("open:battle:%d"), Lead.Report)))
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("READ THE BATTLE REPORT"))).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Cream)
+								]
+							];
+						}
+						LeadBox->AddSlot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)[Doors];
+					}
+					Middle->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)[SNew(SBox).WidthOverride(470.0f)[LeadBox]];
+				}
+
+				TSharedRef<SVerticalBox> Fronts = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Heading(TEXT("YOUR FRONTS  ·  THE LAND FIRST, THEN SEA AND AIR"))];
+				const int32 Most = 6; // (with the lead story, about seven in all: ruling 64)
+				const bool bMore = Card.Rows.Num() > Most;
+				const int32 Shown = bMore && !bMonthRowsOpen ? Most : Card.Rows.Num();
+				for (int32 K = 0; K < Shown; ++K)
+				{
+					Fronts->AddSlot().AutoHeight().Padding(0.0f, K == 0 ? 8.0f : 6.0f, 0.0f, 0.0f)[MonthRowOf(Card.Rows[K])];
+				}
+				if (Card.Rows.Num() == 0)
+				{
+					Fronts->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Nothing else was fought for on your fronts."))).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+					];
+				}
+				if (!Card.Foot.IsEmpty() || bMore)
+				{
+					TSharedRef<SHorizontalBox> Under = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Card.Foot))
+						];
+					if (bMore)
+					{
+						Under->AddSlot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(bMonthRowsOpen ? TEXT("Folds the list to its first rows.") : TEXT("Unfolds every row of the month.")))
+							.OnClicked_Lambda([this]() { bMonthRowsOpen = !bMonthRowsOpen; ShownRoom = -1; return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(bMonthRowsOpen ? FString(TEXT("THE FIRST ROWS ONLY")) : Card.Count)).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(BrightBrass)
+							]
+						];
+					}
+					Fronts->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)[Under];
+				}
+				Middle->AddSlot().FillWidth(1.0f)[Fronts];
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[Middle];
+			}
+
+			// 6. Along the bottom: at home, what the staff did, and the rest of the war.
+			{
+				TSharedRef<SHorizontalBox> Bottom = SNew(SHorizontalBox);
+				auto Boxed = [this, &Bottom, &Heading](const FString& Title, TSharedRef<SVerticalBox> Lines, bool bFirst)
+				{
+					Bottom->AddSlot().FillWidth(1.0f).Padding(bFirst ? 0.0f : 12.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(14.0f, 10.0f, 14.0f, 10.0f))
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[Heading(Title)]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[Lines]
+						]
+					];
+				};
+				auto Quiet = [this](const TCHAR* Words) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(FText::FromString(Words)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true); };
+
+				TSharedRef<SVerticalBox> Home = SNew(SVerticalBox);
+				for (const FMonthHome& Each : Card.Home)
+				{
+					const FLinearColor Lit = Each.bGrey ? Muted : BrightBrass, Said = Each.bGrey ? Muted : Cream;
+					TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox);
+					const FSlateBrush* Sign = Each.Sign.IsEmpty() ? nullptr : OrderSignBrush(Each.Sign);
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(30.0f).HeightOverride(17.0f).HAlign(HAlign_Left)
+						[
+							Sign ? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(25.0f).HeightOverride(17.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Lit)]) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+						]
+					];
+					if (!Each.Count.IsEmpty())
+					{
+						Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 8.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Each.Count)).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(Lit)
+						];
+					}
+					Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(Each.Count.IsEmpty() ? 6.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Each.Where.IsEmpty() ? Each.Text : Each.Text + TEXT("  ·  ") + Each.Where)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Said)
+						.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					];
+					Home->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[Line];
+				}
+				if (Card.Home.Num() == 0)
+				{
+					Home->AddSlot().AutoHeight()[Quiet(TEXT("Nothing was delivered this month, and nothing is due next month."))];
+				}
+				Boxed(TEXT("AT HOME"), Home, true);
+
+				TSharedRef<SVerticalBox> Staff = SNew(SVerticalBox);
+				for (const FMonthStaff& Each : Card.Staff)
+				{
+					Staff->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Each.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 6.0f)).IsFocusable(false).IsEnabled(Each.bOk)
+							.ToolTipText(FText::FromString(Each.bOk ? TEXT("What your staff ordered this month stands. From next month the desk is yours to run.") : TEXT("The desk is yours again.")))
+							.OnClicked_Lambda(Go(Each.Act))
+							[
+								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Each.bOk ? Cream : Faint)
+							]
+						]
+					];
+				}
+				if (Card.Staff.Num() == 0)
+				{
+					Staff->AddSlot().AutoHeight()[Quiet(TEXT("Your staff had nothing to tell of the desks it runs."))];
+				}
+				Boxed(TEXT("WHAT YOUR STAFF DID  ·  IT STANDS"), Staff, false);
+
+				TSharedRef<SVerticalBox> Else = SNew(SVerticalBox);
+				for (const FMonthElse& Each : Card.Elsewhere)
+				{
+					Else->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)[Flag(Each.Tag, 26.0f, 17.0f)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(Each.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+						]
+					];
+				}
+				if (Card.Elsewhere.Num() == 0)
+				{
+					Else->AddSlot().AutoHeight()[Quiet(TEXT("Nothing was fought for elsewhere."))];
+				}
+				Boxed(TEXT("ELSEWHERE IN THE WAR"), Else, false);
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[Bottom];
+			}
+
+			PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("R opens this report again at any time."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+			];
+		}
 
 		/**
 		 * (Ruling 54.) The art director's picture of a kind of target, read once from the game's own files
@@ -4834,6 +5435,11 @@ namespace
 			if (Page.Top.Num() > 0)
 			{
 				PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)[PageButtons(Page.Top)];
+			}
+			if (Page.Month.bValid)
+			{
+				LayOutMonthCard(Page.Month);
+				return;
 			}
 			if (Page.Card.bValid)
 			{
@@ -7578,6 +8184,10 @@ namespace
 		FButtonStyle PillStyle;
 		FButtonStyle RoundStyle, BrassStyle; // the raid card's round plus and minus, and its one brass button
 		FSlateBrush PrintBrush; // the cream border of the target's picture
+		FSlateBrush MonthBoxBrush, MonthBandBrush, MonthStampBrush, MonthDiscBrush, MonthTagBrush; // the month's card
+		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read
+		bool bMonthRowsOpen = false; // its rows past the seventh unfolded
+		FString ShownMonthDate; // the month it was last laid out for
 		TMap<FString, TSharedPtr<FSlateBrush>> TargetPictures; // the art director's pictures of the kinds of target, as they are read
 		TMap<FString, TSharedPtr<FSlateBrush>> CutOuts; // the machines' small pictures with their ground taken away
 		TSharedPtr<SWidget> HelpMark;
