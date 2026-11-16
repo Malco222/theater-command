@@ -11,7 +11,8 @@ import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify } from './arsenal';
 import { blocked, blowBridges } from './rivers';
-import { groundRules } from './ground';
+import { groundRules, isFoot } from './ground';
+import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount } from './navy';
 import { shoreAI } from './fleets';
@@ -1363,6 +1364,20 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
 
 const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
 
+/**
+ * Tanks are not sent alone at a gunned line (ruling 152(g), the grand campaign). Where the pick is tanks with no men
+ * on foot and the defence's anti-tank strength is 'gunned' or more, the strongest infantry to hand goes in with them;
+ * at 'never' or more with no infantry to send, the attack is not made. Gives the force to send, or null.
+ */
+export function notTanksAlone(g: Game, pick: Corps[], pool: Corps[], target: Region): Corps[] | null {
+  if (g.flags.open !== 1 || !pick.some((c) => c.kind === 'arm') || pick.some((c) => isFoot(c))) return pick;
+  const at = assess(g, pick, target).faced?.antiTank;
+  if (!at || at.strength < SUPPORT.staff.gunned) return pick;
+  const foot = pool.filter((c) => isFoot(c) && !pick.includes(c)).sort((a, b) => atkPower(g, b) - atkPower(g, a))[0];
+  if (foot) return [...pick, foot];
+  return at.strength >= SUPPORT.staff.never ? null : pick;
+}
+
 /** Whose army holds the country of a province: in the grand campaign an army round a town it has not taken holds the roads there. Armies march and are counted by this. */
 const ctl = (g: Game, r: Region): string => fieldCtrl(g, r);
 
@@ -1520,6 +1535,12 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
               pick = two.corps; odds = two.then; wave = true;
             }
           }
+          // Tanks do not go alone at a gunned line: infantry goes in with them, or they do not go.
+          if (!wave) {
+            const sent = notTanksAlone(g, pick, pool, target);
+            if (!sent) continue;
+            if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
+          }
           // (A place that needs two waves is a dearer prize than one that falls to one.)
           const score = value + Math.min(odds, 4) - (wave ? 0.5 : 0);
           if (!best || score > best.score) best = { score, target, corps: pick, battle: true, wave };
@@ -1584,6 +1605,9 @@ function localAttacks(g: Game, nat: string): void {
         if (odds >= 2.6) { pick = pool.slice(0, k); break; }
       }
       if (odds < P.odds) continue;
+      const sent = notTanksAlone(g, pick, pool, target);
+      if (!sent) continue;
+      if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
       const score = Math.min(odds, 4) + value;
       if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
     }

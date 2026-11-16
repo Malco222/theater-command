@@ -6,6 +6,7 @@
 
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
+import supportData from '../../data/campaign/support.json';
 import { turnToDate } from '../core/ticket';
 import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
@@ -37,6 +38,8 @@ export interface Tech {
   slots?: number;
   /** Ends the eastern winter's penalty for the nation's troops. */
   winterKit?: boolean;
+  /** One of the infantry's support weapons (rulings 146 and 152): what it does is worked out in support.ts. */
+  weapons?: boolean;
   /** Oil made each month by every working factory at home, out of any raider's reach. */
   oil?: number;
   sealift?: number;
@@ -61,7 +64,7 @@ export const TECH = data as unknown as {
   techs: Tech[];
   start: Record<string, string[]>;
   units: { para: TechUnit };
-  ai: { tier: number; branch: number; early: number; teams: number; later: number; fuel?: number; winter?: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
+  ai: { tier: number; branch: number; early: number; teams: number; later: number; fuel?: number; winter?: number; guns?: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
 };
 
 const BY_ID: Record<string, Tech> = {};
@@ -209,6 +212,13 @@ export function winterAhead(g: Game, nat: string): boolean {
   return false;
 }
 
+const SUPPORT_TECH = (supportData as unknown as { tech: { antiTank: string } }).tech;
+/** True when a country is at war with one that has a tank corps in the field. */
+function facesTanks(g: Game, nat: string): boolean {
+  const foes = g.nations[nat]?.atWar ?? [];
+  return foes.length > 0 && g.corps.some((c) => !c.dead && c.kind === 'arm' && foes.includes(c.nat));
+}
+
 /** What a computer-run nation's staff would research next, or null when nothing is open to it. */
 export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const s = techOf(g, nat);
@@ -226,7 +236,9 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
     const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
     // The player's advisers take up winter equipment as soon as a winter in the east is in sight.
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold;
+    // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
+    const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -344,11 +356,31 @@ const UNLOCK_RULE: Record<string, string> = {
   para: 'Airborne corps can be raised.',
 };
 
+/**
+ * What the infantry's four support technologies do (rulings 146 and 152; the rule is in support.ts and the numbers in
+ * support.json): each weapon has a job of its own in place of 6% on everything.
+ */
+function supportWords(id: string): string | null {
+  const S = supportData as unknown as {
+    antiTank: { without: number; tankDestroyers: number; handHeld: { open: number; close: number } };
+    machineGuns: { defence: number }; mortars: { works: number }; assault: { attack: number };
+    tech: { antiTank: string; tankDestroyers: string; handHeld: string; support: string };
+  };
+  const A = S.antiTank, T = S.tech;
+  if (id === T.antiTank) return `Its infantry keeps up with the anti-tank guns of the day: without this they count at ${pct(A.without)} of their worth. They take the shock out of a tank attack, most from behind finished fieldworks, and the tanks pay for what they lose.`;
+  if (id === T.support) return `Machine guns: its infantry defends up to ${pct(S.machineGuns.defence)} stronger against men on foot, most from finished fieldworks, and more of the attacker's losses fall on his infantry. Mortars: its infantry in the attack takes up to ${pct(S.mortars.works)} of the worth out of fieldworks, never out of concrete.`;
+  if (id === T.tankDestroyers) return `Every line its infantry holds takes ${pct(A.tankDestroyers)} more of the shock out of a tank attack.`;
+  if (id === T.handHeld) return `Its men on foot attack ${pct(S.assault.attack)} stronger. Hand-held anti-tank weapons: a line its infantry holds takes ${pct(A.handHeld.open)} more of the shock out of a tank attack, ${pct(A.handHeld.close)} in forest and hills.`;
+  return null;
+}
+
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
 export function techRule(t: Tech): string {
   const out: string[] = [];
   for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
   if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
+  const kit = supportWords(t.id);
+  if (kit) out.push(kit);
   const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
   if (rest) out.push(rest);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);

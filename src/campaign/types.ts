@@ -462,6 +462,11 @@ export interface BattleReport {
   relief?: boolean;
   /** The garrison of a besieged town came out against the army round it. */
   sally?: boolean;
+  /**
+   * Who paid, and to what (the grand campaign, rulings 146 and 149): the result's line as the attacker reads it and as
+   * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
+   */
+  paid?: { att: string; def: string };
 }
 
 // ---- The war at sea ---------------------------------------------------------------------
