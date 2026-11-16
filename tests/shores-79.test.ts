@@ -16,7 +16,7 @@ import { landingWatch } from '../src/campaign/ai';
 import { addCorps, atWar, capture, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop, stopDef } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { builtUp, frontAshore, joinsOn, oceanRuns, opensOn, seaFoe, startOpen } from '../src/campaign/staff';
+import { builtUp, frontAshore, joinsOn, massing, oceanRuns, opensOn, seaFoe, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { type Corps, type Game, type Region } from '../src/campaign/types';
 import { beyondEurope } from '../src/campaign/world';
@@ -246,6 +246,47 @@ describe('the war nobody plays', () => {
     }
     // Canada's makes none on a mainland.
     expect(landings.filter((l) => l.nat === 'CAN' && !l.island && !l.overseas)).toEqual([]);
+  });
+});
+
+describe('a staff that waits for its date', () => {
+  it('picks no enemy for a crossing whose harbours in reach are all closed to it this month', () => {
+    // January 1943 in the war nobody plays: Germany holds the Channel coast, and France's month has not come.
+    const g = at(JAN_43);
+    expect(germanyEntered(g)).toBe(false);
+    for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete g.flags[k];
+    expect(seaFoe(g, 'UK')).toBeNull();
+    // Where the list is put away the same staff, the same month, has the enemy across the Channel in its eye.
+    const loose = at(JAN_43);
+    for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete loose.flags[k];
+    expect(setStop(loose, 4)).toBe(true);
+    expect(seaFoe(loose, 'UK')?.foe).toBe('GER');
+  });
+
+  it('is not fighting a war nobody can fight: it will come that month', () => {
+    // Britain in January 1942: Germany holds the harbours of France, and France's month has not come.
+    const g = at(JAN_42);
+    expect(g.regions.some((r) => r.owner === 'FRA' && !r.overseas && r.port && r.ctrl === 'GER')).toBe(true);
+    expect(massing(g, 'UK')).toBe(true);
+    // From May 1944 it waits only for Greece's month, where an enemy holds a harbour of the Greek mainland; from October for nothing.
+    g.turn = MAY_44;
+    expect(massing(g, 'UK')).toBe(g.regions.some((r) => r.owner === 'GRE' && r.nb.length > 0 && r.port && r.seas.length > 0 && atWar(g, 'UK', r.ctrl)));
+    g.turn = OCT_44;
+    expect(massing(g, 'UK')).toBe(false);
+    // America with its army gathered in Britain waits too, where it used to be free to sign after a year.
+    const a = at(JAN_42);
+    for (let k = field(a, 'USA').filter((c) => !beyondEurope(a.regions[c.reg])).length; k < PLANNED.USA.with!; k++) addCorps(a, 'USA', `Gathered Corps ${k}`, 'inf', 2, 'Cornwall', {});
+    expect(builtUp(a, 'USA', R(a, 'Brittany'))).toBe(true);
+    for (const turn of [JAN_42, JAN_43, APR_44]) { a.turn = turn; expect(massing(a, 'USA'), `month ${turn}`).toBe(true); }
+    a.turn = MAY_44;
+    expect(massing(a, 'USA')).toBe(false);
+    // With nobody across the ocean it is not gathering and not waiting, as before; and where there are no dates, nobody waits.
+    const none = at(JAN_42);
+    for (const c of field(none, 'USA').filter((x) => !beyondEurope(none.regions[x.reg]))) removeCorps(none, c);
+    expect(massing(none, 'USA')).toBe(false);
+    const loose = at(JAN_42);
+    expect(setStop(loose, 4)).toBe(true);
+    expect(massing(loose, 'UK')).toBe(false);
   });
 });
 

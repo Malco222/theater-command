@@ -1265,12 +1265,21 @@ function armyAcross(g: Game, nat: string): number {
 /**
  * True while a staff with history's list is still building its army up across the sea for the front planned there:
  * it has corps on the far shore, and fewer than it waits for. Its war is not yet one nobody can fight (`stalemates`).
+ * Nor is it while the staff waits for history's date for a shore on its list (Version 79): it will come that month.
  */
 export function massing(g: Game, nat: string): boolean {
-  const need = planned(g, nat)?.with;
-  if (!need) return false;
-  const across = armyAcross(g, nat);
-  return across > 0 && across < need;
+  const P = planned(g, nat);
+  if (!P) return false;
+  const across = P.with ? armyAcross(g, nat) : -1;
+  if (P.with && across <= 0) return false;
+  return (!!P.with && across < P.with) || awaiting(g, nat, P);
+}
+/** True while a staff with history's dates waits for one: an enemy holds a harbour on a mainland shore of its list whose month has not come. */
+function awaiting(g: Game, nat: string, P: Planned): boolean {
+  const from = P.from;
+  if (!from || !dated(g)) return false;
+  return g.regions.some((r) => r.port && r.seas.length > 0 && !r.overseas && r.nb.length > 0 && g.turn < (from[r.owner] ?? 0)
+    && P.open.includes(r.owner) && !P.not?.includes(r.name) && atWar(g, nat, r.ctrl) && !opensOn(g, nat, r));
 }
 /** True for ground on a nation's own side of the ocean: beyond the old chart for a country whose capital is, on it for the others. */
 const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap = g.nations[nat].capital; return cap < 0 || beyondEurope(cap) === beyondEurope(reg); };
@@ -1320,7 +1329,8 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
   const key = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
   const home = homeGround(g, nat);
   const from = [...new Set(home.list.map((id) => g.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
-  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e)) <= NAVY.landing.range;
+  // (A staff with history's list of shores looks only at those of his harbours it may open on this month.)
+  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r))) <= NAVY.landing.range;
   const kept = ids[flag(g, key) - 1];
   if (kept && g.nations[kept].alive && atWar(g, nat, kept)) {
     if (g.turn - flag(g, at) < 12 || lodgment(g, nat)) return { foe: kept, L: D, second: true };

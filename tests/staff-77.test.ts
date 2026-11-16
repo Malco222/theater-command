@@ -157,8 +157,10 @@ describe('the build-up', () => {
     g.turn += 1;
     expect(signs(g)).toBe(true);
     expect(g.nations.USA.atWar).not.toContain('GER');
-    // A staff with no such figure is never gathering.
-    expect(massing(at(JAN_42), 'UK')).toBe(false);
+    // A staff with no such figure is never gathering. (Britain's waits for history's dates since Version 79, where they hold.)
+    const loose = at(JAN_42);
+    expect(setStop(loose, 4)).toBe(true);
+    expect(massing(loose, 'UK')).toBe(false);
     expect(massing(at(JAN_42), 'CAN')).toBe(false);
   });
 });
