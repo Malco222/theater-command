@@ -1304,7 +1304,8 @@ export const keepsDoor = (g: Game, nat: string): boolean => { const cap = g.nati
  */
 export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolean => {
   const his = g.nations[e]?.capital ?? -1;
-  // (A neighbour by the map is met by land, as he was: Mexico is no business for the ships. Ruling 76b.)
+  // (A neighbour by the map is met by land, as he was: Mexico is no business for the ships. Ruling 76b. One who
+  // touches only ground the staff's country owns across the sea is not one: Panama is reached by ship.)
   return his >= 0 && beyondEurope(his) && keepsDoor(g, nat) && !neighbourByLand(g, nat, e);
 };
 /**

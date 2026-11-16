@@ -22,6 +22,7 @@ import { runTurnAI } from '../src/campaign/turn';
 import { type Corps, type Game, type Region } from '../src/campaign/types';
 import { beyondEurope, enemyAtTheDoor, neighbourByLand, overseasOf } from '../src/campaign/world';
 import open from '../data/campaign/open.json';
+import grand from '../data/campaign/grand.json';
 
 const SEP_40 = 13, FEB_42 = 30, END = 37;
 const R = (g: Game, name: string): Region => { const r = g.byName[name]; expect(r, name).toBeDefined(); return r; };
@@ -88,6 +89,33 @@ describe('the rule is written for America (open.json, descent.door)', () => {
       expect(opensOn(g, nat, R(g, 'Cali')), nat).toBe(false);
       expect(neighbourAcrossTheWater(g, nat, 'COL'), nat).toBe(false);
     }
+  });
+});
+
+describe('the start screen says what war with the United States brings (ruling 83d)', () => {
+  const words = (id: string): string => (grand as unknown as { nations: { id: string; years?: Record<string, string> }[] }).nations.find((n) => n.id === id)?.years?.['1939'] ?? '';
+
+  it('to a seat within a landing\'s range of America\'s harbours: its army lands within months, and the rule agrees', () => {
+    for (const nat of ['COL', 'VEN', 'PER']) {
+      expect(words(nat), nat).toContain('War with the United States is another matter: its army lands on your shore within months.');
+      const g = before();
+      joinsAxis(g, nat);
+      expect(seaFoe(g, 'USA')?.foe, nat).toBe(nat);
+      expect(doorQuay(g, 'USA'), nat).not.toBeNull();
+    }
+  });
+
+  it('to Mexico: a war on its own frontier', () => {
+    expect(words('MEX')).toContain('War with the United States is fought on your own northern frontier from its first month.');
+  });
+
+  it('to a seat beyond that range: a war at a distance, until the Pacific slice', () => {
+    for (const nat of ['BRA', 'ARG', 'CHL']) expect(words(nat), nat).toContain('your coast lies beyond the reach of its landing craft');
+    expect(words('BRA')).toContain('Take a colony nearer its harbours and its army lands there and marches on you.');
+  });
+
+  it('and every one of the seven still says that staying out is a quiet game (ruling 58e)', () => {
+    for (const nat of ['MEX', 'BRA', 'ARG', 'CHL', 'PER', 'COL', 'VEN']) expect(words(nat), nat).toContain('Staying out is a quiet game of building and trade');
   });
 });
 
@@ -161,6 +189,35 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
     expect(enemyAtTheDoor(g, 'USA')).toBe(true);
     expect(doorQuay(g, 'USA')).toBeNull();
     expect(overseasOf(g, 'USA')).toBeNull();
+  });
+
+  it('is reached by ship where he touches only ground America owns across the sea: Panama beside the Canal Zone', () => {
+    const g = before();
+    joinsAxis(g, 'PAN');
+    // (No army walks from home to the Canal Zone: he is no neighbour by the map, and holding the army at home would
+    // not bring it to him. On Version 80 he kept America out of the war in Europe for as long as he stood.)
+    expect(neighbourByLand(g, 'USA', 'PAN')).toBe(false);
+    expect(neighbourAcrossTheWater(g, 'USA', 'PAN')).toBe(true);
+    expect(enemyAtTheDoor(g, 'USA')).toBe(false);
+    expect(overseasOf(g, 'USA')).not.toBeNull();
+    expect(seaFoe(g, 'USA')?.foe).toBe('PAN');
+    const quay = doorQuay(g, 'USA')!;
+    expect(quay).not.toBeNull();
+    expect(quay.owner === 'USA' && !quay.overseas).toBe(true);
+    // He is landed on within three months and beaten within five, and the force is home again two months after.
+    let landed = 0, fell = 0;
+    for (let i = 0; i < 5 && !fell; i++) {
+      const t = g.turn;
+      runTurnAI(g);
+      if (!landed && standingIn(g, 'PAN')) landed = t;
+      if (!g.nations.PAN.alive) fell = t;
+    }
+    expect(landed).toBeGreaterThan(0);
+    expect(landed - SEP_40).toBeLessThanOrEqual(3);
+    expect(fell).toBeGreaterThan(0);
+    runTurnAI(g);
+    runTurnAI(g);
+    expect(field(g, 'USA').filter((c) => beyondEurope(c.reg) && g.regions[c.reg].owner !== 'USA').length).toBe(0);
   });
 
   it('never moves a player\'s America (ruling 75e)', () => {
