@@ -23,7 +23,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { numberCorps } from './armies';
-import { INTEL, corpsKnown, identify, intelAttack, intelTick } from './intel';
+import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -31,10 +31,10 @@ import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
-import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
+import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
-import { lineSince, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { beyondEurope, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
@@ -1792,6 +1792,108 @@ export function railMove(g: Game, c: Corps, to: Region): boolean {
   return true;
 }
 
+/** Why a corps cannot go by train: the kind of reason, the sentence, and the province the trouble is at, where there is one. */
+export interface NoTrain {
+  code: 'fort' | 'town' | 'spent' | 'desert' | 'siege' | 'cut' | 'noline' | 'foe' | 'steep' | 'room' | 'broken' | 'unjoined';
+  line: string;
+  at?: number;
+}
+
+/** A cut on friendly ground, said in passing: " (bombed, June 1941)", or the month alone where no cause was kept. */
+function cutAside(g: Game, r: number): string {
+  const why = cutCause(g, r), on = cutOn(g, r);
+  return ` (${why ? `${CAUSE_WORDS[why]}, ` : 'since '}${turnToDate(on ?? g.turn).label})`;
+}
+
+/**
+ * Why no train will take a corps, or take it to one province (the design director's ruling 112(b)): one function for
+ * the browser and the 3D table, so that the two never say different things. With no province named it answers for
+ * the corps alone. Null where the train runs. Where the line does not reach, it names the place the line is broken:
+ * the first break on the way with the fewest. Enemy ground is named as enemy ground and never as cut, so nothing here
+ * tells the player what the fog hides.
+ */
+export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
+  const from = g.regions[c.reg], net = groundRules(g);
+  const open = (r: Region): boolean => (allied(g, c.nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, c.nat, r);
+  const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
+  if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
+  if (c.town) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
+  if (c.ap < 4) return { code: 'spent', line: `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.` };
+  if (from.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return { code: 'siege', line: `${from.name} is under siege. No train leaves it.`, at: from.id };
+  if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
+  if (net && railCut(g, from.id)) return { code: 'cut', line: `The railway at ${from.name} is cut${cutAside(g, from.id)}. No train leaves until ${mended(from.id)}.`, at: from.id };
+  if (to === undefined || to === c.reg || !g.regions[to]) return null;
+  const dest = g.regions[to];
+  if (dest.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
+  if (!allied(g, c.nat, dest.ctrl) && !junctionOpenTo(g, c.nat, dest)) return { code: 'foe', line: `${dest.name} is not in friendly hands. Trains run through friendly ground only.`, at: to };
+  if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return { code: 'siege', line: `${dest.name} is under siege. No train runs into it.`, at: to };
+  if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
+  if (barred(g, c, dest)) return { code: 'steep', line: whyBarred(g, c, dest)!, at: to };
+  if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: `${dest.name} has no room for another corps.`, at: to };
+  if (net && railCut(g, to)) return { code: 'cut', line: `The railway at ${dest.name} is cut${cutAside(g, to)}. No train runs into it until ${mended(to)}.`, at: to };
+  // Where the line is broken: the way there over the map's lines that meets the fewest breaks, and the first of them.
+  // A break on his own side's ground (a cut, a siege, bridges down) is a smaller thing than ground he does not hold,
+  // so he is told of the cut on his own line before he is told of a way round through another country.
+  const INF = 1e9;
+  const cost = new Int32Array(g.regions.length).fill(INF), prev = new Int32Array(g.regions.length).fill(-1);
+  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || downBetween(g, a, b) ? 1 : 0; };
+  cost[c.reg] = 0;
+  const dq: number[] = [c.reg];
+  while (dq.length) {
+    const a = dq.shift()!;
+    for (const b of net ? railsAt(a) : g.regions[a].nb) {
+      if (g.regions[b].terrain === DESERT.terrain) continue;
+      const w = weigh(a, b);
+      if (cost[a] + w >= cost[b]) continue;
+      cost[b] = cost[a] + w; prev[b] = a;
+      dq.push(b);
+    }
+  }
+  if (cost[to] >= INF) return { code: 'unjoined', line: `No railway joins ${from.name} to ${dest.name}.` };
+  const way: number[] = [];
+  for (let at = to; at >= 0 && at !== c.reg; at = prev[at]) way.unshift(at);
+  let a = c.reg;
+  for (const b of way) {
+    const r = g.regions[b];
+    if (!allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r)) return { code: 'broken', line: `The line to ${dest.name} runs through ${r.name}, which is not in friendly hands.`, at: b };
+    if (besieged(g, r) && !junctionOpenTo(g, c.nat, r)) return { code: 'broken', line: `The line to ${dest.name} is broken at ${r.name}: the town is under siege, and no train runs through.`, at: b };
+    if (net && railCut(g, b)) return { code: 'broken', line: `The line to ${dest.name} is broken at ${r.name}: the railway there is cut${cutAside(g, b)}.`, at: b };
+    const x = riverBetween(g, a, b);
+    if (x && bridgeDown(g, x)) return { code: 'broken', line: `The line to ${dest.name} is broken between ${g.regions[a].name} and ${r.name}: the bridges over the ${riverName(x)} are down.`, at: b };
+    a = b;
+  }
+  return { code: 'unjoined', line: `No train can reach ${dest.name} from ${from.name} this month.` };
+}
+
+/** Room in a region for all of these corps at once: engineers apart, as `hasRoom` counts them. */
+export function roomForAll(g: Game, to: Region, corps: Corps[]): boolean {
+  if (!corps.length) return true;
+  const here = friendlyUnits(g, to, corps[0].nat).filter((u) => !corps.includes(u));
+  const eng = here.filter((u) => u.kind === 'eng').length, riding = corps.filter((c) => c.kind === 'eng').length;
+  return eng + riding <= 2 && here.length - eng + (corps.length - riding) <= STACK;
+}
+
+/**
+ * Why no train will take an army in hand to a province (the design director's ruling 116): an army is never split by
+ * surprise, so if one corps cannot ride, nobody rides. Null where every corps can and there is room for them all.
+ * Where some can and some cannot, the sentence names the corps that cannot, so that the player can leave them behind
+ * himself and send the rest.
+ */
+export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | null {
+  const whys = corps.map((c) => whyNoTrain(g, c, to));
+  const first = whys.findIndex(Boolean);
+  if (first < 0) {
+    const dest = to === undefined ? undefined : g.regions[to];
+    return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
+  }
+  const no = whys[first]!;
+  if (whys.every(Boolean)) return no;
+  const names = corps.filter((_, i) => whys[i]).map((c) => c.name);
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return { ...no, line: `${who} cannot go by rail, so nobody rides. ${no.line}` };
+}
+
 /** The share of a nation's home country, by worth, that is in enemy hands. */
 export function homeLost(g: Game, nat: string): number {
   let vp = 0, held = 0;
@@ -2383,6 +2485,8 @@ function digIn(g: Game, nat: string): void {
 }
 
 export function endPhase(g: Game, nat: string): void {
+  // And again as it closes, before the other staffs move: what he saw this month he goes on knowing.
+  if (nat === g.human) seeCuts(g);
   digIn(g, nat);
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
@@ -2428,6 +2532,8 @@ export function startPhase(g: Game, nat: string): void {
   resourcesTick(g, nat);
   // The secret war: the player's agents report, strike or are caught, and the other side's saboteurs come calling (the grand campaign).
   intelTick(g, nat);
+  // What the player can see of cut railways is noted as his month opens (the fog on a cut line, rulings 113 and 114).
+  if (nat === g.human) seeCuts(g);
   // The towns this nation holds that are under siege: another month of bombardment and of stores eaten (the grand campaign).
   siegeMonth(g, nat);
   // Its provinces cut off from the rest of the country eat another month of their stores.

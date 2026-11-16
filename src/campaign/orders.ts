@@ -132,7 +132,8 @@ function lineOf(g: Game, b: Build, nat: string): OrderLine {
   const months = Math.max(0, b.eta - g.turn);
   return {
     id: b.id, what: b.what, unit, sign, label, plural: several(label), name: b.name, holds, elite: !!b.elite,
-    mark: !unit ? '' : sign === 'dd' || sign === 'ca' || sign === 'bb' ? 'hull' : sign,
+    // (A work has no sign of its own but one: anti-aircraft guns take the art director's gun sign.)
+    mark: !unit ? (b.what === 'work' && sign === 'aa' ? 'aa' : '') : sign === 'dd' || sign === 'ca' || sign === 'bb' ? 'hull' : sign,
     ordered: b.ordered, eta: b.eta, ready: turnToDate(b.eta).label, months, need, done: Math.max(0, Math.min(need, need - months)),
     stands: b.region, cost: b.cost, fresh: b.ordered === g.turn,
   };

@@ -7,7 +7,7 @@ import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { markFor, monthCard, monthOrders, type MonthCard, type MonthMark } from '../monthcard';
 import { monthCardHtml } from './monthview';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
-import { armyRound, armyStands, frontIdle, nextArmy, roundCount, settleStands, standArmy } from '../round';
+import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
 import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
@@ -38,7 +38,7 @@ import {
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
-import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
+import { INTEL, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
@@ -58,7 +58,7 @@ import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } 
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
-import { RAILWAYS, railCut, railLinks, railNote } from '../rails';
+import { RAILWAYS, railLinks, railNote, railsAt } from '../rails';
 import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import type { FleetSeen, WingCard } from '../carriers';
@@ -86,7 +86,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, hasRoom, worksOf, worksShare } from '../game';
+import { bloc, hasRoom, roomForAll, whyNoTrainFor, worksOf, worksShare } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -270,6 +270,12 @@ let reaches: { from: number; ap: number; map: Map<number, Reach> }[] = [];
 let trayArmy: { reg: number; nat: string } | null = null;
 /** The march that would be kept to the province under the cursor, for the army in hand (Version 82). */
 let marchPlan: { id: number; plan: MarchPlan; lead: Corps; n: number } | null = null;
+/** Where the whole army in hand can go by train beyond this month's march (Version 82.2, ruling 110(b)): worked out at each redraw. */
+let trainTo = new Set<number>();
+/** The train to the province under the cursor, for the army in hand: that one runs, or the one line that says why none will. */
+let trainPlan: { id: number; go: boolean; why: string } | null = null;
+/** The cut railways the player knows of, under the fog (rulings 113 and 114): worked out at each redraw. */
+let cutsSeen = new Map<number, CutKnown>();
 /** The enemy coasts the fleet that is picked up could shell from where it is. */
 let shellAt: number[] = [];
 /** The piece kept off the map while a copy of it is still being slid along its road, and the march being drawn. */
@@ -558,7 +564,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legdir" hidden><svg width="13" height="14" viewBox="-6.5 -5.4 13 11.6" style="vertical-align:-3px;margin-right:4px"><path d="M-5.6 -4.4H5.6V2.4L0 5.4-5.6 2.4Z" fill="#d8b25a" stroke="#15120f" stroke-width=".9"/></svg>The cabinet's directive, months left</span><span id="legvow" hidden><svg width="13" height="13" viewBox="-6.5 -6.5 13 13" style="vertical-align:-2px;margin-right:4px"><circle r="5.2" fill="#9cc0e6" stroke="#15120f" stroke-width=".9"/></svg>Your promise, months left</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legprize" hidden><svg width="11" height="14" viewBox="-5 -6.6 10 12.2" style="vertical-align:-2px;margin-right:4px"><path d="M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z" fill="#e8622c" stroke="#15120f" stroke-width=".9"/></svg>Wrecked: out of use</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legtrain" hidden><i style="background:rgba(78,126,190,.3);border-color:#2b4f7a"></i>By rail: the whole month</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legdir" hidden><svg width="13" height="14" viewBox="-6.5 -5.4 13 11.6" style="vertical-align:-3px;margin-right:4px"><path d="M-5.6 -4.4H5.6V2.4L0 5.4-5.6 2.4Z" fill="#d8b25a" stroke="#15120f" stroke-width=".9"/></svg>The cabinet's directive, months left</span><span id="legvow" hidden><svg width="13" height="13" viewBox="-6.5 -6.5 13 13" style="vertical-align:-2px;margin-right:4px"><circle r="5.2" fill="#9cc0e6" stroke="#15120f" stroke-width=".9"/></svg>Your promise, months left</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legprize" hidden><svg width="11" height="14" viewBox="-5 -6.6 10 12.2" style="vertical-align:-2px;margin-right:4px"><path d="M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z" fill="#e8622c" stroke="#15120f" stroke-width=".9"/></svg>Wrecked: out of use</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
         <div class="zoom"><button class="btn" id="lensbtn" data-act="lens" aria-label="Show what every province is worth" title="Show what every province is worth: the richer the ground, the more gold on it."><svg width="18" height="18" viewBox="-9 -9 18 18"><circle r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M0 -3.9V3.9M-2.3 -1.6Q-2.3 -3 0 -3T2.3 -1.6 0 0 -2.3 1.6 0 3 2.3 1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -620,14 +626,16 @@ function drawStatic(): void {
  */
 function railMarks(): string {
   if (!groundRules(g)) return '';
-  let ok = '', cut = '';
+  let ok = '', cut = '', old = '';
   for (const l of railLinks(g)) {
     const a = g.regions[l.a], b = g.regions[l.b];
     const ha = `M${a.x} ${a.y}L${l.x} ${l.y}`, hb = `M${l.x} ${l.y}L${b.x} ${b.y}`;
-    if (railCut(g, l.a)) cut += ha; else ok += ha;
-    if (railCut(g, l.b)) cut += hb; else ok += hb;
+    // A cut shows where the player knows of it: seen now, or as he last knew it, drawn fainter (rulings 113 and 114).
+    const ka = cutsSeen.get(l.a), kb = cutsSeen.get(l.b);
+    if (!ka) ok += ha; else if (ka.how === 'now') cut += ha; else old += ha;
+    if (!kb) ok += hb; else if (kb.how === 'now') cut += hb; else old += hb;
   }
-  return `<path class="railbed" d="${ok}"/><path class="railtie" d="${ok}"/>${cut ? `<path class="railcutbed" d="${cut}"/><path class="railcut" d="${cut}"/>` : ''}`;
+  return `<path class="railbed" d="${ok}"/><path class="railtie" d="${ok}"/>${cut ? `<path class="railcutbed" d="${cut}"/><path class="railcut" d="${cut}"/>` : ''}${old ? `<path class="railcutbed" d="${old}"/><path class="railcut old" d="${old}"/>` : ''}`;
 }
 
 /** The bridges over the rivers: a span where they stand, a broken one in red where they are down (the grand campaign). */
@@ -1110,6 +1118,7 @@ function refresh(): void {
   let marks = '';
   const picked = pickedCorps();
   reaches = [];
+  trainTo = new Set<number>();
   $('#route').innerHTML = '';
   $('#kept').innerHTML = keptRoad();
   routeShown = -1;
@@ -1144,6 +1153,8 @@ function refresh(): void {
     const goes = new Map<number, boolean>();
     for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
+    // Beyond the march, in a second and quieter tint: every province the army in hand could ride to this month (ruling 110(b)).
+    if (ui.tab === 'region') { trainTo = trainReach(heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
     // Neutral ground next to the picked armies: marching in means war, and the game asks first.
     for (const id of invasions(g, picked).keys()) if (!goes.has(id)) marks += `<path class="mk war" d="${pathOf(g.regions[id].polys)}"/>`;
     // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
@@ -1156,6 +1167,8 @@ function refresh(): void {
   else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
   $('#marks').innerHTML = marks;
   ($('#legwar') as HTMLElement).hidden = !marks.includes('mk war');
+  ($('#legtrain') as HTMLElement).hidden = !trainTo.size;
+  cutsSeen = cutsKnown(g);
   ($('#legleague') as HTMLElement).hidden = !leagueMembers(g).length;
   $('#rails').innerHTML = railMarks();
   $('#bridges').innerHTML = bridgeMarks();
@@ -1233,7 +1246,7 @@ function refresh(): void {
   $('#legair').textContent = airWar(g) ? 'Aircraft based here' : 'Air fleet';
   ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !crossingsOf(g).some((x) => bridgeDown(g, x));
   ($('#legrail') as HTMLElement).hidden = !groundRules(g);
-  ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !g.regions.some((r) => railCut(g, r.id));
+  ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !cutsSeen.size;
   const hint = hintText();
   if (hint.startsWith(NO_MOVES)) $('#hint').innerHTML = `<span class="nomoves">${esc(NO_MOVES)}</span>${esc(hint.slice(NO_MOVES.length))}`; else $('#hint').textContent = hint;
   $('#alerts').innerHTML = roundPill() + alertButtons();
@@ -1326,8 +1339,46 @@ function missionWhat(m: keyof typeof MISSION): string {
   return MISSION[m].what + (more ? ' The bombs fall on the rail yards too and can cut the railway through the province, and a heavy raid can wreck a factory outright. A province with a railway and no industry can be bombed as well.' : '');
 }
 
+/** A cut railway, on the line under the pointer: what cut it and when, as far as the player knows (ruling 110(c)). */
+function cutTip(id: number): string {
+  if (!cutsSeen.has(id)) return '';
+  const said = cutSays(g, id);
+  return said ? `<br><span class="tipno">${esc(capital(said.short))}${cutsSeen.get(id)!.how === 'now' ? ': no train runs through' : ''}</span>` : '';
+}
+
 function railTargets(c: Corps): Region[] {
   return [...railReach(g, c)].map((id) => g.regions[id]);
+}
+
+/**
+ * Where the army in hand can go by train and not by road this month: ground every corps of it can ride to, with room
+ * for it, that none of them can march to. Empty unless every corps has its whole month, since a train takes all of it.
+ */
+function trainReach(held: Corps[], goes: Map<number, boolean>): Set<number> {
+  const out = new Set<number>();
+  if (!held.length || held.some((c) => c.ap < 4)) return out;
+  let common: number[] | null = null;
+  for (const c of held) {
+    const m = railReach(g, c);
+    common = common ? common.filter((id) => m.has(id)) : [...m];
+    if (!common.length) return out;
+  }
+  for (const id of common ?? []) if (!goes.has(id) && held.every((c) => c.reg !== id) && roomForAll(g, g.regions[id], held)) out.add(id);
+  return out;
+}
+
+/** The line a train would take from a corps to a province, province by province, for drawing; the two ends alone where it cannot be traced. */
+function trainRoad(c: Corps, to: number): number[] {
+  const on = railReach(g, c);
+  const prev = new Map<number, number>([[c.reg, -1]]);
+  const q = [c.reg];
+  for (let i = 0; i < q.length && !prev.has(to); i++) {
+    for (const j of groundRules(g) ? railsAt(q[i]) : g.regions[q[i]].nb) if (!prev.has(j) && on.has(j)) { prev.set(j, q[i]); q.push(j); }
+  }
+  if (!prev.has(to)) return [c.reg, to];
+  const way: number[] = [];
+  for (let at = to; at >= 0; at = prev.get(at) ?? -1) way.unshift(at);
+  return way;
 }
 
 function hintText(): string {
@@ -1370,9 +1421,10 @@ function hintText(): string {
   if (ui.ship) return 'Sea transport: click any blue port, or pick one from the list beside the map. It takes the whole month.';
   // (A finger has no right button, and on a small screen a long hint lies over the provinces it speaks of.)
   if (pickedCorps().length) return fingers()
-    ? invasions(g, pickedCorps()).size ? 'Tap green to march, red to attack. Amber is a country at peace with you.' : 'Tap green to march, red to attack.'
+    ? `Tap green to march, red to attack.${trainTo.size ? ' Press and hold blue to go by rail.' : ''}${invasions(g, pickedCorps()).size ? ' Amber is a country at peace with you.' : ''}`
     : invasions(g, pickedCorps()).size
-    ? 'Right-click a green region to march there, or a red one to plan an attack. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.'
+    ? `Right-click a green region to march there${trainTo.size ? ', a red one to plan an attack, or a blue one to go there by rail, which takes the whole month' : ', or a red one to plan an attack'}. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.`
+    : trainTo.size ? 'Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes the whole month.'
     : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
   // An army with no move left, in hand: what it can still be given (Version 82).
   if (spentInHand()) return `${NO_MOVES} ${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and they march there from next month.`;
@@ -1943,6 +1995,24 @@ function drawRoute(id: number): void {
     const lead = held.find((c) => c.ap <= 0) ?? held[0];
     if (lead) marchPlan = { id, plan: planMarch(g, lead, id), lead, n: held.length };
   }
+  // The train, for an army with its whole month (Version 82.2): where one runs it is the order, drawn along the line in
+  // blue; where a march would be kept and no train runs, the one line that says why (ruling 112(b)).
+  trainPlan = null;
+  if (!way && id >= 0 && !mapBusy() && ui.tab === 'region') {
+    const held = heldCorps().filter((c) => c.reg !== id);
+    if (held.length && trainTo.has(id)) trainPlan = { id, go: true, why: '' };
+    else if (held.length && held.some((c) => c.ap > 0) && marchPlan && marchPlan.plan.ok && !marchPlan.plan.now) {
+      const no = whyNoTrainFor(g, held, id);
+      if (no) trainPlan = { id, go: false, why: no.line };
+    }
+  }
+  if (trainPlan?.go) {
+    const pts = trainRoad(heldCorps().find((c) => c.reg !== id)!, id).map((k) => [g.regions[k].x, g.regions[k].y]);
+    const [ax, ay] = pts[pts.length - 2], [bx, by] = pts[pts.length - 1];
+    const line = `M${pts.map((p) => `${p[0]} ${p[1]}`).join('L')}`;
+    $('#route').innerHTML = `<path class="road under" d="${line}"/><path class="road train" d="${line}"/><path class="roadhead train" transform="translate(${bx} ${by}) rotate(${(Math.atan2(by - ay, bx - ax) * 180 / Math.PI).toFixed(1)})" d="M4 0L-5 -4.6L-2.6 0L-5 4.6Z"/>`;
+    return;
+  }
   if (!way && marchPlan && marchPlan.plan.ok && !marchPlan.plan.now) {
     const pts = [marchPlan.lead.reg, ...marchPlan.plan.road].map((k) => [g.regions[k].x, g.regions[k].y]);
     const [ex, ey] = pts[pts.length - 1];
@@ -2157,7 +2227,7 @@ function roundPill(): string {
   const cap = fingers() ? '' : '<kbd>Tab</kbd>';
   if (bright) {
     const tip = 'Shows the next army of yours you have not touched: those at the front first, then the rear, the nearest first. Each is shown once a round.';
-    return `<button class="nextarmy" data-act="nextarmy" title="${tip}"><span class="disc${bright > 99 ? ' many' : ''}">${bright}</span><span class="grow"><span class="top"><b>Next army</b>${cap}</span><small>${front ? 'at the front' : 'newly raised'}${quiet ? `<i> · rear ${quiet}</i>` : ''}</small></span><span class="chev">›</span></button>`;
+    return `<button class="nextarmy" data-act="nextarmy" title="${tip}"><span class="disc${bright > 99 ? ' many' : ''}">${bright}</span><span class="grow"><span class="top"><b>Next army</b>${cap}</span><small>${front && bright > front ? roundWords({ bright, quiet, front }) : front ? 'at the front' : 'newly raised'}${quiet ? `<i> · rear ${quiet}</i>` : ''}</small></span><span class="chev">›</span></button>`;
   }
   return `<button class="nextrear" data-act="nextarmy" title="No army at the front waits for orders. Shows the next army in the rear you have not touched. The rear never keeps the month from ending."><span class="ring">${quiet}</span><b>Next in the rear</b>${cap}<span class="chev">›</span></button>`;
 }
@@ -2189,11 +2259,15 @@ function askPref(): boolean {
 function setAskPref(on: boolean): void {
   try { localStorage.setItem('tc-ask-end', on ? '1' : '0'); } catch { /* storage is off: it goes on asking */ }
 }
-/** Before the month ends (ruling 88): asked once, only when armies at the front have not moved and have no orders. */
-function askEndCard(n: number): string {
+/**
+ * Before the month ends (ruling 88): asked once, only when armies at the front have not moved and have no orders. It
+ * counts what NEXT ARMY counts and in the same words (ruling 111(f)): the armies at the front, and those newly raised.
+ */
+function askEndCard(): string {
   const off = !askPref(), keys = !fingers();
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Before the month ends</div><h2>${n} ${n === 1 ? 'army' : 'armies'} at the front ${n === 1 ? 'has' : 'have'} no orders</h2></header>
-    <div class="body"><p>${n === 1 ? 'It has not moved this month and no order stands for it.' : 'They have not moved this month and no order stands for them.'} Armies in the rear are not counted.</p>
+  const c = roundCount(g), n = c.bright;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Before the month ends</div><h2>${esc(roundQuestion(c))}</h2></header>
+    <div class="body"><p>${n === 1 ? 'It has a corps that has neither moved nor fought this month.' : 'Each has a corps that has neither moved nor fought this month.'} ${c.bright > c.front ? 'The other armies in the rear are not counted.' : 'Armies in the rear are not counted.'}</p>
     <button class="asktick" data-act="asktick" role="checkbox" aria-checked="${off}"><span class="box">${off ? '✓' : ''}</span>Do not ask me this again. ${isOpen(g) ? 'Settings brings it back.' : 'The guide brings it back.'}</button></div>
     <footer><button class="btn go" data-act="askshow">Show me${keys ? '<kbd>Tab</kbd>' : ''}</button><button class="btn" data-act="end" data-sure="1">End the month${keys ? '<kbd>Enter</kbd>' : ''}</button></footer>`;
 }
@@ -2934,10 +3008,12 @@ function railBlock(r: Region): string {
   if (n.line) {
     const to = n.to.map((j) => g.regions[j].name);
     const lines = to.length > 4 ? `${to.slice(0, 4).join(', ')} and ${to.length - 4} more` : to.join(', ');
-    if (n.cut) rows.push(`<div class="rrow down"><span><b>Railway cut</b></span><small>Torn up since ${date(n.since ?? g.turn)}. No train runs into, out of or through ${esc(r.name)} until ${n.hasty > 0 ? `the railwaymen have made it good, in about ${n.hasty === 1 ? 'a month' : `${n.hasty} months`}, or engineers relay the track sooner` : 'engineers relay the track'}. Only engineers can be carried up to the break.</small></div>`);
+    // What he knows of a cut, and no more (rulings 112(c), 113 and 114): the cause and the month where he sees it, a dated report where he does not.
+    const said = cutSays(g, r.id);
+    if (said) rows.push(`<div class="rrow down${said.head === 'Railway cut' ? '' : ' stale'}"><span><b>${esc(said.head)}</b></span><small>${esc(said.line)}</small></div>`);
     else {
       const why = whyNotCutRailway(g, r.id);
-      rows.push(`<div class="rrow rail"><span><b>Railway</b>, to ${esc(lines)}</span><small>The line is working.</small>${yours ? `<button class="btn small" data-act="cutrail" data-id="${r.id}" ${why ? `disabled title="${esc(why)}"` : 'title="Tear up the track. No train runs into, out of or through this province, for either side, until engineers relay it."'}>Tear up the railway</button>` : ''}</div>`);
+      rows.push(`<div class="rrow rail"><span><b>Railway</b>, to ${esc(lines)}</span><small>${fogOn(g) && (seen[r.id] ?? 2) === 0 ? 'The line is working, as far as is known.' : 'The line is working.'}</small>${yours ? `<button class="btn small" data-act="cutrail" data-id="${r.id}" ${why ? `disabled title="${esc(why)}"` : 'title="Tear up the track. No train runs into, out of or through this province, for either side, until engineers relay it."'}>Tear up the railway</button>` : ''}</div>`);
     }
   } else if (r.terrain !== 'desert' && !r.overseas) rows.push('<div class="rrow rail"><span><b>No railway</b></span><small>No line runs to this province: everything here comes and goes by road or by sea.</small></div>');
   if (yours && n.road > 0) {
@@ -5157,13 +5233,14 @@ function raidCard(): string {
       const body = w.why ? `<div class="waywhy"><b>Cannot fly ${w.kind === 'bomb' ? 'by day' : 'by night'}:</b> ${esc(w.why)}</div>`
         : `<div class="waytop"><b>${pctOf(w.success)}</b><span class="${tone}">${esc(w.verdict)}</span></div>${bar(w.success)}
           <div class="wayrow"><span>Bombers lost</span><b>${esc(w.lost)}</b></div>${bar(w.bomberLoss, true)}
+          <div class="waysub">${esc(w.gunsWords)}<b>${esc(w.toGuns)}</b></div>
           ${w.fightersLost ? `<div class="wayrow"><span>Fighters lost</span><b>${esc(w.fightersLost)}</b></div>${bar(w.fighterLoss, true)}` : ''}
-          <div class="wayrow"><span>What a hit does</span></div><div class="wayhits">${w.hits.map((h) => `<div class="wayhit">${h.n ? `<b>${esc(h.n)}</b>` : ''}<span>${esc(h.words)}</span></div>`).join('')}</div>
+          <div class="wayrow"><span>What a hit does</span>${w.stopNote ? `<small class="waynote">${esc(w.stopNote)}</small>` : ''}</div><div class="wayhits">${w.hits.map((h) => `<div class="wayhit${h.dim ? ' dim' : ''}">${h.n ? `<b>${esc(h.n)}</b>` : ''}<span>${esc(h.words)}</span></div>`).join('')}</div>
           <div class="wayfoot">${esc(w.foot)}</div>`;
       return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" aria-pressed="${on}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${on ? '<span class="waytag">Chosen</span>' : '<span class="wayring"></span>'}</span>${body}</button>`;
     };
     head = `<h3 style="margin-top:0">The forecast · by day or by night</h3>
-      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach</span></div>
+      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach</span><span title="${dn.guns ? `Guns built round the target: they stop ${pctOf(dn.day.gunsStop || dn.night.gunsStop)} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.'}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span><b>${dn.guns ? `Level ${dn.guns}` : 'No'}</b>anti-aircraft guns</span></div>
       <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>
       ${p.why ? '' : `<div class="sub">${p.effects.map(esc).join(' ')}</div>`}
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
@@ -5172,9 +5249,9 @@ function raidCard(): string {
   else if (p.why) head = `<div class="verdict loss" style="font-size:22px">${esc(p.why)}</div>`;
   else {
     const cls = p.success >= 0.6 ? 'win' : p.success >= 0.4 ? '' : 'loss';
-    const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
+    const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}${p.guns.lossN > 0 ? ` · about ${num(p.guns.lossN)} to flak${p.guns.level ? ` and level ${p.guns.level} guns` : ''}` : ''}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
     head = `<div class="verdict ${cls}" style="font-size:24px">${esc(p.verdict)}</div>
-      <div class="oddsbar" title="The chance the raid costs the enemy more than it costs you"><i style="width:${Math.round(p.success * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:var(--panel-3)"></i></div>
+      <div class="oddsbar" title="The chance the raid costs the enemy more than it costs you"><i style="width:${Math.round(p.success * 100)}%;background:var(--brass)"></i><i style="flex:1;background:var(--panel-3)"></i></div>
       <div class="facts raidfacts"><div class="fact"><span>Chance of success</span><b>${pctOf(p.success)}</b></div>${loss}</div>
       <div class="sub">${p.effects.map(esc).join(' ')}</div>
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
@@ -5190,7 +5267,23 @@ function raidCard(): string {
       ${kind === 'fleet' || kind === 'harbour' ? `<div class="note"><b>Ships are sunk whole.</b> The ticket counts hits; a ship goes down when it has taken enough of them, so a strike that is likely to succeed can still come home with nothing sunk. ${kind === 'fleet' ? 'A fleet that is only reported is harder to find: part of the strike never sees it.' : 'Ships in harbour cannot manoeuvre, and a harbour raided in the month war is declared is caught unready.'}</div>` : ''}
       <div class="note"><b>Flown at once.</b> Every group that goes is away for the rest of the month: it flies no second raid and meets no raid on its own sky. It is back at its airfield${going.some((s) => s.ship >= 0) ? ' or aboard its carrier' : ''}, on patrol as before, next month.</div>
     </div>
-    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doraid" ${p.why ? 'disabled' : ''}>Fly the raid${dn ? (kind === 'bomb' ? ' by day' : ' by night') : ''}</button></footer>`;
+    <footer class="raidfoot"><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doraid" ${p.why ? 'disabled' : ''}>Fly the raid${dn ? (kind === 'bomb' ? ' by day' : ' by night') : ''}</button></footer>`;
+}
+
+/**
+ * A band's headline that has no room on its one line (the art director's review of Version 82.1): it first shrinks to
+ * about 85%, and only then is cut, after a whole word and never in the middle of one.
+ */
+function fitBands(root: HTMLElement): void {
+  for (const b of root.querySelectorAll<HTMLElement>('.mc-banner b')) {
+    if (getComputedStyle(b).whiteSpace !== 'nowrap') continue; // (on a narrow screen the headline wraps and nothing is cut)
+    const over = (): boolean => b.scrollWidth > b.clientWidth + 1;
+    if (!over()) continue;
+    b.classList.add('tight');
+    if (!over()) continue;
+    const words = (b.textContent ?? '').split(' ');
+    while (words.length > 2 && over()) { words.pop(); b.textContent = `${words.join(' ').replace(/[,;:.]$/, '')}…`; }
+  }
 }
 
 const ticketTable = (lines: { label: string; value: string; effect?: string }[]): string => `<table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
@@ -5312,6 +5405,7 @@ function openModal(m: typeof ui.modal): void {
     // (A desk taken back on the card stays taken: the button is offered only while the staff still runs it.)
     for (const s of mc.staff) s.mayTake = !!g.human && isOpen(g) && g.nations[g.human].alive && staffRunsDesk(g, s.desk as DeskId);
     card.innerHTML = monthCardHtml(mc, { esc, flag: (nat, w) => flagIcon(nat, g.nations[nat]?.color ?? '#888', w), name: natName, all: ui.monthAll, orders: !!g.human && humanUp(g), tour: tourStops(mc).length > 0 });
+    fitBands(card);
   }
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
@@ -5320,7 +5414,7 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = invadeCard(m.on, m.target ?? -1);
   }
   else if (m.kind === 'level') card.innerHTML = levelCard();
-  else if (m.kind === 'askend') card.innerHTML = askEndCard(m.n);
+  else if (m.kind === 'askend') card.innerHTML = askEndCard();
   else if (m.kind === 'lastact') {
     if (!lastAct(g)?.decided || lastAct(g)!.on) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = lastActCard(!!m.ask);
@@ -8039,7 +8133,21 @@ function orderOrMarch(id: number): boolean {
   const done = orderAt(id);
   // (An attack to plan, a frontier to cross, two corps to change places: the card that opened is the answer.)
   if (ui.modal) return done;
+  // Ground beyond the march that the whole army can ride to: by rail, there this month (ruling 110(b)).
+  if (!done && trainTo.has(id) && !mapBusy() && sendByTrain(id, held.filter((c) => c.reg !== id && !c.dead))) return true;
   return keepMarches(id, held.filter((c) => c.reg !== id && !c.dead)) || done;
+}
+
+/** Sends the army in hand to a province by rail: there this month, the whole month spent. False if no corps of it could go. */
+function sendByTrain(id: number, held: Corps[]): boolean {
+  const went = held.filter((c) => orderRail(g, c, id));
+  if (!went.length) return false;
+  const place = g.regions[id].name, left = held.length - went.length;
+  selectRegion(id);
+  ui.picked.clear();
+  ui.msg = `${went.length === 1 ? `${went[0].name} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}`;
+  refresh();
+  return true;
 }
 
 /** Orders the corps in hand to a friendly place on a march that is kept. False if there is no such order to give. */
@@ -8252,8 +8360,10 @@ function wireMap(): void {
     const way = routeShown === r.id ? routeTo(r.id) : null;
     // (No road this month: the march that would be kept there for the army in hand, or why none can be.)
     const mp = !way && marchPlan && marchPlan.id === r.id ? marchPlan : null;
+    const tp = !way && trainPlan && trainPlan.id === r.id ? trainPlan : null;
     const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>`
-      : mp && mp.plan.ok && !mp.plan.now ? `${mp.plan.spent ? `<br><span class="nomoves">${esc(NO_MOVES)}</span>` : ''}<br><span class="tipgo">Right-click: ${esc(marchLine(mp.plan, mp.lead, mp.n))}</span>`
+      : tp && tp.go ? `<br><span class="tipgo train">Right-click: by rail to ${esc(r.name)}, there this month. It takes the whole month.</span>`
+      : mp && mp.plan.ok && !mp.plan.now ? `${mp.plan.spent ? `<br><span class="nomoves">${esc(NO_MOVES)}</span>` : ''}<br><span class="tipgo">Right-click: ${esc(marchLine(mp.plan, mp.lead, mp.n))}</span>${tp ? `<br><span class="tipno">${esc(tp.why)}</span>` : ''}`
       : mp && mp.plan.spent && !mp.plan.ok ? `<br><span class="tipno">${esc(mp.plan.line.startsWith(NO_MOVES) ? mp.plan.line : `${NO_MOVES} ${mp.plan.line}`)}</span>` : '';
     const rel = relationWord(r.ctrl);
     // The town, and what the ground is worth: to the player if it is the player's own, or as a prize.
@@ -8262,7 +8372,7 @@ function wireMap(): void {
     const has = t.signs.filter((s) => s !== 'fort').map((s) => (s === 'factory' ? `${t.factories} factor${t.factories === 1 ? 'y' : 'ies'}` : TOWNS.words[s].toLowerCase()));
     const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(natName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(natName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${order}`;
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${cutTip(r.id)}${order}`;
     }
     placeTip(e.clientX, e.clientY, !!el && el.classList.contains('obadge'));
   });

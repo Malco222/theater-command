@@ -714,6 +714,6 @@ function romeWavers(g: Game): void {
   const ground = 'Italy\'s ground then goes to whoever has an army on Italian soil, your own corps included.';
   const text = changed
     ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}`
-    : `Italy makes peace if ${who} hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
+    : `Italy makes peace if ${who} still hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
   warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id, 'ITA');
 }

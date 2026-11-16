@@ -750,6 +750,14 @@ describe('at home, what his staff did, and elsewhere', () => {
     const card = monthCard(g, mark, ME);
     expect(card.staff).toHaveLength(1);
     expect(card.staff[0]).toMatchObject({ desk: 'build', sign: 'inf' });
+    // The soldier is for infantry corps only: works and the other arms take the star (the art director's review of 82.1),
+    // and anti-aircraft guns take her gun sign (her brief of the raid card's defences).
+    for (const [text, sign] of [['Your staff ordered anti-aircraft guns at Ruhr.', 'aa'], ['Your staff ordered an armoured corps at Essen.', 'star'], ['Your staff ordered a factory at Essen and two infantry corps at Berlin.', 'star'], ['Your staff ordered I Commonwealth Corps at London.', 'inf']] as const) {
+      const k = game();
+      const mk = monthMark(k, ME);
+      news(k, { kind: 'info', text, nat: ME, desk: 'build' });
+      expect(monthCard(k, mk, ME).staff[0].sign, text).toBe(sign);
+    }
     expect(card.elsewhere.map((e) => `${e.nat}: ${e.text}`)).toEqual(['BRA: Brazil declares war on Argentina.', 'SOV: Soviet troops take Viipuri.']);
     expect(card.letters).toEqual([{ text: 'We crossed the river at dawn.', by: 'A corporal of I Corps' }]);
     // What is on the card nowhere is counted: it is all in the newsreel.

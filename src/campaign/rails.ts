@@ -61,12 +61,31 @@ export const railCut = (g: Game, r: number): boolean => groundRules(g) && g.flag
 export const cutOn = (g: Game, r: number): number | undefined => (groundRules(g) ? g.flags[key(r)] : undefined);
 
 /**
- * Cuts the railway of a province, whoever does it and however: retreating troops, an order, bombers, and later
- * saboteurs and partisans. Returns false where there is no line or it is already cut.
+ * What cut a line (the design director's ruling 112(c)): bombers, an agent, saboteurs, troops tearing it up as they
+ * fall back, troops burning it in a hasty retreat under a scorched earth order, or an order. It is kept beside the
+ * cut for the page to show and changes no rule. A cut made before the cause was kept has none.
  */
-export function cutRail(g: Game, r: number): boolean {
+export type RailCause = 'bombed' | 'agent' | 'saboteurs' | 'retreat' | 'hasty' | 'order';
+const CAUSES: RailCause[] = ['bombed', 'agent', 'saboteurs', 'retreat', 'hasty', 'order'];
+/** The cause in words, to follow "The railway is cut: ". */
+export const CAUSE_WORDS: Record<RailCause, string> = {
+  bombed: 'bombed', agent: 'blown by an agent', saboteurs: 'blown by saboteurs', retreat: 'torn up in a retreat', hasty: 'burnt in a hasty retreat', order: 'cut by order',
+};
+const WKEYS: string[] = [];
+const whyKey = (r: number): string => (WKEYS[r] ??= `railwhy:${r}`);
+/** What cut a province's railway, or null for a whole line and for a cut whose cause was never kept. */
+export const cutCause = (g: Game, r: number): RailCause | null => (railCut(g, r) ? CAUSES[(g.flags[whyKey(r)] ?? 0) - 1] ?? null : null);
+
+/**
+ * Cuts the railway of a province, whoever does it and however: retreating troops, an order, bombers, agents and
+ * saboteurs. Returns false where there is no line or it is already cut. The cause is kept with the cut; and where
+ * the player's own country did it, he has the report of it whether or not he can see the place (ruling 113).
+ */
+export function cutRail(g: Game, r: number, cause?: RailCause, by?: string): boolean {
   if (!groundRules(g) || !onNet(r) || railCut(g, r)) return false;
   g.flags[key(r)] = g.turn;
+  if (cause) g.flags[whyKey(r)] = CAUSES.indexOf(cause) + 1;
+  if (by && by === g.human && g.intel) (g.intel.cuts ??= {})[r] = cause ? { t: g.turn, how: 'report', why: cause } : { t: g.turn, how: 'report' };
   g.supplyDirty = true;
   return true;
 }
@@ -75,6 +94,7 @@ export function cutRail(g: Game, r: number): boolean {
 export function mendRail(g: Game, r: number): boolean {
   if (!railCut(g, r)) return false;
   delete g.flags[key(r)];
+  delete g.flags[whyKey(r)];
   delete g.flags[hastyKey(r)];
   g.supplyDirty = true;
   return true;
@@ -90,8 +110,8 @@ const GKEYS: string[] = [];
 const goodKey = (r: number): string => (GKEYS[r] ??= `railgood:${r}`);
 
 /** Cuts a province's railway in haste: it is made good without engineers after so many months. False where there is no line or it is cut already. */
-export function cutRailHasty(g: Game, r: number, months: number): boolean {
-  if (!cutRail(g, r)) return false;
+export function cutRailHasty(g: Game, r: number, months: number, by?: string): boolean {
+  if (!cutRail(g, r, 'hasty', by)) return false;
   g.flags[hastyKey(r)] = g.turn + months;
   return true;
 }
@@ -147,7 +167,7 @@ export function whyNotCutRail(g: Game, nat: string, region: number): string | nu
 
 /** Tears up the railway of a province by order of the nation whose troops stand there. */
 export function tearUp(g: Game, nat: string, region: number): boolean {
-  if (whyNotCutRail(g, nat, region) || !cutRail(g, region)) return false;
+  if (whyNotCutRail(g, nat, region) || !cutRail(g, region, 'order', nat)) return false;
   const r = g.regions[region];
   if (concerns(g, nat)) headline(g, 'info', `${g.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region, { arm: 'land' });
   return true;
@@ -170,7 +190,7 @@ export function wreckChance(g: Game, taken: Region, by: string): number {
 export function railOnCapture(g: Game, taken: Region, by: string, from: string): void {
   if (!groundRules(g) || !onNet(taken.id) || railCut(g, taken.id)) return;
   const roll = new Rng(hashString(`rail:${g.seed}:${g.turn}:${taken.id}`)).next();
-  if (roll >= wreckChance(g, taken, by) || !cutRail(g, taken.id)) return;
+  if (roll >= wreckChance(g, taken, by) || !cutRail(g, taken.id, 'retreat', from)) return;
   if (concerns(g, by, from)) headline(g, 'battle', `${g.nations[from].adj} troops tear up the railway at ${taken.name} as they fall back.`, from, taken.id, { arm: 'land', won: by, lost: from });
 }
 
@@ -184,7 +204,7 @@ export function railBombChance(g: Game, target: number, through: number, gunsSto
 export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0): boolean {
   const p = railBombChance(g, target, through, gunsStop);
   if (p <= 0) return false;
-  return new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target);
+  return new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target, 'bombed', by);
 }
 
 // ---- The railhead ---------------------------------------------------------------------------

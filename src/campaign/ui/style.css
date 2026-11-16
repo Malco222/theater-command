@@ -2195,3 +2195,36 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .waywhy b { color: var(--ink); }
 .pickrow.seat.ghost { opacity: .55; cursor: default; }
 @media (max-width: 620px) { .daynight { grid-template-columns: 1fr; } }
+
+/* The train's reach beside the march (Version 82.2, ruling 110(b)): a second and quieter tint beyond the green, the
+   line a train would take under the pointer, and a cut line known only from an old report (rulings 113 and 114). */
+.mk.railfar { stroke: #2b4f7a; stroke-width: 1.2; stroke-dasharray: 1.4 2.4; fill: rgba(78, 126, 190, .24); }
+.road.train { stroke: #9cc0e6; stroke-dasharray: 2.2 3; }
+.roadhead.train { fill: #9cc0e6; }
+.tip .tipgo.train { color: #9cc0e6; }
+.railcut.old { stroke: #c9a093; stroke-dasharray: .8 3.4; opacity: .8; }
+.rrow.down.stale b { color: #d7b7ab; }
+
+/* The guns on the raid card (the player's ask of 2026-11-16): the flak's part of the bombers lost, under their bar. */
+.waysub { display: flex; justify-content: space-between; gap: 8px; margin: -2px 0 8px; font-size: 11.5px; color: var(--ink-2); }
+.waysub b { color: var(--ink); font-weight: 600; }
+
+/* The art director's review of Version 82.1. A band his side won has a green field under its green edge; a band's
+   headline shrinks before it is cut; a hit line one column lacks is printed dim; the raid card's foot stays in sight. */
+.mc-banner.good { background: linear-gradient(90deg, rgb(54, 87, 49), rgb(40, 67, 36) 55%, rgb(23, 39, 21)); border-color: #5f8750; border-left-color: var(--mc-green); }
+.mc-banner.good .k { color: #e3efd2; }
+.mc-banner.good small { color: #cfe0bb; }
+.mc-banner.good .mc-alt { border-color: #9fbb86; }
+.mc-banner b.tight { font-size: 19.5px; text-overflow: clip; }
+.wayhit.dim { opacity: .45; }
+.card footer.raidfoot { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
+
+/* The target's guns on the raid card (the art director's brief of 2026-11-16): her gun sign in cream, three pips
+   filled brass up to the level and hollow after it, and what the guns stop beside WHAT A HIT DOES. */
+.waycommon span { display: inline-flex; align-items: baseline; }
+.waycommon .wayaa { align-self: center; fill: var(--ink); margin-right: 7px; flex: none; }
+.waycommon .wayaa.none { opacity: .4; }
+.waypips { display: inline-flex; gap: 4px; align-self: center; margin-right: 8px; }
+.waypips i { width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.3px solid rgb(128, 116, 96); }
+.waypips i.on { background: var(--brass); border-color: var(--brass); }
+.wayrow small.waynote { font-size: 11px; color: var(--ink-3); text-transform: none; letter-spacing: 0; text-align: right; }

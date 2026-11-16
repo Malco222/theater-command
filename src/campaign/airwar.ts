@@ -20,7 +20,7 @@ import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, gunsAt, homeOf, isOffensive, kmTo, kmToSea, setMission, shipsInPort, whyNotBase, whyNotMission,
+  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, setMission, shipsInPort, whyNotBase, whyNotMission,
 } from './air';
 import { fleetKnown } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -515,6 +515,8 @@ export interface RaidSeat {
 }
 
 /** A raid weighed up before it is flown. */
+export interface RaidGuns { level: number; loss: number; lossN: number; stop: number }
+
 export interface RaidPlan {
   kind: RaidKind;
   target: number;
@@ -554,6 +556,12 @@ export interface RaidPlan {
    * (the percent of its works broken down, what the garrison's organisation loses, the percent of the guard out of action).
    */
   figures: RaidFigures;
+  /**
+   * The target's guns (the player's ask of 2026-11-16, "show defenses meaning anticipated flak and AA guns"): the level
+   * of the anti-aircraft guns built round it (0 where there are none), the bombers the flak and those guns should
+   * bring down (a part of `bomberLossN`, the rest falling to fighters), and the share of the bombing the guns stop.
+   */
+  guns: RaidGuns;
   /** What flying it together is worth beside sending each bomber group alone, or '' where only one goes. */
   massed: string;
   /** What the raid costs at home: fighter groups taken off patrol for the rest of the month. */
@@ -647,7 +655,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === target) ?? null : null;
   const plan: RaidPlan = {
     kind, target, place, title: `${row.short}: ${place}`, why: null, seats: [], picked: [], bombers: 0, fighters: 0, meets: [], lines: [],
-    success: 0, verdict: '', bomberLoss: 0, bomberLossN: 0, fighterLossN: 0, foeLossN: 0, effects: [], figures: {}, massed: '', offPatrol: '',
+    success: 0, verdict: '', bomberLoss: 0, bomberLossN: 0, fighterLossN: 0, foeLossN: 0, effects: [], figures: {}, guns: { level: 0, loss: 0, lossN: 0, stop: 0 }, massed: '', offPatrol: '',
   };
   if (!airWar(g) || nat === null) { plan.why = 'Raids are planned only in the grand campaign.'; return plan; }
   if (!(kind === 'strike' ? g.seas[target] : kind === 'fleet' ? quarry : g.regions[target])) { plan.why = kind === 'strike' ? 'Pick a sea.' : kind === 'fleet' ? 'Pick a fleet.' : 'Pick a province.'; return plan; }
@@ -718,6 +726,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
   plan.figures = figuresOf(g, kind, target, fc, nat);
+  // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
+  plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
   if (kind === 'line') plan.wear = fc.cut;
   // What meeting up is worth: each bomber group alone, with the fighters from its own airfield, beside all of them together.
   const bombers = going.filter((f) => f.bmr > 0);
@@ -739,7 +749,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
 }
 
 /** One line of WHAT A HIT DOES: a number and a few words. */
-export interface HitLine { n: string; words: string }
+/** One line of WHAT A HIT DOES. `dim`: the other way can do this and this way cannot; it is printed dim, with its true figure. */
+export interface HitLine { n: string; words: string; dim?: boolean }
 
 /**
  * One way of flying a bombing raid, by day or by night: a whole small forecast, as the raid card's two columns show
@@ -767,6 +778,19 @@ export interface RaidWay {
   /** BOMBERS LOST and FIGHTERS LOST in print: the share and the aircraft, "2% · about 7". The second is '' where no fighters fly. */
   lost: string;
   fightersLost: string;
+  /**
+   * The guns' part (the player's ask of 2026-11-16): the share and the count of the bombers the flak and the
+   * anti-aircraft guns should bring down, a part of the bombers lost; the count as the card prints it ("about 11");
+   * and the share of the bombing the guns round the target stop.
+   */
+  gunLoss: number;
+  gunLossN: number;
+  toGuns: string;
+  gunsStop: number;
+  /** The line under the bombers lost: 'of them to flak and guns', or 'of them to flak' where the target has no guns. */
+  gunsWords: string;
+  /** The note on the WHAT A HIT DOES line: 'after the guns stop 30% of the bombing'; empty with no guns. */
+  stopNote: string;
   /** The damage expected, as the raid card's figures give it: output, national, rail, factory. */
   figures: RaidFigures;
   /** WHAT A HIT DOES: up to three lines, the output stopped, the railway cut, a factory wrecked. */
@@ -786,6 +810,12 @@ export interface DayNight {
   /** What is common to both: the bombers going, and the enemy's fighters in reach. */
   bombers: number;
   foes: number;
+  /**
+   * The target's defences on the ground, common to both: the level of its anti-aircraft guns (0 where none are built)
+   * and that in words. The rules put no fog on the guns: the forecast counts them, so the card names them.
+   */
+  guns: number;
+  gunsLabel: string;
   /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
   home: number[];
   /** Fighter groups that could join by day and cannot by night: "Cannot fly: no escort by night". */
@@ -817,18 +847,34 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
       bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, fighterLoss, fighterLossN: p.fighterLossN,
       lost: flown ? `${pct(p.bomberLoss)} · about ${num(p.bomberLossN)}` : '',
       fightersLost: flown && p.fighters > 0 ? `${pct(fighterLoss)} · about ${num(p.fighterLossN)}` : '',
+      gunLoss: flown ? p.guns.loss : 0, gunLossN: flown ? p.guns.lossN : 0, toGuns: flown ? `about ${num(p.guns.lossN)}` : '', gunsStop: flown ? p.guns.stop : 0,
+      gunsWords: !flown ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to flak',
+      stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct(p.guns.stop)} of the bombing` : '',
       figures: f, hits,
       foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
       prose: flown ? p.effects[0] ?? '' : '',
     };
   };
   const day = way('bomb'), night = way('night');
+  // A line one way has, the other prints too, dim, with its true figure (the art director's review of Version 82.1):
+  // the two columns are read against each other, line for line.
+  if (!day.why && !night.why) {
+    const ORDER = ['output, for a month', 'chance the railway is cut', 'chance a factory is wrecked'];
+    for (const [w, o] of [[day, night], [night, day]] as const) {
+      const lacks = ORDER.filter((words) => o.hits.some((h) => h.words === words && !h.dim) && !w.hits.some((h) => h.words === words));
+      if (!lacks.length) continue;
+      const mine = [...w.hits.filter((h) => ORDER.includes(h.words)), ...lacks.map((words): HitLine => ({ n: '0%', words, dim: true }))];
+      w.hits = mine.sort((a, b) => ORDER.indexOf(a.words) - ORDER.indexOf(b.words));
+    }
+  }
   const lead = !plans.bomb.why ? plans.bomb : plans.night;
   const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
+  const level = g.regions[target] ? gunsAt(g, target) : 0;
   return {
     chosen: kind, day, night,
     bombers: lead.bombers,
     foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
+    guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns',
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
     barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };

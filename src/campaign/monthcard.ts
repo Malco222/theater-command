@@ -290,6 +290,15 @@ const the = (name: string): string => (/^the /i.test(name) ? name.replace(/^The 
 const an = (adj: string): string => `${/^[AEIOU]/i.test(adj) ? 'An' : 'A'} ${adj}`;
 const SIGNS = new Set(['inf', 'arm', 'mot', 'cav', 'mtn', 'art', 'eng']);
 const DESK_SIGN: Record<string, string> = { research: 'star', build: 'inf', diplomacy: 'star', spies: 'star', air: 'ftr', navy: 'hull' };
+/**
+ * The sign of a build order in the staff's box (the art director's review of 82.1): the soldier is for infantry corps
+ * only, so an order that opens with guns, a factory, a fort or another arm takes the star.
+ */
+function buildSign(text: string): string {
+  const what = /ordered (.+?)(?: at |, | and |\.|$)/.exec(text)?.[1] ?? '';
+  if (/anti-aircraft/i.test(what)) return 'aa';
+  return /corps/i.test(what) && !/armou?red|panzer|tank|artillery|engineer|mountain|airborne|parachute|marine|cavalry|mechani[sz]ed|motori[sz]ed/i.test(what) ? 'inf' : 'star';
+}
 
 /** What the player has on order. An interface keeps it in the mark as he ends his month. */
 export function monthOrders(g: Game, viewer: string | null = g.human): MonthOrder[] {
@@ -404,7 +413,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const shutWords = (place: string, lost: number, shut: { men: number; corps: number }): string => {
     const corps = shut.corps ? `${plural(shut.corps, 'corps', 'corps')} ${shut.corps === 1 ? 'is' : 'are'} shut in` : '';
     if (lost >= HEAVY_MEN || lost > shut.men) return `${place} holds, at a cost of ${num(lost)} men. ${corps ? `${corps}.` : 'Only its guard is inside.'}`;
-    return `${corps ? `${corps} at ${place}.` : `Only its guard holds ${place}.`} The province is yours while the town holds.`;
+    // (The art director's words of 16 November for a town with no corps inside.)
+    return `${corps ? `${corps} at ${place}.` : `${place} is held by its guard alone.`} The province is yours while the town holds.`;
   };
   const besiegedTowns = new Set<number>();
   const fought = new Set<number>();
@@ -468,7 +478,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.tag = att ? 'WON' : 'LOST'; row.tone = att ? 'good' : 'bad';
       row.line = att ? 'The field was won, and the town fell after it.' : 'The field was lost, and the town fell after it.';
       row.head = att ? `${place} is taken` : `${place} is lost`;
-      row.follows = worth(!att) || (att ? 'The front moves forward.' : 'The front falls back.');
+      // (Beneath the lead's picture the truth of it comes first, then what the town was worth: the art director's review of 82.1.)
+      row.follows = `${row.line} ${worth(!att) || (att ? 'The front moves forward.' : 'The front falls back.')}`;
       if (!att && corps) row.facts[0] = { n: plural(corps, 'corps', 'corps'), label: 'fought outside' };
     } else if (r.siege) {
       row.tag = att ? 'WON' : 'HELD'; row.tone = att ? 'good' : 'warn';
@@ -954,7 +965,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
-    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
+    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
     const m = /^Research complete: ([^.]+)\./.exec(h.text);
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.

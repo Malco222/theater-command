@@ -14,7 +14,8 @@ import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, Game, IntelNote, Mission, Region } from './types';
 import { allied, atWar, bloc, fieldArmy, headline } from './game';
-import { cutRail, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, cutRail, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
+import { turnToDate } from '../core/ticket';
 import { levelIndex } from './difficulty';
 import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
@@ -98,6 +99,97 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
     }
   }
   return out;
+}
+
+// ---- What is known of a cut railway ---------------------------------------------------------------------
+// The fog lies on a cut line as on everything else (the design director's rulings 113 and 114). On his own ground and
+// his allies', and wherever he has sight of a province, the player sees the line as it is. Elsewhere the map shows
+// what he last knew, with its month: a cut he saw before he lost sight of the place, or one his own raid, agent or
+// troops made and reported. A line mended out of his sight goes on showing as cut until he sees it again. One function
+// decides it, so the browser's map and the 3D table never differ. The computer's staffs see the whole map.
+
+/** What a viewer knows of one cut railway. */
+export interface CutKnown {
+  /** 'now': he sees it as it is. 'seen': last seen cut, in the month `asOf`. 'report': cut by his own doing in `asOf`, and not seen since. */
+  how: 'now' | 'seen' | 'report';
+  /** The month his knowledge is of: this month where he sees the line. */
+  asOf: number;
+  /** The month the line was cut, where he sees it now. */
+  since?: number;
+  /** What cut it, where that was kept and he knows it. */
+  cause: RailCause | null;
+  /** Months until the railwaymen make a hasty cut good, where he sees it now; 0 otherwise. */
+  hasty: number;
+}
+
+/** Every cut railway the viewer knows of, by province. Nobody at the table, the fog lifted, or a computer's staff asking: every cut there is. */
+export function cutsKnown(g: Game, viewer: string | null = g.human): Map<number, CutKnown> {
+  const out = new Map<number, CutKnown>();
+  if (!intelRules(g)) return out;
+  const fog = viewer !== null && viewer === g.human && fogOn(g, viewer);
+  const sight = fog ? sightOf(g, viewer) : null;
+  const kept = fog ? g.intel.cuts ?? {} : {};
+  for (const r of g.regions) {
+    if (!sight || sight[r.id] !== SIGHT.none) {
+      if (railCut(g, r.id)) out.set(r.id, { how: 'now', asOf: g.turn, since: cutOn(g, r.id), cause: cutCause(g, r.id), hasty: hastyLeft(g, r.id) });
+    } else {
+      const k = kept[r.id];
+      if (k) out.set(r.id, { how: k.how, asOf: k.t, cause: k.why ?? null, hasty: 0 });
+    }
+  }
+  return out;
+}
+
+/** What the viewer knows of the railway of one province being cut, or null where he knows of no cut. */
+export const cutKnown = (g: Game, region: number, viewer: string | null = g.human): CutKnown | null => cutsKnown(g, viewer).get(region) ?? null;
+
+/**
+ * The player's record of cut lines is brought up to date with what he can see, as his month opens and as it closes:
+ * a cut in his sight is noted as seen this month, and a line he sees whole is struck off. What he cannot see is left
+ * as he last knew it. It is a memory for the map, and no rule reads it.
+ */
+export function seeCuts(g: Game): void {
+  const me = g.human;
+  if (!intelRules(g) || me === null || !g.nations[me]?.alive) return;
+  // Kept with the fog lifted too, so that laying it again does not leave him knowing nothing.
+  const sight = g.flags.nofog === 1 ? null : sightOf(g, me);
+  const kept = (g.intel.cuts ??= {});
+  for (const r of g.regions) {
+    if (sight && sight[r.id] === SIGHT.none) continue;
+    const why = cutCause(g, r.id);
+    if (railCut(g, r.id)) kept[r.id] = why ? { t: g.turn, how: 'seen', why } : { t: g.turn, how: 'seen' };
+    else delete kept[r.id];
+  }
+  if (!Object.keys(kept).length) delete g.intel.cuts;
+}
+
+const monthOf = (t: number): string => turnToDate(t).label;
+const capital = (s: string): string => s[0].toUpperCase() + s.slice(1);
+
+/** A cut railway in words, for the province panel, the pointer and the 3D table alike. */
+export interface CutSaid {
+  /** "Railway cut", "Railway cut when last seen" or "Railway reported cut". */
+  head: string;
+  /** Whole sentences: what cut it and when, and what it stops. */
+  line: string;
+  /** A few words for the line under the pointer: "railway cut (bombed, June 1941)". */
+  short: string;
+}
+
+/** What the viewer is told of the railway of a province being cut (ruling 112(c)), or null where he knows of no cut. */
+export function cutSays(g: Game, region: number, viewer: string | null = g.human): CutSaid | null {
+  const k = cutKnown(g, region, viewer);
+  if (!k) return null;
+  const name = g.regions[region].name, cause = k.cause ? CAUSE_WORDS[k.cause] : '';
+  if (k.how === 'now') {
+    const when = monthOf(k.since ?? g.turn);
+    const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf(g.turn + k.hasty)}, or engineers relay the track sooner` : 'engineers relay the track'}. Only engineers can be carried up to the break.`;
+    return { head: 'Railway cut', line: `${cause ? `${capital(cause)} in ${when}` : `Cut since ${when}`}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ''}${when})` };
+  }
+  const when = monthOf(k.asOf);
+  if (k.how === 'seen') return { head: 'Railway cut when last seen', line: `Last seen cut in ${when}${cause ? ` (${cause})` : ''}. What has been done to the line since is not known.`, short: `railway cut when last seen (${when})` };
+  const who = k.cause === 'bombed' ? 'Your bombers cut it' : k.cause === 'agent' ? 'Your agent blew it' : k.cause ? 'Your troops tore it up' : 'Reported cut';
+  return { head: 'Railway reported cut', line: `${who} in ${when}. The line has not been seen since.`, short: `railway reported cut (${when})` };
 }
 
 // ---- What is known of a foreign army's make-up ----------------------------------------------------------
@@ -523,7 +615,7 @@ function attempt(g: Game, a: Agent): void {
   let text: string;
   let done = false;
   if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
-  else if (ok && m === 'rail' && cutRail(g, r.id)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
+  else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
   else text = m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
     : m === 'rail' ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.`
@@ -591,7 +683,7 @@ function plots(g: Game, nat: string): void {
       learn(g, G.by, 1);
       continue;
     }
-    const struck = rail ? cutRail(g, r.id) : wreckFactory(g, r);
+    const struck = rail ? cutRail(g, r.id, 'saboteurs') : wreckFactory(g, r);
     if (!struck) continue;
     const text = rail
       ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.`

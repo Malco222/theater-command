@@ -1088,6 +1088,11 @@ export interface Intel {
   how?: Record<number, 'battle' | 'agent' | 'air'>;
   /** Seas the player's aircraft have searched, and the month they did. */
   sea?: Record<number, number>;
+  /**
+   * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
+   * the report of his own raid, agent or troops, and the cause where it was known. One record a province.
+   */
+  cuts?: Record<number, { t: number; how: 'seen' | 'report'; why?: 'bombed' | 'agent' | 'saboteurs' | 'retreat' | 'hasty' | 'order' }>;
 }
 
 export const MEN_PER_DIV = 15000;

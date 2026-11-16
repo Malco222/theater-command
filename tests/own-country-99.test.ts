@@ -110,7 +110,7 @@ describe('a player at war beside the computer\'s Italy is warned', () => {
     expect(warns(g)).toEqual([]);
     g.byName.Sardinia.ctrl = 'UK';
     month(g, DEC_42);
-    expect(warns(g)).toEqual([`Italy makes peace if the Allies hold Sardinia in August 1943. If an enemy holds any of Sicily, Sardinia, Calabria, Apulia, Naples or Rome in August 1943 or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${GROUND}`]);
+    expect(warns(g)).toEqual([`Italy makes peace if the Allies still hold Sardinia in August 1943. If an enemy holds any of Sicily, Sardinia, Calabria, Apulia, Naples or Rome in August 1943 or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${GROUND}`]);
     const h = g.headlines.find((x) => x.warn === 'Rome wavers')!;
     expect(h).toMatchObject({ nat: 'GER', region: g.byName.Sardinia.id, turn: DEC_42 });
     // Not every month: said once, until something changes or the date is near.
@@ -120,7 +120,7 @@ describe('a player at war beside the computer\'s Italy is warned', () => {
     g.byName.Sicily.ctrl = 'UK';
     month(g, DEC_42 + 2);
     expect(warns(g)).toHaveLength(2);
-    expect(warns(g)[1]).toMatch(/^Italy makes peace if the Allies hold Sicily and Sardinia in August 1943\./);
+    expect(warns(g)[1]).toMatch(/^Italy makes peace if the Allies still hold Sicily and Sardinia in August 1943\./);
     month(g, JUNE_43 - 1);
     expect(warns(g)).toHaveLength(2);
     // Two months before the date, and every month from then on.
@@ -172,7 +172,7 @@ describe('a player at war beside the computer\'s Italy is warned', () => {
     g.byName.Sardinia.ctrl = 'UK';
     month(g, DEC_42 + 1);
     const band = monthCard(g, mark, 'GER').bands.find((b) => b.title === 'Rome wavers');
-    expect(band).toMatchObject({ word: 'WARNING', head: 'Italy makes peace if the Allies hold Sardinia in August 1943', nats: ['ITA'], region: g.byName.Sardinia.id });
+    expect(band).toMatchObject({ word: 'WARNING', head: 'Italy makes peace if the Allies still hold Sardinia in August 1943', nats: ['ITA'], region: g.byName.Sardinia.id });
     // (The band flies Italy's flag, the country the news is about, and not the player's own: the art director's rule.)
     expect(g.headlines.find((h) => h.warn === 'Rome wavers')!.about).toBe('ITA');
   });
