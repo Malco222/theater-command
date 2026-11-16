@@ -2645,6 +2645,8 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			Entry->TryGetStringField(TEXT("holder"), Stop.Holder);
 			Entry->TryGetStringField(TEXT("act"), Stop.Act);
 			Entry->TryGetStringField(TEXT("picture"), Stop.Picture);
+			Entry->TryGetStringField(TEXT("title"), Stop.Title);
+			Entry->TryGetStringField(TEXT("who"), Stop.Who);
 			Entry->TryGetNumberField(TEXT("km"), Stop.Km);
 			Entry->TryGetBoolField(TEXT("now"), Stop.bNow);
 		};

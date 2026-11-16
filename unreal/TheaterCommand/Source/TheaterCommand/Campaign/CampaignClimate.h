@@ -51,4 +51,5 @@ private:
 
 	bool bLoaded = false;
 	TArray<float> Share[WorldLook::Count];
+	TArray<float> Warp; // how far each half degree's reading may be warped, in degrees
 };

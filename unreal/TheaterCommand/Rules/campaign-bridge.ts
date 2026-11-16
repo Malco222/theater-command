@@ -3654,9 +3654,18 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
     const stops = raidStopsFor(s, k, -1);
     const here = stops.find((t) => t.id === target);
     const lead = p.seats.find((x) => x.picked && x.kind !== 'ftr') ?? p.seats.find((x) => x.picked);
-    return {
+    // (The art director's round 32: a fleet is titled by its sea, "Western Approaches", and whose ships they are
+    // goes on the line below; every other target is titled by its own name.)
+    const titled = (t: { name: string; zone?: number } | undefined, fallback: string): { title: string; who: string } => {
+      const name = t?.name ?? fallback;
+      if (kind !== 'fleet') return { title: name, who: '' };
+      const sea = (s.seas[t?.zone ?? -1]?.name ?? '').replace(/^the /i, '');
+      const cut = name.indexOf(' in the ');
+      return { title: sea || name, who: cut > 0 ? name.slice(0, cut) : name };
+    };
+    const card = {
       kind, kindLabel: raidKinds(s).find((x) => x.key === kind)?.label ?? '', why: p.why ?? '',
-      target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? '') },
+      target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? ''), ...titled(here, p.place) },
       // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
       what: here?.what ?? '', effect: p.why ? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
       effects: p.why ? '' : p.effects.join(' '),
@@ -3689,7 +3698,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (the same groups against the next target where they can fly it; the rules' own pick where they cannot)
         let q = weighRaid(s, k, t.id, p.picked);
         if (q.why || !q.picked.length) q = weighRaid(s, k, t.id);
-        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder) };
+        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
       }),
       seats: p.seats.map((x) => ({
         id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
@@ -3702,6 +3711,9 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
       fly: { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
+    // (the same round: the one line of prose is dropped when it only repeats a lone box)
+    if (card.hits.length === 1 && card.effect.includes(` ${card.hits[0].n.replace(/[^0-9.]/g, '')}`)) card.effect = '';
+    return card;
   } catch { return null; }
 }
 

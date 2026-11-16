@@ -335,8 +335,9 @@ double FCampaignMapData::RiverBroad(const FString& Name)
 		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester"),
 		TEXT("Mississippi"), TEXT("Missouri"), TEXT("Ohio"), TEXT("St Lawrence"), TEXT("Columbia"),
 		TEXT("Madeira"), TEXT("Paraguay"), TEXT("Uruguay"), TEXT("Magdalena") };
-	// (the Amazon is as broad as the painted river it stands in for, which the art director passed as built)
-	return Name == TEXT("Amazon") ? 1.5 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
+	// (The art director's round 31: the Amazon's trunk is about three times the common great river at Manaus, and
+	// wider toward its mouth; the Madeira one and a half to two times. A river as broad as the rest read as a road.)
+	return Name == TEXT("Amazon") ? 2.2 : Name == TEXT("Madeira") ? 1.1 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
 }
 
 bool FCampaignMapData::IsCharted(double X, double Y) const
@@ -414,6 +415,9 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		// (The art director's round 31: Venezuela's turquoise read as shallow sea from the top, 6.9 from the water
 		// beside it. Emerald, provisional until Brian approves it.)
 		{ TEXT("VEN"), TEXT("1F9D6B") },
+		// (The same round: Argentina's sky blue, deeper, laid 1.35 times thicker and beside the pampas' gold. The
+		// colour itself, sky blue for Argentina, is Brian's to approve.)
+		{ TEXT("ARG"), TEXT("2A7CDC") },
 	};
 	for (const auto& Paint : TablePaints)
 	{

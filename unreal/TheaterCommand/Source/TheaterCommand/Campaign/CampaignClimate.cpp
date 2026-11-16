@@ -81,9 +81,15 @@ void FCampaignClimate::Load()
 		return;
 	}
 
-	// Which look each half degree takes: the last box that holds it.
+	// Which look each half degree takes: the last box that holds it. (And the blur and the warp of that box, in
+	// degrees: two and three unless the box carries its own. The art director's round 32: the desert coast of Peru
+	// and Chile is a strip a degree or two wide between the sea and the Andes, and must not spill east of the crest
+	// into the forest of the Amazon, so its boxes ask for one and one.)
 	TArray<int8> Winner;
 	Winner.Init(static_cast<int8>(WorldLook::Temperate), Wide * High);
+	TArray<float> BlurDegrees, WarpDegrees;
+	BlurDegrees.Init(2.0f, Wide * High);
+	WarpDegrees.Init(3.0f, Wide * High);
 	int32 Read = 0;
 	for (const TSharedPtr<FJsonValue>& Value : *Boxes)
 	{
@@ -109,6 +115,9 @@ void FCampaignClimate::Load()
 			continue;
 		}
 		++Read;
+		double BoxBlur = 2.0, BoxWarp = 3.0;
+		Box->TryGetNumberField(TEXT("blur"), BoxBlur);
+		Box->TryGetNumberField(TEXT("warp"), BoxWarp);
 		for (int32 J = 0; J < High; ++J)
 		{
 			const double Latitude = South + (J + 0.5) / PerDegree;
@@ -123,20 +132,83 @@ void FCampaignClimate::Load()
 				if ((Longitude >= West && Longitude <= East) || (Longitude + 360.0 >= West && Longitude + 360.0 <= East))
 				{
 					Winner[J * Wide + I] = static_cast<int8>(Look);
+					BlurDegrees[J * Wide + I] = static_cast<float>(BoxBlur);
+					WarpDegrees[J * Wide + I] = static_cast<float>(BoxWarp);
 				}
 			}
 		}
 	}
 
-	// Each look's share of every half degree, with its edges blurred by about two degrees.
+	// Each look's share of every half degree, with its edges blurred by about two degrees: or by its own box's
+	// blur, where the box carries one. Each blur is done by itself and the results are added, so that a narrow
+	// strip with a small blur keeps to its strip.
+	TArray<int32> Radii;
+	TArray<int32> RadiusOf;
+	RadiusOf.SetNumUninitialized(Wide * High);
+	for (int32 Idx = 0; Idx < Wide * High; ++Idx)
+	{
+		RadiusOf[Idx] = FMath::Clamp(FMath::RoundToInt32(BlurDegrees[Idx] * PerDegree), 1, 12);
+		Radii.AddUnique(RadiusOf[Idx]);
+	}
+	TArray<float> Part;
 	for (int32 K = 0; K < WorldLook::Count; ++K)
 	{
-		Share[K].SetNumUninitialized(Wide * High);
-		for (int32 Idx = 0; Idx < Wide * High; ++Idx)
+		Share[K].Init(0.0f, Wide * High);
+		for (const int32 Radius : Radii)
 		{
-			Share[K][Idx] = Winner[Idx] == K ? 1.0f : 0.0f;
+			bool bAny = false;
+			Part.Init(0.0f, Wide * High);
+			for (int32 Idx = 0; Idx < Wide * High; ++Idx)
+			{
+				if (Winner[Idx] == K && RadiusOf[Idx] == Radius)
+				{
+					Part[Idx] = 1.0f;
+					bAny = true;
+				}
+			}
+			if (!bAny)
+			{
+				continue;
+			}
+			BlurRound(Part, Wide, High, Radius, 2);
+			for (int32 Idx = 0; Idx < Wide * High; ++Idx)
+			{
+				Share[K][Idx] += Part[Idx];
+			}
 		}
-		BlurRound(Share[K], Wide, High, 2 * PerDegree, 2);
+	}
+	// How far a place's reading may be warped, in degrees: the least any box within three degrees asks for, so that
+	// a place beside a narrow strip is not carried into it, and then softened so that it changes by degrees.
+	Warp.SetNumUninitialized(Wide * High);
+	{
+		const int32 Reach = 3 * PerDegree;
+		TArray<float> Rows;
+		Rows.SetNumUninitialized(Wide * High);
+		for (int32 J = 0; J < High; ++J)
+		{
+			for (int32 I = 0; I < Wide; ++I)
+			{
+				float Least = 1.0e9f;
+				for (int32 D = -Reach; D <= Reach; ++D)
+				{
+					Least = FMath::Min(Least, WarpDegrees[J * Wide + ((I + D) % Wide + Wide) % Wide]);
+				}
+				Rows[J * Wide + I] = Least;
+			}
+		}
+		for (int32 J = 0; J < High; ++J)
+		{
+			for (int32 I = 0; I < Wide; ++I)
+			{
+				float Least = 1.0e9f;
+				for (int32 D = -Reach; D <= Reach; ++D)
+				{
+					Least = FMath::Min(Least, Rows[FMath::Clamp(J + D, 0, High - 1) * Wide + I]);
+				}
+				Warp[J * Wide + I] = Least;
+			}
+		}
+		BlurRound(Warp, Wide, High, PerDegree, 1);
 	}
 	bLoaded = true;
 	UE_LOG(LogTheater, Log, TEXT("Climate: %d boxes of %d read from the world's table"), Read, Boxes->Num());
@@ -156,8 +228,12 @@ void FCampaignClimate::SharesAt(double Latitude, double Longitude, float OutShar
 	// cylinder, so that it runs on unbroken right round the world.
 	const double Turn = FMath::DegreesToRadians(Longitude);
 	const FVector Round(FMath::Cos(Turn) * 6.4, FMath::Sin(Turn) * 6.4, Latitude / 9.0);
-	const double WarpedLatitude = Latitude + 3.0 * FMath::PerlinNoise3D(Round);
-	const double WarpedLongitude = Longitude + 3.0 * FMath::PerlinNoise3D(Round + FVector(31.7, 11.3, 5.9));
+	// (by about three degrees, or by as little as a box close by asks for)
+	const int32 WarpX = ((FMath::FloorToInt32((Longitude + 180.0) * PerDegree) % Wide) + Wide) % Wide;
+	const int32 WarpY = FMath::Clamp(FMath::FloorToInt32((Latitude - South) * PerDegree), 0, High - 1);
+	const double Reach = Warp.Num() == Wide * High ? Warp[WarpY * Wide + WarpX] : 3.0;
+	const double WarpedLatitude = Latitude + Reach * FMath::PerlinNoise3D(Round);
+	const double WarpedLongitude = Longitude + Reach * FMath::PerlinNoise3D(Round + FVector(31.7, 11.3, 5.9));
 
 	const double Gx = (WarpedLongitude + 180.0) * PerDegree - 0.5;
 	const double Gy = FMath::Clamp((WarpedLatitude - South) * PerDegree - 0.5, 0.0, static_cast<double>(High - 1));

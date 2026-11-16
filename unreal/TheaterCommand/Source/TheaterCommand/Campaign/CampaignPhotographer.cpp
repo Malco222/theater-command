@@ -598,7 +598,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				{
 					LandAt = LandingParts[0];
 					LandMonths = LandingParts.Num() > 1 ? FMath::Clamp(FCString::Atoi(*LandingParts[1]), 0, 80) : 0;
-					LandFrom = LandingParts.Num() > 2 ? LandingParts[2] : LandFrom;
+					LandFrom = LandingParts.Num() > 2 ? LandingParts[2] : LandAt == TEXT("@amber") ? FString(TEXT("@amber")) : LandFrom;
 				}
 			}
 			{
@@ -808,7 +808,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 }
 
-void ACampaignPhotographer::Arrange(const FShot& Shot)
+void ACampaignPhotographer::Arrange(const FShot& Given)
 {
 	ACampaignPlayerController* Controller = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
 	ACampaignCameraPawn* Eye = Controller ? Cast<ACampaignCameraPawn>(Controller->GetPawn()) : nullptr;
@@ -817,6 +817,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		return;
 	}
+	FShot Shot = Given; // (a picture that looks for its own subject fills in where it found it: see "@amber" below)
 	// The first picture after the opening screen begins a campaign through it, as Germany in September 1939.
 	if (!Shot.bOpening && !Controller->GetSession())
 	{
@@ -837,6 +838,71 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Controller->PickGrandNation(GrandNation);
 			Controller->BeginGrandCampaign(false);
 		}
+	}
+	// ("-TheaterLanding=@amber:9" pictures a landing whose card is amber. Which army and which shore that is depends on
+	// how the war has gone, so the photographer looks for it: the months asked for are played, then the player's armies
+	// are gone through for a shore they could land on with an amber verdict, a month more at a time until one is found.
+	// The pictures that follow use the same army and the same shore.)
+	if (Shot.Army == TEXT("@amber") && Controller->GetSession())
+	{
+		for (int32 i = 0; i < Shot.Months; ++i)
+		{
+			Controller->EndMonth();
+		}
+		Shot.Months = 0;
+		Shot.bDismiss = true;
+		AmberFrom.Reset();
+		AmberTo.Reset();
+		int32 Played = 0, Met[4] = { 0, 0, 0, 0 }; // red, amber, good, none
+		for (; Played < 16 && AmberTo.IsEmpty(); ++Played)
+		{
+			if (Played > 0)
+			{
+				Controller->EndMonth();
+			}
+			Controller->DismissAnnouncement();
+			Controller->EndNewsreel();
+			FCampaignSession* Session = Controller->GetSession();
+			const FCampaignView& View = Session->GetView();
+			TMap<int32, TArray<int32>> Armies;
+			for (const FViewCorps& Unit : View.Corps)
+			{
+				if (Unit.Nation == View.Human)
+				{
+					Armies.FindOrAdd(Unit.Region).Add(Unit.Id);
+				}
+			}
+			for (const TPair<int32, TArray<int32>>& Army : Armies)
+			{
+				TArray<int32> Ports, Beaches;
+				Session->SeaReach(Army.Value, Ports, Beaches);
+				for (const int32 Beach : Beaches)
+				{
+					if (!AmberTo.IsEmpty() || !Table->GetData().Regions.IsValidIndex(Beach) || !Table->GetData().Regions.IsValidIndex(Army.Key))
+					{
+						continue;
+					}
+					const FString Tone = Session->PlanLanding(Army.Value, Beach).Tone;
+					++Met[Tone == TEXT("red") ? 0 : Tone == TEXT("amber") ? 1 : Tone == TEXT("good") ? 2 : 3];
+					if (Tone == TEXT("amber"))
+					{
+						AmberFrom = Table->GetData().Regions[Army.Key].Name;
+						AmberTo = Table->GetData().Regions[Beach].Name;
+					}
+				}
+			}
+		}
+		UE_LOG(LogTheater, Display, TEXT("Photographer: an amber landing %s (verdicts met: %d red, %d amber, %d good, %d with none)"),
+			AmberTo.IsEmpty() ? TEXT("was not found") : *FString::Printf(TEXT("from %s to %s, %d months on"), *AmberFrom, *AmberTo, Played - 1), Met[0], Met[1], Met[2], Met[3]);
+		Shot.Army = AmberFrom;
+	}
+	if (Shot.Region == TEXT("@amber"))
+	{
+		Shot.Region = AmberTo;
+	}
+	if (Shot.Attack == TEXT("@amber"))
+	{
+		Shot.Attack = AmberTo;
 	}
 	const FCampaignMapData& Data = Table->GetData();
 	FVector2D At(Data.Width * 0.5, Data.Height * 0.5);

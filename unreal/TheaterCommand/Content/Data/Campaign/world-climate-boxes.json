@@ -1,5 +1,5 @@
 {
- "note": "Read in order: a later box paints over an earlier one. Longitudes run -180 to 180 and a box may run past 180. Blur the edges by about two degrees and warp them by about three, so no look ends on a ruled line. The map of Europe (11 W to 47 E, 28.6 N to 71.4 N) keeps its own recipe.",
+ "note": "Read in order: a later box paints over an earlier one. Longitudes run -180 to 180 and a box may run past 180. Blur the edges by about two degrees and warp them by about three, so no look ends on a ruled line. The map of Europe (11 W to 47 E, 28.6 N to 71.4 N) keeps its own recipe. A box may carry its own blur and warp in degrees: use them where given (the desert coast of Peru and Chile is a strip one or two degrees wide between the sea and the Andes, and must not spill east of the crest into the Amazon forest). The Altiplano is listed before those coast boxes on purpose, so the desert paints over its western edge down to the sea at Arica and Antofagasta.",
  "looks": [
   "temperate",
   "drysouth",
@@ -785,20 +785,82 @@
    "where": "the Atlantic coast of Brazil"
   },
   {
-   "look": "desert",
-   "west": -82,
-   "east": -70,
-   "south": -27,
-   "north": -5,
-   "where": "the Peruvian coast and the Atacama"
-  },
-  {
    "look": "alpine",
    "west": -72,
    "east": -65,
    "south": -24,
    "north": -14,
    "where": "the Altiplano"
+  },
+  {
+   "look": "desert",
+   "west": -81.5,
+   "east": -79.5,
+   "south": -7,
+   "north": -4,
+   "where": "the Sechura coast of Peru",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -80.5,
+   "east": -78,
+   "south": -10,
+   "north": -7,
+   "where": "the coast of Peru at Trujillo",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -79,
+   "east": -76.3,
+   "south": -13,
+   "north": -10,
+   "where": "the coast of Peru at Lima",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -77,
+   "east": -74.5,
+   "south": -15.5,
+   "north": -13,
+   "where": "the coast of Peru at Ica",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -75.5,
+   "east": -71.5,
+   "south": -17,
+   "north": -15.5,
+   "where": "the coast of Peru at Arequipa",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -72.5,
+   "east": -69.9,
+   "south": -18.5,
+   "north": -17,
+   "where": "the coast at Tacna and Arica",
+   "blur": 1,
+   "warp": 1
+  },
+  {
+   "look": "desert",
+   "west": -71,
+   "east": -68,
+   "south": -27,
+   "north": -18.5,
+   "where": "the Atacama",
+   "blur": 1,
+   "warp": 1
   },
   {
    "look": "prairie",

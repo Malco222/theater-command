@@ -323,6 +323,8 @@ struct FRaidStop
 	FString Holder;
 	FString Act;
 	FString Picture; // what the studio is asked for: "Target:<sort>:<province or -1>:<holder>"
+	FString Title; // its short title: its name, or for a fleet the sea it is in
+	FString Who; // for a fleet, whose ships they are ("British ships"); empty otherwise
 	int32 Km = 0;
 	bool bNow = false;
 };

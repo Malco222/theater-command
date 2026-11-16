@@ -2340,7 +2340,7 @@ void ACampaignMapActor::BuildWorld()
 	WorldLandMaterial = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 	WorldLandMaterial->CopyParameterOverrides(LandMaterial);
 	DressBeyond(WorldLandMaterial);
-	WorldLandMaterial->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.0f / FMath::Max(WorldPaint.NX, 1), 1.0f / FMath::Max(WorldPaint.NY, 1), 0.0f, 0.0f));
+	WorldLandMaterial->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.0f / FMath::Max(WorldPaint.NX, 1), 1.0f / FMath::Max(WorldPaint.NY, 1), 3.0f * WorldPaint.NX, 3.0f * WorldPaint.NY));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Ground"), Picture(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldGround")));
 	WorldTintPicture = Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint"));
 	WorldReliefPicture = Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief"));
@@ -2638,7 +2638,8 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
 	DressBeyond(Sheet.LandPaint);
 	// (the place its shading is read at is shaken by a little over half a cell: see the land's paint)
-	Sheet.LandPaint->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.3f / FMath::Max(Sheet.Paint.NX, 1), 1.3f / FMath::Max(Sheet.Paint.NY, 1), 0.0f, 0.0f));
+	// (and the grid of thirds of a cell its shake is made on: see the land's paint)
+	Sheet.LandPaint->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.2f / FMath::Max(Sheet.Paint.NX, 1), 1.2f / FMath::Max(Sheet.Paint.NY, 1), 3.0f * Sheet.Paint.NX, 3.0f * Sheet.Paint.NY));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Ground"), Picture(Painted.Ground, Painted.NX, Painted.NY, true, TEXT("Ground")));
 	Sheet.TintPicture = Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint"));
 	Sheet.ReliefPicture = Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief"));
@@ -3271,7 +3272,9 @@ void ACampaignMapActor::BuildWaterways()
 			JungleMidstream = FLinearColor(FColor(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2])));
 		}
 	}
-	const FLinearColor JungleBank = JungleMidstream * 0.84f;
+	// (The art director's round 31: a brown river is lighter in mid channel and darker toward its banks, with a darker
+	// wet margin inside its edge and no dark outline round it.)
+	const FLinearColor JungleBank = JungleMidstream * 0.76f, JungleMargin = JungleMidstream * 0.58f;
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
@@ -3462,12 +3465,25 @@ void ACampaignMapActor::BuildWaterways()
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
+		// (how far along the river each point lies, how broad the river is there and how brown: for its sand bars)
+		TArray<double> RunAt, HalfAt;
+		TArray<float> BrownAt;
+		double Run = 0.0;
 		for (int32 K = 0; K < Path.Num(); ++K)
 		{
 			const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[FMath::Max(K - 1, 0)]).GetSafeNormal();
 			const FVector2D Side(Along.Y, -Along.X);
-			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1)));
-			const double Shore = Half + 0.2; // the dark of the bank beside the water
+			Run += K > 0 ? FVector2D::Distance(Path[K], Path[K - 1]) : 0.0;
+			// (a brown river of the jungle wanders in width by about a fifth along its length: an even width is a road's)
+			float JungleHere = 0.0f;
+			if (bRiverBeyond)
+			{
+				float LooksHere[WorldLook::Count];
+				FCampaignClimate::Get().SharesAt(Data.LatitudeAt(Path[K].Y), Data.LongitudeAt(Path[K].X), LooksHere);
+				JungleHere = LooksHere[WorldLook::Jungle];
+			}
+			const double Wanders = 1.0 + 0.2 * FMath::SmoothStep(0.08f, 0.34f, JungleHere) * FMath::PerlinNoise1D(static_cast<float>(Run * 0.031 + RiverIndex * 13.7));
+			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders;
 			// A river does not run over the sea: stop where the land does.
 			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
@@ -3475,6 +3491,7 @@ void ACampaignMapActor::BuildWaterways()
 			}
 			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
 			FLinearColor MidstreamHere = MidstreamRuns, BankHere = BankRuns;
+			float Brown = 0.0f; // how wholly it is a brown river of the jungle here
 			if (bRiverBeyond)
 			{
 				// (The art director's condition of round 25: a ribbon takes the water colour of the country it crosses,
@@ -3484,16 +3501,34 @@ void ACampaignMapActor::BuildWaterways()
 				// (Blue mixed straight into brown passes through grey, and where the climate is half jungle, as on the
 				// upper Amazon under the Andes, the ribbon read as a tarred road. It turns by way of a murky river
 				// green, and wholly by the time the country is three fifths jungle.)
-				const float Turned = FMath::SmoothStep(0.15f, 0.6f, Shares[WorldLook::Jungle]);
+				// (The art director's round 32: the trunk stays muddy brown all the way to the foothills; the common
+				// river colour is for the mountain streams above. It has turned wholly by a third jungle.)
+				const float Turned = FMath::SmoothStep(0.08f, 0.34f, Shares[WorldLook::Jungle]);
 				const FLinearColor Murky = FLinearColor(FColor(84, 108, 92));
 				MidstreamHere = Turned < 0.5f ? FMath::Lerp(MidstreamHere, Murky, Turned * 2.0f) : FMath::Lerp(Murky, JungleMidstream, Turned * 2.0f - 1.0f);
 				BankHere = Turned < 0.5f ? FMath::Lerp(BankHere, Murky * 0.84f, Turned * 2.0f) : FMath::Lerp(Murky * 0.84f, JungleBank, Turned * 2.0f - 1.0f);
+				Brown = FMath::Clamp(Turned * 2.0f - 1.0f, 0.0f, 1.0f);
+				// (long faint streaks along the current: the mid channel and the banks each go a little lighter and
+				// darker along the river, out of step with one another)
+				MidstreamHere *= 1.0f + 0.07f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.06 + 7.7 + RiverIndex));
+				BankHere *= 1.0f + 0.07f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.045 + 21.3 + RiverIndex));
 			}
+			RunAt.Add(Run);
+			HalfAt.Add(Half);
+			BrownAt.Add(Brown);
 			const FColor Midstream = FMath::Lerp(MidstreamHere, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankHere, BankIce, Frozen).ToFColor(true);
 			// (a tributary's ribbon lies a hair lower where it runs under the ribbon of the river it joins)
 			const double Under = K >= RiverUnderFrom[RiverIndex] ? 0.045 : 0.0;
-			const FVector2D Across[5] = { Path[K] + Side * Shore, Path[K] + Side * Half, Path[K], Path[K] - Side * Half, Path[K] - Side * Shore };
-			const FColor Inks[5] = { Earth, Bank, Midstream, Bank, Earth };
+			// (A common river has the dark of its bank beside the water. A brown river has no outline: its outer strip
+			// lies inside its edge, a darker wet margin about two points of the screen wide, and its edge wanders a
+			// little each side so that it is not a ruled line.)
+			const double EdgeLeft = 0.14 * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.41 + 3.1 + RiverIndex * 5.3));
+			const double EdgeRight = 0.14 * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.37 + 47.9 + RiverIndex * 5.3));
+			const double Outer = Half + FMath::Lerp(0.2, 0.04, static_cast<double>(Brown)); // (a common river's is the dark of the bank beside the water)
+			const double Inner = Half - static_cast<double>(Brown) * FMath::Min(0.5, Half * 0.34);
+			const FVector2D Across[5] = { Path[K] + Side * (Outer + EdgeLeft), Path[K] + Side * (Inner + EdgeLeft), Path[K], Path[K] - Side * (Inner + EdgeRight), Path[K] - Side * (Outer + EdgeRight) };
+			const FColor Margin = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(JungleMargin, BankIce, Frozen), Brown).ToFColor(true);
+			const FColor Inks[5] = { Margin, Bank, Midstream, Bank, Margin };
 			int32 Here[5];
 			for (int32 P = 0; P < 5; ++P)
 			{
@@ -3511,6 +3546,86 @@ void ACampaignMapActor::BuildWaterways()
 			for (int32 P = 0; P < 5; ++P)
 			{
 				Previous[P] = Here[P];
+			}
+		}
+		// (The art director's round 31.) The sand bars of a great brown river: long lenses of pale sand, four to eight
+		// times as long as they are wide, hugging the inside of a bend, at uneven gaps of six to twenty river widths
+		// and never on the centre line; now and then an island with a tuft of green.
+		if (bRiverBeyond && Broad >= 0.8 && RunAt.Num() > 8)
+		{
+			FRandomStream Chance(RiverIndex * 7919 + 17);
+			// (laid well under the pale sand they are to look, about (205, 190, 150): the water's sheen lifts them, and laid at
+			// two thirds of that they came out chalk white)
+			const FColor Sand(112, 104, 80), WetSand(90, 83, 62), Tuft(52, 78, 46);
+			// (a place a given way along the river, and the way across it there)
+			auto Place = [&](double Far, FVector2D& OutAt, FVector2D& OutSide)
+			{
+				int32 K = 1;
+				while (K + 1 < RunAt.Num() && RunAt[K] < Far)
+				{
+					++K;
+				}
+				const double Span = FMath::Max(RunAt[K] - RunAt[K - 1], 1.0e-6);
+				OutAt = FMath::Lerp(Path[K - 1], Path[K], FMath::Clamp((Far - RunAt[K - 1]) / Span, 0.0, 1.0));
+				const FVector2D Along = (Path[FMath::Min(K + 1, RunAt.Num() - 1)] - Path[FMath::Max(K - 2, 0)]).GetSafeNormal();
+				OutSide = FVector2D(Along.Y, -Along.X);
+			};
+			auto Lens = [&](double From, double Long, double Wide, double Aside, const FColor& Middle, const FColor& Rim, double Raised)
+			{
+				const int32 Parts = 12;
+				int32 Last[3] = { INDEX_NONE, INDEX_NONE, INDEX_NONE };
+				for (int32 Part = 0; Part <= Parts; ++Part)
+				{
+					const double T = static_cast<double>(Part) / Parts;
+					FVector2D At, Side;
+					Place(From + Long * T, At, Side);
+					const double HalfWide = 0.5 * Wide * FMath::Pow(FMath::Sin(UE_DOUBLE_PI * T), 0.75);
+					const FVector2D Centre = At + Side * Aside;
+					const FVector2D Points[3] = { Centre + Side * HalfWide, Centre, Centre - Side * HalfWide };
+					int32 Now[3];
+					for (int32 P = 0; P < 3; ++P)
+					{
+						Now[P] = Into.AddVertex(SurfacePointOver(Points[P].X, Points[P].Y, Lift + Raised), FVector::UpVector, P == 1 ? Middle : Rim);
+					}
+					if (Last[0] != INDEX_NONE)
+					{
+						for (int32 Strip = 0; Strip < 2; ++Strip)
+						{
+							Into.AddTriangleFacingUp(Last[Strip], Last[Strip + 1], Now[Strip]);
+							Into.AddTriangleFacingUp(Last[Strip + 1], Now[Strip], Now[Strip + 1]);
+						}
+					}
+					for (int32 P = 0; P < 3; ++P)
+					{
+						Last[P] = Now[P];
+					}
+				}
+			};
+			double Next = RunAt[0] + 10.0 + 40.0 * Chance.FRand();
+			int32 Bars = 0;
+			for (int32 K = 3; K + 3 < RunAt.Num(); ++K)
+			{
+				if (RunAt[K] < Next)
+				{
+					continue;
+				}
+				const double RiverWide = 2.0 * HalfAt[K];
+				const double Wide = RiverWide * Chance.FRandRange(0.16f, 0.25f), Long = Wide * Chance.FRandRange(4.0f, 8.0f);
+				Next = RunAt[K] + Long + RiverWide * Chance.FRandRange(6.0f, 20.0f);
+				if (BrownAt[K] < 0.9f || K >= RiverUnderFrom[RiverIndex] || RunAt[K] + Long > RunAt.Last() - 2.0)
+				{
+					continue;
+				}
+				// (the inside of the bend here; where the river runs straight, either bank)
+				const FVector2D Before = (Path[K] - Path[K - 3]).GetSafeNormal(), After = (Path[K + 3] - Path[K]).GetSafeNormal();
+				const double Turn = Before.X * After.Y - Before.Y * After.X;
+				const double Inside = FMath::Abs(Turn) > 0.03 ? (Turn > 0.0 ? -1.0 : 1.0) : (Chance.FRand() < 0.5f ? -1.0 : 1.0);
+				const double Aside = Inside * (HalfAt[K] - 0.5 * Wide - 0.07 * RiverWide);
+				Lens(RunAt[K], Long, Wide, Aside, Sand, WetSand, 0.03);
+				if (++Bars % 3 == 0)
+				{
+					Lens(RunAt[K] + Long * 0.22, Long * 0.5, Wide * 0.5, Aside, Tuft, Tuft, 0.05);
+				}
 			}
 		}
 	}

@@ -100,6 +100,7 @@ private:
 	void Arrange(const FShot& Shot);
 
 	TArray<FShot> Shots;
+	FString AmberFrom, AmberTo; // the army and the shore of a landing with an amber verdict, once one has been looked for and found
 	FString Folder;
 	int32 Current = -1;
 	float Clock = 0.0f;

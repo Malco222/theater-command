@@ -18,6 +18,8 @@
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
+#include "TextureResource.h"
+#include "Campaign/CampaignTextures.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
@@ -4063,7 +4065,8 @@ namespace
 		TSharedPtr<FSlateBrush> TargetPictureOf(const FString& Sort, bool bSmall)
 		{
 			const TCHAR* Name = Sort == TEXT("factories") ? TEXT("factories") : Sort == TEXT("rail") ? TEXT("rail-yard") : Sort == TEXT("harbour") ? TEXT("harbour")
-				: Sort == TEXT("airfield") ? TEXT("airfield") : Sort == TEXT("works") ? TEXT("fieldworks") : Sort == TEXT("troops") ? TEXT("troops") : Sort == TEXT("fleet") ? TEXT("fleet") : nullptr;
+				: Sort == TEXT("airfield") ? TEXT("airfield") : Sort == TEXT("works") ? TEXT("fieldworks") : Sort == TEXT("troops") ? TEXT("troops") : Sort == TEXT("fleet") ? TEXT("fleet")
+				: Sort == TEXT("town") ? TEXT("town") : nullptr;
 			if (!Name)
 			{
 				return nullptr;
@@ -4097,6 +4100,92 @@ namespace
 			return Brush;
 		}
 
+		/**
+		 * A machine's small studio picture with its dark ground taken away, so that on a card it stands on the row's own
+		 * colour (the art director's round 32: "a flat ground in the row's colour, not noisy black"). The ground is found
+		 * from the picture's border inward, so nothing dark inside the machine is lost. Made once for each machine.
+		 */
+		TSharedPtr<FSlateBrush> CutOutOf(const FString& Model)
+		{
+			if (const TSharedPtr<FSlateBrush>* Kept = CutOuts.Find(Model))
+			{
+				return *Kept;
+			}
+			static TMap<FString, UTexture2D*> Cut; // (kept for the life of the game, like the target pictures)
+			UTexture2D* Texture = Cut.FindRef(Model);
+			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			if (!Texture && !Cut.Contains(Model) && Table)
+			{
+				UTextureRenderTarget2D* Picture = Table->GetPortrait(Model, false);
+				FTextureRenderTargetResource* Resource = Picture ? Picture->GameThread_GetRenderTargetResource() : nullptr;
+				TArray<FColor> Pixels;
+				if (Resource && Resource->ReadPixels(Pixels) && Pixels.Num() == Picture->SizeX * Picture->SizeY && Pixels.Num() > 0)
+				{
+					const int32 W = Picture->SizeX, High = Picture->SizeY;
+					TArray<uint8> Ground;
+					Ground.Init(0, W * High);
+					TArray<int32> Open;
+					auto Try = [&](int32 X, int32 Y)
+					{
+						if (X < 0 || Y < 0 || X >= W || Y >= High)
+						{
+							return;
+						}
+						const int32 Idx = Y * W + X;
+						const FColor& Seen = Pixels[Idx];
+						if (!Ground[Idx] && FMath::Max3(Seen.R, Seen.G, Seen.B) < 52)
+						{
+							Ground[Idx] = 1;
+							Open.Add(Idx);
+						}
+					};
+					for (int32 X = 0; X < W; ++X)
+					{
+						Try(X, 0);
+						Try(X, High - 1);
+					}
+					for (int32 Y = 0; Y < High; ++Y)
+					{
+						Try(0, Y);
+						Try(W - 1, Y);
+					}
+					while (Open.Num() > 0)
+					{
+						const int32 Idx = Open.Pop(EAllowShrinking::No);
+						const int32 X = Idx % W, Y = Idx / W;
+						Try(X + 1, Y);
+						Try(X - 1, Y);
+						Try(X, Y + 1);
+						Try(X, Y - 1);
+					}
+					for (int32 Idx = 0; Idx < Pixels.Num(); ++Idx)
+					{
+						Pixels[Idx].A = Ground[Idx] ? 0 : 255;
+					}
+					Texture = CampaignTextures::Create(W, High, Pixels, true, false, FName(*(TEXT("CutOut_") + Model.Replace(TEXT(":"), TEXT("_")))));
+					if (Texture)
+					{
+						Texture->AddToRoot();
+					}
+				}
+				Cut.Add(Model, Texture);
+			}
+			TSharedPtr<FSlateBrush> Brush;
+			if (Texture)
+			{
+				Brush = MakeShared<FSlateBrush>();
+				Brush->SetResourceObject(Texture);
+				Brush->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+				Brush->DrawAs = ESlateBrushDrawType::Image;
+			}
+			else
+			{
+				Brush = PortraitOf(Model); // (the studio's own picture, where it could not be read back)
+			}
+			CutOuts.Add(Model, Brush);
+			return Brush;
+		}
+
 		/** A meter on the raid card: a bar of the colour given on a dark bed. */
 		TSharedRef<SWidget> RaidMeter(float Share, const FLinearColor& Ink, float High = 7.0f)
 		{
@@ -4119,7 +4208,7 @@ namespace
 			const FLinearColor Red = FLinearColor(FColor::FromHex(TEXT("CF5A41")));
 			const bool bCan = Seat.Why.IsEmpty();
 			const FString Model = Seat.Kind == TEXT("ftr") ? FMiniatureMesh::MainFighterOf(Seat.Nation) : FMiniatureMesh::MainBomberOf(Seat.Nation);
-			const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : PortraitOf(Model);
+			const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : CutOutOf(Model);
 			const FString Craft = Seat.Kind == TEXT("ftr") ? TEXT("fighters") : Seat.Kind == TEXT("bmr") ? TEXT("bombers") : TEXT("aircraft");
 			// (its airfield and how far it has to fly; a fighter group goes as escort)
 			const FString Where = Seat.Kind == TEXT("ftr") ? FString::Printf(TEXT("%s \u00B7 escort, %s km"), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())
@@ -4207,7 +4296,8 @@ namespace
 			{
 				Whole->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("Cannot fly: ") + Seat.Why)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					// (the reason is a sentence of the rules': it runs on from "Cannot fly", so its capital goes)
+					SNew(STextBlock).Text(FText::FromString(TEXT("Cannot fly: ") + Seat.Why.Left(1).ToLower() + Seat.Why.Mid(1))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
 				];
 			}
 			return SNew(SBox).WidthOverride(364.0f)
@@ -4236,7 +4326,9 @@ namespace
 			const FString KindWord = Card.Target.Sort == TEXT("factories") ? TEXT("FACTORIES") : Card.Target.Sort == TEXT("rail") ? TEXT("RAIL YARD") : Card.Target.Sort == TEXT("harbour") ? TEXT("HARBOUR")
 				: Card.Target.Sort == TEXT("airfield") ? TEXT("AIRFIELD") : Card.Target.Sort == TEXT("works") ? TEXT("FIELDWORKS") : Card.Target.Sort == TEXT("troops") ? TEXT("TROOPS")
 				: Card.Target.Sort == TEXT("fleet") ? TEXT("A FLEET") : TEXT("A TOWN");
-			FString Under = Card.HolderName;
+			// (a fleet is titled by its sea, with whose ships they are on the line below: the art director's round 32)
+			const FString& TargetTitle = Card.Target.Title.IsEmpty() ? Card.Target.Name : Card.Target.Title;
+			FString Under = Card.Target.Who.IsEmpty() ? Card.HolderName : Card.Target.Who;
 			if (Card.Target.Km > 0)
 			{
 				Under += FString::Printf(TEXT("%s%s km%s"), Under.IsEmpty() ? TEXT("") : TEXT("  ·  "), *Number(Card.Target.Km), Card.From.IsEmpty() ? TEXT("") : *(TEXT(" from ") + Card.From));
@@ -4274,7 +4366,7 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight()
 						[
 							// (a long name, as a fleet's is, is set smaller and may take a second line)
-							SNew(STextBlock).Text(FText::FromString(Card.Target.Name)).Font(Serif(TEXT("Bold"), Card.Target.Name.Len() > 22 ? 18 : 24)).ColorAndOpacity(Cream).AutoWrapText(true)
+							SNew(STextBlock).Text(FText::FromString(TargetTitle)).Font(Serif(TEXT("Bold"), TargetTitle.Len() > 22 ? 18 : 24)).ColorAndOpacity(Cream).AutoWrapText(true)
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[Whose]
 					]
@@ -4432,14 +4524,26 @@ namespace
 					[
 						SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Stop.bNow ? BrightBrass : FLinearColor(0.0f, 0.0f, 0.0f, 0.0f)).Padding(FMargin(3.0f))
 						[
-							SNew(SBox).WidthOverride(108.0f).HeightOverride(67.0f)[Small.IsValid() ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Small.Get())) : SNullWidget::NullWidget]
+							SNew(SBox).WidthOverride(108.0f).HeightOverride(67.0f)
+							[
+								SNew(SOverlay)
+								+ SOverlay::Slot()[Small.IsValid() ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Small.Get())) : SNullWidget::NullWidget]
+								+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(4.0f, 4.0f, 0.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(19.0f).HeightOverride(13.0f)
+									.Visibility(Stop.Holder.IsEmpty() || Stop.Holder == TEXT("X") ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
+									[
+										SNew(SImage).Image(FlagBrush(Stop.Holder))
+									]
+								]
+							]
 						]
 					];
 					Chip->AddSlot().AutoHeight().Padding(3.0f, 3.0f, 0.0f, 0.0f)
 					[
 						SNew(SBox).WidthOverride(108.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Stop.Name)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Stop.bNow ? BrightBrass : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+							SNew(STextBlock).Text(FText::FromString(Stop.Title.IsEmpty() ? Stop.Name : Stop.Title)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Stop.bNow ? BrightBrass : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 						]
 					];
 					Chip->AddSlot().AutoHeight().Padding(3.0f, 0.0f, 0.0f, 0.0f)
@@ -7288,6 +7392,7 @@ namespace
 		FButtonStyle RoundStyle, BrassStyle; // the raid card's round plus and minus, and its one brass button
 		FSlateBrush PrintBrush; // the cream border of the target's picture
 		TMap<FString, TSharedPtr<FSlateBrush>> TargetPictures; // the art director's pictures of the kinds of target, as they are read
+		TMap<FString, TSharedPtr<FSlateBrush>> CutOuts; // the machines' small pictures with their ground taken away
 		TSharedPtr<SWidget> HelpMark;
 		TArray<TSharedRef<SWidget>> FramePieces;
 		FButtonStyle PromptStyle;

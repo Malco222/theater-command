@@ -446,7 +446,20 @@ def build_land():
     # one ran in straight steps a cell long. There the place the shading and the rock are read at is shaken by the
     # fine detail, by about half a cell: "ReliefJitter" is that in the picture's own measure, and nothing in Europe.)
     jitter = vector(m, "ReliefJitter", (0.0, 0.0, 0.0, 0.0), -3300, 150)
-    shake = times(m, plus(m, pair(m, (fine, "R"), (fine, "B"), -3150, 250), -0.5, -3050, 250), pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2950, 200)
+    # (The art director's round 32: in West Texas the steps were back, about seven points long. The detail the place
+    # was shaken by is a quiet grain round its middle grey: it moved the place by a sixth of a cell and broke
+    # nothing. The place is now shaken by a number of its own, made from where the point lies on a grid of thirds of
+    # a cell, which runs evenly from nought to one: by a little over half a cell each way. "ReliefJitter" carries
+    # the shake in its red and green and that grid in its blue and alpha; all four are nothing in Europe.)
+    third = one_in(m, unreal.MaterialExpressionFloor, times(m, uv, pair(m, (jitter, "B"), (jitter, "A"), -3250, 420), -3150, 420), -3050, 420)
+    third_x = node_from(m, unreal.MaterialExpressionComponentMask, third, -2950, 400, r=True, g=False, b=False, a=False)
+    third_y = node_from(m, unreal.MaterialExpressionComponentMask, third, -2950, 480, r=False, g=True, b=False, a=False)
+
+    def scattered(u, v, plus_by, x, y):
+        inner = one_in(m, unreal.MaterialExpressionFrac, plus(m, plus(m, times(m, u, 0.06711056, x, y), times(m, v, 0.00583715, x, y + 60), x + 100, y), plus_by, x + 200, y), x + 300, y)
+        return one_in(m, unreal.MaterialExpressionFrac, times(m, inner, 52.9829189, x + 400, y), x + 500, y)
+    shake = times(m, plus(m, pair(m, scattered(third_x, third_y, 0.0, -2850, 400), scattered(third_y, third_x, 0.37, -2850, 520), -2250, 460), -0.5, -2150, 460),
+                  pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2050, 200)
     relief_uv = plus(m, uv, shake, -2800, 150)
     # (Tried and taken out: shaking the ground's own colour on the world's coarse sheet by the coarser detail, against
     # the straight valleys of New England seen from high up. It combed the coasts and the woods and left the valleys
@@ -469,7 +482,13 @@ def build_land():
     # The nation's colour is a stain over the bare ground: a wash everywhere (thicker for a nation of little colour,
     # which the Relief picture's alpha says) and a band along the national frontier (the Tint picture's alpha).
     # "Flat" lays the stain on whole, for the map view that shows the countries in flat colour.
-    wash = times(m, scalar(m, "Wash", 0.34, -2300, -760), plus(m, (relief, "A"), 1.0, -2300, -700), -2150, -730)
+    # (The art director's round 31, "blue beside gold": beyond Europe a blue or violet paint mixed into warm ground
+    # cancels to grey, and Argentina read as ice. Such a country is marked in the same alpha as the boost, as a half
+    # added: its ripe wheat, its trees and its palest ground take no wash, so that the blue lies beside the land's
+    # warmth and not in it.)
+    cool_paint = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (relief, "A"), -0.45, -2300, -1000), 40.0, -2200, -1000), -2100, -1000)
+    boost = plus(m, (relief, "A"), times(m, cool_paint, -0.5, -2300, -920), -2200, -920)
+    wash = times(m, scalar(m, "Wash", 0.34, -2300, -760), plus(m, boost, 1.0, -2300, -700), -2150, -730)
     band = times(m, (tint, "A"), scalar(m, "Band", 0.4, -2300, -640), -2150, -640)
     stain = one_in(m, unreal.MaterialExpressionSaturate, plus(m, wash, band, -2050, -690), -1950, -690)
     stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
@@ -545,8 +564,8 @@ def build_land():
     crop = picture(m, "Fields", times(m, plus(m, plus(m, home, 0.5, 1300, 2700), part_at, 1400, 2750), 1.0 / 64.0, 1550, 2750), 1700, 2750, numbers=True)
     # (which crop: a number from 0 to 1 made of the part's own tone; under 0.2 green, to 0.62 wheat, the rest fallow)
     lots = one_in(m, unreal.MaterialExpressionFrac, plus(m, times(m, (crop, "R"), 7.1, 1900, 2700), times(m, (crop, "G"), 3.3, 1900, 2800), 2050, 2750), 2200, 2750)
-    is_green = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2700), scalar(m, "SquareGreen", 0.2, 2350, 2800), 2450, 2700), 1000.0, 2550, 2700), 2700, 2700)
-    is_wheat = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2900), scalar(m, "SquareWheat", 0.8, 2350, 2980), 2450, 2900), 1000.0, 2550, 2900), 2700, 2900)
+    is_green = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2700), lerp(m, scalar(m, "SquareGreen", 0.2, 2350, 2800), scalar(m, "CoolSquareGreen", 0.45, 2350, 2850), cool_paint, 2400, 2830), 2450, 2700), 1000.0, 2550, 2700), 2700, 2700)
+    is_wheat = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2900), lerp(m, scalar(m, "SquareWheat", 0.8, 2350, 2980), scalar(m, "CoolSquareWheat", 0.7, 2350, 3030), cool_paint, 2400, 3010), 2450, 2900), 1000.0, 2550, 2900), 2700, 2900)
     grain = lerp(m, vector(m, "FieldFallow", (0.83, 0.63, 0.83, 1.0), 2700, 3000), vector(m, "FieldWheat", (1.49, 1.28, 1.09, 1.0), 2700, 3100), is_wheat, 2900, 3000)
     grain = lerp(m, grain, vector(m, "FieldGreen", (0.72, 0.91, 0.83, 1.0), 2700, 3200), is_green, 3050, 3050)
     # (each part a little paler or darker than the next of its kind)
@@ -562,7 +581,7 @@ def build_land():
     grain = times(m, grain, plus(m, times(m, times(m, furrow, 0.03, 3450, 3450), work, 3550, 3450), 1.0, 3650, 3450), 3750, 3300)
     # (From high up the squares are smaller than a point of the screen and their crops only speckle it: there they
     # are drawn toward the plain's own mean, to about a third of their contrast.)
-    grain = lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
+    grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
     tone = lerp(m, tone, grain, square, -80, 1700)
     # The section roads: a pale line on the squares' own grid, about a point of the screen wide at working height.
     back_u = one_in(m, unreal.MaterialExpressionOneMinus, cell_u, -550, 2920)
@@ -583,7 +602,7 @@ def build_land():
     # (From high up the quilt's pattern is let go but not its colour: "FieldsFlat" draws every field toward the mean
     # of its own manner of field, the squares' gold or the strips' own, so that the plain keeps its colour when the
     # fields are too small to be seen.)
-    tone = lerp(m, tone, lerp(m, vector(m, "QuiltMean", (1.0, 1.0, 1.0, 1.0), -400, 1850), vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), -400, 1950),
+    tone = lerp(m, tone, lerp(m, vector(m, "QuiltMean", (1.0, 1.0, 1.0, 1.0), -400, 1850), lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), -400, 1950), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), -400, 2010), cool_paint, -350, 1980),
                               times(m, square, (lie, "B"), -330, 2050), -250, 1900),
                 scalar(m, "FieldsFlat", 0.0, -250, 2000), -100, 1850)
     quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
@@ -605,6 +624,22 @@ def build_land():
     hedged = one_in(m, unreal.MaterialExpressionOneMinus,
                     times(m, times(m, hedge_line, scalar(m, "HedgeStrength", 0.0, -250, 2200), -100, 2100),
                           times(m, (cover, "R"), one_in(m, unreal.MaterialExpressionOneMinus, (cover, "G"), -250, 2350), -100, 2300), 50, 2150), 200, 2150)
+    # (The same ruling.) The ripe-wheat squares of such a country are laid in wheat's own gold and take none of its
+    # paint; from high up, where the squares' pattern is let go, they go back into the country's colour.
+    ripe = times(m, times(m, times(m, is_wheat, one_in(m, unreal.MaterialExpressionOneMinus, is_green, -1900, -100), -1800, -100), times(m, square, work, -1800, -40), -1700, -80),
+                 times(m, cool_paint, one_in(m, unreal.MaterialExpressionSaturate, times(m, (cover, "R"), 4.0, -1900, 20), -1800, 20), -1700, 0), -1600, -60)
+    c = lerp(m, c, lerp(m, (ground, "RGB"), vector(m, "CoolWheat", (0.4, 0.27, 0.075, 1.0), -1900, 100), times(m, stain, scalar(m, "CoolWheatWash", 1.0, -1900, 180), -1800, 140), -1700, 100), ripe, -1500, -200)
+    # And where there are no squares (the Patagonian steppe, the Chaco), the palest of the ground, its dry grass and
+    # bare rock on the slopes that face the light, keeps its straw: about a fifth to a quarter of the surface stays
+    # warm. (First tried by a fine noise, which left white specks that read as snow: it is the land's own light
+    # places that stay straw, in patches as broad as the slopes. The ground's picture is read as a colour, so its
+    # lightness here is the light's own measure and not the paint's: a dry plain is about a quarter. And the straw
+    # is laid a full straw yellow, so that it is never taken for snow on the Andes.)
+    lightness = times(m, (ground, "G"), plus(m, times(m, (relief, "B"), scalar(m, "CoolStrawSun", 0.9, -2000, 420), -1900, 420), 0.55, -1800, 420), -1700, 400)
+    straw = times(m, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, square, -1900, 260), -1800, 260),
+                  one_in(m, unreal.MaterialExpressionSaturate,
+                         times(m, plus(m, lightness, times(m, scalar(m, "CoolStraw", 0.2, -2000, 340), -1.0, -1900, 340), -1800, 320), scalar(m, "CoolStrawSharp", 6.0, -1900, 500), -1700, 340), -1600, 340), -1500, 300)
+    c = lerp(m, c, lerp(m, (ground, "RGB"), vector(m, "CoolStrawColour", (0.46, 0.35, 0.15, 1.0), -1700, 520), scalar(m, "CoolStrawTint", 0.85, -1700, 600), -1600, 560), straw, -1400, -150)
     c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
     c = lerp(m, c, vector(m, "SquareRoadColour", (0.552, 0.479, 0.262, 1.0), -1750, -200), road, -1550, -330)
 
@@ -730,7 +765,11 @@ def build_land():
     leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
     woods = lerp(m, leaf,
                  times(m, tint_rgb, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
-                 times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080), -1650, -950)
+                 # (round 31: the trees of a blue or violet country beyond Europe take no wash, or its creek lines read as channels of water)
+                 times(m, times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080),
+                       # (but the canopy of the tropics still takes it: a jungle country that took none, as Colombia, lost its
+                       # colour altogether, and every tile is a shade of its holder's)
+                       one_in(m, unreal.MaterialExpressionOneMinus, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, tropic, -2050, -1180), -1950, -1140), -1850, -1140), -1850, -1100), -1650, -950)
     c = lerp(m, c, woods,
              one_in(m, unreal.MaterialExpressionSaturate,
                     times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),
@@ -844,7 +883,7 @@ def build_land():
     sheet = lerp(m, vector(m, "PaperInk", (0.2, 0.135, 0.075, 1.0), -300, -1150), ground_paper, hill, 0, -1100)
     wash_p = lerp(m, scalar(m, "PaperWash", 0.5, -600, -1450), scalar(m, "FogWash", 0.18, -600, -1520), fog, -500, -1480)
     tinted = one_in(m, unreal.MaterialExpressionSaturate,
-                    plus(m, times(m, wash_p, plus(m, (relief, "A"), 1.0, -600, -1380), -450, -1420),
+                    plus(m, times(m, wash_p, plus(m, boost, 1.0, -600, -1380), -450, -1420),
                          times(m, (tint, "A"), scalar(m, "PaperBand", 0.62, -600, -1620), -450, -1620), -300, -1480), -150, -1480)
     stain_p = times(m, tint_rgb, plus(m, times(m, hill, 0.5, 0, -1380), 0.6, 100, -1380), 150, -1300)
     sheet = lerp(m, sheet, stain_p, tinted, 250, -1200)

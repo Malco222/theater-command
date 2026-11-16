@@ -316,6 +316,13 @@ FLinearColor FCampaignGround::RockColour() { return FromHex(TEXT("857D70")); }
 FLinearColor FCampaignGround::SnowColour() { return FromHex(TEXT("F2F0EA")); }
 FLinearColor FCampaignGround::SandColour() { return FromHex(TEXT("D9CBA4")); }
 
+/** A blue or a violet: the paints that cancel to grey when they are mixed into warm ground (the art director's round 31). */
+static bool IsCoolPaint(const FColor& Colour)
+{
+	const FLinearColor Hsv = FLinearColor(Colour.R / 255.0f, Colour.G / 255.0f, Colour.B / 255.0f).LinearRGBToHSV();
+	return Hsv.R >= 195.0f && Hsv.R <= 285.0f && Hsv.G >= 0.2f;
+}
+
 float FCampaignGround::WashBoost(const FColor& NationColour)
 {
 	// A nation whose colour has little colour in it (Germany's grey, the Baltic states' stone) is washed on
@@ -1104,7 +1111,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						// (the jungle's rivers are brown, with pale bars)
 						Ink = Mix(Ink, FSeen::Bytes(120, 110, 95), Jungle); // (laid cooler than it is to be seen: under the lamp it comes out at about (128, 110, 76))
 						// (a hairline has no bars: the art director's ruling of round 25)
-						Bed = FMath::Lerp(Bed, 0.4f * FMath::SmoothStep(0.2f, 0.45f, Half), Jungle);
+						// (the art director's round 31: a jungle river's sand lay along its middle like the dashes of a road; less of it)
+						Bed = FMath::Lerp(Bed, 0.16f * FMath::SmoothStep(0.2f, 0.45f, Half), Jungle);
 						// (the savanna's are dry beds of sand; a great one keeps a stream down its middle)
 						Ink = Mix(Ink, FSeen::Bytes(104, 122, 112), Savanna);
 						Bed = FMath::Lerp(Bed, FMath::Lerp(1.0f, 0.28f, Great), Savanna);
@@ -1225,11 +1233,37 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		const FVector2f Step = Flat / FMath::Max(FMath::Abs(Flat.X), FMath::Abs(Flat.Y)); // one grid point a step along the longer way
 		const float Drop = ToSun.Z / Flat.Size() * Step.Size() * static_cast<float>(Terrain.Cell); // how far the light's line falls each step
 		const int32 Steps = FMath::CeilToInt32(26.0 / (Step.Size() * Terrain.Cell));
+		const bool bFineBeyond = bBeyond && Terrain.Cell <= 3.0 && Terrain.HasElevation() && Outside.Num() == Count;
 		ParallelFor(NY, [&](int32 J)
 		{
 			for (int32 I = 0; I < NX; ++I)
 			{
 				const int32 Idx = Terrain.Index(I, J);
+				if (bFineBeyond && Outside[Idx] > 0.5f)
+				{
+					// (The art director's round 32: in West Texas the shading ran in steps about seven points long. A
+					// shadow was thrown on a whole cell or on none of it, and a fine sheet's cell is five or six points
+					// of the screen. Beyond Europe, where the heights are a smooth surface, it is thrown from nine points
+					// of each cell, and the cell takes the share of them that lie in shadow: a step is a third as long.)
+					const FVector2D Middle = Terrain.PointAt(I, J);
+					int32 Dark = 0;
+					for (int32 Sub = 0; Sub < 9; ++Sub)
+					{
+						const FVector2D From = Middle + FVector2D((Sub % 3 - 1) / 3.0, (Sub / 3 - 1) / 3.0) * Terrain.Cell;
+						const float Mine = FMath::Max(Terrain.MetresAt(From.X, From.Y), 0.0f) * Tall;
+						for (int32 K = 1; K <= Steps; ++K)
+						{
+							const FVector2D Over = From + FVector2D(Step.X, Step.Y) * (K * Terrain.Cell);
+							if (FMath::Max(Terrain.MetresAt(Over.X, Over.Y), 0.0f) * Tall - K * Drop > Mine + 0.15f)
+							{
+								++Dark;
+								break;
+							}
+						}
+					}
+					Thrown[Idx] = Dark / 9.0f;
+					continue;
+				}
 				const float Here = Metres[Idx] * Tall;
 				for (int32 K = 1; K <= Steps; ++K)
 				{
@@ -2037,6 +2071,14 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 		}
 		RegionStain[Region.Id] = FSeen::Bytes(Colour.R, Colour.G, Colour.B);
 		RegionBoost[Region.Id] = WashBoost(Colour);
+		// (The art director's round 31, "blue beside gold".) Beyond Europe, ground held under a blue or violet paint
+		// is marked for the material by a half added to its boost (see the land's material: its ripe wheat, its trees
+		// and its palest ground take no wash). Argentina's and Uruguay's wash is 1.35 times the common one, by her ruling.
+		if (Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && IsCoolPaint(Colour))
+		{
+			const bool bThick = Region.Owner == TEXT("ARG") || Region.Owner == TEXT("URU");
+			RegionBoost[Region.Id] = 1.0f + (bThick ? 0.35f : RegionBoost[Region.Id] - 1.0f) + 0.5f;
+		}
 	}
 	// (The ownership paint.) Occupied ground: the stripe's colour, for each province whose holder is not its lawful
 	// owner. And the sieges: the besieger's stain, and how far each point of the field lies from the side it comes by.

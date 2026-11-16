@@ -965,10 +965,13 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 
 FString FMiniatureMesh::MainBomberOf(const FString& Tag)
 {
+	// (Brian, 15 November 2026: "stuka dive bombers are short range". The design director's ruling 59: a bomber group
+	// is always drawn as its country's level bomber, with two engines or four. The dive bomber and the ground-attack
+	// machine never stand in for one: a country with no level bomber among the models flies a plain twin-engined
+	// machine in its own paint until its own is sculpted.)
 	const int32 Reached = YearOf(Tag, 2);
 	if (Tag == TEXT("USA")) return TEXT("B17");
-	if (Tag == TEXT("GER")) return Reached >= 1941 ? TEXT("He111") : TEXT("Stuka");
-	if (Tag == TEXT("SOV")) return Reached >= 1942 ? TEXT("Sturmovik") : TEXT("Bomber:SOV");
+	if (Tag == TEXT("GER")) return TEXT("He111");
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1942 ? TEXT("Lancaster") : TEXT("Bomber:UK");
 	return TEXT("Bomber:") + Tag;
 }

@@ -30134,11 +30134,18 @@ ${standing3}`,
       const stops = raidTargetsFor(s, k, -1);
       const here = stops.find((t) => t.id === target);
       const lead2 = p.seats.find((x) => x.picked && x.kind !== "ftr") ?? p.seats.find((x) => x.picked);
-      return {
+      const titled = (t, fallback) => {
+        const name = t?.name ?? fallback;
+        if (kind !== "fleet") return { title: name, who: "" };
+        const sea2 = (s.seas[t?.zone ?? -1]?.name ?? "").replace(/^the /i, "");
+        const cut = name.indexOf(" in the ");
+        return { title: sea2 || name, who: cut > 0 ? name.slice(0, cut) : name };
+      };
+      const card = {
         kind,
         kindLabel: raidMenu(s).find((x) => x.key === kind)?.label ?? "",
         why: p.why ?? "",
-        target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? "", sort: raidSort(s, kind, target), act: "", now: true, picture: picture(target, here?.holder ?? "") },
+        target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? "", sort: raidSort(s, kind, target), act: "", now: true, picture: picture(target, here?.holder ?? ""), ...titled(here, p.place) },
         // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
         what: here?.what ?? "",
         effect: p.why ? "" : ((t) => {
@@ -30177,7 +30184,7 @@ ${standing3}`,
         strip: stops.slice(0, 10).map((t) => {
           let q = previewRaid(s, k, t.id, p.picked);
           if (q.why || !q.picked.length) q = previewRaid(s, k, t.id);
-          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder) };
+          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
         }),
         seats: p.seats.map((x) => ({
           id: x.id,
@@ -30210,6 +30217,8 @@ ${standing3}`,
         ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"),
         fly: { label: "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." }
       };
+      if (card.hits.length === 1 && card.effect.includes(` ${card.hits[0].n.replace(/[^0-9.]/g, "")}`)) card.effect = "";
+      return card;
     } catch {
       return null;
     }
