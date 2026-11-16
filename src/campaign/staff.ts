@@ -30,7 +30,7 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, overseasOf } from './world';
+import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
 import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -74,7 +74,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1092,7 +1092,10 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const quay = seaBase(g, nat, slot);
     if (!quay) continue;
     const sea = seaFoe(g, nat, slot)!;
-    const want = sea.second && lodgment(g, nat, slot)?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : sea.L.force;
+    const lod = sea.second ? lodgment(g, nat, slot) : null;
+    // (With its men ashore on its own side of the ocean and not short, a staff keeps nobody more at that quay.)
+    if (!slot && lod && !lod.short && neighbourAcrossTheWater(g, nat, sea.foe)) continue;
+    const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : sea.L.force;
     phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
   }
   // A force kept ready for a stroke still to come.
@@ -1162,7 +1165,11 @@ export function lodgment(g: Game, nat: string, slot = 0): { at: Region; ports: R
     }
   }
   if (!front) return null;
-  return { at, ports: q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl)), short: mine < Math.max(D.hold ?? 15, (D.feed ?? 2) * foes) };
+  // (A force put ashore for an enemy on the staff's own side of the ocean is the force its forecast asks for and no
+  // more: it is short only against the enemy army next to its ground, never against the fifteen divisions a
+  // lodgment across the water is built up to. Version 81, ruling 80.)
+  const hold = keepsDoor(g, nat) && beyondEurope(at.id) ? 0 : D.hold ?? 15;
+  return { at, ports: q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl)), short: mine < Math.max(hold, (D.feed ?? 2) * foes) };
 }
 
 /** The seas a nation's troopships can reach from a quay within a landing's range, over seas not closed to them: the seas crossed to each, -1 where they cannot go. */
@@ -1239,7 +1246,7 @@ const entered = (g: Game, id: string): boolean => g.regions.some((r) => r.owner 
  */
 export function opensOn(g: Game, nat: string, r: Region): boolean {
   const P = planned(g, nat);
-  if (!P || r.overseas) return true;
+  if (!P || r.overseas || ownShore(g, nat, r)) return true;
   if (!P.open.includes(r.owner) || P.not?.includes(r.name)) return false;
   const from = P.from?.[r.owner];
   if (from === undefined || !dated(g) || !r.nb.length || g.turn >= from) return true;
@@ -1254,7 +1261,7 @@ export function opensOn(g: Game, nat: string, r: Region): boolean {
  */
 export function builtUp(g: Game, nat: string, r: Region): boolean {
   const need = planned(g, nat)?.with;
-  return !need || !!r.overseas || !r.nb.length || armyAcross(g, nat) >= need;
+  return !need || !!r.overseas || !r.nb.length || ownShore(g, nat, r) || armyAcross(g, nat) >= need;
 }
 /** The field corps a nation has across its ocean. */
 function armyAcross(g: Game, nat: string): number {
@@ -1284,6 +1291,23 @@ function awaiting(g: Game, nat: string, P: Planned): boolean {
 /** True for ground on a nation's own side of the ocean: beyond the old chart for a country whose capital is, on it for the others. */
 const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap = g.nations[nat].capital; return cap < 0 || beyondEurope(cap) === beyondEurope(reg); };
 /**
+ * True for ground on a staff's own side of the ocean, where its capital stands beyond the old chart (Version 81, the
+ * design director's rulings 75 and 76). History's list of shores was written for the far side of the water: on its
+ * own side a staff has no list and no build-up figure, and goes where it judges best.
+ */
+export const ownShore = (g: Game, nat: string, r: Region): boolean => keepsDoor(g, nat) && beyondEurope(r.id);
+/** True for a staff the rule is written for (open.json, 'descent.door'): its capital stands beyond the old chart. */
+export const keepsDoor = (g: Game, nat: string): boolean => { const cap = g.nations[nat]?.capital ?? -1; return cap >= 0 && beyondEurope(cap) && (OPEN.descent?.door?.includes(nat) ?? false); };
+/**
+ * True for an enemy whose home is on a staff's own side of the ocean (Version 81): its own capital stands beyond the
+ * old chart, and so does his. He is the staff's first business: it does not wait a quiet year to cross to him.
+ */
+export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolean => {
+  const his = g.nations[e]?.capital ?? -1;
+  // (A neighbour by the map is met by land, as he was: Mexico is no business for the ships. Ruling 76b.)
+  return his >= 0 && beyondEurope(his) && keepsDoor(g, nat) && !neighbourByLand(g, nat, e);
+};
+/**
  * True where a staff sends its corps by ship to a front its side already holds (see `planned`); `by` names the ally
  * whose landing the harbour is, where it is one. A staff that waits behind its allies (Version 79, ruling 60:
  * Canada, the island's guard) goes on from its base not before 'joinFrom', and only behind one of the allies named
@@ -1292,7 +1316,7 @@ const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap =
  */
 export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
   const P = planned(g, nat);
-  if (!P || r.overseas) return true;
+  if (!P || r.overseas || ownShore(g, nat, r)) return true;
   if (P.join && !P.join.includes(r.owner)) return false;
   if (!P.behind || !dated(g) || based(P, r)) return true;
   const B = P.behind;
@@ -1342,7 +1366,8 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
   for (const e of [...n.atWar].sort()) {
     const x = g.nations[e];
     if (!x?.alive || x.capital < 0) continue;
-    const q = e === claim ? 999 : quietWith(g, nat, e);
+    // (Nor does a staff beyond the old chart wait a year for an enemy on its own side of the ocean: he is its first business. Version 81.)
+    const q = e === claim ? 999 : neighbourAcrossTheWater(g, nat, e) ? 500 + quietWith(g, nat, e) : quietWith(g, nat, e);
     if (q > bq && !inTouch(g, nat, e, home.on) && inReach(e)) { bq = q; best = e; }
   }
   if (!best) { delete g.flags[key]; return null; }
@@ -1463,6 +1488,21 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   g.flags[key] = best.id + 1;
   g.flags[at] = g.turn;
   return best;
+}
+
+/**
+ * The quay where a staff beyond the old chart keeps the force for its first business (Version 81, rulings 75 and
+ * 76): an enemy whose home is on its own side of the ocean and whom its home army cannot reach by land. The force
+ * is brought there by rail and is not shipped across the ocean while he stands. Null where it has no such enemy
+ * within a landing's range of its harbours, and for the player's country.
+ */
+export function doorQuay(g: Game, nat: string): Region | null {
+  const sea = seaFoe(g, nat);
+  if (!sea?.second || !neighbourAcrossTheWater(g, nat, sea.foe)) return null;
+  // (The force its forecast asks for and no more: once its men are ashore and not short, the quay is an ordinary
+  // harbour again and the rest of the army goes about history's business across the ocean. Ruling 80.)
+  const lod = lodgment(g, nat);
+  return lod && !lod.short ? null : seaBase(g, nat);
 }
 
 /**
