@@ -134,6 +134,7 @@ struct FArmyTray
 	FText FoldButton, FoldTip; // (Version 64) two corps of the army are worn thin and could be folded into one. Empty when there are none
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
+	FText HintLead; // (ruling 87) and what is said before it, in brass: "No moves left this month."
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
@@ -244,6 +245,12 @@ struct FTownPlate
 	bool bPlus = false;
 	int32 Months = 0;
 	int32 Stage = 0; // 0 the whole badge, 1 without the count and the plus, 2 the sign alone
+	// (Ruling 86.) Not a town: a sea gate's mark. Its holder's flag and a lamp, green or red; with Stage 0 its name
+	// too, and with Stage 2 the lamp alone.
+	bool bGate = false;
+	bool bGateOpen = true;
+	int32 Gate = INDEX_NONE;
+	FString Flag;
 };
 
 /** The bar of a town's building plots, shown when one of the player's provinces is picked and nothing is in hand. */
@@ -527,10 +534,32 @@ public:
 	void PressToDo(int32 Index);
 	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
 	FText GetHoverTip() const { return HoverTip; }
+	/**
+	 * (Rulings 86 and 87.) What the box says under that, where some of it is marked in a colour of its own: "<Brass>No
+	 * moves left this month.</>" and "<Red>Shut to your ships:</>". The marks are the box's own; nothing else is read as one.
+	 */
+	FText GetHoverTipMarked() const { return HoverTipMarked; }
+	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
+	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
+	/** A line made safe to stand inside marked text. */
+	static FString PlainInMarked(const FString& Text) { return Text.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")); }
+	/**
+	 * (Ruling 87.) The slip on the top edge of the army's card: shown whenever an army with no moves left is in hand,
+	 * until GOT IT is pressed or one march has been kept for such an army. After that, never.
+	 */
+	bool IsMarchSlipShown() const;
+	void DismissMarchSlip();
+	bool IsHandSpent() const { return bHandSpent; }
+	/** For the photographer: the question at the month's end, as it would be asked now. */
+	void ShowEndAsk();
 	/** Where the pointer is, in the window's own pixels. */
-	FVector2D GetPointer() const { return StagedHover != INDEX_NONE ? StagedPointer : LastMouse; }
+	FVector2D GetPointer() const { return (StagedHover != INDEX_NONE || StagedGate != INDEX_NONE) ? StagedPointer : LastMouse; }
 	// For the photographer, who has no mouse: the tip as it would read with the pointer resting on this region.
 	void StageHover(int32 RegionId) { StagedHover = RegionId; }
+	/** (Ruling 86.) For the photographer: the pointer resting on the mark of the gate whose name begins so. */
+	void StageGate(const FString& NameBegins);
+	/** (Ruling 86.) Where the gates' marks were last drawn, in the window's own pixels: told by the screen as it paints them. */
+	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks) { GateMarks = Marks; }
 	/** Shows the model of one of the corps in hand large and turning beside the cards. */
 	void ShowCorpsModel(int32 CorpsId);
 	FText GetShowTitle() const { return ShowTitle; }
@@ -596,8 +625,35 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
-	/** How many of the player's armies can still move this month: the reminder beside the button that ends it. */
+	/** How many of the player's armies still wait for an order this month: the count on the NEXT ARMY button. */
 	int32 ArmiesYetToMove() const;
+	/**
+	 * (Ruling 101.) How many armies at the front have not been touched this month and have no order: the count on
+	 * NEXT ARMY, and what keeps it bright and END THE MONTH dark. The rest that can still move (ArmiesYetToMove less
+	 * this) are the quieter number: Tab still goes to them after the front, and they never hold the month.
+	 */
+	int32 ArmiesIdleAtFront() const;
+	/**
+	 * (Ruling 88.) The provinces where an army of the player's still waits for an order this month, in the order the
+	 * round takes them: untouched first, the front before the rear, then the nearest. Left out: armies on a kept
+	 * march, digging in, told to stand this month, garrisons and forts. With bIdleAtFront, only the armies at the
+	 * front that have not been touched at all: the ones the question at the month's end is about.
+	 */
+	TArray<int32> ArmiesWaiting(bool bIdleAtFront = false) const;
+	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
+	void StandThisMonth();
+	bool IsStandingThisMonth() const;
+	/** The question at the month's end, put once a month when armies at the front have had no orders. */
+	struct FEndAsk
+	{
+		bool bVisible = false;
+		int32 Count = 0;
+		double Since = 0.0; // (it takes no key for its first half second)
+	};
+	const FEndAsk& GetEndAsk() const { return EndAsk; }
+	void AnswerEndAsk(bool bShowMe);
+	bool IsEndAskWanted() const { return bAskAtMonthsEnd; }
+	void ToggleEndAskWanted();
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
 	/** The reserve of men as a sum, and the player's say over the call-up (version 62). */
@@ -791,6 +847,13 @@ private:
 	void KeepView(int32 Slot);
 	void GoToKeptView(int32 Slot);
 	TMap<int32, int32> FarMonths; // and friendly ground beyond this month's reach: about how many months the march there would take
+	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
+	bool bHandSpent = false;
+	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
+	FMarchPlan KeptPlan; // the rules' plan for a march to the place last asked about
+	int32 KeptPlanRegion = -2;
+	const FMarchPlan& PlanFor(int32 RegionId);
+	FText HoverTipMarked;
 	TArray<int32> StandingRoad; // and the road still ahead of it, if it is on a standing march
 	int32 RouteTarget = INDEX_NONE;
 	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there
@@ -834,6 +897,12 @@ private:
 	bool bWatching = false;
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
 	bool bRewatching = false; // the month is being watched again from its card
+	TSet<int32> StandingCorps; // (ruling 88) the corps told to stand this month, and the month that was
+	int32 StandingTurn = -1;
+	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
+	FEndAsk EndAsk;
+	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month
+	bool bAskAtMonthsEnd = true; // (kept with the options)
 	FMonthResult Month;
 	int32 WatchIndex = 0;
 	double WatchNext = 0.0;
@@ -935,6 +1004,12 @@ private:
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
 	int32 HoverTipField = INDEX_NONE;
 	int32 StagedHover = INDEX_NONE;
+	// (Ruling 86.) The gates' marks as last drawn; the gate under the pointer, and what its box says.
+	TArray<TPair<int32, FBox2D>> GateMarks;
+	int32 StagedGate = INDEX_NONE;
+	int32 HoverGate = INDEX_NONE;
+	FText GateTip, GateTipMarked;
+	int32 GateUnder(const FVector2D& Pointer) const;
 	FVector2D StagedPointer = FVector2D::ZeroVector;
 	int32 HoverTipHand = INDEX_NONE; // what was in hand, and how it was to travel, when the tip was written
 	int32 HoverTipRegion = INDEX_NONE;

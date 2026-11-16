@@ -233,6 +233,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
+	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
 	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
@@ -287,6 +288,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("moments"))
 	{
 		bMoments = !bMoments;
+	}
+	else if (Id == TEXT("askend"))
+	{
+		bAskAtMonthsEnd = !bAskAtMonthsEnd;
 	}
 	else if (Id == TEXT("adviser"))
 	{
@@ -388,8 +393,8 @@ void ACampaignPlayerController::SaveOptions() const
 		bLampSaved = Room && Room->IsLamplight();
 	}
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments));
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone));
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -431,6 +436,8 @@ void ACampaignPlayerController::LoadOptions()
 	bBriefings = Yes(TEXT("briefing"), true);
 	bHelpSeen = Yes(TEXT("helped"), false);
 	bMoments = Yes(TEXT("moments"), true);
+	bAskAtMonthsEnd = Yes(TEXT("askEnd"), true);
+	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -712,7 +719,7 @@ void ACampaignPlayerController::EnterCampaign()
 		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted;
 	}
 	Notify(Nation
-		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *Nation->Name, View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
+		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *WithThe(Nation->Name), View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
 		: FString::Printf(TEXT("%s. End the month to watch the war."), *View.Date), 7.0);
 	// A campaign just begun opens with a flight over the situation, a moment after the table is laid.
 	BriefingAt = bFreshCampaign && Nation && bBriefings && !bScripted ? FPlatformTime::Seconds() + 1.4 : 0.0;
@@ -1066,6 +1073,15 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 			const FVector2D At = Map->FleetPlace(Number);
 			if (Eye)
 			{
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.4f, 0.6f), false);
+			}
+		}
+		else if (Parts.Num() >= 3 && Parts[1] == TEXT("sea") && Map.IsValid())
+		{
+			// (the month's card: news from the sea has its place on the chart)
+			if (Eye && Map->GetData().Seas.IsValidIndex(Number))
+			{
+				const FVector2D At = Map->GetData().Seas[Number].Center;
 				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.4f, 0.6f), false);
 			}
 		}
@@ -1775,6 +1791,31 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Out.Add(Pair.Value);
 		}
 	}
+	// (Ruling 86; the art director's brief.) The sea gates: the Panama Canal and the three straits. One mark each,
+	// on the water at its narrowest: the holder's flag and a lamp, green where the player's ships may pass and red
+	// where they may not. Close up, where names show, it has its name; from far up it is the lamp alone. They are
+	// handed over last, so that they step clear of everything else.
+	{
+		const int32 GateStage = Distance <= 5500.0f ? 0 : Distance <= 12500.0f ? 1 : 2;
+		for (const FViewGate& Gate : View.Gates)
+		{
+			FVector2D Screen;
+			if (!ProjectWorldLocationToScreen(Map->MapToWorld(Gate.At.X, Gate.At.Y, 0.0), Screen, false)
+				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
+			{
+				continue;
+			}
+			FTownPlate& Mark = Out.AddDefaulted_GetRef();
+			Mark.At = Screen;
+			Mark.Name = Gate.Name;
+			Mark.bGate = true;
+			Mark.bGateOpen = Gate.bOpen;
+			Mark.Gate = Gate.Id;
+			Mark.Flag = Gate.Holder;
+			Mark.Stage = GateStage;
+			Mark.Rank = -2;
+		}
+	}
 	// A crowded province shows one flag: beside it, a small count of the armies put away behind it. (Point at the
 	// province and they fan out.) At any height, since the armies it stands for are hidden at any height.
 	{
@@ -1794,6 +1835,33 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 				Count.Name = FString::Printf(TEXT("+%d"), Crowd.Value);
 				Count.bCrowd = true;
 				Count.Rank = 900;
+			}
+		}
+	}
+}
+
+int32 ACampaignPlayerController::GateUnder(const FVector2D& Pointer) const
+{
+	for (const TPair<int32, FBox2D>& Mark : GateMarks)
+	{
+		if (Mark.Value.ExpandBy(3.0).IsInside(Pointer))
+		{
+			return Mark.Key;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void ACampaignPlayerController::StageGate(const FString& NameBegins)
+{
+	StagedGate = INDEX_NONE;
+	if (const FCampaignSession* Session = GetSession())
+	{
+		for (const FViewGate& Gate : Session->GetView().Gates)
+		{
+			if (!NameBegins.IsEmpty() && Gate.Name.StartsWith(NameBegins))
+			{
+				StagedGate = Gate.Id;
 			}
 		}
 	}
@@ -2157,6 +2225,8 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("MOVING AND ATTACKING"),
 		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. A dashed red line marks how deep the enemy you can see could strike next month. ")
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
+		TEXT("NEXT ARMY (Tab), under END THE MONTH, goes round every army that still waits for an order, so that none is missed; STAND THIS MONTH on an army's card tells it to wait where it is. ")
+		TEXT("Right-click friendly ground too far for this month and the army marches there by itself over the months, halting if the enemy comes near. An army with no moves left can be sent on the same way: it sets off as the next month opens.\n")
 		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port.\n")
 		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is dug in behind its fieldworks (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
 		TEXT("a lorry and crates while supply reaches it, and a red barred board when it is cut off. The dotted line to where an army would go has a ring for each province on the way, and ends in red where there would be a battle."));
@@ -2350,22 +2420,181 @@ void ACampaignPlayerController::GoToKeptView(int32 Slot)
 
 int32 ACampaignPlayerController::ArmiesYetToMove() const
 {
+	return ArmiesWaiting().Num();
+}
+
+int32 ACampaignPlayerController::ArmiesIdleAtFront() const
+{
+	return ArmiesWaiting(true).Num();
+}
+
+TArray<int32> ACampaignPlayerController::ArmiesWaiting(bool bIdleAtFront) const
+{
+	TArray<int32> Places;
 	const FCampaignSession* Session = GetSession();
-	if (!Session || bWatching || Opening.bVisible || !Session->GetView().bHumanUp)
+	if (!Session || !Map.IsValid() || bWatching || Opening.bVisible || !Session->GetView().bHumanUp)
 	{
-		return 0;
+		return Places;
 	}
 	const FCampaignView& View = Session->GetView();
-	TSet<int32> Places;
+	const FCampaignMapData& Data = Map->GetData();
+	struct FPlace
+	{
+		bool bUntouched = true;
+		bool bFront = false;
+		double Far = 0.0;
+	};
+	TMap<int32, FPlace> Found;
 	for (const FViewCorps& Unit : View.Corps)
 	{
-		// (an army on a standing march has its orders: it is not waiting for any)
-		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.Kind != TEXT("fort") && Unit.MarchTo == INDEX_NONE)
+		// (an army on a kept march has its orders, a garrison and a fort have their place, an army digging in or told
+		// to stand this month has been seen to)
+		if (Unit.Nation != View.Human || !Unit.bCanOrder || Unit.Moves <= 0 || Unit.Kind == TEXT("fort") || Unit.bInTown || Unit.MarchTo != INDEX_NONE
+			|| (!View.bAutoDig && Unit.Posture == TEXT("dig")) || (StandingTurn == View.Turn && StandingCorps.Contains(Unit.Id)) || !Data.Regions.IsValidIndex(Unit.Region))
 		{
-			Places.Add(Unit.Region);
+			continue;
+		}
+		Found.FindOrAdd(Unit.Region).bUntouched &= Unit.Moves >= Unit.MovesMax;
+	}
+	// Where the round is measured from: the army in hand, or else what the eye is on.
+	FVector2D From = FVector2D::ZeroVector;
+	if (Data.Regions.IsValidIndex(ArmyRegion))
+	{
+		From = Data.Regions[ArmyRegion].Center;
+	}
+	else if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		From = Map->WorldToMap(Eye->GetFocus());
+	}
+	for (TPair<int32, FPlace>& Each : Found)
+	{
+		for (const int32 Near : Data.Regions[Each.Key].Neighbors)
+		{
+			Each.Value.bFront |= View.RegionStanding.IsValidIndex(Near) && View.RegionStanding[Near] == TEXT("enemy");
+		}
+		Each.Value.Far = FVector2D::Distance(Data.Regions[Each.Key].Center, From);
+		if (!bIdleAtFront || (Each.Value.bFront && Each.Value.bUntouched))
+		{
+			Places.Add(Each.Key);
 		}
 	}
-	return Places.Num();
+	Places.Sort([&Found](int32 A, int32 B)
+	{
+		const FPlace& One = Found[A];
+		const FPlace& Other = Found[B];
+		// (Ruling 101.) The front first, then the rear; in each, those not yet touched before the others, then the nearest.
+		if (One.bFront != Other.bFront)
+		{
+			return One.bFront;
+		}
+		if (One.bUntouched != Other.bUntouched)
+		{
+			return One.bUntouched;
+		}
+		return One.Far != Other.Far ? One.Far < Other.Far : A < B;
+	});
+	return Places;
+}
+
+void ACampaignPlayerController::StandThisMonth()
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0)
+	{
+		return;
+	}
+	const bool bWas = IsStandingThisMonth();
+	if (StandingTurn != Session->GetView().Turn)
+	{
+		StandingCorps.Reset();
+		StandingTurn = Session->GetView().Turn;
+	}
+	for (const int32 Id : PickedCorps)
+	{
+		if (bWas)
+		{
+			StandingCorps.Remove(Id);
+		}
+		else
+		{
+			StandingCorps.Add(Id);
+		}
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	Notify(bWas ? TEXT("The order to stand is taken back: this army waits for orders again.") : TEXT("This army stands where it is this month. NEXT ARMY passes it by until the next."), 5.0);
+}
+
+bool ACampaignPlayerController::IsStandingThisMonth() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || StandingTurn != Session->GetView().Turn || PickedCorps.Num() == 0)
+	{
+		return false;
+	}
+	for (const int32 Id : PickedCorps)
+	{
+		if (!StandingCorps.Contains(Id))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void ACampaignPlayerController::AnswerEndAsk(bool bShowMe)
+{
+	if (!EndAsk.bVisible)
+	{
+		return;
+	}
+	EndAsk.bVisible = false;
+	if (bShowMe)
+	{
+		NextArmy();
+	}
+	else
+	{
+		EndMonth();
+	}
+}
+
+void ACampaignPlayerController::ToggleEndAskWanted()
+{
+	bAskAtMonthsEnd = !bAskAtMonthsEnd;
+	SaveOptions();
+}
+
+void ACampaignPlayerController::ShowEndAsk()
+{
+	EndAsk.bVisible = true;
+	EndAsk.Count = FMath::Max(ArmiesWaiting(true).Num(), 1);
+	EndAsk.Since = FPlatformTime::Seconds();
+}
+
+bool ACampaignPlayerController::IsMarchSlipShown() const
+{
+	return bHandSpent && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
+}
+
+void ACampaignPlayerController::DismissMarchSlip()
+{
+	if (!bMarchSlipDone)
+	{
+		bMarchSlipDone = true;
+		SaveOptions();
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	}
+}
+
+const FMarchPlan& ACampaignPlayerController::PlanFor(int32 RegionId)
+{
+	if (RegionId != KeptPlanRegion)
+	{
+		KeptPlanRegion = RegionId;
+		FCampaignSession* Session = GetSession();
+		KeptPlan = (Session && RegionId != INDEX_NONE && ArmyRegion != INDEX_NONE && RegionId != ArmyRegion) ? Session->PlanMarch(PickedCorps, RegionId) : FMarchPlan();
+	}
+	return KeptPlan;
 }
 
 void ACampaignPlayerController::OpenForces()
@@ -3074,31 +3303,45 @@ void ACampaignPlayerController::NextArmy()
 	{
 		return;
 	}
-	// The provinces where the player has corps that can still move, in order; the one after the army in hand.
-	const FCampaignView& View = Session->GetView();
-	TArray<int32> Places;
-	for (const FViewCorps& Unit : View.Corps)
+	// (the question at the month's end: this key is its SHOW ME, once it has been up for half a second)
+	if (EndAsk.bVisible)
 	{
-		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.MarchTo == INDEX_NONE)
+		if (FPlatformTime::Seconds() - EndAsk.Since < 0.5)
 		{
-			Places.AddUnique(Unit.Region);
+			return;
 		}
+		EndAsk.bVisible = false;
 	}
+	// (Ruling 88.) The round: untouched armies first, the front before the rear, the nearest first; each is shown once
+	// before any is shown again.
+	const TArray<int32> Places = ArmiesWaiting();
 	if (Places.Num() == 0)
 	{
-		Notify(TEXT("Every army has used its month. Press Enter to end it."), 4.0);
+		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
-	Places.Sort();
-	int32 Next = Places[0];
-	for (int32 Place : Places)
+	RoundSeen.RemoveAll([&Places](int32 Each) { return !Places.Contains(Each); });
+	int32 Next = INDEX_NONE;
+	for (int32 Pass = 0; Pass < 2 && Next == INDEX_NONE; ++Pass)
 	{
-		if (Place > ArmyRegion)
+		for (const int32 Place : Places)
 		{
-			Next = Place;
-			break;
+			if (Place != ArmyRegion && !RoundSeen.Contains(Place))
+			{
+				Next = Place;
+				break;
+			}
+		}
+		if (Next == INDEX_NONE)
+		{
+			RoundSeen.Reset(); // (all have been shown: the round begins again)
 		}
 	}
+	if (Next == INDEX_NONE)
+	{
+		Next = Places[0]; // (the one army left is the one in hand)
+	}
+	RoundSeen.Add(Next);
 	SelectRegion(Next);
 	PickUpArmyIn(Next);
 	CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
@@ -3132,6 +3375,10 @@ void ACampaignPlayerController::Escape()
 	else if (Opening.bVisible)
 	{
 		CloseMenu();
+	}
+	else if (EndAsk.bVisible)
+	{
+		EndAsk.bVisible = false; // (the question at the month's end is put away: nothing is ended)
 	}
 	else if (bWatching)
 	{
@@ -3713,6 +3960,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		HoverTipField = TipField;
 		HoverTipHand = TipHand;
 		HoverTip = FText::GetEmpty();
+		HoverTipMarked = FText::GetEmpty();
 		FCampaignSession* Session = GetSession();
 		if (Session && Map->GetData().Regions.IsValidIndex(TipRegion))
 		{
@@ -3806,6 +4054,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\nServes %s aircraft: %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *FText::AsNumber(Field->Holds).ToString(), *Stands);
 			}
 			// With an army in hand: what a right-click here would do, and what it would cost.
+			FString TipMarked;
 			if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
 				if (const FReachRegion* There = FindReach(TipRegion))
@@ -3861,6 +4110,20 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				else if (bHandSpent && !bByRail && !bBySea)
+				{
+					// (Ruling 87.) An army with no moves left. On friendly ground a right-click is kept, and it sets off
+					// as the next month opens; anywhere else the rules say why not. The words are the rules' own.
+					const FMarchPlan& KeptWay = PlanFor(TipRegion);
+					if (KeptWay.bOk)
+					{
+						TipMarked = TEXT("<Brass>No moves left this month.</>\nRight-click: ") + PlainInMarked(KeptWay.Line);
+					}
+					else
+					{
+						TipMarked = FString::Printf(TEXT("<Red>%s</>"), *PlainInMarked(KeptWay.Line.IsEmpty() ? FString(TEXT("No moves left this month.")) : KeptWay.Line));
+					}
+				}
 				else if (const int32* Months = (!bByRail && !bBySea) ? FarMonths.Find(TipRegion) : nullptr)
 				{
 					Line += FString::Printf(TEXT("\nOut of reach this month. Right-click: march here over about %s. The army goes on by itself as each month opens, and halts if the enemy comes near."),
@@ -3888,6 +4151,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 			}
 			HoverTip = FText::FromString(Line);
+			HoverTipMarked = FText::FromString(TipMarked);
 		}
 	}
 	// With a fleet in hand, the sea under the pointer is marked, and what a right-click would do is said.
@@ -3943,14 +4207,58 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						Known += FString::Printf(TEXT(" Torpedo risk to a heavy ship: %d%%."), FMath::RoundToInt32(There->Torpedo * 100.0f));
 					}
 				}
+				// (Ruling 86.) A sea it would reach but for a gate shut to it: the gate is named, with its reason.
+				const int32* BarredBy = Held->Reach.Contains(Sea) ? nullptr : Held->Barred.Find(Sea);
+				const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
+				HoverTipMarked = Bar ? FText::FromString(FString::Printf(TEXT("<Red>%s</>"), *PlainInMarked(Bar->Shut))) : FText::GetEmpty();
 				HoverTip = FText::FromString(Held->Reach.Contains(Sea)
 					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s."), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"))
+					: Bar ? Name
 					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
 			}
 			else if (TipRegion == INDEX_NONE)
 			{
 				HoverTip = FText::GetEmpty();
 			}
+		}
+	}
+
+	// (Ruling 86.) The pointer on a gate's mark: who holds it, and whether the player's ships may pass, in the
+	// words of that gate's own rule. Its box takes the place of whatever lies under the mark.
+	{
+		const int32 OnGate = StagedGate != INDEX_NONE ? StagedGate : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : GateUnder(Mouse);
+		const FCampaignSession* Told = GetSession();
+		const FViewGate* Shown = (Told && OnGate != INDEX_NONE) ? Told->GetView().Gates.FindByPredicate([OnGate](const FViewGate& Each) { return Each.Id == OnGate; }) : nullptr;
+		if (Shown)
+		{
+			if (HoverGate != OnGate)
+			{
+				GateTip = FText::FromString(Shown->Name);
+				GateTipMarked = FText::FromString(PlainInMarked(Shown->Lead)
+					+ (Shown->Mark.IsEmpty() ? FString() : FString::Printf(TEXT("<%s>%s</>"), Shown->bOpen ? TEXT("Brass") : TEXT("Red"), *PlainInMarked(Shown->Mark)))
+					+ PlainInMarked(Shown->Rest));
+			}
+			HoverGate = OnGate;
+			HoverTip = GateTip;
+			HoverTipMarked = GateTipMarked;
+			if (StagedGate != INDEX_NONE)
+			{
+				for (const TPair<int32, FBox2D>& Mark : GateMarks)
+				{
+					if (Mark.Key == StagedGate)
+					{
+						StagedPointer = Mark.Value.GetCenter();
+					}
+				}
+			}
+		}
+		else if (HoverGate != INDEX_NONE)
+		{
+			HoverGate = INDEX_NONE;
+			HoverTip = FText::GetEmpty();
+			HoverTipMarked = FText::GetEmpty();
+			HoverTipRegion = -2; // (and whatever lies under the pointer says its own piece again)
+			FleetHoverSea = -2;
 		}
 	}
 
@@ -4399,7 +4707,10 @@ void ACampaignPlayerController::OrderFleetTo(int32 Zone)
 	if (!Fleet->Reach.Contains(Zone))
 	{
 		CampaignSounds::Play(this, TEXT("click"), 0.5f);
-		Notify(FString::Printf(TEXT("%s cannot reach the %s this month."), *Name, *Sea), 5.0);
+		// (Ruling 86.) A route refused because a gate is shut says so.
+		const int32* BarredBy = Fleet->Barred.Find(Zone);
+		const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
+		Notify(Bar && !Bar->Shut.IsEmpty() ? Bar->Shut : FString::Printf(TEXT("%s cannot reach the %s this month."), *Name, *Sea), Bar ? 8.0 : 5.0);
 		return;
 	}
 	FString Note;
@@ -4718,12 +5029,20 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		: bByRail
 		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
 		: TEXT("Right-click where they should go, or drag the flag there. Esc puts them down."));
+	Tray.HintLead = FText::GetEmpty();
+	if (bHandSpent && !bBySea && !bByRail)
+	{
+		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens.
+		Tray.HintLead = FText::FromString(TEXT("No moves left this month."));
+		Tray.Hint = FText::FromString(TEXT("Right-click a friendly place and they march there from next month."));
+	}
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
 	{
 		const FString Name = Map->GetData().Regions[RegionId].Name;
 		Tray.PendingButton = FText::FromString(FString::Printf(TEXT("%s %s"),
 			bBySea ? (Target->bAttack ? TEXT("LAND AT") : TEXT("BY SEA TO")) : bByRail ? TEXT("BY RAIL TO") : Target->IsWar() ? TEXT("INVADE") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
+		Tray.HintLead = FText::GetEmpty();
 		Tray.Hint = FText::FromString(FString::Printf(TEXT("Click %s again, or press the button above, to %s. Click anywhere else to think again."),
 			*Name, Target->IsWar() ? TEXT("be asked whether you mean war") : Target->bAttack ? TEXT("draw up the attack") : TEXT("send them")));
 	}
@@ -4770,13 +5089,19 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 		Piece->ReturnToRest();
 		OrderTo(RegionId);
 	}
+	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE && bOnTable && !bByRail && !bBySea && FarMonths.Contains(RegionId))
+	{
+		// (Ruling 87.) Set down on friendly ground out of this month's reach: the march is kept, as a right-click keeps it.
+		Piece->ReturnToRest();
+		OrderTo(RegionId);
+	}
 	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE)
 	{
 		// Set down on a country at peace with the player: does he mean war?
 		Piece->ReturnToRest();
 		if (!OfferWar(RegionId))
 		{
-			Notify(TEXT("They cannot get there this month. Lightened ground is where they can go."));
+			Notify(bHandSpent ? TEXT("No moves left this month. Friendly ground is where a march can be kept for next month.") : TEXT("They cannot get there this month. Lightened ground is where they can go."));
 		}
 	}
 	// Whatever is left of the army where it started goes back to its place.
@@ -5113,6 +5438,8 @@ void ACampaignPlayerController::RefreshOrders()
 
 	TArray<int32> Danger, Road;
 	TMap<int32, int32> Far;
+	bHandSpent = false;
+	KeptPlanRegion = -2; // (whatever was planned was planned for another hand)
 	if (bBySea)
 	{
 		TArray<int32> Ports, Beaches;
@@ -5145,7 +5472,7 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road);
+		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent);
 	}
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
@@ -5187,13 +5514,28 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 			break;
 		}
 	}
+	bool bKeptRoad = false;
 	if (Road.Num() == 0 && !bBySea)
 	{
-		Road = StandingRoad; // (nothing in reach is pointed at: the road of its standing march, if it has one)
+		// (Ruling 87.) Friendly ground out of this month's reach, and any friendly ground for an army with no moves
+		// left: the road the kept march would take, from the flag to the place.
+		if (RegionId != INDEX_NONE && RegionId != ArmyRegion && FarMonths.Contains(RegionId))
+		{
+			const FMarchPlan& KeptWay = PlanFor(RegionId);
+			if (KeptWay.bOk && !KeptWay.bNow)
+			{
+				Road = KeptWay.Road;
+			}
+		}
+		if (Road.Num() == 0)
+		{
+			Road = StandingRoad; // (nothing in reach is pointed at: the road of its standing march, if it has one)
+		}
+		bKeptRoad = Road.Num() > 0;
 	}
 	const FVector From = RingedPiece.IsValid() ? RingedPiece->GetRestLocation() : FVector::ZeroVector;
 	const FReachRegion* Ends = FindReach(RegionId);
-	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>(), Ends && Ends->IsWar() ? 2 : Ends && Ends->bAttack ? 1 : 0);
+	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>(), bKeptRoad ? 3 : Ends && Ends->IsWar() ? 2 : Ends && Ends->bAttack ? 1 : 0);
 }
 
 void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFrom)
@@ -5270,11 +5612,17 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		// far as it can go, and the rules send it on as each month opens.
 		AdviserSaw(1);
 		FString Said;
+		const bool bWasSpent = bHandSpent;
 		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
 		if (Said.IsEmpty() && Marches.Num() == 0)
 		{
 			Notify(TEXT("They cannot march there."), 5.0);
 			return;
+		}
+		if (bWasSpent && !bMarchSlipDone)
+		{
+			bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
+			SaveOptions();
 		}
 		if (!Said.IsEmpty())
 		{
@@ -5300,6 +5648,12 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 	if (!Target)
 	{
+		if (!bByRail && bHandSpent)
+		{
+			const FMarchPlan& KeptWay = PlanFor(RegionId);
+			Notify(KeptWay.Line.IsEmpty() ? FString(TEXT("No moves left this month.")) : KeptWay.Line, 6.0);
+			return;
+		}
 		Notify(bByRail ? TEXT("The railway does not reach there through friendly ground, or the corps have already used their month.") : TEXT("They cannot get there this month."));
 		return;
 	}
@@ -6000,6 +6354,31 @@ void ACampaignPlayerController::EndMonth()
 		ClosePage();
 		return;
 	}
+	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never
+	// barred, but he is asked once, and may tick not to be asked. With the question up, this key is its END THE
+	// MONTH: but the question takes no key for its first half second, so that a held or doubled Enter cannot end a
+	// month before he has seen it.
+	if (EndAsk.bVisible)
+	{
+		if (FPlatformTime::Seconds() - EndAsk.Since < 0.5)
+		{
+			return;
+		}
+		EndAsk.bVisible = false;
+	}
+	else if (!bScripted && bAskAtMonthsEnd && EndAskedTurn != Session->GetView().Turn)
+	{
+		const int32 Idle = ArmiesWaiting(true).Num();
+		if (Idle > 0)
+		{
+			EndAskedTurn = Session->GetView().Turn;
+			EndAsk.bVisible = true;
+			EndAsk.Count = Idle;
+			EndAsk.Since = FPlatformTime::Seconds();
+			CampaignSounds::Play(this, TEXT("click"), 0.6f);
+			return;
+		}
+	}
 	PutDownArmy();
 	PutDownFleet();
 	ClosePage();
@@ -6388,7 +6767,7 @@ FText ACampaignPlayerController::GetRulesNote() const
 			: View.bOpen ? TEXT("Watching a war nobody has seen") : TEXT("Watching history unfold"));
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(View.Human) : nullptr;
-	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *Nation->Name : *View.Human);
+	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *WithThe(Nation->Name) : *View.Human);
 	if (View.bOpen)
 	{
 		Note += View.Level.IsEmpty() ? FString(TEXT("  \u00B7  free play")) : TEXT("  \u00B7  ") + View.Level;

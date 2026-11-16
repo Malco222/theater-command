@@ -8533,8 +8533,10 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 		return;
 	}
 	FCampaignMeshBuffers Buffers;
-	// Gold for a march, red where it ends in a battle, amber where it means declaring war.
-	const FColor Gold = (RouteEnds == 1 ? FLinearColor(1.0f, 0.3f, 0.2f, 0.95f) : RouteEnds == 2 ? FLinearColor(1.0f, 0.62f, 0.12f, 0.95f) : FLinearColor(1.0f, 0.83f, 0.45f, 0.95f)).ToFColor(false);
+	// Gold for a march, red where it ends in a battle, amber where it means declaring war; and (ruling 87) cream
+	// for a march kept on a standing order, which ends in a small ring and not in an arrowhead.
+	const FColor Gold = (RouteEnds == 1 ? FLinearColor(1.0f, 0.3f, 0.2f, 0.95f) : RouteEnds == 2 ? FLinearColor(1.0f, 0.62f, 0.12f, 0.95f)
+		: RouteEnds == 3 ? FLinearColor(0.86f, 0.82f, 0.68f, 0.95f) : FLinearColor(1.0f, 0.83f, 0.45f, 0.95f)).ToFColor(false);
 	// A dotted line, as a staff officer pencils a march on the map: short dashes from province to province.
 	for (int32 Leg = 0; Leg + 1 < Points.Num(); ++Leg)
 	{
@@ -8561,6 +8563,17 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 		}
 	}
 
+	if (RouteEnds == 3)
+	{
+		TArray<FVector2D> Ring;
+		for (int32 K = 0; K < 18; ++K)
+		{
+			Ring.Add(Points.Last() + FVector2D(FMath::Cos(K * 0.349), FMath::Sin(K * 0.349)) * 1.7);
+		}
+		AppendRibbon(Buffers, Ring, 0.42, 0.36, Gold, true);
+		Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
+		return;
+	}
 	// An arrowhead where the road ends.
 	const FVector2D End = Points.Last();
 	const FVector2D Dir = (End - Points[Points.Num() - 2]).GetSafeNormal();

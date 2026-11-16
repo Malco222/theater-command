@@ -775,6 +775,36 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 					Fleet.Reach.Add(FMath::RoundToInt32(Sea->AsNumber()));
 				}
 			}
+			const TArray<TSharedPtr<FJsonValue>>* Barred = nullptr;
+			if (Entry->TryGetArrayField(TEXT("barred"), Barred))
+			{
+				for (int32 K = 0; K + 1 < Barred->Num(); K += 2)
+				{
+					Fleet.Barred.Add(FMath::RoundToInt32((*Barred)[K]->AsNumber()), FMath::RoundToInt32((*Barred)[K + 1]->AsNumber()));
+				}
+			}
+		}
+	}
+	// (Ruling 86.) The sea gates.
+	const TArray<TSharedPtr<FJsonValue>>* Gates = nullptr;
+	if (Object->TryGetArrayField(TEXT("gates"), Gates))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Gates)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FViewGate& Gate = Out.Gates.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("id"), Gate.Id);
+			Entry->TryGetStringField(TEXT("name"), Gate.Name);
+			double X = 0.0, Y = 0.0;
+			Entry->TryGetNumberField(TEXT("x"), X);
+			Entry->TryGetNumberField(TEXT("y"), Y);
+			Gate.At = FVector2D(X, Y);
+			Entry->TryGetStringField(TEXT("holder"), Gate.Holder);
+			Entry->TryGetBoolField(TEXT("open"), Gate.bOpen);
+			Entry->TryGetStringField(TEXT("lead"), Gate.Lead);
+			Entry->TryGetStringField(TEXT("mark"), Gate.Mark);
+			Entry->TryGetStringField(TEXT("rest"), Gate.Rest);
+			Entry->TryGetStringField(TEXT("shut"), Gate.Shut);
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* AirFleets = nullptr;
@@ -1159,9 +1189,13 @@ namespace
 	}
 }
 
-TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding)
+TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding, bool* OutSpent)
 {
 	TArray<FReachRegion> Out;
+	if (OutSpent)
+	{
+		*OutSpent = false;
+	}
 	if (OutDanger)
 	{
 		OutDanger->Reset();
@@ -1220,7 +1254,35 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 			OutStanding->Add(FMath::RoundToInt32(Value->AsNumber()));
 		}
 	}
+	if (OutSpent)
+	{
+		Object->TryGetBoolField(TEXT("spent"), *OutSpent);
+	}
 	return Out;
+}
+
+FMarchPlan FCampaignSession::PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FMarchPlan Plan;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("marchPlan"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		return Plan;
+	}
+	Object->TryGetBoolField(TEXT("ok"), Plan.bOk);
+	Object->TryGetBoolField(TEXT("spent"), Plan.bSpent);
+	Object->TryGetBoolField(TEXT("now"), Plan.bNow);
+	Object->TryGetNumberField(TEXT("months"), Plan.Months);
+	Object->TryGetStringField(TEXT("line"), Plan.Line);
+	const TArray<TSharedPtr<FJsonValue>>* Road = nullptr;
+	if (Object->TryGetArrayField(TEXT("road"), Road))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Road)
+		{
+			Plan.Road.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
+	return Plan;
 }
 
 TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote)
@@ -2640,6 +2702,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetStringField(TEXT("none"), Month.None);
 		Told->TryGetStringField(TEXT("foot"), Month.Foot);
 		Told->TryGetStringField(TEXT("count"), Month.Count);
+		Told->TryGetStringField(TEXT("rest"), Month.Rest);
 		auto ReadFigures = [](const TSharedPtr<FJsonObject>& From, TArray<FMonthFigure>& Into)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* Figures = nullptr;
@@ -2666,6 +2729,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("text"), Band.Text);
 				Each->TryGetStringField(TEXT("tip"), Band.Tip);
 				Each->TryGetNumberField(TEXT("week"), Band.Week);
+				Each->TryGetStringField(TEXT("when"), Band.When);
 				Each->TryGetNumberField(TEXT("region"), Band.Region);
 			}
 		}
@@ -2717,6 +2781,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("b"), Row.B);
 				Each->TryGetStringField(TEXT("text"), Row.Text);
 				Each->TryGetNumberField(TEXT("region"), Row.Region);
+				Each->TryGetNumberField(TEXT("sea"), Row.Sea);
 				ReadFigures(Each, Row.Figures);
 			}
 		}
@@ -2731,6 +2796,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("text"), Line.Text);
 				Each->TryGetStringField(TEXT("where"), Line.Where);
 				Each->TryGetBoolField(TEXT("grey"), Line.bGrey);
+				Each->TryGetStringField(TEXT("tip"), Line.Tip);
 			}
 		}
 		if (Told->TryGetArrayField(TEXT("staff"), List))
@@ -2742,6 +2808,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("text"), Line.Text);
 				Each->TryGetStringField(TEXT("act"), Line.Act);
 				Each->TryGetBoolField(TEXT("ok"), Line.bOk);
+				Each->TryGetStringField(TEXT("tip"), Line.Tip);
 			}
 		}
 		if (Told->TryGetArrayField(TEXT("elsewhere"), List))
@@ -2752,6 +2819,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				FMonthElse& Line = Month.Elsewhere.AddDefaulted_GetRef();
 				Each->TryGetStringField(TEXT("nat"), Line.Tag);
 				Each->TryGetStringField(TEXT("text"), Line.Text);
+				Each->TryGetStringField(TEXT("tip"), Line.Tip);
 			}
 		}
 	}

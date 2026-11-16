@@ -216,6 +216,7 @@ struct FViewFleet
 	int32 WingFighters = 0, WingStrike = 0;
 	TArray<int32> Reach; // the seas it can sail to this month (the player's own fleets only)
 	TArray<int32> Bases; // the friendly ports it could make its new home
+	TMap<int32, int32> Barred; // (ruling 86) the seas it would reach but for a gate shut to it, each with that gate
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
@@ -398,6 +399,7 @@ struct FMonthBand
 	TArray<FString> Flags;
 	FString Text, Tip;
 	int32 Week = 0;
+	FString When; // "week 1", or "July, week 1" for news dated after the month turned
 	int32 Region = INDEX_NONE;
 };
 
@@ -417,6 +419,7 @@ struct FMonthRow
 	FString Text;
 	TArray<FMonthFigure> Figures;
 	int32 Region = INDEX_NONE;
+	int32 Sea = INDEX_NONE; // news from the sea: its place on the chart
 };
 
 /** The month's lead story. */
@@ -435,17 +438,20 @@ struct FMonthHome
 {
 	FString Sign, Count, Text, Where;
 	bool bGrey = false; // next month's, not this month's
+	FString Tip; // the whole line of news, where the card gives it short
 };
 
 struct FMonthStaff
 {
-	FString Text, Act;
+	FString Text, Act; // (the button is on a desk's first line only: no act, no button)
 	bool bOk = true; // false once the desk has been taken back
+	FString Tip;
 };
 
 struct FMonthElse
 {
 	FString Tag, Text;
+	FString Tip;
 };
 
 /** (Rulings 64 and 65.) The month on one card: it takes the place of the typed strip and of the month's report. */
@@ -458,6 +464,7 @@ struct FMonthCard
 	FMonthLead Lead;
 	TArray<FMonthRow> Rows;
 	FString None, Foot, Count;
+	FString Rest; // what is said at the card's foot of the news that found no line
 	TArray<FMonthHome> Home;
 	TArray<FMonthStaff> Staff;
 	TArray<FMonthElse> Elsewhere;
@@ -498,6 +505,22 @@ struct FViewLane
 };
 
 /** An air fleet on its airfields. */
+/**
+ * (Ruling 86.) A sea gate: the Panama Canal or one of the straits. Where its mark stands, who holds it, whether the
+ * player's ships may pass, and the rules' own words for why: what comes before the marked words, the marked words
+ * ("Open to your ships." or "Shut to your ships:"), and what comes after.
+ */
+struct FViewGate
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FVector2D At = FVector2D::ZeroVector; // on the map
+	FString Holder;
+	bool bOpen = true;
+	FString Lead, Mark, Rest;
+	FString Shut; // for a fleet's route that is refused: "The Panama Canal is shut to your ships: ..."
+};
+
 /** An airfield as the player knows it (the grand campaign). */
 struct FViewAirfield
 {
@@ -642,6 +665,7 @@ struct FCampaignView
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut
 	TArray<FViewFleet> Fleets;
+	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	TArray<FViewAirFleet> AirFleets;
 
 	const FViewCorps* FindCorps(int32 Id) const
@@ -1186,6 +1210,17 @@ struct FDiplomacy
 	TArray<FLeagueAnswer> Invites; // who the player, a member, could invite
 	int32 InviteCost = 0;
 	int32 Revision = 0;
+};
+
+/** (Ruling 87.) The rules' plan for a march kept on a standing order, before it is ordered. */
+struct FMarchPlan
+{
+	bool bOk = false; // it can be ordered
+	bool bSpent = false; // the corps has no moves left: it sets off as the next month opens
+	bool bNow = false; // an ordinary move reaches the place this month: nothing would be kept
+	int32 Months = 0;
+	TArray<int32> Road; // the place itself last
+	FString Line; // what an order here would do, or why it cannot be given: the rules' own words
 };
 
 /** What a landing on an enemy coast would meet, and afterwards how it went. */

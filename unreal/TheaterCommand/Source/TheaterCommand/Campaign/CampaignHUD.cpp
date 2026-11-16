@@ -4,6 +4,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignSession.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
@@ -25,6 +26,7 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScaleBox.h"
 #include "Widgets/Layout/SDPIScaler.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
@@ -32,6 +34,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/Text/SRichTextBlock.h"
 #include "Widgets/Text/STextBlock.h"
 
 namespace
@@ -304,6 +307,12 @@ namespace
 				Line({ { 0.5, 0.55 }, { 0.5, 0.79 } });
 				Line({ { 0.38, 0.67 }, { 0.62, 0.67 } });
 				break;
+			case 7: // a tick
+				Line({ { 0.14, 0.55 }, { 0.4, 0.8 }, { 0.88, 0.2 } });
+				break;
+			case 8: // a chevron, pointing on
+				Line({ { 0.36, 0.2 }, { 0.66, 0.5 }, { 0.36, 0.8 } });
+				break;
 			default: // a clock's dial: the long hand at twelve, the short one at the hour
 			{
 				Ring(0.5, 0.5, 0.45);
@@ -531,6 +540,11 @@ namespace
 			DiscSmall = FSlateRoundedBoxBrush(FLinearColor::White, 6.5f);
 			// (on the staff's paper map a plate is a paper label: paper, a thin edge of ink, the name in ink)
 			PaperLabel = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f, FLinearColor(0.12f, 0.08f, 0.045f, 0.85f), 1.0f);
+			Lamp = FSlateRoundedBoxBrush(FLinearColor::White, 9.0f);
+			LampLit = FSlateRoundedBoxBrush(FLinearColor::White, 8.0f);
+			LampFar = FSlateRoundedBoxBrush(FLinearColor::White, 6.0f);
+			LampFarLit = FSlateRoundedBoxBrush(FLinearColor::White, 4.5f);
+			LampBar = FSlateRoundedBoxBrush(FLinearColor::White, 1.0f);
 			SetVisibility(EVisibility::HitTestInvisible);
 		}
 
@@ -545,8 +559,12 @@ namespace
 			}
 			TArray<FTownPlate> Plates;
 			Controller->GetTownPlates(Plates);
+			// (ruling 86: where the gates' marks are drawn, for the pointer; and the badges drawn, for them to step clear of)
+			TArray<TPair<int32, FBox2D>> GateBoxes;
+			TArray<FBox2D> Badges;
 			if (Plates.Num() == 0)
 			{
+				Controller->NoteGateMarks(GateBoxes);
 				return LayerId;
 			}
 			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
@@ -684,6 +702,88 @@ namespace
 					if (!UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(Wide, Tall))))
 					{
 						DrawOrders(Each, Corner, Tall);
+						Badges.Add(FBox2D(Corner, Corner + FVector2D(Wide, Tall)));
+					}
+					continue;
+				}
+				if (Each.bGate)
+				{
+					// (Ruling 86; the art director's brief and her lamps.) A sea gate's mark. From far up the lamp alone,
+					// twelve across: a plain green disc, or a red disc with a cream bar. Nearer, a small dark plate in the
+					// name plates' look with the holder's flag and the lamp, eighteen across, with a padlock on it for
+					// close up and for eyes that do not tell red from green; and close up, its name after the lamp.
+					const FLinearColor Lit = Each.bGateOpen ? FLinearColor(FColor::FromHex(TEXT("9CC08A"))) : FLinearColor(FColor::FromHex(TEXT("CF5A41")));
+					const FLinearColor Dark = Each.bGateOpen ? FLinearColor(FColor::FromHex(TEXT("1D2A17"))) : FLinearColor(FColor::FromHex(TEXT("2A110B")));
+					const bool bLampOnly = Each.Stage >= 2;
+					const FVector2D NameSize = Each.Stage == 0 ? FVector2D(Measure->Measure(Each.Name, TownFont)) : FVector2D::ZeroVector;
+					const double Wide = bLampOnly ? 12.0 : 52.0 + (Each.Stage == 0 ? NameSize.X + 9.0 : 0.0), High = bLampOnly ? 12.0 : 22.0;
+					FVector2D Corner(Each.At.X / Scale - Wide * 0.5, Each.At.Y / Scale - High * 0.5);
+					// (it steps clear of flags, name plates and badges as a name plate does: to one side or down)
+					for (int32 Pass = 0; Pass < 3; ++Pass)
+					{
+						const FBox2D Here(Corner - FVector2D(2.0, 1.0), Corner + FVector2D(Wide + 2.0, High + 1.0));
+						auto Crosses = [&Here](const FBox2D& Other) { return Other.Intersect(Here); };
+						const FBox2D* Across = Colours.FindByPredicate(Crosses);
+						Across = Across ? Across : Taken.FindByPredicate(Crosses);
+						Across = Across ? Across : Badges.FindByPredicate(Crosses);
+						if (!Across)
+						{
+							break;
+						}
+						const double Left = Here.Max.X - Across->Min.X, Right = Across->Max.X - Here.Min.X, Down = Across->Max.Y - Here.Min.Y;
+						if (Down <= High * 2.0 && Down <= FMath::Min(Left, Right))
+						{
+							Corner.Y += Down + 1.0;
+						}
+						else
+						{
+							Corner.X += Left < Right ? -(Left + 1.0) : Right + 1.0;
+						}
+					}
+					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(Wide, High))))
+					{
+						continue;
+					}
+					GateBoxes.Add(TPair<int32, FBox2D>(Each.Gate, FBox2D(Corner * Scale, (Corner + FVector2D(Wide, High)) * Scale)));
+					const FPaintGeometry Whole = Geometry.ToPaintGeometry();
+					if (bLampOnly)
+					{
+						FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(12.0, 12.0), FSlateLayoutTransform(Corner)), &LampFar, ESlateDrawEffect::None, Dark);
+						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(9.0, 9.0), FSlateLayoutTransform(Corner + FVector2D(1.5, 1.5))), &LampFarLit, ESlateDrawEffect::None, Lit);
+						if (!Each.bGateOpen)
+						{
+							FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(FVector2D(6.4, 2.2), FSlateLayoutTransform(Corner + FVector2D(2.8, 4.9))), &LampBar, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("F2E8D5"))));
+						}
+						continue;
+					}
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
+					if (const FSlateBrush* Flag = GateFlag(Each.Flag))
+					{
+						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(24.0, 16.0), FSlateLayoutTransform(Corner + FVector2D(3.0, 3.0))), Flag, ESlateDrawEffect::None, FLinearColor::White);
+					}
+					// (the lamp: a dark rim, the lit disc, and the padlock in the rim's own dark)
+					const FVector2D LampAt = Corner + FVector2D(31.0, 2.0);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(18.0, 18.0), FSlateLayoutTransform(LampAt)), &Lamp, ESlateDrawEffect::None, Dark);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(FVector2D(16.0, 16.0), FSlateLayoutTransform(LampAt + FVector2D(1.0, 1.0))), &LampLit, ESlateDrawEffect::None, Lit);
+					const double Unit = 18.0 / 16.0; // (her lamps are drawn in a box of sixteen)
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 3, Geometry.ToPaintGeometry(FVector2D(7.4 * Unit, 5.2 * Unit), FSlateLayoutTransform(LampAt + FVector2D(4.3, 7.6) * Unit)), &LampBar, ESlateDrawEffect::None, Dark);
+					TArray<FVector2D> Shackle;
+					const double Foot = Each.bGateOpen ? 5.0 : 5.6;
+					Shackle.Add(LampAt + FVector2D(5.9, 7.8) * Unit);
+					for (int32 K = 0; K <= 8; ++K)
+					{
+						// (the bow of the padlock: closed it comes down into the body again, open its far end stands free)
+						const double Turn = PI * (1.0 - K / 8.0);
+						Shackle.Add(LampAt + FVector2D(8.0 + 2.1 * FMath::Cos(Turn), Foot - (Each.bGateOpen ? 0.5 * K / 8.0 : 0.0) - 2.1 * FMath::Sin(Turn)) * Unit);
+					}
+					if (!Each.bGateOpen)
+					{
+						Shackle.Add(LampAt + FVector2D(10.1, 7.8) * Unit);
+					}
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 3, Whole, Shackle, ESlateDrawEffect::None, Dark, true, 1.7f);
+					if (Each.Stage == 0)
+					{
+						FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(55.0, (High - NameSize.Y) * 0.5))), Each.Name, TownFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("F2E8D5"))));
 					}
 					continue;
 				}
@@ -733,6 +833,7 @@ namespace
 					{
 						continue;
 					}
+					Badges.Add(FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh)));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
 					// (the anchor: a ring, a shank with its stock across, and the two flukes on their curved arm)
@@ -765,6 +866,7 @@ namespace
 					{
 						continue;
 					}
+					Badges.Add(FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh)));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
 					// (the aircraft, seen from above with its nose up the plate: a body, wings and a tailplane)
@@ -839,6 +941,7 @@ namespace
 					// (the city's order badge: directly above its name plate, left edges in line)
 					const double Tall = Each.Stage == 0 ? 22.0 : 16.0;
 					DrawOrders(Each, Corner - FVector2D(0.0, Tall + 2.0), Tall);
+					Badges.Add(FBox2D(Corner - FVector2D(0.0, Tall + 2.0), Corner + FVector2D(OrdersWide(Each, Tall), -2.0)));
 				}
 				if (bStar)
 				{
@@ -865,6 +968,7 @@ namespace
 					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(LineSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 1.0 + NameSize.Y))), Each.Line, LineFont, ESlateDrawEffect::None, LineInk);
 				}
 			}
+			Controller->NoteGateMarks(GateBoxes);
 			return LayerId + 1;
 		}
 
@@ -876,6 +980,29 @@ namespace
 		FSlateBrush Disc; // the brass disc of a city's order badge
 		FSlateBrush DiscSmall; // and the smaller one of the badge seen from further off
 		FSlateBrush PaperLabel;
+		// (Ruling 86.) A gate's lamp: its dark rim and its lit disc, at both sizes; the padlock's body and the far lamp's bar.
+		FSlateBrush Lamp, LampLit, LampFar, LampFarLit, LampBar;
+		mutable TMap<FString, TSharedPtr<FSlateBrush>> GateFlags;
+		/** The holder's flag, as the map keeps it; nothing until the picture is ready. */
+		const FSlateBrush* GateFlag(const FString& Tag) const
+		{
+			if (const TSharedPtr<FSlateBrush>* Found = GateFlags.Find(Tag))
+			{
+				return Found->Get();
+			}
+			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			UTexture2D* Picture = (Table && !Tag.IsEmpty()) ? Table->GetFlagTexture(Tag) : nullptr;
+			if (!Picture)
+			{
+				return nullptr; // not ready yet: asked again next time
+			}
+			TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Picture);
+			Brush->ImageSize = FVector2D(96.0f, 64.0f);
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+			GateFlags.Add(Tag, Brush);
+			return Brush.Get();
+		}
 	};
 
 	class SMinimap : public SLeafWidget
@@ -1135,6 +1262,48 @@ namespace
 			// (The raid card, to the art director's brief: a cream border like a print's round the target's picture, a
 			// round brass ring for its plus and minus, and one button of solid brass that flies the raid.)
 			PrintBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("E9E0C8"))), 1.0f);
+			// (Ruling 88, to the art director's numbers.) END THE MONTH's two looks: dark leather with a brass rim while
+			// armies wait, and lit brass with a pale halo when every army has its orders.
+			{
+				const FLinearColor DarkFill(FColor::FromHex(TEXT("2E241A"))), DarkRim(FColor::FromHex(TEXT("8A7245")));
+				EndDarkStyle.SetNormal(FSlateRoundedBoxBrush(DarkFill, 25.0f, DarkRim, 2.0f));
+				EndDarkStyle.SetHovered(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("3D2F21"))), 25.0f, BrightBrass, 2.0f));
+				EndDarkStyle.SetPressed(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("241C14"))), 25.0f, BrightBrass, 2.5f));
+				EndDarkStyle.SetDisabled(FSlateRoundedBoxBrush(DarkFill.CopyWithNewOpacity(0.6f), 25.0f, DarkRim, 1.0f));
+				EndDarkStyle.SetNormalPadding(FMargin(0.0f));
+				EndDarkStyle.SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				const FLinearColor LitFill(FColor::FromHex(TEXT("E9C679"))), Halo(FColor::FromHex(TEXT("F0D28A")));
+				EndLitStyle.SetNormal(FSlateRoundedBoxBrush(LitFill, 25.0f, Halo, 2.5f));
+				EndLitStyle.SetHovered(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("F2D38C"))), 25.0f, FLinearColor(FColor::FromHex(TEXT("FFF0C0"))), 2.5f));
+				EndLitStyle.SetPressed(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("CFAA5C"))), 25.0f, Halo, 3.0f));
+				EndLitStyle.SetDisabled(FSlateRoundedBoxBrush(LitFill.CopyWithNewOpacity(0.6f), 25.0f, Halo, 1.0f));
+				EndLitStyle.SetNormalPadding(FMargin(0.0f));
+				EndLitStyle.SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				NoBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 21.0f);
+				KeyCapBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 3.0f, FLinearColor::White, 1.0f);
+				CountDiscBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2B2118"))), 16.0f);
+				QuietChipBrush = FSlateRoundedBoxBrush(DarkFill.CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("9CC08A"))).CopyWithNewOpacity(0.55f), 1.0f);
+				// (ruling 87: the slip on the army's card, typing paper with the calendar's red bar)
+				const FLinearColor SlipPaper(FColor::FromHex(TEXT("D8CBA8")));
+				SlipBrush = FSlateRoundedBoxBrush(SlipPaper, 2.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.85f), 1.0f);
+				SlipBarBrush = FSlateRoundedBoxBrush(Binding, FVector4(2.0f, 0.0f, 0.0f, 2.0f));
+				SlipButton = FButtonStyle();
+				SlipButton.SetNormal(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("C9BB96"))), 3.0f, DeskInk.CopyWithNewOpacity(0.7f), 1.0f));
+				SlipButton.SetHovered(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("E6DBBB"))), 3.0f, DeskInk, 1.5f));
+				SlipButton.SetPressed(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("B8AA86"))), 3.0f, DeskInk, 1.5f));
+				SlipButton.SetNormalPadding(FMargin(0.0f));
+				SlipButton.SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				NoButton = FButtonStyle();
+				NoButton.SetNormal(FSlateNoResource()).SetHovered(FSlateNoResource()).SetPressed(FSlateNoResource()).SetDisabled(FSlateNoResource());
+				NoButton.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				RearChipBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2E241A"))).CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("6F5D38"))), 1.0f);
+				RearRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 8.0f, FLinearColor::White, 1.2f);
+				// (rulings 86 and 87: the marks inside the pointer's box)
+				TipPlain = FTextBlockStyle().SetFont(Font(TEXT("Regular"), 11)).SetColorAndOpacity(FSlateColor(Cream));
+				TipStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterTipMarks"));
+				TipStyles->Set("Brass", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(BrightBrass)));
+				TipStyles->Set("Red", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(Alarm)));
+			}
 			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
 			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
 			MonthBandBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(104, 34, 26)), 3.0f, FLinearColor(FColor(208, 86, 61)), 1.0f);
@@ -1413,8 +1582,20 @@ namespace
 						SAssignNew(HoverTipBox, SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTip().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
-							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
+							]
+							// (Rulings 86 and 87.) Under it, what is said with a mark of its own colour in it: brass for "No
+							// moves left this month." and "Open to your ships.", the refusing red where the answer is no.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+							[
+								SNew(SRichTextBlock).TextStyle(&TipPlain).DecoratorStyleSet(TipStyles.Get()).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTipMarked().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTipMarked() : FText::GetEmpty(); })
+							]
 						]
 					]
 
@@ -1541,60 +1722,7 @@ namespace
 							// month of the year, and under its words how many armies have yet to move.
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 							[
-								SNew(SButton).ButtonStyle(&PillStyle).ContentPadding(FMargin(3.0f)).IsFocusable(false)
-								.ToolTipText(FText::FromString(TEXT("End the month: every other nation moves, and the next month begins. (Enter)")))
-								.OnClicked_Lambda([this]()
-								{
-									if (Controller.IsValid())
-									{
-										if (Controller->IsWatching())
-										{
-											Controller->SkipWatching();
-										}
-										else
-										{
-											Controller->EndMonth();
-										}
-									}
-									return FReply::Handled();
-								})
-								[
-									SNew(SBorder).BorderImage(&PillShine).Padding(FMargin(9.0f, 5.0f, 20.0f, 5.0f))
-									[
-										SNew(SHorizontalBox)
-										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
-										[
-											SNew(SLineIcon).Kind(6).Size(34.0f).Weight(1.6f).Ink(DeskInk)
-											.Hand_Lambda([this]() { return static_cast<float>(MonthOf(Controller.IsValid() ? Controller->GetDateText().ToString() : FString())); })
-										]
-										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-										[
-											SNew(SVerticalBox)
-											+ SVerticalBox::Slot().AutoHeight()
-											[
-												SNew(STextBlock).Font(Serif(TEXT("Bold"), 14, 120)).ColorAndOpacity(DeskInk)
-												.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsWatching() ? TEXT("SKIP") : TEXT("END THE MONTH")); })
-											]
-											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -1.0f, 0.0f, 0.0f)
-											[
-												SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
-												.Text_Lambda([this]()
-												{
-													if (!Controller.IsValid())
-													{
-														return FText::GetEmpty();
-													}
-													if (Controller->IsWatching())
-													{
-														return FText::FromString(TEXT("the other nations move  \u00B7  Space"));
-													}
-													const int32 Count = Controller->ArmiesYetToMove();
-													return FText::FromString(Count > 0 ? FString::Printf(TEXT("%d arm%s yet to move"), Count, Count == 1 ? TEXT("y") : TEXT("ies")) : FString(TEXT("every army has moved")));
-												})
-											]
-										]
-									]
-								]
+								EndPills()
 							])
 						]
 						// On the eve of war: the staff's plan for placing the army, carried out at a press.
@@ -1609,21 +1737,11 @@ namespace
 								.Text(FText::FromString(TEXT("PLACE THE ARMY AS THE STAFF ADVISES")))
 							])
 						]
-						// What is still to do before the month is ended: armies that have not moved. A click goes to the next of them.
-						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
+						// (Ruling 88.) NEXT ARMY, directly under END THE MONTH and as wide: the brass one while armies wait for
+						// orders, and a quiet green chip when every army has them.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, -2.0f, 0.0f, 10.0f)
 						[
-							Chip(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
-							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->ArmiesYetToMove() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
-							.ToolTipText(FText::FromString(TEXT("Armies that can still move this month. Click, or press Tab, to go to the next of them. You can end the month whenever you like.")))
-							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
-							[
-								SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass)
-								.Text_Lambda([this]()
-								{
-									const int32 Count = Controller.IsValid() ? Controller->ArmiesYetToMove() : 0;
-									return FText::FromString(Count > 0 ? TEXT("GO TO THE NEXT ARMY  \u00B7  TAB") : TEXT(""));
-								})
-							])
+							Chip(NextArmyPill())
 						]
 						// And the rest of it: a general with no command, a design team with no work, nothing on order.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -1828,6 +1946,14 @@ namespace
 						// (It takes the room that is left on the screen and no more: with more corps than fit, the row of cards scrolls.)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left).VAlign(VAlign_Bottom)
 						[
+							SNew(SVerticalBox)
+							// (Ruling 87.) The slip: the game speaking, the first times an army with no moves left is picked up.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+							[
+								MarchSlip()
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+							[
 							Edge(TrayPiece, SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
 							.Visibility_Lambda([Tray]()
 							{
@@ -1858,6 +1984,39 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Italic"), 14)).ColorAndOpacity(BrightBrass)
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetArmySaid() : FText::GetEmpty(); })
 									]
+									// (Ruling 88.) STAND THIS MONTH, at the right of the title row and over PUT DOWN: it takes the army
+									// in hand out of the round of armies until the next month. It stands away from the "If attacked"
+									// orders on purpose, since two orders on one card begin with STAND.
+									+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										.Visibility_Lambda([this, Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible && !Info->bLook && !Info->bFleet && Controller.IsValid() && Controller->GetSession() && Controller->GetSession()->GetView().bHumanUp ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("This month:"))).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted)
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsStandingThisMonth() ? EVisibility::Collapsed : EVisibility::Visible; })
+											.ToolTipText(FText::FromString(TEXT("This army stays where it is this month and is asked for no more orders: NEXT ARMY passes it by. It can still be given an order.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("STAND THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsStandingThisMonth() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText(FText::FromString(TEXT("This army stands this month. Press to take that back: it waits for orders again.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("STANDING THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+											]
+										]
+									]
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 8.0f, 0.0f)
 								[
@@ -1875,10 +2034,22 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 8.0f, 0.0f)
 								[
-									SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted)
-									.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Hint : FText::GetEmpty(); })
+									SNew(SHorizontalBox)
+									// (Ruling 87.) "No moves left this month." in brass, before what to do about it.
+									+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(BrightBrass)
+										.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && !Info->HintLead.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->HintLead : FText::GetEmpty(); })
+									]
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted)
+										.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Hint : FText::GetEmpty(); })
+									]
 								]
 							])
+							]
 						]
 
 					]
@@ -2399,15 +2570,18 @@ namespace
 					// A room the rules set out themselves: the secret service, the last act.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f, 10.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsPageOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							// (the raid card is laid out to the art director's sheet, about 1176 by 932: the room is larger for it,
 							// and keeps only its title and CLOSE at its head)
+							// (The art director's brief: the month's card shrinks to fit the screen before it would scroll. A scale
+							// box that only ever scales down: every other page has a size that fits, and is left as it is.)
+							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+							[
 							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
-							// (the month's card is as tall as what it has to tell, and no taller than the screen: a quiet month is a small card)
-							.MaxDesiredHeight_Lambda([this]() { return IsMonthCard() ? FOptionalSize(956.0f) : FOptionalSize(); })
+							// (the month's card is as tall as what it has to tell: a quiet month is a small card)
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
 								[
@@ -2460,6 +2634,7 @@ namespace
 										SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)]
 									]
 								]
+							]
 							]
 						]
 					]
@@ -2906,6 +3081,100 @@ namespace
 							[
 								SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted)
 								.Text(FText::FromString(TEXT("Click, or press Space, to go on.")))
+							]
+						]
+					]
+
+					// (Rulings 88 and 90.) The question at the month's end: a small card over a half-dark veil. SHOW ME is the
+					// brass one (Tab); END THE MONTH ends it (Enter); and a tick stops the asking.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetEndAsk().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(620.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("BEFORE THE MONTH ENDS"))).Font(Typed(9, true, 200)).ColorAndOpacity(Brass)
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), 22)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Text_Lambda([this]()
+										{
+											const int32 Count = Controller.IsValid() ? Controller->GetEndAsk().Count : 0;
+											return FText::FromString(Count == 1 ? FString(TEXT("1 army at the front has no orders")) : FString::Printf(TEXT("%d armies at the front have no orders"), Count));
+										})
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Text(FText::FromString(TEXT("They have not moved this month and no order stands for them. Armies in the rear are not counted.")))
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 20.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.ToolTipText(FText::FromString(TEXT("Goes to the first of them. (Tab)")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(true); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("SHOW ME"))).Font(Font(TEXT("Bold"), 12, 220)).ColorAndOpacity(DeskInk)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), DeskInk)]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth()
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.ToolTipText(FText::FromString(TEXT("Ends the month as it stands. (Enter)")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(false); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("END THE MONTH"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Muted)]
+											]
+										]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ToggleEndAskWanted(); } return FReply::Handled(); })
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+											[
+												SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)
+												[
+													SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Muted).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+													[
+														SNew(SBox)
+														.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->IsEndAskWanted() ? EVisibility::HitTestInvisible : EVisibility::Hidden; })
+														[
+															SNew(SLineIcon).Kind(7).Size(11.0f).Weight(1.8f).Ink(BrightBrass)
+														]
+													]
+												]
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("Do not ask me this again. Settings brings it back."))).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+								]
 							]
 						]
 					]
@@ -4252,6 +4521,288 @@ namespace
 		/** A room of the rules' own: its buttons, then each section with its words and its rows. */
 		/** Whether the room open is a raid being planned, which is set out as a card of its own. */
 		bool IsRaidCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Card.bValid; }
+
+		/** A key's name on a small cap, as on a keyboard: beside the button it works. */
+		/**
+		 * (Ruling 87; the art director's brief.) A slip of typing paper with the red binding bar down its left edge:
+		 * NO MOVES LEFT THIS MONTH, what a right-click does, and GOT IT. Paper on leather is the calendar's own
+		 * contrast, so it reads as the game speaking and not as an error.
+		 */
+		TSharedRef<SWidget> MarchSlip()
+		{
+			return SNew(SBorder).BorderImage(&SlipBrush).Padding(FMargin(0.0f))
+				.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMarchSlipShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+				.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the slip is not the map
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SBox).WidthOverride(7.0f)[SNew(SBorder).BorderImage(&SlipBarBrush)]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(13.0f, 8.0f, 18.0f, 9.0f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("NO MOVES LEFT THIS MONTH"))).Font(Typed(10, true, 120)).ColorAndOpacity(InkRed)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("Right-click a friendly place and this army marches there by itself, starting next month.")))
+							.Font(Typed(9)).ColorAndOpacity(DeskInk).LineHeightPercentage(1.1f).WrapTextAt(404.0f)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&SlipButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->DismissMarchSlip(); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("GOT IT"))).Font(Typed(9, true, 120)).ColorAndOpacity(DeskInk)
+						]
+					]
+				];
+		}
+
+		TSharedRef<SWidget> KeyCap(const TCHAR* Key, const FLinearColor& Ink)
+		{
+			return SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Ink.CopyWithNewOpacity(0.85f)).Padding(FMargin(5.0f, 0.0f, 5.0f, 1.0f)).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Key)).Font(Typed(7.0f, true)).ColorAndOpacity(Ink)
+				];
+		}
+
+		/**
+		 * (Rulings 88 and 101.) True while armies at the front wait untouched and with no order: NEXT ARMY is then the
+		 * bright button, and END THE MONTH the dark one. The rear never holds the month, and a country at peace opens
+		 * with END THE MONTH lit.
+		 */
+		bool ArmiesWait() const { return Controller.IsValid() && !Controller->IsWatching() && Controller->ArmiesIdleAtFront() > 0; }
+		/** (Ruling 101.) The quieter number: the armies that can still move and are not counted on NEXT ARMY. */
+		int32 ArmiesBesides() const { return Controller.IsValid() && !Controller->IsWatching() ? FMath::Max(Controller->ArmiesYetToMove() - Controller->ArmiesIdleAtFront(), 0) : 0; }
+
+		/**
+		 * (Ruling 88; the art director's brief: "one bright button, and it is always the next thing to press".) The
+		 * control that ends the month, in its two looks, one of them shown: dark leather with brass words while armies
+		 * wait for orders (it is plainly a button, and it is never barred); lit brass when every army has its orders,
+		 * and while the other nations move (when it reads SKIP). The dial's short hand stands at the month of the year.
+		 */
+		TSharedRef<SWidget> EndPills()
+		{
+			const FLinearColor DarkInk = BrightBrass;
+			auto Make = [this](bool bDark, const FLinearColor& Ink) -> TSharedRef<SWidget>
+			{
+				return SNew(SButton).ButtonStyle(bDark ? &EndDarkStyle : &EndLitStyle).ContentPadding(FMargin(3.0f)).IsFocusable(false)
+					.Visibility_Lambda([this, bDark]() { return ArmiesWait() == bDark ? EVisibility::Visible : EVisibility::Collapsed; })
+					.ToolTipText(FText::FromString(bDark ? TEXT("End the month at any time: every other nation moves, and the next month begins. Armies still wait for orders: NEXT ARMY goes to them. (Enter)")
+						: TEXT("End the month: every other nation moves, and the next month begins. (Enter)")))
+					.OnClicked_Lambda([this]()
+					{
+						if (Controller.IsValid())
+						{
+							if (Controller->IsWatching())
+							{
+								Controller->SkipWatching();
+							}
+							else
+							{
+								Controller->EndMonth();
+							}
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(SBox).WidthOverride(246.0f)
+						[
+							SNew(SBorder).BorderImage(bDark ? &NoBrush : &PillShine).Padding(FMargin(9.0f, 5.0f, 14.0f, 5.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SLineIcon).Kind(6).Size(34.0f).Weight(1.6f).Ink(Ink)
+									.Hand_Lambda([this]() { return static_cast<float>(MonthOf(Controller.IsValid() ? Controller->GetDateText().ToString() : FString())); })
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), 14, 120)).ColorAndOpacity(Ink)
+										.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsWatching() ? TEXT("SKIP") : TEXT("END THE MONTH")); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(Ink.CopyWithNewOpacity(0.85f))
+											.Text_Lambda([this, bDark]()
+											{
+												if (Controller.IsValid() && Controller->IsWatching())
+												{
+													return FText::FromString(TEXT("the other nations move"));
+												}
+												return FText::FromString(bDark ? TEXT("at any time") : TEXT("ready"));
+											})
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SBox)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsWatching() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+											[
+												KeyCap(TEXT("ENTER"), Ink)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SBox)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsWatching() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											[
+												KeyCap(TEXT("SPACE"), Ink)
+											]
+										]
+									]
+								]
+							]
+						]
+					];
+			};
+			return SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[Make(true, DarkInk)]
+				+ SVerticalBox::Slot().AutoHeight()[Make(false, DeskInk)];
+		}
+
+		/**
+		 * (Ruling 88.) NEXT ARMY: while armies wait, the brass pill END THE MONTH used to wear, with the count on an
+		 * ink disc, "yet to move" and the Tab key's cap, and a chevron; when none wait, a quiet chip with a green tick
+		 * that says every army has its orders.
+		 */
+		TSharedRef<SWidget> NextArmyPill()
+		{
+			const FLinearColor CountInk(FColor::FromHex(TEXT("F0D28A")));
+			const FLinearColor RearInk(FColor::FromHex(TEXT("B9A06A")));
+			auto Shown = [this]() { return Controller.IsValid() && Controller->GetSession() && !Controller->IsWatching() && Controller->GetSession()->GetView().bHumanUp; };
+			return SNew(SVerticalBox)
+				.Visibility_Lambda([Shown]() { return Shown() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+				// 1. Armies at the front remain: the one bright thing.
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox).WidthOverride(252.0f).HeightOverride(46.0f)
+					.Visibility_Lambda([this]() { return ArmiesWait() ? EVisibility::Visible : EVisibility::Collapsed; })
+					[
+						SNew(SButton).ButtonStyle(&PillStyle).ContentPadding(FMargin(3.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("Goes to the next army that still waits for orders this month: the front first, then the rear; in each, those not yet touched before the others, then the nearest. The number is the armies at the front with no order yet. STAND THIS MONTH on an army's card takes it out of the round. (Tab)")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
+						[
+							SNew(SBorder).BorderImage(&PillShine).Padding(FMargin(6.0f, 2.0f, 14.0f, 2.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(32.0f).HeightOverride(32.0f)
+									[
+										SNew(SBorder).BorderImage(&CountDiscBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+										[
+											SNew(STextBlock).Font(Serif(TEXT("Bold"), 14)).ColorAndOpacity(CountInk)
+											.Text_Lambda([this]() { return FText::AsNumber(Controller.IsValid() ? Controller->ArmiesIdleAtFront() : 0); })
+										]
+									]
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("NEXT ARMY"))).Font(Serif(TEXT("Bold"), 14, 120)).ColorAndOpacity(DeskInk)
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(9.0f, 1.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), DeskInk)]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -1.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("at the front"))).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
+										]
+										// (Ruling 101.) The quieter number, at about 60 percent of the ink's strength: the rest that can
+										// still move. With nobody in the rear the line reads "at the front" alone.
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(7.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.6f))
+											.Visibility_Lambda([this]() { return ArmiesBesides() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											.Text_Lambda([this]() { return FText::FromString(FString::Printf(TEXT("· rear %d"), ArmiesBesides())); })
+										]
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(SLineIcon).Kind(8).Size(16.0f).Weight(2.2f).Ink(DeskInk)
+								]
+							]
+						]
+					]
+				]
+				// 2. The front is done and the rear is not: a quiet chip, still a button. It never lights and never
+				// breathes, and never holds the light from END THE MONTH.
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+					[
+						SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("Every army at the front has its orders. This goes round the armies in the rear that can still move. They do not hold the month. (Tab)")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
+						[
+							SNew(SBorder).BorderImage(&RearChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+								[
+									SNew(SBox).MinDesiredWidth(26.0f).HeightOverride(16.0f)
+									[
+										SNew(SBorder).BorderImage(&RearRingBrush).BorderBackgroundColor(RearInk).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(5.0f, 0.0f, 5.0f, 1.0f))
+										[
+											SNew(STextBlock).Font(Serif(TEXT("Bold"), 9)).ColorAndOpacity(RearInk)
+											.Text_Lambda([this]() { return FText::AsNumber(ArmiesBesides()); })
+										]
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("NEXT IN THE REAR"))).Font(Typed(8.5f, true)).ColorAndOpacity(RearInk)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), RearInk)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SLineIcon).Kind(8).Size(10.0f).Weight(1.6f).Ink(RearInk)
+								]
+							]
+						]
+					]
+				]
+				// 3. Every army has its orders.
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					[
+						SNew(SBorder).BorderImage(&QuietChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+							[
+								SNew(SLineIcon).Kind(7).Size(13.0f).Weight(1.8f).Ink(Gain)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("EVERY ARMY HAS ITS ORDERS"))).Font(Typed(8.5f, true)).ColorAndOpacity(Gain)
+							]
+						]
+					]
+				];
+		}
 		bool IsMonthCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Month.bValid; }
 
 		/**
@@ -4391,9 +4942,10 @@ namespace
 					]
 				];
 			}
-			if (Told.Region >= 0)
+			if (Told.Region >= 0 || Told.Sea >= 0)
 			{
-				const FString Act = FString::Printf(TEXT("goto:region:%d"), Told.Region);
+				// (a province has a place on the map and a sea has one on the chart: either way the row carries the pin)
+				const FString Act = Told.Region >= 0 ? FString::Printf(TEXT("goto:region:%d"), Told.Region) : FString::Printf(TEXT("goto:sea:%d"), Told.Sea);
 				Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f)).IsFocusable(false)
@@ -4490,11 +5042,11 @@ namespace
 					SNew(STextBlock).Text(FText::FromString(Band.Text)).Font(Serif(TEXT("Bold"), 18)).ColorAndOpacity(Cream)
 					.OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Band.Tip.IsEmpty() ? Band.Text : Band.Tip))
 				];
-				if (Band.Week > 0)
+				if (Band.Week > 0 || !Band.When.IsEmpty())
 				{
 					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 14.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("week %d"), Band.Week))).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.8f))
+						SNew(STextBlock).Text(FText::FromString(Band.When.IsEmpty() ? FString::Printf(TEXT("week %d"), Band.Week) : Band.When)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.8f))
 					];
 				}
 				if (Band.Region >= 0)
@@ -4758,30 +5310,48 @@ namespace
 				auto Quiet = [this](const TCHAR* Words) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(FText::FromString(Words)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true); };
 
 				TSharedRef<SVerticalBox> Home = SNew(SVerticalBox);
+				// (The art director's brief, "What the browser build taught": no word and no name is cut, so a line is
+				// given whole and wraps. In a box where no line has a sign, the lines start at the box's left edge. A
+				// city that finds no room beside its unit goes whole to a second line, in grey.)
+				const bool bSigns = Card.Home.ContainsByPredicate([](const FMonthHome& Each) { return !Each.Sign.IsEmpty(); });
 				for (const FMonthHome& Each : Card.Home)
 				{
 					const FLinearColor Lit = Each.bGrey ? Muted : BrightBrass, Said = Each.bGrey ? Muted : Cream;
 					TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox);
-					const FSlateBrush* Sign = Each.Sign.IsEmpty() ? nullptr : OrderSignBrush(Each.Sign);
-					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)
-					[
-						SNew(SBox).WidthOverride(30.0f).HeightOverride(17.0f).HAlign(HAlign_Left)
+					if (bSigns)
+					{
+						const FSlateBrush* Sign = Each.Sign.IsEmpty() ? nullptr : OrderSignBrush(Each.Sign);
+						const bool bStar = Each.Sign == TEXT("star");
+						Line->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 0.0f, 0.0f)
 						[
-							Sign ? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(25.0f).HeightOverride(17.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Lit)]) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
-						]
-					];
+							SNew(SBox).WidthOverride(30.0f).HeightOverride(17.0f).HAlign(HAlign_Left).VAlign(VAlign_Center)
+							[
+								Sign ? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(bStar ? 15.0f : 25.0f).HeightOverride(bStar ? 15.0f : 17.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Lit)]) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+							]
+						];
+					}
 					if (!Each.Count.IsEmpty())
 					{
-						Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 8.0f, 0.0f)
+						Line->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(6.0f, -3.0f, 8.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(FText::FromString(Each.Count)).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(Lit)
 						];
 					}
-					Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(Each.Count.IsEmpty() ? 6.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+					const bool bUnder = !Each.Where.IsEmpty() && Each.Text.Len() + 0.86 * Each.Where.Len() + 1.0 > 28.0;
+					TSharedRef<SVerticalBox> Words = SNew(SVerticalBox);
+					Words->AddSlot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(Each.Where.IsEmpty() ? Each.Text : Each.Text + TEXT("  ·  ") + Each.Where)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Said)
-						.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+						SNew(STextBlock).Text(FText::FromString(Each.Where.IsEmpty() || bUnder ? Each.Text : Each.Text + TEXT("  ·  ") + Each.Where)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Said)
+						.AutoWrapText(true).ToolTipText(FText::FromString(Each.Tip))
 					];
+					if (bUnder)
+					{
+						Words->AddSlot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Each.Where)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Top).Padding((bSigns && Each.Count.IsEmpty()) ? 6.0f : 0.0f, 1.0f, 0.0f, 0.0f)[Words];
 					Home->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[Line];
 				}
 				if (Card.Home.Num() == 0)
@@ -4793,14 +5363,16 @@ namespace
 				TSharedRef<SVerticalBox> Staff = SNew(SVerticalBox);
 				for (const FMonthStaff& Each : Card.Staff)
 				{
-					Staff->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)
-					[
-						SNew(SHorizontalBox)
+					TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(FText::FromString(Each.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
-						]
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							.ToolTipText(FText::FromString(Each.Tip))
+						];
+					if (!Each.Act.IsEmpty())
+					{
+						// (a desk's first line carries its button)
+						Line->AddSlot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 6.0f)).IsFocusable(false).IsEnabled(Each.bOk)
 							.ToolTipText(FText::FromString(Each.bOk ? TEXT("What your staff ordered this month stands. From next month the desk is yours to run.") : TEXT("The desk is yours again.")))
@@ -4808,8 +5380,9 @@ namespace
 							[
 								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Each.bOk ? Cream : Faint)
 							]
-						]
-					];
+						];
+					}
+					Staff->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[Line];
 				}
 				if (Card.Staff.Num() == 0)
 				{
@@ -4827,6 +5400,7 @@ namespace
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Text(FText::FromString(Each.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+							.ToolTipText(FText::FromString(Each.Tip))
 						]
 					];
 				}
@@ -4840,7 +5414,17 @@ namespace
 
 			PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(TEXT("R opens this report again at any time."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("R opens this report again at any time."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
+				// (what found no line on the card is counted, not lost)
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(STextBlock).Text(FText::FromString(Card.Rest)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				]
 			];
 		}
 
@@ -7889,6 +8473,7 @@ namespace
 				: !Card.bCanOrder ? FString(TEXT("holds its ground"))
 				: (!Card.bPicked ? FString(TEXT("staying behind"))
 					: !Card.Marching.IsEmpty() ? Card.Marching // (release 1: a corps on a standing march says where to, and how long)
+					: (Card.Moves <= 0 && Card.MovesMax > 0) ? FString(TEXT("No moves left this month")) // (ruling 87)
 					: FString::Printf(TEXT("moves %d of %d"), Card.Moves, Card.MovesMax));
 			const FLinearColor StrengthInk = Card.Strength < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")));
 			const FLinearColor MoraleInk = Card.Morale < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("6FA3D8")));
@@ -8184,6 +8769,14 @@ namespace
 		FButtonStyle PillStyle;
 		FButtonStyle RoundStyle, BrassStyle; // the raid card's round plus and minus, and its one brass button
 		FSlateBrush PrintBrush; // the cream border of the target's picture
+		FButtonStyle EndDarkStyle, EndLitStyle; // (ruling 88) END THE MONTH while armies wait, and when none do
+		FSlateBrush NoBrush, KeyCapBrush, CountDiscBrush, QuietChipBrush;
+		FSlateBrush SlipBrush, SlipBarBrush; // (ruling 87) the slip on the army's card
+		FButtonStyle SlipButton;
+		FButtonStyle NoButton; // (ruling 101) a button that is only what it holds: the quiet chip
+		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
+		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
+		TSharedPtr<FSlateStyleSet> TipStyles;
 		FSlateBrush MonthBoxBrush, MonthBandBrush, MonthStampBrush, MonthDiscBrush, MonthTagBrush; // the month's card
 		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read
 		bool bMonthRowsOpen = false; // its rows past the seventh unfolded

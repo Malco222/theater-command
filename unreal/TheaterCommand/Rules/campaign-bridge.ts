@@ -79,6 +79,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { railCut, railLinks, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
+import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
@@ -418,10 +419,14 @@ function view() {
       wingStrike: Math.round(wings.filter((w) => w.kind !== 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+      // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
+      barred: f.nat === s.human && up ? barredSeas(s, f) : [],
       // And the friendly ports it could make its new home.
       bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
       };
     }),
+    // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
+    gates: gatesOf(s),
     // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
     // many groups and aircraft stand on it, or -1 where the fog hides that.
     airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
@@ -1270,22 +1275,100 @@ function reachOf(ids: number[]) {
   const far: number[] = [];
   let standing: number[] = [];
   let standingTo = -1;
+  // (Ruling 87.) True when every corps in hand that takes orders has used its moves: an order is kept for next month.
+  let spent = false;
   try {
     if (humanUp(s) && !onEve(s)) {
       const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
       const lead = cs[0];
+      spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
       if (lead) {
         for (const [id, g] of farGround(s, lead)) {
           // (a province next door that cannot be entered this month is full: that is a matter of changing places, not of a long march)
-          if (id === lead.reg || merged.has(id) || s.regions[lead.reg].nb.includes(id) || far.length >= 1200) continue;
+          // (Ruling 87: but a corps with no moves left is another matter. Its march next door is kept like any other, and sets off as the next month opens.)
+          if (id === lead.reg || merged.has(id) || (lead.ap > 0 && s.regions[lead.reg].nb.includes(id)) || far.length >= 1200) continue;
           far.push(id, monthsOf(lead, g.cost));
         }
         const on = cs.find((c) => marchOf(s, c) >= 0);
         if (on) { standingTo = marchOf(s, on); standing = farRoad(s, on, standingTo)?.road ?? []; }
       }
     }
-  } catch { far.length = 0; standing = []; standingTo = -1; }
-  return { regions: [...merged.values()], danger: [...danger], far, standing, standingTo };
+  } catch { far.length = 0; standing = []; standingTo = -1; spent = false; }
+  return { regions: [...merged.values()], danger: [...danger], far, standing, standingTo, spent };
+}
+
+/**
+ * (Ruling 86.) Where each gate's mark stands: on the water at its narrowest, by latitude and longitude. A gate the
+ * rules add later, and not named here, stands on the province that holds it until it is given a place.
+ */
+const GATE_AT: Record<string, [number, number]> = {
+  'the Panama Canal': [9.62, -79.92],
+  'the Danish straits': [55.35, 10.95],
+  'the Strait of Gibraltar': [35.95, -5.6],
+  'the Turkish straits': [40.2, 26.4],
+};
+
+/**
+ * (Rulings 86 and 90b.) The sea gates as the player is shown them. Who holds each, whether his ships may pass and
+ * the words for it are the rules' own (gates.ts, which reads canPass and each gate's own rule), so that both builds
+ * say the same. The box marks the words that answer the question in a colour of their own, so the line is handed
+ * over in three parts: what comes before "Open to your ships." or "Shut to your ships:", those words, and the rest.
+ * A gate with no place given above stands where the rules put it (gateSpot).
+ */
+function gatesOf(s: Game) {
+  try {
+    return gateViews(s, s.human ?? null).map((v) => {
+      const gt = s.gates[v.id];
+      const at = GATE_AT[gt.name];
+      const spot = at ? { x: (at[1] + 11) * 25.7115, y: (71.4 - at[0]) * 40 } : gateSpot(s, gt);
+      const open = v.open !== false;
+      const key = open ? 'Open to your ships' : 'Shut to your ships:';
+      const i = v.line.indexOf(key);
+      const mark = i < 0 ? '' : open && v.line[i + key.length] === '.' ? `${key}.` : key;
+      const lead = i < 0 ? v.line : v.line.slice(0, i), rest = i < 0 ? '' : v.line.slice(i + mark.length);
+      // (for a fleet's route that is refused: the gate named, with the same reason, as gateBar words it)
+      const shut = open ? '' : `${v.theName} ${/s$/.test(v.name) ? 'are' : 'is'} closed to your ships: ${v.why}.`;
+      return { id: v.id, name: v.name, x: spot.x, y: spot.y, holder: v.holder, open, lead, mark, rest, shut };
+    });
+  } catch { return []; }
+}
+
+/** (Ruling 86.) The seas a fleet would reach this month but for a gate shut to it, each with that gate: sea, gate, sea, gate. */
+function barredSeas(s: Game, f: Game['fleets'][number]): number[] {
+  const out: number[] = [];
+  try {
+    const now = new Set(fleetReach(s, f));
+    for (let z = 0; z < s.seas.length; z++) {
+      if (now.has(z)) continue;
+      const bar = gateBar(s, f, z);
+      if (bar) out.push(z, bar.gate.id);
+    }
+  } catch { out.length = 0; }
+  return out;
+}
+
+/**
+ * (Ruling 87.) Before the order is given: could the corps in hand be marched to that place on a standing order, about
+ * how long it would take, the road, and the line for the pointer. All of it is the rules' own (marches.ts); for more
+ * than one corps the line speaks of them together. Nothing in the game is changed by asking.
+ */
+function marchPlanOf(ids: number[], to: number) {
+  const none = { ok: false, spent: false, now: false, months: 0, road: [] as number[], line: '' };
+  try {
+    const s = game();
+    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const lead = cs[0];
+    if (!lead || !s.regions[to]) return none;
+    const p = planMarch(s, lead, to);
+    let line = p.line, months = p.months;
+    if (p.ok && !p.now && cs.length > 1) {
+      for (const c of cs.slice(1)) { const q = planMarch(s, c, to); if (q.ok && !q.now) months = Math.max(months, q.months); }
+      const all = cs.every((c) => c.ap <= 0);
+      line = all ? `These ${cs.length} corps march here from next month, ${inMonths(months)}.`
+        : `These ${cs.length} corps march here over ${inMonths(months)}, going on by themselves as each month opens.`;
+    }
+    return { ok: p.ok, spent: p.spent, now: p.now, months, road: p.road, line };
+  } catch { return none; }
 }
 
 /** (Version 65) The swap last offered: asked once, done when the same march is ordered again. */
@@ -1608,14 +1691,16 @@ function attack(ids: number[], to: number) {
 interface CardFigure { value: string; label: string }
 interface MonthCard {
   date: string;
-  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; region: number }[];
+  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number }[];
   score: { label: string; sign: string; figure: string; sub: string; tone: number }[];
   lead: null | { tag: string; stamp: string; tone: number; headline: string; a: string; aName: string; b: string; bName: string; picture: string; line: string; figures: CardFigure[]; region: number; report: number };
-  rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; text: string; figures: CardFigure[]; region: number }[];
+  rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; text: string; figures: CardFigure[]; region: number; sea: number }[];
   none: string; foot: string; count: string;
-  home: { sign: string; count: string; text: string; where: string; grey: boolean }[];
-  staff: { text: string; act: string }[];
-  elsewhere: { nat: string; text: string }[];
+  home: { sign: string; count: string; text: string; where: string; grey: boolean; tip: string }[];
+  staff: { text: string; tip: string; desk: string; act: string }[];
+  elsewhere: { nat: string; text: string; tip: string }[];
+  /** What is said at the card's foot of the news that found no line: "3 more lines of news are in the Newsreel." */
+  rest: string;
 }
 
 /** The mark kept as the player's month opened: what the card that closes it is counted from. */
@@ -1644,25 +1729,47 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
   const name = (nat: string | null): string => (nat ? s.nations[nat]?.name ?? nat : '');
   const boxSign: Record<string, string> = { provinces: 'flag', battles: '', men: 'inf', sea: 'hull', air: 'ftr', treasury: '' };
   const lead = c.lead;
+  // (The art director's brief, "What the browser build taught".) Each foot box holds three lines beside a lead story
+  // and five on a quieter card; what is over is counted, not lost. At home: what is ready first, then research,
+  // then what next month brings, then the other news of home. Deliveries that find no line are counted in one;
+  // news that finds none is in the Newsreel.
+  const lines = lead ? 3 : 5;
+  type HomeLine = { sign: string; count: string; text: string; where: string; grey: boolean; tip: string; ready: number; next: number };
+  const homeAll: HomeLine[] = [
+    ...c.home.filter((x) => !x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: false, tip: '', ready: x.count, next: 0 })),
+    ...c.research.map((text) => ({ sign: 'star', count: '', text: `Research complete: ${text}`, where: '', grey: false, tip: '', ready: 0, next: 0 })),
+    ...c.home.filter((x) => x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: true, tip: '', ready: 0, next: x.count })),
+    ...c.also.map((text, i) => ({ sign: '', count: '', text, where: '', grey: false, tip: c.alsoFull[i] ?? text, ready: 0, next: 0 })),
+  ];
+  let home = homeAll.slice(0, lines), homeOver = 0;
+  if (homeAll.length > lines) {
+    const hid = homeAll.slice(lines - 1);
+    const ready = hid.reduce((n, x) => n + x.ready, 0), next = hid.reduce((n, x) => n + x.next, 0);
+    const said = [ready ? `${ready} more ready` : '', next ? `${next} due next month` : ''].filter(Boolean).join('  \u00B7  ');
+    if (said) home = [...homeAll.slice(0, lines - 1), { sign: '', count: '', text: said, where: '', grey: true, tip: '', ready: 0, next: 0 }];
+    homeOver = (said ? hid : homeAll.slice(lines)).filter((x) => !x.ready && !x.next).length;
+  }
+  // (A desk's first line carries its button, and the first lines of the desks come first.)
+  const firsts = c.staff.filter((x, i) => c.staff.findIndex((y) => y.desk === x.desk) === i);
+  const staffAll = [...firsts, ...c.staff.filter((x) => !firsts.includes(x))];
+  const over = c.more + homeOver + Math.max(0, staffAll.length - lines) + Math.max(0, c.elsewhere.length - lines) + c.letters.length;
   return {
     date: c.month,
-    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, region: x.region ?? -1 })),
+    // (An item dated after the month turned names its month: "July, week 1" under June's title.)
+    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.week > 0 ? `${x.month ? `${x.month}, ` : ''}week ${x.week}` : (x.month ?? ''), region: x.region ?? -1 })),
     score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? '', figure: x.figure, sub: x.sub, tone: x.tone === 'good' ? 1 : x.tone === 'bad' ? -1 : 0 })),
     lead: lead ? {
-      tag: lead.week > 0 ? `${lead.kind.toUpperCase()}  ·  WEEK ${lead.week}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
+      tag: lead.week > 0 ? `${lead.kind.toUpperCase()}  ·  ${lead.month ? `${lead.month.toUpperCase()}, ` : ''}WEEK ${lead.week}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
       a: lead.ours ?? '', aName: name(lead.ours), b: lead.theirs ?? '', bName: name(lead.theirs), picture: lead.picture ?? '',
       line: lead.follows || lead.line, figures: figures(lead.facts), region: lead.region ?? -1, report: lead.report?.type === 'land' ? lead.report.id : -1,
     } : null,
-    rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1 })),
+    // (A province has a place on the map and a sea has one on the chart: either way the row carries the pin.)
+    rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1, sea: x.sea ?? -1 })),
     none: c.quiet, foot: c.foot, count: c.count,
-    home: [
-      ...c.home.filter((x) => !x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: false })),
-      ...c.research.map((text) => ({ sign: '', count: '', text: `Researched: ${text}`, where: '', grey: false })),
-      ...c.also.map((text) => ({ sign: '', count: '', text, where: '', grey: false })),
-      ...c.home.filter((x) => x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: true })),
-    ].slice(0, 6),
-    staff: c.staff.slice(0, 3).map((x) => ({ text: x.short || x.text, act: `desk:${x.desk}:own` })),
-    elsewhere: c.elsewhere.slice(0, 3).map((x) => ({ nat: x.nat, text: x.text })),
+    home: home.map((x) => ({ sign: x.sign, count: x.count, text: x.text, where: x.where, grey: x.grey, tip: x.tip })),
+    staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : '' })),
+    elsewhere: c.elsewhere.slice(0, lines).map((x) => ({ nat: x.nat, text: x.text, tip: x.full ?? x.text })),
+    rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
   };
 }
 
@@ -2911,7 +3018,7 @@ let lastMonth: { date: string; rows: { nat: string; note: string; region: number
 function monthShown(s: Game, card: MonthCard) {
   let run: string[] = [];
   try { run = (commandOf(s)?.desks ?? []).filter((d) => d.staff).map((d) => String(d.id)); } catch { run = []; }
-  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.act.split(':')[1] ?? '') })) };
+  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.desk) })) };
 }
 
 /** A battle's report set out to be read: who fought, what each lost, and what the map fed into the fight. */
@@ -4636,5 +4743,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, move, previewAttack: preview, attack, endMonth };

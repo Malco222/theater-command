@@ -769,6 +769,11 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterSelect="), Shots[0].Select, false);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterHover="), Shots[0].Hover, false);
+		// ("-TheaterArmy=Ruhr" picks up the army there, and "-TheaterRoute=Rhineland" draws the road to a place as the
+		// pointer would. "-TheaterSpend=Ruhr>Rhineland>Ruhr" first marches the army in the first place through the
+		// others in turn, to use up its moves: for pictures of an army with none left.)
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterArmy="), Shots[0].Army, false);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterRoute="), Shots[0].Route, false);
 	}
 
 	// "-TheaterMoment=Warsaw" takes four stills of a moment at the front over that region, as when its capital
@@ -1145,6 +1150,31 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		Controller->EndMonthAndWatch();
 		return; // the view now follows the action
 	}
+	{
+		static bool bSpentAsked = false;
+		FString Spend;
+		if (!bSpentAsked && Controller->GetSession() && FParse::Value(FCommandLine::Get(), TEXT("TheaterSpend="), Spend, false))
+		{
+			bSpentAsked = true;
+			TArray<FString> Places;
+			Spend.ParseIntoArray(Places, TEXT(">"));
+			for (int32 K = 0; K + 1 < Places.Num(); ++K)
+			{
+				const int32* From = Data.RegionByName.Find(Places[K]);
+				const int32* To = Data.RegionByName.Find(Places[K + 1]);
+				if (From && To && Controller->PickUpArmyIn(*From))
+				{
+					const bool bSpentBefore = Controller->IsHandSpent();
+					if (!bSpentBefore)
+					{
+						Controller->OrderTo(*To);
+					}
+					UE_LOG(LogTheater, Display, TEXT("Photographer: %s to %s, %s"), *Places[K], *Places[K + 1], bSpentBefore ? TEXT("no moves left: not ordered") : TEXT("ordered"));
+					Controller->PutDownArmy();
+				}
+			}
+		}
+	}
 	if (!Shot.bKeep)
 	{
 		const int32* Pick = Data.RegionByName.Find(Shot.Select);
@@ -1199,6 +1229,30 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		Controller->OrderTo(*Target);
 	}
 	Controller->SetProvinceTab(Shot.ProvinceTab);
+	// ("-TheaterHoverGate=Panama" rests the pointer on that gate's mark, for the picture of its box.)
+	{
+		FString OnGate;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterHoverGate="), OnGate, false);
+		Controller->StageGate(OnGate);
+	}
+	// ("-TheaterStandAll" tells every army that waits to stand this month, for the picture of the corner when none
+	// waits; "-TheaterEndAsk" puts the question at the month's end.)
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterStandAll")))
+	{
+		for (int32 Guard = 0; Guard < 400 && Controller->ArmiesWaiting().Num() > 0; ++Guard)
+		{
+			if (!Controller->PickUpArmyIn(Controller->ArmiesWaiting()[0]) || Controller->IsStandingThisMonth())
+			{
+				break;
+			}
+			Controller->StandThisMonth();
+		}
+		Controller->PutDownArmy();
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterEndAsk")))
+	{
+		Controller->ShowEndAsk();
+	}
 	{
 		// The view of the map the picture asks for: as it is, by wealth, or by friend and foe.
 		const int32 Wanted = Shot.bWealth ? 1 : Shot.bSides ? 2 : 0;
@@ -1380,6 +1434,11 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 	if (!Shot.Room.IsEmpty())
 	{
+		// (a page that is asked for is not pictured under a country's fall notice: in play the notices are read first)
+		for (int32 Guard = 0; Guard < 24 && Controller->GetAnnouncement(); ++Guard)
+		{
+			Controller->DismissAnnouncement();
+		}
 		Controller->OpenPage(Shot.Room);
 		// The presses of a shot, one after another: an act by name, "@row" for the first button of a row that can
 		// be pressed, "@top" for the first button across the top.

@@ -63,7 +63,9 @@ public:
 	 * could strike next month; OutFar, friendly ground beyond this month's reach with about how many months the march
 	 * would take; OutStanding, the road still ahead of a corps already on a standing march.
 	 */
-	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr);
+	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr);
+	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
+	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */
