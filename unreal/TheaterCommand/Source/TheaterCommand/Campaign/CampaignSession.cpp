@@ -339,6 +339,10 @@ namespace
 		Object->TryGetNumberField(TEXT("months"), Line.Months);
 		Object->TryGetNumberField(TEXT("cost"), Line.Cost);
 		Object->TryGetBoolField(TEXT("canCancel"), Line.bCanCancel);
+		Object->TryGetStringField(TEXT("sign"), Line.Sign);
+		Object->TryGetStringField(TEXT("words"), Line.Words);
+		Object->TryGetBoolField(TEXT("star"), Line.bStar);
+		Object->TryGetNumberField(TEXT("share"), Line.Share);
 		return Line;
 	}
 
@@ -585,6 +589,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		const TArray<TSharedPtr<FJsonValue>>* Bombed = nullptr;
+		if (Object->TryGetArrayField(TEXT("bombed"), Bombed))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Bombed)
+			{
+				Out.Bombed.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Sieges = nullptr;
 		if (Object->TryGetArrayField(TEXT("sieges"), Sieges))
 		{
@@ -797,6 +809,24 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				Entry->TryGetStringArrayField(TEXT("names"), Names);
 				Out.Folds.Add(Region, FString::Join(Names, TEXT(" and ")));
 			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* CityOrders = nullptr;
+	if (Object->TryGetArrayField(TEXT("cityOrders"), CityOrders))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *CityOrders)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FCityOrders& City = Out.CityOrders.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("region"), City.Region);
+			Entry->TryGetStringField(TEXT("sign"), City.Sign);
+			Entry->TryGetBoolField(TEXT("star"), City.bStar);
+			Entry->TryGetNumberField(TEXT("count"), City.Count);
+			Entry->TryGetBoolField(TEXT("plus"), City.bPlus);
+			Entry->TryGetNumberField(TEXT("months"), City.Months);
+			Entry->TryGetNumberField(TEXT("total"), City.Total);
+			Entry->TryGetStringField(TEXT("head"), City.Head);
+			Entry->TryGetStringArrayField(TEXT("lines"), City.Lines);
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Going = nullptr;
@@ -2024,6 +2054,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		}
 	}
 	Info.Forming = ReadOrders(Object, TEXT("forming"));
+	Object->TryGetStringField(TEXT("formingHead"), Info.FormingHead);
 	return Info;
 }
 

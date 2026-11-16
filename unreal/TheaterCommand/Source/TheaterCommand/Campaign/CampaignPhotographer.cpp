@@ -359,6 +359,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.RoomAct = TEXT("open:raid:bomb|@row|@top");
 			Shot.bCloseRoom = true;
 			Shot.RaidAt = 0.22f; // (half way out, before the defender's fighters are in among them)
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterRaidAt="), Shot.RaidAt); // ("-TheaterRaidAt=0.45" catches it over its target, where the guns are)
 			Shot.Tilt = -25.0f; // (looked down on more steeply than the closest view does of itself, so that no army's flag stands in front)
 		}
 		{
@@ -758,6 +759,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	if (!Look.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterRoom="), RoomAsked, false) && Shots.Num() > 0)
 	{
 		Shots[0].Room = RoomAsked;
+		// (and "-TheaterRoomAct=@top" presses something in it: "@top" flies the raid on a raid card)
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterRoomAct="), Shots[0].RoomAct, false);
+	}
+
+	// "-TheaterSelect=Ruhr" picks that province for the first "-TheaterLook" picture (its card is shown), and
+	// "-TheaterHover=Ruhr" rests the pointer on one (its tip is shown).
+	if (!Look.IsEmpty() && Shots.Num() > 0)
+	{
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSelect="), Shots[0].Select, false);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterHover="), Shots[0].Hover, false);
 	}
 
 	// "-TheaterMoment=Warsaw" takes four stills of a moment at the front over that region, as when its capital
@@ -1043,6 +1054,39 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	for (int32 i = 0; i < Shot.Months; ++i)
 	{
 		Controller->EndMonth();
+	}
+	// ("-TheaterOrders=Ruhr:corps:inf+corps:inf+corps:arm;Hamburg:ship:dd" places orders from the Arsenal before the
+	// first picture, each list with its province in mind, after any months the first picture asks to be played (so
+	// that there is money for them): for pictures of what the cities have on order.)
+	{
+		static bool bOrdersPlaced = false;
+		FString OrdersAsked;
+		if (!bOrdersPlaced && Controller->GetSession() && FParse::Value(FCommandLine::Get(), TEXT("TheaterOrders="), OrdersAsked, false))
+		{
+			bOrdersPlaced = true;
+			TArray<FString> Places;
+			OrdersAsked.ParseIntoArray(Places, TEXT(";"));
+			for (const FString& Place : Places)
+			{
+				FString Where, Keys;
+				TArray<FString> Each;
+				if (!Place.Split(TEXT(":"), &Where, &Keys) || Keys.ParseIntoArray(Each, TEXT("+")) == 0)
+				{
+					continue;
+				}
+				if (const int32* Region = Table->GetData().RegionByName.Find(Where))
+				{
+					Controller->SelectRegion(*Region);
+					Controller->OpenArsenal();
+					for (const FString& Key : Each)
+					{
+						Controller->OrderFromArsenal(Key);
+					}
+					Controller->CloseArsenal();
+				}
+			}
+			Controller->SelectRegion(INDEX_NONE);
+		}
 	}
 	if (Shot.bWatch)
 	{

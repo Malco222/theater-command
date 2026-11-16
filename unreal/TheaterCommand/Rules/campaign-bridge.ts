@@ -39,7 +39,7 @@
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, moveCost, railReach as railReachOf, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
-import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
+import { ARSENAL as arsenalBook, factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
@@ -264,6 +264,7 @@ function view() {
     // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
     // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
     // fortifications). Only where the player can know it.
+    cityOrders: (() => { try { return cityOrdersOf(s); } catch { return []; } })(),
     going: (() => {
       const at = new Map<number, number>();
       try {
@@ -492,6 +493,25 @@ function view() {
     // (Version 60) And the town the player has promised the cabinet, with the months left: a second seal.
     vow: (() => { try { const pr = (governmentOf(s) as { promise?: { region?: number; left: number } | null } | null)?.promise; return pr && pr.region !== undefined && pr.region >= 0 ? { region: pr.region, left: pr.left } : null; } catch { return null; } })(),
     // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
+    // (Brian's ask of 16 November 2026: a city or target that is bombed stands under black smoke through the next
+    // month.) The provinces bombed this month or last, where the player can know of it: his own side's raid, a raid
+    // on his own side, or ground he has eyes on.
+    bombed: (() => {
+      try {
+        // (pairs: the province, and what the raids on it were worth on the rules' own scale, where one aircraft is 1.
+        // The art director's brief: smoke only where a raid did damage. The design director's ruling 66: it shows
+        // nothing the player could not know already.)
+        const out = new Map<number, number>();
+        for (const r of s.airReports) {
+          const reg = s.regions[r.region];
+          if (!reg || r.turn < s.turn - 1 || !['bomb', 'night', 'town', 'harbour', 'ground', 'line'].includes(r.mission as string)) continue;
+          const known = !s.human || r.attNat === s.human || r.defNat === s.human || allied(s, r.attNat, s.human) || allied(s, r.defNat, s.human) || reg.ctrl === s.human || seen[reg.id] > 0;
+          const worth = r.worth ?? (r.won ? 1 : 0);
+          if (known && worth > 0) out.set(reg.id, (out.get(reg.id) ?? 0) + worth);
+        }
+        return [...out].flat();
+      } catch { return []; }
+    })(),
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
     // region, the months since, and how big the fighting was (1 to 3). Only what the player saw or took part in.
@@ -627,11 +647,65 @@ function ledger() {
 }
 
 /** Something on order, as a line: what, where, when it is due, and whether the order can still be taken back. */
+// ---- What each city has on order (Brian's ask of 15 November 2026; the design director's rulings 46 and 57) ----
+// (Worked out here from the rules' own order book until the rules' shared call of Version 78 takes its place: the
+// badge, the list and the card all read these, so only this part changes then.)
+
+/** The sign an order takes on its city's badge ('' for works and buildings, which take none), and whether it carries a special formation's star. */
+function orderSign(b: Build): { sign: string; star: boolean } {
+  if (b.what === 'corps') return { sign: b.airborne ? 'para' : String(b.kind ?? 'inf'), star: !!b.elite };
+  if (b.what === 'air') return { sign: b.item === 'bmr' ? 'bmr' : 'ftr', star: false };
+  if (b.what === 'ship') return { sign: b.item === 'cv' ? 'cv' : b.item === 'ss' ? 'ss' : b.item === 'tp' ? 'tp' : 'hull', star: false };
+  return { sign: '', star: false };
+}
+
+/** What an order is, in a few plain words of the rules' own. */
+function orderWords(b: Build): string {
+  if (b.what === 'corps') return b.airborne ? 'airborne corps' : `${(KIND[b.kind ?? 'inf']?.label ?? 'Infantry').toLowerCase()} corps`;
+  if (b.what === 'air') return ((arsenalBook.air as Record<string, { label: string }>)[b.item ?? '']?.label ?? 'air wing').toLowerCase();
+  if (b.what === 'ship') return ((arsenalBook.ships as Record<string, { label: string }>)[b.item ?? '']?.label ?? 'ship').toLowerCase();
+  return b.name;
+}
+
+const readyIn = (months: number): string => (months <= 0 ? 'ready now' : months === 1 ? 'ready in 1 month' : `ready in ${months} months`);
+
+/**
+ * Every place of the player's with a unit on order, for its one badge. Ruling 57: the sign is the unit ready soonest
+ * (on a tie the kind with more on order there, then the one ordered first); the count is the orders there of exactly
+ * what the sign shows; the plus says other kinds of unit are on order there too; works never count.
+ */
+function cityOrdersOf(s: Game) {
+  const me = s.human;
+  if (!me || !s.nations[me]?.alive) return [];
+  const by = new Map<number, Build[]>();
+  for (const b of s.nations[me].queue) {
+    if (!s.regions[b.region] || !orderSign(b).sign) continue;
+    by.set(b.region, [...(by.get(b.region) ?? []), b]);
+  }
+  const key = (b: Build): string => { const k = orderSign(b); return `${k.sign}${k.star ? '*' : ''}`; };
+  const many = (n: number, words: string): string => (n === 1 || /(corps|s)$/.test(words) ? `${n} ${words}` : `${n} ${words}s`);
+  return [...by].map(([region, units]) => {
+    const alike = (b: Build): number => units.filter((x) => key(x) === key(b)).length;
+    const sorted = [...units].sort((a, b) => a.eta - b.eta || alike(b) - alike(a) || a.ordered - b.ordered || a.id - b.id);
+    const first = sorted[0];
+    const kinds = new Map<string, number>();
+    for (const b of sorted) kinds.set(orderWords(b), (kinds.get(orderWords(b)) ?? 0) + 1);
+    const months = Math.max(0, first.eta - s.turn);
+    return {
+      region, ...orderSign(first), count: alike(first), plus: units.some((b) => key(b) !== key(first)), months, total: units.length,
+      head: `${units.length} on order: ${[...kinds].map(([words, n]) => many(n, words)).join(', ')}. Next ${readyIn(months)}.`,
+      lines: sorted.map((b) => `${upFirst(orderWords(b))}${orderSign(b).star ? ' (special formation)' : ''}, ${readyIn(Math.max(0, b.eta - s.turn))}`),
+    };
+  });
+}
+
 function orderLine(s: Game, b: Build) {
   const months = Math.max(0, b.eta - s.turn);
   return {
     id: b.id, what: b.what, name: b.name, region: b.region, where: s.regions[b.region]?.name ?? '',
     due: turnToDate(b.eta).label, months, cost: b.cost, canCancel: b.ordered === s.turn && humanUp(s),
+    // (for the city card's "Forming here": its sign, what it is, and how far along it is)
+    ...orderSign(b), words: upFirst(orderWords(b)), share: b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1,
   };
 }
 
@@ -2026,7 +2100,8 @@ function province(id: number) {
       ok: up && !!n && n.pp >= cost,
       why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
     } : null,
-    forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
+    forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b)) : [],
+    formingHead: (() => { try { return cityOrdersOf(s).find((c) => c.region === r.id)?.head ?? ''; } catch { return ''; } })(),
     // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
     // (all only in the grand campaign, where those rules apply).
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.

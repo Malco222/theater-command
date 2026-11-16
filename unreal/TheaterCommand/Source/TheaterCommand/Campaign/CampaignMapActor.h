@@ -290,6 +290,12 @@ public:
 	void ShowScars(const TArray<int32>& Scars);
 	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
 	void ShowSieges(const TArray<int32>& Sieges);
+	/**
+	 * (Brian's ask of 16 November 2026; the art director's brief.) Black smoke stands over every place a raid has
+	 * damaged this month or last: pairs, the region and what the raids on it were worth (three columns for a place
+	 * hit hard, one otherwise).
+	 */
+	void ShowBombed(const TArray<int32>& Pairs);
 	/** (Version 64) Fieldworks standing empty: three numbers each, the region, tenths of a month of work, room for how many corps. A small broken bank where an army would stand. */
 	void ShowWorksLeft(const TArray<int32>& FromRules);
 	/** Factories that are not working (bombed, sabotaged, burnt): pairs, the region and how many. Their works stand as wrecks and their chimneys are cold. */
@@ -943,6 +949,18 @@ private:
 	TArray<int32> ShownScars;
 	TArray<FVector> Smoulders; // wrecks still burning, for the smoke that rises from them
 	TArray<int32> ShownSieges;
+	TArray<int32> ShownBombed;
+	struct FBombSmoke
+	{
+		int32 Region = INDEX_NONE;
+		FVector Root = FVector::ZeroVector; // where the column stands
+		double Tall = 0.0; // how high it rises, at working height
+		double Began = 0.0; // when it began to rise
+		double Ends = -1.0; // when it began to thin away (less than nothing while it stands)
+		int32 Seed = 0;
+		bool bFirst = false; // the one column of its place that is still drawn from the top
+	};
+	TArray<FBombSmoke> BombSmokes; // bombed places, for the black smoke that stands over them
 	TArray<int32> ShownWorksLeft;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WorksLeftMesh;

@@ -1655,6 +1655,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		Plate.bCapital = Spot.Tier == 0;
 		Plate.bFar = State == 0;
 		Plate.Rank = Spot.Rank;
+		Plate.Region = Spot.Region;
 		const FString Holder = View.RegionHolder.IsValidIndex(Spot.Region) ? View.RegionHolder[Spot.Region] : (Data.Regions.IsValidIndex(Spot.Region) ? Data.Regions[Spot.Region].Owner : FString());
 		if (const FCampaignNation* Nation = Data.FindNation(Holder))
 		{
@@ -1682,6 +1683,55 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Seal.bSeal = true;
 			Seal.bVow = Which == 1;
 			Seal.Rank = 1000; // (before any name plate: nothing crowds it out)
+		}
+	}
+	// (Brian's ask of 15 November 2026; rulings 46 and 57.) A city of the player's with a unit on order wears one
+	// badge, directly above its name plate: the sign of the unit ready soonest, how many of it are on order there,
+	// a plus where other kinds are too, and the months to go in a brass disc. Pulling back it loses the count, then
+	// all but the sign, and from far off it is put away, as the harbour badge is.
+	if (State >= 1)
+	{
+		const int32 Stage = Distance <= 5500.0f ? 0 : Distance <= 8500.0f ? 1 : 2;
+		for (const FCityOrders& City : View.CityOrders)
+		{
+			if (!Data.Regions.IsValidIndex(City.Region) || City.Sign.IsEmpty())
+			{
+				continue;
+			}
+			FTownPlate* Wears = Out.FindByPredicate([&City](const FTownPlate& Each) { return Each.Region == City.Region && !Each.Name.IsEmpty(); });
+			if (!Wears)
+			{
+				// (its name plate is not shown from here: the badge hangs where the plate would)
+				FVector At = Map->MapToWorld(Data.Regions[City.Region].Center.X, Data.Regions[City.Region].Center.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale);
+				for (const ACampaignMapActor::FPlateSpot& Spot : Map->GetPlateSpots())
+				{
+					if (Spot.Region == City.Region)
+					{
+						At = Spot.World + Toward * Spot.Reach;
+					}
+				}
+				FVector2D Screen;
+				if (!ProjectWorldLocationToScreen(At, Screen, false) || Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
+				{
+					continue;
+				}
+				Wears = &Out.AddDefaulted_GetRef();
+				Wears->At = Screen;
+				Wears->Region = City.Region;
+				Wears->Rank = -1;
+				const FString Holder = View.RegionHolder.IsValidIndex(City.Region) ? View.RegionHolder[City.Region] : Data.Regions[City.Region].Owner;
+				if (const FCampaignNation* Nation = Data.FindNation(Holder))
+				{
+					Wears->Colour = FLinearColor(Nation->Color);
+				}
+			}
+			Wears->bOrders = true;
+			Wears->Sign = City.Sign;
+			Wears->bStar = City.bStar;
+			Wears->OrderCount = City.Count;
+			Wears->bPlus = City.bPlus;
+			Wears->Months = City.Months;
+			Wears->Stage = Stage;
 		}
 	}
 	// An airfield with air groups based on it wears a small badge: an aircraft and how many groups fly from it, on
@@ -3700,6 +3750,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				Line += TEXT("\n") + FString::Join(Worth, TEXT("  \u00B7  "));
 			}
+			// (Ruling 46: pointing at a city lists everything it has on order, the total first.)
+			if (const FCityOrders* City = View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; }))
+			{
+				Line += TEXT("\n") + City->Head;
+				for (int32 K = 0; K < FMath::Min(City->Lines.Num(), 6); ++K)
+				{
+					Line += TEXT("\n  ") + City->Lines[K];
+				}
+				if (City->Lines.Num() > 6)
+				{
+					Line += FString::Printf(TEXT("\n  and %d more"), City->Lines.Num() - 6);
+				}
+			}
 			TMap<FString, FIntPoint> Forces; // by nation: corps, divisions
 			bool bDim = false;
 			for (const FViewCorps& Unit : View.Corps)
@@ -5479,6 +5542,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowCivic(View.Civic);
 		Map->ShowScars(View.Scars);
 		Map->ShowSieges(View.Sieges);
+		Map->ShowBombed(View.Bombed);
 		Map->ShowWorksLeft(View.WorksLeft);
 		Map->ShowWrecked(View.Wrecked);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
@@ -6536,6 +6600,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				});
 			}
 			RegionPanel.Forming = Province.Forming;
+			RegionPanel.FormingHead = Province.FormingHead;
 		}
 	}
 }

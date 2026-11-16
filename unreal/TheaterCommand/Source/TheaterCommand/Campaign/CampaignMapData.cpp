@@ -337,7 +337,8 @@ double FCampaignMapData::RiverBroad(const FString& Name)
 		TEXT("Madeira"), TEXT("Paraguay"), TEXT("Uruguay"), TEXT("Magdalena") };
 	// (The art director's round 31: the Amazon's trunk is about three times the common great river at Manaus, and
 	// wider toward its mouth; the Madeira one and a half to two times. A river as broad as the rest read as a road.)
-	return Name == TEXT("Amazon") ? 2.2 : Name == TEXT("Madeira") ? 1.1 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
+	// (her round 33: the trunk's mean is twice what it was)
+	return Name == TEXT("Amazon") ? 4.4 : Name == TEXT("Madeira") ? 1.1 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
 }
 
 bool FCampaignMapData::IsCharted(double X, double Y) const

@@ -3263,7 +3263,13 @@ void ACampaignMapActor::BuildWaterways()
 	const FColor Earth = FColor(26, 38, 36);
 	// ("-TheaterJungleRiver=102,100,88" tries another paint for a ribbon in the jungle. It is laid cooler than it is
 	// seen: under the lamp (98, 95, 79) measured (122, 104, 67), and the painted jungle water is (128, 110, 76).)
-	FLinearColor JungleMidstream = FLinearColor(FColor(102, 100, 88));
+	// (The art director's round 33, ruling C: she withdrew the brown. Every other river on the map is blue, so a brown
+	// ribbon reads as a road whatever its shape. A great river of the jungle is a silted blue, to be seen at about
+	// (98, 146, 160); its mud is shown by its sand bars and its islands.)
+	// (laid (66, 112, 142) it was seen at about (60, 138, 163), too bright a sky blue; laid (103, 118, 139), at about
+	// (136, 144, 158), a pale lavender: between the two)
+	const FColor SiltedBlue(85, 120, 140);
+	FLinearColor JungleMidstream = FLinearColor(SiltedBlue);
 	{
 		FString Asked;
 		TArray<FString> Parts;
@@ -3274,7 +3280,9 @@ void ACampaignMapActor::BuildWaterways()
 	}
 	// (The art director's round 31: a brown river is lighter in mid channel and darker toward its banks, with a darker
 	// wet margin inside its edge and no dark outline round it.)
-	const FLinearColor JungleBank = JungleMidstream * 0.76f, JungleMargin = JungleMidstream * 0.58f;
+	// (and it is flat: no tube shading. The river is a cut in the canopy: a soft shade inside its north-west bank,
+	// where the trees stand between it and the sun, and a pale lit line on the far bank.)
+	const FLinearColor JungleBank = JungleMidstream, JungleShade = JungleMidstream * 0.7f, JungleLit = JungleMidstream * 1.22f;
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
@@ -3482,7 +3490,10 @@ void ACampaignMapActor::BuildWaterways()
 				FCampaignClimate::Get().SharesAt(Data.LatitudeAt(Path[K].Y), Data.LongitudeAt(Path[K].X), LooksHere);
 				JungleHere = LooksHere[WorldLook::Jungle];
 			}
-			const double Wanders = 1.0 + 0.2 * FMath::SmoothStep(0.08f, 0.34f, JungleHere) * FMath::PerlinNoise1D(static_cast<float>(Run * 0.031 + RiverIndex * 13.7));
+			// (round 33: between about 0.7 and 1.4 of its mean; and a tributary's mouth flares where it joins its river)
+			const double Wander = FMath::Clamp(1.7 * FMath::PerlinNoise1D(static_cast<float>(Run * 0.031 + RiverIndex * 13.7)), -1.0, 1.0);
+			const double Flare = RiverUnderFrom[RiverIndex] < Path.Num() ? 1.0 + 0.6 * FMath::SmoothStep(static_cast<double>(RiverUnderFrom[RiverIndex] - 5), static_cast<double>(RiverUnderFrom[RiverIndex]), static_cast<double>(K)) : 1.0;
+			const double Wanders = (1.0 + FMath::SmoothStep(0.08f, 0.34f, JungleHere) * (Wander > 0.0 ? 0.4 * Wander : 0.3 * Wander)) * (bRiverBeyond ? Flare : 1.0);
 			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders;
 			// A river does not run over the sea: stop where the land does.
 			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
@@ -3504,14 +3515,13 @@ void ACampaignMapActor::BuildWaterways()
 				// (The art director's round 32: the trunk stays muddy brown all the way to the foothills; the common
 				// river colour is for the mountain streams above. It has turned wholly by a third jungle.)
 				const float Turned = FMath::SmoothStep(0.08f, 0.34f, Shares[WorldLook::Jungle]);
-				const FLinearColor Murky = FLinearColor(FColor(84, 108, 92));
-				MidstreamHere = Turned < 0.5f ? FMath::Lerp(MidstreamHere, Murky, Turned * 2.0f) : FMath::Lerp(Murky, JungleMidstream, Turned * 2.0f - 1.0f);
-				BankHere = Turned < 0.5f ? FMath::Lerp(BankHere, Murky * 0.84f, Turned * 2.0f) : FMath::Lerp(Murky * 0.84f, JungleBank, Turned * 2.0f - 1.0f);
+				MidstreamHere = FMath::Lerp(MidstreamHere, JungleMidstream, Turned);
+				BankHere = FMath::Lerp(BankHere, JungleBank, Turned);
 				Brown = FMath::Clamp(Turned * 2.0f - 1.0f, 0.0f, 1.0f);
 				// (long faint streaks along the current: the mid channel and the banks each go a little lighter and
 				// darker along the river, out of step with one another)
-				MidstreamHere *= 1.0f + 0.07f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.06 + 7.7 + RiverIndex));
-				BankHere *= 1.0f + 0.07f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.045 + 21.3 + RiverIndex));
+				MidstreamHere *= 1.0f + 0.05f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.06 + 7.7 + RiverIndex));
+				BankHere *= 1.0f + 0.05f * Brown * FMath::PerlinNoise1D(static_cast<float>(Run * 0.045 + 21.3 + RiverIndex));
 			}
 			RunAt.Add(Run);
 			HalfAt.Add(Half);
@@ -3527,8 +3537,12 @@ void ACampaignMapActor::BuildWaterways()
 			const double Outer = Half + FMath::Lerp(0.2, 0.04, static_cast<double>(Brown)); // (a common river's is the dark of the bank beside the water)
 			const double Inner = Half - static_cast<double>(Brown) * FMath::Min(0.5, Half * 0.34);
 			const FVector2D Across[5] = { Path[K] + Side * (Outer + EdgeLeft), Path[K] + Side * (Inner + EdgeLeft), Path[K], Path[K] - Side * (Inner + EdgeRight), Path[K] - Side * (Outer + EdgeRight) };
-			const FColor Margin = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(JungleMargin, BankIce, Frozen), Brown).ToFColor(true);
-			const FColor Inks[5] = { Margin, Bank, Midstream, Bank, Margin };
+			// (which bank the sun's trees shade: the one whose own side looks to the north-west)
+			const double ToNorthWest = FVector2D::DotProduct(Side, FVector2D(-0.7071, -0.7071));
+			const FLinearColor EdgeLeft_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 + 0.5 * ToNorthWest)), EdgeRight_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 - 0.5 * ToNorthWest));
+			const FColor MarginLeft = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeLeft_, BankIce, Frozen), Brown).ToFColor(true);
+			const FColor MarginRight = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeRight_, BankIce, Frozen), Brown).ToFColor(true);
+			const FColor Inks[5] = { MarginLeft, Bank, Midstream, Bank, MarginRight };
 			int32 Here[5];
 			for (int32 P = 0; P < 5; ++P)
 			{
@@ -3556,7 +3570,7 @@ void ACampaignMapActor::BuildWaterways()
 			FRandomStream Chance(RiverIndex * 7919 + 17);
 			// (laid well under the pale sand they are to look, about (205, 190, 150): the water's sheen lifts them, and laid at
 			// two thirds of that they came out chalk white)
-			const FColor Sand(112, 104, 80), WetSand(90, 83, 62), Tuft(52, 78, 46);
+			const FColor Sand(132, 124, 98), WetSand(104, 100, 84), Tuft(46, 74, 44);
 			// (a place a given way along the river, and the way across it there)
 			auto Place = [&](double Far, FVector2D& OutAt, FVector2D& OutSide)
 			{
@@ -3850,6 +3864,35 @@ void ACampaignMapActor::BuildWorks()
 		const FVector Middle = SurfacePointOver(Crossing.At.X, Crossing.At.Y, 0.12);
 		const FQuat Facing(FRotator(0.0, Turn, 0.0));
 		const bool bDown = ShownDown.Contains(K);
+		{
+			// (The art director's round 33: there were no bridges over the Amazon. On a river as broad as that the
+			// crossing is a ferry: a flat boat lying across the stream, and a landing stage on either bank.)
+			double Nearest = 12.0, BroadThere = 0.0;
+			for (int32 R = 0; R < RiverPaths.Num(); ++R)
+			{
+				for (const FVector2D& Point : RiverPaths[R])
+				{
+					const double Far = FVector2D::Distance(Point, Crossing.At);
+					if (Far < Nearest)
+					{
+						Nearest = Far;
+						BroadThere = RiverBroad.IsValidIndex(R) ? RiverBroad[R] : 0.0;
+					}
+				}
+			}
+			if (BroadThere >= 2.0)
+			{
+				const FLinearColor Hull(FColor::FromHex(TEXT("4A3A2A"))), Deck(FColor::FromHex(TEXT("D8CFB4")));
+				Model.Box(Middle + FVector(0.0, 0.0, 0.14 * U), FVector(2.6, 0.95, 0.28) * U, Hull, Turn);
+				Model.Box(Middle + FVector(0.0, 0.0, 0.34 * U), FVector(2.1, 0.72, 0.12) * U, Deck, Turn);
+				Model.Box(Middle + Facing.RotateVector(FVector(-0.55 * U, 0.0, 0.6 * U)), FVector(0.6, 0.52, 0.42) * U, Deck, Turn);
+				for (const double End : { -1.0, 1.0 })
+				{
+					Model.Box(Middle + Facing.RotateVector(FVector(End * (BroadThere + 0.9) * U, 0.0, 0.06 * U)), FVector(0.9, 0.5, 0.12) * U, Stone, Turn);
+				}
+				continue;
+			}
+		}
 		for (int32 Span = -1; Span <= 1; ++Span)
 		{
 			const FVector At = Middle + Facing.RotateVector(FVector(Span * 1.5 * U, 0.0, 0.0));
@@ -4342,6 +4385,57 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 		{
 			const double Angle = F * 2.4 + Region.Id;
 			SiegeFires.Add(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * 2.2 * TownSpread(Region.Id), Region.Center.Y + FMath::Sin(Angle) * 2.2 * TownSpread(Region.Id), 1.6 * TownSpread(Region.Id)));
+		}
+	}
+}
+
+void ACampaignMapActor::ShowBombed(const TArray<int32>& Pairs)
+{
+	if (Pairs == ShownBombed)
+	{
+		return;
+	}
+	ShownBombed = Pairs;
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	// How many columns each place is to have: three where it was hit hard, one otherwise.
+	TMap<int32, int32> Wanted;
+	for (int32 K = 0; K + 1 < Pairs.Num(); K += 2)
+	{
+		if (Data.Regions.IsValidIndex(Pairs[K]))
+		{
+			Wanted.Add(Pairs[K], Pairs[K + 1] >= 300 ? 3 : 1);
+		}
+	}
+	// A column that stands and is still wanted stands on; one no longer wanted thins away over two seconds.
+	TMap<int32, int32> Standing;
+	for (FBombSmoke& Smoke : BombSmokes)
+	{
+		int32& Have = Standing.FindOrAdd(Smoke.Region);
+		if (Smoke.Ends < 0.0 && Have >= Wanted.FindRef(Smoke.Region))
+		{
+			Smoke.Ends = Now;
+		}
+		else if (Smoke.Ends < 0.0)
+		{
+			++Have;
+		}
+	}
+	BombSmokes.RemoveAll([Now](const FBombSmoke& Smoke) { return Smoke.Ends >= 0.0 && Now - Smoke.Ends > 2.5; });
+	for (const TPair<int32, int32>& Place : Wanted)
+	{
+		const FCampaignRegion& Region = Data.Regions[Place.Key];
+		// (about one and a fifth times as tall as the town's model is wide; a place with no town gets a modest one)
+		const double Tall = FMath::Clamp(2.4 * TownRadius(Region.Id), 9.0, 30.0) * UnitScale;
+		for (int32 Column = Standing.FindRef(Place.Key); Column < Place.Value; ++Column)
+		{
+			FBombSmoke& Smoke = BombSmokes.AddDefaulted_GetRef();
+			Smoke.Region = Region.Id;
+			const double Angle = Column * 2.1 + Region.Id * 0.7, Out = Column == 0 ? 0.35 : 1.1;
+			Smoke.Root = SurfacePoint(Region.Center.X + FMath::Cos(Angle) * Out * TownSpread(Region.Id), Region.Center.Y + FMath::Sin(Angle) * Out * TownSpread(Region.Id), 0.5);
+			Smoke.Tall = Tall * (Column == 0 ? 1.0 : 0.8);
+			Smoke.Began = Now;
+			Smoke.Seed = Region.Id * 7 + Column * 31;
+			Smoke.bFirst = Column == 0;
 		}
 	}
 }
@@ -8945,6 +9039,16 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	}
 	FFlight& Flight = Flights.AddDefaulted_GetRef();
 	Flight.Sortie = Sortie;
+	{
+		// ("-TheaterFlak=2" gives every raid's target that many anti-aircraft guns, for a picture of the flak: few
+		// places have guns when a war opens.)
+		static int32 StagedFlak = -1;
+		static const bool bFlakAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterFlak="), StagedFlak);
+		if (bFlakAsked && StagedFlak >= 0 && Sortie.bBombers)
+		{
+			Flight.Sortie.Flak = StagedFlak;
+		}
+	}
 	Flight.Began = GetWorld()->GetTimeSeconds();
 
 	// The aircraft are the nation's own, as they stand on its pieces: its bomber in a vic of three with a pair of
@@ -9201,7 +9305,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	{
 		return;
 	}
-	const int32 MaxPuffs = 1000, Rim = 8, PerPuff = Rim + 1;
+	const int32 MaxPuffs = 2400, Rim = 8, PerPuff = Rim + 1; // (room for the columns over bombed places, which are dense)
 	if (!bSmokeMade)
 	{
 		// The mesh is made once, with room for every puff; after that only its points and colours change.
@@ -9269,6 +9373,32 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			SmokeColours[First + 1 + K] = Edge.ToFColor(false);
 		}
 		++Puff;
+	};
+
+	// (A puff is thick at its middle and nothing at its rim: one alone is a soft glow or a soft shadow, never a body.
+	// A firm one, for a ball of smoke that is to read as a thing: a core that is still half as thick at its own edge,
+	// inside a soft one that gives it its outline.)
+	auto DrawFirm = [&](const FVector& Where, double Radius, const FLinearColor& Colour, float Alpha)
+	{
+		if (Puff + 1 >= MaxPuffs || Alpha <= 0.004f)
+		{
+			return;
+		}
+		const int32 First = Puff * PerPuff;
+		FLinearColor Middle = Colour;
+		Middle.A = Alpha;
+		FLinearColor Edge = Colour;
+		Edge.A = 0.55f * Alpha;
+		SmokeVertices[First] = Where;
+		SmokeColours[First] = Middle.ToFColor(false);
+		for (int32 K = 0; K < Rim; ++K)
+		{
+			const double Angle = K * 2.0 * PI / Rim;
+			SmokeVertices[First + 1 + K] = Where + (Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle)) * (Radius * 0.72);
+			SmokeColours[First + 1 + K] = Edge.ToFColor(false);
+		}
+		++Puff;
+		Draw(Where, Radius, Colour, 0.8f * Alpha);
 	};
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterSmokeTest")))
@@ -9521,6 +9651,75 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 	}
 
+	// (Brian's ask of 16 November 2026; the art director's brief.) Black smoke over every place a raid has damaged, from
+	// the bombs falling through the whole of the next month. A leaning column, never a ball: narrow and dense at its
+	// root, drifting downwind as the flags fly and flattening into a pall; black at the root, thinning to a grey
+	// haze at the top; a small fire at its foot, seen from close by. From the top it is never smaller than a town's
+	// plate and there is one column a place. Nothing like a chimney's thin grey plume.
+	{
+		const FLinearColor RootInk(FColor(24, 20, 18)), MidInk(FColor(52, 46, 42)), TopInk(FColor(96, 88, 80)), FireInk(FColor(204, 88, 36));
+		const float Moon = GetMoonlight();
+		const FVector Skyward(0.0, 0.0, 1.0);
+		for (FBombSmoke& Smoke : BombSmokes)
+		{
+			// (it rises when the bombs are seen to fall, not when the order is given)
+			bool bWaiting = false;
+			for (const FFlight& Flight : Flights)
+			{
+				bWaiting |= Flight.Sortie.Region == Smoke.Region && Flight.Sortie.bBombers && !Flight.bStruck;
+			}
+			if (bWaiting && Smoke.Ends < 0.0)
+			{
+				Smoke.Began = Now;
+				continue;
+			}
+			float Strength = static_cast<float>(FMath::SmoothStep(0.0, 1.5, Now - Smoke.Began));
+			if (Smoke.Ends >= 0.0)
+			{
+				Strength *= 1.0f - static_cast<float>(FMath::SmoothStep(0.0, 2.0, Now - Smoke.Ends));
+			}
+			const bool bFar = CameraDistance > 9000.0f;
+			if (Strength <= 0.01f || (bFar && !Smoke.bFirst) || FVector::DistSquared2D(Smoke.Root, CameraFocus) > FMath::Square(CameraDistance * 1.6 + 2500.0))
+			{
+				continue;
+			}
+			// (from the top it is a mark, never smaller than a town's plate: about forty points of the screen)
+			const double Tall = FMath::Max(Smoke.Tall, (bFar ? 0.06 : 0.032) * CameraDistance);
+			// (Many small puffs that overlap: a puff is thick at its middle and nothing at its rim, and sixteen of them
+			// up a column were a row of soft shadows, not smoke. Fewer from the top, where it is a mark.)
+			const int32 Count = bFar ? 22 : 46;
+			const double Life = 11.0;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const double Age = FMath::Frac(Now / Life + static_cast<double>(K) / Count + Smoke.Seed * 0.137);
+				// (it climbs fast and then flattens, and the wind takes it further the higher it is: a pall, not a pillar)
+				const double High = Tall * (1.0 - FMath::Pow(1.0 - Age, 1.7));
+				// (each puff keeps a place of its own beside the column's line, and billows a little as it goes up)
+				const double Aside = FMath::Sin(K * 12.9898 + Smoke.Seed) * 0.5 + FMath::Sin(Now * 0.45 + K * 1.7) * 0.2;
+				const double Radius = Tall * FMath::Lerp(1.0 / 26.0, 1.0 / 7.0, FMath::Pow(Age, 1.2)) * (0.85 + 0.3 * FMath::Abs(FMath::Sin(K * 4.1 + Smoke.Seed)));
+				const FVector At = Smoke.Root + Skyward * (High + 0.5 * Radius * FMath::Cos(K * 7.3)) + Wind * (0.8 * Tall * Age * Age) + Right * (Aside * Radius * 0.9);
+				FLinearColor Ink = Age < 0.5 ? FMath::Lerp(RootInk, MidInk, static_cast<float>(Age * 2.0)) : FMath::Lerp(MidInk, TopInk, static_cast<float>(Age * 2.0 - 1.0));
+				// (by night the fire lights its lowest third)
+				Ink = FMath::Lerp(Ink, FireInk * 0.55f, 0.6f * Moon * (1.0f - static_cast<float>(FMath::SmoothStep(0.0, 0.33, Age))));
+				const float Thick = Age < 0.5 ? FMath::Lerp(1.0f, 0.75f, static_cast<float>(Age * 2.0)) : FMath::Lerp(0.75f, bFar ? 0.5f : 0.2f, static_cast<float>(Age * 2.0 - 1.0));
+				const float Shown = Thick * Strength * static_cast<float>(FMath::SmoothStep(0.0, 0.02, Age)) * (1.0f - static_cast<float>(FMath::SmoothStep(0.88, 1.0, Age)));
+				// (a body of smoke in its lower two thirds, a haze where it flattens out)
+				if (Age < 0.62)
+				{
+					DrawFirm(At, Radius, Ink, Shown);
+				}
+				else
+				{
+					Draw(At, Radius, Ink, Shown);
+				}
+			}
+			if (!bFar && CameraDistance < 6500.0f)
+			{
+				Draw(Smoke.Root + Skyward * (0.015 * Tall), Tall / 24.0 * (1.0 + 0.2 * FMath::Sin(Now * 9.0 + Smoke.Seed)), FireInk, 0.85f * Strength);
+			}
+		}
+	}
+
 	// Raids in flight: flak round the bombers over a defended target, tracer between them and the fighters that
 	// rise to meet them, and a damaged bomber trailing smoke on the way home.
 	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f), Tracer(1.0f, 0.86f, 0.35f);
@@ -9534,19 +9733,41 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (Flight.Sortie.Flak > 0 && Flight.Share > 0.3 && Flight.Share < 0.64)
 		{
-			// More guns, more bursts: each lives a second and a half and is thrown up somewhere new each time.
-			const int32 Bursts = FMath::Min(Flight.Sortie.Flak, 4) * 6;
-			for (int32 K = 0; K < Bursts; ++K)
+			// (Brian, 16 November 2026: "dont forget to show flak when bombers go to a target with AA guns". The art
+			// director's brief.) Bursts at the bombers' height, within about two wingspans of the formation, more of
+			// them behind than ahead and never dead on a machine. Each is a flash, then a black ball that swells for
+			// four seconds and thins away, hanging where it burst while the formation flies on: a dark belly under a
+			// crown the sun catches, or it vanishes over dark ground; and a small shadow under it. More guns, more
+			// bursts alive at once: four, seven, twelve.
+			const double Wings = (Flight.Sortie.bBombers ? 8.0 : 5.0) * Table; // (a bomber's wings as it is built for a raid)
+			const int32 AliveNow = Flight.Sortie.Flak >= 3 ? 12 : Flight.Sortie.Flak == 2 ? 7 : 4;
+			const double BurstLasts = 4.0;
+			const FVector Onward = FVector(Flight.Dir.X, Flight.Dir.Y, 0.0).GetSafeNormal();
+			const FVector Abeam(-Onward.Y, Onward.X, 0.0);
+			const FLinearColor BurstBelly(FColor(14, 12, 14)), BurstCrown(FColor(168, 156, 140));
+			for (int32 K = 0; K < AliveNow; ++K)
 			{
-				const double Clock = Now / 1.5 + K * 0.371;
-				const double Age = FMath::Frac(Clock);
-				FRandomStream Random(static_cast<int32>(FMath::FloorToDouble(Clock)) * 7919 + K * 131 + F * 17);
-				const FVector Offset(Random.FRandRange(-9.0f, 9.0f) * Table, Random.FRandRange(-9.0f, 9.0f) * Table, Random.FRandRange(-3.0f, 2.5f) * Table);
-				if (Age < 0.07)
+				const double BurstClock = Now / BurstLasts + static_cast<double>(K) / AliveNow + F * 0.31;
+				const double BurstAge = FMath::Frac(BurstClock);
+				FRandomStream BurstRandom(static_cast<int32>(FMath::FloorToDouble(BurstClock)) * 7919 + K * 131 + F * 17);
+				const double BurstAlong = BurstRandom.FRandRange(-1.9f, 0.9f), BurstRise = BurstRandom.FRandRange(-0.45f, 0.55f);
+				double BurstAside = BurstRandom.FRandRange(-2.0f, 2.0f);
+				if (FMath::Abs(BurstAlong) < 0.8 && FMath::Abs(BurstAside) < 0.8)
 				{
-					Draw(Flight.At + Offset, 1.1 * Table, Fire, 0.9f);
+					BurstAside += BurstAside < 0.0 ? -0.9 : 0.9;
 				}
-				Draw(Flight.At + Offset + FVector(0.0, 0.0, 0.6 * Table * Age), (0.7 + 1.5 * Age) * Table, FlakBlack, 0.78f * FMath::Pow(1.0 - Age, 1.1));
+				const FVector BurstAt = Flight.At + (Onward * (BurstAlong - 1.5 * BurstAge) + Abeam * BurstAside + FVector(0.0, 0.0, BurstRise + 0.12 * BurstAge)) * Wings;
+				const double BurstRadius = Wings * FMath::Lerp(0.15, 0.3, FMath::Sqrt(BurstAge));
+				const float BurstThin = 0.92f * (1.0f - static_cast<float>(FMath::SmoothStep(0.5, 1.0, BurstAge)));
+				if (BurstAge < 0.025)
+				{
+					Draw(BurstAt, 0.24 * Wings, Fire, 0.95f);
+				}
+				// (its shadow first, on the ground under it, so that the ball is drawn over it)
+				const FVector2D BurstUnder = WorldToMap(BurstAt);
+				Draw(SurfacePoint(BurstUnder.X, BurstUnder.Y, 0.2), BurstRadius * 0.8, FLinearColor(0.0f, 0.0f, 0.0f), 0.2f * BurstThin);
+				DrawFirm(BurstAt, BurstRadius, BurstBelly, BurstThin);
+				Draw(BurstAt + (Up * 0.42 - Right * 0.16) * BurstRadius, BurstRadius * 0.46, BurstCrown, 0.7f * BurstThin);
 			}
 		}
 		if (Flight.bEngaged)

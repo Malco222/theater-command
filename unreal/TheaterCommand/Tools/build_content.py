@@ -696,7 +696,7 @@ def build_land():
                                                                   # to be picked out across its basin. Every great river was drawn there at the
                                                                   # one least width. The very greatest, half-broad beyond a map unit, are drawn
                                                                   # up to as broad again and a little more.)
-                                                                  times(m, sat(times(m, plus(m, half, -1.0, -1900, 3120), 2.0, -1800, 3120), -1700, 3120), scalar(m, "WetGreatest", 1.5, -1700, 3180), -1600, 3140),
+                                                                  times(m, sat(times(m, plus(m, half, -1.0, -1900, 3120), 2.0, -1800, 3120), -1700, 3120), scalar(m, "WetGreatest", 2.5, -1700, 3180), -1600, 3140),
                                                                   -1600, 3060), -1550, 3040), times(m, half, 0.5, -1550, 3100), -1400, 3060), times(m, great, far, -1400, 2960), -1250, 2900)
     inside = less(sat(plus(m, over(less(half_seen, off, -1100, 2600), px, -950, 2600), 0.5, -800, 2600), -650, 2600),
                   sat(plus(m, over(less(times(m, half_seen, -1.0, -1100, 2700), off, -950, 2700), px, -800, 2700), 0.5, -650, 2700), -500, 2700), -350, 2650)

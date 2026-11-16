@@ -124,6 +124,24 @@ struct FOrderLine
 	int32 Months = 0; // months still to wait
 	int32 Cost = 0;
 	bool bCanCancel = false; // only in the month it was ordered
+	FString Sign; // the sign it takes on its city's badge ("inf", "arm", "bmr", "hull" and so on); empty for works
+	FString Words; // what it is, in a few words
+	bool bStar = false; // a special formation
+	float Share = 0.0f; // how far along it is, 0 to 1
+};
+
+/** What one of the player's cities has on order, for its one badge on the map (rulings 46 and 57). */
+struct FCityOrders
+{
+	int32 Region = INDEX_NONE;
+	FString Sign; // of the unit ready soonest
+	bool bStar = false;
+	int32 Count = 1; // the orders there of exactly what the sign shows
+	bool bPlus = false; // other kinds of unit are on order there too
+	int32 Months = 0; // until the unit in the sign is ready
+	int32 Total = 0;
+	FString Head; // "3 on order: 1 armor corps, 2 infantry corps. Next ready in 2 months."
+	TArray<FString> Lines; // one an order, soonest first
 };
 
 /** The player's treasury. */
@@ -479,6 +497,7 @@ struct FCampaignView
 	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
+	TArray<FCityOrders> CityOrders; // what each of the player's cities has on order
 	TArray<int32> Going; // works going up from the arsenal, where the player can know it: flat pairs, the region and what (bits: 1 factory, 2 shipyard, 4 guns, 8 airfield, 16 fortifications)
 	TArray<int32> Wrecked; // factories not working (bombed, sabotaged, burnt), where the player can know it: flat pairs, the region and how many
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
@@ -498,6 +517,7 @@ struct FCampaignView
 	TArray<int32> Scars;
 	// Towns under siege that the player knows of, three numbers each: region, 1 if the ring is closed, months of stores left.
 	TArray<int32> Sieges;
+	TArray<int32> Bombed; // the provinces bombed this month or last, where the player can know of it: each stands under black smoke
 	// For the night: the nations at war (their towns are blacked out), and the fronts as pairs of regions.
 	TArray<FString> Blackout;
 	TArray<int32> Fronts;
@@ -1196,6 +1216,7 @@ struct FProvinceInfo
 	FString Note;
 	TArray<FProvinceOption> Options;
 	TArray<FOrderLine> Forming;
+	FString FormingHead; // the total with its breakdown, where units are on order here
 	// The town's building plots (the grand campaign): what stands on each or "Free plot", whether the town is the
 	// player's to build in, and how many kinds of building could be ordered there now.
 	bool bHasPlots = false, bPlotsMine = false;

@@ -736,7 +736,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					// (from high up only the great rivers, and each comes in from nothing: the land's paint draws a
 					// water from 0.8 of half-breadth up as a line of even width, and brings it in over the next eighth)
-					HalfLaid = HalfLaid < 0.72f ? 0.0f : 0.8f + 0.125f * FMath::SmoothStep(0.72f, 1.0f, HalfLaid);
+					// (The art director's rounds 31 and 33: from the top the Amazon is the one river to be picked out across
+					// its basin. The very greatest, half-broad beyond a map unit by the water they carry, keep growing here,
+					// and the land's paint draws them broader: see "WetGreatest".)
+					HalfLaid = HalfLaid < 0.72f ? 0.0f : HalfLaid <= 1.0f ? 0.8f + 0.125f * FMath::SmoothStep(0.72f, 1.0f, HalfLaid) : 0.925f + 1.1f * (HalfLaid - 1.0f);
 				}
 				return HalfLaid;
 			};
@@ -1108,8 +1111,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const FSeen Blue = FSeen::Bytes(72, 104, 125); // (as Europe's rivers are laid)
 						FSeen Ink = Blue;
 						float Bed = 0.1f;
-						// (the jungle's rivers are brown, with pale bars)
-						Ink = Mix(Ink, FSeen::Bytes(120, 110, 95), Jungle); // (laid cooler than it is to be seen: under the lamp it comes out at about (128, 110, 76))
+						// (The art director's round 33, ruling C: the jungle's rivers are a silted blue like the ribbon they run
+						// into, to be seen at about (98, 146, 160). Brown read as a road beside every other river's blue.)
+						Ink = Mix(Ink, FSeen::Bytes(103, 118, 139), Jungle);
 						// (a hairline has no bars: the art director's ruling of round 25)
 						// (the art director's round 31: a jungle river's sand lay along its middle like the dashes of a road; less of it)
 						Bed = FMath::Lerp(Bed, 0.16f * FMath::SmoothStep(0.2f, 0.45f, Half), Jungle);
@@ -1156,7 +1160,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const float Patch = FMath::PerlinNoise2D(P * 0.23 + FVector2D(17.0, 71.0)) + 0.5f * FMath::PerlinNoise2D(P * 0.61 + FVector2D(3.0, 29.0));
 						// (not at a river's very head, where it is a thread: a clearing there was a red match-head on every source)
 						// (and only beside a course still drawn as a river, so that none floats alone in the canopy by a hairline)
-						const float Bank = Half > 0.0f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.25f, 0.45f, Half) : 0.0f;
+						// (The art director's round 33: along a ruled river's ribbon the clearings showed as a neon fringe of raw
+						// paint, magenta in Peru and orange in Brazil. The bank of a ribbon takes none.)
+						const float Bank = Half > 0.0f && RiverWater[Idx] > -1.5f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.25f, 0.45f, Half) : 0.0f;
 						const float Clear = FMath::SmoothStep(0.0f, 0.1f, Patch - FMath::Lerp(ClearingFrom().X, ClearingFrom().Y, Bank)) * FMath::SmoothStep(0.55f, 0.8f, Jungle) * Out;
 						if (Clear > 0.0f)
 						{
@@ -1362,7 +1368,13 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					Wooded = FMath::Max(Wooded, 0.8f * Ribbon * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]));
 					// (and no canopy over the water itself: a jungle's roof is broken by its rivers)
 					// (a hairline has no rim: the canopy closes to its very edge, and the water is drawn over it)
-					Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]));
+					// (The art director's round 33: not under a ruled river's ribbon. Opened there, the canopy showed the raw
+					// paint of the ground beside the ribbon wherever the ribbon ran narrow: a neon fringe, magenta in Peru
+					// and orange in Brazil. The ribbon lies over the canopy, and its banks are shaded instead: see below.)
+					if (RiverWater[Idx] > -1.5f)
+					{
+						Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]));
+					}
 				}
 				Wooded *= 1.0f - Opened[Idx];
 				if (WetScale == 1)
@@ -1386,6 +1398,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
 			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
 			Sun *= 1.0f - 0.42f * Thrown[Idx];
+			if (bWaters && Terrain.Cell <= 3.0 && RiverHalf[Idx] > 0.0f && RiverWater[Idx] < -1.5f)
+			{
+				// (and the forest is a little darker along a ruled river's banks: the cut the river makes in the canopy)
+				Sun *= FMath::Lerp(0.74f, 1.0f, FMath::SmoothStep(RiverHalf[Idx] * 0.4f, RiverHalf[Idx] + 1.6f, RiverAt[Idx]));
+			}
 			Sun -= 0.3f * FMath::Clamp((Surround[Idx] - Metres[Idx]) / 260.0f, -0.6f, 0.6f);
 			// A little unevenness, so that large areas do not look printed.
 			Sun *= 1.0f + 0.03f * (1.0f - 0.6f * Lowland) * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b62e4cc 2026-11-15. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a991695 2026-11-15. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1214,7 +1214,7 @@
       per: 0.01
     },
     stalemate: {
-      _note: "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Never a war the player is fighting in.",
+      _note: "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Not while a staff on either side is still building its army up across the sea for the front history planned (open.json, 'descent.planned', 'with'): the months are then counted from the month that army is ready. Never a war the player is fighting in.",
       after: 12
     }
   };
@@ -8713,19 +8713,6 @@
     g2.flags[quayKey(nat)] = from.id + 1;
     return true;
   }
-  function landReach(g2, nat) {
-    const byLand = new Uint8Array(g2.regions.length);
-    const q = [];
-    for (const r of g2.regions) if (allied(g2, nat, r.ctrl)) {
-      byLand[r.id] = 1;
-      q.push(r.id);
-    }
-    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (!byLand[j] && atWar(g2, nat, g2.regions[j].ctrl)) {
-      byLand[j] = 1;
-      q.push(j);
-    }
-    return byLand;
-  }
   function armyReach(g2, nat) {
     const byLand = new Uint8Array(g2.regions.length);
     const q = [];
@@ -8827,7 +8814,7 @@
     const idle = (r) => r.units.reduce((s, u) => s + (u.nat === att && !u.dead && u.kind !== "fort" && u.kind !== "eng" && !u.airborne && !u.town ? 1 : 0), 0);
     const quays = g2.regions.filter((r) => r.port && r.seas.length > 0 && allied(g2, att, r.ctrl) && idle(r) >= W.corps).sort((a, b) => idle(b) - idle(a) || a.id - b.id);
     if (!quays.length) return;
-    const byLand = landReach(g2, att);
+    const byLand = armyReach(g2, att);
     for (const d of [...n.atWar].sort()) {
       const x = g2.nations[d];
       if (!x?.alive || x.capital < 0) continue;
@@ -9726,7 +9713,7 @@
       splitFleet(g2, f);
     }
   }
-  function whyNotBase(g2, f, r) {
+  function whyNotBase(g2, f, r, bySea = false) {
     if (f.ship !== void 0) return "It flies from the carriers of its fleet, and goes where they go.";
     if (r.id === f.base) return "It is already based there.";
     if (!airfieldOpenTo(g2, f.nat, r)) {
@@ -9740,7 +9727,7 @@
     if (!hasAirfield(g2, r.id)) return "There is no airfield there. Engineers can lay one out, and the treasury can build one.";
     if (r.since >= g2.turn) return "Airfields taken this month are not yet in use.";
     if (f.moved === g2.turn) return "It has already changed base this month.";
-    if (km(g2, f.base, r.id) > AIR.ferry) return "Too far to move in one month.";
+    if (!bySea && km(g2, f.base, r.id) > AIR.ferry) return "Too far to move in one month.";
     return null;
   }
   var airBases = (g2, f) => g2.regions.filter((r) => whyNotBase(g2, f, r) === null);
@@ -9780,8 +9767,8 @@
       return out;
     };
   }
-  function rebaseAir(g2, f, r) {
-    if (whyNotBase(g2, f, r)) return false;
+  function rebaseAir(g2, f, r, bySea = false) {
+    if (whyNotBase(g2, f, r, bySea)) return false;
     f.base = r.id;
     f.moved = g2.turn;
     f.ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
@@ -9790,6 +9777,10 @@
       f.target = -1;
     }
     return true;
+  }
+  function fieldRoom(g2, base, f) {
+    const there = g2.airFleets.reduce((s, x) => s + (x !== f && x.base === base && x.ship === void 0 ? x.ftr + x.bmr : 0), 0);
+    return there + f.ftr + f.bmr <= (airWar(g2) ? Math.max(AIRWAR.fields.least, airfieldsHold(g2, base)) : airfieldsHold(g2, base));
   }
   function shipping(g2, nat, z) {
     if (g2.fleets.some((x) => x.zone === z && atSea(x) && atWar(g2, nat, x.nat))) return true;
@@ -10976,12 +10967,13 @@
       fleets: "Squadrons in home waters on the first day, in the form of navy.json.",
       peace: "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
       warWork: "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
-      overseas: "The army sent across the ocean. A computer-run country here whose homeland lies an ocean away from every enemy ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business.",
+      overseas: "The army sent across the ocean. A computer-run country here whose homeland lies an ocean away from every enemy ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business. Version 77: 'hop' is a higher ceiling for one kind of sailing, a corps already on the far shore going on over a narrow sea (no further than a landing can go) into a harbour its side already holds: a reinforcement and not a venture. 'fleet' names the fleets that follow the army once its first corps is across: each moves its base to the harbour where the army is built up and takes the sea off it for its beat. 'air' is how many air groups stay at home: the others are shipped across, one a month, to the nearest airfield of its side's with room. Canada ships its army the same way, on its own small scale (its two home commands stay). So does Brazil from 'from' (59: July 1944, the month its expeditionary force sailed; its one corps has a ship as soon as it is on the quay). 'most' is the size of such an expeditionary force: no more than this many of its field corps are kept across the ocean (Canada 3, about the five divisions it had overseas; Brazil 1, its one division).",
       protector: "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
       pairs: "Trade agreements history had in 1939, added to trade.json's. The republics of Latin America trade with their neighbours, round the continent and round the Caribbean: every one of their trading houses is spoken for on the first day, so the agreements of Europe are the same with them on the map as without.",
       order: "Where the new countries stand in the order of play: after the countries of nations.json.",
       idle: "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (A country with an entry under 'overseas' that is at war and has an ally's port to ship to raises by that rule instead.) A player's own staff is not bound by it.",
       oilHome: "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
+      labels: "Where a province's name is written on the map when the middle of the province will not do (the art director's ruling on the Canal Zone, whose name ran into Panama City's): 'under' centres the name under the province's own town mark, 'west' writes it to the west of that mark, ending there. Every other name sits on the middle of its province.",
       great: "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
     },
     nations: {
@@ -10993,19 +10985,19 @@
       CHL: { name: "Chile", adj: "Chilean", color: "#a0600f", quality: 0.65, air: 2, resilience: 0.6, align: "independent", sealift: 1 },
       PER: { name: "Peru", adj: "Peruvian", color: "#93479a", quality: 0.55, air: 2, resilience: 0.5, align: "independent", sealift: 1 },
       COL: { name: "Colombia", adj: "Colombian", color: "#2f55a6", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
-      VEN: { name: "Venezuela", adj: "Venezuelan", color: "#2cc0c6", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
-      GUA: { name: "Guatemala", adj: "Guatemalan", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      ELS: { name: "El Salvador", adj: "Salvadoran", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      HON: { name: "Honduras", adj: "Honduran", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      NIC: { name: "Nicaragua", adj: "Nicaraguan", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      COS: { name: "Costa Rica", adj: "Costa Rican", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      PAN: { name: "Panama", adj: "Panamanian", color: "#b0a488", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
-      HAI: { name: "Haiti", adj: "Haitian", color: "#b0a488", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
-      DOM: { name: "Dominican Republic", adj: "Dominican", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      ECU: { name: "Ecuador", adj: "Ecuadorian", color: "#b0a488", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      BOL: { name: "Bolivia", adj: "Bolivian", color: "#b0a488", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
-      PAR: { name: "Paraguay", adj: "Paraguayan", color: "#b0a488", quality: 0.55, air: 0, resilience: 0.5, align: "independent" },
-      URU: { name: "Uruguay", adj: "Uruguayan", color: "#b0a488", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
+      VEN: { name: "Venezuela", adj: "Venezuelan", color: "#1f9d6b", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
+      GUA: { name: "Guatemala", adj: "Guatemalan", color: "#9383c4", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      ELS: { name: "El Salvador", adj: "Salvadoran", color: "#c98494", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      HON: { name: "Honduras", adj: "Honduran", color: "#9dbd8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      NIC: { name: "Nicaragua", adj: "Nicaraguan", color: "#bf7f73", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      COS: { name: "Costa Rica", adj: "Costa Rican", color: "#7fae8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      PAN: { name: "Panama", adj: "Panamanian", color: "#a8607f", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
+      HAI: { name: "Haiti", adj: "Haitian", color: "#8fba7a", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
+      DOM: { name: "Dominican Republic", adj: "Dominican", color: "#b08fb5", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      ECU: { name: "Ecuador", adj: "Ecuadorian", color: "#cf8f66", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      BOL: { name: "Bolivia", adj: "Bolivian", color: "#6fa58c", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
+      PAR: { name: "Paraguay", adj: "Paraguayan", color: "#c4838f", quality: 0.55, air: 0, resilience: 0.5, align: "independent" },
+      URU: { name: "Uruguay", adj: "Uruguayan", color: "#9d8cc4", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
     },
     home: {
       USA: { align: "leaning_allies" }
@@ -11070,7 +11062,9 @@
     },
     warWork: { USA: 0.037 },
     overseas: {
-      USA: { guard: 4, ahead: 7, bank: 2, risk: 0.1, oceans: { atlantic: 0.15 } }
+      USA: { guard: 4, ahead: 7, bank: 2, risk: 0.1, hop: 0.2, air: 0, fleet: ["Atlantic Squadron"], oceans: { atlantic: 0.15 } },
+      CAN: { guard: 2, ahead: 4, bank: 1, risk: 0.1, hop: 0.2, most: 3, oceans: { atlantic: 0.25 } },
+      BRA: { guard: 4, ahead: 1, bank: 1, risk: 0.1, hop: 0.2, from: 59, most: 1, oceans: { atlantic: 1 } }
     },
     protector: ["UK", "USA"],
     pairs: [
@@ -11123,7 +11117,8 @@
       BOL: 2,
       PAR: 1,
       URU: 1
-    }
+    },
+    labels: { "Canal Zone": "west", "Panama City": "under" }
   };
 
   // ../../src/campaign/world.ts
@@ -11276,6 +11271,7 @@
     const O = worldOn(g2) && nat !== g2.human ? WORLD.overseas[nat] : void 0;
     const n = g2.nations[nat];
     if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g2.regions[n.capital].ctrl !== nat) return null;
+    if (O.from !== void 0 && g2.turn < O.from) return null;
     for (let i = WORLD_FIRST; i < g2.regions.length; i++) if (n.atWar.includes(g2.regions[i].ctrl)) return null;
     return O;
   }
@@ -20919,8 +20915,14 @@
       dig: { orders: 2, top: 2, capital: 3, keep: 40 }
     },
     descent: {
-      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. A staff heeds its own forecast ('heed'): it lands no force on a beach where the sea behind could be closed and the force cut off from its supplies (the same forecast a player reads on the landing card, navy.ts). 'mainland' is that rule for a first landing on a shore with a land frontier; 'island' is the same for a landing that takes a whole island (a province with no land frontier), and it is off: in the wars measured (Version 75) landings of that kind under a warning mostly held and cost few men, and the island war to come would be forbidden by it; 'wave' is the rule for a further wave sent over the beach to men already ashore. A player may still order any such landing by hand. The hardest level has rules of its own for the player's coasts (difficulty.json).",
+      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. A staff heeds its own forecast ('heed'): it lands no force on a beach where the sea behind could be closed and the force cut off from its supplies (the same forecast a player reads on the landing card, navy.ts). 'mainland' is that rule for a first landing on a shore with a land frontier; 'island' is the same for a landing that takes a whole island (a province with no land frontier), and it is off: in the wars measured (Version 75) landings of that kind under a warning mostly held and cost few men, and the island war to come would be forbidden by it; 'wave' is the rule for a further wave sent over the beach to men already ashore. A player may still order any such landing by hand. The hardest level has rules of its own for the player's coasts (difficulty.json). 'planned' holds history's shores for the staffs that have such a list (Version 77, the design director's rulings 39 and 40): 'open' names the countries on whose own shores the staff may open a second front by a landing of its own, 'join' those on whose ground it goes by ship to a front its side already holds; colonies and islands overseas are open to it always. Such a staff does not go elsewhere because elsewhere is clear: where its shores are barred it names its beach, its fleet and its fighters work on the crossing, and it waits. 'with' is the build-up: the staff opens no front of its own on a mainland until this many of its field corps stand across the ocean (9 for the United States: the landing force and two more to follow it in; with none, three corps put ashore at Bordeaux in the autumn of 1942 were destroyed by the spring in most wars). An island taken whole and a colony overseas need no such army, and joining a front its side already holds never waits for it. The United States opens on France and Italy (with North Africa, its landings in the real war) and joins a front in the west or in Italy; Canada and Brazil open no front of their own on a mainland and join their allies' (Canada in the west and in Italy, Brazil in Italy and France); a staff with no list goes where it judges best, and at the stop of the history dial where nobody has read the books so does every staff. 'front' is how near the enemy must be, in marches over ground its side holds, for a harbour an ally holds to count as a front that an army across an ocean is shipped to (world.json 'overseas'): not only the harbour of a landing still in the lander's own hands, but one handed back to the country it was freed for, one reached overland, or an ally's own that the war has come to.",
       heed: { mainland: true, island: false, wave: true },
+      front: 2,
+      planned: {
+        USA: { open: ["FRA", "ITA"], join: ["FRA", "ITA", "BEL", "NED", "LUX", "GER", "DEN", "UK"], with: 9 },
+        CAN: { open: [], join: ["FRA", "ITA", "BEL", "NED", "LUX", "GER", "DEN", "UK"] },
+        BRA: { open: [], join: ["ITA", "FRA"] }
+      },
       after: 12,
       abroad: 3,
       hold: 15,
@@ -21589,7 +21591,7 @@
     const pushed = g2.turn <= flag2(g2, `st:push:${nat}`);
     const list4 = ops(nat);
     const meant = (op, f) => !op.side && f.enemies.some((e) => (op.if ?? []).includes(`war:${nat},${e}`));
-    const planned = (f) => list4.some((op) => meant(op, f) && !flag2(g2, `st:done:${nat}:${op.id}`) && g2.turn <= (op.to ?? 999) && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real)));
+    const planned2 = (f) => list4.some((op) => meant(op, f) && !flag2(g2, `st:done:${nat}:${op.id}`) && g2.turn <= (op.to ?? 999) && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real)));
     const hurried = (op) => real.some((f) => meant(op, f) && boldness2(g2, nat, f) > 0);
     for (const f of real) {
       const since = onSince(g2, nat, f);
@@ -21605,7 +21607,7 @@
         const usual = T.attackAt * inConcert(g2, nat, f);
         const I = OPEN.impatience;
         const k0 = boldness2(g2, nat, f);
-        const k = k0 < (I?.after.length ?? 0) && planned(f) ? 0 : k0;
+        const k = k0 < (I?.after.length ?? 0) && planned2(f) ? 0 : k0;
         const none3 = T.attackAt >= 50;
         const eager = !k ? usual : none3 ? k >= I.after.length ? I.any : usual : Math.max(I.floor, usual * I.ratio[k - 1]);
         if (f.ratio >= eager && !(!k && shy(g2, nat, f))) {
@@ -21618,7 +21620,7 @@
         }
       }
     }
-    mainEffort(g2, nat, real, T, "", planned);
+    mainEffort(g2, nat, real, T, "", planned2);
     const busy = real.some((f) => onSince(g2, nat, f) && !cond(g2, nat, "quiet", [f]) && g2.turn - flag2(g2, `st:gain:${nat}`) <= 1);
     let cur = flag2(g2, `st:op:${nat}`);
     const book = !!stopDef(g2).book;
@@ -21880,6 +21882,34 @@
   }
   var landingForce = () => OPEN.descent?.force ?? 3;
   var harbours = (g2, e) => g2.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
+  var planned = (g2, nat) => stopDef(g2).bold ? null : OPEN.descent?.planned?.[nat] ?? null;
+  var opensOn = (g2, nat, r) => {
+    const P = planned(g2, nat);
+    return !P || !!r.overseas || P.open.includes(r.owner);
+  };
+  function builtUp(g2, nat, r) {
+    const need = planned(g2, nat)?.with;
+    return !need || !!r.overseas || !r.nb.length || armyAcross(g2, nat) >= need;
+  }
+  function armyAcross(g2, nat) {
+    let across = 0;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && !acrossHome(g2, nat, c.reg)) across++;
+    return across;
+  }
+  function massing(g2, nat) {
+    const need = planned(g2, nat)?.with;
+    if (!need) return false;
+    const across = armyAcross(g2, nat);
+    return across > 0 && across < need;
+  }
+  var acrossHome = (g2, nat, reg) => {
+    const cap6 = g2.nations[nat].capital;
+    return cap6 < 0 || beyondEurope(cap6) === beyondEurope(reg);
+  };
+  var joinsOn = (g2, nat, r) => {
+    const P = planned(g2, nat);
+    return !P || !!r.overseas || P.join.includes(r.owner);
+  };
   function seaFoe(g2, nat, slot = 0) {
     const n = g2.nations[nat];
     if (!n || !n.alive || n.dormant || n.sealift <= 0 || nat === g2.human) return null;
@@ -21930,7 +21960,8 @@
     const ids2 = Object.keys(g2.nations);
     const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none3 = `st:far:${nat}`;
     const foe = ids2[flag2(g2, kf) - 1], quay = g2.regions[flag2(g2, kq) - 1];
-    if (foe && quay && g2.nations[foe].alive && atWar(g2, nat, foe) && allied(g2, nat, quay.ctrl) && (g2.turn - flag2(g2, at) < 3 || lodgment(g2, nat, 1)?.short)) return { foe, quay };
+    const room2 = (p) => STACK - friendlyUnits(g2, p, nat).filter((u) => u.nat !== nat).length >= D.force;
+    if (foe && quay && g2.nations[foe].alive && atWar(g2, nat, foe) && allied(g2, nat, quay.ctrl) && room2(quay) && (g2.turn - flag2(g2, at) < 3 || lodgment(g2, nat, 1)?.short)) return { foe, quay };
     if (flag2(g2, none3) === g2.turn) return null;
     const drop = () => {
       delete g2.flags[kf];
@@ -21943,7 +21974,7 @@
       return !!x?.alive && x.capital >= 0 && quietWith(g2, nat, e) >= (D.abroad ?? 3);
     });
     if (!foes.length) return drop();
-    const shores = foes.map((e) => harbours(g2, e));
+    const shores = foes.map((e) => harbours(g2, e).filter((r) => opensOn(g2, nat, r)));
     if (!shores.some((s) => s.length)) return drop();
     const home = homeGround(g2, nat).on;
     const seen2 = new Uint8Array(g2.regions.length);
@@ -21974,6 +22005,7 @@
     const shut = g2.seas.map((z) => closedTo(g2, z.id, nat));
     let best = null, bw = 0, bs = Infinity;
     for (const p of idle) {
+      if (!room2(p)) continue;
       const d = new Int16Array(g2.regions.length).fill(-1);
       const q = [p.id];
       d[p.id] = 0;
@@ -22125,7 +22157,7 @@
     let best = null, bs = -1;
     const look = (id, slot, own) => {
       const l = lodgment(g2, id, slot);
-      if (!l || !l.ports.length) return;
+      if (!l || !l.ports.length || !own && !joinsOn(g2, nat, l.at)) return;
       const s = (own ? 2 : 0) + (l.short ? 1 : 0);
       if (s > bs) {
         bs = s;
@@ -22138,9 +22170,51 @@
       if (id === nat || !A.alive || A.dormant || !allied(g2, nat, id) || !A.atWar.some((e) => n.atWar.includes(e))) continue;
       for (const slot of [0, 1]) look(id, slot, false);
     }
-    if (!best) return null;
+    const marches = OPEN.descent?.front;
+    const held = marches !== void 0 && isOpen(g2) ? heldFront(g2, nat, marches) : null;
+    if (!best) return held;
     const b = best;
-    return { ...b, ground: groundFrom(g2, nat, b.at) };
+    const ground = groundFrom(g2, nat, b.at);
+    if (!held) return { ...b, ground, lodged: b.ports.length };
+    for (let i = 0; i < ground.length; i++) if (held.ground[i]) ground[i] = 1;
+    return { at: b.at, ports: [...b.ports, ...held.ports.filter((p) => !b.ports.includes(p))], ground, lodged: b.ports.length };
+  }
+  function heldFront(g2, nat, marches) {
+    const n = g2.nations[nat];
+    const home = homeGround(g2, nat).on;
+    const ours = (c) => c === nat || allied(g2, nat, c) && !!g2.nations[c]?.atWar.some((e) => n.atWar.includes(e));
+    const found2 = [];
+    for (const p of g2.regions) {
+      if (!p.port || !p.seas.length || home[p.id] || !ours(p.ctrl) || !joinsOn(g2, nat, p) || hostileUnits(g2, p, nat).length) continue;
+      const d = /* @__PURE__ */ new Map([[p.id, 0]]);
+      const q = [p.id];
+      let near = Infinity;
+      for (let i = 0; i < q.length && near === Infinity; i++) {
+        const k = d.get(q[i]);
+        for (const j of g2.regions[q[i]].nb) {
+          if (d.has(j)) continue;
+          const c = fieldCtrl(g2, g2.regions[j]);
+          if (atWar(g2, nat, c)) {
+            near = k + 1;
+            break;
+          }
+          if (k + 1 < marches && allied(g2, nat, c)) {
+            d.set(j, k + 1);
+            q.push(j);
+          }
+        }
+      }
+      if (near <= marches) found2.push({ p, d: near });
+    }
+    if (!found2.length) return null;
+    found2.sort((a, b) => a.d - b.d || a.p.id - b.p.id);
+    const ground = new Uint8Array(g2.regions.length);
+    for (const f of found2) {
+      if (ground[f.p.id]) continue;
+      const on = groundFrom(g2, nat, f.p);
+      for (let i = 0; i < on.length; i++) if (on[i]) ground[i] = 1;
+    }
+    return { at: found2[0].p, ports: found2.map((f) => f.p), ground, lodged: 0 };
   }
   function oceanBase(g2, nat, ocean, safe) {
     const n = g2.nations[nat];
@@ -22148,7 +22222,9 @@
     const serves = (p) => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g2, nat, p.ctrl) && (p.ctrl === nat || !!g2.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g2, p, nat).length && safe(p);
     const kept = g2.regions[flag2(g2, key4) - 1];
     if (kept && serves(kept) && g2.turn - flag2(g2, at) < 6) return kept;
-    const shores = [...n.atWar].sort().filter((e) => g2.nations[e]?.alive && g2.nations[e].capital >= 0).flatMap((e) => harbours(g2, e));
+    const all = [...n.atWar].sort().filter((e) => g2.nations[e]?.alive && g2.nations[e].capital >= 0).flatMap((e) => harbours(g2, e));
+    const meant = all.filter((r) => opensOn(g2, nat, r) || joinsOn(g2, nat, r));
+    const shores = meant.length ? meant : all;
     if (!shores.length) {
       delete g2.flags[key4];
       return null;
@@ -22341,13 +22417,19 @@
       return t;
     };
     const free2 = (x, side3) => !side3.some((y) => g2.nations[y].alive && atWar(g2, x, y) && touch(x, y));
+    for (const n of live) if (massing(g2, n.id)) g2.flags[`st:massing:${n.id}`] = g2.turn;
+    const massed2 = (xs, ys) => {
+      let t = 0;
+      for (const x of xs) if (g2.nations[x].alive && ys.some((y) => atWar(g2, x, y))) t = Math.max(t, flag2(g2, `st:massing:${x}`));
+      return t;
+    };
     const signed = [];
     for (const A of live) for (const b of A.atWar) {
       const B2 = g2.nations[b];
       if (!(A.id < b) || !B2?.alive || B2.dormant) continue;
       if (me !== null && (A.id === me || b === me || atWar(g2, me, A.id) || atWar(g2, me, b))) continue;
       const sa = sideOf3(g2, A.id), sb = sideOf3(g2, b);
-      const since = Math.max(lastBattle(sa, sb), flag2(g2, `war:${A.id}:${b}`), flag2(g2, `war:${b}:${A.id}`), 1);
+      const since = Math.max(lastBattle(sa, sb), massed2(sa, sb), massed2(sb, sa), flag2(g2, `war:${A.id}:${b}`), flag2(g2, `war:${b}:${A.id}`), 1);
       if (g2.turn - since < S.after || !free2(A.id, sb) || !free2(b, sa)) continue;
       signed.push([A.id, b]);
     }
@@ -22696,8 +22778,8 @@
     const n = g2.nations[nat];
     const open = isOpen(g2);
     if (open) decide(g2, nat, (r) => aside(g2, r, nat));
-    const planned = phaseFor(g2, nat);
-    const ph = planned?.ifAtWar && !atWar(g2, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
+    const planned2 = phaseFor(g2, nat);
+    const ph = planned2?.ifAtWar && !atWar(g2, planned2.ifAtWar[0], planned2.ifAtWar[1]) ? null : planned2;
     if (ph?.declare) {
       let go = true;
       if (ph.declareWhenCollapsing) {
@@ -22778,17 +22860,17 @@
       return;
     }
     const enemies = enemySet(g2, nat);
-    const follow = posture === "attack" && !ph.force;
+    const follow2 = posture === "attack" && !ph.force;
     const halt = /* @__PURE__ */ new Set([...ph && g2.turn === ph.from ? ph.haltOrder ?? [] : [], ...ph?.siege ?? []]);
     const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g2, nat)) : null;
     gunsUp(g2, nat, enemies, only);
     if (!ph?.massing) {
       softenLine(g2, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
-      offensive(g2, nat, objectivesFor(g2, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g2.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+      offensive(g2, nat, objectivesFor(g2, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g2.turn > (ph?.from ?? 0), follow2, halt, only, ph?.oddsFor);
     }
     if (!n.alive) return;
     if (posture === "redeploy") redeploy(g2, nat, ph, enemies);
-    else if (follow) {
+    else if (follow2) {
       advance(g2, nat, enemies, 0, null, halt);
       mass(g2, nat, ph);
       defend(g2, nat, false);
@@ -23187,6 +23269,7 @@
     let best = null, bv = 0, bw = false, bz = -1;
     for (const r of landingTargets(g2, force2)) {
       if (r.ctrl !== you || !r.port) continue;
+      if (sea.second && (!opensOn(g2, nat, r) || !builtUp(g2, nat, r))) continue;
       if (!shoreOpen(g2, r.owner, !!r.overseas)) continue;
       const plan = planLanding(g2, force2, r);
       if (plan.why || plan.risk > L.risk) continue;
@@ -23230,16 +23313,29 @@
     const sails = (c, p) => {
       if (friendlyUnits(g2, p, nat).length >= STACK) return false;
       const path = seaPath(g2, nat, g2.regions[c.reg], p);
-      return !!path && crossingRisk(g2, nat, path) <= O.risk && shipMove(g2, c, p);
+      if (!path) return false;
+      const limit = path.length <= NAVY.landing.range ? Math.max(O.risk, O.hop ?? 0) : O.risk;
+      return crossingRisk(g2, nat, path) <= limit && shipMove(g2, c, p);
     };
     const front = frontAshore(g2, nat);
+    const order2 = /* @__PURE__ */ new Map();
+    const portsFor = (c) => {
+      if (!front) return [];
+      let ports = order2.get(c.reg);
+      if (!ports) {
+        const far = new Map(front.ports.slice(front.lodged).map((p) => [p.id, seaPath(g2, nat, g2.regions[c.reg], p)?.length ?? Infinity]));
+        ports = [...front.ports.slice(0, front.lodged), ...front.ports.slice(front.lodged).sort((a, b) => far.get(a.id) - far.get(b.id))];
+        order2.set(c.reg, ports);
+      }
+      return ports;
+    };
     if (front) {
       for (const c of g2.corps.filter(fit3).sort(byWorth2)) {
         if (liftLeft(g2, nat) < 1) break;
         const here = g2.regions[c.reg];
         if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g2, nat, here.ctrl)) continue;
         if (here.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) continue;
-        if (front.ports.some((p) => sails(c, p))) went(c);
+        if (portsFor(c).some((p) => sails(c, p))) went(c);
       }
     }
     const home = () => g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && g2.regions[c.reg].owner === nat && !g2.regions[c.reg].overseas);
@@ -23250,12 +23346,14 @@
         g2.flags[key4] = Math.min(O.bank, (g2.flags[key4] ?? 0) + run.share * n.sealift);
       }
       let spare = home().length - O.guard;
+      let more = O.most === void 0 ? Infinity : O.most - g2.corps.reduce((s, c) => s + (c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && !beyondEurope(c.reg) ? 1 : 0), 0);
       for (const c of run.from.units.filter((u) => fit3(u) && !u.hold).sort(byWorth2)) {
-        if (spare <= 0 || (g2.flags[key4] ?? 0) < 1 || liftLeft(g2, nat) < 1) break;
+        if (spare <= 0 || more <= 0 || (g2.flags[key4] ?? 0) < 1 || liftLeft(g2, nat) < 1) break;
         const to = run.to.find((p) => sails(c, p));
         if (!to) break;
         g2.flags[key4] -= 1;
         spare--;
+        more--;
         went(c);
         const first = !g2.flags[`fy:first:${nat}`];
         g2.flags[`fy:first:${nat}`] = 1;
@@ -23275,6 +23373,43 @@
         }
       }
     }
+    if (g2.flags[`fy:first:${nat}`]) follow(g2, nat, O);
+  }
+  function follow(g2, nat, O) {
+    const id = Object.keys(O.oceans).map((o) => g2.flags[`st:base:${nat}:${o}`] ?? 0).find((x) => x > 0);
+    const base = id ? g2.regions[id - 1] : null;
+    if (!base || !allied(g2, nat, base.ctrl)) return;
+    const n = g2.nations[nat];
+    const far = (r) => Math.hypot(r.x - base.x, r.y - base.y);
+    for (const f of fleetsOf(g2, nat)) {
+      if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships)) continue;
+      let to = null;
+      for (const r of g2.regions) {
+        if (beyondEurope(r) || !r.port || !r.seas.length || !allied(g2, nat, r.ctrl) || hostileUnits(g2, r, nat).length || !canSailTo(g2, f, r)) continue;
+        if (!to || far(r) < far(to)) to = r;
+      }
+      if (!to || !rebase(g2, f, to)) continue;
+      f.station = to.seas[0];
+      headline(g2, "event", `The ${f.name} crosses the ocean to ${to.name}: the ${n.adj} fleet goes where its army has gone, to cover the crossings still to come.`, nat, to.id);
+    }
+    if (O.air === void 0 || g2.flags[`fy:air:${nat}`] === g2.turn) return;
+    const home = airFleetsOf(g2, nat).filter((f) => !afloat(f) && beyondEurope(f.base)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
+    if (home.length <= O.air) return;
+    for (const f of home) {
+      let to = null, bd = Infinity;
+      for (const r of g2.regions) {
+        if (beyondEurope(r) || whyNotBase(g2, f, r, true) !== null || !fieldRoom(g2, r.id, f)) continue;
+        const d = km(g2, base.id, r.id);
+        if (d < bd) {
+          bd = d;
+          to = r;
+        }
+      }
+      if (!to || !rebaseAir(g2, f, to, true)) continue;
+      g2.flags[`fy:air:${nat}`] = g2.turn;
+      if (g2.human !== null && (allied(g2, g2.human, nat) || atWar(g2, g2.human, nat))) headline(g2, "info", `${f.name} of the ${n.adj} air force has crossed the ocean with the army, to the airfields of ${to.name}.`, nat, to.id);
+      break;
+    }
   }
   function takeAim(g2, nat, sfx, quay, force2, L, you) {
     const key4 = `st:aim:${nat}${sfx}`, at = `st:aimAt:${nat}${sfx}`;
@@ -23283,7 +23418,7 @@
     let best = null, bv = 0;
     for (const r of g2.regions) {
       if (r.ctrl !== you || !r.port || !r.seas.length || g2.turn < (g2.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
-      if (!shoreOpen(g2, r.owner, !!r.overseas)) continue;
+      if (!opensOn(g2, nat, r) || !builtUp(g2, nat, r) || !shoreOpen(g2, r.owner, !!r.overseas)) continue;
       if (!seaPath(g2, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
       const defended = hostileUnits(g2, r, nat).length > 0;
       if (defended && assess(g2, force2, r, landingOpts(g2, force2, r)).odds < L.odds) continue;
@@ -23394,7 +23529,7 @@
     const a2 = assess(g2, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
     return a2.odds >= need * H.second ? { corps: first, then: a2.odds } : null;
   }
-  function offensive(g2, nat, objs, enemies, minOdds, axisList, axisOpen, follow, halt, only, oddsFor = {}) {
+  function offensive(g2, nat, objs, enemies, minOdds, axisList, axisOpen, follow2, halt, only, oddsFor = {}) {
     const failed = /* @__PURE__ */ new Set();
     const waved = /* @__PURE__ */ new Map();
     const axis2 = new Set(axisList);
@@ -23494,7 +23629,7 @@
           }
           if (taken2 && g2.nations[nat].alive) support(g2, nat, best.target);
         }
-        if (!follow || !g2.nations[nat].alive || !advance(g2, nat, enemies, wave, doorstep(g2, nat, axisGoal()), halt)) break;
+        if (!follow2 || !g2.nations[nat].alive || !advance(g2, nat, enemies, wave, doorstep(g2, nat, axisGoal()), halt)) break;
       }
     }
   }
@@ -26554,13 +26689,13 @@
       { id: "TUR", small: true, years: { "1939": "Twelve divisions astride the Straits, leaning toward the Allies. Everyone would like you on their side." } },
       { id: "IRL", small: true, years: { "1939": "One division and the Atlantic. Neutral, with Britain next door and family in America." } },
       { id: "CAN", small: true, years: { "1939": "At war beside Britain from the first week, with three thin divisions, six destroyers and factories no bomber can reach. Send your army across the Atlantic, or keep it to guard your own shores." } },
-      { id: "MEX", small: true, years: { "1939": "Four thin divisions, oilfields the foreign companies want back, and a long frontier with the United States. Stay out, stand with your neighbour, or look for friends further off." } },
-      { id: "BRA", small: true, years: { "1939": "Six thin divisions, two old battleships and half a continent. Washington wants your airfields and your rubber, and Berlin wants your trade. Stay out, pick a side, or lead the continent yourself." } },
-      { id: "ARG", small: true, years: { "1939": "The richest country in South America, with five divisions and the strongest navy south of the Canal. Britain buys your beef and half your officers admire Germany. Nobody can make you choose." } },
-      { id: "CHL", small: true, years: { "1939": "A coast four thousand kilometres long, copper every arsenal needs, and three small divisions. The Andes guard your back and the sea is your road." } },
-      { id: "PER", small: true, years: { "1939": "Three small divisions in the mountains and an old quarrel with Ecuador over the upper Amazon. Settle it, sell your copper and oil, or join the wider war." } },
-      { id: "COL", small: true, years: { "1939": "Two small divisions, a coast on each ocean and the Canal next door. Washington watches every airfield within reach of it. Stand beside it, or keep your own counsel." } },
-      { id: "VEN", small: true, years: { "1939": "Two small divisions and the oil of Maracaibo, which every navy at war wants. Sell to all comers, choose a side, or guard the wells and wait." } }
+      { id: "MEX", small: true, years: { "1939": "Four thin divisions, oilfields the foreign companies want back, and a long frontier with the United States. Stay out, stand with your neighbour, or look for friends further off. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour." } },
+      { id: "BRA", small: true, years: { "1939": "Six thin divisions, two old battleships and half a continent. Washington wants your airfields and your rubber, and Berlin wants your trade. Stay out, pick a side, or lead the continent yourself. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour." } },
+      { id: "ARG", small: true, years: { "1939": "The richest country in South America, with five divisions and the strongest navy south of the Canal. Britain buys your beef and half your officers admire Germany. Nobody can make you choose. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour." } },
+      { id: "CHL", small: true, years: { "1939": "A coast four thousand kilometres long, copper every arsenal needs, and three small divisions. The Andes guard your back and the sea is your road. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join a side and ship an army to its ports, or march on a neighbour." } },
+      { id: "PER", small: true, years: { "1939": "Three small divisions in the mountains and an old quarrel with Ecuador over the upper Amazon. Settle it, sell your copper and oil, or join the wider war. Staying out is a quiet game of building and trade: a fight comes only if you choose one. March on Ecuador, or join a side and ship an army to its ports." } },
+      { id: "COL", small: true, years: { "1939": "Two small divisions, a coast on each ocean and the Canal next door. Washington watches every airfield within reach of it. Stand beside it, or keep your own counsel. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join a side and ship an army to its ports, or march on a neighbour." } },
+      { id: "VEN", small: true, years: { "1939": "Two small divisions and the oil of Maracaibo, which every navy at war wants. Sell to all comers, choose a side, or guard the wells and wait. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join a side and ship an army to its ports, or march on a neighbour." } }
     ],
     watch: {
       "1939": "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same.",
@@ -26727,6 +26862,13 @@
       // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
       // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
       // fortifications). Only where the player can know it.
+      cityOrders: (() => {
+        try {
+          return cityOrdersOf(s);
+        } catch {
+          return [];
+        }
+      })(),
       going: (() => {
         const at = /* @__PURE__ */ new Map();
         try {
@@ -27021,6 +27163,24 @@
         }
       })(),
       // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
+      // (Brian's ask of 16 November 2026: a city or target that is bombed stands under black smoke through the next
+      // month.) The provinces bombed this month or last, where the player can know of it: his own side's raid, a raid
+      // on his own side, or ground he has eyes on.
+      bombed: (() => {
+        try {
+          const out = /* @__PURE__ */ new Map();
+          for (const r of s.airReports) {
+            const reg = s.regions[r.region];
+            if (!reg || r.turn < s.turn - 1 || !["bomb", "night", "town", "harbour", "ground", "line"].includes(r.mission)) continue;
+            const known = !s.human || r.attNat === s.human || r.defNat === s.human || allied(s, r.attNat, s.human) || allied(s, r.defNat, s.human) || reg.ctrl === s.human || seen2[reg.id] > 0;
+            const worth3 = r.worth ?? (r.won ? 1 : 0);
+            if (known && worth3 > 0) out.set(reg.id, (out.get(reg.id) ?? 0) + worth3);
+          }
+          return [...out].flat();
+        } catch {
+          return [];
+        }
+      })(),
       sieges: (() => {
         try {
           return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]);
@@ -27178,6 +27338,51 @@
       onOrder: orders.reduce((sum2, o) => sum2 + o.cost, 0)
     };
   }
+  function orderSign(b) {
+    if (b.what === "corps") return { sign: b.airborne ? "para" : String(b.kind ?? "inf"), star: !!b.elite };
+    if (b.what === "air") return { sign: b.item === "bmr" ? "bmr" : "ftr", star: false };
+    if (b.what === "ship") return { sign: b.item === "cv" ? "cv" : b.item === "ss" ? "ss" : b.item === "tp" ? "tp" : "hull", star: false };
+    return { sign: "", star: false };
+  }
+  function orderWords2(b) {
+    if (b.what === "corps") return b.airborne ? "airborne corps" : `${(KIND[b.kind ?? "inf"]?.label ?? "Infantry").toLowerCase()} corps`;
+    if (b.what === "air") return (ARSENAL.air[b.item ?? ""]?.label ?? "air wing").toLowerCase();
+    if (b.what === "ship") return (ARSENAL.ships[b.item ?? ""]?.label ?? "ship").toLowerCase();
+    return b.name;
+  }
+  var readyIn = (months3) => months3 <= 0 ? "ready now" : months3 === 1 ? "ready in 1 month" : `ready in ${months3} months`;
+  function cityOrdersOf(s) {
+    const me = s.human;
+    if (!me || !s.nations[me]?.alive) return [];
+    const by = /* @__PURE__ */ new Map();
+    for (const b of s.nations[me].queue) {
+      if (!s.regions[b.region] || !orderSign(b).sign) continue;
+      by.set(b.region, [...by.get(b.region) ?? [], b]);
+    }
+    const key4 = (b) => {
+      const k = orderSign(b);
+      return `${k.sign}${k.star ? "*" : ""}`;
+    };
+    const many = (n, words) => n === 1 || /(corps|s)$/.test(words) ? `${n} ${words}` : `${n} ${words}s`;
+    return [...by].map(([region, units]) => {
+      const alike = (b) => units.filter((x) => key4(x) === key4(b)).length;
+      const sorted = [...units].sort((a, b) => a.eta - b.eta || alike(b) - alike(a) || a.ordered - b.ordered || a.id - b.id);
+      const first = sorted[0];
+      const kinds = /* @__PURE__ */ new Map();
+      for (const b of sorted) kinds.set(orderWords2(b), (kinds.get(orderWords2(b)) ?? 0) + 1);
+      const months3 = Math.max(0, first.eta - s.turn);
+      return {
+        region,
+        ...orderSign(first),
+        count: alike(first),
+        plus: units.some((b) => key4(b) !== key4(first)),
+        months: months3,
+        total: units.length,
+        head: `${units.length} on order: ${[...kinds].map(([words, n]) => many(n, words)).join(", ")}. Next ${readyIn(months3)}.`,
+        lines: sorted.map((b) => `${upFirst(orderWords2(b))}${orderSign(b).star ? " (special formation)" : ""}, ${readyIn(Math.max(0, b.eta - s.turn))}`)
+      };
+    });
+  }
   function orderLine(s, b) {
     const months3 = Math.max(0, b.eta - s.turn);
     return {
@@ -27189,7 +27394,11 @@
       due: turnToDate(b.eta).label,
       months: months3,
       cost: b.cost,
-      canCancel: b.ordered === s.turn && humanUp(s)
+      canCancel: b.ordered === s.turn && humanUp(s),
+      // (for the city card's "Forming here": its sign, what it is, and how far along it is)
+      ...orderSign(b),
+      words: upFirst(orderWords2(b)),
+      share: b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1
     };
   }
   var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
@@ -28490,7 +28699,14 @@ ${next.text}` : ""}` : next ? next.also : "";
         ok: up && !!n && n.pp >= cost,
         why: !up ? "It is not your month." : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : ""
       } : null,
-      forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
+      forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b)) : [],
+      formingHead: (() => {
+        try {
+          return cityOrdersOf(s).find((c) => c.region === r.id)?.head ?? "";
+        } catch {
+          return "";
+        }
+      })(),
       // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
       // (all only in the grand campaign, where those rules apply).
       // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.

@@ -43,6 +43,7 @@ struct FRegionPanelInfo
 	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
 	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));
 	TArray<FOrderLine> Forming;
+	FString FormingHead; // the total of what is on order here, with its breakdown
 	int32 Revision = 0;
 };
 
@@ -232,6 +233,16 @@ struct FTownPlate
 	bool bSeal = false; // not a town either: the seal on the town a directive of the war cabinet names (Name is the months left)
 	bool bVow = false; // with bSeal: it is the player's own promise to the cabinet, in wax red, not the cabinet's directive in brass
 	int32 Rank = 0;
+	// (Rulings 46 and 57.) What the place has on order, for its badge: drawn directly above its name plate, or by
+	// itself (the name left empty) where the plate is not shown at this height.
+	int32 Region = INDEX_NONE;
+	bool bOrders = false;
+	FString Sign;
+	bool bStar = false;
+	int32 OrderCount = 0;
+	bool bPlus = false;
+	int32 Months = 0;
+	int32 Stage = 0; // 0 the whole badge, 1 without the count and the plus, 2 the sign alone
 };
 
 /** The bar of a town's building plots, shown when one of the player's provinces is picked and nothing is in hand. */

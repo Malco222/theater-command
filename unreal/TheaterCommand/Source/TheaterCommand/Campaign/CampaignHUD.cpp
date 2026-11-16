@@ -486,6 +486,30 @@ namespace
 	};
 
 	/**
+	 * The art director's sign for a kind of unit on order (Content/CityOrders/order-<key>.png): white on a clear
+	 * ground, to be tinted. Read once for the life of the game; null for a key she has not drawn.
+	 */
+	const FSlateBrush* OrderSignBrush(const FString& Key)
+	{
+		static TMap<FString, TSharedPtr<FSlateBrush>> Kept;
+		if (const TSharedPtr<FSlateBrush>* Found = Kept.Find(Key))
+		{
+			return Found->Get();
+		}
+		TSharedPtr<FSlateBrush> Brush;
+		if (UTexture2D* Texture = FImageUtils::ImportFileAsTexture2D(FPaths::ProjectContentDir() / TEXT("CityOrders") / (TEXT("order-") + Key + TEXT(".png"))))
+		{
+			Texture->AddToRoot();
+			Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Texture);
+			Brush->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+		}
+		Kept.Add(Key, Brush);
+		return Brush.Get();
+	}
+
+	/**
 	 * The name plates of the towns: each hangs before its town and faces the player, so a name can be read from
 	 * any side of the table and is never hidden by the models. A stripe in the holder's colour says whose it is.
 	 * Where plates would crowd one another the place that matters more keeps its plate.
@@ -503,6 +527,7 @@ namespace
 			Plate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.86f), 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 1.0f);
 			CapitalPlate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.92f), 3.0f, FLinearColor(FColor::FromHex(TEXT("B8975A"))).CopyWithNewOpacity(0.85f), 1.0f);
 			Stripe = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
+			Disc = FSlateRoundedBoxBrush(FLinearColor::White, 12.0f);
 			// (on the staff's paper map a plate is a paper label: paper, a thin edge of ink, the name in ink)
 			PaperLabel = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f, FLinearColor(0.12f, 0.08f, 0.045f, 0.85f), 1.0f);
 			SetVisibility(EVisibility::HitTestInvisible);
@@ -546,8 +571,86 @@ namespace
 				Flag.Min /= Scale;
 				Flag.Max /= Scale;
 			}
+			// (Rulings 46 and 57; the art director's brief.) A city's order badge, left to right: its holder's colour,
+			// the sign of the unit ready soonest, how many of it, a plus for other kinds, the months to go in a brass
+			// disc. As high as a name plate at working height and as a harbour badge from further off.
+			const FLinearColor BadgeCream(FColor::FromHex(TEXT("F4EEDA"))), BadgeBrass(FColor::FromHex(TEXT("C9A04C")));
+			auto OrdersWide = [&](const FTownPlate& Each, double Tall)
+			{
+				const FSlateFontInfo Type = Font(TEXT("Bold"), Tall > 19.0 ? 14 : 10);
+				double Wide = FMath::Max(Tall * 0.14, 2.0) + 6.0 + Tall * 0.99 + 5.0;
+				if (Each.Stage == 0 && Each.OrderCount > 1)
+				{
+					Wide += Measure->Measure(FString::Printf(TEXT("\u00D7%d"), Each.OrderCount), Type).X + 4.0;
+				}
+				if (Each.Stage == 0 && Each.bPlus)
+				{
+					Wide += Measure->Measure(TEXT("+"), Type).X + 3.0;
+				}
+				if (Each.Stage <= 1)
+				{
+					Wide += Tall * 0.74 + 4.0;
+				}
+				return Wide;
+			};
+			auto DrawOrders = [&](const FTownPlate& Each, const FVector2D& Corner, double Tall)
+			{
+				const FSlateFontInfo Type = Font(TEXT("Bold"), Tall > 19.0 ? 14 : 10);
+				const double Wide = OrdersWide(Each, Tall), Bar = FMath::Max(Tall * 0.14, 2.0);
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, Tall), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Bar, Tall - 6.0), FSlateLayoutTransform(Corner + FVector2D(3.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
+				double X = 3.0 + Bar + 4.0;
+				const double SignHigh = Tall * 0.66, SignWide = SignHigh * 1.5;
+				if (const FSlateBrush* Sign = OrderSignBrush(Each.Sign))
+				{
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SignWide, SignHigh), FSlateLayoutTransform(Corner + FVector2D(X, (Tall - SignHigh) * 0.5))), Sign, ESlateDrawEffect::None, BadgeCream);
+				}
+				if (Each.bStar)
+				{
+					if (const FSlateBrush* Star = OrderSignBrush(TEXT("star")))
+					{
+						const double StarWide = Tall * 0.36;
+						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(FVector2D(StarWide, StarWide), FSlateLayoutTransform(Corner + FVector2D(X + SignWide - StarWide * 0.6, 1.0))), Star, ESlateDrawEffect::None, BadgeBrass);
+					}
+				}
+				X += SignWide + 4.0;
+				if (Each.Stage == 0 && Each.OrderCount > 1)
+				{
+					const FString Count = FString::Printf(TEXT("\u00D7%d"), Each.OrderCount);
+					const FVector2D Size = Measure->Measure(Count, Type);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(Corner + FVector2D(X, (Tall - Size.Y) * 0.5))), Count, Type, ESlateDrawEffect::None, BadgeCream);
+					X += Size.X + 4.0;
+				}
+				if (Each.Stage == 0 && Each.bPlus)
+				{
+					const FVector2D Size = Measure->Measure(TEXT("+"), Type);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(Corner + FVector2D(X, (Tall - Size.Y) * 0.5))), TEXT("+"), Type, ESlateDrawEffect::None, BadgeBrass);
+					X += Size.X + 3.0;
+				}
+				if (Each.Stage <= 1)
+				{
+					const double Across = Tall * 0.74;
+					const FString Months = FString::FromInt(FMath::Max(Each.Months, 0));
+					const FSlateFontInfo Numeral = Font(TEXT("Bold"), Tall > 19.0 ? 11 : 8);
+					const FVector2D Size = Measure->Measure(Months, Numeral);
+					const FVector2D DiscAt = Corner + FVector2D(X, (Tall - Across) * 0.5);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Across, Across), FSlateLayoutTransform(DiscAt)), &Disc, ESlateDrawEffect::None, BadgeBrass);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(DiscAt + FVector2D((Across - Size.X) * 0.5, (Across - Size.Y) * 0.5))), Months, Numeral, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+				}
+			};
 			for (const FTownPlate& Each : Plates)
 			{
+				if (Each.bOrders && Each.Name.IsEmpty())
+				{
+					// (a badge by itself, where its city's name plate is not shown from this height)
+					const double Tall = 16.0, Wide = OrdersWide(Each, Tall);
+					const FVector2D Corner(Each.At.X / Scale - Wide * 0.5, Each.At.Y / Scale - Tall - 2.0);
+					if (!UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(Wide, Tall))))
+					{
+						DrawOrders(Each, Corner, Tall);
+					}
+					continue;
+				}
 				if (Each.bSeal)
 				{
 					// A directive's seal: a small brass plate with a dark figure, the months left to carry it out.
@@ -695,6 +798,12 @@ namespace
 				const FSlateBrush& Back = bLabels ? PaperLabel : Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, bLabels ? LabelPaper.CopyWithNewOpacity(0.92f) : Back.GetTint(InWidgetStyle));
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
+				if (Each.bOrders)
+				{
+					// (the city's order badge: directly above its name plate, left edges in line)
+					const double Tall = Each.Stage == 0 ? 22.0 : 16.0;
+					DrawOrders(Each, Corner - FVector2D(0.0, Tall + 2.0), Tall);
+				}
 				if (bStar)
 				{
 					// A capital's star, drawn as the frame's signs are drawn: the five strokes of a star in one line, close
@@ -728,6 +837,7 @@ namespace
 		FSlateBrush Plate;
 		FSlateBrush CapitalPlate;
 		FSlateBrush Stripe;
+		FSlateBrush Disc; // the brass disc of a city's order badge
 		FSlateBrush PaperLabel;
 	};
 
@@ -3088,6 +3198,73 @@ namespace
 							SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
 						];
 					}
+					// (Ruling 46: "Forming here". A header that sums it up, then a line an order: its sign, what it is, a bar
+					// of the months done out of the months needed, and the month it is ready.)
+					if (Info.Forming.Num() > 0)
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("FORMING HERE"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)
+						];
+						if (!Info.FormingHead.IsEmpty())
+						{
+							ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Info.FormingHead)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+							];
+						}
+					}
+					for (const FOrderLine& Order : Info.Forming)
+					{
+						const FSlateBrush* Sign = Order.Sign.IsEmpty() ? nullptr : OrderSignBrush(Order.Sign);
+						const FString What = Order.Sign.IsEmpty() ? Order.Name : Order.Words + TEXT("  \u00B7  ") + Order.Name;
+						const FString When = Order.Months <= 0 ? FString(TEXT("ready now")) : FString::Printf(TEXT("ready in %d month%s (%s)"), Order.Months, Order.Months == 1 ? TEXT("") : TEXT("s"), *Order.Due);
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 8.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(24.0f).HeightOverride(16.0f)
+								[
+									Sign ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Sign).ColorAndOpacity(Order.bStar ? BrightBrass : Cream)) : SNullWidget::NullWidget
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(BrightBrass).AutoWrapText(true)
+									.Text(FText::FromString(What + TEXT(", ") + When))
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+								[
+									SNew(SBox).HeightOverride(4.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(Order.Share, 0.001f, 1.0f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass)]
+										+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(1.0f - Order.Share, 0.001f, 1.0f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+									]
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false)
+								.Visibility(Order.bCanCancel ? EVisibility::Visible : EVisibility::Collapsed)
+								.OnClicked_Lambda([this, Id = Order.Id]()
+								{
+									if (Controller.IsValid())
+									{
+										Controller->CancelOrder(Id);
+									}
+									return FReply::Handled();
+								})
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+								]
+							]
+						];
+					}
 					if ((ProvinceTab == 0 || !bProvince) && !Info.Prize.IsEmpty())
 					{
 						// The prize: what the player gets for taking the place, or has from holding it.
@@ -3323,34 +3500,6 @@ namespace
 								]
 							];
 						}
-					}
-					for (const FOrderLine& Order : Info.Forming)
-					{
-						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-							[
-								SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(BrightBrass).AutoWrapText(true)
-								.Text(FText::FromString(FString::Printf(TEXT("On order: %s, due %s"), *Order.Name, *Order.Due)))
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
-							[
-								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false)
-								.Visibility(Order.bCanCancel ? EVisibility::Visible : EVisibility::Collapsed)
-								.OnClicked_Lambda([this, Id = Order.Id]()
-								{
-									if (Controller.IsValid())
-									{
-										Controller->CancelOrder(Id);
-									}
-									return FReply::Handled();
-								})
-								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
-								]
-							]
-						];
 					}
 				}
 			}
@@ -4543,7 +4692,8 @@ namespace
 					[
 						SNew(SBox).WidthOverride(108.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Stop.Title.IsEmpty() ? Stop.Name : Stop.Title)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Stop.bNow ? BrightBrass : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+							// (a long name takes a second line: "Western Approaches" was cut short)
+							SNew(STextBlock).Text(FText::FromString(Stop.Title.IsEmpty() ? Stop.Name : Stop.Title)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Stop.bNow ? BrightBrass : Cream).AutoWrapText(true)
 						]
 					];
 					Chip->AddSlot().AutoHeight().Padding(3.0f, 0.0f, 0.0f, 0.0f)
