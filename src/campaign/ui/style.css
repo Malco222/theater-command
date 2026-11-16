@@ -1261,6 +1261,8 @@ details.cannot summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2)
 .twn.village path { fill: #ddd4bd; stroke-width: .5; }
 .twn.town { opacity: 0; }
 svg#map.mid .twn.town, svg#map.near .twn.village, svg#map.lensworth.mid .twn.village { opacity: 1; }
+/* A town with an order badge keeps its mark for as long as the badge is drawn. */
+svg#map.ob1 .haso .twn, svg#map.ob2 .haso .twn, svg#map.ob3 .haso .twn { opacity: 1; }
 .lbl.big { font-weight: 600; }
 svg#map.mid .lbl.big { opacity: 1; }
 .figs { opacity: 0; pointer-events: none; }
