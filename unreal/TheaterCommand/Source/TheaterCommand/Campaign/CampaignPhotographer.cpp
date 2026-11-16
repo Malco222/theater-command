@@ -1296,7 +1296,8 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			const FOfficePage& Now = Controller->GetPage();
 			if (Press == TEXT("@top"))
 			{
-				Act = Now.Top.Num() > 0 ? Now.Top[0].Act : FString();
+				// (a raid being planned is a card with no buttons across its top: its one button is the one that flies it)
+				Act = Now.Card.bValid ? Now.Card.Fly.Act : Now.Top.Num() > 0 ? Now.Top[0].Act : FString();
 			}
 			else if (Press == TEXT("@row"))
 			{
