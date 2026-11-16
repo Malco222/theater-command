@@ -760,7 +760,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
   let turned = false, turnedTo = 1;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
-  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
+  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, armorAlone = 0, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
   for (const c of attackers) sources.add(c.reg);
   // Defenders with nowhere to fall back to: every way out is enemy ground or the attack itself.
@@ -795,6 +795,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     works: (d) => (d.dug && d.supplied ? worksShare(worksNow(d)) : 0),
     guns: gunsD, mines: mineLv, sappers: sap,
     fort: target.fort && !opts.sally && attackers.some((c) => target.fort!.vs.includes(g.regions[c.reg].owner)) ? target.fort.lv : 0,
+    foot: armsA ? armsA.foot : 0, tanks: armsA ? armsA.tanks : 0,
   } : null;
   const at = facing ? antiTank(g, attackers, defenders, target, facing) : null;
   const onFoot = facing ? footShare(attackers) : 0;
@@ -824,7 +825,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       if (town) { p *= SIEGE.assault.armour; streets = true; }
       else if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       // Tanks against a defence that cannot stop them. In the grand campaign the edge shrinks by its anti-tank strength.
-      else if (at ? at.strength < 1 : !defHasArmor) { p *= 1 + 0.25 * (at ? 1 - at.strength : 1); armorShock = true; }
+      else {
+        if (at ? at.strength < 1 : !defHasArmor) { p *= 1 + 0.25 * (at ? 1 - at.strength : 1); armorShock = true; }
+        // Tanks that come on without infantry beside them are picked off by the guns (the grand campaign).
+        if (at && at.alone > 0) { p *= 1 - at.alone; armorAlone = at.alone; }
+      }
     }
     const lead = cmdAttack(g, c, pocket);
     if (pocket && lead > cmdAttack(g, c, false)) trap = true;
@@ -1160,7 +1165,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const tanksIn = attackers.some((c) => c.kind === 'arm');
     const dugNow = facing ? defenders.some((d) => facing.works(d) > 0) : false;
     faced = {
-      antiTank: at, toll, shock: at && tanksIn && !armorStuck ? 1 - at.strength : null,
+      antiTank: at, toll, shock: at && tanksIn && !armorStuck ? 1 - at.strength : null, alone: armorAlone,
       machineGuns: toll.why.machineGuns > 0 && onFoot > 0, mgDug: facing ? defenders.some((d) => machineGuns(g, d, 1, 0) > 1 && facing.works(d) > 0) : false,
       worksCut: dugNow ? 1 - (1 - soften) * (1 - mortar) : 0, mortars: mortar > 0, gunsIn: soften > 0, snipers: sniped,
     };
@@ -1168,6 +1173,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (facing) {
       let w = 0, up = 0;
       for (const d of defenders) { const k = d.divs * d.str; w += k; up += k * (machineGuns(g, d, onFoot, facing.works(d)) - 1); }
+      if (armorAlone >= 0.005) lines.push({ label: 'Tanks alone', value: `Tank attack cut by ${Math.round(armorAlone * 100)}%` });
       if (w > 0 && up / w >= 0.005) lines.push({ label: 'Machine guns', value: `Defence up ${Math.round((up / w) * 100)}% against the men on foot` });
       if (mortar >= 0.005 && dugNow) lines.push({ label: 'Mortars', value: `The fieldworks count for ${Math.round(mortar * 100)}% less` });
       if (attackers.some((c) => assaultFire(g, c) > 1)) lines.push({ label: 'Assault rifles', value: `Infantry attack up ${Math.round(SUPPORT.assault.attack * 100)}%` });

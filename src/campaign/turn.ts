@@ -462,7 +462,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
     if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
     return l;
-  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
+  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Tanks alone' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
   const nn = k.none.length, old = k.report.length;
   const count = (x: number): string => ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][x] ?? `${x}`;
   const dark = !nn ? '' : nn < n ? `${count(nn)} of the ${n} defending corps ${nn === 1 ? 'is' : 'are'} not identified`

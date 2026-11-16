@@ -17,7 +17,9 @@
     "_works": "Fortress works by level: the anti-tank ditch, then dragon's teeth. Concrete adds no more.",
     "works": [0, 0.05, 0.1, 0.1],
     "_tanks": "The defence's own tanks: their share of its strength, times this.",
-    "tanks": 2
+    "tanks": 2,
+    "_alone": "Tanks that go in without infantry beside them are picked off by the guns (ruling 152(3): two tank corps alone at a gunned line of 1943 have no better than an even chance). Against a defence whose guns (the infantry's own, tank destroyers, hand-held weapons and guns in the line, less the attacker's armour ahead of its day) add up to the whole, tanks with no infantry at all lose 'cut' of their attack, and less as the infantry covers them: one division of infantry covers 'cover' divisions of tanks. Not where the ground has already stopped the tanks (mountain, marsh, city streets).",
+    "alone": { "cut": 0.7, "cover": 2 }
   },
   "_machineGuns": "Defence of troops with Submachine guns and mortars against men on foot: this much against an attack that is all on foot, in finished fieldworks; 'open' is the share of it they have with no works.",
   "machineGuns": { "defence": 0.12, "open": 0.4 },

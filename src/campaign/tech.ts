@@ -362,12 +362,12 @@ const UNLOCK_RULE: Record<string, string> = {
  */
 function supportWords(id: string): string | null {
   const S = supportData as unknown as {
-    antiTank: { without: number; tankDestroyers: number; handHeld: { open: number; close: number } };
+    antiTank: { without: number; tankDestroyers: number; alone: { cut: number }; handHeld: { open: number; close: number } };
     machineGuns: { defence: number }; mortars: { works: number }; assault: { attack: number };
     tech: { antiTank: string; tankDestroyers: string; handHeld: string; support: string };
   };
   const A = S.antiTank, T = S.tech;
-  if (id === T.antiTank) return `Its infantry keeps up with the anti-tank guns of the day: without this they count at ${pct(A.without)} of their worth. They take the shock out of a tank attack, most from behind finished fieldworks, and the tanks pay for what they lose.`;
+  if (id === T.antiTank) return `Its infantry keeps up with the anti-tank guns of the day: without this they count at ${pct(A.without)} of their worth. They take the shock out of a tank attack, most from behind finished fieldworks, and the tanks pay for what they lose. Tanks that come on with no infantry beside them lose up to ${pct(A.alone.cut)} of their attack to the guns.`;
   if (id === T.support) return `Machine guns: its infantry defends up to ${pct(S.machineGuns.defence)} stronger against men on foot, most from finished fieldworks, and more of the attacker's losses fall on his infantry. Mortars: its infantry in the attack takes up to ${pct(S.mortars.works)} of the worth out of fieldworks, never out of concrete.`;
   if (id === T.tankDestroyers) return `Every line its infantry holds takes ${pct(A.tankDestroyers)} more of the shock out of a tank attack.`;
   if (id === T.handHeld) return `Its men on foot attack ${pct(S.assault.attack)} stronger. Hand-held anti-tank weapons: a line its infantry holds takes ${pct(A.handHeld.open)} more of the shock out of a tank attack, ${pct(A.handHeld.close)} in forest and hills.`;

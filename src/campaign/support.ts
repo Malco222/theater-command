@@ -25,6 +25,7 @@ export const SUPPORT = data as unknown as {
     mines: number;
     works: number[];
     tanks: number;
+    alone: { cut: number; cover: number };
   };
   machineGuns: { defence: number; open: number };
   mortars: { works: number };
@@ -79,6 +80,12 @@ export interface AntiTank {
   tanks: number;
   /** What the attacker's armour takes off, when it is ahead of its day (negative when it is behind it). */
   armour: number;
+  /** 0 to 1: the guns alone (the infantry's own, tank destroyers, hand-held weapons and guns in the line, against the attacker's armour). */
+  gunned: number;
+  /** How far the attack's infantry covers its tanks against the guns: 1 where there is a division of infantry to every two of tanks, 0 for tanks alone. */
+  cover: number;
+  /** The share of their attack the tanks lose to the guns for want of infantry beside them. */
+  alone: number;
 }
 
 export interface Facing {
@@ -91,6 +98,9 @@ export interface Facing {
   sappers: number;
   /** The level of fortress works that face this attack. */
   fort: number;
+  /** The weight of infantry and of tanks in the attack, as the battle counts them beside each other. */
+  foot: number;
+  tanks: number;
 }
 
 /** Works out the anti-tank strength of a defence against this attack. */
@@ -128,7 +138,13 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
   const fort = Math.max(0, f.fort);
   const works = S.works[Math.min(S.works.length - 1, fort)] ?? 0;
   const own = all > 0 ? S.tanks * (tanks / all) : 0;
-  return { strength: clamp01(guns + destroyers + handHeld + artillery + mines + works + own - armour), guns, kit, destroyers, handHeld, artillery, mines, works, fort, tanks: own, armour };
+  // Tanks alone: what the guns do to tanks that come on with no infantry to deal with them.
+  // (A defence with no guns at all has none for the purpose, however old the attacker's tanks.)
+  const pieces = guns + destroyers + handHeld + artillery;
+  const gunned = pieces > 0 ? clamp01(pieces - armour) : 0;
+  const cover = f.tanks > 0 ? clamp01((f.foot * S.alone.cover) / f.tanks) : 1;
+  const alone = f.tanks > 0 ? S.alone.cut * gunned * (1 - cover) : 0;
+  return { strength: clamp01(guns + destroyers + handHeld + artillery + mines + works + own - armour), guns, kit, destroyers, handHeld, artillery, mines, works, fort, tanks: own, armour, gunned, cover, alone };
 }
 
 /** The share of an attack's weight that goes in on foot. */
@@ -209,6 +225,8 @@ export interface Faced {
   toll: Toll;
   /** The share of the tanks' shock that is left, 1 in full and 0 nothing. Null where no tanks go in or the ground stops them. */
   shock: number | null;
+  /** The share of their attack the tanks lose to the guns for want of infantry beside them. Zero where they are covered, or the ground has stopped them. */
+  alone: number;
   /** Machine guns in the defence that men on foot will meet, and whether any of them fire from fieldworks. */
   machineGuns: boolean;
   mgDug: boolean;
@@ -255,6 +273,7 @@ export function faceLines(f: Faced): FaceLine[] {
     const parts = antiTankParts(at);
     out.push({ sign: 'anti-tank', text: at.strength < 0.1 || !parts.length ? 'Few anti-tank guns: your tanks\' shock counts in full.' : `${cap(listAnd(parts))}: your tanks' shock counts ${shareWords(f.shock)}.` });
   }
+  if (at && f.alone >= 0.05) out.push({ sign: 'anti-tank', text: `${at.cover <= 0 ? 'No infantry' : 'Too little infantry'} with your tanks: their guns take ${shareOf(f.alone)} of the tanks' attack.` });
   if (f.machineGuns) out.push({ sign: 'machine-gun', text: f.mgDug ? 'Machine guns, dug in: most of your losses will be infantry.' : 'Machine guns in the open: more of your losses will be infantry.' });
   if (f.worksCut >= 0.05) out.push({ sign: 'mortar', text: `Fieldworks: your ${f.mortars && f.gunsIn ? 'mortars and guns' : f.mortars ? 'mortars' : 'guns'} take ${shareOf(f.worksCut)} of them away.` });
   if (f.snipers && f.toll.why.snipers > 0) out.push({ sign: 'sniper', text: `Snipers in the ${f.snipers}: more of your losses will be infantry.` });

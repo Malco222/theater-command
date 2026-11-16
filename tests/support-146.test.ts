@@ -233,13 +233,67 @@ describe('the battle', () => {
     works(l.def, 0); for (const c of l.def) c.dug = false;
     const full = alone([tank]) / 1.25;
     works(l.def, DONE);
-    expect(alone([tank])).toBeCloseTo(full * (1 + 0.25 * 0.8), 4);
+    // (Alone, they also lose to the guns for want of infantry beside them: the next test.)
+    expect(alone([tank])).toBeCloseTo(full * (1 + 0.25 * 0.8) * (1 - S.alone.cut * 0.2), 4);
+    expect(alone([tank, foot]) - alone([foot])).toBeGreaterThan(alone([tank]));
     expect(alone([foot])).toBeGreaterThan(0);
     // Where the defence stops the edge whole there is no Armor row at all.
     const h = playing('GER');
     const m = line(h, [['inf', 2], ['arm', 2]], [['arm', 3]]);
     expect(faced(h, m).shock).toBe(0);
     expect(row(h, m, 'Armor')).toBeUndefined();
+  });
+
+  it('cuts the attack of tanks that come on without infantry beside them, by the guns alone, and a division of infantry covers two of tanks', () => {
+    const A = S.alone;
+    expect(A).toEqual({ cut: 0.7, cover: 2 });
+    const g = playing('GER');
+    g.turn = january(1943);
+    const l = line(g, undefined, [['arm', 3], ['arm', 3]]);
+    give(g, 'GER', T.armour[0], T.armour[1]);
+    give(g, 'POL', T.tankDestroyers);
+    works(l.def, DONE);
+    // The line of ruling 152(3): guns of the day behind finished works and tank destroyers, nine tenths in all.
+    const alone = at(g, l);
+    expect(alone.gunned).toBeCloseTo(0.9, 6);
+    expect(alone.cover).toBe(0);
+    expect(alone.alone).toBeCloseTo(A.cut * 0.9, 6);
+    expect(faced(g, l).alone).toBeCloseTo(0.63, 6);
+    expect(row(g, l, 'Tanks alone')).toBe('Tank attack cut by 63%');
+    expect(faceLines(faced(g, l)).map((x) => x.text)).toEqual([
+      'Anti-tank guns and tank destroyers: your tanks\' shock counts for a tenth.',
+      'No infantry with your tanks: their guns take two thirds of the tanks\' attack.',
+    ]);
+    // The attack itself is smaller by that share: the same tanks against the line without its tank destroyers.
+    const a1 = assess(g, l.att, l.target).A;
+    take(g, 'POL', T.tankDestroyers);
+    const a0 = assess(g, l.att, l.target).A;
+    expect(a1 / a0).toBeCloseTo(((1 + 0.25 * 0.1) * (1 - A.cut * 0.9)) / ((1 + 0.25 * 0.25) * (1 - A.cut * 0.75)), 4);
+    give(g, 'POL', T.tankDestroyers);
+    // One division of infantry to two of tanks covers them all; less covers a part.
+    const thin = addCorps(g, 'GER', 'Thin', 'inf', 1, l.from.id, {}), full = addCorps(g, 'GER', 'Full', 'inf', 3, l.from.id, {});
+    for (const c of [thin, full]) c.supplied = true;
+    expect(at(g, l, [...l.att, thin]).cover).toBeCloseTo(2 / 6, 6);
+    expect(at(g, l, [...l.att, thin]).alone).toBeCloseTo(A.cut * 0.9 * (4 / 6), 6);
+    expect(faceLines(faced(g, l, [...l.att, thin]))[1].text).toBe('Too little infantry with your tanks: their guns take half of the tanks\' attack.');
+    expect(at(g, l, [...l.att, full]).alone).toBe(0);
+    expect(row(g, l, 'Tanks alone', [...l.att, full])).toBeUndefined();
+    // Better armour takes its step off the guns here too.
+    give(g, 'GER', T.armour[2]);
+    expect(at(g, l).gunned).toBeCloseTo(0.9 - S.armourStep, 6);
+    take(g, 'GER', T.armour[2]);
+    // Where the ground has already stopped the tanks there is no second cut.
+    l.target.terrain = 'marsh';
+    expect(faced(g, l).alone).toBe(0);
+    expect(row(g, l, 'Tanks alone')).toBeUndefined();
+    // A defence of tanks alone has no guns for the purpose: tank against tank needs no infantry.
+    const h = playing('GER');
+    h.turn = january(1943);
+    const m = line(h, [['arm', 3]], [['arm', 3], ['arm', 3]]);
+    works(m.def, DONE);
+    expect(at(h, m).strength).toBe(1);
+    expect(at(h, m).gunned).toBe(0);
+    expect(at(h, m).alone).toBe(0);
   });
 
   it('gives machine guns their worth against men on foot: most in finished fieldworks, less in the open, nothing against tanks', () => {
@@ -378,8 +432,8 @@ describe('the battle', () => {
 
 describe('what the cards say', () => {
   const toll = (over: Partial<Toll> = {}): Toll => ({ tanks: 1, foot: 1, guns: 0.5, why: { machineGuns: 0, guns: 0, snipers: 0, shield: 0 }, ...over });
-  const strength = (over: Partial<AntiTank> = {}): AntiTank => ({ strength: 0, guns: 0, kit: true, destroyers: 0, handHeld: 0, artillery: 0, mines: 0, works: 0, fort: 0, tanks: 0, armour: 0, ...over });
-  const face = (over: Partial<Faced> = {}): Faced => ({ antiTank: strength(), toll: toll(), shock: null, machineGuns: false, mgDug: false, worksCut: 0, mortars: false, gunsIn: false, snipers: null, ...over });
+  const strength = (over: Partial<AntiTank> = {}): AntiTank => ({ strength: 0, guns: 0, kit: true, destroyers: 0, handHeld: 0, artillery: 0, mines: 0, works: 0, fort: 0, tanks: 0, armour: 0, gunned: 0, cover: 1, alone: 0, ...over });
+  const face = (over: Partial<Faced> = {}): Faced => ({ antiTank: strength(), toll: toll(), shock: null, alone: 0, machineGuns: false, mgDug: false, worksCut: 0, mortars: false, gunsIn: false, snipers: null, ...over });
 
   it('gives a share in words', () => {
     expect([1, 0.75, 0.66, 0.5, 0.33, 0.25, 0.1, 0].map(shareWords)).toEqual(['in full', 'for three quarters', 'for two thirds', 'for half', 'for a third', 'for a quarter', 'for a tenth', 'for nothing']);
