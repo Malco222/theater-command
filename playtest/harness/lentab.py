@@ -5,7 +5,7 @@ from collections import Counter
 args = sys.argv[1:]; label = ''
 if '--label' in args: i = args.index('--label'); label = args[i + 1]; del args[i:i + 2]
 files = sorted(f for a in args for f in glob.glob(a))
-fell, siege, fieldb, peak, reached = {}, {}, {}, {}, {}
+fell, siege, fieldb, peak, reached, stormed = {}, {}, {}, {}, {}, {}
 for f in files:
     for ln in open(f):
         m = re.match(r'FELL seed (\d+): (\S+) falls (\w+ \d+) to (\w+): (\w+)(?: \(([^)]*)\))?(?: at ([\d.]+) by (\d+) corps on (\d+))? \| the month before: (not besieged|besieged), garrison (\d+) corps (\d+) divs str ([\d.]+) org ([\d.]+), guard ([\d.]+), field (\d+), outside (\d+) corps (\d+) divs, shut (\d+) of (\d+), by sea (\w+), ring (\w+), breach ([\d.]+), roads cut (\d+) of (\d+), next door ours (\d+) foes (\d+) \| so far: besieged (\d+) months, storms (\d+), sorties (\d+), reliefs (\d+)', ln)
@@ -18,6 +18,8 @@ for f in files:
         if m and int(m[1]) not in fieldb: fieldb[int(m[1])] = dict(when=m[2], odds=float(m[4]), att=int(m[5]), dfn=int(m[6]))
         m = re.match(r'L seed (\d+) (\w+ \d+): held by SOV.*?field (\d+) \|.*?roads cut (\d+)', ln)
         if m and int(m[4]) > 0: peak[int(m[1])] = max(peak.get(int(m[1]), 0), int(m[3])); reached.setdefault(int(m[1]), m[2])
+        m = re.match(r'L seed (\d+) (\w+ \d+): held by (\w+).*?\| .*?(\w+)>(\w+) ([\d.]+) STORM taken', ln)
+        if m: stormed.setdefault(int(m[1]), []).append((m[2], m[4], m[5], float(m[6]), m[3]))
         m = re.match(r'SIEGE seed (\d+): (\S+) \(([^)]*)\) besieged (\d+) months in (\d+) sieges(?: from (\w+ \d+))?, storms (\d+) \(won (\d+)\), sorties (\d+), reliefs (\d+) \| fell (.*?) \| back (.*)', ln)
         if m: siege[int(m[1])] = dict(town=m[2], kind=m[3], months=int(m[4]), sieges=int(m[5]), first=m[6], storms=int(m[7]), won=int(m[8]), sorties=int(m[9]), reliefs=int(m[10]), fell=m[11], back=m[12].strip())
 n = len(siege)
@@ -40,6 +42,12 @@ if fell:
     so = [x for x in v if x['odds']]
     if so: print(f'  the storm: odds middle {med([x["odds"] for x in so]):.2f} (least {min(x["odds"] for x in so):.2f}, most {max(x["odds"] for x in so):.2f}), by {med([x["by"] for x in so])} corps; the besiegers the month before: {med([x["out"] for x in so])} corps, {med([x["odivs"] for x in so])} divisions')
     print(f'  taken by: {dict(Counter(x["to"] for x in v))}')
+home = 'SOV'
+quick = sorted(s for s, xs in stormed.items() if s not in fell and any(x[2] == home for x in xs))
+if quick: print(f'  stormed and taken back within the same month (so not counted as fallen at the month\'s end): seeds {quick}')
+yrs = Counter(v['when'].split()[1] for v in fell.values()); print('  the year it falls: ' + ', '.join(f'{y} in {c}' for y, c in sorted(yrs.items())))
+bk = [x for xs in stormed.values() for x in xs if x[1] == home]
+if bk: print(f'  taken back by storm in {len(bk)} wars, odds middle {st.median([x[3] for x in bk]):.2f}')
 print('  storms on the town in all wars: %d, won %d' % (sum(v['storms'] for v in siege.values()), sum(v['won'] for v in siege.values())))
 print()
 print('  seed  besieged  first siege      fell (how)                          the month before                                   back')
