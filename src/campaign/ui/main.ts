@@ -13,7 +13,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
-  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
+  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
@@ -3931,6 +3931,18 @@ function fleetRow(f: Fleet, mine: boolean, whose = false): string {
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span></${el}>${recStrip('fleet', f)}`;
 }
 
+/** A fleet action in a sea in one line, from the forecast (Version 80): the odds as a band, how it is likely to go, and what it is likely to cost. */
+function seaOddsLine(f: Fleet, zone: number, meet: 'battle' | 'shy'): string {
+  const p = seaForecast(g, f.id, zone);
+  const offers = p && p.odds ? p.offers : meet === 'battle';
+  const lead = offers ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle';
+  if (!p || !p.odds) return lead;
+  const n = (s: Record<string, number>): number => Object.values(s).reduce((a, b) => a + b, 0);
+  const one = (x: number): string => (x >= 9.95 ? 'over 10' : x.toFixed(1));
+  const ours = n(p.likely.ours), theirs = n(p.likely.theirs);
+  return `${lead}: odds ${one(p.odds.mid)} to 1 (${one(p.odds.low)} to ${one(p.odds.high)}), ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ship${ours === 1 ? '' : 's'} for ${theirs} of his`;
+}
+
 /** The orders the player can give the fleet that is picked. */
 function fleetOrders(f: Fleet): string {
   const o = fleetOptions(g, f.id);
@@ -3949,7 +3961,7 @@ function fleetOrders(f: Fleet): string {
       more.push(`${s.subs} enemy submarine${s.subs === 1 ? '' : 's'} at work${pieces ? `: a hunt here would sink ${sunk < 0.5 ? 'less than one' : `about ${Math.round(sunk)}`} a month` : ''}`);
     }
     if (s.torpedo >= 0.02) more.push(`<span style="color:var(--red)">${pc100(s.torpedo)} chance of a heavy ship torpedoed: too few destroyers</span>`);
-    if (now === 'patrol' && s.meet !== 'clear') more.push(s.meet === 'battle' ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle');
+    if (now === 'patrol' && s.meet !== 'clear') more.push(esc(seaOddsLine(f, s.zone, s.meet)));
     return `<button class="pickrow${s.here ? ' pick' : ''}" data-act="sail" data-zone="${s.zone}"><span class="grow"><b>${esc(s.name)}</b><br>${small(`${foe} · your side ${num(s.ours)}${more.length ? `<br>${more.join(' · ')}` : ''}`)}</span>${s.here ? '<span class="tag good">Here now</span>' : ''}</button>`;
   }).join('');
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
