@@ -2,8 +2,8 @@
 // the desert has one road and no water, and an army there is only as strong as the port behind it.
 import { describe, expect, it } from 'vitest';
 import {
-  DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar,
-  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksShare,
+  DEFENCE, DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar, digsLate, endPhase,
+  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksOf, worksShare,
 } from '../src/campaign/game';
 import { theatrePhases } from '../src/campaign/ai';
 import { canRaise, orderCorps } from '../src/campaign/economy';
@@ -310,6 +310,80 @@ describe('open desert', () => {
     const line = assess(g, [armour], target).lines.find((l) => l.label === 'Open desert')!;
     expect(line.value).toContain('whose works are not finished');
     expect(line.value).not.toContain('no works to anchor on');
+  });
+
+  it('in the grand campaign the open desert digs a month slow: half after two whole months, three quarters after three, finished after four', () => {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    expect(DESERT.digLate).toBe(1);
+    const target = g.byName['Sidi Barrani'];
+    expect(target.terrain).toBe(DESERT.terrain);
+    expect(target.fort).toBeFalsy();
+    expect(digsLate(target)).toBe(true);
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true; camps.ap = camps.apMax;
+    // The first whole month shows no works: rock under a thin layer of sand.
+    endPhase(g, 'ITA');
+    expect(camps.dug).toBeFalsy();
+    expect(camps.dugFor).toBeUndefined();
+    expect(camps.digging).toBe(1);
+    expect(worksOf(camps)).toBe(0);
+    const shares: number[] = [];
+    for (let m = 2; m <= 5; m++) { endPhase(g, 'ITA'); shares.push(worksShare(worksOf(camps))); }
+    expect(shares).toEqual([0.5, 0.75, 1, 1]);
+    expect(camps.dug).toBe(true);
+    expect(camps.digging).toBeUndefined();
+    // A month's digging begun is lost with a march, like the works themselves.
+    const column = addCorps(g, 'ITA', 'Desert column', 'inf', 2, 'Sidi Barrani', {});
+    column.supplied = true; column.ap = column.apMax;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBe(1);
+    column.ap = 0;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBeUndefined();
+    expect(column.dug).toBeFalsy();
+    // A month under attack is half a month's digging there as anywhere: it only comes later.
+    column.ap = column.apMax; column.pressed = true;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBe(DEFENCE.wear.regrow);
+    endPhase(g, 'ITA');
+    expect(column.dug).toBe(true);
+    expect(column.dugFor).toBeCloseTo(DEFENCE.wear.regrow, 6);
+    // Where the map has a fort the works come at the usual pace (the historian's rider): Tobruk's posts, ditch and wire were there before the war.
+    const tobruk = g.byName['Tobruk'];
+    expect(tobruk.terrain).toBe(DESERT.terrain);
+    expect(tobruk.fort).toBeTruthy();
+    expect(digsLate(tobruk)).toBe(false);
+    const garrison = addCorps(g, 'ITA', 'Tobruk line', 'inf', 2, 'Tobruk', {});
+    garrison.supplied = true; garrison.ap = garrison.apMax;
+    // And outside the desert nothing has changed.
+    const rome = g.byName['Rome'];
+    expect(digsLate(rome)).toBe(false);
+    const guard = addCorps(g, 'ITA', 'Rome guard', 'inf', 2, 'Rome', {});
+    guard.supplied = true; guard.ap = guard.apMax;
+    endPhase(g, 'ITA');
+    for (const c of [garrison, guard]) { expect(c.dug).toBe(true); expect(c.dugFor).toBe(1); expect(c.digging).toBeUndefined(); }
+    // A month's digging begun, and the works, come back from a save as they were.
+    const late = addCorps(g, 'ITA', 'Late column', 'inf', 2, 'Sidi Barrani', {});
+    late.supplied = true; late.ap = late.apMax;
+    endPhase(g, 'ITA');
+    const saved = loadGame(saveGame(g))!;
+    expect(saved.corps.find((c) => c.name === 'Sidi Barrani camps')).toMatchObject({ dug: true, dugFor: camps.dugFor });
+    expect(saved.corps.find((c) => c.name === 'Late column')!.digging).toBe(1);
+  });
+
+  it('a history campaign digs as it always did: dug in is dug in, in the desert too', () => {
+    const g = desertWar();
+    const target = g.byName['Sidi Barrani'];
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true; camps.ap = camps.apMax;
+    endPhase(g, 'ITA');
+    expect(camps.digging).toBeUndefined();
+    expect(g.corps.some((c) => c.digging !== undefined)).toBe(false);
   });
 
   it('does not apply inside a fortress, or to troops with their own wheels', () => {

@@ -321,6 +321,8 @@ export interface Corps extends Storied {
   dug?: boolean;
   /** Months it has been dug in where it stands (the grand campaign): its works grow with them, and attacks wear them down. */
   dugFor?: number;
+  /** Months it has dug in the open desert with no works to show for them yet (the grand campaign): the works there come a month late. */
+  digging?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
@@ -466,7 +468,7 @@ export interface BattleReport {
    * Who paid, and to what (the grand campaign, rulings 146 and 149): the result's line as the attacker reads it and as
    * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
    */
-  paid?: { att: string; def: string; sign?: 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
+  paid?: { att: string; def: string; sign?: 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
 }
 
 // ---- The war at sea ---------------------------------------------------------------------

@@ -8,7 +8,7 @@
 // gunned line. None of it is in a history campaign. The numbers are in data/campaign/support.json.
 import { describe, expect, it } from 'vitest';
 import { notTanksAlone } from '../src/campaign/ai';
-import { GUNS_AND_MINES_UNKNOWN, GUNS_UNKNOWN, gunsKnown, minesKnown, whatYouFace } from '../src/campaign/facing';
+import { GUNS_AND_MINES_UNKNOWN, GUNS_UNKNOWN, briefTicket, gunsKnown, minesKnown, whatYouFace } from '../src/campaign/facing';
 import { DEFENCE, addCorps, assess, createGame, relocate, resolveBattle, worksShare } from '../src/campaign/game';
 import { SIGHT, identify, setFog, sightOf } from '../src/campaign/intel';
 import { startOpen } from '../src/campaign/staff';
@@ -260,9 +260,10 @@ describe('the battle', () => {
     expect(alone.alone).toBeCloseTo(A.cut * 0.9, 6);
     expect(faced(g, l).alone).toBeCloseTo(0.63, 6);
     expect(row(g, l, 'Tanks alone')).toBe('Tank attack cut by 63%');
+    // (The line stands first on the card: it is the one thing there he can change before he clicks.)
     expect(faceLines(faced(g, l)).map((x) => x.text)).toEqual([
-      'Anti-tank guns and tank destroyers: your tanks\' shock counts for a tenth.',
       'No infantry with your tanks: their guns take two thirds of the tanks\' attack.',
+      'Anti-tank guns and tank destroyers: your tanks\' shock counts for a tenth.',
     ]);
     // The attack itself is smaller by that share: the same tanks against the line without its tank destroyers.
     const a1 = assess(g, l.att, l.target).A;
@@ -275,13 +276,26 @@ describe('the battle', () => {
     for (const c of [thin, full]) c.supplied = true;
     expect(at(g, l, [...l.att, thin]).cover).toBeCloseTo(2 / 6, 6);
     expect(at(g, l, [...l.att, thin]).alone).toBeCloseTo(A.cut * 0.9 * (4 / 6), 6);
-    expect(faceLines(faced(g, l, [...l.att, thin]))[1].text).toBe('Too little infantry with your tanks: their guns take half of the tanks\' attack.');
+    expect(faceLines(faced(g, l, [...l.att, thin]))[0].text).toBe('Too little infantry with your tanks: their guns take half of the tanks\' attack.');
     expect(at(g, l, [...l.att, full]).alone).toBe(0);
     expect(row(g, l, 'Tanks alone', [...l.att, full])).toBeUndefined();
     // Better armour takes its step off the guns here too.
     give(g, 'GER', T.armour[2]);
     expect(at(g, l).gunned).toBeCloseTo(0.9 - S.armourStep, 6);
     take(g, 'GER', T.armour[2]);
+    // Never twice: in a forest the old cut for tanks alone (15%) gives way where this is the larger, and stands where it is not.
+    l.target.terrain = 'forest';
+    expect(faced(g, l).alone).toBeCloseTo(0.63, 6);
+    expect(assess(g, l.att, l.target).lines.find((x) => x.label === 'Tanks alone')).toEqual({ label: 'Tanks alone', value: 'Tank attack cut by 63%', effect: 'This takes the place of the 15% cut for tanks alone in close country' });
+    const k = playing('GER');
+    const n = line(k, undefined, [['arm', 3]]);
+    works(n.def, DONE);
+    expect(faced(k, n).alone).toBeCloseTo(0.14, 6);
+    const open = assess(k, n.att, n.target).A;
+    n.target.terrain = 'forest';
+    expect(faced(k, n).alone).toBe(0);
+    expect(row(k, n, 'Tanks alone')).toBeUndefined();
+    expect(assess(k, n.att, n.target).A).toBeLessThan(open);
     // Where the ground has already stopped the tanks there is no second cut.
     l.target.terrain = 'marsh';
     expect(faced(g, l).alone).toBe(0);
@@ -409,6 +423,12 @@ describe('the battle', () => {
     l.target.terrain = 'urban';
     expect(faced(g, l).snipers).toBe('city');
     expect(hasTech(g, 'POL', T.support)).toBe(false);
+    // An attack with no men on foot is told of no snipers: there is nobody for them to shoot.
+    const h = playing('GER');
+    const m = line(h, [['inf', 3], ['inf', 3]], [['arm', 3]]);
+    m.target.terrain = 'forest';
+    expect(faced(h, m).snipers).toBeNull();
+    expect(faceLines(faced(h, m)).some((x) => x.sign === 'sniper')).toBe(false);
   });
 
   it('makes the losses fall that way: against machine guns in finished works the infantry loses more of itself than the tanks beside it', () => {
@@ -616,12 +636,45 @@ describe('what the player\'s reports know of it', () => {
     expect(labels()).not.toContain('Who pays');
     expect(labels()).not.toContain('Minefields');
     expect(armour()).toBe('Tank attack up by as much as 25%: their guns are not known');
+    // Tanks sent alone at guns that are not known: the most the guns could take, on the card first and in the ticket.
+    const lone = (): ReturnType<typeof attackOutlook> => attackOutlook(g, [l.att[0]], l.target);
+    expect(lone()!.lines.find((x) => x.label === 'Tanks alone')?.value).toBe('Tank attack cut by as much as 70%: their guns are not known');
+    expect(lone()!.face!.map((x) => x.text)).toEqual(['No infantry with your tanks: their guns take as much as two thirds of the tanks\' attack.', GUNS_AND_MINES_UNKNOWN.text]);
+    expect(labels()).not.toContain('Tanks alone');
     identify(g, l.def, 'GER');
+    expect(lone()!.lines.find((x) => x.label === 'Tanks alone')?.value).toBe('Tank attack cut by 14%');
+    expect(lone()!.face![0].text).toBe('No infantry with your tanks: their guns take a tenth of the tanks\' attack.');
     expect(labels()).toContain('Machine guns');
     expect(labels()).toContain('Who pays');
     expect(labels()).toContain('Minefields');
     expect(armour()).toMatch(/^Tank attack up \d+%$/);
     expect(attackOutlook(g, l.att, l.target)!.face!.map((x) => x.sign)).toEqual(['anti-tank', 'machine-gun']);
+  });
+});
+
+describe('one cause, one place on the attack card (ruling 166)', () => {
+  it('where WHAT YOU FACE says why, the Dug in row keeps its figure alone, with what the attack takes off the works', () => {
+    const g = playing('GER');
+    const l = line(g);
+    works(l.def, DONE);
+    give(g, 'POL', T.support);
+    const a = assess(g, l.att, l.target);
+    const full = a.lines.find((x) => x.label === 'Dug in')!;
+    expect(full.value).toContain('their works are finished');
+    expect(full.effect).toContain('The day runs against the attack');
+    const face = whatYouFace(g, a, l.target, null)!;
+    expect(face.some((x) => !x.unknown)).toBe(true);
+    const brief = briefTicket(a.lines, face);
+    const row = brief.find((x) => x.label === 'Dug in')!;
+    expect(row.value).toMatch(/^Troops in fieldworks defend \d+% stronger$/);
+    expect(row.effect ?? 'Won or lost').toMatch(/^Won or lost/);
+    expect(row.effect ?? '').not.toContain('The day runs against');
+    // Every other row stands as it was, in its place.
+    expect(brief.map((x) => x.label)).toEqual(a.lines.map((x) => x.label));
+    for (const [i, x] of brief.entries()) if (x.label !== 'Dug in') expect(x).toBe(a.lines[i]);
+    // With nothing stated above it (a history campaign's card, or only the line in italics) the row stands in full.
+    expect(briefTicket(a.lines, null)).toBe(a.lines);
+    expect(briefTicket(a.lines, [GUNS_AND_MINES_UNKNOWN])).toBe(a.lines);
   });
 });
 

@@ -6,8 +6,9 @@ import { minesAt } from './engineers';
 import type { Assessment } from './game';
 import { allied } from './game';
 import { agentAt, corpsKnown, fogOn } from './intel';
-import { faceLines, type FaceLine } from './support';
+import { aloneUnknown, faceLines, type FaceLine } from './support';
 import type { Game, Region } from './types';
+import type { TicketLine } from '../core/ticket';
 
 /** The line that closes the list where the defence is not identified, overland and out of view alike: two sentences and no third (ruling 162(c)). */
 export const GUNS_UNKNOWN: FaceLine = { sign: 'scouted', text: 'Not scouted: their guns are unknown.', unknown: true };
@@ -32,7 +33,7 @@ export function minesKnown(g: Game, r: Region, viewer: string | null = g.human):
 const smallShare = (x: number): string => (x < 0.075 ? 'a twentieth' : x < 0.125 ? 'a tenth' : x < 0.175 ? 'a sixth' : x < 0.225 ? 'a fifth' : 'a quarter');
 
 /**
- * The lines of WHAT YOU FACE for this attack, four at most. Null outside the grand campaign (a history campaign's card
+ * The lines of WHAT YOU FACE for this attack, four at most and one more in italics for what is not scouted. Null outside the grand campaign (a history campaign's card
  * shows none). Where the defence is identified, everything. Where it is not: the works, which are on every staff's
  * map, the snipers the ground itself promises, and one line in italics for what is not known.
  */
@@ -42,6 +43,9 @@ export function whatYouFace(g: Game, a: Assessment, target: Region, viewer: stri
   if (gunsKnown(g, a, viewer)) return faceLines(f);
   const out: FaceLine[] = [];
   const at = f.antiTank;
+  // Tanks with no infantry beside them: the one thing he can change before he clicks, said first, at the most the guns could take.
+  const lone = at && f.shock !== null ? aloneUnknown(at) : null;
+  if (lone) out.push(lone);
   const mines = !!at && at.mines > 0 && minesAt(g, target) > 0 && minesKnown(g, target, viewer);
   // The works that stand against tanks: the ditch, the dragon's teeth, and mines with a report.
   if (at && f.shock !== null && (at.works > 0 || mines)) {
@@ -54,6 +58,21 @@ export function whatYouFace(g: Game, a: Assessment, target: Region, viewer: stri
   const snipers = faceLines(f).find((l) => l.sign === 'sniper');
   if (snipers) out.push(snipers);
   // With a report from the ground he knows its mines, or that it has none: only the guns are left unknown.
-  out.push(minesKnown(g, target, viewer) ? GUNS_UNKNOWN : GUNS_AND_MINES_UNKNOWN);
-  return out.slice(0, 4);
+  // (Four lines at most, the snipers' the first to go; the line in italics stands beside the four.)
+  return [...out.slice(0, 4), minesKnown(g, target, viewer) ? GUNS_UNKNOWN : GUNS_AND_MINES_UNKNOWN];
+}
+
+/**
+ * One cause, one place (ruling 166): on a card where WHAT YOU FACE states what the defence does, the ticket's 'Dug in'
+ * row keeps its figure alone, with what this attack takes off the works. Elsewhere the row stands in full.
+ */
+export function briefTicket(lines: TicketLine[], face: FaceLine[] | null | undefined): TicketLine[] {
+  if (!face?.some((l) => !l.unknown)) return lines;
+  return lines.map((l) => {
+    if (l.label !== 'Dug in' || !l.effect) return l;
+    const figure = /^Troops in fieldworks defend \d+% stronger/.exec(l.effect);
+    if (!figure) return l;
+    const wear = /Won or lost, .*$/.exec(l.effect);
+    return { label: l.label, value: figure[0], effect: wear ? wear[0] : undefined };
+  });
 }

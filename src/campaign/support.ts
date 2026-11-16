@@ -257,23 +257,32 @@ export function antiTankParts(at: AntiTank): string[] {
   return parts.filter((p) => p[0] >= 0.03).sort((a, b) => b[0] - a[0]).slice(0, 3).map((p) => p[1]);
 }
 
-export type FaceSign = 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted';
+/** How the card names tanks that go in with no infantry, or too little, beside them. */
+export const aloneWords = (at: AntiTank): string => `${at.cover <= 0 ? 'No infantry' : 'Too little infantry'} with your tanks`;
+/** The same line where the defence's guns are not known: the most they could take from tanks covered this far. Null where infantry covers the tanks. */
+export function aloneUnknown(at: AntiTank): FaceLine | null {
+  const most = SUPPORT.antiTank.alone.cut * (1 - at.cover);
+  return most >= 0.05 ? { sign: 'tank', text: `${aloneWords(at)}: their guns take as much as ${shareOf(most)} of the tanks' attack.` } : null;
+}
+
+export type FaceSign = 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted';
 /** One line of WHAT YOU FACE: a sign and a sentence. 'unknown' marks the line that stands alone when nothing is scouted. */
 export interface FaceLine { sign: FaceSign; text: string; unknown?: boolean }
 
 /**
- * WHAT YOU FACE (rulings 146(d)(8), 149(d) and 152): a line for each thing the defence will do to what he brings, four
- * at most, facts first and never a warning. These are the lines for a defence that is identified: what his reports do
+ * WHAT YOU FACE (rulings 146(d)(8), 149(d), 152 and 164(f)): a line for each thing the defence will do to what he brings,
+ * four at most and the snipers' the first to go, facts and never a warning. These are the lines for a defence that is identified: what his reports do
  * not know is left out in facing.ts.
  */
 export function faceLines(f: Faced): FaceLine[] {
   const out: FaceLine[] = [];
   const at = f.antiTank;
+  // First the one thing he can change before he clicks; then guns and obstacles, machine guns, fieldworks, and snipers last (ruling 164(f)).
+  if (at && f.alone >= 0.05) out.push({ sign: 'tank', text: `${aloneWords(at)}: their guns take ${shareOf(f.alone)} of the tanks' attack.` });
   if (at && f.shock !== null) {
     const parts = antiTankParts(at);
     out.push({ sign: 'anti-tank', text: at.strength < 0.1 || !parts.length ? 'Few anti-tank guns: your tanks\' shock counts in full.' : `${cap(listAnd(parts))}: your tanks' shock counts ${shareWords(f.shock)}.` });
   }
-  if (at && f.alone >= 0.05) out.push({ sign: 'anti-tank', text: `${at.cover <= 0 ? 'No infantry' : 'Too little infantry'} with your tanks: their guns take ${shareOf(f.alone)} of the tanks' attack.` });
   if (f.machineGuns) out.push({ sign: 'machine-gun', text: f.mgDug ? 'Machine guns, dug in: most of your losses will be infantry.' : 'Machine guns in the open: more of your losses will be infantry.' });
   if (f.worksCut >= 0.05) out.push({ sign: 'mortar', text: `Fieldworks: your ${f.mortars && f.gunsIn ? 'mortars and guns' : f.mortars ? 'mortars' : 'guns'} take ${shareOf(f.worksCut)} of them away.` });
   if (f.snipers && f.toll.why.snipers > 0) out.push({ sign: 'sniper', text: `Snipers in the ${f.snipers}: more of your losses will be infantry.` });

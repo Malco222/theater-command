@@ -60,7 +60,7 @@ import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } 
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
-import { minesKnown } from '../facing';
+import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
@@ -1867,6 +1867,7 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
+  else if (c.digging && autoDig()) tags.push(`<span class="tag good worn" title="${esc('Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.')}">Digging · no works yet</span>`);
   else if (autoDig() ? mine && c.kind !== 'fort' && c.town === undefined && !c.yields && !c.fought && c.ap >= c.apMax : c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(autoDig() ? STANCE_HOLD : STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
@@ -1985,7 +1986,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -6392,6 +6393,7 @@ const TICKET_KEY = new Set(['Forces', 'Troops', 'Dug in', 'Supply', 'Earlier att
 // ---- What you bring and what you face (the design director's rulings 146, 149 and 152; the grand campaign) ----
 /** The support weapons' signs, the art director's, as the UI director's kit draws them: strokes of one weight on a 24 box. */
 const WEAPON_SIGN: Record<string, string> = {
+  tank: '<path d="M5 14h14a3 3 0 0 1 0 6H5a3 3 0 0 1 0-6zM7 14v-3h8l1.5 3M12 11V8h3M15 9.5h6.5"/><path d="M7 17h.1M11 17h.1M15 17h.1M19 17h.1"/>',
   'anti-tank': '<circle cx="10.5" cy="16.8" r="3.7"/><path d="M8 9.6H22.4M22.4 7.6v4M10.5 4.2V13M8 9.6L2 20.4"/>',
   'machine-gun': '<path d="M5 7.8h6.2v3.4H5zM11.2 9.5H21.5M8.6 11.2L4.6 20M8.6 11.2L13.4 20M5 9.5H2.6M2.6 8v3"/>',
   mortar: '<path d="M7.7 18.5L14.1 4.5L16.3 5.5L9.9 19.5ZM4 20.5H13.2M13.4 11.8L19.8 20.5"/>',
@@ -6403,7 +6405,8 @@ const weaponSign = (id: string): string => `<svg class="wsign" viewBox="0 0 24 2
 /** A sign and one sentence: a line of WHAT YOU FACE, or the result's line on who paid. */
 const signLine = (l: { sign?: string | null; text: string; unknown?: boolean }): string => `<div class="tc-signline${l.unknown ? ' is-unknown' : ''}${l.sign ? '' : ' bare'}">${l.sign ? weaponSign(l.sign) : ''}<span>${esc(l.text)}</span></div>`;
 /** WHAT YOU FACE, just above the odds: what the defence will do to what he brings, as far as his reports know it. Nothing in a history campaign. */
-const faceBlock = (face: { sign: string; text: string; unknown?: boolean }[] | null | undefined): string => (face?.length ? `<div class="facepart"><h3>What you face</h3>${face.map(signLine).join('')}</div>` : '');
+const faceBlock = (face: { sign: string; text: string; unknown?: boolean }[] | null | undefined): string => (face?.length
+  ? `<div class="facepart"><div class="facehead"><h3>What you face</h3>${face.filter((l) => l.unknown).map(signLine).join('')}</div>${face.filter((l) => !l.unknown).map(signLine).join('')}</div>` : '');
 /** Who paid and what did it, under the sentence of losses: as the attacker reads it, or with the sides turned for the defender. */
 function paidLine(r: BattleReport): string {
   if (!r.paid || r.yielded) return '';
@@ -6544,12 +6547,12 @@ function attackCard(): string {
     const at = (odds: number): number => (100 * odds) / (1 + odds);
     const p = look.chance;
     const word = look.chanceLo >= 0.95 ? 'Victory looks certain' : look.chanceHi <= 0 ? 'This attack looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
-    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
-      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
+      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="${esc(`The balance lies somewhere in this band. ${look.note}${look.wide ? ` ${look.narrow}` : ''}`)}"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
       ${costBlock(look)}
-      <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}${scoutButton(target)}</div>
-      ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
+      ${look.face?.length ? (scoutButton(target) ? `<div class="acts scoutrow">${scoutButton(target)}</div>` : '') : `<div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}${scoutButton(target)}</div>`}
+      ${ticketBlock('What the campaign map feeds into this battle', briefTicket(look.lines, look.face))}`;
   } else if (a) {
     const p = chanceOn(a.odds, a.dice);
     const share = a.A / (a.A + a.D);
@@ -6558,7 +6561,7 @@ function attackCard(): string {
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ' against prepared positions' : ''}</span><span>Theirs</span></div></div>
       ${look ? costBlock(look) : ''}
-      ${ticketBlock('What the campaign map feeds into this battle', a.lines)}`;
+      ${ticketBlock('What the campaign map feeds into this battle', briefTicket(a.lines, look?.face))}`;
   } else body = cands.length && cands.every((c) => barred(g, c, target))
     ? `<div class="empty">${esc(target.name)} is too steep for tanks. Bring infantry or mountain troops up beside it to attack.</div>`
     : cands.length && cands.every((c) => blocked(g, c, target))

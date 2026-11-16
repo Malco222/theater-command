@@ -56,7 +56,7 @@ export const EASTERN = eastData as unknown as {
 };
 /** Rules for campaigning in the desert. See data/campaign/desert.json. */
 export const DESERT = desertData as unknown as {
-  terrain: string; step: number; port: number; ports: Record<string, number>; bands: [number, number][]; lineDefence: number; open: number; stores: number; retreat: [number, number]; replace: number; drag: [number, number][];
+  terrain: string; step: number; port: number; ports: Record<string, number>; bands: [number, number][]; lineDefence: number; open: number; digLate: number; stores: number; retreat: [number, number]; replace: number; drag: [number, number][];
   route: { id: string; feeds: string[]; perTenth: number };
   works?: [number, string, number, string[], string][];
 };
@@ -644,6 +644,8 @@ export const chanceOn = (odds: number, dice: [number, number]): number => Math.m
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** The odds at which an attack is an even chance. */
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
+/** True on open desert with no fort (ruling 165): rock under a thin layer of sand, so fieldworks there come a month late. */
+export const digsLate = (r: Region): boolean => r.terrain === DESERT.terrain && !r.fort;
 /** Months of works a dug-in corps has to its name, up to the months they take to finish (the grand campaign). Attacks wear them down. */
 export const worksOf = (c: Corps): number => (c.dug ? Math.max(0, Math.min(DEFENCE.entrench.months, c.dugFor ?? 1)) : 0);
 /** What works that many months old are worth, as a share of finished ones: the first month's digging does the most. */
@@ -760,7 +762,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
   let turned = false, turnedTo = 1;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
-  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, armorAlone = 0, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
+  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, armorAlone = 0, aloneOver = 1, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
   for (const c of attackers) sources.add(c.reg);
   // Defenders with nowhere to fall back to: every way out is enemy ground or the attack itself.
@@ -828,7 +830,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       else {
         if (at ? at.strength < 1 : !defHasArmor) { p *= 1 + 0.25 * (at ? 1 - at.strength : 1); armorShock = true; }
         // Tanks that come on without infantry beside them are picked off by the guns (the grand campaign).
-        if (at && at.alone > 0) { p *= 1 - at.alone; armorAlone = at.alone; }
+        // Never twice (ruling 164(b)): where the old cut for tanks alone in close country is the larger, it stands and this adds nothing.
+        if (at && at.alone > 0) {
+          const old = armsA ? armsA.alone : 1;
+          if (1 - at.alone < old) { p *= (1 - at.alone) / old; armorAlone = at.alone; aloneOver = old; }
+        }
       }
     }
     const lead = cmdAttack(g, c, pocket);
@@ -1167,13 +1173,13 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     faced = {
       antiTank: at, toll, shock: at && tanksIn && !armorStuck ? 1 - at.strength : null, alone: armorAlone,
       machineGuns: toll.why.machineGuns > 0 && onFoot > 0, mgDug: facing ? defenders.some((d) => machineGuns(g, d, 1, 0) > 1 && facing.works(d) > 0) : false,
-      worksCut: dugNow ? 1 - (1 - soften) * (1 - mortar) : 0, mortars: mortar > 0, gunsIn: soften > 0, snipers: sniped,
+      worksCut: dugNow ? 1 - (1 - soften) * (1 - mortar) : 0, mortars: mortar > 0, gunsIn: soften > 0, snipers: onFoot > 0 ? sniped : null,
     };
     // The figures, for the ticket: the words are on the card.
     if (facing) {
       let w = 0, up = 0;
       for (const d of defenders) { const k = d.divs * d.str; w += k; up += k * (machineGuns(g, d, onFoot, facing.works(d)) - 1); }
-      if (armorAlone >= 0.005) lines.push({ label: 'Tanks alone', value: `Tank attack cut by ${Math.round(armorAlone * 100)}%` });
+      if (armorAlone >= 0.005) lines.push({ label: 'Tanks alone', value: `Tank attack cut by ${Math.round(armorAlone * 100)}%`, ...(aloneOver < 1 ? { effect: `This takes the place of the ${Math.round((1 - aloneOver) * 100)}% cut for tanks alone in close country` } : {}) });
       if (w > 0 && up / w >= 0.005) lines.push({ label: 'Machine guns', value: `Defence up ${Math.round((up / w) * 100)}% against the men on foot` });
       if (mortar >= 0.005 && dugNow) lines.push({ label: 'Mortars', value: `The fieldworks count for ${Math.round(mortar * 100)}% less` });
       if (attackers.some((c) => assaultFire(g, c) > 1)) lines.push({ label: 'Assault rifles', value: `Infantry attack up ${Math.round(SUPPORT.assault.attack * 100)}%` });
@@ -2700,16 +2706,21 @@ function digIn(g: Game, nat: string): void {
     if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
+      const late = digsLate(g.regions[c.reg]) ? DESERT.digLate : 0;
       // Works standing empty where it stood the month are its own (Version 65): a corps raised beside a ready line
       // does not dig from nothing while the line falls in.
       if (!c.dug) {
         takeWorks(g, c, g.regions[c.reg]);
-        if (c.relief) { delete c.relief; c.dugFor = Math.max(c.dugFor ?? 0, gain); if (c.pressed) delete c.pressed; continue; }
+        if (c.relief) { delete c.relief; c.dugFor = Math.max(c.dugFor ?? 0, (c.digging ?? 0) + gain - late); if (c.digging !== undefined) delete c.digging; if (c.pressed) delete c.pressed; continue; }
       }
       if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
-      else if (gain > 0) { c.dugFor = gain; c.dug = true; }
+      else if (gain > 0) {
+        // In the open desert the first month's digging shows no works (ruling 165): half after two whole months.
+        const begun = (c.digging ?? 0) + gain;
+        if (begun > late) { c.dugFor = begun - late; c.dug = true; if (c.digging !== undefined) delete c.digging; } else c.digging = begun;
+      }
     }
-    else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; }
+    else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
     if (c.pressed) delete c.pressed;
   }
 }

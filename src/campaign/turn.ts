@@ -65,7 +65,7 @@ import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { staffRuns, type DeskId } from './depth';
 import { minesKnown, whatYouFace } from './facing';
-import type { FaceLine } from './support';
+import { SUPPORT, type FaceLine } from './support';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -463,6 +463,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
     return l;
   }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Tanks alone' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
+  // Tanks with no infantry beside them, against guns that are not known: the most they could take (ruling 164(c)).
+  const loneMost = k.none.length && a.faced?.antiTank && a.faced.shock !== null ? SUPPORT.antiTank.alone.cut * (1 - a.faced.antiTank.cover) : 0;
+  if (loneMost >= 0.005) {
+    const at = lines.findIndex((l) => l.label === 'Armor');
+    lines.splice(at < 0 ? lines.length : at + 1, 0, { label: 'Tanks alone', value: `Tank attack cut by as much as ${Math.round(loneMost * 100)}%: their guns are not known` });
+  }
   const nn = k.none.length, old = k.report.length;
   const count = (x: number): string => ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][x] ?? `${x}`;
   const dark = !nn ? '' : nn < n ? `${count(nn)} of the ${n} defending corps ${nn === 1 ? 'is' : 'are'} not identified`

@@ -2320,6 +2320,9 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .wsign { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--brass); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .facepart { margin: 10px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .facepart h3 { margin: 0 0 5px; }
+.facehead { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.facehead .tc-signline { font-size: 14px; }
+.scoutrow { margin: 8px 0 2px; }
 .tc-signline { display: flex; align-items: flex-start; gap: 8px; font-family: Georgia, 'PT Serif', 'Times New Roman', serif; font-size: 15px; line-height: 22px; color: var(--ink); }
 .tc-signline .wsign { margin-top: 3px; }
 .tc-signline.is-unknown { font-style: italic; color: var(--ink-3); }
