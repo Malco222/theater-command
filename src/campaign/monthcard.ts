@@ -32,7 +32,7 @@
  */
 import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
-import { majorsOf } from './diplomacy';
+import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue } from './diplomacy';
 import { ARSENAL } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
@@ -82,6 +82,15 @@ export interface CardBand {
   region?: number;
   /** FREED by his own side: the band's left edge takes the rows' good-news green, and its field stays red. */
   good?: boolean;
+  /**
+   * The month of grace is spent (ruling 120): the standing warning of the months after a LAST MONTH lead, while the
+   * campaign goes on. Its head is the warning's own title ('Rome holds, for now'), the label WARNING sits on a cream
+   * plate in red letters and the band's bright edge turns cream (the art director's turn-report brief), so it cannot
+   * be taken for the band of the months before.
+   */
+  spent?: boolean;
+  /** With `spent`, the sentence that says what to do, printed small where the date stands: 'There will be no last month: hold all six.' */
+  note?: string;
 }
 
 /** One of the six score boxes. A box with nothing to count is left out. */
@@ -126,6 +135,13 @@ export interface CardRow {
   head: string;
   follows: string;
   facts: CardFigure[];
+  /**
+   * The lead of the month a campaign's stake falls due on him (ruling 118(f); see stakeDue): no picture, the frame in
+   * the warning band's red, `ours` the flag drawn large, the tag LAST MONTH on a cream plate, `line` the short line
+   * under the headline in place of the two flags, `follows` the sentence under the frame, two figures, and SHOW ON
+   * MAP alone. That month the card has no warning band of the same title.
+   */
+  stake?: boolean;
 }
 
 export interface CardHome { sign: string; count: number; text: string; place: string; region?: number; /** Next month's: drawn in grey. */ next?: boolean }
@@ -871,6 +887,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const seat = who ? g.nations[who].capital : -1;
     if (g.regions[seat]) b.band.region = seat;
   }
+  // The warning of the months after a stake's last month is headed by its own title, and says on its face what to do.
+  for (const b of banded) {
+    if (b.band.word !== 'WARNING' || b.band.title !== ROME_HOLDS) continue;
+    const short = b.band.text.split(/(?<=\.) /).find((s) => s.startsWith(NO_LAST_MONTH));
+    Object.assign(b.band, { head: ROME_HOLDS, spent: true }, short ? { note: short } : {});
+  }
+  // The month a stake falls due the warning is the lead story, and is not said twice (ruling 118(f)).
+  const due = stakeDue(g, me);
+  if (due) for (const b of banded.filter((x) => x.band.word === 'WARNING' && x.band.title === due.title)) banded.splice(banded.indexOf(b), 1);
   // (Of the same rank: war declared on him, then his own doing, then the rest.)
   const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
   banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
@@ -912,6 +937,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const topG = ranked.find((x) => x.row.cls === 3 && x.row.picture !== null), topS = ranked.find((x) => x.row.cls === 4 && x.row.picture !== null);
   const light = (x: Ranked): boolean => x.sub !== GROUND_FIGHTING || x.weight < CORPS_MEN;
   card.lead = (topG && topS ? ((topS.great && light(topG)) || order(topS) > order(topG) ? topS : topG) : topG ?? topS)?.row ?? null;
+  // The month a stake falls due it leads, whatever was fought (ruling 118(f)), and the battle that would have led is
+  // the first of the rows.
+  if (due) {
+    card.lead = { ...blank(), cls: 2, stake: true, tag: 'LAST MONTH', tone: 'bad', ours: due.nat, place: g.nations[due.nat]?.name ?? '', kind: 'THE STAKE', month: due.month,
+      head: due.head, line: due.sub, follows: due.sentence, facts: due.figures, ...(due.region !== undefined ? { region: due.region } : {}) };
+  }
   card.rows = all.filter((r) => r !== card.lead);
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
   card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);

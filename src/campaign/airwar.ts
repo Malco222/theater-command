@@ -391,6 +391,21 @@ export function raidKinds(g: Game, nat: string | null = g.human): RaidKindView[]
   });
 }
 
+/** What the one row for a bombing raid says of itself (the design director's ruling 117, point 6). */
+export const BOMB_EITHER = 'Bombers go for the factories and rail yards of one province, by day or by night: the card weighs both and asks which. Fighters in range can go with them by day.';
+
+/**
+ * The planner's menu with a bombing raid named once (ruling 117, point 6): "Bomb by night" opens the same card as
+ * "Bomb factories and railways", so the list has one row for the two, its line says by day or by night, and the
+ * card asks which. The row is offered where either way has a target.
+ */
+export function raidKindsOne(g: Game, nat: string | null = g.human): RaidKindView[] {
+  const all = raidKinds(g, nat);
+  const night = all.find((k) => k.key === 'night');
+  return all.filter((k) => k.key !== 'night').map((k) => (k.key !== 'bomb' || !night ? k
+    : { ...k, blurb: BOMB_EITHER, targets: Math.max(k.targets, night.targets), why: k.targets || night.targets ? null : k.why }));
+}
+
 /** A target for one kind of raid: where it is, how far from the nearest group that could fly, how many groups could, and what is there. */
 export interface RaidTarget {
   /** A province, a sea (a shipping strike) or a fleet (a strike on one fleet): what to give planRaid(). */
@@ -689,7 +704,10 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const d = dist(f), R = airRange(f), k = kindOf(f);
     const effect = k === 'bmr' ? (d <= R.bmr ? 1 : 0) : kind === 'night' ? 0 : cover(d, R.ftr);
     const why = whys.get(f.id) ?? null;
-    const note = why ? '' : kind === 'recon' ? `${Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr)} of its aircraft go` : k === 'bmr' ? `${num(d)} km to fly` : effect >= 1 ? `${num(d)} km: well inside its range` : `${num(d)} km: at ${pct(effect)} effect over the target`;
+    // (A group with no distance to fly is not told '0 km', which reads as a fault: its carriers lie off the target, or its field is at it.)
+    const atSeaTarget = kind === 'strike' || kind === 'fleet';
+    const here = d > 0 ? '' : atSeaTarget ? (f.ship !== undefined ? 'its carriers are in these waters' : 'based on these shores') : f.ship !== undefined ? 'its carriers lie off this coast' : 'based at the target';
+    const note = why ? '' : kind === 'recon' ? `${Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr)} of its aircraft go` : here ? here : k === 'bmr' ? `${num(d)} km to fly` : effect >= 1 ? `${num(d)} km: well inside its range` : `${num(d)} km: at ${pct(effect)} effect over the target`;
     return { id: f.id, name: f.name, kind: k, aircraft: f.ftr + f.bmr, base: f.base, baseName: homeName(g, f), ship: f.ship ?? -1, km: d, effect, ready: f.ready, picked: going.includes(f), locked: locked.has(f.id), why, note };
   }).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.km - b.km || a.id - b.id);
   plan.bombers = going.reduce((s, f) => s + f.bmr, 0);
@@ -787,7 +805,7 @@ export interface RaidWay {
   gunLossN: number;
   toGuns: string;
   gunsStop: number;
-  /** The line under the bombers lost: 'of them to flak and guns', or 'of them to flak' where the target has no guns. */
+  /** The line under the bombers lost: 'of them to flak and guns', or 'of them to light flak' where the target has no guns. */
   gunsWords: string;
   /** The note on the WHAT A HIT DOES line: 'after the guns stop 30% of the bombing'; empty with no guns. */
   stopNote: string;
@@ -816,6 +834,8 @@ export interface DayNight {
    */
   guns: number;
   gunsLabel: string;
+  /** After the label, in the row's small dim type, where no guns are built: 'light flak only' (any target puts up some). Empty with guns. */
+  gunsTail: string;
   /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
   home: number[];
   /** Fighter groups that could join by day and cannot by night: "Cannot fly: no escort by night". */
@@ -848,7 +868,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
       lost: flown ? `${pct(p.bomberLoss)} · about ${num(p.bomberLossN)}` : '',
       fightersLost: flown && p.fighters > 0 ? `${pct(fighterLoss)} · about ${num(p.fighterLossN)}` : '',
       gunLoss: flown ? p.guns.loss : 0, gunLossN: flown ? p.guns.lossN : 0, toGuns: flown ? `about ${num(p.guns.lossN)}` : '', gunsStop: flown ? p.guns.stop : 0,
-      gunsWords: !flown ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to flak',
+      gunsWords: !flown ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to light flak',
       stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct(p.guns.stop)} of the bombing` : '',
       figures: f, hits,
       foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
@@ -874,7 +894,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     chosen: kind, day, night,
     bombers: lead.bombers,
     foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
-    guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns',
+    guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns', gunsTail: level ? '' : 'light flak only',
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
     barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };

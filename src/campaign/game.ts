@@ -1754,13 +1754,21 @@ export function swapCorps(g: Game, a: Corps, b: Corps): boolean {
  * or through a province whose line is cut; only engineers can be carried to the break itself.
  */
 export function railReach(g: Game, c: Corps): Set<number> {
+  return railWalk(g, c).out;
+}
+
+/**
+ * The walk railReach makes: where the corps can get down (`out`), every province its train can run through, its own
+ * first (`through`), and the cut provinces a works train carries engineers up to (`ends`).
+ */
+function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; ends: number[] } {
   const out = new Set<number>();
   // No train leaves a province under siege, unless the army round the town holds a great junction outside it (prizes.ts).
-  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return out;
+  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
   const net = groundRules(g);
-  if (net && railCut(g, c.reg)) return out;
+  if (net && railCut(g, c.reg)) return { out, through: [], ends: [] };
   const seen = new Uint8Array(g.regions.length);
-  const q = [c.reg];
+  const q = [c.reg], ends: number[] = [];
   seen[c.reg] = 1;
   for (let i = 0; i < q.length; i++) {
     for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
@@ -1770,14 +1778,38 @@ export function railReach(g: Game, c: Corps): Set<number> {
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       if (net && railCut(g, j)) {
         // Engineers alone ride the works train to the break itself. Nothing goes on through it.
-        if (c.kind === 'eng') { seen[j] = 1; out.add(j); }
+        if (c.kind === 'eng') { seen[j] = 1; out.add(j); ends.push(j); }
         continue;
       }
       seen[j] = 1; q.push(j);
       if (!barred(g, c, r)) out.add(j); // the trains run through the high passes, but tanks are not unloaded there
     }
   }
-  return out;
+  return { out, through: q, ends };
+}
+
+/**
+ * The lit railway (the art director's railway brief, sections 3 and 11): every working track a train could carry the
+ * army in hand along this month, from its own province outward, track inside its march reach among it. Each is a
+ * pair of provinces a line joins, the lower id first. With engineers in hand the light runs up to a cut they can be
+ * carried to. Empty where the army cannot ride, and where the trains do not keep to lines on the map.
+ */
+export function litTracks(g: Game, corps: Corps[]): [number, number][] {
+  const ride = corps.filter((c) => !c.dead);
+  if (!ride.length || !groundRules(g) || whyNoTrainFor(g, ride)) return [];
+  type Track = [number, number];
+  let lit: Map<number, Track> | null = null;
+  for (const c of ride) {
+    const w = railWalk(g, c), through = new Set(w.through), ends = new Set(w.ends);
+    const mine = new Map<number, Track>(), was: Map<number, Track> | null = lit;
+    for (const a of w.through) for (const b of railsAt(a)) {
+      if (!(through.has(b) ? a < b : ends.has(b)) || downBetween(g, a, b)) continue;
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      mine.set(lo * g.regions.length + hi, [lo, hi]);
+    }
+    lit = was ? new Map([...was].filter((e: [number, Track]) => mine.has(e[0]))) : mine;
+  }
+  return [...(lit?.values() ?? [])];
 }
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
@@ -1796,8 +1828,17 @@ export function railMove(g: Game, c: Corps, to: Region): boolean {
 export interface NoTrain {
   code: 'fort' | 'town' | 'spent' | 'desert' | 'siege' | 'cut' | 'noline' | 'foe' | 'steep' | 'room' | 'broken' | 'unjoined';
   line: string;
+  /**
+   * Set where the reason is a break he can act on (a cut, a siege, bridges down): the opening of `line` that takes
+   * the box's emphasis. Both builds then print the reason first and the kept march's line after it, dim. Every other
+   * reason is an aside: it follows the march's line in plain type (the art director's railway brief, section 8).
+   */
+  strong?: string;
   at?: number;
 }
+
+/** A reason that is news he can act on: its opening takes the emphasis. */
+const news = (code: NoTrain['code'], strong: string, rest: string, at: number): NoTrain => ({ code, line: `${strong} ${rest}`, strong, at });
 
 /** A cut on friendly ground, said in passing: " (bombed, June 1941)", or the month alone where no cause was kept. */
 function cutAside(g: Game, r: number): string {
@@ -1818,20 +1859,28 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
   if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
   if (c.town) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
-  if (c.ap < 4) return { code: 'spent', line: `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.` };
+  // The test is four weeks of movement in hand. A corps that has moved, fought or worked has spent part of its month;
+  // one slowed for want of fuel opens its month with three and has spent nothing (ruling 118(c); the art director's
+  // lines). A fast corps with five may march a week and still ride.
+  if (c.ap < 4) return {
+    code: 'spent',
+    line: c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
+      : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
+      : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
+  };
   if (from.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
-  if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return { code: 'siege', line: `${from.name} is under siege. No train leaves it.`, at: from.id };
+  if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
-  if (net && railCut(g, from.id)) return { code: 'cut', line: `The railway at ${from.name} is cut${cutAside(g, from.id)}. No train leaves until ${mended(from.id)}.`, at: from.id };
+  if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
   if (dest.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
   if (!allied(g, c.nat, dest.ctrl) && !junctionOpenTo(g, c.nat, dest)) return { code: 'foe', line: `${dest.name} is not in friendly hands. Trains run through friendly ground only.`, at: to };
-  if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return { code: 'siege', line: `${dest.name} is under siege. No train runs into it.`, at: to };
+  if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
   if (barred(g, c, dest)) return { code: 'steep', line: whyBarred(g, c, dest)!, at: to };
   if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: `${dest.name} has no room for another corps.`, at: to };
-  if (net && railCut(g, to)) return { code: 'cut', line: `The railway at ${dest.name} is cut${cutAside(g, to)}. No train runs into it until ${mended(to)}.`, at: to };
+  if (net && railCut(g, to)) return news('cut', `The railway at ${dest.name} is cut${cutAside(g, to)}.`, `No train runs into it until ${mended(to)}.`, to);
   // Where the line is broken: the way there over the map's lines that meets the fewest breaks, and the first of them.
   // A break on his own side's ground (a cut, a siege, bridges down) is a smaller thing than ground he does not hold,
   // so he is told of the cut on his own line before he is told of a way round through another country.
@@ -1857,10 +1906,10 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   for (const b of way) {
     const r = g.regions[b];
     if (!allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r)) return { code: 'broken', line: `The line to ${dest.name} runs through ${r.name}, which is not in friendly hands.`, at: b };
-    if (besieged(g, r) && !junctionOpenTo(g, c.nat, r)) return { code: 'broken', line: `The line to ${dest.name} is broken at ${r.name}: the town is under siege, and no train runs through.`, at: b };
-    if (net && railCut(g, b)) return { code: 'broken', line: `The line to ${dest.name} is broken at ${r.name}: the railway there is cut${cutAside(g, b)}.`, at: b };
+    if (besieged(g, r) && !junctionOpenTo(g, c.nat, r)) return news('broken', `The line to ${dest.name} is broken at ${r.name}:`, 'the town is under siege, and no train runs through.', b);
+    if (net && railCut(g, b)) return news('broken', `The line to ${dest.name} is broken at ${r.name}:`, `the railway there is cut${cutAside(g, b)}.`, b);
     const x = riverBetween(g, a, b);
-    if (x && bridgeDown(g, x)) return { code: 'broken', line: `The line to ${dest.name} is broken between ${g.regions[a].name} and ${r.name}: the bridges over the ${riverName(x)} are down.`, at: b };
+    if (x && bridgeDown(g, x)) return news('broken', `The line to ${dest.name} is broken between ${g.regions[a].name} and ${r.name}:`, `the bridges over the ${riverName(x)} are down.`, b);
     a = b;
   }
   return { code: 'unjoined', line: `No train can reach ${dest.name} from ${from.name} this month.` };
@@ -1891,7 +1940,86 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
   if (whys.every(Boolean)) return no;
   const names = corps.filter((_, i) => whys[i]).map((c) => c.name);
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return { ...no, line: `${who} cannot go by rail, so nobody rides. ${no.line}` };
+  // (Its own reason follows as an aside: the sentence that leads is about the army.)
+  return { code: no.code, line: `${who} cannot go by rail, so nobody rides. ${no.line}`, ...(no.at !== undefined ? { at: no.at } : {}) };
+}
+
+/**
+ * The words under the pointer on a province an army in hand can ride to (the art director's railway brief, section
+ * 8, as ruled at 15:45 UTC on Version 82.2's pictures): the one line, in the rail's own blue, naming the press that
+ * sends it (the build's own: 'Right-click'); and engineers pointed at a cut they can reach are told what they can do
+ * there.
+ */
+export function rideLines(g: Game, corps: Corps[], to: number, press: string): { line: string; relay: string } {
+  return {
+    line: `${press}: by rail to ${g.regions[to].name}, there this month. It takes the whole month.`,
+    relay: corps.length > 0 && corps.every((c) => c.kind === 'eng') && railCut(g, to) ? 'Engineers can relay the track here.' : '',
+  };
+}
+
+/** Where an army in hand could go by rail this month: what every corps of it can reach, less where it stands and where there is no room for all. */
+export function railReachFor(g: Game, corps: Corps[]): Set<number> {
+  const out = new Set<number>();
+  if (!corps.length) return out;
+  let common: number[] | null = null;
+  for (const c of corps) {
+    const m = railReach(g, c);
+    common = common ? common.filter((id) => m.has(id)) : [...m];
+    if (!common.length) return out;
+  }
+  for (const id of common ?? []) if (corps.every((c) => c.reg !== id) && roomForAll(g, g.regions[id], corps)) out.add(id);
+  return out;
+}
+
+/**
+ * The break nearest an army on its own side's lines that stops its trains (a cut, a siege, bridges down), in the
+ * words whyNoTrain has for it, or null where nothing of the kind bounds its reach.
+ */
+export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
+  const c = corps[0];
+  if (!c) return null;
+  const net = groundRules(g), reach = railReach(g, c), seen = new Set<number>([c.reg]), q = [c.reg];
+  for (let i = 0; i < q.length; i++) {
+    for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
+      if (seen.has(j)) continue;
+      seen.add(j);
+      const r = g.regions[j];
+      if (r.terrain === DESERT.terrain) continue;
+      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
+      if (open) { q.push(j); continue; }
+      if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;
+      const why = whyNoTrain(g, c, j);
+      if (why?.strong) return why;
+    }
+  }
+  return null;
+}
+
+/**
+ * The one line on the army's panel that says what the trains will do for the army in hand this month (ruling
+ * 118(b); the art director's railway brief, section 2a), where the switch used to stand. `beyond` is how many
+ * places a train would take it to that its march does not reach, which the build knows from the reaches it draws:
+ * the line counts them, so he looks for them. `where` names the build's own sign for such a place, of one and of
+ * several ({ one: 'the station dot', many: 'a station dot' }; { one: 'the blue one', many: 'a blue one' }), and
+ * `press` its press. Null where nothing in hand could ever ride (no field corps).
+ */
+export interface RailSaid {
+  can: boolean;
+  /** The opening that takes the rail's own colour, where it can ride: 'By rail this month to 3 more places:'. */
+  strong: string;
+  line: string;
+}
+export function railSays(g: Game, corps: Corps[], beyond: number, press: string, where: { one: string; many: string }): RailSaid | null {
+  const ride = corps.filter((c) => !c.dead);
+  if (!ride.length) return null;
+  const no = whyNoTrainFor(g, ride);
+  if (no) return { can: false, strong: '', line: no.line };
+  if (beyond > 0) {
+    const strong = `By rail this month to ${beyond} more place${beyond === 1 ? '' : 's'}:`;
+    return { can: true, strong, line: `${strong} ${press} ${beyond === 1 ? where.one : where.many}. It takes the whole month.` };
+  }
+  const brk = nearestBreak(g, ride);
+  return { can: true, strong: '', line: `By rail this month, but a train reaches no farther than it can march.${brk ? ` ${brk.line}` : ''}` };
 }
 
 /** The share of a nation's home country, by worth, that is in enemy hands. */
