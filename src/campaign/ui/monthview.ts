@@ -45,7 +45,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const head = `<div class="mc-head"><div><div class="mc-eyebrow kick">Dispatches · the month in one look</div><h1>${esc(card.month)}</h1></div>
     <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
 
-  const bands = card.bands.map((b) => `<div class="mc-banner${b.good ? ' good' : ''}"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small>${esc(b.when)}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
+  const bands = card.bands.map((b) => `<div class="mc-banner${b.good ? ' good' : ''}${b.spent ? ' spent' : ''}"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small${b.note ? ` title="${esc(b.text)}"` : ''}>${esc(b.note ?? b.when)}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
 
   const tileSign: Record<string, string> = { provinces: glyph(PENNANT, 13, DIM), men: monthSign('inf', 11, DIM), sea: monthSign('hull', 11, DIM), air: monthSign('ftr', 11, DIM) };
   const tally = card.boxes.length ? `<div class="mc-tally" style="--n:${Math.max(4, card.boxes.length)}">${card.boxes.map((b) => `<div class="mc-tile ${toneClass(b.tone)}"><u>${tileSign[b.key] ?? ''}${esc(b.label)}</u><b>${esc(b.figure)}</b><small>${esc(b.sub)}</small></div>`).join('')}</div>` : '';
@@ -60,7 +60,15 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   };
 
   const L = card.lead;
-  const lead = !L ? '' : `<div class="mc-leadcol"><div class="mc-lab">The lead story</div>
+  // The month a campaign's stake falls due (ruling 118(f); the art director's last-month-lead): the warning band grown
+  // into the lead's frame. No picture, the country's flag large, the stamp on a cream plate, one short line under the
+  // headline, the sentence beneath, two figures in the band's red, and SHOW ON MAP alone.
+  const stake = !L?.stake ? '' : `<div class="mc-leadcol"><div class="mc-lab">The lead story</div>
+    <div class="mc-photo stake"><span class="mc-kind">${esc(L.kind)} · ${esc(L.when.toUpperCase())}</span>${L.tag ? `<span class="mc-stamp plate">${esc(L.tag)}</span>` : ''}<span class="mc-bigflag">${L.ours ? o.flag(L.ours, 114) : ''}</span>
+      <div class="mc-cap"><h2>${esc(L.head)}</h2><span>${esc(L.line)}</span></div></div>
+    ${L.follows ? `<p class="mc-so stake">${esc(L.follows)}</p>` : ''}${L.facts.length ? `<div class="mc-facts stake" style="--n:${L.facts.length}">${L.facts.map((f) => `<div><b>${esc(f.n)}</b>${esc(f.label)}</div>`).join('')}</div>` : ''}
+    <div class="mc-leadb">${where(L) ? `<button class="mc-alt" ${where(L)}>SHOW ON MAP</button>` : ''}</div></div>`;
+  const lead = !L ? '' : stake ? stake : `<div class="mc-leadcol"><div class="mc-lab">The lead story</div>
     <div class="mc-photo${L.report ? ' opens' : ''}"${act(L)}><i class="tpic k-${L.picture}"></i><span class="mc-kind">${esc(L.kind)} · ${esc(L.when.toUpperCase())}</span>${L.tag ? `<span class="mc-stamp ${toneClass(L.tone)}">${esc(L.tag)}</span>` : ''}
       <div class="mc-cap"><h2>${esc(L.head)}</h2><span>${L.ours ? `${fl(L.ours, 30)} ${esc(o.name(L.ours))}` : ''}${L.ours && L.theirs ? ' <i class="mc-ag">against</i> ' : ''}${L.theirs ? `${fl(L.theirs, 30)} ${esc(o.name(L.theirs))}` : ''}</span></div></div>
     ${L.follows ? `<p class="mc-so">${esc(L.follows)}</p>` : ''}${L.facts.length ? `<div class="mc-facts" style="--n:${L.facts.length}">${L.facts.map((f) => `<div><b>${esc(f.n)}</b>${esc(f.label)}</div>`).join('')}</div>` : ''}

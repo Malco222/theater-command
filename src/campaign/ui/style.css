@@ -2228,3 +2228,53 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .waypips i { width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.3px solid rgb(128, 116, 96); }
 .waypips i.on { background: var(--brass); border-color: var(--brass); }
 .wayrow small.waynote { font-size: 11px; color: var(--ink-3); text-transform: none; letter-spacing: 0; text-align: right; }
+
+/* A cut railway's lamp and the buffer bar where a working line stops at it (the art director's railway brief, 2026-11-16). */
+.railstop { fill: rgb(226, 62, 44); stroke: rgba(20, 14, 12, .75); stroke-width: .35; pointer-events: none; }
+.railstop.old { opacity: .55; }
+.raillamp { pointer-events: none; }
+.raillamp circle { fill: rgb(226, 62, 44); stroke: rgba(20, 14, 12, .85); stroke-width: .8; }
+.raillamp path { fill: none; stroke: #f4eeda; stroke-width: .75; stroke-linecap: round; }
+.raillamp.old circle { fill: rgba(20, 14, 12, .4); stroke: rgb(226, 62, 44); stroke-width: .7; stroke-dasharray: 1.3 1.1; }
+.raillamp.old path { stroke: rgb(226, 62, 44); }
+
+/* What the trains will do for the army in hand, in one line where the Rail move switch stood (ruling 118). */
+.railsay { display: flex; align-items: flex-start; gap: 9px; margin: 6px 0 8px; font-size: 12.5px; line-height: 1.4; color: rgb(214, 206, 188); }
+.railsay .railpiece { flex: none; margin-top: 3px; }
+.railsay b { color: rgb(198, 228, 255); font-weight: 700; }
+.railsay.no { color: rgb(162, 153, 135); }
+.tip .tipgo.dim { opacity: .62; }
+.tip .tipaside { color: var(--ink-3); }
+.tip .tipno b, .tip .tipgo b { font: inherit; font-weight: 700; letter-spacing: 0; }
+.tip .tipno b { color: #f0a488; }
+.thead .railsay { margin: 7px 0 2px; }
+
+/* The month a campaign's stake falls due (ruling 118(f); art-director/turn-report, last-month-lead): the warning
+   band grown into the lead story's frame, in the band's own red with its bright edge down the left. */
+.mc-photo.stake { background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, .2)), linear-gradient(90deg, rgb(132, 44, 31), rgb(84, 32, 24)); }
+.mc-photo.stake::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: rgb(208, 86, 61); }
+.mc-photo.stake .mc-kind { left: 16px; }
+.mc-photo.stake .mc-cap { background: none; padding-left: 20px; }
+.mc-photo.stake .mc-cap span { color: #fbe6da; font-size: 15px; }
+.mc-stamp.plate { background: #efe6d0; border-color: #efe6d0; color: rgb(150, 44, 30); box-shadow: 0 2px 7px rgba(0, 0, 0, .45); }
+.mc-bigflag { position: absolute; left: 20px; top: 50px; line-height: 0; outline: 1.5px solid #efe6d0; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+.mc-so.stake { font-size: 15px; color: var(--mc-ink); }
+.mc-facts.stake b { color: rgb(232, 112, 84); }
+@media (max-width: 760px) {
+  .mc-bigflag { transform: scale(.62); transform-origin: left top; top: 44px; }
+}
+.raillamp circle.ring { fill: none; stroke: rgb(236, 246, 255); stroke-width: .75; }
+
+/* Version 82.3, after the art director's review of 82.2 (15:46 UTC). The lit railway: every working track the army in
+   hand could ride this month, the pointer's own pale blue dotted line at half its weight on a dark casing. */
+.raillitbed { fill: none; stroke: rgba(18, 20, 24, .5); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.raillit { fill: none; stroke: #a9cbee; stroke-width: 1.1; stroke-dasharray: 2.2 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+svg#map:not(.near) .raillitbed { stroke-width: 2.3; }
+svg#map:not(.near) .raillit { stroke-width: 1.35; }
+/* The raid card with no guns built: "· light flak only" in the row's small dim type. */
+.waycommon .waytail { font-size: 11.5px; color: var(--ink-3); white-space: pre; }
+/* The band of the months after a LAST MONTH lead (ruling 120): WARNING on a cream plate in red letters, a cream edge. */
+.mc-banner.spent { border-left-color: rgb(236, 231, 216); }
+.mc-banner.spent .k { background: rgb(236, 231, 216); color: rgb(132, 38, 26); padding: 3px 8px 3px 10px; border-radius: 2px; }
+/* The LAST MONTH plate sits under the label, which it used to cover. */
+.mc-photo.stake .mc-stamp.plate { top: 46px; }

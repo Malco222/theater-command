@@ -169,7 +169,7 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
         expect(w.gunLoss).toBe(p.guns.loss);
         expect(w.gunsStop).toBe(p.guns.stop);
         expect(w.toGuns).toBe(`about ${num(p.guns.lossN)}`);
-        expect(w.gunsWords).toBe(p.guns.level ? 'of them to flak and guns' : 'of them to flak');
+        expect(w.gunsWords).toBe(p.guns.level ? 'of them to flak and guns' : 'of them to light flak');
         expect(w.stopNote).toBe(p.guns.stop > 0 ? `after the guns stop ${Math.round(p.guns.stop * 100)}% of the bombing` : '');
         // A part of the bombers lost, never more: the rest fall to fighters.
         expect(w.gunLossN).toBeLessThanOrEqual(w.bomberLossN);
@@ -188,12 +188,14 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
       expect(none.guns).toBe(0);
       expect(none.gunsLabel).toBe('No anti-aircraft guns');
       expect(none.day.gunsStop).toBe(0);
-      expect(none.day.gunsWords).toBe('of them to flak');
+      expect(none.day.gunsWords).toBe('of them to light flak');
+      expect(none.gunsTail).toBe('light flak only');
       expect(none.day.stopNote).toBe('');
       expect(armed.guns).toBe(2);
       expect(armed.gunsLabel).toBe('Level 2 anti-aircraft guns');
       expect(armed.day.gunsStop).toBeCloseTo(0.3, 9);
       expect(armed.day.gunsWords).toBe('of them to flak and guns');
+      expect(armed.gunsTail).toBe('');
       expect(armed.night.stopNote).toBe('after the guns stop 30% of the bombing');
       expect(armed.night.gunsStop).toBeCloseTo(0.3, 9);
       expect(armed.day.gunLoss).toBeGreaterThan(none.day.gunLoss);

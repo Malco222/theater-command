@@ -675,6 +675,7 @@ export function monthlyDiplomacy(g: Game): void {
     if (r && g.flags[flag] && !(h && bloc(h) === side)) g.flags[`others:${place}`] = g.turn;
   }
   romeWavers(g);
+  romeWaversOwn(g);
 }
 
 /** The places some event's 'taken' condition watches: [the bloc, the place, the flag]. */
@@ -716,4 +717,123 @@ function romeWavers(g: Game): void {
     ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}`
     : `Italy makes peace if ${who} still hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
   warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id, 'ITA');
+}
+
+/** What Rome's fall holds over the player's own Italy, where history can end his campaign with it. */
+export interface RomeStake {
+  /** The places Rome watches, and those of them an enemy holds now. */
+  grounds: string[];
+  lost: string[];
+  /** 'the Allies'. */
+  who: string;
+  /** The first month Mussolini can fall, and the month he fell, if he has. */
+  falls: number;
+  fell?: number;
+  /** The month whose opening ends the campaign as things stand: set only where he has fallen and a place is still held. */
+  due?: number;
+}
+
+/**
+ * The stake of the one history campaign an event can end on the player: his own Italy, from the seat of July 1943
+ * (rulings 103 and 117). Null everywhere else: in the grand campaign, from any other seat, for any other country,
+ * once the armistice is signed, and where nobody plays. The places and the months are read from the two events.
+ */
+export function romeStake(g: Game, viewer: string | null = g.human): RomeStake | null {
+  const I = g.nations.ITA;
+  if (viewer !== 'ITA' || g.human !== 'ITA' || g.flags.open === 1 || !I?.alive || g.flags['event:italian-armistice']) return null;
+  const falls = DIPLOMACY.events.find((e) => e.id === 'mussolini-falls'), signs = DIPLOMACY.events.find((e) => e.id === 'italian-armistice');
+  const test = falls?.if?.find((c) => c.startsWith('anyHeld:'));
+  // (Only where the armistice can take the player's Italy out: every other seat is spared, by rulings 99 and 103.)
+  if (!falls || !signs || !test || spared(g, 'ITA', signs.stake) || g.turn > Math.max(falls.to, signs.to)) return null;
+  const [side, ...grounds] = test.slice('anyHeld:'.length).split(',');
+  const lost = grounds.filter((nm) => { const h = g.nations[g.byName[nm]?.ctrl ?? '']; return !!h && h.id !== 'ITA' && bloc(h) === side; });
+  const fell: number | undefined = g.flags['event:mussolini-falls'];
+  const due = fell !== undefined && lost.length > 0 && g.turn + 1 >= signs.from && g.turn + 1 <= signs.to;
+  return { grounds, lost, who: side === 'allies' ? 'the Allies' : 'the Axis', falls: falls.from, ...(fell !== undefined ? { fell } : {}), ...(due ? { due: g.turn + 1 } : {}) };
+}
+
+/**
+ * The month a history campaign's stake falls due on the player (ruling 118(f)): that month the warning is no band
+ * but the lead story of his card, in both builds, and this is all of it. The month named is the rules' own: the one
+ * whose opening he will not see as that country's commander if he fails.
+ */
+export interface StakeDue {
+  /** The warning whose place it takes ('Rome wavers'), and the country whose fall ends the campaign. */
+  title: string;
+  nat: string;
+  /** The month it falls due, as a turn and by name ('September'). */
+  due: number;
+  month: string;
+  /** What happened, in the event's own words, and one short line under it. */
+  head: string;
+  sub: string;
+  /** What ends the campaign, when, and what would stop it, naming every place held. */
+  sentence: string;
+  /** The months left; the places an enemy holds, and of how many. */
+  left: number;
+  lost: string[];
+  of: number;
+  /** The two figures as the card prints them: '1' and 'month left'; '1' and 'of the six places lost'. */
+  figures: { n: string; label: string }[];
+  /** Where SHOW ON MAP goes: the first place held against him. */
+  region?: number;
+}
+
+/** The title of the warning to the player's own Italy once Mussolini has fallen and every place is held again (ruling 120). */
+export const ROME_HOLDS = 'Rome holds, for now';
+/** The opening of the sentence in that band's words that says the month of grace is spent; the month card prints the sentence on the band's face. */
+export const NO_LAST_MONTH = 'There will be no last month';
+const COUNTED = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+/**
+ * The stake that falls due as next month opens, or null: in every other month, and from every seat no event can
+ * end. Today one campaign has such a stake (Italy from the seat of July 1943: see romeStake); a second is added here
+ * and nowhere else.
+ */
+export function stakeDue(g: Game, viewer: string | null = g.human): StakeDue | null {
+  const st = romeStake(g, viewer);
+  if (!st || st.due === undefined) return null;
+  const month = turnToDate(st.due).label.split(' ')[0];
+  const n = st.lost.length, of = st.grounds.length;
+  const num = (k: number): string => COUNTED[k] ?? String(k);
+  // (Ruling 118(f): it names every place held, and when more than three are held it counts them and then names them.)
+  const unless = n > 3 ? `unless all ${num(n)} places ${st.who} hold are retaken first: ${listed(st.lost)}` : `unless ${listed(st.lost)} ${n === 1 ? 'is' : 'are'} retaken first`;
+  return {
+    title: 'Rome wavers', nat: 'ITA', due: st.due, month,
+    head: 'Mussolini has fallen', sub: 'Rome seeks an armistice',
+    sentence: `An armistice ends your campaign as ${month} opens, ${unless}.`,
+    left: st.due - g.turn, lost: st.lost, of,
+    figures: [{ n: String(st.due - g.turn), label: st.due - g.turn === 1 ? 'month left' : 'months left' }, { n: String(n), label: `of the ${num(of)} places lost` }],
+    region: g.byName[st.lost[0]]?.id,
+  };
+}
+
+/**
+ * Ruling 117, point 4: no campaign ends on the player without a red band at least a month before, saying what ends
+ * it and what would stop it. The player's own Italy is put out of the war by history only in the campaign whose card
+ * states Rome's fall as its stake (the seat of July 1943), and there he is told every month: while no ground is
+ * lost, which six places Rome watches; when one is lost, which, and the month Mussolini falls; and from the month
+ * he falls, that an armistice ends the campaign next month while an Ally holds one of the six, naming those held.
+ * News only: no rule reads it. The grounds and the dates are read from the two events themselves.
+ */
+function romeWaversOwn(g: Game): void {
+  const st = romeStake(g);
+  if (!st) return;
+  const { grounds, lost, who, falls } = st;
+  const six = listed(grounds, 'or');
+  const held = listed(lost);
+  const are = lost.length === 1 ? 'is' : 'are';
+  const changed = st.fell !== undefined;
+  const date = turnToDate(falls).label;
+  const all = COUNTED[grounds.length] ?? String(grounds.length);
+  // (The month a ground is lost and every month after: the band is on every card of this campaign, by the ruling.)
+  const text = changed
+    ? lost.length
+      ? `Italy signs an armistice next month unless ${held} ${are} taken back. Mussolini has fallen, and Rome signs while ${who} hold any of ${six}: that ends your campaign. Take back what they hold this month and Italy fights on.`
+      // (Ruling 120: once the month of grace is spent the band must not read like the months before the fall.)
+      : `Mussolini has fallen. If ${who} hold any of the ${all} as a month opens, Rome signs at once and your campaign ends. ${NO_LAST_MONTH}: hold all ${all}. They are ${listed(grounds)}.`
+    : lost.length
+      ? `Mussolini falls ${g.turn < falls ? `in ${date}` : 'next month'} unless ${held} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.`
+      : `Mussolini falls if ${who} take one of six places. They are ${listed(grounds)}${g.turn < falls ? `, and they count from ${date}` : ''}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
+  warning(g, changed && !lost.length ? ROME_HOLDS : 'Rome wavers', text, 'ITA', g.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, 'ITA');
 }

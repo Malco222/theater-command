@@ -6,7 +6,7 @@ import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, ty
 import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
-  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
+  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
 import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
@@ -1284,6 +1284,9 @@ export const airGroupBases = (g: Game, id: number): BaseOption[] => groupBases(g
 
 /** The raid planner's menu: each kind of raid and how many targets are in reach this month. */
 export const raidMenu = (g: Game): RaidKindView[] => raidKinds(g, g.human);
+
+/** The same menu with a bombing raid named once, by day or by night (the design director's ruling 117, point 6). */
+export const raidMenuOne = (g: Game): RaidKindView[] => raidKindsOne(g, g.human);
 
 /** Every target for one kind of raid, nearest first. With `lead`, only those that one of the player's groups can fly against. */
 export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => raidTargets(g, kind, g.human, lead);
