@@ -239,6 +239,7 @@ struct FTownPlate
 	bool bOrders = false;
 	FString Sign;
 	bool bStar = false;
+	bool bSpied = false; // (an agent's report of another country's city: a dashed frame)
 	int32 OrderCount = 0;
 	bool bPlus = false;
 	int32 Months = 0;

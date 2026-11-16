@@ -412,7 +412,10 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		// Canal Zone apart from the American olive.)
 		{ TEXT("GUA"), TEXT("9383C4") }, { TEXT("ELS"), TEXT("C98494") }, { TEXT("HON"), TEXT("9DBD8C") }, { TEXT("NIC"), TEXT("BF7F73") },
 		{ TEXT("COS"), TEXT("7FAE8C") }, { TEXT("PAN"), TEXT("A8607F") }, { TEXT("HAI"), TEXT("8FBA7A") }, { TEXT("DOM"), TEXT("B08FB5") },
-		{ TEXT("ECU"), TEXT("CF8F66") }, { TEXT("BOL"), TEXT("6FA58C") }, { TEXT("PAR"), TEXT("C4838F") }, { TEXT("URU"), TEXT("9D8CC4") },
+		{ TEXT("ECU"), TEXT("CF8F66") }, { TEXT("BOL"), TEXT("6FA58C") }, { TEXT("PAR"), TEXT("C4838F") },
+		// (The art director's round 33: Uruguay's lilac came out a grey on the ground. Deeper, and laid thicker, as
+		// Argentina's was: its squares are to be seen at about (126, 108, 178). Provisional until Brian approves.)
+		{ TEXT("URU"), TEXT("5D3CCB") },
 		// (The art director's round 31: Venezuela's turquoise read as shallow sea from the top, 6.9 from the water
 		// beside it. Emerald, provisional until Brian approves it.)
 		{ TEXT("VEN"), TEXT("1F9D6B") },

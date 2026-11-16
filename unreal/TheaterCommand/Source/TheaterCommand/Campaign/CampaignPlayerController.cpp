@@ -1728,6 +1728,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Wears->bOrders = true;
 			Wears->Sign = City.Sign;
 			Wears->bStar = City.bStar;
+			Wears->bSpied = City.bSpied;
 			Wears->OrderCount = City.Count;
 			Wears->bPlus = City.bPlus;
 			Wears->Months = City.Months;

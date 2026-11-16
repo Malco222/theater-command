@@ -751,6 +751,16 @@ private:
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
 	bool bSmokeMade = false;
+	// Flak (the art director's round 34): each burst is a solid ball of smoke in the pieces' own paint, so that it is
+	// as sharp as the machine beside it and throws its shadow on the ground. A puff of the smoke's mesh is see-through
+	// and soft, and from close by read as a dark ball lying out of focus on the ground. One mesh for every burst, its
+	// points moved each frame.
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> FlakMesh;
+	TArray<FVector> FlakLump, FlakLumpNormals; // one burst as it is built, two units across
+	TArray<FVector> FlakVertices, FlakNormals;
+	TArray<FColor> FlakColours;
+	bool bFlakShown = false;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;

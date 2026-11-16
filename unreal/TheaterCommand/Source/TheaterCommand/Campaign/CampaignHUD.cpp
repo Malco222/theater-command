@@ -528,6 +528,7 @@ namespace
 			CapitalPlate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.92f), 3.0f, FLinearColor(FColor::FromHex(TEXT("B8975A"))).CopyWithNewOpacity(0.85f), 1.0f);
 			Stripe = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
 			Disc = FSlateRoundedBoxBrush(FLinearColor::White, 12.0f);
+			DiscSmall = FSlateRoundedBoxBrush(FLinearColor::White, 6.5f);
 			// (on the staff's paper map a plate is a paper label: paper, a thin edge of ink, the name in ink)
 			PaperLabel = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f, FLinearColor(0.12f, 0.08f, 0.045f, 0.85f), 1.0f);
 			SetVisibility(EVisibility::HitTestInvisible);
@@ -575,6 +576,17 @@ namespace
 			// the sign of the unit ready soonest, how many of it, a plus for other kinds, the months to go in a brass
 			// disc. As high as a name plate at working height and as a harbour badge from further off.
 			const FLinearColor BadgeCream(FColor::FromHex(TEXT("F4EEDA"))), BadgeBrass(FColor::FromHex(TEXT("C9A04C")));
+			// (The art director's round 34: on the small plate the disc came out seven points across and its number
+			// could not be read. There it is thirteen points of solid brass, a pill for two figures, and its number
+			// is the size of the harbour badge's.)
+			auto DiscWide = [&](const FTownPlate& Each, double Tall)
+			{
+				if (Tall > 19.0)
+				{
+					return Tall * 0.74;
+				}
+				return FMath::Max(13.0, Measure->Measure(FString::FromInt(FMath::Max(Each.Months, 0)), Font(TEXT("Bold"), 12)).X + 5.0);
+			};
 			auto OrdersWide = [&](const FTownPlate& Each, double Tall)
 			{
 				const FSlateFontInfo Type = Font(TEXT("Bold"), Tall > 19.0 ? 14 : 10);
@@ -589,7 +601,7 @@ namespace
 				}
 				if (Each.Stage <= 1)
 				{
-					Wide += Tall * 0.74 + 4.0;
+					Wide += DiscWide(Each, Tall) + 4.0;
 				}
 				return Wide;
 			};
@@ -629,13 +641,37 @@ namespace
 				}
 				if (Each.Stage <= 1)
 				{
-					const double Across = Tall * 0.74;
+					const double Across = Tall > 19.0 ? Tall * 0.74 : 13.0, AcrossWide = DiscWide(Each, Tall);
 					const FString Months = FString::FromInt(FMath::Max(Each.Months, 0));
-					const FSlateFontInfo Numeral = Font(TEXT("Bold"), Tall > 19.0 ? 11 : 8);
+					const FSlateFontInfo Numeral = Font(TEXT("Bold"), Tall > 19.0 ? 11 : 12);
 					const FVector2D Size = Measure->Measure(Months, Numeral);
 					const FVector2D DiscAt = Corner + FVector2D(X, (Tall - Across) * 0.5);
-					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Across, Across), FSlateLayoutTransform(DiscAt)), &Disc, ESlateDrawEffect::None, BadgeBrass);
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(DiscAt + FVector2D((Across - Size.X) * 0.5, (Across - Size.Y) * 0.5))), Months, Numeral, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(AcrossWide, Across), FSlateLayoutTransform(DiscAt)), Tall > 19.0 ? &Disc : &DiscSmall, ESlateDrawEffect::None, BadgeBrass);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(DiscAt + FVector2D((AcrossWide - Size.X) * 0.5, (Across - Size.Y) * 0.5))), Months, Numeral, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+				}
+				if (Each.bSpied)
+				{
+					// (Another country's city, known through an agent: the plate wears a dashed amber frame, as everything
+					// only reported does.)
+					const FLinearColor Reported(FColor(232, 168, 62));
+					const FPaintGeometry Whole = Geometry.ToPaintGeometry();
+					auto Dashes = [&](const FVector2D& From, const FVector2D& To)
+					{
+						const double Long = FVector2D::Distance(From, To);
+						const FVector2D Way = (To - From) / FMath::Max(Long, 1.0);
+						for (double Run = 0.0; Run < Long; Run += 6.0)
+						{
+							TArray<FVector2D> Dash;
+							Dash.Add(From + Way * Run);
+							Dash.Add(From + Way * FMath::Min(Run + 3.5, Long));
+							FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 3, Whole, Dash, ESlateDrawEffect::None, Reported, true, 1.3f);
+						}
+					};
+					const FVector2D A = Corner + FVector2D(-1.5, -1.5), B = Corner + FVector2D(Wide + 1.5, Tall + 1.5);
+					Dashes(A, FVector2D(B.X, A.Y));
+					Dashes(FVector2D(B.X, A.Y), B);
+					Dashes(B, FVector2D(A.X, B.Y));
+					Dashes(FVector2D(A.X, B.Y), A);
 				}
 			};
 			for (const FTownPlate& Each : Plates)
@@ -838,6 +874,7 @@ namespace
 		FSlateBrush CapitalPlate;
 		FSlateBrush Stripe;
 		FSlateBrush Disc; // the brass disc of a city's order badge
+		FSlateBrush DiscSmall; // and the smaller one of the badge seen from further off
 		FSlateBrush PaperLabel;
 	};
 

@@ -85,6 +85,7 @@ import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
+import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import type { RaidKind, RaidPlan } from '../../../src/campaign/airwar';
 import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
@@ -604,7 +605,7 @@ function treasuryOf(s: Game, nat: string) {
     pp: Math.floor(s.nations[nat].pp),
     income: Math.round(income(s, nat)),
     pc: Math.floor(s.nations[nat].pc),
-    orders: s.nations[nat].queue.map((b) => orderLine(s, b)),
+    orders: ((book) => s.nations[nat].queue.map((b) => orderLine(s, b, book)))(ordersBookOf(s)),
     scale: BUDGET.scale,
     budget: L.budget,
     money: inHand(L.treasury),
@@ -622,7 +623,7 @@ function ledger() {
   if (!me) return null;
   const L = ledgerOf(s, me);
   const line = (l: { label: string; amount: number; count?: number }) => ({ label: l.label, amount: shown(l.amount), count: l.count ?? 0 });
-  const orders = s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }));
+  const orders = ((book) => s.nations[me].queue.map((b) => ({ ...orderLine(s, b, book), cost: shown(b.cost) })))(ordersBookOf(s));
   return {
     nation: s.nations[me].name,
     date: turnToDate(s.turn).label,
@@ -646,66 +647,41 @@ function ledger() {
   };
 }
 
-/** Something on order, as a line: what, where, when it is due, and whether the order can still be taken back. */
 // ---- What each city has on order (Brian's ask of 15 November 2026; the design director's rulings 46 and 57) ----
-// (Worked out here from the rules' own order book until the rules' shared call of Version 78 takes its place: the
-// badge, the list and the card all read these, so only this part changes then.)
+// (The rules' own shared call of Version 78, `cityOrders` in orders.ts: one working-out for the browser page and for
+// this game. The badge, the pointer's list and the city card all read it through here. Ruling 57: the sign is the
+// unit ready soonest; the count is the orders there of exactly what the sign shows; the plus says other kinds of
+// unit are on order there too; works take no badge.)
 
-/** The sign an order takes on its city's badge ('' for works and buildings, which take none), and whether it carries a special formation's star. */
-function orderSign(b: Build): { sign: string; star: boolean } {
-  if (b.what === 'corps') return { sign: b.airborne ? 'para' : String(b.kind ?? 'inf'), star: !!b.elite };
-  if (b.what === 'air') return { sign: b.item === 'bmr' ? 'bmr' : 'ftr', star: false };
-  if (b.what === 'ship') return { sign: b.item === 'cv' ? 'cv' : b.item === 'ss' ? 'ss' : b.item === 'tp' ? 'tp' : 'hull', star: false };
-  return { sign: '', star: false };
+/** The rules' book of what is on order place by place, as the player may know it. */
+function ordersBookOf(s: Game): CityBook[] {
+  const me = s.human;
+  return me && s.nations[me]?.alive ? ordersBook(s, me) : [];
 }
-
-/** What an order is, in a few plain words of the rules' own. */
-function orderWords(b: Build): string {
-  if (b.what === 'corps') return b.airborne ? 'airborne corps' : `${(KIND[b.kind ?? 'inf']?.label ?? 'Infantry').toLowerCase()} corps`;
-  if (b.what === 'air') return ((arsenalBook.air as Record<string, { label: string }>)[b.item ?? '']?.label ?? 'air wing').toLowerCase();
-  if (b.what === 'ship') return ((arsenalBook.ships as Record<string, { label: string }>)[b.item ?? '']?.label ?? 'ship').toLowerCase();
-  return b.name;
-}
-
-const readyIn = (months: number): string => (months <= 0 ? 'ready now' : months === 1 ? 'ready in 1 month' : `ready in ${months} months`);
 
 /**
- * Every place of the player's with a unit on order, for its one badge. Ruling 57: the sign is the unit ready soonest
- * (on a tie the kind with more on order there, then the one ordered first); the count is the orders there of exactly
- * what the sign shows; the plus says other kinds of unit are on order there too; works never count.
+ * Every place with something on order that the player may know of, for its one badge and for the pointer's list:
+ * his own, and another country's where an agent of his reports it. A place with only works under way has no sign.
  */
 function cityOrdersOf(s: Game) {
-  const me = s.human;
-  if (!me || !s.nations[me]?.alive) return [];
-  const by = new Map<number, Build[]>();
-  for (const b of s.nations[me].queue) {
-    if (!s.regions[b.region] || !orderSign(b).sign) continue;
-    by.set(b.region, [...(by.get(b.region) ?? []), b]);
-  }
-  const key = (b: Build): string => { const k = orderSign(b); return `${k.sign}${k.star ? '*' : ''}`; };
-  const many = (n: number, words: string): string => (n === 1 || /(corps|s)$/.test(words) ? `${n} ${words}` : `${n} ${words}s`);
-  return [...by].map(([region, units]) => {
-    const alike = (b: Build): number => units.filter((x) => key(x) === key(b)).length;
-    const sorted = [...units].sort((a, b) => a.eta - b.eta || alike(b) - alike(a) || a.ordered - b.ordered || a.id - b.id);
-    const first = sorted[0];
-    const kinds = new Map<string, number>();
-    for (const b of sorted) kinds.set(orderWords(b), (kinds.get(orderWords(b)) ?? 0) + 1);
-    const months = Math.max(0, first.eta - s.turn);
-    return {
-      region, ...orderSign(first), count: alike(first), plus: units.some((b) => key(b) !== key(first)), months, total: units.length,
-      head: `${units.length} on order: ${[...kinds].map(([words, n]) => many(n, words)).join(', ')}. Next ${readyIn(months)}.`,
-      lines: sorted.map((b) => `${upFirst(orderWords(b))}${orderSign(b).star ? ' (special formation)' : ''}, ${readyIn(Math.max(0, b.eta - s.turn))}`),
-    };
-  });
+  return ordersBookOf(s).map((c) => ({
+    region: c.region, sign: c.badge?.mark ?? '', star: !!c.badge?.starred, count: c.badge?.count ?? 0, plus: !!c.badge?.plus,
+    months: c.badge?.months ?? c.months, total: c.units, spied: c.spied,
+    head: `${c.spied ? 'Your agent reports: ' : ''}${c.summary}`,
+    lines: c.lines.map((l) => `${upFirst(l.label)}, ready ${readyWhen(l.months)}`),
+  }));
 }
 
-function orderLine(s: Game, b: Build) {
+/** Something on order, as a line: what, where, when it is due, and whether the order can still be taken back. */
+function orderLine(s: Game, b: Build, book: CityBook[] = ordersBookOf(s)) {
   const months = Math.max(0, b.eta - s.turn);
+  // (for the city card's "Forming here": its sign, what it is, and how far along it is, as the rules have them)
+  const shownAs = book.find((c) => c.region === b.region && !c.spied)?.lines.find((l) => l.id === b.id);
   return {
     id: b.id, what: b.what, name: b.name, region: b.region, where: s.regions[b.region]?.name ?? '',
     due: turnToDate(b.eta).label, months, cost: b.cost, canCancel: b.ordered === s.turn && humanUp(s),
-    // (for the city card's "Forming here": its sign, what it is, and how far along it is)
-    ...orderSign(b), words: upFirst(orderWords(b)), share: b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1,
+    sign: shownAs?.mark ?? '', star: !!shownAs?.elite, words: upFirst(shownAs?.label ?? b.name),
+    share: shownAs ? Math.min(1, Math.max(0, shownAs.done / shownAs.need)) : b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1,
   };
 }
 
@@ -2100,8 +2076,10 @@ function province(id: number) {
       ok: up && !!n && n.pp >= cost,
       why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
     } : null,
-    forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b)) : [],
-    formingHead: (() => { try { return cityOrdersOf(s).find((c) => c.region === r.id)?.head ?? ''; } catch { return ''; } })(),
+    ...((book) => ({
+      forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b, book)) : [],
+      formingHead: book.find((c) => c.region === r.id && !c.spied)?.summary ?? '',
+    }))((() => { try { return ordersBookOf(s); } catch { return []; } })()),
     // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
     // (all only in the grand campaign, where those rules apply).
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
@@ -2570,7 +2548,7 @@ function arsenal(region = -1) {
       // (Versions 65 and 67) where money is the only thing in the way, how far short the treasury is and what it holds
       why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : o.why) : 'It is not your month.', poor: o.poor,
     })),
-    orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) })),
+    orders: ((book) => s.nations[me].queue.map((b) => ({ ...orderLine(s, b, book), cost: shown(b.cost) })))(ordersBookOf(s)),
   };
 }
 

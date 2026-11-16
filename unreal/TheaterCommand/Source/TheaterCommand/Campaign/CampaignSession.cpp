@@ -826,6 +826,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("months"), City.Months);
 			Entry->TryGetNumberField(TEXT("total"), City.Total);
 			Entry->TryGetStringField(TEXT("head"), City.Head);
+			Entry->TryGetBoolField(TEXT("spied"), City.bSpied);
 			Entry->TryGetStringArrayField(TEXT("lines"), City.Lines);
 		}
 	}

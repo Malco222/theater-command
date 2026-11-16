@@ -641,7 +641,54 @@ def build_land():
     straw = times(m, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, square, -1900, 260), -1800, 260),
                   one_in(m, unreal.MaterialExpressionSaturate,
                          times(m, plus(m, lightness, times(m, scalar(m, "CoolStraw", 0.17, -2000, 340), -1.0, -1900, 340), -1800, 320), scalar(m, "CoolStrawSharp", 30.0, -1900, 500), -1700, 340), -1600, 340), -1500, 300)
-    c = lerp(m, c, lerp(m, (ground, "RGB"), vector(m, "CoolStrawColour", (0.46, 0.35, 0.15, 1.0), -1700, 520), scalar(m, "CoolStrawTint", 0.85, -1700, 600), -1600, 560), straw, -1400, -150)
+    straw_colour = lerp(m, (ground, "RGB"), vector(m, "CoolStrawColour", (0.46, 0.35, 0.15, 1.0), -1700, 520), scalar(m, "CoolStrawTint", 0.85, -1700, 600), -1600, 560)
+    # (The art director's round 33, ruling B: "the quilt gone wild". A cool paint laid flat over open ground reads as
+    # a lake, and patches shaped like the ground read as sandbanks in a sea. What reads as land is what the pampas
+    # already has: crisp patches side by side. So flat wild ground under such a paint is laid in paddocks, about three
+    # farm squares across, with crooked sides: the country's colour in three tones, about a quarter of them left
+    # straw and about one in ten left as scrub, no blend anywhere. On a slope the lightness rule above stands: lit
+    # sides in the land's own warm rock, shade in the country's colour.)
+    rg = plus(m, times(m, pair(m, (relief, "R"), (relief, "G"), -2300, 700), 2.0, -2200, 700), -1.0, -2100, 700)
+    steepness = node(m, unreal.MaterialExpressionDotProduct, -2000, 700)
+    connect(rg, "", steepness, "A")
+    connect(rg, "", steepness, "B")
+    flat_here = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, unreal.MaterialExpressionSaturate,
+                       times(m, plus(m, steepness, times(m, scalar(m, "WildFlat", 0.006, -2000, 780), -1.0, -1900, 780), -1800, 740), 400.0, -1700, 740), -1600, 740), -1500, 740)
+    # (and only open ground: under a canopy the straw paddocks showed through the leaves as pale stars)
+    open_ground = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, unreal.MaterialExpressionSaturate, times(m, (ground, "A"), 3.0, -2000, 920), -1900, 920), -1800, 920)
+    wild = times(m, times(m, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, square, -1900, 860), -1800, 860), flat_here, -1400, 800), open_ground, -1350, 840)
+    wild_scale = scalar(m, "WildPaddock", 0.5, -2400, 940)
+    wild_u = times(m, east0, wild_scale, -2300, 900)
+    wild_v = times(m, south0, wild_scale, -2300, 980)
+
+    def wobble(a, b, f1, p1, f2, p2, x, y):
+        s1 = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, b, f1, x, y), p1, x + 100, y), x + 200, y)
+        s2 = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, b, f2, x, y + 60), p2, x + 100, y + 60), x + 200, y + 60)
+        return plus(m, a, plus(m, times(m, s1, 0.2, x + 300, y), times(m, s2, 0.1, x + 300, y + 60), x + 400, y), x + 500, y)
+    # (the engine's sine turns once for each whole number, so these are turns a paddock: a slow crook in each side
+    # and a lesser one on it. Asked in radians at first, every side came out with five teeth, a field of stars.)
+    wild_x = wobble(wild_u, wild_v, 0.33, 0.21, 0.84, 0.06, -2200, 1060)
+    wild_y = wobble(wild_v, wild_u, 0.30, 0.11, 0.75, 0.35, -2200, 1200)
+    # (its own corner of the picture of the fields' tones, read at the middle of a paddock)
+    wild_cell = pair(m, plus(m, one_in(m, unreal.MaterialExpressionFloor, wild_x, -1600, 1060), 17.5, -1500, 1060),
+                     plus(m, one_in(m, unreal.MaterialExpressionFloor, wild_y, -1600, 1200), 41.5, -1500, 1200), -1400, 1120)
+    wild_lot = picture(m, "Fields", times(m, wild_cell, 1.0 / 64.0, -1300, 1160), -1150, 1160, numbers=True)
+    wild_dice = one_in(m, unreal.MaterialExpressionFrac, plus(m, times(m, (wild_lot, "R"), 7.1, -1000, 1120), times(m, (wild_lot, "G"), 3.3, -1000, 1200), -900, 1160), -800, 1160)
+
+    def under(value, edge, x, y):
+        return one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, value, -1.0, x, y), edge, x + 100, y), 1000.0, x + 200, y), x + 300, y)
+    wild_straw = under(wild_dice, scalar(m, "WildStraw", 0.25, -700, 1060), -700, 1100)
+    wild_scrub = times(m, under(wild_dice, 0.36, -700, 1200), one_in(m, unreal.MaterialExpressionOneMinus, wild_straw, -400, 1240), -300, 1200)
+    # (three tones of the country's colour: a paddock a fifth darker, one as it is, one a fifth lighter)
+    wild_tone = plus(m, 0.8, plus(m, times(m, one_in(m, unreal.MaterialExpressionOneMinus, under(wild_dice, 0.58, -700, 1320), -400, 1320), 0.2, -300, 1320),
+                                  times(m, one_in(m, unreal.MaterialExpressionOneMinus, under(wild_dice, 0.8, -700, 1420), -400, 1420), 0.2, -300, 1420), -200, 1370), -100, 1340)
+    wild_washed = times(m, lerp(m, (ground, "RGB"), tint_rgb, scalar(m, "WildWash", 0.76, -700, 1520), -600, 1520), wild_tone, -400, 1520)
+    wild_colour = lerp(m, wild_washed, straw_colour, wild_straw, -200, 1500)
+    wild_colour = lerp(m, wild_colour, times(m, (ground, "RGB"), vector(m, "WildScrub", (0.5, 0.62, 0.4, 1.0), -400, 1620), -300, 1620), wild_scrub, -100, 1560)
+    # (from high up the paddocks are too small to see: there the ground goes back to the country's colour whole)
+    wild = times(m, wild, work, -1300, 860)
+    c = lerp(m, c, straw_colour, times(m, straw, one_in(m, unreal.MaterialExpressionOneMinus, wild, -1400, -100), -1350, -130), -1300, -150)
+    c = lerp(m, c, wild_colour, wild, -1200, -150)
     c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
     c = lerp(m, c, vector(m, "SquareRoadColour", (0.552, 0.479, 0.262, 1.0), -1750, -200), road, -1550, -330)
 
@@ -771,13 +818,27 @@ def build_land():
                 one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, north, -0.4, -1650, -1460), 1.6667, -1500, -1460), -1350, -1460), -1200, -1100)
     # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
     leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
+    # (The art director's round 33, ruling A: a stain keeps the canopy's grain and takes the country's hue. A purple
+    # or a magenta mixed part-way into green cancels to grey, which is what Peru's forest was: (88, 86, 83). The
+    # canopy of the tropics takes such a paint nearly whole and a little deeper, so that it comes out the country's
+    # own colour: Peru's at about (104, 70, 112).)
+    tint_b = node(m, unreal.MaterialExpressionComponentMask, -2500, -1410, r=False, g=False, b=True, a=False)
+    connect(tint, "RGB", tint_b, "")
+    # (Which paints: those with as much blue as red and little green, Peru's violet above all. Not a red or a crimson,
+    # which has red far above its blue: Britain's and Japan's jungles keep the olive canopy of a warm stain.)
+    purple = times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate,
+                                      times(m, plus(m, plus(m, smaller(tint_r, tint_b, -2400, -1700), times(m, tint_g, -1.0, -2400, -1640), -2300, -1680), -0.07, -2200, -1680),
+                                            scalar(m, "WoodsPurple", 40.0, -2200, -1600), -2100, -1660), -2000, -1660),
+                             one_in(m, unreal.MaterialExpressionSaturate,
+                                    plus(m, times(m, plus(m, tint_b, times(m, tint_r, -0.62, -2400, -1780), -2300, -1780), 12.0, -2200, -1780), 0.2, -2100, -1780), -2000, -1780), -1950, -1720), tropic, -1900, -1660)
     woods = lerp(m, leaf,
-                 times(m, tint_rgb, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
+                 times(m, tint_rgb, lerp(m, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), scalar(m, "WoodsPurpleDepth", 1.15, -2300, -940), purple, -2200, -970), -2100, -1000),
                  # (round 31: the trees of a blue or violet country beyond Europe take no wash, or its creek lines read as channels of water)
                  times(m, times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080),
                        # (but the canopy of the tropics still takes it: a jungle country that took none, as Colombia, lost its
                        # colour altogether, and every tile is a shade of its holder's)
                        one_in(m, unreal.MaterialExpressionOneMinus, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, tropic, -2050, -1180), -1950, -1140), -1850, -1140), -1850, -1100), -1650, -950)
+    woods = lerp(m, woods, times(m, tint_rgb, scalar(m, "WoodsPurpleDepth", 1.15, -1700, -880), -1600, -880), times(m, purple, scalar(m, "WoodsPurpleShare", 0.84, -1700, -820), -1600, -820), -1500, -900)
     c = lerp(m, c, woods,
              one_in(m, unreal.MaterialExpressionSaturate,
                     times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),

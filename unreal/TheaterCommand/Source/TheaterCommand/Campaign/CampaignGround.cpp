@@ -1113,7 +1113,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						float Bed = 0.1f;
 						// (The art director's round 33, ruling C: the jungle's rivers are a silted blue like the ribbon they run
 						// into, to be seen at about (98, 146, 160). Brown read as a road beside every other river's blue.)
-						Ink = Mix(Ink, FSeen::Bytes(103, 118, 139), Jungle);
+						// (laid (103, 118, 139) it was seen from far up at (119, 132, 152), a lavender: laid greener and less red)
+						// (laid (82, 132, 147) it was seen at (85, 149, 160): a little more red)
+						Ink = Mix(Ink, FSeen::Bytes(90, 130, 146), Jungle);
 						// (a hairline has no bars: the art director's ruling of round 25)
 						// (the art director's round 31: a jungle river's sand lay along its middle like the dashes of a road; less of it)
 						Bed = FMath::Lerp(Bed, 0.16f * FMath::SmoothStep(0.2f, 0.45f, Half), Jungle);
@@ -1162,8 +1164,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						// (and only beside a course still drawn as a river, so that none floats alone in the canopy by a hairline)
 						// (The art director's round 33: along a ruled river's ribbon the clearings showed as a neon fringe of raw
 						// paint, magenta in Peru and orange in Brazil. The bank of a ribbon takes none.)
-						const float Bank = Half > 0.0f && RiverWater[Idx] > -1.5f ? (1.0f - FMath::SmoothStep(Half + 0.4f, Half + 3.0f, Off)) * FMath::SmoothStep(0.25f, 0.45f, Half) : 0.0f;
-						const float Clear = FMath::SmoothStep(0.0f, 0.1f, Patch - FMath::Lerp(ClearingFrom().X, ClearingFrom().Y, Bank)) * FMath::SmoothStep(0.55f, 0.8f, Jungle) * Out;
+						// (And the same ruling finished: the small streams' banks carried the same fringe, clearing after clearing
+						// in a row. No river's bank takes a clearing now: the few there are lie out in the forest.)
+						const float OffBank = Half > 0.0f ? FMath::SmoothStep(Half + 1.0f, Half + 3.5f, Off) : 1.0f;
+						const float Clear = FMath::SmoothStep(0.0f, 0.1f, Patch - ClearingFrom().X) * FMath::SmoothStep(0.55f, 0.8f, Jungle) * Out * OffBank;
 						if (Clear > 0.0f)
 						{
 							C = Mix(C, FSeen::Bytes(152, 97, 86), Clear); // (laid bluer than it is to be seen: the lamp brings it to about (152, 94, 64))
@@ -1371,9 +1375,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					// (The art director's round 33: not under a ruled river's ribbon. Opened there, the canopy showed the raw
 					// paint of the ground beside the ribbon wherever the ribbon ran narrow: a neon fringe, magenta in Peru
 					// and orange in Brazil. The ribbon lies over the canopy, and its banks are shaded instead: see below.)
+					// (And the same ruling finished: nor beside a jungle's lesser rivers, where the opened rim showed as a
+					// thread of raw paint down each bank, yellow in Brazil. There the canopy closes to the water's edge and
+					// the water is drawn over it.)
 					if (RiverWater[Idx] > -1.5f)
 					{
-						Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]));
+						Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]) * (1.0f - FMath::SmoothStep(0.5f, 0.9f, JungleRoof)));
 					}
 				}
 				Wooded *= 1.0f - Opened[Idx];

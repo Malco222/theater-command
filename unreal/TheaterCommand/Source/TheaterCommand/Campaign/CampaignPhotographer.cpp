@@ -1051,9 +1051,60 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		Controller->CloseFaceOff();
 	}
+	// ("-TheaterActs=0:spy:recruit;1:Thames>spy:send:1" presses actions as the months asked of a picture go by: each
+	// is "<months gone>:<action>" or "<months gone>:<province>><action>", for an action that wants a province in mind.
+	// For pictures of things that take some months to bring about, such as an agent at work in another country's city.)
+	static TArray<TPair<int32, FString>> ActsAsked;
+	static bool bActsRead = false;
+	if (!bActsRead)
+	{
+		bActsRead = true;
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterActs="), Asked, false))
+		{
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(";"));
+			for (const FString& One : Each)
+			{
+				FString When, What;
+				if (One.Split(TEXT(":"), &When, &What))
+				{
+					ActsAsked.Emplace(FCString::Atoi(*When), What);
+				}
+			}
+		}
+	}
+	auto PressAsked = [&](int32 MonthsGone)
+	{
+		for (TPair<int32, FString>& Asked : ActsAsked)
+		{
+			if (Asked.Key != MonthsGone)
+			{
+				continue;
+			}
+			Asked.Key = -1; // (once only)
+			FString Where, What = Asked.Value;
+			if (Asked.Value.Split(TEXT(">"), &Where, &What))
+			{
+				if (const int32* Region = Table->GetData().RegionByName.Find(Where))
+				{
+					Controller->SelectRegion(*Region);
+				}
+			}
+			Controller->OpenPage(TEXT("spies"));
+			Controller->PressPage(What);
+			Controller->ClosePage();
+			Controller->SelectRegion(INDEX_NONE);
+		}
+	};
 	for (int32 i = 0; i < Shot.Months; ++i)
 	{
+		PressAsked(i);
 		Controller->EndMonth();
+	}
+	if (Shot.Months > 0)
+	{
+		PressAsked(Shot.Months);
 	}
 	// ("-TheaterOrders=Ruhr:corps:inf+corps:inf+corps:arm;Hamburg:ship:dd" places orders from the Arsenal before the
 	// first picture, each list with its province in mind, after any months the first picture asks to be played (so

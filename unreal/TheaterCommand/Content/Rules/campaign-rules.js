@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a991695 2026-11-15. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 924c249 2026-11-16. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1435,7 +1435,7 @@
         from: 28,
         to: 99,
         mode: "open",
-        if: ["flag:world", "alive:GER", "alive:USA", "peace:USA,GER", "notInBloc:USA"],
+        if: ["flag:world", "alive:GER", "alive:USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"],
         enter: { nations: ["USA"], align: "allies" },
         war: [["USA", "GER"], ["USA", "ITA"]],
         text: "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
@@ -1445,7 +1445,7 @@
         from: 28,
         to: 99,
         mode: "open",
-        if: ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "atPeace:CUB", "notInBloc:CUB"],
+        if: ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "peace:CUB,GER", "openTo:CUB,allies"],
         enter: { nations: ["CUB"], align: "allies" },
         war: [["CUB", "GER"]],
         text: "Cuba follows the United States into the war: Havana declares war on Germany and opens its harbours and airfields to the American fleet."
@@ -1455,7 +1455,7 @@
         from: 33,
         to: 99,
         mode: "open",
-        if: ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "atPeace:MEX", "notInBloc:MEX"],
+        if: ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "peace:MEX,GER", "openTo:MEX,allies"],
         enter: { nations: ["MEX"], align: "allies" },
         war: [["MEX", "GER"]],
         text: "German submarines have sunk Mexican tankers in the Gulf. Mexico declares war on the Axis and joins the Allies."
@@ -1475,7 +1475,7 @@
         from: 36,
         to: 99,
         mode: "open",
-        if: ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "atPeace:BRA", "notInBloc:BRA"],
+        if: ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "peace:BRA,GER", "openTo:BRA,allies"],
         enter: { nations: ["BRA"], align: "allies" },
         war: [["BRA", "GER"]],
         text: "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
@@ -1832,6 +1832,173 @@
     deter: 0.5
   };
 
+  // ../../data/campaign/world.json
+  var world_default = {
+    _about: {
+      what: "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
+      nations: "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
+      home: "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
+      follow: "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
+      corps: "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
+      fleets: "Squadrons in home waters on the first day, in the form of navy.json.",
+      peace: "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
+      parts: "The parts of the world. A League is a pact of neighbours: a founder or a member may ask only countries of its own part (the design director's ruling 58). Every country under 'nations' here lies in the part named by 'new' unless 'of' names another; every country of the old chart lies in 'europe' unless 'of' names another. Each new slice of the map adds its part.",
+      warWork: "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
+      overseas: "The army sent across the ocean. A computer-run country here with no enemy at its door beyond the old chart (an invader from across the ocean ashore anywhere on its side of the water, or a hostile country across a land frontier from ground it holds, is its army's first business; a hostile country beyond the sea on its own side, such as an Axis Brazil at war with the United States, is not: Version 78) ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business. Version 77: 'hop' is a higher ceiling for one kind of sailing, a corps already on the far shore going on over a narrow sea (no further than a landing can go) into a harbour its side already holds: a reinforcement and not a venture. 'fleet' names the fleets that follow the army once its first corps is across: each moves its base to the harbour where the army is built up and takes the sea off it for its beat. 'air' is how many air groups stay at home: the others are shipped across, one a month, to the nearest airfield of its side's with room. Canada ships its army the same way, on its own small scale (its two home commands stay). So does Brazil from 'from' (59: July 1944, the month its expeditionary force sailed; its one corps has a ship as soon as it is on the quay). 'most' is the size of such an expeditionary force: no more than this many of its field corps are kept across the ocean (Canada 3, about the five divisions it had overseas; Brazil 1, its one division).",
+      protector: "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
+      pairs: "Trade agreements history had in 1939, added to trade.json's. The republics of Latin America trade with their neighbours, round the continent and round the Caribbean: every one of their trading houses is spoken for on the first day, so the agreements of Europe are the same with them on the map as without.",
+      order: "Where the new countries stand in the order of play: after the countries of nations.json.",
+      idle: "A computer-run staff whose homeland lies beyond the old chart, with no enemy at its door there (an invader from across the ocean ashore on its side of the water, or a hostile country across a land frontier), does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (A country with an entry under 'overseas' that is at war and has an ally's port to ship to raises by that rule instead.) A player's own staff is not bound by it.",
+      oilHome: "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
+      labels: "Where a province's name is written on the map when the middle of the province will not do (the art director's ruling on the Canal Zone, whose name ran into Panama City's): 'under' centres the name under the province's own town mark, 'west' writes it to the west of that mark, ending there. Every other name sits on the middle of its province.",
+      great: "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
+    },
+    nations: {
+      CAN: { name: "Canada", adj: "Canadian", color: "#eba181", quality: 0.9, air: 8, resilience: 0.9, align: "allies", seaSupply: true, sealift: 1 },
+      MEX: { name: "Mexico", adj: "Mexican", color: "#1e7046", quality: 0.55, air: 2, resilience: 0.6, align: "independent" },
+      CUB: { name: "Cuba", adj: "Cuban", color: "#644eb2", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
+      BRA: { name: "Brazil", adj: "Brazilian", color: "#f2d516", quality: 0.6, air: 3, resilience: 0.6, align: "independent", sealift: 1 },
+      ARG: { name: "Argentina", adj: "Argentine", color: "#4aa2ec", quality: 0.65, air: 4, resilience: 0.6, align: "independent", sealift: 1 },
+      CHL: { name: "Chile", adj: "Chilean", color: "#a0600f", quality: 0.65, air: 2, resilience: 0.6, align: "independent", sealift: 1 },
+      PER: { name: "Peru", adj: "Peruvian", color: "#93479a", quality: 0.55, air: 2, resilience: 0.5, align: "independent", sealift: 1 },
+      COL: { name: "Colombia", adj: "Colombian", color: "#2f55a6", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
+      VEN: { name: "Venezuela", adj: "Venezuelan", color: "#1f9d6b", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
+      GUA: { name: "Guatemala", adj: "Guatemalan", color: "#9383c4", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      ELS: { name: "El Salvador", adj: "Salvadoran", color: "#c98494", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      HON: { name: "Honduras", adj: "Honduran", color: "#9dbd8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      NIC: { name: "Nicaragua", adj: "Nicaraguan", color: "#bf7f73", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      COS: { name: "Costa Rica", adj: "Costa Rican", color: "#7fae8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      PAN: { name: "Panama", adj: "Panamanian", color: "#a8607f", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
+      HAI: { name: "Haiti", adj: "Haitian", color: "#8fba7a", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
+      DOM: { name: "Dominican Republic", adj: "Dominican", color: "#b08fb5", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      ECU: { name: "Ecuador", adj: "Ecuadorian", color: "#cf8f66", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
+      BOL: { name: "Bolivia", adj: "Bolivian", color: "#6fa58c", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
+      PAR: { name: "Paraguay", adj: "Paraguayan", color: "#c4838f", quality: 0.55, air: 0, resilience: 0.5, align: "independent" },
+      URU: { name: "Uruguay", adj: "Uruguayan", color: "#9d8cc4", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
+    },
+    home: {
+      USA: { align: "leaning_allies" }
+    },
+    follow: { CAN: "UK" },
+    corps: [
+      ["USA", "First Army (1st Division)", "inf", 2, "New York", { xp: 0.05, str: 0.5 }],
+      ["USA", "Washington garrison", "inf", 1, "Washington", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["USA", "Second Army (5th and 6th Divisions)", "inf", 2, "Chicago", { xp: 0.05, str: 0.4 }],
+      ["USA", "Third Army (2nd Division and 1st Cavalry Division)", "inf", 2, "North Texas", { xp: 0.05, str: 0.5 }],
+      ["USA", "Fourth Army (3rd Division)", "inf", 1, "San Francisco", { xp: 0.05, str: 0.6 }],
+      ["CAN", "1st Canadian Division", "inf", 1, "Montreal", { xp: 0.05, str: 0.6 }],
+      ["CAN", "Atlantic Command", "inf", 1, "Nova Scotia", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["CAN", "Pacific Command", "inf", 1, "Vancouver", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["MEX", "1st Division and the Presidential Guard", "inf", 2, "Mexico City", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["MEX", "Northern military zones", "inf", 1, "Monterrey", { xp: 0.05, str: 0.5 }],
+      ["MEX", "Gulf military zones", "inf", 1, "Veracruz", { xp: 0.05, str: 0.5 }],
+      ["CUB", "Cuban Army", "inf", 1, "Havana", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["USA", "Panama Canal Department", "fort", 1, "Canal Zone", { hold: 1 }],
+      ["BRA", "1st Military Region (Rio de Janeiro)", "inf", 2, "Rio de Janeiro", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["BRA", "2nd Military Region (Sao Paulo)", "inf", 1, "Sao Paulo", { xp: 0.05, str: 0.5 }],
+      ["BRA", "3rd Military Region (Rio Grande do Sul)", "inf", 2, "Rio Grande do Sul", { xp: 0.05, str: 0.5 }],
+      ["BRA", "7th Military Region (Recife)", "inf", 1, "Pernambuco", { xp: 0.05, str: 0.4 }],
+      ["ARG", "1st Army Division and the Campo de Mayo garrison", "inf", 2, "Buenos Aires", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["ARG", "3rd Army Division (the Littoral)", "inf", 1, "Rosario", { xp: 0.05, str: 0.5 }],
+      ["ARG", "4th Army Division (Cordoba)", "inf", 1, "Cordoba", { xp: 0.05, str: 0.5 }],
+      ["ARG", "Cuyo Mountain Detachment", "inf", 1, "Mendoza", { xp: 0.05, str: 0.5 }],
+      ["CHL", "2nd Division (Santiago)", "inf", 1, "Santiago", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["CHL", "1st Division (Antofagasta)", "inf", 1, "Antofagasta", { xp: 0.05, str: 0.5 }],
+      ["CHL", "3rd Division (Concepcion)", "inf", 1, "Concepcion", { xp: 0.05, str: 0.5 }],
+      ["PER", "2nd Light Division (Lima)", "inf", 1, "Lima", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["PER", "Northern Army Detachment", "inf", 1, "Piura", { xp: 0.05, str: 0.5 }],
+      ["PER", "3rd Light Division (Arequipa)", "inf", 1, "Arequipa", { xp: 0.05, str: 0.5 }],
+      ["COL", "1st Division (Bogota)", "inf", 1, "Bogota", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["COL", "2nd Division (Barranquilla)", "inf", 1, "Barranquilla", { xp: 0.05, str: 0.5 }],
+      ["VEN", "Caracas garrison", "inf", 1, "Caracas", { xp: 0.05, str: 0.6, hold: 1 }],
+      ["VEN", "Maracaibo garrison", "inf", 1, "Maracaibo", { xp: 0.05, str: 0.5 }],
+      ["ECU", "Ecuadorian Army", "inf", 1, "Quito", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["BOL", "La Paz garrison", "inf", 1, "La Paz", { xp: 0.2, str: 0.5, hold: 1 }],
+      ["BOL", "Southern divisions", "inf", 1, "Potosi", { xp: 0.2, str: 0.4 }],
+      ["PAR", "Paraguayan Army", "inf", 1, "Asuncion", { xp: 0.3, str: 0.5, hold: 1 }],
+      ["URU", "Uruguayan Army", "inf", 1, "Montevideo", { xp: 0.05, str: 0.5, hold: 1 }],
+      ["GUA", "Guatemalan Army", "inf", 1, "Guatemala City", { xp: 0.05, str: 0.4, hold: 1 }],
+      ["ELS", "Salvadoran Army", "inf", 1, "San Salvador", { xp: 0.05, str: 0.4, hold: 1 }],
+      ["HON", "Honduran Army", "inf", 1, "Tegucigalpa", { xp: 0.05, str: 0.4, hold: 1 }],
+      ["NIC", "National Guard of Nicaragua", "inf", 1, "Managua", { xp: 0.05, str: 0.4, hold: 1 }],
+      ["COS", "Costa Rican Army", "inf", 1, "San Jose", { xp: 0.05, str: 0.3, hold: 1 }],
+      ["PAN", "National Police of Panama", "inf", 1, "Panama City", { xp: 0.05, str: 0.3, hold: 1 }],
+      ["HAI", "Garde d'Haiti", "inf", 1, "Port-au-Prince", { xp: 0.05, str: 0.3, hold: 1 }],
+      ["DOM", "Dominican Army", "inf", 1, "Ciudad Trujillo", { xp: 0.05, str: 0.4, hold: 1 }]
+    ],
+    fleets: [
+      { nat: "USA", name: "Atlantic Squadron", base: "Norfolk", port: "Norfolk", home: "seaboard", zone: "seaboard", duty: "patrol", ships: { bb: 4, cv: 1, ca: 4, dd: 20, ss: 0 } },
+      { nat: "CAN", name: "Royal Canadian Navy", base: "Nova Scotia", port: "Halifax", home: "scotian", zone: "scotian", duty: "patrol", ships: { bb: 0, cv: 0, ca: 0, dd: 6, ss: 0 } },
+      { nat: "BRA", name: "Brazilian Fleet", base: "Rio de Janeiro", port: "Rio de Janeiro", home: "santos", zone: "santos", duty: "patrol", ships: { bb: 2, cv: 0, ca: 2, dd: 6, ss: 3 } },
+      { nat: "ARG", name: "Sea Fleet", base: "Buenos Aires", port: "Puerto Belgrano", home: "plate", zone: "plate", duty: "patrol", ships: { bb: 2, cv: 0, ca: 3, dd: 12, ss: 3 } },
+      { nat: "CHL", name: "Chilean Squadron", base: "Santiago", port: "Valparaiso", home: "valparaiso", zone: "valparaiso", duty: "patrol", ships: { bb: 1, cv: 0, ca: 1, dd: 8, ss: 6 } },
+      { nat: "PER", name: "Peruvian Squadron", base: "Lima", port: "Callao", home: "callao", zone: "callao", duty: "patrol", ships: { bb: 0, cv: 0, ca: 2, dd: 2, ss: 4 } }
+    ],
+    peace: {
+      USA: [[1, 0.1], [10, 0.2], [19, 0.35]]
+    },
+    warWork: { USA: 0.037 },
+    parts: { names: { europe: "Europe and the Mediterranean", americas: "the Americas" }, of: { USA: "americas" }, new: "americas" },
+    overseas: {
+      USA: { guard: 4, ahead: 7, bank: 2, risk: 0.1, hop: 0.2, air: 0, fleet: ["Atlantic Squadron"], oceans: { atlantic: 0.15 } },
+      CAN: { guard: 2, ahead: 4, bank: 1, risk: 0.1, hop: 0.2, most: 3, oceans: { atlantic: 0.25 } },
+      BRA: { guard: 4, ahead: 1, bank: 1, risk: 0.1, hop: 0.2, from: 59, most: 1, oceans: { atlantic: 1 } }
+    },
+    protector: ["UK", "USA"],
+    pairs: [
+      ["UK", "USA"],
+      ["USA", "CAN"],
+      ["USA", "MEX"],
+      ["USA", "CUB"],
+      ["UK", "CAN"],
+      ["BRA", "URU"],
+      ["URU", "ARG"],
+      ["ARG", "PAR"],
+      ["PAR", "BOL"],
+      ["BOL", "CHL"],
+      ["CHL", "PER"],
+      ["PER", "ECU"],
+      ["ECU", "COL"],
+      ["COL", "VEN"],
+      ["VEN", "BRA"],
+      ["GUA", "ELS"],
+      ["ELS", "HON"],
+      ["HON", "NIC"],
+      ["NIC", "COS"],
+      ["COS", "PAN"],
+      ["PAN", "HAI"],
+      ["HAI", "DOM"],
+      ["DOM", "GUA"]
+    ],
+    order: ["CAN", "MEX", "CUB", "BRA", "ARG", "CHL", "PER", "COL", "VEN", "GUA", "ELS", "HON", "NIC", "COS", "PAN", "HAI", "DOM", "ECU", "BOL", "PAR", "URU"],
+    great: ["USA"],
+    oilHome: { USA: 20 },
+    idle: {
+      _default: 4,
+      USA: 8,
+      CUB: 2,
+      BRA: 5,
+      ARG: 4,
+      CHL: 3,
+      PER: 3,
+      COL: 2,
+      VEN: 2,
+      GUA: 1,
+      ELS: 1,
+      HON: 1,
+      NIC: 1,
+      COS: 1,
+      PAN: 1,
+      HAI: 1,
+      DOM: 1,
+      ECU: 1,
+      BOL: 2,
+      PAR: 1,
+      URU: 1
+    },
+    labels: { "Canal Zone": "west", "Panama City": "under" }
+  };
+
   // ../../data/campaign/history.json
   var history_default = {
     _about: "The history dial (Version 70, the grand campaign). One setting, chosen when a campaign starts and open to change in any month: how far the war the computer runs may move away from the war that was fought. It leashes the computer-run world and never the player. Stop 3 is the game with nothing added, and a campaign with no stop stored is played at it. 'stops' are the five stops: 'mood' multiplies how far a staff's nerve differs from one war to the next (open.json 'mood'); 'lean' says how a staff's character is dealt: 'real' gives each nation the character its staff most often has (rivals.json 'lean'), a number flattens the national lean toward an even deal (0 the lean as it stands, 1 an even deal); 'other' multiplies the monthly chance of a great choice history never took ('unhistoric'); 'league' multiplies the chance that small countries found a League unprovoked or join one; 'join' is the monthly chance that a neutral whose opinion has reached the mark joins a bloc it never joined in history (1 where nothing holds it back; 'joined' lists who really did, and a neutral the player has courted is his affair at every stop); 'early' is how many months before its usual first month a great choice may be taken up. At a stop with 'book' the great choices keep history's calendar: one with a date in 'dates' (months of the war, 1 for September 1939) is taken up so that the blow falls in that month, give or take 'slack' months by the war's seed, with no monthly draw and no postponement, and on odds as short as 'nerve' times what its staff would usually ask; one that followed another nation into a war (no date, not unhistoric) follows at once. The book yields when it no longer fits. Each choice belongs to a 'theatre', and 'marks' are what history's calendar expects there: the 'if' list (as in diplomacy.json, with 'a|b' for either) must hold in every month before 'until', or from the month after 'by' on, the slack allowed. When a mark fails the book is closed in that theatre and in every theatre that comes 'after' it: from then on the staffs there decide as at stop 3, and the news says so. 'shores' are the book's word on the second front (theatre 'second'): while it stands no computer staff lands an army from the sea on the home ground of the 'owners' before the month 'from' (the slack allowed; '*' is every other shore, overseas ground included): North Africa from November 1942, Italy from July 1943, France and the north from June 1944, the British Isles never. 'ambitions' are claims on named ground, read at the stops that have 'ambitions': a computer-run country ('nat') with a claim on ground another ('on') holds presses it when the holder is weakened ('weak': at war, and either its will to fight is down to that share or the claimant's strength against what stands near the claim is 'odds' or better; ground reached only by sea counts as weakly held with no more than 'thin' divisions on it), and at a stop marked 'bold' whenever the odds are that good, at war or not, once the claimant has bided its time (up to 'wait' months, by the war's seed); at a stop with 'share' only that share of the claims is alive in any one war, dealt from its seed. Pressing is a warning: the news and the Powers tab say so. A great power of the holder's alliance that stands on the claimant's own border deters it until that power has itself lost 'guard' of its will to fight (not asked at a bold stop). After 'notice' months, if the holder is still weak, it marches with chance 'chance' a month, and the news gives the reason. A warning that has gone 'lapse' months without the conditions holding is dropped. A claimant that marches on a member of one alliance fights beside the other as a co-belligerent if that alliance is at war with the holder; each month a great power of the holder's alliance that borders the claimant stands by its ally with chance 'aid'. A war between two countries outside both alliances ends when the claimant has held all the ground it claims for 'treaty' months (1: the first month it is found holding it all): the ground is its own by treaty and the two are at peace. An ambition with 'stop' is read only from that stop up; one with 'if' only when those conditions hold; 'lift' is the shipping the claimant gathers when it marches on ground across the sea. At a stop with 'deal' every neutral's leaning between the alliances is dealt afresh from the war's seed within 'deal' points either way, and the news names those who have changed their minds.",
@@ -2094,6 +2261,10 @@
   // ../../src/campaign/league.ts
   var LEAGUE = league_default;
   var small = (id) => !LEAGUE.never.includes(id);
+  var PARTS = world_default;
+  var partOf = (id) => PARTS.parts.of[id] ?? (PARTS.nations[id] ? PARTS.parts.new : "europe");
+  var partName = (id) => PARTS.parts.names[partOf(id)] ?? partOf(id);
+  var farFrom = (id, members) => members.find((m) => partOf(m) !== partOf(id));
   var ownPath = (g2, id) => g2.flags.open === 1 && id === g2.human && small(id);
   var leagueMembers = (g2) => Object.values(g2.nations).filter((n) => n.league && n.alive);
   var leagueFounded = (g2) => g2.flags["league:born"] !== void 0;
@@ -2130,6 +2301,8 @@
     if (!n || !n.alive || n.dormant) return no("Not there to ask.");
     if (!small(id)) return no("A great power joins no league of small nations.");
     if (n.league) return no("Already a member.");
+    const far = farFrom(id, members);
+    if (far) return no(`A pact of neighbours: ${g2.nations[far]?.name ?? "its founder"} lies in ${partName(far)}, another part of the world.`);
     const b = bloc(n);
     if (b) return no(`Already belongs to ${b === "axis" ? "the Axis" : "the Allies"}.`);
     if (n.atWar.length) return no("At war: the League takes in no country that is already fighting.");
@@ -2193,6 +2366,7 @@
       else if (!members.length) why = "The League has fallen: none of its members is left.";
       else if (n.atWar.length) why = "The League takes in no country that is already at war.";
       else if (members.length >= LEAGUE.join.most) why = "The League is as large as it can hold together.";
+      else if (farFrom(nat, members.map((m) => m.id))) why = `The League is a pact of neighbours, and its members lie in ${partName(members[0].id)}.`;
       out.push({ id: "join", ok: why === "", why, now: mine3 === "league" });
     }
     return out;
@@ -2207,6 +2381,7 @@
     const out = [];
     for (const n of Object.values(g2.nations)) {
       if (!n.alive || n.dormant || n.league || members.includes(n.id) || !small(n.id) || bloc(n)) continue;
+      if (farFrom(n.id, members)) continue;
       out.push({ nat: n.id, ...willing(g2, n.id, members) });
     }
     return out.sort((a, b) => Number(b.ok) - Number(a.ok) || Number(b.friend) - Number(a.friend) || g2.nations[a.nat].name.localeCompare(g2.nations[b.nat].name));
@@ -10332,8 +10507,8 @@
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
       a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
-      const low = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
-      const cut = troopCut(r, foes, through + low * G.fighters);
+      const low2 = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+      const cut = troopCut(r, foes, through + low2 * G.fighters);
       let divs = 0;
       for (const c of foes) {
         const k = cut * (c.dug ? G.dug : 1);
@@ -10956,171 +11131,6 @@
     never: [["UK", "VIC"]]
   };
 
-  // ../../data/campaign/world.json
-  var world_default = {
-    _about: {
-      what: "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
-      nations: "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
-      home: "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
-      follow: "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
-      corps: "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
-      fleets: "Squadrons in home waters on the first day, in the form of navy.json.",
-      peace: "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
-      warWork: "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
-      overseas: "The army sent across the ocean. A computer-run country here whose homeland lies an ocean away from every enemy ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business. Version 77: 'hop' is a higher ceiling for one kind of sailing, a corps already on the far shore going on over a narrow sea (no further than a landing can go) into a harbour its side already holds: a reinforcement and not a venture. 'fleet' names the fleets that follow the army once its first corps is across: each moves its base to the harbour where the army is built up and takes the sea off it for its beat. 'air' is how many air groups stay at home: the others are shipped across, one a month, to the nearest airfield of its side's with room. Canada ships its army the same way, on its own small scale (its two home commands stay). So does Brazil from 'from' (59: July 1944, the month its expeditionary force sailed; its one corps has a ship as soon as it is on the quay). 'most' is the size of such an expeditionary force: no more than this many of its field corps are kept across the ocean (Canada 3, about the five divisions it had overseas; Brazil 1, its one division).",
-      protector: "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
-      pairs: "Trade agreements history had in 1939, added to trade.json's. The republics of Latin America trade with their neighbours, round the continent and round the Caribbean: every one of their trading houses is spoken for on the first day, so the agreements of Europe are the same with them on the map as without.",
-      order: "Where the new countries stand in the order of play: after the countries of nations.json.",
-      idle: "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (A country with an entry under 'overseas' that is at war and has an ally's port to ship to raises by that rule instead.) A player's own staff is not bound by it.",
-      oilHome: "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
-      labels: "Where a province's name is written on the map when the middle of the province will not do (the art director's ruling on the Canal Zone, whose name ran into Panama City's): 'under' centres the name under the province's own town mark, 'west' writes it to the west of that mark, ending there. Every other name sits on the middle of its province.",
-      great: "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
-    },
-    nations: {
-      CAN: { name: "Canada", adj: "Canadian", color: "#eba181", quality: 0.9, air: 8, resilience: 0.9, align: "allies", seaSupply: true, sealift: 1 },
-      MEX: { name: "Mexico", adj: "Mexican", color: "#1e7046", quality: 0.55, air: 2, resilience: 0.6, align: "independent" },
-      CUB: { name: "Cuba", adj: "Cuban", color: "#644eb2", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
-      BRA: { name: "Brazil", adj: "Brazilian", color: "#f2d516", quality: 0.6, air: 3, resilience: 0.6, align: "independent", sealift: 1 },
-      ARG: { name: "Argentina", adj: "Argentine", color: "#4aa2ec", quality: 0.65, air: 4, resilience: 0.6, align: "independent", sealift: 1 },
-      CHL: { name: "Chile", adj: "Chilean", color: "#a0600f", quality: 0.65, air: 2, resilience: 0.6, align: "independent", sealift: 1 },
-      PER: { name: "Peru", adj: "Peruvian", color: "#93479a", quality: 0.55, air: 2, resilience: 0.5, align: "independent", sealift: 1 },
-      COL: { name: "Colombia", adj: "Colombian", color: "#2f55a6", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
-      VEN: { name: "Venezuela", adj: "Venezuelan", color: "#1f9d6b", quality: 0.5, air: 1, resilience: 0.5, align: "independent", sealift: 1 },
-      GUA: { name: "Guatemala", adj: "Guatemalan", color: "#9383c4", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      ELS: { name: "El Salvador", adj: "Salvadoran", color: "#c98494", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      HON: { name: "Honduras", adj: "Honduran", color: "#9dbd8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      NIC: { name: "Nicaragua", adj: "Nicaraguan", color: "#bf7f73", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      COS: { name: "Costa Rica", adj: "Costa Rican", color: "#7fae8c", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      PAN: { name: "Panama", adj: "Panamanian", color: "#a8607f", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
-      HAI: { name: "Haiti", adj: "Haitian", color: "#8fba7a", quality: 0.4, air: 0, resilience: 0.4, align: "independent" },
-      DOM: { name: "Dominican Republic", adj: "Dominican", color: "#b08fb5", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      ECU: { name: "Ecuador", adj: "Ecuadorian", color: "#cf8f66", quality: 0.45, air: 0, resilience: 0.4, align: "independent" },
-      BOL: { name: "Bolivia", adj: "Bolivian", color: "#6fa58c", quality: 0.5, air: 0, resilience: 0.5, align: "independent" },
-      PAR: { name: "Paraguay", adj: "Paraguayan", color: "#c4838f", quality: 0.55, air: 0, resilience: 0.5, align: "independent" },
-      URU: { name: "Uruguay", adj: "Uruguayan", color: "#9d8cc4", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
-    },
-    home: {
-      USA: { align: "leaning_allies" }
-    },
-    follow: { CAN: "UK" },
-    corps: [
-      ["USA", "First Army (1st Division)", "inf", 2, "New York", { xp: 0.05, str: 0.5 }],
-      ["USA", "Washington garrison", "inf", 1, "Washington", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["USA", "Second Army (5th and 6th Divisions)", "inf", 2, "Chicago", { xp: 0.05, str: 0.4 }],
-      ["USA", "Third Army (2nd Division and 1st Cavalry Division)", "inf", 2, "North Texas", { xp: 0.05, str: 0.5 }],
-      ["USA", "Fourth Army (3rd Division)", "inf", 1, "San Francisco", { xp: 0.05, str: 0.6 }],
-      ["CAN", "1st Canadian Division", "inf", 1, "Montreal", { xp: 0.05, str: 0.6 }],
-      ["CAN", "Atlantic Command", "inf", 1, "Nova Scotia", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["CAN", "Pacific Command", "inf", 1, "Vancouver", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["MEX", "1st Division and the Presidential Guard", "inf", 2, "Mexico City", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["MEX", "Northern military zones", "inf", 1, "Monterrey", { xp: 0.05, str: 0.5 }],
-      ["MEX", "Gulf military zones", "inf", 1, "Veracruz", { xp: 0.05, str: 0.5 }],
-      ["CUB", "Cuban Army", "inf", 1, "Havana", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["USA", "Panama Canal Department", "fort", 1, "Canal Zone", { hold: 1 }],
-      ["BRA", "1st Military Region (Rio de Janeiro)", "inf", 2, "Rio de Janeiro", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["BRA", "2nd Military Region (Sao Paulo)", "inf", 1, "Sao Paulo", { xp: 0.05, str: 0.5 }],
-      ["BRA", "3rd Military Region (Rio Grande do Sul)", "inf", 2, "Rio Grande do Sul", { xp: 0.05, str: 0.5 }],
-      ["BRA", "7th Military Region (Recife)", "inf", 1, "Pernambuco", { xp: 0.05, str: 0.4 }],
-      ["ARG", "1st Army Division and the Campo de Mayo garrison", "inf", 2, "Buenos Aires", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["ARG", "3rd Army Division (the Littoral)", "inf", 1, "Rosario", { xp: 0.05, str: 0.5 }],
-      ["ARG", "4th Army Division (Cordoba)", "inf", 1, "Cordoba", { xp: 0.05, str: 0.5 }],
-      ["ARG", "Cuyo Mountain Detachment", "inf", 1, "Mendoza", { xp: 0.05, str: 0.5 }],
-      ["CHL", "2nd Division (Santiago)", "inf", 1, "Santiago", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["CHL", "1st Division (Antofagasta)", "inf", 1, "Antofagasta", { xp: 0.05, str: 0.5 }],
-      ["CHL", "3rd Division (Concepcion)", "inf", 1, "Concepcion", { xp: 0.05, str: 0.5 }],
-      ["PER", "2nd Light Division (Lima)", "inf", 1, "Lima", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["PER", "Northern Army Detachment", "inf", 1, "Piura", { xp: 0.05, str: 0.5 }],
-      ["PER", "3rd Light Division (Arequipa)", "inf", 1, "Arequipa", { xp: 0.05, str: 0.5 }],
-      ["COL", "1st Division (Bogota)", "inf", 1, "Bogota", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["COL", "2nd Division (Barranquilla)", "inf", 1, "Barranquilla", { xp: 0.05, str: 0.5 }],
-      ["VEN", "Caracas garrison", "inf", 1, "Caracas", { xp: 0.05, str: 0.6, hold: 1 }],
-      ["VEN", "Maracaibo garrison", "inf", 1, "Maracaibo", { xp: 0.05, str: 0.5 }],
-      ["ECU", "Ecuadorian Army", "inf", 1, "Quito", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["BOL", "La Paz garrison", "inf", 1, "La Paz", { xp: 0.2, str: 0.5, hold: 1 }],
-      ["BOL", "Southern divisions", "inf", 1, "Potosi", { xp: 0.2, str: 0.4 }],
-      ["PAR", "Paraguayan Army", "inf", 1, "Asuncion", { xp: 0.3, str: 0.5, hold: 1 }],
-      ["URU", "Uruguayan Army", "inf", 1, "Montevideo", { xp: 0.05, str: 0.5, hold: 1 }],
-      ["GUA", "Guatemalan Army", "inf", 1, "Guatemala City", { xp: 0.05, str: 0.4, hold: 1 }],
-      ["ELS", "Salvadoran Army", "inf", 1, "San Salvador", { xp: 0.05, str: 0.4, hold: 1 }],
-      ["HON", "Honduran Army", "inf", 1, "Tegucigalpa", { xp: 0.05, str: 0.4, hold: 1 }],
-      ["NIC", "National Guard of Nicaragua", "inf", 1, "Managua", { xp: 0.05, str: 0.4, hold: 1 }],
-      ["COS", "Costa Rican Army", "inf", 1, "San Jose", { xp: 0.05, str: 0.3, hold: 1 }],
-      ["PAN", "National Police of Panama", "inf", 1, "Panama City", { xp: 0.05, str: 0.3, hold: 1 }],
-      ["HAI", "Garde d'Haiti", "inf", 1, "Port-au-Prince", { xp: 0.05, str: 0.3, hold: 1 }],
-      ["DOM", "Dominican Army", "inf", 1, "Ciudad Trujillo", { xp: 0.05, str: 0.4, hold: 1 }]
-    ],
-    fleets: [
-      { nat: "USA", name: "Atlantic Squadron", base: "Norfolk", port: "Norfolk", home: "seaboard", zone: "seaboard", duty: "patrol", ships: { bb: 4, cv: 1, ca: 4, dd: 20, ss: 0 } },
-      { nat: "CAN", name: "Royal Canadian Navy", base: "Nova Scotia", port: "Halifax", home: "scotian", zone: "scotian", duty: "patrol", ships: { bb: 0, cv: 0, ca: 0, dd: 6, ss: 0 } },
-      { nat: "BRA", name: "Brazilian Fleet", base: "Rio de Janeiro", port: "Rio de Janeiro", home: "santos", zone: "santos", duty: "patrol", ships: { bb: 2, cv: 0, ca: 2, dd: 6, ss: 3 } },
-      { nat: "ARG", name: "Sea Fleet", base: "Buenos Aires", port: "Puerto Belgrano", home: "plate", zone: "plate", duty: "patrol", ships: { bb: 2, cv: 0, ca: 3, dd: 12, ss: 3 } },
-      { nat: "CHL", name: "Chilean Squadron", base: "Santiago", port: "Valparaiso", home: "valparaiso", zone: "valparaiso", duty: "patrol", ships: { bb: 1, cv: 0, ca: 1, dd: 8, ss: 6 } },
-      { nat: "PER", name: "Peruvian Squadron", base: "Lima", port: "Callao", home: "callao", zone: "callao", duty: "patrol", ships: { bb: 0, cv: 0, ca: 2, dd: 2, ss: 4 } }
-    ],
-    peace: {
-      USA: [[1, 0.1], [10, 0.2], [19, 0.35]]
-    },
-    warWork: { USA: 0.037 },
-    overseas: {
-      USA: { guard: 4, ahead: 7, bank: 2, risk: 0.1, hop: 0.2, air: 0, fleet: ["Atlantic Squadron"], oceans: { atlantic: 0.15 } },
-      CAN: { guard: 2, ahead: 4, bank: 1, risk: 0.1, hop: 0.2, most: 3, oceans: { atlantic: 0.25 } },
-      BRA: { guard: 4, ahead: 1, bank: 1, risk: 0.1, hop: 0.2, from: 59, most: 1, oceans: { atlantic: 1 } }
-    },
-    protector: ["UK", "USA"],
-    pairs: [
-      ["UK", "USA"],
-      ["USA", "CAN"],
-      ["USA", "MEX"],
-      ["USA", "CUB"],
-      ["UK", "CAN"],
-      ["BRA", "URU"],
-      ["URU", "ARG"],
-      ["ARG", "PAR"],
-      ["PAR", "BOL"],
-      ["BOL", "CHL"],
-      ["CHL", "PER"],
-      ["PER", "ECU"],
-      ["ECU", "COL"],
-      ["COL", "VEN"],
-      ["VEN", "BRA"],
-      ["GUA", "ELS"],
-      ["ELS", "HON"],
-      ["HON", "NIC"],
-      ["NIC", "COS"],
-      ["COS", "PAN"],
-      ["PAN", "HAI"],
-      ["HAI", "DOM"],
-      ["DOM", "GUA"]
-    ],
-    order: ["CAN", "MEX", "CUB", "BRA", "ARG", "CHL", "PER", "COL", "VEN", "GUA", "ELS", "HON", "NIC", "COS", "PAN", "HAI", "DOM", "ECU", "BOL", "PAR", "URU"],
-    great: ["USA"],
-    oilHome: { USA: 20 },
-    idle: {
-      _default: 4,
-      USA: 8,
-      CUB: 2,
-      BRA: 5,
-      ARG: 4,
-      CHL: 3,
-      PER: 3,
-      COL: 2,
-      VEN: 2,
-      GUA: 1,
-      ELS: 1,
-      HON: 1,
-      NIC: 1,
-      COS: 1,
-      PAN: 1,
-      HAI: 1,
-      DOM: 1,
-      ECU: 1,
-      BOL: 2,
-      PAR: 1,
-      URU: 1
-    },
-    labels: { "Canal Zone": "west", "Panama City": "under" }
-  };
-
   // ../../src/campaign/world.ts
   var WORLD_MAP = world_map_default;
   var WORLD = world_default;
@@ -11221,6 +11231,19 @@
         headline(g2, "war", `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
       }
     }
+    for (const id of Object.keys(WORLD.warWork)) {
+      const n = g2.nations[id];
+      if (!n?.alive || n.dormant || id === g2.human || bloc(n) !== null) continue;
+      const foes = n.atWar.map((e) => g2.nations[e]).filter((x) => x?.alive);
+      const foe = foes.find((x) => bloc(x) === "axis");
+      if (!foe || foes.some((x) => bloc(x) === "allies")) continue;
+      if (!Object.values(g2.nations).some((x) => x.id !== id && x.alive && !x.dormant && bloc(x) === "allies")) continue;
+      n.align = "allies";
+      n.opinion = n.home = -100;
+      g2.flags[`step:${id}`] = g2.turn;
+      g2.supplyDirty = true;
+      headline(g2, "event", `${theName(n, true)} joins the Allies: it is at war with ${theName(foe)}, and the Axis is one enemy.`, id);
+    }
   }
   function peaceFooting(g2, nat) {
     const rows = worldOn(g2) ? WORLD.peace[nat] : void 0;
@@ -11252,14 +11275,25 @@
     return share === null || share >= 1 || !step2 ? 0 : Math.ceil((1 - share) / step2 - 1e-9);
   }
   var oilAtHome = (g2, nat) => worldOn(g2) ? WORLD.oilHome[nat] ?? null : null;
+  function enemyAtTheDoor(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n) return false;
+    for (let i = WORLD_FIRST; i < g2.regions.length; i++) {
+      const r = g2.regions[i];
+      if (!n.atWar.includes(r.ctrl)) continue;
+      const cap6 = g2.nations[r.ctrl]?.capital ?? -1;
+      if (cap6 >= 0 && !beyondEurope(cap6) || r.nb.some((j) => g2.regions[j].ctrl === nat)) return true;
+    }
+    return false;
+  }
   function armyIdle(g2, nat) {
     if (!worldOn(g2) || nat === g2.human) return false;
     const n = g2.nations[nat];
     if (!n || n.capital < 0 || !beyondEurope(n.capital)) return false;
+    if (enemyAtTheDoor(g2, nat)) return false;
     let home = n.queue.reduce((s, b) => s + (b.what === "corps" && b.kind !== "eng" ? 1 : 0), 0);
     for (let i = WORLD_FIRST; i < g2.regions.length; i++) {
       const r = g2.regions[i];
-      if (n.atWar.includes(r.ctrl)) return false;
       for (const c of r.units) if (c.nat === nat && c.kind !== "fort" && c.kind !== "eng") home++;
       for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== "fort" && c.kind !== "eng") home++;
     }
@@ -11272,8 +11306,7 @@
     const n = g2.nations[nat];
     if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g2.regions[n.capital].ctrl !== nat) return null;
     if (O.from !== void 0 && g2.turn < O.from) return null;
-    for (let i = WORLD_FIRST; i < g2.regions.length; i++) if (n.atWar.includes(g2.regions[i].ctrl)) return null;
-    return O;
+    return enemyAtTheDoor(g2, nat) ? null : O;
   }
   var shipsItsOwn = (g2, nat) => {
     const n = g2.nations[nat];
@@ -14240,7 +14273,7 @@
       if (good === "oil") st.oilMet = met2;
       else st.supMet = met2;
       if (nat !== g2.human) continue;
-      const name = GOOD_NAME[good].toLowerCase(), key4 = `res:${good}:${nat}`, low = `res:low:${good}:${nat}`;
+      const name = GOOD_NAME[good].toLowerCase(), key4 = `res:${good}:${nat}`, low2 = `res:low:${good}:${nat}`;
       if (met2 < 0.995 && was >= 0.995) {
         headline(g2, "info", good === "oil" ? `The oil has run out. Only ${Math.round(met2 * 100)}% of what the forces need came in this month: tanks, aircraft and ships are short of fuel. Open Oil on the top bar to see where it comes from and what is stopping it.` : `The depots are empty. Only ${Math.round(met2 * 100)}% of the supplies the nation needs came in this month: the armies fight weaker, fewer replacements go out and factories stand idle. Open Supplies on the top bar to see why.`, nat);
         g2.flags[key4] = g2.turn;
@@ -14249,10 +14282,10 @@
         delete g2.flags[key4];
       }
       const left = b.net < -1e-9 ? st[good] / -b.net : Infinity;
-      if (met2 >= 0.995 && left <= 3 && g2.flags[low] === void 0) {
-        g2.flags[low] = g2.turn;
+      if (met2 >= 0.995 && left <= 3 && g2.flags[low2] === void 0) {
+        g2.flags[low2] = g2.turn;
         headline(g2, "info", `${GOOD_NAME[good]} for ${Math.max(1, Math.round(left))} more month${Math.round(left) <= 1 ? "" : "s"}: more is going out than coming in. Open ${GOOD_NAME[good]} on the top bar.`, nat);
-      } else if (left > 6 && g2.flags[low] !== void 0) delete g2.flags[low];
+      } else if (left > 6 && g2.flags[low2] !== void 0) delete g2.flags[low2];
     }
     const W = RES.will, lack = W.sup * (1 - st.supMet) + W.oil * (1 - st.oilMet);
     const hunger = lack > 1e-9 ? hungryBefore + lack : Math.max(0, hungryBefore - W.heal);
@@ -14401,7 +14434,7 @@
     if (!s) return null;
     const A = TECH.ai, order2 = A.order[nat] ?? A.order._default, year = yearOf(turn);
     const skip = (id) => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
-    let best = null, low = Infinity;
+    let best = null, low2 = Infinity;
     const thirsty = oilMonths(g2, nat) < RES.ai.synthAt;
     for (const t of TECH.techs) {
       if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
@@ -14410,8 +14443,8 @@
       const idle = t.oil && !keepsStores(g2, nat) ? A.later : 0;
       const cold2 = t.winterKit && winterAhead(g2, nat) ? A.winter ?? 0 : 0;
       const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold2;
-      if (score < low) {
-        low = score;
+      if (score < low2) {
+        low2 = score;
         best = t;
       }
     }
@@ -15044,6 +15077,16 @@
         return !!N(a[0]) && bloc(N(a[0])) === null;
       case "inBloc":
         return !!N(a[0]) && bloc(N(a[0])) === a[1];
+      // 'openTo:CUB,allies': in no alliance, or on that side already. (A country in the other camp or in the League is not history's to move.)
+      case "openTo":
+        return !!N(a[0]) && (bloc(N(a[0])) === null || bloc(N(a[0])) === a[1]);
+      // 'anyPeace:USA,GER,ITA': the first is at peace with at least one of the others still standing, so a war the entry brings has not begun.
+      case "anyPeace":
+        return !!N(a[0]) && a.slice(1).some((id) => !!N(id)?.alive && !N(a[0]).atWar.includes(id));
+      // 'binds:USA': history's entry still binds this country. At the dial's looser stops (neutrals with ambitions) a
+      // player who has already taken a side keeps the war he chose: history does not widen it for him.
+      case "binds":
+        return !(a[0] === g2.human && !!stopDef(g2).ambitions && !!N(a[0]) && bloc(N(a[0])) !== null);
       case "step>=":
         return !!N(a[0]) && step(N(a[0])) >= Number(a[1]);
       case "step<=":
@@ -15184,27 +15227,43 @@
       headline(g2, "event", e.text, e.wake.nations[0]);
       told = true;
     }
+    const barred3 = /* @__PURE__ */ new Set();
     if (e.enter) {
-      let any = false;
+      const side3 = e.enter.align.startsWith("allies") ? "allies" : e.enter.align.startsWith("axis") ? "axis" : null;
+      let any = false, there = false;
       for (const id of e.enter.nations) {
         const n = g2.nations[id];
-        if (!n?.alive || n.dormant || bloc(n) || ownPath(g2, id)) continue;
+        const b = n ? bloc(n) : null;
+        if (!n?.alive || n.dormant || ownPath(g2, id) || b !== null && b !== side3) {
+          barred3.add(id);
+          continue;
+        }
+        if (n.align === e.enter.align) {
+          there = true;
+          continue;
+        }
         n.align = e.enter.align;
         n.opinion = n.home = homeOpinion(id, n.align);
         g2.flags[`step:${id}`] = g2.turn;
         any = true;
       }
-      if (!any) return false;
-      did = true;
-      g2.supplyDirty = true;
-      headline(g2, "event", e.text, e.enter.nations[0]);
-      told = true;
+      if (!any && !(there && e.war)) return false;
+      if (any) {
+        did = true;
+        g2.supplyDirty = true;
+        headline(g2, "event", e.text, e.enter.nations[0]);
+        told = true;
+      }
     }
     if (e.war) {
       for (const [a, b] of e.war) {
         const A = g2.nations[a], B2 = g2.nations[b];
-        if (!A?.alive || !B2?.alive || A.atWar.includes(b)) continue;
+        if (barred3.has(a) || !A?.alive || !B2?.alive || A.atWar.includes(b)) continue;
         if (g2.flags.open === 1 && !B2.atWar.length) continue;
+        if (e.enter && !told && !allied(g2, a, b)) {
+          headline(g2, "event", e.text, e.enter.nations[0]);
+          told = true;
+        }
         declareWar(g2, a, b);
         did = did || A.atWar.includes(b);
       }
@@ -19589,6 +19648,8 @@
     orderTeams: () => orderTeams,
     orderTrade: () => orderTrade,
     orderWreck: () => orderWreck,
+    ordersByCity: () => ordersByCity,
+    ordersIn: () => ordersIn,
     passMonth: () => passMonth,
     paths: () => paths,
     playerFell: () => playerFell,
@@ -20041,6 +20102,34 @@
     }
     return out;
   }
+  function figuresOf(g2, kind, target, fc, nat) {
+    const f = {};
+    if (kind === "bomb" || kind === "night") {
+      if (g2.regions[target].fac > 0) {
+        f.output = fc.cut;
+        f.national = fc.nation;
+      }
+      if (fc.rail) f.rail = fc.rail;
+      if (fc.ruin) f.factory = fc.ruin;
+    } else if (kind === "superiority") {
+      f.odds = fc.odds;
+      if (fc.cut > 0) f.readiness = fc.cut;
+    } else if (kind === "strike") {
+      f.ships = fc.cut;
+    } else if (kind === "fleet" || kind === "harbour") {
+      f.hits = fc.hits ?? 0;
+      if (fc.ships) f.sunk = { ...fc.ships };
+    } else if (kind === "line") {
+      const most = Math.max(0, ...g2.regions[target].units.filter((u) => !u.dead && atWar(g2, nat, u.nat)).map(worksOf));
+      f.works = Math.min(fc.cut, most);
+      f.worksLeft = Math.max(0, most - fc.cut);
+    } else if (kind === "town") {
+      if (fc.town) f.town = { ...fc.town };
+    } else if (kind === "ground") {
+      f.organisation = fc.cut;
+    }
+    return f;
+  }
   function planRaid(g2, kind, target, ids2, nat = g2.human) {
     const row2 = kindRow(kind);
     const place2 = placeOf(g2, kind, target, nat);
@@ -20064,6 +20153,7 @@
       fighterLossN: 0,
       foeLossN: 0,
       effects: [],
+      figures: {},
       massed: "",
       offPatrol: ""
     };
@@ -20155,6 +20245,7 @@
     plan.fighterLossN = Math.round(fc.ftrLoss);
     plan.foeLossN = Math.round(fc.foeLoss);
     plan.effects = effectsOf2(g2, kind, target, fc, nat);
+    plan.figures = figuresOf(g2, kind, target, fc, nat);
     if (kind === "line") plan.wear = fc.cut;
     const bombers = going.filter((f) => f.bmr > 0);
     if (bombers.length >= 2) {
@@ -20321,6 +20412,113 @@
     (n.cadres ?? (n.cadres = [])).push(gone);
     if (keep.nat === g2.human) headline(g2, "info", `${gone.name} is folded into ${keep.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
     return true;
+  }
+
+  // ../../src/campaign/orders.ts
+  var low = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+  var several = (s) => /(corps|ships|guns|airfields|fortifications|troops)$/.test(s) ? s : /y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`;
+  var inMonths = (m) => m <= 0 ? "this month" : `in ${m} month${m === 1 ? "" : "s"}`;
+  function lineOf2(g2, b, nat) {
+    let sign = "civic", label = "town building", holds3 = 1;
+    const unit = b.what === "corps" || b.what === "air" || b.what === "ship";
+    if (b.what === "corps") {
+      sign = b.airborne ? "para" : b.kind ?? "inf";
+      const own = b.elite ? eliteOf(nat) : null;
+      label = b.airborne ? "airborne corps" : own && own.id === b.elite ? /^(Commonwealth|Guards|Ardennes|Evzone|Legion|Alpine)\b/.test(own.label) ? own.label : low(own.label) : low(PRODUCTION.builds[b.kind ?? "inf"]?.label ?? ARSENAL.land?.[b.kind ?? "inf"]?.label ?? `${KIND[b.kind ?? "inf"]?.label ?? "Infantry"} corps`);
+    } else if (b.what === "air") {
+      sign = b.item ?? "ftr";
+      label = low(ARSENAL.air[sign]?.label ?? "air wing");
+      holds3 = b.count ?? 1;
+    } else if (b.what === "ship") {
+      sign = b.item ?? "dd";
+      label = low(ARSENAL.ships[sign]?.label ?? "ships");
+      holds3 = b.count ?? 1;
+    } else if (b.what === "fort") {
+      sign = "fort";
+      label = "fortifications";
+    } else if (b.what === "work") {
+      sign = b.item ?? "factory";
+      label = low(ARSENAL.works[sign]?.label ?? "works");
+    } else {
+      const line = CIVIC.lines.find((x) => x.id === b.item);
+      label = line ? `${low(line.name)} building` : "town building";
+    }
+    const need = Math.max(1, b.eta - b.ordered);
+    const months3 = Math.max(0, b.eta - g2.turn);
+    return {
+      id: b.id,
+      what: b.what,
+      unit,
+      sign,
+      label,
+      plural: several(label),
+      name: b.name,
+      holds: holds3,
+      elite: !!b.elite,
+      mark: !unit ? "" : sign === "dd" || sign === "ca" || sign === "bb" ? "hull" : sign,
+      ordered: b.ordered,
+      eta: b.eta,
+      ready: turnToDate(b.eta).label,
+      months: months3,
+      need,
+      done: Math.max(0, Math.min(need, need - months3)),
+      stands: b.region,
+      cost: b.cost,
+      fresh: b.ordered === g2.turn
+    };
+  }
+  function cityOf(g2, region, holder, spied, builds) {
+    const r = g2.regions[region];
+    const all0 = builds.map((b) => lineOf2(g2, b, holder));
+    const same = (l) => all0.filter((x) => x.unit && x.mark === l.mark && x.elite === l.elite).length;
+    const lines = all0.sort((a, b) => Number(b.unit) - Number(a.unit) || a.eta - b.eta || (a.unit ? same(b) - same(a) : 0) || a.id - b.id);
+    const kinds = [];
+    for (const l of lines) {
+      const k = kinds.find((x) => x.sign === l.sign && x.label === l.label && x.starred === l.elite);
+      if (k) k.count++;
+      else kinds.push({ sign: l.sign, mark: l.mark, starred: l.elite, label: l.label, plural: l.plural, count: 1, unit: l.unit, months: l.months });
+    }
+    const next = lines[0];
+    const units = lines.filter((l) => l.unit);
+    const badge = next.unit ? { mark: next.mark, starred: next.elite, count: same(next), plus: units.length > same(next), months: next.months } : null;
+    const said = kinds.map((k) => `${k.count} ${k.count === 1 ? k.label : k.plural}`);
+    const all = said.length > 1 ? `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}` : said[0];
+    return {
+      region,
+      province: r.name,
+      town: townName(r),
+      holder,
+      spied,
+      lines,
+      units: units.length,
+      works: lines.length - units.length,
+      kinds,
+      next,
+      months: next.months,
+      badge,
+      summary: `${lines.length} on order: ${all}. ${lines.length === 1 ? "Ready" : "Next ready"} ${inMonths(next.months)}.`,
+      list: lines.map((l) => `${l.name}: ready ${l.ready} (${inMonths(l.months)})`)
+    };
+  }
+  function cityOrders(g2, nat = g2.human) {
+    const n = nat ? g2.nations[nat] : null;
+    if (!n) return [];
+    const at = /* @__PURE__ */ new Map();
+    for (const b of n.queue) {
+      const l = at.get(b.region);
+      if (l) l.push(b);
+      else at.set(b.region, [b]);
+    }
+    const out = [...at].map(([region, builds]) => cityOf(g2, region, n.id, false, builds));
+    for (const r of g2.regions) {
+      if (r.ctrl === n.id || at.has(r.id) || !agentAt(g2, r.id, n.id)) continue;
+      const theirs = g2.nations[r.ctrl]?.queue.filter((b) => b.region === r.id) ?? [];
+      if (theirs.length) out.push(cityOf(g2, r.id, r.ctrl, true, theirs));
+    }
+    return out.sort((a, b) => Number(a.spied) - Number(b.spied) || Number(b.units > 0) - Number(a.units > 0) || a.months - b.months || a.region - b.region);
+  }
+  function ordersAt(g2, region, nat = g2.human) {
+    return cityOrders(g2, nat).find((c) => c.region === region) ?? null;
   }
 
   // ../../src/campaign/fleets.ts
@@ -23335,7 +23533,7 @@
         const here = g2.regions[c.reg];
         if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g2, nat, here.ctrl)) continue;
         if (here.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) continue;
-        if (portsFor(c).some((p) => sails(c, p))) went(c);
+        if (portsFor(c).some((p) => beyondEurope(p) === beyondEurope(here) && sails(c, p))) went(c);
       }
     }
     const home = () => g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && g2.regions[c.reg].owner === nat && !g2.regions[c.reg].overseas);
@@ -25658,6 +25856,12 @@
   function agentReport(g2, region) {
     return g2.human ? cityReport(g2, region, g2.human) : null;
   }
+  function ordersByCity(g2) {
+    return g2.human ? cityOrders(g2, g2.human) : [];
+  }
+  function ordersIn(g2, region) {
+    return g2.human ? ordersAt(g2, region, g2.human) : null;
+  }
   function rivalStaff(g2, nat) {
     const n = g2.nations[nat];
     if (!rivalRules(g2) || !n?.alive || n.dormant || nat === g2.human) return null;
@@ -27292,7 +27496,7 @@
       pp: Math.floor(s.nations[nat].pp),
       income: Math.round(income(s, nat)),
       pc: Math.floor(s.nations[nat].pc),
-      orders: s.nations[nat].queue.map((b) => orderLine(s, b)),
+      orders: ((book) => s.nations[nat].queue.map((b) => orderLine(s, b, book)))(ordersBookOf(s)),
       scale: BUDGET.scale,
       budget: L.budget,
       money: inHand(L.treasury),
@@ -27308,7 +27512,7 @@
     if (!me) return null;
     const L = ledger(s, me);
     const line = (l) => ({ label: l.label, amount: shown(l.amount), count: l.count ?? 0 });
-    const orders = s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }));
+    const orders = ((book) => s.nations[me].queue.map((b) => ({ ...orderLine(s, b, book), cost: shown(b.cost) })))(ordersBookOf(s));
     return {
       nation: s.nations[me].name,
       date: turnToDate(s.turn).label,
@@ -27338,53 +27542,27 @@
       onOrder: orders.reduce((sum2, o) => sum2 + o.cost, 0)
     };
   }
-  function orderSign(b) {
-    if (b.what === "corps") return { sign: b.airborne ? "para" : String(b.kind ?? "inf"), star: !!b.elite };
-    if (b.what === "air") return { sign: b.item === "bmr" ? "bmr" : "ftr", star: false };
-    if (b.what === "ship") return { sign: b.item === "cv" ? "cv" : b.item === "ss" ? "ss" : b.item === "tp" ? "tp" : "hull", star: false };
-    return { sign: "", star: false };
-  }
-  function orderWords2(b) {
-    if (b.what === "corps") return b.airborne ? "airborne corps" : `${(KIND[b.kind ?? "inf"]?.label ?? "Infantry").toLowerCase()} corps`;
-    if (b.what === "air") return (ARSENAL.air[b.item ?? ""]?.label ?? "air wing").toLowerCase();
-    if (b.what === "ship") return (ARSENAL.ships[b.item ?? ""]?.label ?? "ship").toLowerCase();
-    return b.name;
-  }
-  var readyIn = (months3) => months3 <= 0 ? "ready now" : months3 === 1 ? "ready in 1 month" : `ready in ${months3} months`;
-  function cityOrdersOf(s) {
+  function ordersBookOf(s) {
     const me = s.human;
-    if (!me || !s.nations[me]?.alive) return [];
-    const by = /* @__PURE__ */ new Map();
-    for (const b of s.nations[me].queue) {
-      if (!s.regions[b.region] || !orderSign(b).sign) continue;
-      by.set(b.region, [...by.get(b.region) ?? [], b]);
-    }
-    const key4 = (b) => {
-      const k = orderSign(b);
-      return `${k.sign}${k.star ? "*" : ""}`;
-    };
-    const many = (n, words) => n === 1 || /(corps|s)$/.test(words) ? `${n} ${words}` : `${n} ${words}s`;
-    return [...by].map(([region, units]) => {
-      const alike = (b) => units.filter((x) => key4(x) === key4(b)).length;
-      const sorted = [...units].sort((a, b) => a.eta - b.eta || alike(b) - alike(a) || a.ordered - b.ordered || a.id - b.id);
-      const first = sorted[0];
-      const kinds = /* @__PURE__ */ new Map();
-      for (const b of sorted) kinds.set(orderWords2(b), (kinds.get(orderWords2(b)) ?? 0) + 1);
-      const months3 = Math.max(0, first.eta - s.turn);
-      return {
-        region,
-        ...orderSign(first),
-        count: alike(first),
-        plus: units.some((b) => key4(b) !== key4(first)),
-        months: months3,
-        total: units.length,
-        head: `${units.length} on order: ${[...kinds].map(([words, n]) => many(n, words)).join(", ")}. Next ${readyIn(months3)}.`,
-        lines: sorted.map((b) => `${upFirst(orderWords2(b))}${orderSign(b).star ? " (special formation)" : ""}, ${readyIn(Math.max(0, b.eta - s.turn))}`)
-      };
-    });
+    return me && s.nations[me]?.alive ? cityOrders(s, me) : [];
   }
-  function orderLine(s, b) {
+  function cityOrdersOf(s) {
+    return ordersBookOf(s).map((c) => ({
+      region: c.region,
+      sign: c.badge?.mark ?? "",
+      star: !!c.badge?.starred,
+      count: c.badge?.count ?? 0,
+      plus: !!c.badge?.plus,
+      months: c.badge?.months ?? c.months,
+      total: c.units,
+      spied: c.spied,
+      head: `${c.spied ? "Your agent reports: " : ""}${c.summary}`,
+      lines: c.lines.map((l) => `${upFirst(l.label)}, ready ${inMonths(l.months)}`)
+    }));
+  }
+  function orderLine(s, b, book = ordersBookOf(s)) {
     const months3 = Math.max(0, b.eta - s.turn);
+    const shownAs = book.find((c) => c.region === b.region && !c.spied)?.lines.find((l) => l.id === b.id);
     return {
       id: b.id,
       what: b.what,
@@ -27395,10 +27573,10 @@
       months: months3,
       cost: b.cost,
       canCancel: b.ordered === s.turn && humanUp(s),
-      // (for the city card's "Forming here": its sign, what it is, and how far along it is)
-      ...orderSign(b),
-      words: upFirst(orderWords2(b)),
-      share: b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1
+      sign: shownAs?.mark ?? "",
+      star: !!shownAs?.elite,
+      words: upFirst(shownAs?.label ?? b.name),
+      share: shownAs ? Math.min(1, Math.max(0, shownAs.done / shownAs.need)) : b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1
     };
   }
   var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
@@ -27929,7 +28107,7 @@
     return { road, cost: end.cost };
   }
   var monthsOf2 = (c, cost) => Math.max(1, Math.ceil(cost / Math.max(1, c.apMax ?? 4)));
-  var inMonths = (n) => n === 1 ? "about a month" : `about ${n} months`;
+  var inMonths2 = (n) => n === 1 ? "about a month" : `about ${n} months`;
   function marchLeg(s, c, road) {
     const m = reach2(s, c);
     let far = -1;
@@ -28125,7 +28303,7 @@
             s.flags[marchKey(c.id)] = to + 1;
             s.flags[`marchRep:${c.id}`] = lastReportId(s);
             const left = farRoad(s, c, to);
-            note4 = `${c.name} marches for ${s.regions[to].name}, ${inMonths(left ? monthsOf2(c, left.cost) : 1)} more. It goes on by itself as each month opens, and halts if the enemy comes near. Any other order stops the march.`;
+            note4 = `${c.name} marches for ${s.regions[to].name}, ${inMonths2(left ? monthsOf2(c, left.cost) : 1)} more. It goes on by itself as each month opens, and halts if the enemy comes near. Any other order stops the march.`;
           }
           continue;
         }
@@ -28699,14 +28877,16 @@ ${next.text}` : ""}` : next ? next.also : "";
         ok: up && !!n && n.pp >= cost,
         why: !up ? "It is not your month." : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : ""
       } : null,
-      forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b)) : [],
-      formingHead: (() => {
+      ...((book) => ({
+        forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).sort((a, b) => a.eta - b.eta).map((b) => orderLine(s, b, book)) : [],
+        formingHead: book.find((c) => c.region === r.id && !c.spied)?.summary ?? ""
+      }))((() => {
         try {
-          return cityOrdersOf(s).find((c) => c.region === r.id)?.head ?? "";
+          return ordersBookOf(s);
         } catch {
-          return "";
+          return [];
         }
-      })(),
+      })()),
       // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
       // (all only in the grand campaign, where those rules apply).
       // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
@@ -29162,7 +29342,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         why: up ? o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : o.why : "It is not your month.",
         poor: o.poor
       })),
-      orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }))
+      orders: ((book) => s.nations[me].queue.map((b) => ({ ...orderLine(s, b, book), cost: shown(b.cost) })))(ordersBookOf(s))
     };
   }
   function order(key4, region = -1) {

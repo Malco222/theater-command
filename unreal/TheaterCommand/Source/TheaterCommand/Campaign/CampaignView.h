@@ -140,7 +140,8 @@ struct FCityOrders
 	bool bPlus = false; // other kinds of unit are on order there too
 	int32 Months = 0; // until the unit in the sign is ready
 	int32 Total = 0;
-	FString Head; // "3 on order: 1 armor corps, 2 infantry corps. Next ready in 2 months."
+	FString Head; // "3 on order: 2 infantry corps and 1 armoured corps. Next ready in 2 months."
+	bool bSpied = false; // another country's place, known of only through an agent of the player's there
 	TArray<FString> Lines; // one an order, soonest first
 };
 
