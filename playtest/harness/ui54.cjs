@@ -1,0 +1,24 @@
+const { chromium } = require('playwright');
+const PAGE = process.env.TC_PAGE; const seed = Number(process.argv[2] || 3);
+(async () => {
+  const browser = await chromium.launch();
+  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  page.on('pageerror', (e) => console.log('ERR', e.message.slice(0, 300)));
+  await page.goto(PAGE); await page.evaluate(() => { localStorage.clear(); localStorage.setItem('tc-watch', '0'); }); await page.reload(); await page.waitForSelector('#card');
+  await page.evaluate((seed) => window.theater.newGame('POL', seed, 1, 'grand', 'colonel', true, false, 'theatre', 3), seed);
+  await page.waitForTimeout(2500);
+  const st = (label) => page.evaluate((label) => { const g = window.theater.game(); const own = g.regions.filter((r) => r.owner === 'POL' && !r.overseas); const by = {}; for (const r of own) by[r.ctrl] = (by[r.ctrl] || 0) + 1; const towns = own.filter((r) => r.garr && r.garr.length).map((r) => `${r.name}:${r.ctrl}:${r.garr.map((c) => c.nat).join('')}`); return `${label}: turn ${g.turn}; held ${JSON.stringify(by)}; garrisons ${towns.join(' ')}; top "${(document.querySelector('[data-act="end"]')?.innerText || '').replace(/\s+/g, ' ')}"; tile ${(document.querySelector('#veil.open .mc-tile')?.innerText || '').replace(/\s+/g, ' ')}`; }, label);
+  console.log(await st('at deployment'));
+  await page.evaluate(() => document.querySelector('[data-act="eveplan"]')?.click()); await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-act="end"]')?.click()); await page.waitForTimeout(4000);
+  console.log(await st('the player first moves (September)'));
+  await page.evaluate(() => window.theater.openModal(null)); await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-act="end"]')?.click()); await page.waitForTimeout(800);
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#veil.open #card button')].find((x) => /end the month/i.test(x.innerText || '')); b?.click(); });
+  await page.waitForTimeout(6000);
+  console.log(await st('the September card'));
+  console.log('rows: ' + JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.mc-row')].map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)))));
+  console.log('all reports button: ' + JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#veil.open #card button')].map((b) => (b.innerText || '').replace(/\s+/g, ' ')).filter((t) => /REPORTS/.test(t)))));
+  console.log('battles this card by region: ' + JSON.stringify(await page.evaluate(() => { const g = window.theater.game(); return (g.reports || g.battles || []).filter((r) => r.turn >= 1).slice(-30).map((r) => `${r.turn}/${r.week ?? ''} ${g.regions[r.region]?.name || r.region} ${r.att}>${r.def} ${r.siege ? 'siege' : ''}${r.yielded ? ' yielded' : ''} ${r.won ? 'att won' : ''}`); })));
+  await browser.close();
+})();
