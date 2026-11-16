@@ -73,6 +73,7 @@ export interface CardBand {
   head: string;
   text: string;
   week: number;
+  /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
 }
 
@@ -104,8 +105,9 @@ export interface CardRow {
   line: string;
   /** One figure, or two for a land battle: ours first, theirs second. */
   figures: CardFigure[];
-  /** The place a pin shows on the map; and the battle report the row opens. */
+  /** The place a pin shows on the map, a province or a sea of the chart; and the battle report the row opens. */
   region?: number;
+  sea?: number;
   report?: CardReport;
   week: number;
   /** For the lead story: the kind word of its tag, a headline of about eight words, one line on what follows from it, and three figures. */
@@ -116,7 +118,7 @@ export interface CardRow {
 }
 
 export interface CardHome { sign: string; count: number; text: string; place: string; region?: number; /** Next month's: drawn in grey. */ next?: boolean }
-export interface CardStaff { text: string; desk: string; sign: string; /** True while the staff still runs that desk: the button takes it back from next month. */ mayTake: boolean }
+export interface CardStaff { /** The whole line of news, and its short form for the card: the desk, then what it did ('Research: 2 teams set to work'). */ text: string; short: string; desk: string; sign: string; /** True while the staff still runs that desk: the button takes it back from next month. */ mayTake: boolean }
 export interface CardElse { nat: string; text: string; region?: number }
 export interface CardLetter { text: string; by: string; unit?: number }
 
@@ -139,7 +141,9 @@ export interface MonthCard {
   /** At home: what was delivered, what was researched, anything else of his own, and next month's deliveries. */
   home: CardHome[];
   research: string[];
+  /** Other news of home, each cut to a line or two of whole words; and the same lines whole, for a hover. */
   also: string[];
+  alsoFull: string[];
   /** What his staff did. It stands: the button takes the desk back from next month. */
   staff: CardStaff[];
   elsewhere: CardElse[];
@@ -169,6 +173,72 @@ const sentence = (text: string, max: number): string => {
   const cut = brief(text.replace(/\.$/, ''), max - 1);
   return /[….]$/.test(cut) ? cut : `${cut}.`;
 };
+/**
+ * A line for one of the foot boxes, kept to the room two lines have (the boxes are set in a typewriter face, so a
+ * line's room is a count of letters). No word is cut and no name is cut in half: the whole sentence where it
+ * wraps into the lines it has, else whole clauses, else whole words, backing off from the middle of a name and
+ * from a word that leads nowhere.
+ */
+const linesAt = (text: string, per: number): number => { let n = 1, at = 0; for (const w of text.split(' ')) { if (at && at + 1 + w.length > per) { n++; at = w.length; } else at += (at ? 1 : 0) + w.length; } return n; };
+const LITTLE = /^(a|an|the|of|at|in|on|to|with|for|from|by|and|or|its|their|his|is|are|was|were|has|have|had|that|which|as|into|over|under|near|round|against|between|who|whose)$/i;
+export const wholeWords = (text: string, per: number, lines = 2): string => {
+  const t = text.replace(/\s+/g, ' ').trim().replace(/[.]$/, '');
+  const fits = (s: string): boolean => linesAt(s, per) <= lines;
+  if (fits(`${t}.`)) return `${t}.`;
+  const stops = [...t.matchAll(/[,;:] | and (?=[a-z])| which | before | after | while /g)].map((m) => m.index!).filter((i) => i >= per * lines * 0.4 && fits(`${t.slice(0, i)}.`));
+  if (stops.length) return `${t.slice(0, stops[stops.length - 1])}.`;
+  const all = t.split(' ');
+  const kept = [...all];
+  const capital = (w: string | undefined): boolean => !!w && /^[A-Z0-9]/.test(w);
+  const said = (): string => `${kept.join(' ').replace(/[,;:]$/, '')}…`;
+  const back = (): void => { while (kept.length > 1 && (!fits(said()) || LITTLE.test(kept[kept.length - 1]) || (capital(kept[kept.length - 1]) && capital(all[kept.length])))) kept.pop(); };
+  back();
+  // ("Between" needs both its places: a line that has room for one of them ends before the word.)
+  const pair = kept.lastIndexOf('between');
+  if (pair > 0 && !kept.slice(pair).includes('and')) { kept.length = pair; back(); }
+  return said();
+};
+/** The room the foot boxes have, in letters to a line: at home, elsewhere, and what a staff line may run to in all. */
+const FOOT_ROOM = { home: 30, elsewhere: 36, staff: 44 };
+const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
+/** "Hamburg's", "Calais'". */
+const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${place}'s`);
+/** What a desk did, as the card says it: the desk, then the deed, in about forty letters and never a cut name. */
+export function staffShort(desk: string, text: string): string {
+  const word = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
+  const room = FOOT_ROOM.staff - word.length - 2;
+  const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, '');
+  // The first way of saying it that fits; the last is always short.
+  const fit = (...tries: string[]): string => { const t = tries.find((x) => x.length <= room) ?? tries[tries.length - 1]; return `${word}: ${t.length <= room ? t : wholeWords(t, room, 1).replace(/\.$/, '')}`; };
+  const teams = /^put (a|\d+) research teams? to work on (.+)$/.exec(said);
+  if (teams) { const n = teams[1] === 'a' ? 1 : Number(teams[1]); return n === 1 ? fit(`1 team on ${teams[2].replace(/ \(\d+ months?\)/g, '')}`, '1 team set to work') : fit(`${n} teams set to work`); }
+  const ordered = /^ordered (.+)$/.exec(said);
+  if (ordered) {
+    // ("X at P, Y at Q and Z at R": a piece without its place belongs to the one before.)
+    const items = ordered[1].split(/, | and /).reduce<string[]>((xs, p) => { if (xs.length && !/ at /.test(p)) xs[xs.length - 1] += ` and ${p}`; else xs.push(p); return xs; }, []);
+    const at = items[0].lastIndexOf(' at ');
+    const what = (at < 0 ? items[0] : items[0].slice(0, at)).replace(/^the /, ''), where = at < 0 ? '' : items[0].slice(at + 4);
+    const more = items.length - 1;
+    return more ? fit(`${what}, ${where} and ${more} more`, `${what} and ${more} more`, `${items.length} orders placed`) : fit(where ? `${what}, ${where}` : what, what, '1 order placed');
+  }
+  const raids = /^flew (a|\d+) raids?: (.+)$/.exec(said);
+  if (raids) {
+    const n = raids[1] === 'a' ? 1 : Number(raids[1]);
+    const cost = Number(/It cost (\d+) aircraft/.exec(text)?.[1] ?? 0);
+    if (n > 1) return cost ? fit(`${n} raids, ${cost} aircraft lost`, `${n} raids flown`) : fit(`${n} raids flown`);
+    const on = /^the (.+?) at (.+)$/.exec(raids[2]);
+    const thing = on ? (/^ships/.test(on[1]) ? 'harbour' : on[1]) : '';
+    return on ? fit(`a raid on ${of(on[2])} ${thing}`, `a raid on ${on[2]}`, 'a raid flown') : fit(`a raid on ${raids[2]}`, 'a raid flown');
+  }
+  const nearer = /^courted (.+?), which has moved a step towards us$/.exec(said);
+  if (nearer) return fit(`${nearer[1]} moves a step towards us`, `${nearer[1]} moves a step nearer`, `courted ${nearer[1]}`, 'a country moves a step nearer');
+  // Anything else: the first thing it did, and how many more. (A fleet sent to a sea is said the short way.)
+  const deeds = said.split(/ and (?=[a-z])/).map((d) => d.replace(/^sent (the .+?) into (the .+)$/, '$1 to $2'));
+  return deeds.length > 1 ? fit(`${deeds[0]} and ${deeds.length - 1} more`, deeds[0]) : fit(deeds[0]);
+}
+/** Other names a line of news gives a country. */
+const ALSO_CALLED: Record<string, RegExp> = { UK: /\bBritain\b/, USA: /\bAmerica\b/, SOV: /\bRussia\b/ };
+
 /** The room a row has for its sentence, in letters: less beside two figures. */
 const ROW_ROOM = { one: 54, two: 44 };
 /** "A", "A and B", "A, B and C". */
@@ -197,6 +267,18 @@ export function monthMark(g: Game, viewer: string | null = g.human): MonthMark {
     orders: monthOrders(g, viewer),
   };
 }
+
+/**
+ * The mark for the first month of a war played from its opening. Everything since the game began is that month's
+ * news, and the world was at peace before it: so the card for September 1939 carries the declarations that opened
+ * the war, though they were made before the player's first month came round. Both interfaces take this mark while
+ * the game is in its first month, and monthMark from the second.
+ */
+export function openingMark(g: Game, viewer: string | null = g.human): MonthMark {
+  return { ...monthMark(g, viewer), h: 0, r: 0, s: 0, a: 0, shore: 0, warring: [] };
+}
+/** The mark as a month opens, whichever month it is. */
+export const markFor = (g: Game, viewer: string | null = g.human): MonthMark => (g.turn === 1 ? openingMark(g, viewer) : monthMark(g, viewer));
 
 /** The one measure across land, sea and air (ruling 95): the cost to build what was lost, counted in men. */
 const CORPS_MEN = PRODUCTION.builds.inf.divs * MEN_PER_DIV;
@@ -228,7 +310,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const N = g.nations[me];
   const card: MonthCard = {
     turn: mark.turn, month: turnToDate(mark.turn).label, viewer: me, bands: [], boxes: [], lead: null, quiet: '', rows: [], show: 7, count: '', foot: '',
-    home: [], research: [], also: [], staff: [], elsewhere: [], letters: [], more: 0,
+    home: [], research: [], also: [], alsoFull: [], staff: [], elsewhere: [], letters: [], more: 0,
   };
   if (!N) { card.quiet = 'A quiet month.'; return card; }
   const mine = (nat?: string | null): boolean => nat === me;
@@ -384,6 +466,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.sign = carriers ? 'cv' : 'hull';
     row.picture = 'fleet';
     row.place = r.zoneName;
+    if (g.seas[r.zone]) row.sea = r.zone;
     row.report = { type: 'sea', id: r.id };
     row.ours = me; row.theirs = them[0]?.nat ?? null;
     row.tag = good ? 'WON' : 'LOST'; row.tone = good ? 'good' : 'bad';
@@ -414,7 +497,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const row = blank();
     row.cls = 4; row.arm = 'air';
     row.report = { type: 'air', id: r.id };
-    if (r.region >= 0) row.region = r.region;
+    if (r.region >= 0) row.region = r.region; else if (g.seas[r.zone]) row.sea = r.zone;
     row.ours = me; row.theirs = att ? r.defNat || null : r.attNat;
     const sky = r.mission === 'superiority';
     const good = att ? r.won : !r.won;
@@ -472,8 +555,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const target = r.what === 'troops' ? 'the troops ashore' : r.what === 'city' ? 'the city' : 'the defences of the town';
     row.line = `${cap(the(r.fleet))} shelled ${target}.`;
     row.figures = lost ? [{ n: String(lost), label: `${classWord(r.sunk)} ${att ? 'lost' : 'sunk'}` }]
-      : r.what === 'troops' ? [{ n: String(r.divs), label: r.divs === 1 ? 'division shelled' : 'divisions shelled' }]
-      : r.what === 'city' ? [{ n: `${Math.round(r.output * 100)}%`, label: 'of output stopped' }]
+      : r.what === 'troops' ? [{ n: String(r.divs), label: r.divs === 1 ? 'division hit' : 'divisions hit' }]
+      : r.what === 'city' ? [{ n: `${Math.round(r.output * 100)}%`, label: 'output stopped' }]
       : [{ n: `${Math.round(r.works ?? 0)}%`, label: 'of its works' }];
     row.kind = 'SHELLED FROM THE SEA';
     row.head = `${r.place} is shelled from the sea`;
@@ -504,6 +587,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (News from the sea names its sea: the row's place takes it, and the line is the shorter for it.)
     const where = h.region === undefined ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
     row.place = h.region !== undefined ? g.regions[h.region].name : where ? cap(where[1].replace(/^the /, '')) : h.arm === 'sea' ? 'At sea' : 'In the air';
+    // (A sea has a place on the chart: the row's pin goes there.)
+    const zone = where ? g.seas.findIndex((z) => z.name.replace(/^the /i, '') === where[1].replace(/^the /i, '')) : -1;
+    if (zone >= 0) row.sea = zone;
     row.sign = h.arm === 'land' ? (bridges ? 'eng' : /airborne/.test(h.text) ? 'para' : 'inf') : h.arm === 'sea' ? (/submarine|torpedo|convoy|shipping/i.test(h.text) ? 'ss' : 'hull') : 'bmr';
     row.picture = h.arm === 'land' ? (bridges || /\b(town|city|garrison|siege)\b/.test(h.text) ? 'town' : 'troops') : h.arm === 'sea' ? 'fleet' : h.region !== undefined ? 'factories' : 'fleet';
     const sinking = h.arm !== 'land' && /\b(sinks?|sunk|torpedoes|scuttled)\b/.test(h.text);
@@ -544,6 +630,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // What it weighs: the men of a ring or of an army that lays down its arms; the ships a line of news names.
     const menNamed = Number((ring?.[2] ?? arms?.[3] ?? '0').replace(/,/g, ''));
     const sunkWord = ships?.[3] ?? torpedoed?.[1] ?? '', sunkCount = ships ? Number(ships[1]) : torpedoed ? 1 : 0;
+    // (The score at sea counts what the rows say: a ship a line of news names is in it too.)
+    if (good) sunk += sunkCount; else if (bad) shipsLost += sunkCount;
     const weight = h.arm === 'land' ? menNamed || (bad ? 0 : NEWS_MEN) : sunkCount ? sunkCount * shipMen(wordClass(sunkWord)) : NEWS_MEN;
     ranked.push({ row, sub: h.arm === 'land' ? (menNamed || bad ? GROUND_FIGHTING : GROUND_NEWS) : 0, weight, alone: sunkCount > 0, great: /^(battleship|carrier)/.test(sunkWord) });
   }
@@ -570,22 +658,36 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const majors = new Set(majorsOf(g));
   const freed = new Set(g.passings.filter((p) => p.turn >= mark.turn && p.kind === 'freed').map((p) => p.nat));
   const passed = (nat?: string) => g.passings.find((p) => p.turn >= mark.turn && p.nat === nat);
-  const banded: { band: CardBand; rank: number; h: Headline }[] = [];
+  const banded: { band: CardBand; rank: number; h: Headline; onHim?: boolean }[] = [];
+  /** Whether a line names a country, by its name or by another the news gives it; and the countries a line names, in its order. */
+  const nameAt = (id: string, text: string): number => {
+    const n = g.nations[id];
+    if (!n) return -1;
+    const a = text.search(new RegExp(`\\b${n.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)), b = ALSO_CALLED[id] ? text.search(ALSO_CALLED[id]) : -1;
+    return a < 0 ? b : b < 0 ? a : Math.min(a, b);
+  };
+  const namedIn = (text: string): string[] => Object.keys(g.nations).map((id) => ({ id, at: nameAt(id, text) })).filter((x) => x.at >= 0).sort((a, b) => a.at - b.at).map((x) => x.id);
   // A great power entering the war: at peace when the month opened and at war now. The first line of news that
   // names it is its band. (One already at war that declares another is war and peace like anyone's: his band only
   // where it touches his own war.)
   const entered = new Set([...majors].filter((m) => !!g.nations[m]?.alive && g.nations[m].atWar.length > 0 && !mark.warring.includes(m)));
   hs.forEach((h) => {
     const warn = !!h.warn && mine(h.nat);
-    const enters = h.kind === 'war' ? [...entered].filter((m) => m === h.nat || h.text.includes(g.nations[m].name)) : [];
+    const enters = h.kind === 'war' ? [...entered].filter((m) => m === h.nat || nameAt(m, h.text) >= 0) : [];
     for (const m of enters) entered.delete(m);
     const great = enters.length > 0 || (h.kind === 'fall' && !!h.nat && majors.has(h.nat));
     const p = h.kind === 'fall' ? passed(h.nat) : undefined;
     const touches = (h.kind === 'war' || h.kind === 'fall') && (mine(h.nat) || side(h.nat) || foe(h.nat) || (!!p && (side(p.by) || foe(p.by))));
     if (!warn && !great && !touches) return;
     const word: CardBand['word'] = warn ? 'WARNING' : h.kind === 'war' ? 'WAR' : h.nat && freed.has(h.nat) ? 'FREED' : 'FALLEN';
-    const nats = warn ? [me] : [...new Set([h.nat, ...enters, p?.by])].filter((x): x is string => !!x && !!g.nations[x] && x !== 'none').slice(0, 2);
-    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head: first(h.text), text: h.text, week: h.week, region: h.region }, rank: great ? 0 : warn ? 1 : 2, h });
+    // For him the news is the declaration on him: where a line of news says more than one thing, the sentence
+    // that names war on his country is the headline, under the flags of those who declare it.
+    const said = h.kind === 'war' && !warn ? (h.text.match(/[^.!?]+/g) ?? []).map((s) => s.trim()).find((s) => { const at = s.search(/\bwar on\b/); return at >= 0 && nameAt(me, s.slice(at)) >= 0; }) : undefined;
+    const declarers = said ? namedIn(said.slice(0, said.search(/\bdeclares? war\b|\bwar on\b/))).filter((x) => x !== me) : [];
+    // (The flags are those of the headline: who did it, and a great power the headline names as entering the war.)
+    const head = said ?? first(h.text);
+    const nats = warn ? [me] : declarers.length ? declarers.slice(0, 2) : [...new Set([h.nat, ...enters.filter((m) => nameAt(m, head) >= 0), p?.by])].filter((x): x is string => !!x && !!g.nations[x] && x !== 'none').slice(0, 2);
+    banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, region: h.region }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said });
     used.add(h);
   });
   // One story, one band. A country's fall is told once, by the line that says the country fell (the capital's own
@@ -614,8 +716,29 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     b.band.nats = [...new Set([...b.band.nats, ...more.flatMap((x) => x.band.nats)])].slice(0, 2);
     for (const x of more) banded.splice(banded.indexOf(x), 1);
   }
-  for (const b of banded) b.band.head = brief(b.band.head, 76);
-  banded.sort((a, b) => a.rank - b.rank || Number(mine(b.h.nat)) - Number(mine(a.h.nat)));
+  // Several countries that declare war on him in a month do so in one band, under their flags.
+  const onHim = banded.filter((b) => b.h.kind === 'war' && !mine(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, '') === N.name);
+  if (onHim.length > 1) {
+    const [keep, ...rest] = onHim;
+    keep.band.head = `${listOf(onHim.map((b) => DECLARES.exec(b.band.head)![1]))} declare war on ${theName(N)}`;
+    keep.band.nats = onHim.map((b) => b.h.nat!).slice(0, 2);
+    keep.band.text = onHim.map((b) => b.band.text).join(' ');
+    keep.rank = Math.min(...onHim.map((b) => b.rank));
+    for (const b of rest) banded.splice(banded.indexOf(b), 1);
+  }
+  for (const b of banded) {
+    b.band.head = brief(b.band.head, 76);
+    // A declaration or a fall has a place to show too: the capital of the first country it names that is not his
+    // own; and of an invasion, the country invaded.
+    if (b.band.region !== undefined || b.band.word === 'WARNING') continue;
+    const struck = /\b(?:invades?|attacks?) /.exec(b.band.head);
+    const who = [...(struck ? namedIn(b.band.head.slice(struck.index)) : []), ...namedIn(b.band.head), ...b.band.nats].find((x) => x !== me && !!g.nations[x]);
+    const seat = who ? g.nations[who].capital : -1;
+    if (g.regions[seat]) b.band.region = seat;
+  }
+  // (Of the same rank: war declared on him, then his own doing, then the rest.)
+  const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
+  banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
   card.bands = banded.slice(0, 2).map((b) => b.band);
   // An item that finds no band stays red and sits above the first battle row.
   for (const b of banded.slice(2)) {
@@ -656,7 +779,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   card.rows = all.filter((r) => r !== card.lead);
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
   card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);
-  for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one);
+  // (A long word under the figure takes its width from the sentence beside it.)
+  for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
   card.quiet = fighting.length ? '' : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
   if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
 
@@ -699,12 +823,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
-    if (h.desk) { card.staff.push({ text: h.text, desk: h.desk, sign: DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
+    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
     const m = /^Research complete: ([^.]+)\./.exec(h.text);
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.
     if (h.kind === 'info' && h.arm === 'sea' && !card.foot) { card.foot = h.text; used.add(h); continue; }
-    if (h.kind === 'info' && card.also.length < 2) { card.also.push(h.text); used.add(h); }
+    if (h.kind === 'info' && card.also.length < 2) { card.also.push(wholeWords(first(h.text), FOOT_ROOM.home)); card.alsoFull.push(h.text); used.add(h); }
   }
 
   // ---- 7. Elsewhere: a flag and one line a war, the greatest event first -------------------------------------
@@ -716,7 +840,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of [...hs].filter((x) => !used.has(x) && !!x.nat && !!g.nations[x.nat] && !mine(x.nat) && weight[x.kind] < 9 && !x.warn).sort((a, b) => weight[a.kind] - weight[b.kind] || armRank(a) - armRank(b) || cityRank(a) - cityRank(b) || Number(foe(b.nat) || side(b.nat)) - Number(foe(a.nat) || side(a.nat)))) {
     if (seenNat.has(h.nat!) || card.elsewhere.length >= 4) continue;
     seenNat.add(h.nat!);
-    card.elsewhere.push({ nat: h.nat!, text: `${brief(first(h.text), 96)}.`, ...(h.region !== undefined ? { region: h.region } : {}) });
+    card.elsewhere.push({ nat: h.nat!, text: wholeWords(first(h.text), FOOT_ROOM.elsewhere), ...(h.region !== undefined ? { region: h.region } : {}) });
     used.add(h);
   }
 

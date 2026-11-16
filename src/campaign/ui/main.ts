@@ -4,7 +4,7 @@
 
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
-import { monthCard, monthMark, monthOrders, type MonthCard, type MonthMark } from '../monthcard';
+import { markFor, monthCard, monthOrders, type MonthCard, type MonthMark } from '../monthcard';
 import { monthCardHtml } from './monthview';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
@@ -6230,7 +6230,7 @@ function continueGame(): boolean {
   const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
   applyView();
-  if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = monthMark(g); refresh(); }
+  if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = markFor(g); refresh(); }
   return true;
 }
 
@@ -6245,7 +6245,7 @@ function markNow(): MonthMark | undefined {
   if (!g.human) return undefined;
   const m = ui.mark;
   const ok = !!m && m.turn === g.turn && m.before.length === g.regions.length && m.h <= g.headlines.length && m.r <= g.reports.length && m.s <= g.seaReports.length && m.a <= g.airReports.length && m.shore <= g.shoreReports.length;
-  const mark = ok ? m! : monthMark(g);
+  const mark = ok ? m! : markFor(g);
   mark.orders = monthOrders(g);
   return mark;
 }
@@ -6366,8 +6366,9 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
   // The month's report on one card (Version 82), for a player still in the war; and the mark for the month now opening.
-  const card = !lost && g.human && from.mark ? monthCard(g, from.mark) : null;
-  ui.mark = g.human && humanUp(g) ? monthMark(g) : null;
+  // (No card in the war's first month: no month has passed. The first card tells the war from its opening.)
+  const card = !lost && g.human && from.mark && g.turn > 1 ? monthCard(g, from.mark) : null;
+  ui.mark = g.human && humanUp(g) ? markFor(g) : null;
   if (card) { ui.lastCard = card; ui.monthAll = false; }
   refresh();
   if (lost) {
@@ -6396,7 +6397,7 @@ function reopenMonth(): void {
 }
 
 /**
- * WATCH IT AGAIN (Version 82). The browser keeps no film of the month's moves to run a second time, so the map
+ * TOUR THE MAP (Version 82; WATCH IT AGAIN in the 3D game). The browser keeps no film of the month's moves to run a second time, so the map
  * visits the places on the card in the card's own order, each under the line that says what happened there, and
  * then the card comes back. Space or the button ends it at once.
  */

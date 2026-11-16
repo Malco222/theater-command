@@ -17,7 +17,7 @@ export interface MonthViewHelp {
   all: boolean;
   /** True where a player's orders follow: the main button reads GIVE ORDERS. */
   orders: boolean;
-  /** True where the card has a place on the map to show again: WATCH IT AGAIN is offered. */
+  /** True where the card has a place on the map to show again: TOUR THE MAP is offered. */
   tour: boolean;
 }
 
@@ -38,10 +38,12 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const nums = (fs: CardFigure[]): string => fs.map((f) => `<span><b>${esc(f.n)}</b>${esc(f.label)}</span>`).join('');
   const versus = (r: CardRow, w: number): string => (r.ours && r.theirs ? `${fl(r.ours, w)}<i class="mc-ag">against</i>${fl(r.theirs, w)}` : fl(r.ours ?? r.theirs, w));
   const act = (r: CardRow): string => (r.report ? ` data-act="${REPORT_ACT[r.report.type]}" data-id="${r.report.id}" title="Read the battle report" role="button" tabindex="0"` : '');
-  const pin = (region: number | undefined): string => (region === undefined ? '<span class="mc-go none"></span>' : `<button class="mc-go" data-act="showmap" data-id="${region}" title="Show on map" aria-label="Show on map">${glyph(PIN, 17, BRASS)}</button>`);
+  // (A province has a place on the map and a sea has one on the chart: either way the row carries the pin.)
+  const where = (r: { region?: number; sea?: number }): string => (r.region !== undefined ? `data-act="showmap" data-id="${r.region}"` : r.sea !== undefined ? `data-act="showsea" data-id="${r.sea}"` : '');
+  const pin = (r: CardRow): string => (where(r) ? `<button class="mc-go" ${where(r)} title="Show on map" aria-label="Show on map">${glyph(PIN, 17, BRASS)}</button>` : '<span class="mc-go none"></span>');
 
   const head = `<div class="mc-head"><div><div class="mc-eyebrow kick">Dispatches · the month in one look</div><h1>${esc(card.month)}</h1></div>
-    <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month again, one by one">WATCH IT AGAIN</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
+    <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
 
   const bands = card.bands.map((b) => `<div class="mc-banner"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small>week ${b.week}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
 
@@ -54,7 +56,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     const flags = r.cls === 2 ? fl(r.theirs, 30) : versus(r, 30);
     return `<div class="mc-row ${toneClass(r.tone)}${r.cls === 2 ? ' red' : ''}${r.report ? ' opens' : ''}"${act(r)}>${pic}${disc || '<span></span>'}
       <div class="mc-rtx"><div class="r1"><b class="pl${r.place.length > 16 ? ' long' : ''}">${esc(r.place)}</b>${r.tag ? `<span class="mc-chip">${esc(r.tag)}</span>` : ''}<span class="vs">${flags}</span></div><div class="r2" title="${esc(r.line)}">${esc(r.line)}</div></div>
-      <div class="mc-nums">${nums(r.figures)}</div>${pin(r.region)}</div>`;
+      <div class="mc-nums">${nums(r.figures)}</div>${pin(r)}</div>`;
   };
 
   const L = card.lead;
@@ -62,10 +64,10 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     <div class="mc-photo${L.report ? ' opens' : ''}"${act(L)}><i class="tpic k-${L.picture}"></i><span class="mc-kind">${esc(L.kind)} · WEEK ${L.week}</span>${L.tag ? `<span class="mc-stamp ${toneClass(L.tone)}">${esc(L.tag)}</span>` : ''}
       <div class="mc-cap"><h2>${esc(L.head)}</h2><span>${L.ours ? `${fl(L.ours, 30)} ${esc(o.name(L.ours))}` : ''}${L.ours && L.theirs ? ' <i class="mc-ag">against</i> ' : ''}${L.theirs ? `${fl(L.theirs, 30)} ${esc(o.name(L.theirs))}` : ''}</span></div></div>
     ${L.follows ? `<p class="mc-so">${esc(L.follows)}</p>` : ''}${L.facts.length ? `<div class="mc-facts" style="--n:${L.facts.length}">${L.facts.map((f) => `<div><b>${esc(f.n)}</b>${esc(f.label)}</div>`).join('')}</div>` : ''}
-    <div class="mc-leadb">${L.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${L.region}">SHOW ON MAP</button>` : ''}${L.report ? `<button class="mc-alt" data-act="${REPORT_ACT[L.report.type]}" data-id="${L.report.id}">READ THE BATTLE REPORT</button>` : ''}</div></div>`;
+    <div class="mc-leadb">${where(L) ? `<button class="mc-alt" ${where(L)}>SHOW ON MAP</button>` : ''}${L.report ? `<button class="mc-alt" data-act="${REPORT_ACT[L.report.type]}" data-id="${L.report.id}">READ THE BATTLE REPORT</button>` : ''}</div></div>`;
 
   const shown = o.all ? card.rows : card.rows.slice(0, card.show);
-  const fold = card.rows.length > shown.length ? `<button class="mc-all" data-act="monthall">${esc(card.count || `ALL ${card.rows.length + (L ? 1 : 0)} ITEMS`)} ▸</button>` : '';
+  const fold = card.rows.length > shown.length ? `<button class="mc-all" data-act="monthall">${esc(card.count || `ALL ${card.rows.length + (L ? 1 : 0)} REPORTS`)} ▸</button>` : '';
   const more = card.foot || fold ? `<div class="mc-more"><span>${esc(card.foot)}</span>${fold}</div>` : '';
   // A letter from the front is read where the rows leave it room; the rest are in the Newsreel.
   const room = o.all ? 0 : L ? (shown.length <= 3 ? 1 : 0) : shown.length <= 3 ? 2 : shown.length <= 5 ? 1 : 0;
@@ -77,14 +79,15 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const it = (sign: string, body: string, cls = ''): string => `<div class="mc-it${cls}">${sign}${body}</div>`;
   // Each box holds three lines beside a lead story and five on a quieter card; what is over is counted, not lost.
   const lines = L ? 3 : 5;
-  const goods = (h: MonthCard['home'][number]): string => it(`<span class="sg">${monthSign(h.sign, 15, h.next ? DIM : BRASS)}</span>`, `<b>${h.count}</b><span>${esc(h.text)}</span>${h.place ? `<small>· ${esc(h.place)}</small>` : ''}`, h.next ? ' gd next' : ' gd');
+  // (What was delivered, and where: a city that finds no room beside it goes whole to a second line, in grey.)
+  const goods = (h: MonthCard['home'][number]): string => it(`<span class="sg">${monthSign(h.sign, 15, h.next ? DIM : BRASS)}</span>`, `<b>${h.count}</b><span class="gt">${esc(h.text)}${h.place ? ` <small>${esc(h.place)}</small>` : ''}</span>`, h.next ? ' gd next' : ' gd');
   // (What is ready first, then research, then what next month brings, then the other news of home. Deliveries
   // that find no line are counted in one; news that finds none is in the Newsreel.)
   const homeAll: { html: string; ready: number; next: number }[] = [
     ...card.home.filter((h) => !h.next).map((h) => ({ html: goods(h), ready: h.count, next: 0 })),
     ...card.research.map((t) => ({ html: it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`), ready: 0, next: 0 })),
     ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
-    ...card.also.map((t) => ({ html: it('<span class="sg"></span>', `<span title="${esc(t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
+    ...card.also.map((t, i) => ({ html: it('<span class="sg"></span>', `<span title="${esc(card.alsoFull[i] ?? t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
   ];
   let homeOver = 0;
   let home = homeAll.slice(0, lines).map((x) => x.html);
@@ -98,7 +101,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   // (A desk's first line carries its button, and the first lines of the desks come first.)
   const firsts = card.staff.filter((s, i) => card.staff.findIndex((x) => x.desk === s.desk) === i);
   const staffAll = [...firsts, ...card.staff.filter((s) => !firsts.includes(s))];
-  const staff = staffAll.slice(0, lines).map((s) => it(`<span class="sg">${monthSign(s.sign, s.sign === 'star' ? 13 : 15, BRASS)}</span>`, `<span title="${esc(s.text)}">${esc(s.text)}</span>${!firsts.includes(s) ? '' : s.mayTake ? `<button class="tb" data-act="desk" data-desk="${esc(s.desk)}" data-on="0" title="What your staff did this month stands. From next month this desk is yours again.">TAKE THE DESK BACK</button>` : '<small class="mc-took">yours again from next month</small>'}`, ' st'));
+  const staff = staffAll.slice(0, lines).map((s) => it(`<span class="sg">${monthSign(s.sign, s.sign === 'star' ? 13 : 15, BRASS)}</span>`, `<span title="${esc(s.text)}">${esc(s.short)}</span>${!firsts.includes(s) ? '' : s.mayTake ? `<button class="tb" data-act="desk" data-desk="${esc(s.desk)}" data-on="0" title="What your staff did this month stands. From next month this desk is yours again.">TAKE THE DESK BACK</button>` : '<small class="mc-took">yours again from next month</small>'}`, ' st'));
   const els = card.elsewhere.slice(0, lines).map((e) => it(fl(e.nat, 26), `<span title="${esc(e.text)}">${esc(e.text)}</span>`, ' el'));
   const over = homeOver + Math.max(0, staffAll.length - lines) + Math.max(0, card.elsewhere.length - lines);
   const none = (t: string): string => `<div class="mc-it none"><span>${t}</span></div>`;

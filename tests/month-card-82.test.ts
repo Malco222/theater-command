@@ -19,7 +19,7 @@
 // 6. At home, what his staff did, and elsewhere in the war.
 import { describe, expect, it } from 'vitest';
 import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
-import { monthCard, monthMark, monthOrders, type CardRow, type MonthCard } from '../src/campaign/monthcard';
+import { markFor, monthCard, monthMark, monthOrders, openingMark, staffShort, wholeWords, type CardRow, type MonthCard } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { townName, townSize } from '../src/campaign/towns';
@@ -298,6 +298,8 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ kind: 'FLEET ACTION', tag: 'WON', place: 'the Baltic Sea' });
     expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual(['SUNK Western Approaches']);
+    // The score at sea counts what the rows say: three sunk in the Baltic, and the submarine the escorts sank.
+    expect(card.boxes.find((b) => b.key === 'sea')).toMatchObject({ figure: '3 – 1', sub: '3 sunk · 1 lost' });
   });
 
   it('a fleet meeting a fleet is never below a single ship lost alone, and a fleet action lost leads a smaller one won', () => {
@@ -357,7 +359,8 @@ describe('the red bands (classes 1 and 2)', () => {
     expect(card.bands[1]).toMatchObject({ title: 'Coast watch', nats: [ME] });
     // What found no band stays red and sits above the first battle row.
     expect(card.rows[0]).toMatchObject({ cls: 2, tone: 'bad', kind: 'WAR', picture: null });
-    expect(card.rows[0].line).toMatch(/^Poland calls on Lithuania/);
+    // (Of a line that says two things, the sentence that names war on his own country is the news.)
+    expect(card.rows[0].line).toBe('Lithuania declares war on Germany.');
     expect(card.lead!.cls).toBe(3);
     expect(card.quiet).toBe('');
   });
@@ -505,6 +508,110 @@ describe('one story is told once, and in the room the card has', () => {
     const rows = order(monthCard(g, mark, ME));
     for (const r of rows.slice(1)) expect(r.line.length, r.line).toBeLessThanOrEqual(r.figures.length > 1 ? 44 : 54);
     expect(rows.find((r) => r.region === a.id)!.line).toMatch(/…$/);
+  });
+});
+
+describe('the art director\'s mends and the 3D builder\'s three points', () => {
+  it('for him the news is the declaration on him: that sentence is the band, under the flags of those who declare', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'war', text: 'Germany invades Poland. Britain and France declare war on Germany.', nat: ME });
+    const card = monthCard(g, mark, ME);
+    expect(card.bands).toHaveLength(1);
+    expect(card.bands[0]).toMatchObject({ word: 'WAR', head: 'Britain and France declare war on Germany', nats: ['UK', 'FRA'] });
+    // A band has a place to show: the capital of the first country it names that is not his own.
+    expect(card.bands[0].region).toBe(g.nations.UK.capital);
+    // To Poland the same line is the invasion, and the place is Berlin.
+    const pol = monthCard(g, mark, 'POL');
+    expect(pol.bands[0]).toMatchObject({ head: 'Germany invades Poland', region: g.nations.GER.capital });
+  });
+
+  it('several countries that declare war on him in a month do so in one band; his own declaration comes after it', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'war', text: 'Germany declares war on Denmark.', nat: ME });
+    news(g, { kind: 'war', text: 'The United Kingdom declares war on Germany.', nat: 'UK' });
+    news(g, { kind: 'war', text: 'France declares war on Germany.', nat: 'FRA' });
+    const card = monthCard(g, mark, ME);
+    expect(card.bands.map((b) => b.head)).toEqual(['The United Kingdom and France declare war on Germany', 'Germany declares war on Denmark']);
+    expect(card.bands[0].nats).toEqual(['UK', 'FRA']);
+    expect(card.bands[1].region).toBe(g.nations.DEN.capital);
+    expect(card.rows.filter((r) => r.cls === 2)).toHaveLength(0);
+  });
+
+  it('a country that falls is shown at its capital', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'fall', text: 'Poland capitulates to Germany.', nat: 'POL' });
+    expect(monthCard(g, mark, ME).bands[0]).toMatchObject({ word: 'FALLEN', region: g.nations.POL.capital });
+  });
+
+  it('what the staff did is said as the desk and the deed, in about forty letters and never a cut name', () => {
+    const said: [string, string, string][] = [
+      ['research', 'Your advisers put 2 research teams to work on Research institutes (6 months) and Ocean-going submarines (5 months).', 'Research: 2 teams set to work'],
+      ['research', 'Your advisers put a research team to work on Medium bombers (5 months).', 'Research: 1 team on Medium bombers'],
+      ['research', 'Your advisers put a research team to work on Long-range escort fighters and drop tanks (9 months).', 'Research: 1 team set to work'],
+      ['build', 'Your staff ordered I Commonwealth Corps at London.', 'Build: I Commonwealth Corps, London'],
+      ['build', 'Your staff ordered anti-aircraft guns at Midlands and the cooperative farms at Leeds.', 'Build: anti-aircraft guns and 1 more'],
+      ['build', 'Your staff ordered anti-aircraft guns at Ruhr.', 'Build: anti-aircraft guns, Ruhr'],
+      ['air', 'Your air staff flew a raid: the factories at Hamburg. It cost 4 aircraft.', 'Air: a raid on Hamburg\'s factories'],
+      ['air', 'Your air staff flew a raid: the ships in harbour at Danzig Corridor. It cost 2 aircraft.', 'Air: a raid on Danzig Corridor\'s harbour'],
+      ['air', 'Your air staff flew 3 raids: the factories at Lyon, the factories at Polish Silesia and the factories at Krakow. It cost 15 aircraft.', 'Air: 3 raids, 15 aircraft lost'],
+      ['navy', 'Your admirals shelled Danzig Corridor.', 'Navy: shelled Danzig Corridor'],
+      ['navy', 'Your admirals sent the Battle Fleet into the Baltic Sea and shelled Danzig Corridor.', 'Navy: the Battle Fleet to the Baltic Sea'],
+      ['navy', 'Your admirals brought the Battle Fleet into harbour.', 'Navy: brought the Battle Fleet into harbour'],
+      ['diplomacy', 'Your envoys courted Turkey, which has moved a step towards us.', 'Diplomacy: Turkey moves a step towards us'],
+      ['diplomacy', 'Your envoys began courting Argentina.', 'Diplomacy: began courting Argentina'],
+      ['spies', 'Your secret service recruited agent Chalice and sent Bellows to Berlin to read the books.', 'Spies: recruited agent Chalice and 1 more'],
+    ];
+    for (const [desk, text, short] of said) {
+      expect(staffShort(desk, text), text).toBe(short);
+      expect(staffShort(desk, text).length).toBeLessThanOrEqual(44);
+    }
+    // And on the card the short form stands beside the whole line.
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'info', text: said[3][1], nat: ME, desk: 'build' } as Parameters<typeof news>[1]);
+    expect(monthCard(g, mark, ME).staff[0]).toMatchObject({ short: said[3][2], text: said[3][1], desk: 'build' });
+  });
+
+  it('a line in a foot box keeps to whole clauses or whole words, and never half a name', () => {
+    // (The room is a count of letters to a line, and two lines: the boxes are set in a typewriter face.)
+    expect(wholeWords('Engineers finish the bridge at Lodz.', 30)).toBe('Engineers finish the bridge at Lodz.');
+    // The whole sentence where it wraps into two lines.
+    expect(wholeWords('German troops close round Paris: the capital of France is under siege.', 36)).toBe('German troops close round Paris: the capital of France is under siege.');
+    // Else whole clauses.
+    expect(wholeWords('German troops close round Paris: the capital of France is under siege, with 3 corps inside.', 36)).toBe('German troops close round Paris: the capital of France is under siege.');
+    // Else whole words: not a cut word, not a word that leads nowhere, not the first half of a name.
+    expect(wholeWords('The coast watch reports that the invasion barges are gathering in the harbours of Danzig Corridor', 44)).toBe('The coast watch reports that the invasion barges are gathering in the harbours…');
+    expect(wholeWords('The staff has studied the lost battle and believes the attack went in against Polish Silesia too early', 40)).toBe('The staff has studied the lost battle.');
+    expect(wholeWords('The staff believes the attack went in against Polish Silesia too early', 30)).toBe('The staff believes the attack went…');
+    const wraps = (text: string, per: number): number => { let n = 1, at = 0; for (const w of text.split(' ')) { if (at && at + 1 + w.length > per) { n++; at = w.length; } else at += (at ? 1 : 0) + w.length; } return n; };
+    for (const per of [20, 26, 30, 36, 40, 44]) {
+      const cut = wholeWords('Your envoys report that the government of the United Kingdom has offered Portugal and the Soviet Union a trade agreement on wolfram', per);
+      expect(wraps(cut, per), `${per}: ${cut}`).toBeLessThanOrEqual(2);
+      expect(cut, `${per}`).not.toMatch(/\b(United|Soviet|the|of|and|a|has|that)[….]$/);
+    }
+    // On the card: other news of home is cut the same way, and the whole line is kept for a hover.
+    const g = game();
+    const mark = monthMark(g, ME);
+    const long = 'The staff has studied the lost battle at Polish Silesia and finds that the attack went in too early. It asks for a month to rest the corps.';
+    news(g, { kind: 'info', text: long, nat: ME });
+    const card = monthCard(g, mark, ME);
+    expect(card.also).toEqual(['The staff has studied the lost battle at Polish Silesia.']);
+    expect(card.alsoFull).toEqual([long]);
+  });
+
+  it('a sea row has its sea, so the pin can show it on the chart', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    const baltic = g.seas.findIndex((z) => /Baltic/.test(z.name));
+    sea(g, { attNat: ME, defNat: 'POL', zone: baltic, zoneName: g.seas[baltic].name, att: [fleet(ME, 'Baltic Station', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4 }, { dd: 2 })], won: true });
+    news(g, { kind: 'battle', arm: 'sea', text: `The escorts of the Western Approaches Command sink 1 German submarine in the ${g.seas[0].name.replace(/^the /i, '')}.`, nat: 'UK', won: 'UK', lost: ME });
+    const card = monthCard(g, mark, ME);
+    expect(card.lead).toMatchObject({ arm: 'sea', sea: baltic });
+    expect(card.lead!.region).toBeUndefined();
+    expect(card.rows[0]).toMatchObject({ arm: 'sea', sea: 0 });
   });
 });
 
@@ -690,5 +797,35 @@ describe('a year of war with nobody playing, a card a month for four countries',
     expect(leads).toBeGreaterThan(5);
     expect(bands).toBeGreaterThan(0);
     expect(quiet).toBeGreaterThan(0);
+  });
+});
+
+describe('the first month of a war (the card for September 1939)', () => {
+  const fresh = (human: string): Game => { const g = startOpen(createGame(17, human)); g.human = human; return g; };
+  it('carries the declarations that opened the war, though they were made before his first month', () => {
+    const g = fresh('GER');
+    expect(monthCard(g, monthMark(g)).bands).toEqual([]);
+    const card = monthCard(g, markFor(g));
+    expect(card.bands).toHaveLength(1);
+    expect(card.bands[0]).toMatchObject({ word: 'WAR', nats: ['UK', 'FRA'], head: 'Britain and France declare war on Germany', region: g.nations.UK.capital });
+  });
+  it('for another country the headline is the invasion, under the flag of the country that made it, shown at the country invaded', () => {
+    for (const me of ['UK', 'FRA', 'USA']) {
+      const g = fresh(me);
+      const card = monthCard(g, markFor(g));
+      expect(card.bands[0], me).toMatchObject({ word: 'WAR', nats: ['GER'], head: 'Germany invades Poland', region: g.nations.POL.capital });
+    }
+    const g = fresh('POL');
+    expect(monthCard(g, markFor(g)).bands[0]).toMatchObject({ nats: ['GER'], head: 'Germany invades Poland', region: g.nations.GER.capital });
+  });
+  it('from the second month the mark is the month as it opens', () => {
+    const g = fresh('GER');
+    g.turn = 2;
+    expect(markFor(g).h).toBe(g.headlines.length);
+    expect(markFor(g).warring).toContain('GER');
+    expect(openingMark(g)).toMatchObject({ h: 0, r: 0, s: 0, a: 0, shore: 0, warring: [] });
+  });
+  it('a line that names two places with "between" ends before the word when it has room for one', () => {
+    expect(wholeWords('Polish troops blow the bridges over the Vistula between Danzig Corridor and West Prussia as they fall back', 36)).toBe('Polish troops blow the bridges over the Vistula…');
   });
 });

@@ -1941,7 +1941,7 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .tip .otip b { font-family: inherit; font-size: 12.5px; letter-spacing: 0; font-weight: 600; }
 
 /* ---- The month's report on one card (Version 82): the art director's mock-up, class for class ---- */
-.card.month { width: min(1300px, 100%); background: rgba(47, 36, 27, .975); border: 1px solid #6b5a36; border-radius: 6px; padding: 15px 24px 10px; box-shadow: 0 18px 60px rgba(0, 0, 0, .65); }
+.card.month { width: min(1300px, 100%); background: rgba(47, 36, 27, .975); border: 1px solid #6b5a36; border-radius: 6px; padding: 12px 24px 8px; box-shadow: 0 18px 60px rgba(0, 0, 0, .65); }
 .mc { --mc-ink: #ede5d5; --mc-soft: #d9cfba; --mc-dim: #a89e8e; --mc-brass: #d8aa62; --mc-red: #d0563d; --mc-green: #93b56c; --mc-amber: #e0a13c; --mc-panel: #3e3a36; --mc-serif: Georgia, 'DejaVu Serif', serif;
   font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; color: var(--mc-ink); font-size: 14px; line-height: 1.25; }
 .mc .t-good { --c: var(--mc-green); } .mc .t-bad { --c: var(--mc-red); } .mc .t-warn { --c: var(--mc-amber); } .mc .t-plain { --c: #6b6252; }
@@ -1987,19 +1987,20 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-facts b { display: block; font: 700 22px var(--mc-serif); color: var(--mc-ink); white-space: nowrap; }
 .mc-leadb { display: flex; gap: 10px; margin-top: 9px; flex-wrap: wrap; }
 .mc-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 7px; }
-.mc-row { position: relative; display: grid; grid-template-columns: 92px 34px minmax(0, 1fr) auto 38px; align-items: center; column-gap: 11px; background: var(--mc-panel); border-left: 6px solid var(--c); border-radius: 4px; padding: 5px 10px 5px 6px; height: 71px; }
+.mc-row { position: relative; display: grid; grid-template-columns: 92px 34px minmax(0, 1fr) auto 38px; align-items: center; column-gap: 9px; background: var(--mc-panel); border-left: 6px solid var(--c); border-radius: 4px; padding: 5px 10px 5px 6px; height: 71px; }
 .mc-row.red { background: linear-gradient(90deg, #6a281d, #4a2018); }
 .mc-row.opens:hover { background: #47423d; }
 .mc-row .tpic { width: 92px; height: 59px; border: 1px solid #1c1712; }
 .mc-nopic { width: 92px; height: 59px; display: flex; align-items: center; justify-content: center; }
 .mc-disc { width: 34px; height: 34px; border-radius: 50%; background: #2a2019; border: 1.5px solid var(--mc-brass); display: flex; align-items: center; justify-content: center; }
 .mc-rtx { min-width: 0; }
-.mc-rtx .r1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.mc-rtx .pl { font: 700 20px var(--mc-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* (The two lines of a row are set tight, so the row centres its words and not their leading.) */
+.mc-rtx .r1 { display: flex; align-items: center; gap: 10px; min-width: 0; height: 24px; }
+.mc-rtx .pl { font: 700 20px/24px var(--mc-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mc-rtx .pl.long { font-size: 17px; }
 .mc-rtx .vs { display: flex; align-items: center; gap: 6px; margin-left: 2px; flex: none; }
 .mc-chip { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #1b1610; background: var(--c); padding: 3px 8px; border-radius: 2px; flex: none; }
-.mc-rtx .r2 { font-size: 13.5px; color: var(--mc-soft); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-rtx .r2 { font-size: 13.5px; line-height: 17px; color: var(--mc-soft); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mc-nums { display: flex; gap: 14px; text-align: right; }
 .mc-nums span { font-size: 12px; color: var(--mc-dim); line-height: 1.15; white-space: nowrap; }
 .mc-nums b { display: block; font: 700 19px var(--mc-serif); color: var(--mc-ink); }
@@ -2009,15 +2010,17 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-more span { min-width: 0; }
 .mc-all { border: 0; background: none; padding: 0; color: var(--mc-brass); font-weight: 700 !important; letter-spacing: .08em; white-space: nowrap; margin-left: auto; }
 .mc-quiet { font: 700 22px/1.2 var(--mc-serif); color: var(--mc-ink); margin: 12px 0 6px; }
-.mc-low { display: grid; grid-template-columns: .94fr 1.32fr 1.04fr; gap: 14px; margin-top: 10px; }
+/* (The staff's box is the widest: its line stands whole beside its button.) */
+.mc-low { display: grid; grid-template-columns: .86fr 1.52fr .98fr; gap: 14px; margin-top: 10px; }
 .mc-box { background: rgba(62, 58, 54, .6); border: 1px solid #57503f; border-radius: 4px; padding: 8px 12px 8px; min-width: 0; }
 .mc-it { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-top: 5px; color: #e4dccb; min-width: 0; }
-.mc-it > span:not(.sg):not(.mc-flag) { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* A foot line may run to two lines. Its words are cut to that room where the card is made, at a whole word, so nothing is clipped here. */
+.mc-it > span:not(.sg):not(.mc-flag) { min-width: 0; line-height: 1.3; overflow-wrap: break-word; }
 .mc-it b { font: 700 19px var(--mc-serif); color: var(--mc-brass); min-width: 22px; text-align: right; }
 .mc-it small { color: var(--mc-dim); font-size: 12.5px; white-space: nowrap; }
 .mc-it .sg { width: 30px; display: flex; justify-content: center; flex: none; }
 .mc-it.next, .mc-it.next b, .mc-it.none { color: var(--mc-dim); }
-.mc-it .tb { margin-left: auto; border: 1px solid #7a7468; background: #2a2019; color: var(--mc-ink); letter-spacing: .1em; padding: 6px 9px; border-radius: 3px; white-space: nowrap; flex: none; }
+.mc-it .tb { margin-left: auto; border: 1px solid #7a7468; background: #2a2019; color: var(--mc-ink); letter-spacing: .08em; padding: 6px 8px; border-radius: 3px; white-space: nowrap; flex: none; }
 .mc-it.el { align-items: flex-start; line-height: 1.3; }
 .mc-it.el .mc-flag { margin-top: 1px; }
 .mc-letters { margin-top: 12px; }
@@ -2053,8 +2056,11 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 }
 .mc-it .mc-took { margin-left: auto; font-style: italic; }
 .mc-it.over { color: var(--mc-dim); font-size: 13px; padding-left: 39px; }
-.mc-it.gd > span:not(.sg) { display: block; flex: none; white-space: nowrap; }
-.mc-it.gd small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* What was delivered and where: the city keeps whole, beside the unit where there is room and on a line of its own in grey where there is not. */
+.mc-it.gd { align-items: baseline; }
+.mc-it.gd .sg { align-self: center; }
+.mc-it.gd .gt small { display: inline-block; margin-left: 5px; }
+.mc-it.st { align-items: center; }
 .mc-rt .mc-letters blockquote p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* A second band: everything under it gives up a little room, so the month is still one look. */
 .mc.two .mc-banner { padding-top: 6px; padding-bottom: 6px; margin-top: 10px; }
