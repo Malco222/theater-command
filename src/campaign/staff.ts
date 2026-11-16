@@ -1496,8 +1496,15 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
  * 76): an enemy whose home is on its own side of the ocean and whom its home army cannot reach by land. The force
  * is brought there by rail and is not shipped across the ocean while he stands. Null where it has no such enemy
  * within a landing's range of its harbours, and for the player's country.
+ *
+ * Every staff is asked this as it masses its army, and a staff's choice of an enemy across the sea is kept for a
+ * year. So the question is put only to a staff that keeps a door and has such an enemy alive: nobody else is made
+ * to choose here, a part of the month before its crossing is planned. (As first built the question chose for
+ * Germany as for anyone, and one war in 24 with nobody playing moved: a German landing in Norway, seed 26.)
  */
 export function doorQuay(g: Game, nat: string): Region | null {
+  const n = g.nations[nat];
+  if (!n || !keepsDoor(g, nat) || !n.atWar.some((e) => g.nations[e]?.alive && neighbourAcrossTheWater(g, nat, e))) return null;
   const sea = seaFoe(g, nat);
   if (!sea?.second || !neighbourAcrossTheWater(g, nat, sea.foe)) return null;
   // (The force its forecast asks for and no more: once its men are ashore and not short, the quay is an ordinary

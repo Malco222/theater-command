@@ -90,6 +90,28 @@ describe('the rule is written for America (open.json, descent.door)', () => {
       expect(neighbourAcrossTheWater(g, nat, 'COL'), nat).toBe(false);
     }
   });
+
+  it('and makes no other staff choose an enemy across the sea: asking for the quay writes nothing down', () => {
+    // Every staff is asked for the quay as it masses its army, and a staff keeps its choice of an enemy across the
+    // sea for a year. As first built the question made that choice for anyone, a part of the month early: one war
+    // in 24 with nobody playing moved (seed 26, a German landing in Norway in April 1943).
+    const g = before();
+    // Every front is called quiet for a year, so that a staff asked to choose would choose.
+    for (const n of Object.values(g.nations)) n.lastFight = {};
+    for (const k of Object.keys(g.flags)) if (k.startsWith('war:') || k.startsWith('st:foe')) delete g.flags[k];
+    const state = saveGame(g);
+    let wouldChoose = 0;
+    for (const nat of Object.keys(g.nations)) {
+      const asked = loadGame(state)!, chosen = loadGame(state)!;
+      const was = JSON.stringify(asked.flags);
+      expect(doorQuay(asked, nat), nat).toBeNull();
+      expect(JSON.stringify(asked.flags), nat).toBe(was);
+      seaFoe(chosen, nat);
+      if (JSON.stringify(chosen.flags) !== was) wouldChoose++;
+    }
+    // (The test bites: Germany, Italy and Britain would each have chosen that month.)
+    expect(wouldChoose).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('the start screen says what war with the United States brings (ruling 83d)', () => {
