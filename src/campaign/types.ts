@@ -632,6 +632,8 @@ export interface Headline {
   desk?: string;
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
+  /** For a warning: the country the news is about, where that is not the player's own (display only: a band flies its flag). */
+  about?: string;
   /**
    * Two tags on news of fighting (Version 80; display only, no rule reads them). `arm` is the arm that did the
    * fighting: on land, at sea or from the air. `won` and `lost` are the nation that had the better of it and the one

@@ -783,7 +783,7 @@ describe('a year of war with nobody playing, a card a month for four countries',
           expect(r.place, `${nat} ${card.month}`).not.toBe('');
           expect(r.line, `${nat} ${card.month} ${r.place}`).not.toBe('');
           expect(r.figures.length).toBeLessThanOrEqual(r.report?.type === 'land' ? 2 : 1);
-          if (r.report?.type === 'land') expect(r.figures).toHaveLength(2);
+          if (r.report?.type === 'land') expect(r.figures).toHaveLength(r.figures[0]?.label === 'shut in' ? 1 : 2);
           if (r.cls === 3 || r.cls === 4) expect(['good', 'bad', 'warn', 'plain']).toContain(r.tone);
         }
         expect(card.elsewhere.length).toBeLessThanOrEqual(4);

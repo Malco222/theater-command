@@ -177,8 +177,8 @@ export function headline(g: Game, kind: Headline['kind'], text: string, nat?: st
 export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
-export function warning(g: Game, title: string, text: string, nat?: string, region?: number): void {
-  g.headlines.push({ turn: g.turn, week: g.week, text, kind: 'event', nat, region, warn: title });
+export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
+  g.headlines.push({ turn: g.turn, week: g.week, text, kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
 }
 
 /** Routine news of a computer-run nation's month, kept back for one line when the month closes. */

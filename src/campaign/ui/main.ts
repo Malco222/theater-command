@@ -671,6 +671,8 @@ function drawLabels(): void {
     const lx = spots[r.id].lx + slid[r.id].dx, ly = spots[r.id].ly + slid[r.id].dy;
     // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
+    // (A name with no room is not written, and its worth line with it: the art director's rule of 2026-11-16.)
+    if (slid[r.id].hide) { delete labelBox[r.id]; return `${star}${fort}${high}`; }
     // Where the name and the worth line under it lie, for the marks that give way to them (Version 82).
     labelBox[r.id] = { ...nameBoxes(spots[r.id], slid[r.id].dx, slid[r.id].dy), cap: !!r.cap, size: t.size };
     return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
@@ -700,8 +702,8 @@ let namesCrowded = 0, namesMoved = 0;
  * whole, a map unit clear of the richer name and its line, never further onto a town's mark, an airfield or an
  * army's flag than it lay, and for choice not out of its own province. A name with no room stays where it was.
  */
-function settleNames(spots: NameSpot[], list: TownView[]): { dx: number; dy: number }[] {
-  const out = spots.map(() => ({ dx: 0, dy: 0 }));
+function settleNames(spots: NameSpot[], list: TownView[]): { dx: number; dy: number; hide?: boolean }[] {
+  const out: { dx: number; dy: number; hide?: boolean }[] = spots.map(() => ({ dx: 0, dy: 0 }));
   const tier = (id: number): number => (g.regions[id].cap ? 2 : list[id].size === 'city' ? 1 : 0);
   const order = spots.map((_, id) => id).sort((a, b) => tier(b) - tier(a) || list[b].worth - list[a].worth || a - b);
   const boxes = (id: number, dx = 0, dy = 0): Box[] => { const b = nameBoxes(spots[id], dx, dy); return b.figs ? [b.name, b.figs] : [b.name]; };
@@ -759,8 +761,11 @@ function settleNames(spots: NameSpot[], list: TownView[]): { dx: number; dy: num
         }
         if (cost < Infinity) namesMoved++;
         if (cost < Infinity) break;
-        if (!whole) namesCrowded++;
+        // (No room anywhere: the name is hidden with its worth line, and comes back when the flags in its way move.
+        // It stands in nobody's way while it is hidden. Pointing at the province still names it.)
+        if (!whole) { namesCrowded++; out[id].hide = true; }
       }
+      if (out[id].hide) continue;
     }
     set.push(...best);
     blocks.push(block(best));
