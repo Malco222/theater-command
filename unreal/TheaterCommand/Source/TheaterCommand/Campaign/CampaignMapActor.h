@@ -642,6 +642,12 @@ private:
 	TObjectPtr<UProceduralMeshComponent> CutLampMesh;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> CutLampInk; // a sign, not a light: its own ink, which the night does not touch
+	/** (Ruling 107(f).) The red glow of a burning town by night: a soft light on the ground, the roofs and the air downwind. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> FireGlowMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> FireGlowInk;
+	bool bFireGlowAdds = false; // its light is added to what is there (M_Glow); without that material it is laid over, more weakly
 	TArray<TPair<int32, bool>> CutLamps; // the province, and whether the sign is the hollow one
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> BeamMesh;

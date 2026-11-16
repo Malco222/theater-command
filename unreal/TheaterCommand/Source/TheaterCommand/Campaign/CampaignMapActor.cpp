@@ -125,6 +125,7 @@ ACampaignMapActor::ACampaignMapActor()
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	FlakSmokeMesh = MakeMesh(TEXT("FlakSmoke"), false);
 	BeamMesh = MakeMesh(TEXT("Searchlights"), false);
+	FireGlowMesh = MakeMesh(TEXT("FireGlow"), false);
 	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
 	CutLampMesh = MakeMesh(TEXT("CutLamps"), false);
 	RailLightMesh = MakeMesh(TEXT("RailLight"), false);
@@ -1500,6 +1501,18 @@ void ACampaignMapActor::LoadMaterials()
 	SleeperInk = MakeInk();
 	GunEarthInk = MakeInk(); // (the trodden earth under an army's guns)
 	CutLampInk = MakeInk(); // (the lamp of a cut railway)
+	// (The red glow of a burning town by night is added light: M_Glow. Without that material it is laid over as a
+	// wash, which is weaker and flatter, and the log says so.)
+	if (UMaterialInterface* GlowMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Glow.M_Glow")))
+	{
+		FireGlowInk = UMaterialInstanceDynamic::Create(GlowMaterial, this);
+		bFireGlowAdds = true;
+	}
+	else
+	{
+		FireGlowInk = MakeInk();
+		UE_LOG(LogTheater, Warning, TEXT("The firelight's material is missing (M_Glow: run Tools/build_content.sh); a burning town's glow is laid over as a wash"));
+	}
 	RailLightInk = MakeInk(); // (the lit railway of the army in hand)
 	RailLightInk->SetScalarParameterValue(TEXT("Brightness"), 1.2f);
 	RailTintInk = MakeInk();
@@ -5382,8 +5395,27 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 	}
 }
 
-void ACampaignMapActor::ShowBombed(const TArray<int32>& Pairs)
+void ACampaignMapActor::ShowBombed(const TArray<int32>& FromRules)
 {
+	TArray<int32> Pairs = FromRules;
+	{
+		// (for pictures: "-TheaterBombedAt=Katowice:hard;Krakow" stands a raid's smoke over those places as well)
+		FString Asked;
+		if (Data.IsLoaded() && FParse::Value(FCommandLine::Get(), TEXT("TheaterBombedAt="), Asked, false))
+		{
+			TArray<FString> Names;
+			Asked.ParseIntoArray(Names, TEXT(";"));
+			for (const FString& Each : Names)
+			{
+				FString Name = Each, How;
+				Each.Split(TEXT(":"), &Name, &How);
+				if (const int32* Found = Data.RegionByName.Find(Name.Replace(TEXT("_"), TEXT(" "))))
+				{
+					Pairs.Append({ *Found, How == TEXT("hard") ? 400 : 100 });
+				}
+			}
+		}
+	}
 	if (Pairs == ShownBombed)
 	{
 		return;
@@ -11543,6 +11575,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		const FLinearColor RootInk(FColor(24, 20, 18)), MidInk(FColor(52, 46, 42)), TopInk(FColor(96, 88, 80)), FireInk(FColor(204, 88, 36));
 		const float Moon = GetMoonlight();
 		const FVector Skyward(0.0, 0.0, 1.0);
+		// (the towns that burn, for the glow of their fires: one a place, however many columns stand over it)
+		struct FBurningTown
+		{
+			FVector FireAt = FVector::ZeroVector; // the root of its first column
+			float Risen = 0.0f; // how far its light has come up, or died away
+			int32 Columns = 0;
+			int32 Seed = 0;
+		};
+		TMap<int32, FBurningTown> BurningTowns;
 		// (The art director's round 34: the head of a column hid the army standing behind it. Flags are things of the
 		// table and smoke is drawn over whatever is behind it, so a flag cannot be laid over the smoke; the smoke is
 		// thinned instead wherever it comes between the eye and a standard.)
@@ -11571,6 +11612,18 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			if (Smoke.Ends >= 0.0)
 			{
 				Strength *= 1.0f - static_cast<float>(FMath::SmoothStep(0.0, 2.0, Now - Smoke.Ends));
+			}
+			{
+				// (its fire's light comes up over about two seconds as the bombs land, and dies with the column)
+				FBurningTown& Burning = BurningTowns.FindOrAdd(Smoke.Region);
+				const float Up2 = static_cast<float>(FMath::SmoothStep(0.0, 2.0, Now - Smoke.Began));
+				Burning.Risen = FMath::Max(Burning.Risen, Smoke.Ends >= 0.0 ? Up2 * (1.0f - static_cast<float>(FMath::SmoothStep(0.0, 2.0, Now - Smoke.Ends))) : Up2);
+				Burning.Columns += Smoke.Ends < 0.0 ? 1 : 0;
+				if (Smoke.bFirst || Burning.FireAt.IsZero())
+				{
+					Burning.FireAt = Smoke.Root;
+					Burning.Seed = Smoke.Seed;
+				}
 			}
 			const bool bFar = CameraDistance > 9000.0f;
 			if (Strength <= 0.01f || (bFar && !Smoke.bFirst) || FVector::DistSquared2D(Smoke.Root, CameraFocus) > FMath::Square(CameraDistance * 1.6 + 2500.0))
@@ -11609,9 +11662,12 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// (by night the fire lights its lowest third)
 				// (the puff's own colour takes the hour in DrawPuff; the fire's share is given so that it comes through whole)
 				{
-					const float Fired = 0.6f * Moon * (1.0f - static_cast<float>(FMath::SmoothStep(0.0, 0.33, Age)));
-					const FLinearColor Glow = FireInk * 0.55f;
-					Ink = FMath::Lerp(Ink, FLinearColor(Glow.R / FMath::Max(SmokeHour.R, 0.05f), Glow.G / FMath::Max(SmokeHour.G, 0.05f), Glow.B / FMath::Max(SmokeHour.B, 0.05f)), Fired);
+					// (The burning town brief: the root goes to about (178,63,33), halfway up it is a dull red-brown, and
+					// the head stays as it was: the light does not reach it.)
+					// (It is a light, and DrawPuff leaves a light its own colour: it is not brightened again for the hour.
+					// Brightened twice, the lit root read as one great flame.)
+					const float Fired = Moon * (1.0f - static_cast<float>(FMath::SmoothStep(0.0, 0.42, Age)));
+					Ink = FMath::Lerp(Ink, FLinearColor(FColor(178, 63, 33)), Fired);
 				}
 				// (round 34: the head about two fifths thick where it was three quarters; from the top it stays a mark)
 				const float Thick = Age < 0.35 ? FMath::Lerp(1.0f, 0.7f, static_cast<float>(Age / 0.35))
@@ -11639,6 +11695,216 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			if (!bFar && CameraDistance < 6500.0f)
 			{
 				Draw(Smoke.Root + Skyward * (0.015 * Tall), Tall / 24.0 * (1.0 + 0.2 * FMath::Sin(Now * 9.0 + Smoke.Seed)), FireInk, 0.85f * Strength);
+			}
+		}
+
+		// THE RED GLOW OF A BURNING TOWN BY NIGHT (ruling 107(f); the art director's brief of 16 November 2026).
+		// By night a bombed town had its flames and its black column, and nothing was lit by them. The glow is the
+		// fire's own light on three things: the ground round the town, an uneven pool of three lobes that fades to
+		// nothing with no edge; the town itself, its roofs and walls, strongest beside the fire; and the air on the
+		// downwind side, a low red haze. (The smoke's root is lit from below where the column is drawn.) It is a
+		// soft light laid over what is there, orange at the heart and red at the rim, and nothing under it goes
+		// white. It shows by night only, and at half strength at dusk; wherever a raid's smoke stands; full over a
+		// city hit hard, two thirds as wide and six tenths as strong over a plain hit. It comes up over two seconds
+		// as the bombs land and it breathes slowly, never faster than once a second. It lights no flag and no
+		// army's piece: the town's light and the haze are thinned to nothing where a piece stands before them. The
+		// smoke, the lit railway and a cut's lamp are drawn over it. It never covers a province, and it is never a
+		// disc: if the pool's edge can be traced, it is wrong.
+		if (FireGlowMesh && FireGlowInk)
+		{
+			FCampaignMeshBuffers GlowFire;
+			const float GlowNight = FMath::Clamp(Moon, 0.0f, 1.0f) * (1.0f - GetPaper());
+			const APlayerController* GlowWatcher = World->GetFirstPlayerController();
+			const FLinearColor GlowHeart(FColor(255, 108, 38)), GlowRed(FColor(170, 34, 14));
+			auto GlowInked = [](const FLinearColor& Colour, float Alpha)
+			{
+				FLinearColor Out = Colour;
+				Out.A = FMath::Clamp(Alpha, 0.0f, 1.0f);
+				return Out.ToFColor(false);
+			};
+			const FVector WindWay = Wind.GetSafeNormal(), WindAcross(-WindWay.Y, WindWay.X, 0.0);
+			// (from where he plays the pool and the haze are drawn about half as large again, and a little weaker)
+			const double GlowHigh = FMath::SmoothStep(2600.0, 4600.0, static_cast<double>(CameraDistance));
+			const int32 Spokes = 16;
+			for (const TPair<int32, FBurningTown>& Lit : BurningTowns)
+			{
+				const FBurningTown& Burning = Lit.Value;
+				if (GlowNight <= 0.02f || Burning.Risen <= 0.01f || !Data.Regions.IsValidIndex(Lit.Key)
+					|| FVector::DistSquared2D(Burning.FireAt, CameraFocus) > FMath::Square(CameraDistance * 1.6 + 2500.0))
+				{
+					continue;
+				}
+				const FCampaignRegion& Province = Data.Regions[Lit.Key];
+				const bool bHard = Burning.Columns >= 3;
+				// (it breathes: about an eighth up and down, over three to five seconds, unevenly)
+				const double Breath = 1.0 + 0.08 * FMath::Sin(Now * 1.53 + Burning.Seed) + 0.045 * FMath::Sin(Now * 2.03 + Burning.Seed * 1.7);
+				const float Glowing = GlowNight * Burning.Risen * static_cast<float>(Breath) * (bHard ? 1.0f : 0.6f);
+				const double Houses = TownRadius(Lit.Key) * UnitScale;
+				const FVector TownAt = SurfacePoint(Province.Center.X, Province.Center.Y, 0.0);
+				// The pool reaches half a town's width beyond the houses; it stays under about a third of its
+				// province's width; and from the top it is never under about forty pixels across.
+				double PoolOut = 2.0 * Houses * (bHard ? 1.0 : 0.67) * FMath::Lerp(1.0, 1.45, GlowHigh);
+				if (Province.Area > 1.0)
+				{
+					PoolOut = FMath::Min(PoolOut, FMath::Max(0.15 * FMath::Sqrt(Province.Area) * UnitScale, 1.1 * Houses));
+				}
+				PoolOut = FMath::Max(PoolOut, 20.0 * 0.00037 * CameraDistance);
+				const float PoolThick = Glowing * static_cast<float>(FMath::Lerp(1.0, 0.72, GlowHigh));
+				// (the armies' pieces that stand near, as boxes on the screen: the town's light and the haze are kept off them)
+				TArray<FBox2D, TInlineAllocator<8>> Spared;
+				if (GlowWatcher)
+				{
+					for (const TObjectPtr<AArmyPiece>& Piece : Pieces)
+					{
+						if (!Piece || Piece->IsHidden() || FVector::DistSquared2D(Piece->GetActorLocation(), TownAt) > FMath::Square(PoolOut + 2.0 * Houses + 30.0 * UnitScale))
+						{
+							continue;
+						}
+						FVector BoundsAt, BoundsOut;
+						Piece->GetActorBounds(false, BoundsAt, BoundsOut);
+						FBox2D Shape(ForceInit);
+						bool bAll = true;
+						for (int32 Corner = 0; Corner < 8 && bAll; ++Corner)
+						{
+							FVector2D OnScreen;
+							bAll = GlowWatcher->ProjectWorldLocationToScreen(BoundsAt + BoundsOut * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), OnScreen, false);
+							Shape += OnScreen;
+						}
+						if (bAll)
+						{
+							Spared.Add(Shape);
+						}
+					}
+				}
+				auto KeptOff = [&](const FVector& Point) -> float
+				{
+					FVector2D OnScreen;
+					if (Spared.Num() == 0 || !GlowWatcher->ProjectWorldLocationToScreen(Point, OnScreen, false))
+					{
+						return 1.0f;
+					}
+					float Whole = 1.0f;
+					for (const FBox2D& Shape : Spared)
+					{
+						const double Outside = FMath::Max(FMath::Max(Shape.Min.X - OnScreen.X, OnScreen.X - Shape.Max.X), FMath::Max(Shape.Min.Y - OnScreen.Y, OnScreen.Y - Shape.Max.Y));
+						Whole = FMath::Min(Whole, static_cast<float>(FMath::SmoothStep(2.0, 28.0, Outside)));
+					}
+					return Whole;
+				};
+				// A soft patch of light: thick at its hub, thinning across two rings to nothing at an uneven edge;
+				// orange at the hub and red at the edge. On the ground it follows the ground.
+				auto GlowFan = [&](const FVector& Hub, const TArray<FVector>& Brim, float Thick, bool bOnGround, bool bSpare)
+				{
+					static const double RingOut[3] = { 0.34, 0.68, 1.0 };
+					static const float RingThick[3] = { 0.82f, 0.36f, 0.0f }, RingRed[3] = { 0.3f, 0.7f, 1.0f };
+					auto Laid = [&](const FVector& Point)
+					{
+						if (!bOnGround)
+						{
+							return Point;
+						}
+						const FVector2D OnMap = WorldToMap(Point);
+						return SurfacePoint(OnMap.X, OnMap.Y, 0.3);
+					};
+					const int32 Around = Brim.Num();
+					const FVector HubAt = Laid(Hub);
+					const int32 Start = GlowFire.AddVertex(HubAt, FVector::UpVector, GlowInked(GlowHeart, Thick * (bSpare ? KeptOff(HubAt) : 1.0f)));
+					for (int32 Band = 0; Band < 3; ++Band)
+					{
+						for (int32 Spoke = 0; Spoke < Around; ++Spoke)
+						{
+							const FVector Point = Laid(FMath::Lerp(Hub, Brim[Spoke], RingOut[Band]));
+							GlowFire.AddVertex(Point, FVector::UpVector, GlowInked(FMath::Lerp(GlowHeart, GlowRed, RingRed[Band]), Thick * RingThick[Band] * (bSpare ? KeptOff(Point) : 1.0f)));
+						}
+					}
+					for (int32 Spoke = 0; Spoke < Around; ++Spoke)
+					{
+						const int32 Near0 = Start + 1 + Spoke, Next0 = Start + 1 + (Spoke + 1) % Around;
+						GlowFire.Triangles.Append({ Start, Near0, Next0, Start, Next0, Near0 });
+						for (int32 Band = 0; Band + 1 < 3; ++Band)
+						{
+							const int32 A0 = Near0 + Band * Around, B0 = Next0 + Band * Around, A1 = A0 + Around, B1 = B0 + Around;
+							GlowFire.Triangles.Append({ A0, A1, B1, A0, B1, A1, A0, B1, B0, A0, B0, B1 });
+						}
+					}
+				};
+				auto Uneven = [&Burning](double Angle, double Turn, double By)
+				{
+					return 1.0 + By * (0.17 * FMath::Sin(2.0 * Angle + Turn + Burning.Seed) + 0.1 * FMath::Sin(3.0 * Angle + 1.7 * Turn + Burning.Seed * 0.37) + 0.06 * FMath::Sin(5.0 * Angle + Burning.Seed * 0.11));
+				};
+				const FVector FireFoot(Burning.FireAt.X, Burning.FireAt.Y, TownAt.Z);
+				// 1. The ground: three lobes of different sizes, the largest under the fire, one leaning downwind the
+				// way the smoke leans, one smaller to the other side.
+				{
+					struct FLobe
+					{
+						FVector Centre;
+						double Size, Long, Turn;
+						float Share;
+					};
+					const FLobe Lobes[3] = {
+						{ FireFoot, 1.0, 1.0, 0.0, 1.0f },
+						{ FireFoot + WindWay * (0.5 * PoolOut), 0.8, 1.4, 1.3, 0.7f },
+						{ FireFoot - WindWay * (0.22 * PoolOut) + WindAcross * ((Burning.Seed % 2 == 0 ? 0.48 : -0.48) * PoolOut), 0.55, 1.0, 2.9, 0.6f } };
+					for (const FLobe& Lobe : Lobes)
+					{
+						TArray<FVector> Brim;
+						for (int32 Spoke = 0; Spoke < Spokes; ++Spoke)
+						{
+							const double Angle = Spoke * 2.0 * PI / Spokes;
+							Brim.Add(Lobe.Centre + (WindWay * (FMath::Cos(Angle) * Lobe.Long) + WindAcross * FMath::Sin(Angle)) * (PoolOut * Lobe.Size * Uneven(Angle, Lobe.Turn, 1.0)));
+						}
+						// (As added light the ground sixty pixels beyond the houses goes from night's (46,64,77) to about
+						// (77,72,80), a faint rose; laid over as a wash it needs more to show at all.)
+						GlowFan(Lobe.Centre, Brim, (bFireGlowAdds ? 0.24f : 0.36f) * PoolThick * Lobe.Share, true, false);
+					}
+				}
+				// 2. The town: its roofs and walls take the light, strongest beside the fire and a dark red at the far
+				// edge. A patch that faces the eye, standing just before the nearest houses on the line from the eye
+				// to the town, as wide and as deep as the town looks from there. (Over a plain hit it is two thirds
+				// the size and drawn toward the fire: it warms the nearest roofs and no more.)
+				{
+					const FVector ToEye = (SmokeEye - TownAt).GetSafeNormal();
+					const double Before = 1.2 * Houses + 2.0 * UnitScale;
+					const double Tilted = FMath::Sqrt(FMath::Max(1.0 - Up.Z * Up.Z, 0.0)); // (how much of the ground's depth the eye sees)
+					const double Part = bHard ? 1.0 : 0.67;
+					const double Wide = 1.3 * 1.05 * Houses * Part, Deep = 1.3 * (1.05 * Houses * FMath::Max(Tilted, 0.3) + 0.25 * Houses) * Part;
+					const FVector Lift(0.0, 0.0, 0.25 * Houses);
+					const FVector Over = FMath::Lerp(TownAt, FireFoot, bHard ? 0.0 : 0.6) + Lift + ToEye * Before;
+					TArray<FVector> Brim;
+					for (int32 Spoke = 0; Spoke < Spokes; ++Spoke)
+					{
+						const double Angle = Spoke * 2.0 * PI / Spokes;
+						Brim.Add(Over + (Right * (FMath::Cos(Angle) * Wide) + Up * (FMath::Sin(Angle) * Deep)) * Uneven(Angle, 0.7, 0.5));
+					}
+					// (a roof beside the fire goes from night's (29,32,39) to about (221,104,63); one at the far edge to a dark red)
+					GlowFan(FireFoot + Lift + ToEye * Before, Brim, (bFireGlowAdds ? 0.52f : 0.6f) * Glowing, false, true);
+				}
+				// 3. The haze: low in the air on the downwind side, no taller than the town is wide. (It stands just
+				// clear of the ground, so that the ground does not cut it.)
+				{
+					const double HazeWide = 0.85 * PoolOut, HazeHigh = 0.8 * Houses;
+					const FVector Hub = TownAt + WindWay * (0.9 * Houses + 0.25 * PoolOut) + FVector(0.0, 0.0, HazeHigh * FMath::Abs(Up.Z) + 0.08 * Houses);
+					TArray<FVector> Brim;
+					for (int32 Spoke = 0; Spoke < Spokes; ++Spoke)
+					{
+						const double Angle = Spoke * 2.0 * PI / Spokes;
+						Brim.Add(Hub + (Right * (FMath::Cos(Angle) * HazeWide) + Up * (FMath::Sin(Angle) * HazeHigh)) * Uneven(Angle, 2.1, 1.0));
+					}
+					GlowFan(Hub, Brim, (bFireGlowAdds ? 0.13f : 0.2f) * PoolThick, false, true);
+				}
+			}
+			if (!GlowFire.Commit(FireGlowMesh, 0, FireGlowInk))
+			{
+				if (FireGlowMesh->GetNumSections() > 0)
+				{
+					FireGlowMesh->ClearAllMeshSections();
+				}
+			}
+			else
+			{
+				FireGlowMesh->SetCastShadow(false);
+				FireGlowMesh->SetTranslucentSortPriority(-1); // (under the smoke, the lit railway and a cut's lamp)
 			}
 		}
 	}

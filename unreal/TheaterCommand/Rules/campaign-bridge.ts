@@ -75,6 +75,7 @@ import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { ashoreSays } from '../../../src/campaign/ashore';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
@@ -2213,9 +2214,12 @@ function landingPlan(ids: number[], to: number) {
     if (hold && hold.open && !p.air) lines.push('', `As things stand the enemy cannot close the ${s.seas[hold.sea]?.name ?? 'sea'} behind it.`);
     // (the long warning in red stays under the card where the headline does not already say it)
     // (the headline and the line under it now say what the long warning in red said)
-    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict, tone, under, underTone };
+    // (Version 83, ruling 89(f).) The test of strength, as the card's last note: the reckoning his rivals' staffs make
+    // before they sail, for his own force at that beach. The rules' own words; it never stops him.
+    const said = ashoreSays(s, cs, s.regions[to]);
+    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict, tone, under, underTone, ashore: said ? { head: said.head, line: said.line, tone: said.tone } : null };
   }
-  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '', underTone: '' };
+  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '', verdict: '', tone: '', under: '', underTone: '', ashore: null };
 }
 
 /** Lands the chosen corps on an enemy coast. */

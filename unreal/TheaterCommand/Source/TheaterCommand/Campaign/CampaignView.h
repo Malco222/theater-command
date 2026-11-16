@@ -1321,6 +1321,9 @@ struct FLandingPlan
 	// (rules version 74) The headline, which speaks for the whole venture: "Ashore, then cut off" (red), "A costly
 	// crossing" (amber), or how the fight for the beach stands; its tone ("red", "amber", "good" or none); and a line under it.
 	FString Verdict, Tone, Under, UnderTone;
+	// (rules version 83) The test of strength, the card's last note: its heading ("Three months on"), its line, and
+	// how it is to be read ("holds", "even" or "lost").
+	FString AshoreHead, AshoreLine, AshoreTone;
 };
 
 struct FLandingResult

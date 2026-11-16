@@ -1114,6 +1114,25 @@ def build_beam():
     finish(m)
 
 
+def build_glow():
+    """Firelight on the table (the red glow of a burning town by night): light added over what is there, never
+    darkening anything. The mesh's own colour is the light's colour and its alpha how strong it is there. It is drawn
+    in the ordinary translucent pass, with the scene's own blur, so that smoke and signs can be drawn over it."""
+    m = new_material("M_Glow")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -700, 0)
+    lit = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(colour, "", lit, "A")
+    connect(colour, "A", lit, "B")
+    strong = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(lit, "", strong, "A")
+    connect(scalar(m, "Strength", 1.0, -450, 200), "", strong, "B")
+    to_property(strong, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
 def build_flak_lit():
     """Flak smoke inside a searchlight's beam: the painted shape again, as light added where the smoke is."""
     m = new_material("M_FlakLit")
@@ -1139,7 +1158,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

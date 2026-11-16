@@ -3349,6 +3349,26 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Body : FText::GetEmpty(); })
 									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									[
+										// (Rules version 83: the test of strength, the card's last note. Plain where the staff would
+										// expect to hold, amber where it is an even thing, red where they would not expect the force to
+										// be still ashore. It never stops him.)
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Ashore.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.ColorAndOpacity_Lambda([this]()
+										{
+											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().AshoreTone : 0;
+											return FSlateColor(Tone == 3 ? Alarm : Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Muted);
+										})
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Ashore : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Last.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Last : FText::GetEmpty(); })
+									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 									[
 										// (rules version 73: the warning that the sea behind the beach could be closed, in red)
@@ -3361,6 +3381,8 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
+											// (Ruling 138(1): the safe answer carries the brass only where an answer destroys something, as
+											// on the save card. Before a war or a landing the order keeps the brass, as it always had.)
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseWarPrompt(); } return FReply::Handled(); })
 											[
@@ -3457,6 +3479,57 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 10.0f, 0.0f)
 									[
 										SAssignNew(OpeningFoot, SBox)
+									]
+								]
+							]
+						]
+					]
+
+					// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be
+					// lost. The question put before a new war begins, over the opening screen. Keeping the campaign
+					// is the bright button.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible && Controller->GetOpening().AskKind != 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(640.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 26.0f))
+								[
+									// (Ruling 132(b): the design director's words. "This replaces your saved campaign: Germany,
+									// March 1941.", and the two answers, "Keep it" and "Start the new one".)
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 15)).ColorAndOpacity(Cream).AutoWrapText(true).LineHeightPercentage(1.2f).Justification(ETextJustify::Center)
+										.Text(FText::FromString(TEXT("This replaces your saved campaign:")))
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 17)).ColorAndOpacity(BrightBrass).AutoWrapText(true).Justification(ETextJustify::Center)
+										.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetOpening().SavedLine.ToString() + TEXT(".")) : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 24.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerBegin(false); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("KEEP IT"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerBegin(true); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("START THE NEW ONE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
 									]
 								]
 							]
@@ -8593,7 +8666,7 @@ namespace
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("Nobody leads: every nation decides for itself, and you watch the war play out.")))
-					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BeginGrandCampaign(true); } return FReply::Handled(); })
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(2); } return FReply::Handled(); })
 					[
 						SNew(STextBlock).Text(FText::FromString(TEXT("JUST WATCH"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
 					]
@@ -8603,7 +8676,7 @@ namespace
 					Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
 						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
-						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BeginGrandCampaign(false); } return FReply::Handled(); })
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
 						[
 							SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
 							.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
@@ -8687,7 +8760,7 @@ namespace
 				{
 					if (Controller.IsValid())
 					{
-						Controller->BeginCampaign(GroupIndex, SideIndex);
+						Controller->AskToBegin(3, GroupIndex, SideIndex);
 					}
 					return FReply::Handled();
 				})

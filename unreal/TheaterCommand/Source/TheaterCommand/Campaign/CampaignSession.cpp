@@ -2036,6 +2036,13 @@ FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 
 		Object->TryGetStringField(TEXT("tone"), Plan.Tone);
 		Object->TryGetStringField(TEXT("under"), Plan.Under);
 		Object->TryGetStringField(TEXT("underTone"), Plan.UnderTone);
+		const TSharedPtr<FJsonObject>* Ashore = nullptr;
+		if (Object->TryGetObjectField(TEXT("ashore"), Ashore) && Ashore && Ashore->IsValid())
+		{
+			(*Ashore)->TryGetStringField(TEXT("head"), Plan.AshoreHead);
+			(*Ashore)->TryGetStringField(TEXT("line"), Plan.AshoreLine);
+			(*Ashore)->TryGetStringField(TEXT("tone"), Plan.AshoreTone);
+		}
 	}
 	return Plan;
 }

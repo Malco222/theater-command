@@ -1056,6 +1056,11 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		{
 			Controller->PickGrandNation(Shot.OpeningNation);
 		}
+		// ("-TheaterAskBegin": the word to begin is given, so that the question put before a saved campaign is replaced shows)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterAskBegin")))
+		{
+			Controller->AskToBegin(1);
+		}
 		return;
 	}
 	if (Shot.bMenu)

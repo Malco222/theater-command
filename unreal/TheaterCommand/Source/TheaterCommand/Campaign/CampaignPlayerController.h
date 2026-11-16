@@ -207,6 +207,11 @@ struct FOpening
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
 	TArray<FOpeningGroup> Groups;
 	FText SavedLine; // empty when there is nothing to continue
+	// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be lost. The
+	// beginning that waits on the player's answer: 0 none; 1 the grand campaign, led; 2 the grand campaign,
+	// watched; 3 a scenario (its group and side).
+	int32 AskKind = 0;
+	int32 AskGroup = 0, AskSide = 0;
 	int32 Revision = 0;
 };
 
@@ -294,6 +299,11 @@ struct FWarPrompt
 	// (0 plainly, 1 as good news, 2 in amber, 3 in red), and the line under it.
 	FText Verdict, VerdictUnder;
 	int32 VerdictTone = 0, UnderTone = 3;
+	// (rules version 83) Before a landing: the test of strength, as the card's last note (0 plainly where the staff
+	// would expect to hold, 2 in amber where it is an even thing, 3 in red where they would not); and the card's
+	// closing line after it.
+	FText Ashore, Last;
+	int32 AshoreTone = 0;
 	bool bFromOffice = false; // asked from the foreign office: go back there afterwards
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;
@@ -410,6 +420,15 @@ public:
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
+
+	/**
+	 * (Ruling 130.) Begins a new war from the opening screen: at once where no campaign is saved on this computer,
+	 * and otherwise only after the player has been asked, with the saved campaign named. Kind is 1 for the grand
+	 * campaign led, 2 for it watched, 3 for a scenario.
+	 */
+	void AskToBegin(int32 Kind, int32 GroupIndex = 0, int32 SideIndex = 0);
+	/** The answer to that question: begin the new war and let the saved one go, or keep it. */
+	void AnswerBegin(bool bBegin);
 
 	/** Saves the campaign and shows the opening screen over it. */
 	void OpenMenu();

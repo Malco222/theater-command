@@ -650,8 +650,44 @@ void ACampaignPlayerController::ContinueCampaign()
 	}
 }
 
+void ACampaignPlayerController::AskToBegin(int32 Kind, int32 GroupIndex, int32 SideIndex)
+{
+	// (Ruling 130.) One campaign is kept on this computer. A new war writes over it at its first month's end, when
+	// the menu is opened, or when the game is left: so where one is saved (and a campaign under way is saved as the
+	// menu opens) the new war waits for the player's answer to a question that names it.
+	Opening.AskKind = Kind;
+	Opening.AskGroup = GroupIndex;
+	Opening.AskSide = SideIndex;
+	if (Opening.SavedLine.IsEmpty())
+	{
+		AnswerBegin(true);
+		return;
+	}
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::AnswerBegin(bool bBegin)
+{
+	const int32 Kind = Opening.AskKind, GroupIndex = Opening.AskGroup, SideIndex = Opening.AskSide;
+	Opening.AskKind = 0;
+	++Opening.Revision;
+	if (!bBegin)
+	{
+		return;
+	}
+	if (Kind == 3)
+	{
+		BeginCampaign(GroupIndex, SideIndex);
+	}
+	else if (Kind == 1 || Kind == 2)
+	{
+		BeginGrandCampaign(Kind == 2);
+	}
+}
+
 void ACampaignPlayerController::OpenMenu()
 {
+	Opening.AskKind = 0; // (a question left unanswered is not carried to the next time the screen opens)
 	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (bWatching || FaceOff.bVisible)
 	{
@@ -3353,6 +3389,10 @@ void ACampaignPlayerController::Escape()
 	{
 		CloseDocument();
 	}
+	else if (Opening.bVisible && Opening.AskKind != 0)
+	{
+		AnswerBegin(false); // (ruling 134(f): the safe answer is the default. Esc keeps the saved campaign.)
+	}
 	else if (Opening.bVisible)
 	{
 		CloseMenu();
@@ -5561,7 +5601,10 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 	RouteTarget = RegionId;
 	// (the railway brief, section 8: the route a train would take to the province under the pointer turns white)
 	Map->SetRailRoute(RailBeyond.Contains(RegionId) ? RegionId : INDEX_NONE);
-	if (bByRail)
+	// (Ruling 132(a): one route under the pointer, the one the right-click will take. Where a train reaches the
+	// place this month that is the lit rail route alone; the kept march's dashed road is for ground no train
+	// reaches, and for an army that cannot ride this month.)
+	if (bByRail || RailBeyond.Contains(RegionId))
 	{
 		Map->SetRoute(FVector::ZeroVector, TArray<int32>());
 		return;
@@ -5630,7 +5673,14 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Region = RegionId;
 			WarPrompt.Tag = Session->GetView().Human;
 			WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Land at %s?"), *Plan.Name));
-			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")) + TEXT("\n\nOnce they sail it cannot be taken back."));
+			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")));
+			if (!Plan.AshoreLine.IsEmpty())
+			{
+				// (set out as the card's other notes are: a heading, and its line marked)
+				WarPrompt.Ashore = FText::FromString(Plan.AshoreHead.ToUpper() + TEXT("\n\u00B7 ") + Plan.AshoreLine);
+				WarPrompt.AshoreTone = Plan.AshoreTone == TEXT("lost") ? 3 : Plan.AshoreTone == TEXT("even") ? 2 : 0;
+			}
+			WarPrompt.Last = FText::FromString(TEXT("Once they sail it cannot be taken back."));
 			WarPrompt.Warning = FText::FromString(Plan.Warn);
 			WarPrompt.Verdict = FText::FromString(Plan.Verdict);
 			WarPrompt.VerdictUnder = FText::FromString(Plan.Under);
@@ -6414,6 +6464,18 @@ void ACampaignPlayerController::CloseFaceOff()
 void ACampaignPlayerController::EndMonth()
 {
 	FCampaignSession* Session = GetSession();
+	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with the
+	// question before a war or a landing up, the key never ends the month behind the card: it puts the card away.)
+	if (Opening.bVisible && Opening.AskKind != 0)
+	{
+		AnswerBegin(false);
+		return;
+	}
+	if (WarPrompt.bVisible && !bScripted)
+	{
+		CloseWarPrompt();
+		return;
+	}
 	if (!Session || !Map.IsValid() || bWatching || FaceOff.bVisible || Opening.bVisible)
 	{
 		return;
