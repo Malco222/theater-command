@@ -30135,7 +30135,23 @@
   function stageGuns(region, level) {
     const s = game();
     if (s.regions[region]) s.flags[`wk:aa:${region}`] = Math.max(0, Math.min(3, Math.round(level)));
-    return { ok: !!s.regions[region] };
+    return { ok: !!s.regions[region], view: view2() };
+  }
+  function stageRecon(region) {
+    const s = game();
+    let said = "";
+    try {
+      for (const f of s.airFleets) {
+        if (f.nat !== s.human) continue;
+        const flown = orderScout(s, f.id, region);
+        if (flown.ok) {
+          said = flown.text || "flown";
+          break;
+        }
+      }
+    } catch {
+    }
+    return { ok: !!said, said, view: view2() };
   }
   function standsOf(reg) {
     try {
@@ -32659,7 +32675,7 @@ ${standing4}`,
       const keep = (list4) => dn && kind === "night" ? [...list4, ...dn.home.filter((id) => !list4.includes(id))] : list4;
       const carry = keep(p.picked);
       const picture = (t, holder) => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || "X"}`;
-      const gunsOf = (t) => sea || !s.regions[t] ? -1 : gunsAt(s, t);
+      const gunsOf = (t) => sea || !s.regions[t] || !["bomb", "night", "town", "harbour"].includes(kind) ? -1 : gunsAt(s, t);
       const stops = raidTargetsFor(s, k, -1);
       const here = stops.find((t) => t.id === target);
       const lead2 = p.seats.find((x) => x.picked && x.kind !== "ftr") ?? p.seats.find((x) => x.picked);
@@ -33817,6 +33833,7 @@ ${standing4}`,
     stands: standsOf,
     stageGuns,
     stageCut,
+    stageRecon,
     move,
     previewAttack: preview,
     attack,

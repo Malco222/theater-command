@@ -361,6 +361,9 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.RaidAt = 0.22f; // (half way out, before the defender's fighters are in among them)
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterRaidAt="), Shot.RaidAt); // ("-TheaterRaidAt=0.45" catches it over its target, where the guns are)
 			Shot.Tilt = -25.0f; // (looked down on more steeply than the closest view does of itself, so that no army's flag stands in front)
+			// ("-TheaterRaidTilt=0 -TheaterRaidTurn=40" set the eye's tilt and heading instead: for a flag in front of a beam)
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterRaidTilt="), Shot.Tilt);
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterRaidTurn="), Shot.Yaw);
 		}
 		{
 			// The same raid from the top, where a burst of flak is a mark of smoke and no more.
@@ -787,6 +790,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterSelect="), Shots[0].Select, false);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterHover="), Shots[0].Hover, false);
+		// ("-TheaterLookWait=30" waits that many seconds more before the first picture: for something that takes time, as a train's run)
+		float LookWait = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLookWait="), LookWait))
+		{
+			Shots[0].Wait += FMath::Clamp(LookWait, 0.0f, 120.0f);
+		}
 		// ("-TheaterArmy=Ruhr" picks up the army there, and "-TheaterRoute=Rhineland" draws the road to a place as the
 		// pointer would. "-TheaterSpend=Ruhr>Rhineland>Ruhr" first marches the army in the first place through the
 		// others in turn, to use up its moves: for pictures of an army with none left.)
@@ -1011,6 +1020,20 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			}
 		}
 	}
+	if (Shot.Region.StartsWith(TEXT("@train")))
+	{
+		// "@train" is a train running in the open just now; "@train3" one made up under level 3 guns (two flak wagons).
+		FVector2D Running;
+		Table->ForgetTrain();
+		if (Table->TrainSpot(FCString::Atoi(*Shot.Region.Mid(6)), Running))
+		{
+			At = Running;
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Photographer: no such train runs in the open just now"));
+		}
+	}
 	Eye->FocusHeight = Shot.Region.StartsWith(TEXT("@parade")) ? Eye->FocusHeight : 0.0f;
 	Table->HoldRaids(Shot.RaidAt);
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
@@ -1131,6 +1154,26 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		PressAsked(Shot.Months);
 	}
+	// ("-TheaterRecon=Poznan;Lodz" flies a reconnaissance flight over those provinces before the first picture: the
+	// armies there are identified.)
+	{
+		static bool bReconFlown = false;
+		FString ReconAsked;
+		if (!bReconFlown && Controller->GetSession() && FParse::Value(FCommandLine::Get(), TEXT("TheaterRecon="), ReconAsked, false))
+		{
+			bReconFlown = true;
+			TArray<FString> ReconPlaces;
+			ReconAsked.ParseIntoArray(ReconPlaces, TEXT(";"));
+			for (const FString& ReconPlace : ReconPlaces)
+			{
+				if (const int32* ReconRegion = Table->GetData().RegionByName.Find(ReconPlace))
+				{
+					const FString ReconSaid = Controller->StageRecon(*ReconRegion);
+					UE_LOG(LogTheater, Display, TEXT("Photographer: reconnaissance over %s: %s"), *ReconPlace, ReconSaid.IsEmpty() ? TEXT("no flight could go") : *ReconSaid);
+				}
+			}
+		}
+	}
 	// ("-TheaterCutAt=Neumark:bombed;Lodz:agent:report" cuts those railways before the first picture, each with its
 	// cause; a third part, "report" or "seen", only writes down that the player knows of a cut there.)
 	{
@@ -1172,7 +1215,7 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 				{
 					if (const int32* StagedRegion = Table->GetData().RegionByName.Find(StagedWhere))
 					{
-						Controller->GetSession()->StageGuns(*StagedRegion, FCString::Atoi(*StagedLevel));
+						Controller->StageGuns(*StagedRegion, FCString::Atoi(*StagedLevel));
 					}
 				}
 			}
@@ -1286,6 +1329,10 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		const int32* Rest = Shot.Hover.IsEmpty() ? nullptr : Data.RegionByName.Find(Shot.Hover);
 		Controller->StageHover(Rest ? *Rest : INDEX_NONE);
+		if (Rest)
+		{
+			Table->SetHoveredRegion(*Rest); // (as the game does for the real pointer)
+		}
 	}
 	if (Shot.bSea)
 	{
@@ -1800,6 +1847,18 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 
 	Clock += DeltaSeconds;
 	++Frames;
+
+	// (A look at a train goes with the train while the picture waits.)
+	if (!bTaken && Shots.IsValidIndex(Current) && Shots[Current].Region.StartsWith(TEXT("@train")))
+	{
+		ACampaignPlayerController* Rider = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		ACampaignCameraPawn* RiderEye = Rider ? Cast<ACampaignCameraPawn>(Rider->GetPawn()) : nullptr;
+		FVector2D Running;
+		if (RiderEye && Rider->GetMap() && Rider->GetMap()->TrainSpot(FCString::Atoi(*Shots[Current].Region.Mid(6)), Running))
+		{
+			RiderEye->GoTo(Rider->GetMap()->MapToWorld(Running.X, Running.Y), Shots[Current].Zoom, true);
+		}
+	}
 
 	// An army ordered off just before the picture is caught in the air.
 	if (!bMarched && Clock >= 2.45f && !Shots[Current].March.IsEmpty())

@@ -668,6 +668,9 @@ public:
 	bool IsRoundMixed() const;
 	/** (For the photographer only.) Cuts a province's railway through the rules and lays the table out again. */
 	void StageCut(int32 RegionId, const FString& Cause, const FString& How);
+	/** (For the photographer only.) Gives a province anti-aircraft guns, or flies a reconnaissance flight over it, and lays the table out again. */
+	void StageGuns(int32 RegionId, int32 Level);
+	FString StageRecon(int32 RegionId);
 	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
 	void StandThisMonth();
 	bool IsStandingThisMonth() const;

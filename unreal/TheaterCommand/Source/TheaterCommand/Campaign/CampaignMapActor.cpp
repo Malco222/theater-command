@@ -3192,23 +3192,108 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			++Count;
 		}
 		// Anti-aircraft guns: a sandbagged pit for each level, its barrel up at the sky.
-		if (Built.Z > 0 && Place(FVector2D(-9.5, 0.5), Spot))
+		if (Built.Z > 0)
 		{
-			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
-			const double Turn = Facing(Spot) + 90.0; // the pits in a row running out from the town
-			const int32 Guns = FMath::Clamp(Built.Z, 1, 4);
-			for (int32 Pit = 0; Pit < Guns; ++Pit)
+			// (Ruling 125; the art director's guard-the-line brief, section 4.) THE GUNS BY THE JUNCTION: the heavy
+			// anti-aircraft gun, a long barrel raised 70 degrees on a cross-shaped platform in a low ring of sandbags.
+			// One a level, up to three, in a row beside the track where it enters the town, on open ground clear of the
+			// houses. The ring is as wide as a wagon is long (a wagon is a unit and a half) and the barrel stands as tall
+			// as the town's spire. A province with guns and no railway keeps them at the town's edge.
+			const int32 Guns = FMath::Clamp(Built.Z, 1, 3);
+			const double Ring = 0.75; // (half a wagon, in the map's units)
+			TArray<FVector> Feet;
+			double Turn = 0.0;
 			{
-				const FVector Foot = At + Ahead(Turn, 0.0, (Pit - (Guns - 1) * 0.5) * 0.7 * Unit);
-				Model.Pillar(Foot, 0.3 * Unit, 0.27 * Unit, 0.13 * Unit, Sandbag, 10);
-				Model.Pillar(Foot + FVector(0.0, 0.0, 0.13 * Unit), 0.2 * Unit, 0.2 * Unit, 0.01 * Unit, Soot, 10);
-				Model.Pillar(Foot + FVector(0.0, 0.0, 0.1 * Unit), 0.07 * Unit, 0.05 * Unit, 0.2 * Unit, GunPaint, 6);
-				const FVector Breech = Foot + FVector(0.0, 0.0, 0.3 * Unit);
-				const FVector Up = (Ahead(Turn + Pit * 37.0, 0.45, 0.0) + FVector(0.0, 0.0, 0.89)).GetSafeNormal();
-				Model.Rod(Breech - Up * 0.08 * Unit, Breech + Up * 0.55 * Unit, 0.028 * Unit, GunPaint);
-				Model.Box(Breech, FVector(0.16, 0.12, 0.1) * Unit, GunPaint, Turn + Pit * 37.0);
+				FVector2D FieldAt;
+				const bool bField = Built.W > 0 && Place(FVector2D(-10.0, 13.0), FieldAt);
+				const FVector2D Base = WorldToMap(ArmySpot(Id, 0));
+				TArray<FVector2D> Row;
+				double RowScore = -1.0e9;
+				FVector2D RowWay = FVector2D::ZeroVector;
+				for (const FLandRail& Rail : Land.Rails)
+				{
+					if (Rail.A != Id && Rail.B != Id)
+					{
+						continue;
+					}
+					const double Length = FVector2D::Distance(Middle, Rail.At);
+					const double Open = Length - Roofs - 0.9 - 2.0 * Ring - 0.6; // (the track the row may run along)
+					if (Open < 0.0)
+					{
+						continue;
+					}
+					// (a ring apart where the track is long enough; closer on a short one, but never touching)
+					const double Apart = FMath::Clamp(Open / FMath::Max(Guns - 1, 1), 2.3 * Ring, 4.0 * Ring);
+					if ((Guns - 1) * Apart > Open + 0.01)
+					{
+						continue;
+					}
+					const FVector2D Way = (Rail.At - Middle) / Length, Side(Way.Y, -Way.X);
+					for (const double Hand : { 1.0, -1.0 })
+					{
+						TArray<FVector2D> Tried;
+						double Room = 1.0e9;
+						for (int32 Pit = 0; Pit < Guns; ++Pit)
+						{
+							const FVector2D Stand = Middle + Way * (Roofs + 0.9 + Ring + Pit * Apart) + Side * (Hand * (Ring + 0.8));
+							if (Data.FindRegionAt(Stand.X, Stand.Y) != Id || GroundAt(Stand.X, Stand.Y) <= 0.0f)
+							{
+								break;
+							}
+							Room = FMath::Min(Room, FVector2D::Distance(Stand, Base) - 9.0);
+							if (bField)
+							{
+								Room = FMath::Min(Room, FVector2D::Distance(Stand, FieldAt) - 6.5);
+							}
+							Tried.Add(Stand);
+						}
+						// (a row clear of the army's base and the airfield before one that is not; then the longer line)
+						const double Score = (Room >= 0.0 ? 1000.0 : 10.0 * Room) + Length;
+						if (Tried.Num() == Guns && Score > RowScore)
+						{
+							Row = Tried;
+							RowScore = Score;
+							RowWay = Way;
+						}
+					}
+				}
+				for (const FVector2D& Stand : Row)
+				{
+					Feet.Add(SurfacePoint(Stand.X, Stand.Y, 0.02));
+				}
+				if (Row.Num() > 0)
+				{
+					const FVector Along = MapToWorld(Middle.X + RowWay.X, Middle.Y + RowWay.Y, 0.0) - MapToWorld(Middle.X, Middle.Y, 0.0);
+					Turn = FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X));
+				}
+				else if (Place(FVector2D(-9.5, 0.5), Spot))
+				{
+					// (no railway, or no room beside it: in a row at the town's edge, running out from the town)
+					const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+					Turn = Facing(Spot) + 90.0;
+					for (int32 Pit = 0; Pit < Guns; ++Pit)
+					{
+						Feet.Add(At + Ahead(Turn, 0.0, (Pit - (Guns - 1) * 0.5) * 0.86 * Unit));
+					}
+				}
 			}
-			++Count;
+			const double Rim = Ring * UnitScale; // (the ring's radius on the table)
+			for (int32 Pit = 0; Pit < Feet.Num(); ++Pit)
+			{
+				const FVector& Foot = Feet[Pit];
+				Model.Pillar(Foot, Rim, 0.92 * Rim, 0.11 * Unit, Sandbag, 12);
+				Model.Pillar(Foot + FVector(0.0, 0.0, 0.11 * Unit), 0.76 * Rim, 0.76 * Rim, 0.008 * Unit, Soot, 12);
+				// the cross-shaped platform, its arms across the pit
+				Model.Box(Foot + FVector(0.0, 0.0, 0.135 * Unit), FVector(1.3 * Rim, 0.26 * Rim, 0.035 * Unit), GunPaint, Turn + 45.0);
+				Model.Box(Foot + FVector(0.0, 0.0, 0.135 * Unit), FVector(0.26 * Rim, 1.3 * Rim, 0.035 * Unit), GunPaint, Turn + 45.0);
+				Model.Pillar(Foot + FVector(0.0, 0.0, 0.12 * Unit), 0.075 * Unit, 0.055 * Unit, 0.2 * Unit, GunPaint, 8);
+				const FVector Breech = Foot + FVector(0.0, 0.0, 0.33 * Unit);
+				const double Bearing = Turn + Pit * 37.0, Raised = FMath::DegreesToRadians(70.0);
+				const FVector Bore = Ahead(Bearing, FMath::Cos(Raised), 0.0) + FVector(0.0, 0.0, FMath::Sin(Raised));
+				Model.Rod(Breech - Bore * 0.1 * Unit, Breech + Bore * 0.82 * Unit, 0.036 * Unit, GunPaint);
+				Model.Box(Breech, FVector(0.2, 0.13, 0.12) * Unit, GunPaint, Bearing);
+			}
+			Count += Feet.Num() > 0 ? 1 : 0;
 		}
 		// An airfield, by its size: a landing ground is a mown strip with a hut and a windsock; an airfield has a
 		// hard runway and hangars; an air base has crossing runways, a row of hangars and a control tower; and
@@ -3297,6 +3382,38 @@ void ACampaignMapActor::SetRailLight(const FRailLight& Light)
 	RailRouteTo = INDEX_NONE;
 	RailRoute.Reset();
 	bRailLightDirty = true;
+	// The way back to the army from every province on a lit line, by the fewest lines: a station dot that must move
+	// moves that way.
+	RailBack.Reset();
+	DotOut.Reset();
+	if (RailLight.From != INDEX_NONE && RailLight.Tracks.Num() > 0)
+	{
+		TArray<int32> Queue;
+		Queue.Add(RailLight.From);
+		RailBack.Add(RailLight.From, INDEX_NONE);
+		for (int32 Head = 0; Head < Queue.Num(); ++Head)
+		{
+			const int32 Here = Queue[Head];
+			for (const FIntPoint& Track : RailLight.Tracks)
+			{
+				const int32 Next = Track.X == Here ? Track.Y : Track.Y == Here ? Track.X : INDEX_NONE;
+				if (Next != INDEX_NONE && !RailBack.Contains(Next))
+				{
+					RailBack.Add(Next, Here);
+					Queue.Add(Next);
+				}
+			}
+		}
+	}
+	if (RailLight.Dots.Num() > 0)
+	{
+		FString Named;
+		for (const int32 RegionId : RailLight.Dots)
+		{
+			Named += (Named.IsEmpty() ? TEXT("") : TEXT(", ")) + (Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Name : FString(TEXT("?")));
+		}
+		UE_LOG(LogTheater, Log, TEXT("Rail light: %d tracks lit and %d station dots: %s"), RailLight.Tracks.Num(), RailLight.Dots.Num(), *Named);
+	}
 }
 
 void ACampaignMapActor::SetRailRoute(int32 ToRegion)
@@ -3374,6 +3491,7 @@ void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 		return Out.ToFColor(false);
 	};
 	const FLinearColor Lit(FColor(198, 228, 255)), RouteLit(FColor(255, 253, 244)), Casing(FColor(18, 20, 24)), BarRed(FColor(226, 62, 44));
+	const FLinearColor RouteRail(FColor(76, 96, 110)); // (laid at nine tenths on the route's white bed it reads about (92,110,122): the lit line's navy)
 	FCampaignMeshBuffers Tints, Lines, Stops;
 	// The faint cool tint, on the fields as the march wash is laid; the province under the pointer brightens.
 	for (const int32 RegionId : RailLight.Tint)
@@ -3414,7 +3532,7 @@ void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 			// (with a route shown the other lines fall to about seven tenths of their strength)
 			const float Strength = bRoute && !bOnRoute ? 0.7f : 1.0f;
 			const FLinearColor& Ink = bOnRoute ? RouteLit : Lit;
-			const double Core = (bOnRoute ? 1.5 : 1.0) * Pixel, TickLong = (bOnRoute ? 4.3 : 3.2) * Pixel, GlowOut = (bOnRoute ? 14.0 : 10.0) * Pixel;
+			const double Core = (bOnRoute ? 1.5 : 1.0) * Pixel, TickLong = (bOnRoute ? 4.0 : 3.2) * Pixel, GlowOut = (bOnRoute ? 14.0 : 10.0) * Pixel;
 			const float Glow = (bOnRoute ? 0.55f : 0.30f) * Strength;
 			const FVector2D Stops3[3] = { Data.Regions[Rail->A].Center, Rail->At, Data.Regions[Rail->B].Center };
 			for (int32 Leg = 0; Leg < 2; ++Leg)
@@ -3433,7 +3551,17 @@ void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 				}
 				else if (Pass == 1)
 				{
-					AppendRibbon(Lines, Way, 3.2 * Pixel, 0.22, Inked(Casing, 0.66f * Strength), false);
+					// (The art director's review of 18:06, 16 November: on the route under the pointer the two rails stay
+					// the lit line's dark navy on a bed that is wider and whiter. They had faded to a pale grey there, and
+					// the route read as a road beside the railway.)
+					if (bOnRoute)
+					{
+						AppendRibbon(Lines, Way, 4.0 * Pixel, 0.22, Inked(RouteRail, 0.9f), false);
+					}
+					else
+					{
+						AppendRibbon(Lines, Way, 3.2 * Pixel, 0.22, Inked(Casing, 0.66f * Strength), false);
+					}
 				}
 				else
 				{
@@ -3475,6 +3603,61 @@ void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 	RailLightMesh->SetTranslucentSortPriority(1); // (over every wash; under the cut lamps and the searchlights)
 }
 
+FVector2D ACampaignMapActor::CutSpot(int32 RegionId) const
+{
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	const double Town = TownRadius(RegionId);
+	FVector2D Best = Region.Center + FVector2D(-3.0, 3.0);
+	double BestScore = -1.0e9;
+	for (const FLandRail& Rail : Land.Rails)
+	{
+		if (Rail.A != RegionId && Rail.B != RegionId)
+		{
+			continue;
+		}
+		const double Length = FVector2D::Distance(Region.Center, Rail.At);
+		if (Length - Town < 3.0)
+		{
+			continue; // (no open track on this line at all)
+		}
+		// (a stretch of under six units is taken only where no longer one is clear)
+		const double Short = Length - Town < 6.0 ? -200.0 : 0.0;
+		// What the sign must stand clear of: the armies' bases on both sides of the border this line runs to (a base
+		// is some fourteen units across), and both provinces' airfields.
+		const int32 Other = Rail.A == RegionId ? Rail.B : Rail.A;
+		TArray<TPair<FVector2D, double>, TInlineAllocator<4>> Keep;
+		for (const int32 Whose : { RegionId, Other })
+		{
+			if (Data.Regions.IsValidIndex(Whose))
+			{
+				Keep.Emplace(WorldToMap(ArmySpot(Whose, 0)), 11.0);
+				if (const FVector2D* Field = AirfieldSpots.Find(Whose))
+				{
+					Keep.Emplace(*Field, 7.0);
+				}
+			}
+		}
+		// Halfway between the last house and the border first; then nearer the town, then nearer the border.
+		for (const double Part : { 0.5, 0.36, 0.66, 0.24, 0.8 })
+		{
+			const FVector2D Spot = Region.Center + (Rail.At - Region.Center) / Length * (Town + Part * (Length - Town));
+			double Room = 1.0e9;
+			for (const TPair<FVector2D, double>& Thing : Keep)
+			{
+				Room = FMath::Min(Room, FVector2D::Distance(Spot, Thing.Key) - Thing.Value);
+			}
+			// (a clear place before any that is not; then the longer line; then the nearer to halfway)
+			const double Score = (Room >= 0.0 ? 1000.0 : 6.0 * Room) + Short + Length - 24.0 * FMath::Abs(Part - 0.5);
+			if (Score > BestScore)
+			{
+				Best = Spot;
+				BestScore = Score;
+			}
+		}
+	}
+	return Best;
+}
+
 void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 {
 	CutLamps.Reset();
@@ -3494,7 +3677,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	{
 		return;
 	}
-	if ((CutLamps.Num() == 0 && RailLight.Dots.Num() == 0) || !CutLampInk)
+	if ((CutLamps.Num() == 0 && RailLight.Dots.Num() == 0 && RailLight.Tracks.Num() == 0 && HoveredRegion == INDEX_NONE) || !CutLampInk)
 	{
 		if (CutLampMesh->GetNumSections() > 0)
 		{
@@ -3502,7 +3685,8 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 		}
 		return;
 	}
-	FVector Right = FVector::RightVector, Up = FVector::UpVector;
+	FVector Right = FVector::RightVector, Up = FVector::UpVector, EyeAt = FVector::ZeroVector;
+	bool bEye = false;
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -3510,9 +3694,19 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			const FRotationMatrix Looking(Player->PlayerCameraManager->GetCameraRotation());
 			Right = Looking.GetUnitAxis(EAxis::Y);
 			Up = Looking.GetUnitAxis(EAxis::Z);
+			EyeAt = Player->PlayerCameraManager->GetCameraLocation();
+			bEye = true;
 		}
 	}
-	const FVector Near = FVector::CrossProduct(Up, Right); // (toward the eye: each layer of the sign a hair nearer than the last)
+	const FVector Near = FVector::CrossProduct(Up, Right); // (toward the eye, along its axis)
+	// Each layer of a sign lies a hair nearer the eye than the last. The step is taken toward the eye itself, not
+	// along its axis: off the middle of the view a step along the axis slides the layers apart on the screen, and a
+	// station dot's dark rim showed thick on one side and thin on the other.
+	const double LayerStep = 0.004 * CameraDistance;
+	auto Nearer = [&](const FVector& Point, double Layers)
+	{
+		return Point + (bEye ? (EyeAt - Point).GetSafeNormal() : Near) * (Layers * LayerStep);
+	};
 	const double U = UnitScale;
 	// (A pixel of the 1600 view in the table's measure. The lamp is 8.5 px in radius from where he plays and nearer,
 	// and is never under 6 px from any height.)
@@ -3572,29 +3766,31 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			}
 			return true;
 		};
-		FVector2D Stands = Region.Center + FVector2D(-3.0, 3.0);
+		FVector2D Stands = CutSpot(Lamp.Key);
 		if (!Inside(Stands))
 		{
 			Stands = Inside(Region.Center) ? Region.Center : Region.Centroid;
 		}
 		const FVector Foot = SurfacePointOver(Stands.X, Stands.Y, 0.1);
 		const FVector Middle = Foot + FVector(0.0, 0.0, 2.4 * U) + Up * (Radius * 1.25);
-		const double Hair = 0.004 * CameraDistance; // (a step toward the eye, so that the layers lie in their order)
 		if (!Lamp.Value)
 		{
 			// Seen: a faint red glow, a dark rim, the red disc, and the broken rail in cream.
 			Arc(Middle, Radius * 1.2, Radius * 2.0, 0.0, 2.0 * PI, Inked(Red, 0.22f), Inked(Red, 0.0f));
-			Arc(Middle + Near * Hair, 0.0, Radius * 1.26, 0.0, 2.0 * PI, Inked(Dark, 0.95f), Inked(Dark, 0.95f));
-			Arc(Middle + Near * (2.0 * Hair), 0.0, Radius, 0.0, 2.0 * PI, Inked(Red, 1.0f), Inked(Red, 1.0f));
+			Arc(Nearer(Middle, 1.0), 0.0, Radius * 1.26, 0.0, 2.0 * PI, Inked(Dark, 0.95f), Inked(Dark, 0.95f));
+			Arc(Nearer(Middle, 2.0), 0.0, Radius, 0.0, 2.0 * PI, Inked(Red, 1.0f), Inked(Red, 1.0f));
 		}
 		else
 		{
-			// Known from a report, or as it was when last seen: the same size, hollow, a dashed red ring on a dark ground.
-			Arc(Middle + Near * Hair, 0.0, Radius * 1.26, 0.0, 2.0 * PI, Inked(Dark, 0.55f), Inked(Dark, 0.55f));
+			// Known from a report, or as it was when last seen: the same size, hollow, a dashed red ring. (The art
+			// director's round 38: on a dark see-through backing, (24,18,16) at about two thirds strength and 2.4 px wider
+			// than the ring, so that on every ground it reads as a lamp gone out.)
+			const FLinearColor Backing(FColor(24, 18, 16));
+			Arc(Nearer(Middle, 1.0), 0.0, Radius + 2.4 * Pixel, 0.0, 2.0 * PI, Inked(Backing, 0.66f), Inked(Backing, 0.66f));
 			for (int32 Dash = 0; Dash < 8; ++Dash)
 			{
 				const double From = (Dash + 0.14) * 2.0 * PI / 8.0, To = (Dash + 0.74) * 2.0 * PI / 8.0;
-				Arc(Middle + Near * (2.0 * Hair), Radius * 0.8, Radius, From, To, Inked(Red, 1.0f), Inked(Red, 1.0f));
+				Arc(Nearer(Middle, 2.0), Radius * 0.8, Radius, From, To, Inked(Red, 1.0f), Inked(Red, 1.0f));
 			}
 		}
 		if (RailLight.Ringed.Contains(Lamp.Key))
@@ -3602,11 +3798,11 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			// (Ruling 118: engineers in hand can be carried up to this break and mend it. A white ring two pixels wide,
 			// just outside the lamp's dark rim.)
 			const FLinearColor White(FColor(236, 246, 255));
-			Arc(Middle + Near * (2.0 * Hair), Radius * 1.26 + 0.4 * Pixel, Radius * 1.26 + 2.4 * Pixel, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
+			Arc(Nearer(Middle, 2.0), Radius * 1.26 + 0.4 * Pixel, Radius * 1.26 + 2.4 * Pixel, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
 		}
 		// The broken rail: one half level, the other dropped.
 		const FColor BrokenInk = Inked(Lamp.Value ? Red : CreamRail, 1.0f);
-		const FVector Rail = Middle + Near * (3.0 * Hair);
+		const FVector Rail = Nearer(Middle, 3.0);
 		const double Thick = Radius * 0.13;
 		Bar(Rail - Right * (0.62 * Radius), Rail - Right * (0.07 * Radius), Thick, BrokenInk);
 		Bar(Rail + Right * (0.1 * Radius) - Up * (0.06 * Radius), Rail + Right * (0.58 * Radius) - Up * (0.36 * Radius), Thick, BrokenInk);
@@ -3614,21 +3810,294 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	// The station dots (the art director's railway brief, section 4): one in each province beyond the march that a
 	// train would take the army to, over its town. White, 5.2 px in radius with a dark rim and a soft glow; never
 	// under 4 px; the one at the end of the route under the pointer grows to 7.4.
+	// (What may cover a station dot or a guard tab is gathered once, as boxes on the screen.)
+	const APlayerController* Viewer = World->GetFirstPlayerController();
+	int32 ViewWide = 0, ViewHigh = 0;
+	if (Viewer)
+	{
+		Viewer->GetViewportSize(ViewWide, ViewHigh);
+	}
+	const double PerPixel = ViewWide > 0 ? ViewWide / 1600.0 : 1.0; // (the screen's own points to a pixel of the 1600 view)
+	// What may cover a dot, as boxes on the screen: every army's piece with its flag, and every town's plate.
+	TArray<FBox2D> Covers;
+	if (Viewer && Viewer->PlayerCameraManager && (RailLight.Dots.Num() > 0 || RailLight.Tracks.Num() > 0 || (!bReachShown && HoveredRegion != INDEX_NONE)))
+	{
+		for (const TObjectPtr<AArmyPiece>& Piece : Pieces)
+		{
+			if (!Piece || Piece->IsHidden())
+			{
+				continue;
+			}
+			FVector Origin, Extent;
+			Piece->GetActorBounds(false, Origin, Extent);
+			FBox2D Box(ForceInit);
+			bool bAll = true;
+			for (int32 Corner = 0; Corner < 8 && bAll; ++Corner)
+			{
+				FVector2D Screen;
+				bAll = Viewer->ProjectWorldLocationToScreen(Origin + Extent * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), Screen, false);
+				Box += Screen;
+			}
+			if (bAll)
+			{
+				Covers.Add(Box);
+			}
+		}
+		FVector Toward = -Viewer->PlayerCameraManager->GetCameraRotation().Vector();
+		Toward.Z = 0.0;
+		Toward = Toward.GetSafeNormal();
+		for (const FPlateSpot& Plate : PlateSpots)
+		{
+			FVector2D Screen;
+			if (Viewer->ProjectWorldLocationToScreen(Plate.World + Toward * Plate.Reach, Screen, false))
+			{
+				const double HalfWide = (Plate.Name.Len() * 4.0 + 16.0) * PerPixel;
+				Covers.Add(FBox2D(FVector2D(Screen.X - HalfWide, Screen.Y - 2.0 * PerPixel), FVector2D(Screen.X + HalfWide, Screen.Y + 26.0 * PerPixel)));
+			}
+		}
+	}
 	{
 		const FLinearColor White(FColor(236, 246, 255));
+		// (The art director's review of 18:06, 16 November.) The white is 10.4 px across at every height, in a 2.6 px
+		// rim with a soft glow: smaller, it is lost on a town's roofs. And a dot never hides. It stands over its town
+		// unless an army's piece, a flag or a plate would cover it there; then it moves out along the lit track toward
+		// the army in hand until it is clear of them by its own width.
 		for (const int32 RegionId : RailLight.Dots)
 		{
 			if (!Data.Regions.IsValidIndex(RegionId))
 			{
 				continue;
 			}
-			const double Dot = (RegionId == RailRouteTo ? 7.4 : FMath::Lerp(5.2, 4.0, FMath::SmoothStep(4800.0, 9500.0, static_cast<double>(CameraDistance)))) * Pixel;
+			const double Dot = (RegionId == RailRouteTo ? 7.4 : 5.2) * Pixel;
 			const FCampaignRegion& Region = Data.Regions[RegionId];
-			const FVector Middle = SurfacePointOver(Region.Center.X, Region.Center.Y, 0.1) + FVector(0.0, 0.0, 2.8 * U) + Up * Dot;
-			const double Hair = 0.004 * CameraDistance;
+			// The lit track toward the army, and how much of it lies in this province.
+			FVector2D Outward = FVector2D::ZeroVector;
+			double Track = 0.0;
+			if (const int32* Back = RailBack.Find(RegionId))
+			{
+				for (const FLandRail& Rail : Land.Rails)
+				{
+					if ((Rail.A == RegionId && Rail.B == *Back) || (Rail.B == RegionId && Rail.A == *Back))
+					{
+						Track = FVector2D::Distance(Region.Center, Rail.At);
+						Outward = Track > 0.01 ? (Rail.At - Region.Center) / Track : FVector2D::ZeroVector;
+						break;
+					}
+				}
+			}
+			auto Stands = [&](double Along)
+			{
+				const FVector2D Spot = Region.Center + Outward * Along;
+				return SurfacePointOver(Spot.X, Spot.Y, 0.1) + FVector(0.0, 0.0, 2.8 * U) + Up * Dot;
+			};
+			auto Covered = [&](double Along, double Margin)
+			{
+				FVector2D Screen;
+				if (!Viewer || !Viewer->ProjectWorldLocationToScreen(Stands(Along), Screen, false))
+				{
+					return false;
+				}
+				for (const FBox2D& Box : Covers)
+				{
+					if (Screen.X > Box.Min.X - Margin && Screen.X < Box.Max.X + Margin && Screen.Y > Box.Min.Y - Margin && Screen.Y < Box.Max.Y + Margin)
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			// (Its own width, rim and all, when it must find a place; it keeps the place it has while that stays clear by
+			// half as much, so that it does not hop about as the eye moves.)
+			const double Width = 15.6 * PerPixel;
+			double& Moved = DotOut.FindOrAdd(RegionId, 0.0);
+			if (Covered(Moved, 0.5 * Width))
+			{
+				for (double Try = 0.0; Try <= Track - 1.0; Try += 1.25)
+				{
+					if (!Covered(Try, Width))
+					{
+						Moved = Try;
+						break;
+					}
+				}
+			}
+			else if (Moved > 0.0 && !Covered(0.0, Width))
+			{
+				Moved = 0.0; // (back over its town as soon as that is clear again)
+			}
+			const FVector Middle = Stands(Moved);
 			Arc(Middle, Dot * 1.2, Dot * 2.6, 0.0, 2.0 * PI, Inked(White, 0.26f), Inked(White, 0.0f));
-			Arc(Middle + Near * Hair, 0.0, Dot + 2.6 * Pixel, 0.0, 2.0 * PI, Inked(Dark, 0.9f), Inked(Dark, 0.9f));
-			Arc(Middle + Near * (2.0 * Hair), 0.0, Dot, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
+			Arc(Nearer(Middle, 1.0), 0.0, Dot + 2.6 * Pixel, 0.0, 2.0 * PI, Inked(Dark, 0.9f), Inked(Dark, 0.9f));
+			Arc(Nearer(Middle, 2.0), 0.0, Dot, 0.0, 2.0 * PI, Inked(White, 1.0f), Inked(White, 1.0f));
+		}
+	}
+	// THE GUARD TAB (ruling 125; the art director's guard-the-line brief, section 2). Anti-aircraft guns built in a
+	// province take 15% a level off the chance that a raid cuts its railway, and this is where he sees it on the
+	// table: a small dark tab beside the track with the guns' sign and three pips, brass where guns guard the line and
+	// hollow where none do. It is never there at rest. With an army in hand every guarded province on a lit line
+	// wears one; with the pointer on a place it can ride to, every province along that route wears one, guarded or
+	// not, so that the gaps in the one route are drawn where he is looking; with no army in hand the province under
+	// the pointer wears its own. It keeps its size, 41 by 15 px, and from far off it goes rather than shrinks.
+	if (CameraDistance < 7000.0f && ShownBuildings.Num() > 0)
+	{
+		auto GunsOf = [this](int32 RegionId)
+		{
+			return ShownBuildings.IsValidIndex(RegionId) ? FMath::Clamp(static_cast<int32>(ShownBuildings[RegionId].Z), 0, 3) : 0;
+		};
+		// Who wears one, and the track it should stand by (none named: whichever of its tracks has the room).
+		TMap<int32, FIntPoint> Wear;
+		if (RailLight.From != INDEX_NONE && RailLight.Tracks.Num() > 0)
+		{
+			for (const FIntPoint& Lit : RailLight.Tracks)
+			{
+				for (const int32 RegionId : { Lit.X, Lit.Y })
+				{
+					if (GunsOf(RegionId) > 0 && !Wear.Contains(RegionId))
+					{
+						Wear.Add(RegionId, Lit);
+					}
+				}
+			}
+			for (const FIntPoint& OnRoute : RailRoute)
+			{
+				for (const int32 RegionId : { OnRoute.X, OnRoute.Y })
+				{
+					Wear.Add(RegionId, OnRoute);
+				}
+			}
+		}
+		else if (!bReachShown && Data.Regions.IsValidIndex(HoveredRegion))
+		{
+			Wear.Add(HoveredRegion, FIntPoint(INDEX_NONE, INDEX_NONE));
+		}
+		const double HalfWide = 20.5, HalfHigh = 7.5; // (in pixels of the 1600 view)
+		const FVector Fore = FVector(Up.X, Up.Y, 0.0).GetSafeNormal(); // (away from the eye, on the table)
+		const FLinearColor PlateInk(FColor(26, 21, 17)), EdgeInk(FColor(104, 88, 58)), Brass(FColor(226, 180, 92)), Dim(FColor(156, 142, 116));
+		// A plate with rounded ends, facing the eye.
+		auto Slab = [&](const FVector& Centre, double HalfW, double HalfH, double Round, const FColor& Ink)
+		{
+			Bar(Centre - Right * (HalfW - Round), Centre + Right * (HalfW - Round), HalfH, Ink);
+			for (const double End : { -1.0, 1.0 })
+			{
+				Bar(Centre + Right * (End * (HalfW - Round)), Centre + Right * (End * HalfW), HalfH - Round, Ink);
+				for (const double Top : { -1.0, 1.0 })
+				{
+					const FVector Corner = Centre + Right * (End * (HalfW - Round)) + Up * (Top * (HalfH - Round));
+					const double Begins = End > 0.0 ? (Top > 0.0 ? 0.0 : 1.5 * PI) : (Top > 0.0 ? 0.5 * PI : PI);
+					Arc(Corner, 0.0, Round, Begins, Begins + 0.5 * PI, Ink, Ink);
+				}
+			}
+		};
+		for (const TPair<int32, FIntPoint>& Each : Wear)
+		{
+			const int32 RegionId = Each.Key;
+			if (!Data.Regions.IsValidIndex(RegionId))
+			{
+				continue;
+			}
+			const FCampaignRegion& Region = Data.Regions[RegionId];
+			const double Town = TownRadius(RegionId);
+			const FVector2D Base = WorldToMap(ArmySpot(RegionId, 0));
+			const bool bLamp = CutLamps.ContainsByPredicate([RegionId](const TPair<int32, bool>& Lamp) { return Lamp.Key == RegionId; });
+			const FVector2D LampAt = bLamp ? CutSpot(RegionId) : FVector2D::ZeroVector;
+			// Beside the track where it meets the town, 12 px off it, on the side with the more open ground: clear of
+			// the houses, the army's base, a cut's lamp and the border; and by a track that does not run down the
+			// screen from the town, where the town's plate hangs.
+			double BestScore = -1.0e9;
+			FVector BestAt = FVector::ZeroVector;
+			for (const FLandRail& Rail : Land.Rails)
+			{
+				if (Rail.A != RegionId && Rail.B != RegionId)
+				{
+					continue;
+				}
+				const double Length = FVector2D::Distance(Region.Center, Rail.At);
+				if (Length < 1.0)
+				{
+					continue;
+				}
+				const bool bWanted = FMath::Min(Rail.A, Rail.B) == Each.Value.X && FMath::Max(Rail.A, Rail.B) == Each.Value.Y;
+				const FVector2D Way = (Rail.At - Region.Center) / Length;
+				const FVector2D OnTrack = Region.Center + Way * FMath::Min(Town + 1.6, 0.8 * Length);
+				const FVector AlongTable = (MapToWorld(OnTrack.X + Way.X, OnTrack.Y + Way.Y, 0.0) - MapToWorld(OnTrack.X, OnTrack.Y, 0.0)).GetSafeNormal2D();
+				const FVector AcrossTable(-AlongTable.Y, AlongTable.X, 0.0);
+				// (across the track as the eye sees it: the tab's nearer edge is 12 px from the rails)
+				const FVector2D Seen(FVector::DotProduct(AcrossTable, Right), FVector::DotProduct(AcrossTable, Up));
+				const double Shown = Seen.Size();
+				if (Shown < 0.05)
+				{
+					continue;
+				}
+				const double Off = (12.0 + (HalfWide * FMath::Abs(Seen.X) + HalfHigh * FMath::Abs(Seen.Y)) / Shown) * Pixel / Shown;
+				for (const double Hand : { 1.0, -1.0 })
+				{
+					const FVector At = SurfacePointOver(OnTrack.X, OnTrack.Y, 0.1) + AcrossTable * (Hand * Off) + FVector(0.0, 0.0, 0.3 * U);
+					const FVector2D OnMap = WorldToMap(At);
+					if (Data.FindRegionAt(OnMap.X, OnMap.Y) != RegionId || GroundAt(OnMap.X, OnMap.Y) <= 0.0f)
+					{
+						continue; // (never over the border or on the water)
+					}
+					double Score = (bWanted ? 300.0 : 0.0) + 0.2 * Length;
+					// (never under a town's plate, nor over an army's piece or its flag: the next track, or the other side)
+					FVector2D OnView;
+					if (Viewer && Viewer->ProjectWorldLocationToScreen(At, OnView, false))
+					{
+						const double ClearWide = (HalfWide + 3.0) * PerPixel, ClearHigh = (HalfHigh + 3.0) * PerPixel;
+						for (const FBox2D& Box : Covers)
+						{
+							if (OnView.X > Box.Min.X - ClearWide && OnView.X < Box.Max.X + ClearWide && OnView.Y > Box.Min.Y - ClearHigh && OnView.Y < Box.Max.Y + ClearHigh)
+							{
+								Score -= 400.0;
+								break;
+							}
+						}
+					}
+					Score += 12.0 * FMath::Min(FVector2D::Distance(OnMap, Base) - 9.5, 0.0);
+					Score += 12.0 * FMath::Min(FVector2D::Distance(OnMap, Region.Center) - Town - 0.4, 0.0);
+					if (bLamp)
+					{
+						Score += 12.0 * FMath::Min(FVector2D::Distance(OnMap, LampAt) - 3.5, 0.0);
+					}
+					Score -= 60.0 * FMath::Max(0.0, -FVector::DotProduct(AlongTable, Fore));
+					if (Score > BestScore)
+					{
+						BestScore = Score;
+						BestAt = At;
+					}
+				}
+			}
+			if (BestScore < -1.0e8)
+			{
+				continue; // (no railway here, or nowhere of its own to stand)
+			}
+			const int32 Level = GunsOf(RegionId);
+			const float Strength = Level > 0 ? 1.0f : 0.85f;
+			Slab(BestAt, HalfWide * Pixel, HalfHigh * Pixel, 4.0 * Pixel, Inked(EdgeInk, 0.92f * Strength));
+			Slab(Nearer(BestAt, 1.0), (HalfWide - 1.0) * Pixel, (HalfHigh - 1.0) * Pixel, 3.0 * Pixel, Inked(PlateInk, 0.92f * Strength));
+			// The sign, 16 by 10.6 px: a gun on its mount, the barrel raised.
+			const FColor SignInk = Inked(Level > 0 ? Brass : Dim, Strength);
+			const FVector Glyph = Nearer(BestAt, 2.0) - Right * (9.0 * Pixel);
+			auto Stroke = [&](double X0, double Y0, double X1, double Y1, double HalfThick)
+			{
+				Bar(Glyph + Right * (X0 * Pixel) + Up * (Y0 * Pixel), Glyph + Right * (X1 * Pixel) + Up * (Y1 * Pixel), HalfThick * Pixel, SignInk);
+			};
+			Stroke(-7.0, -4.4, 2.0, -4.4, 0.9); // the platform
+			Stroke(-2.5, -4.4, -2.5, -0.8, 1.3); // the pedestal
+			Stroke(-4.6, -2.9, -1.2, 0.3, 2.0); // the breech
+			Stroke(-2.4, -0.8, 6.6, 5.0, 1.05); // the barrel
+			// The three pips: filled up to the level, rings after it.
+			for (int32 Pip = 0; Pip < 3; ++Pip)
+			{
+				const FVector PipAt = Nearer(BestAt, 2.0) + Right * ((4.2 + 6.0 * Pip) * Pixel);
+				if (Pip < Level)
+				{
+					Arc(PipAt, 0.0, 2.3 * Pixel, 0.0, 2.0 * PI, Inked(Brass, Strength), Inked(Brass, Strength));
+				}
+				else
+				{
+					Arc(PipAt, 1.05 * Pixel, 2.3 * Pixel, 0.0, 2.0 * PI, Inked(Dim, Strength), Inked(Dim, Strength));
+				}
+			}
 		}
 	}
 	if (!Sign.Commit(CutLampMesh, 0, CutLampInk))
@@ -4063,6 +4532,19 @@ void ACampaignMapActor::BuildWaterways()
 	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points (and %d beyond Europe)"), Land.Rivers.Num(), Buffers.Vertices.Num(), BuffersBeyond.Vertices.Num());
 }
 
+void ACampaignMapActor::MakeUpTrain(FTrain& Train, int32 FromRegion) const
+{
+	const int32 Level = ShownBuildings.IsValidIndex(FromRegion) ? FMath::Clamp(static_cast<int32>(ShownBuildings[FromRegion].Z), 0, 3) : 0;
+	if (Level == Train.FlakLevel || !Train.Mesh || Train.Mesh->GetNumSections() < 4)
+	{
+		return;
+	}
+	Train.FlakLevel = Level;
+	Train.Mesh->SetMeshSectionVisible(1, Level < 3); // (the box wagon behind the tender gives its place to the second flak wagon)
+	Train.Mesh->SetMeshSectionVisible(2, Level >= 1);
+	Train.Mesh->SetMeshSectionVisible(3, Level >= 3);
+}
+
 void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDistance)
 {
 	UWorld* World = GetWorld();
@@ -4084,27 +4566,66 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		double Share = (Now - Train.Began) / LinkLasts;
 		const bool bGone = !bNear || !Land.Rails.IsValidIndex(Train.Rail) || ShownCut.Contains(Land.Rails[Train.Rail].A) || ShownCut.Contains(Land.Rails[Train.Rail].B)
 			|| FVector2D::DistSquared(Land.Rails[Train.Rail].At, Looking) > 260.0 * 260.0;
-		if (!bGone && Share >= 1.0)
+		if (!bGone && Share >= 1.0 && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].A) && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].B))
 		{
-			// Arrived: onward by another line out of this town, if there is one and the journey is not over.
-			const int32 Here = Train.bBackward ? Land.Rails[Train.Rail].A : Land.Rails[Train.Rail].B;
+			// Arrived. (Brian, 16 November 2026: "can the trains turn on the tracks? when they get to the end of the line
+			// they just vanish".) It goes on by another line out of this town where there is one, swinging onto it as it
+			// stands at the station. At the end of the line, and now and then anywhere, it is turned round where it
+			// stands, about its own middle, and goes back the way it came. It never vanishes at a station.
+			const FLandRail& Came = Land.Rails[Train.Rail];
+			const int32 Here = Train.bBackward ? Came.A : Came.B;
+			const FVector2D Station = Data.Regions[Here].Center;
+			const FVector WayIn = (MapToWorld(Station.X, Station.Y) - MapToWorld(Came.At.X, Came.At.Y)).GetSafeNormal2D();
 			TArray<int32> Onward;
 			for (int32 Other = 0; Other < Land.Rails.Num(); ++Other)
 			{
-				if (Other != Train.Rail && (Land.Rails[Other].A == Here || Land.Rails[Other].B == Here) && !ShownCut.Contains(Land.Rails[Other].A) && !ShownCut.Contains(Land.Rails[Other].B))
+				if (Other != Train.Rail && (Land.Rails[Other].A == Here || Land.Rails[Other].B == Here) && !ShownCut.Contains(Land.Rails[Other].A) && !ShownCut.Contains(Land.Rails[Other].B)
+					&& Data.Regions.IsValidIndex(Land.Rails[Other].A) && Data.Regions.IsValidIndex(Land.Rails[Other].B))
 				{
 					Onward.Add(Other);
 				}
 			}
-			if (Onward.Num() > 0 && ++Train.Links < 4)
+			++Train.Links;
+			Train.TurnBegan = Now;
+			Train.TurnFrom = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(WayIn.Y, WayIn.X)));
+			if (Onward.Num() > 0 && FMath::FRand() > 0.18f)
 			{
 				Train.Rail = Onward[FMath::RandHelper(Onward.Num())];
 				Train.bBackward = Land.Rails[Train.Rail].B == Here;
-				Train.Began = Now;
-				Share = 0.0;
+				const FLandRail& Next = Land.Rails[Train.Rail];
+				const FVector WayOut = (MapToWorld(Next.At.X, Next.At.Y) - MapToWorld(Station.X, Station.Y)).GetSafeNormal2D();
+				Train.TurnTo = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(WayOut.Y, WayOut.X)));
+				Train.bPivotMiddle = false;
+				Train.StartAlong = 0.0;
+				// (it stands a moment and swings onto its new line: longer the sharper the turn)
+				Train.Began = Now + 0.5 + 0.9 * FMath::Abs(FMath::FindDeltaAngleDegrees(Train.TurnFrom, Train.TurnTo)) / 180.0;
 			}
+			else
+			{
+				// Turned round where it stands: about its own middle, which is some two and a half of the map's units
+				// behind its engine. It then stands twice that far out of the town on the line it came by, facing back.
+				const double MiddleBack = 2.6;
+				Train.bBackward = !Train.bBackward;
+				Train.TurnTo = Train.TurnFrom + 180.0f;
+				Train.bPivotMiddle = true;
+				const FVector2D Middle = Station - (Station - Came.At).GetSafeNormal() * MiddleBack;
+				Train.Pivot = SurfacePointOver(Middle.X, Middle.Y, 0.2);
+				Train.StartAlong = 2.0 * MiddleBack;
+				Train.Began = Now + 2.4;
+			}
+			MakeUpTrain(Train, Here);
+			{
+				// (for whoever checks the trains from the log: how many have gone on, and how many were turned round)
+				static int32 WentOn = 0, TurnedRound = 0;
+				(Train.bPivotMiddle ? TurnedRound : WentOn) += 1;
+				if ((WentOn + TurnedRound) % 12 == 1)
+				{
+					UE_LOG(LogTheater, Log, TEXT("Trains: %d have gone on by another line and %d have been turned round and sent back, the last at %s; none vanishes at a station"), WentOn, TurnedRound, *Data.Regions[Here].Name);
+				}
+			}
+			Share = 0.0;
 		}
-		if (bGone || Share >= 1.0)
+		if (bGone)
 		{
 			if (Train.Mesh)
 			{
@@ -4120,8 +4641,10 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		}
 		const FVector2D From = Data.Regions[Train.bBackward ? Rail.B : Rail.A].Center, To = Data.Regions[Train.bBackward ? Rail.A : Rail.B].Center;
 		const double First = FVector2D::Distance(From, Rail.At), Second = FVector2D::Distance(Rail.At, To);
-		// It draws out of the station and slows into the next.
-		const double Along = FMath::SmoothStep(0.0, 1.0, Share) * (First + Second);
+		// It draws out of the station and slows into the next. (A train just turned about its middle sets out from
+		// where the turn left it, a little way out of the town.)
+		const double Started = FMath::Min(Train.StartAlong, 0.4 * (First + Second));
+		const double Along = Started + FMath::SmoothStep(0.0, 1.0, FMath::Clamp(Share, 0.0, 1.0)) * (First + Second - Started);
 		const FVector2D A = Along < First ? From : Rail.At, B = Along < First ? Rail.At : To;
 		const double Leg = Along < First ? First : Second, Done = Along < First ? Along : Along - First;
 		const FVector2D At = FMath::Lerp(A, B, Leg > 0.01 ? Done / Leg : 0.0);
@@ -4129,7 +4652,21 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		const FVector Ahead = (MapToWorld(B.X, B.Y) - MapToWorld(A.X, A.Y)).GetSafeNormal2D();
 		if (Train.Mesh)
 		{
-			Train.Mesh->SetRelativeLocationAndRotation(Here, FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Ahead.Y, Ahead.X)), 0.0));
+			FVector Stands = Here;
+			double Heading = FMath::RadiansToDegrees(FMath::Atan2(Ahead.Y, Ahead.X));
+			if (Train.TurnBegan >= 0.0 && Now < Train.Began)
+			{
+				// (standing at the station, being turned: it eases from the heading it came in on to the one it leaves by)
+				const double Turned = FMath::SmoothStep(0.0, 1.0, (Now - Train.TurnBegan) / FMath::Max(Train.Began - Train.TurnBegan - 0.3, 0.1));
+				Heading = Train.TurnFrom + FMath::FindDeltaAngleDegrees(Train.TurnFrom, Train.TurnTo) * Turned;
+				if (Train.bPivotMiddle)
+				{
+					// (about its own middle, which stays where it stood)
+					Heading = Train.TurnFrom + 180.0 * Turned;
+					Stands = Train.Pivot + FRotator(0.0, Heading, 0.0).RotateVector(FVector(2.6 * U, 0.0, 0.0));
+				}
+			}
+			Train.Mesh->SetRelativeLocationAndRotation(Stands, FRotator(0.0, Heading, 0.0));
 		}
 	}
 
@@ -4168,15 +4705,51 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	Model.Box(FVector(0.75 * U, 0.0, 0.22 * U), FVector(2.3 * U, W * 0.95, 0.3 * U), Red);
 	Model.Box(FVector(-1.25 * U, 0.0, 0.5 * U), FVector(1.0 * U, W, 0.66 * U), Black);
 	const int32 Sort = FMath::RandHelper(4);
+	// (the wagon behind the tender is a piece of its own: at level 3 a flak wagon rides in its place)
+	FMiniatureMesh FirstWagon, TailFlak, SecondFlak;
 	for (int32 Wagon = 0; Wagon < 3; ++Wagon)
 	{
 		const double X = (-2.75 - Wagon * 1.7) * U;
-		Model.Box(FVector(X, 0.0, 0.52 * U), FVector(1.5 * U, W, 0.7 * U), Wagons[(Sort + Wagon) % 4]);
-		Model.Box(FVector(X, 0.0, 0.12 * U), FVector(1.3 * U, W * 0.8, 0.14 * U), Black);
+		FMiniatureMesh& Into = Wagon == 0 ? FirstWagon : Model;
+		Into.Box(FVector(X, 0.0, 0.52 * U), FVector(1.5 * U, W, 0.7 * U), Wagons[(Sort + Wagon) % 4]);
+		Into.Box(FVector(X, 0.0, 0.12 * U), FVector(1.3 * U, W * 0.8, 0.14 * U), Black);
+	}
+	const int32 StartRail = Near[FMath::RandHelper(Near.Num())];
+	const bool bStartBackward = FMath::RandBool();
+	const int32 StartRegion = bStartBackward ? Land.Rails[StartRail].B : Land.Rails[StartRail].A;
+	{
+		// THE FLAK WAGON (the art director's guard-the-line brief, section 4; our own design): a flat wagon as long as a
+		// box wagon, its deck at three tenths of a box wagon's height, low plank sides and a locker at each end;
+		// amidships a gun on a pedestal, one barrel 0.62 of a wagon long raised 64 degrees and leaning back along the
+		// train, a shield on the muzzle side only. The wagon in the train's own paint, the gun in the nation's vehicle
+		// paint. No emblem. It never fires and shows no light.
+		const FLinearColor Planks = Wagons[Sort % 4];
+		const FLinearColor GunPaint = FMiniatureMesh::VehicleColour(Data.Regions[StartRegion].Owner) * 1.3f;
+		auto FlakWagon = [&](FMiniatureMesh& Into, double X)
+		{
+			Into.Box(FVector(X, 0.0, 0.12 * U), FVector(1.3 * U, W * 0.8, 0.14 * U), Black);
+			Into.Box(FVector(X, 0.0, 0.22 * U), FVector(1.5 * U, W, 0.06 * U), Planks * 0.8f);
+			for (const double Edge : { -0.47, 0.47 })
+			{
+				Into.Box(FVector(X, Edge * W, 0.31 * U), FVector(1.5 * U, 0.05 * U, 0.14 * U), Planks);
+			}
+			for (const double End : { -0.61, 0.61 })
+			{
+				Into.Box(FVector(X + End * U, 0.0, 0.34 * U), FVector(0.26 * U, W * 0.82, 0.2 * U), Planks * 0.9f);
+			}
+			Into.Pillar(FVector(X, 0.0, 0.25 * U), 0.15 * U, 0.1 * U, 0.3 * U, GunPaint, 8);
+			const FVector Breech(X + 0.08 * U, 0.0, 0.58 * U);
+			const double Raised = FMath::DegreesToRadians(64.0);
+			Into.Rod(Breech, Breech + FVector(-FMath::Cos(Raised), 0.0, FMath::Sin(Raised)) * (0.93 * U), 0.075 * U, GunPaint, 6);
+			Into.Box(Breech, FVector(0.28 * U, 0.3 * U, 0.2 * U), GunPaint);
+			Into.Box(FVector(X - 0.14 * U, 0.0, 0.66 * U), FVector(0.05 * U, 0.52 * U, 0.36 * U), GunPaint * 0.92f);
+		};
+		FlakWagon(TailFlak, (-2.75 - 3 * 1.7) * U);
+		FlakWagon(SecondFlak, -2.75 * U);
 	}
 	FTrain& Train = Trains.AddDefaulted_GetRef();
-	Train.Rail = Near[FMath::RandHelper(Near.Num())];
-	Train.bBackward = FMath::RandBool();
+	Train.Rail = StartRail;
+	Train.bBackward = bStartBackward;
 	Train.Began = Now;
 	Train.Mesh = NewObject<UProceduralMeshComponent>(this);
 	Train.Mesh->SetupAttachment(Root);
@@ -4184,6 +4757,19 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	Train.Mesh->RegisterComponent();
 	Train.Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 	Train.Mesh->SetMaterial(0, SceneryMaterial);
+	{
+		int32 Section = 1;
+		for (const FMiniatureMesh* Part : { &FirstWagon, &TailFlak, &SecondFlak })
+		{
+			Train.Mesh->CreateMeshSection(Section, Part->Vertices, Part->Triangles, Part->Normals, TArray<FVector2D>(), Part->Colors, TArray<FProcMeshTangent>(), false);
+			Train.Mesh->SetMaterial(Section, SceneryMaterial);
+			++Section;
+		}
+		Train.Mesh->SetMeshSectionVisible(2, false);
+		Train.Mesh->SetMeshSectionVisible(3, false);
+		Train.FlakLevel = 0;
+		MakeUpTrain(Train, StartRegion);
+	}
 	Train.Mesh->SetCastShadow(true);
 	Train.Mesh->SetVisibility(false); // until its first place on the line is set, at the next frame
 	Train.Mesh->SetVisibility(true);
@@ -4320,8 +4906,10 @@ void ACampaignMapActor::BuildWorks()
 	{
 		if (Data.Regions.IsValidIndex(RegionId))
 		{
-			// (a little to one side of the town, on a post, so it stands clear of the houses and the lettering)
-			const FVector Foot = SurfacePointOver(Data.Regions[RegionId].Center.X - 3.0, Data.Regions[RegionId].Center.Y + 3.0, 0.1);
+			// (The art director's round 38: in a town the board read as a red cross on a building. It stands with its
+			// lamp on open track, halfway between the town's last house and the border.)
+			const FVector2D Stands = CutSpot(RegionId);
+			const FVector Foot = SurfacePointOver(Stands.X, Stands.Y, 0.1);
 			const FVector At = Foot + FVector(0.0, 0.0, 1.9 * U);
 			Model.Pillar(Foot, 0.12 * U, 0.12 * U, 1.9 * U, Shadow, 6);
 			Model.Box(At, FVector(0.3, 2.6, 0.45) * U, Rust, 0.0, 0.0);
@@ -6485,6 +7073,32 @@ FVector2D ACampaignMapActor::FleetSpot(int32 Index) const
 	return FVector2D(Data.Width * 0.5, Data.Height * 0.5);
 }
 
+bool ACampaignMapActor::TrainSpot(int32 MinFlak, FVector2D& Out) const
+{
+	const UWorld* World = GetWorld();
+	const double Now = World ? World->GetTimeSeconds() : 0.0;
+	// (the train this look already watches, wherever it has got to: its middle is some three and a half units behind its engine)
+	for (const FTrain& Train : Trains)
+	{
+		if (Train.Mesh && WatchedTrain.IsValid() && Train.Mesh.Get() == WatchedTrain.Get())
+		{
+			Out = WorldToMap(Train.Mesh->GetComponentLocation() - Train.Mesh->GetForwardVector() * (3.5 * UnitScale));
+			return true;
+		}
+	}
+	for (const FTrain& Train : Trains)
+	{
+		const double Share = (Now - Train.Began) / 11.0;
+		if (Train.Mesh && Train.FlakLevel >= MinFlak && Share > 0.08 && Share < 0.4)
+		{
+			WatchedTrain = Train.Mesh.Get();
+			Out = WorldToMap(Train.Mesh->GetComponentLocation() - Train.Mesh->GetForwardVector() * (3.5 * UnitScale));
+			return true;
+		}
+	}
+	return false;
+}
+
 FVector2D ACampaignMapActor::ParadeSpot(int32 Index) const
 {
 	if (ParadeSpots.IsValidIndex(Index))
@@ -6552,18 +7166,22 @@ void ACampaignMapActor::BuildParade()
 	ParadeLevel = Middle.Z - GetActorLocation().Z + 1.3 * Metre;
 	const double Long = Apart * Names.Num() + 30.0 * Metre;
 	FMiniatureMesh Model;
-	const FLinearColor Board(FColor::FromHex(TEXT("B9AD8F"))), Wall(FColor::FromHex(TEXT("D9D3C2"))), Ink(FColor::FromHex(TEXT("3A3A3A"))), Red(FColor::FromHex(TEXT("A02020")));
+	// (Ships, drawn a tenth the size or less, stand on a dark board against a dark wall: pale hulls are lost on the
+	// pale one. Their wall stands beyond the beam and is high enough to fill the view.)
+	const bool bShips = Shrink < 0.5;
+	const FLinearColor Board(FColor::FromHex(bShips ? TEXT("1F2B36") : TEXT("B9AD8F"))), Wall(FColor::FromHex(bShips ? TEXT("27323E") : TEXT("D9D3C2"))), Ink(FColor::FromHex(TEXT("3A3A3A"))), Red(FColor::FromHex(TEXT("A02020")));
 	Model.Box(Middle - FVector(0.0, 400.0 * Metre, 4.0), FVector(Long * 3.0, 860.0 * Metre, 8.0), Board);
 	// The wall behind (toward +Y, so a view turned a quarter-circle looks square at it), ruled in half metres, the whole metres heavier.
-	const double WallAt = 3.2 * Metre;
-	Model.Box(Middle + FVector(0.0, WallAt + 2.0, 10.0 * Metre), FVector(Long * 3.0, 4.0, 20.0 * Metre), Wall);
-	auto Write = [this, &Middle, WallAt, Metre](const FString& Text, double Along, double Up, double Size)
+	const double WallAt = (bShips ? 24.0 : 3.2) * Metre, WallHigh = (bShips ? 170.0 : 20.0) * Metre;
+	Model.Box(Middle + FVector(0.0, WallAt + 2.0, 0.5 * WallHigh), FVector(Long * 3.0, 4.0, WallHigh), Wall);
+	const FColor Lettering = bShips ? FColor(232, 224, 200) : FColor(40, 40, 40);
+	auto Write = [this, &Middle, WallAt, Metre, Lettering](const FString& Text, double Along, double Up, double Size)
 	{
 		UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
 		Label->SetupAttachment(Root);
 		Label->SetText(FText::FromString(Text));
 		Label->SetWorldSize(Size * Metre);
-		Label->SetTextRenderColor(FColor(40, 40, 40));
+		Label->SetTextRenderColor(Lettering);
 		Label->SetHorizontalAlignment(EHTA_Center);
 		Label->SetVerticalAlignment(EVRTA_TextCenter);
 		Label->SetCastShadow(false);
@@ -6573,10 +7191,15 @@ void ACampaignMapActor::BuildParade()
 		Label->SetWorldLocation(Middle + FVector(Along, WallAt - 1.0, Up * Metre));
 		Label->RegisterComponent();
 	};
-	for (int32 Half = 1; Half <= 7; ++Half)
+	for (int32 Half = 1; Half <= 7 && !bShips; ++Half)
 	{
 		const bool bWhole = Half % 2 == 0;
 		Model.Box(Middle + FVector(0.0, WallAt - 0.3, Half * 0.5 * Metre), FVector(Long, 0.6, (bWhole ? 0.05 : 0.02) * Metre), bWhole ? Ink : FLinearColor(0.35f, 0.35f, 0.35f));
+	}
+	// (the ships' wall is ruled at every ten metres above the water)
+	for (int32 Ten = 1; Ten <= 4 && bShips; ++Ten)
+	{
+		Model.Box(Middle + FVector(0.0, WallAt - 0.3, Ten * 10.0 * Metre), FVector(Long, 0.6, 0.35 * Metre), FLinearColor(FColor::FromHex(TEXT("3D4B5A"))));
 	}
 	for (int32 K = 0; K < Names.Num(); ++K)
 	{
@@ -6612,6 +7235,24 @@ void ACampaignMapActor::BuildParade()
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Parade: no model called %s"), *Names[K]);
 		}
+		if (bShips)
+		{
+			// A hull's facts over it: what it is, how long, and how it is armed (so two hulls can be told apart by the
+			// lettering as well as by the eye).
+			const bool bBritish = Whose == TEXT("UK");
+			const FString Facts = Kind == TEXT("Battleship")
+				? (bBritish ? TEXT("British battleship, 227 m: ten guns in three turrets (4, 2, 4), two funnels") : TEXT("The plain battleship, 215 m: six guns in three turrets of two, two funnels close together"))
+				: Kind == TEXT("Cruiser")
+				? (bBritish ? TEXT("British cruiser, 192 m: eight guns in four turrets of two, three tall funnels") : TEXT("The plain cruiser, 175 m: six guns in three turrets of two, two funnels"))
+				: FMiniatureMesh::VehicleTitle(Names[K]);
+			Write(Facts, Spot.X - Middle.X, 56.0, 5.4);
+			for (int32 Ten = 1; Ten <= 4; ++Ten)
+			{
+				Write(FString::Printf(TEXT("%d m"), Ten * 10), Spot.X - Middle.X + 128.0 * Metre, Ten * 10.0 + 2.6, 3.2);
+			}
+			ParadeSpots.Add(WorldToMap(Spot));
+			continue;
+		}
 		Write(FMiniatureMesh::VehicleTitle(Names[K]), Spot.X - Middle.X, 3.6, 0.42);
 		for (int32 Whole = 1; Whole <= 3; ++Whole)
 		{
@@ -6631,18 +7272,24 @@ void ACampaignMapActor::BuildParade()
 	Mesh->SetMaterial(0, SceneryMaterial);
 }
 
-void ACampaignMapActor::BuildTrees()
+void ACampaignMapActor::BuildTrees(const TSet<FIntPoint>* Only)
 {
-	for (UProceduralMeshComponent* Mesh : TreeMeshes)
+	// (With `Only`, just those squares of country are planted again and the rest stand as they are: a gun line that
+	// comes or goes clears or gives back the trees under it.)
+	if (!Only)
 	{
-		if (Mesh)
+		for (UProceduralMeshComponent* Mesh : TreeMeshes)
 		{
-			Mesh->DestroyComponent();
+			if (Mesh)
+			{
+				Mesh->DestroyComponent();
+			}
 		}
+		TreeMeshes.Reset();
+		TreeCentres.Reset();
+		TreesShown.Reset();
+		TreeSquareOf.Reset();
 	}
-	TreeMeshes.Reset();
-	TreeCentres.Reset();
-	TreesShown.Reset();
 
 	// Trees stand wherever the paint says the ground is wooded: one to every couple of map units, each a little
 	// off its place, firs in the north and on high ground and broad-leaved trees elsewhere. They are kept in
@@ -6670,6 +7317,10 @@ void ACampaignMapActor::BuildTrees()
 	{
 		for (int32 SX = 0; SX < SquaresX; ++SX)
 		{
+			if (Only && !Only->Contains(FIntPoint(SX, SY)))
+			{
+				continue;
+			}
 			FMiniatureMesh Model;
 			FRandomStream Random(SY * 977 + SX * 131 + 5);
 			for (int32 J = 0; J < PerSide; ++J)
@@ -6698,6 +7349,11 @@ void ACampaignMapActor::BuildTrees()
 					}
 					// Nor where the armies of the region stand: a clearing for each of the first three, and one for its airfield.
 					if (RegionId >= 0 && Clearings[RegionId].ContainsByPredicate([X, Y](const FVector2D& Spot) { return FVector2D::DistSquared(Spot, FVector2D(X, Y)) < 7.8 * 7.8; }))
+					{
+						continue;
+					}
+					// Nor on the trodden earth of a gun line (the art director's round 38: the patch clears its trees).
+					if (GunClearings.ContainsByPredicate([X, Y](const FVector2D& Spot) { return FVector2D::DistSquared(Spot, FVector2D(X, Y)) < 4.6 * 4.6; }))
 					{
 						continue;
 					}
@@ -6747,6 +7403,13 @@ void ACampaignMapActor::BuildTrees()
 					++Trees;
 				}
 			}
+			// (a square planted again takes the place of the one that stood there, shown or put away as it was)
+			const int32 Old = Only ? TreeSquareOf.IndexOfByKey(FIntPoint(SX, SY)) : INDEX_NONE;
+			if (Old != INDEX_NONE && TreeMeshes.IsValidIndex(Old) && TreeMeshes[Old])
+			{
+				TreeMeshes[Old]->DestroyComponent();
+				TreeMeshes[Old] = nullptr;
+			}
 			if (Model.Vertices.Num() == 0)
 			{
 				continue;
@@ -6758,13 +7421,23 @@ void ACampaignMapActor::BuildTrees()
 			Mesh->RegisterComponent();
 			Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 			Mesh->SetMaterial(0, WoodsMaterial ? WoodsMaterial : SceneryMaterial);
+			if (Old != INDEX_NONE && TreeMeshes.IsValidIndex(Old))
+			{
+				Mesh->SetVisibility(TreesShown.IsValidIndex(Old) && TreesShown[Old]);
+				TreeMeshes[Old] = Mesh;
+				continue;
+			}
 			Mesh->SetVisibility(false);
 			TreeMeshes.Add(Mesh);
 			TreeCentres.Add(MapToWorld((SX + 0.5) * Square, (SY + 0.5) * Square));
 			TreesShown.Add(false);
+			TreeSquareOf.Add(FIntPoint(SX, SY));
 		}
 	}
-	UE_LOG(LogTheater, Log, TEXT("Trees: %d, in %d squares of country"), Trees, TreeMeshes.Num());
+	if (!Only)
+	{
+		UE_LOG(LogTheater, Log, TEXT("Trees: %d, in %d squares of country"), Trees, TreeMeshes.Num());
+	}
 }
 
 UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing, int32 OfRegion)
@@ -7626,8 +8299,53 @@ void ACampaignMapActor::BuildGunLines()
 	GunLinesBuilt = Made;
 	GunLines.Reset();
 	GunLineMesh->ClearAllMeshSections();
+	// (The art director's round 38: the patch clears its trees. The squares of country where a line stood, and where
+	// one stands now, are planted again when the lines are made: see the end of this.)
+	const TArray<FVector2D> ClearedBefore = MoveTemp(GunClearings);
+	GunClearings.Reset();
+	auto Replant = [this, &ClearedBefore]()
+	{
+		if (TreeSquare <= 0.0 || TreeMeshes.Num() == 0)
+		{
+			return;
+		}
+		const double Side = TreeSquare / UnitScale; // (a square of country, in the map's units)
+		TSet<FIntPoint> Squares;
+		auto Touch = [&Squares, Side](const TArray<FVector2D>& Spots)
+		{
+			for (const FVector2D& Spot : Spots)
+			{
+				for (const FVector2D& Corner : { FVector2D(-5.0, -5.0), FVector2D(5.0, -5.0), FVector2D(-5.0, 5.0), FVector2D(5.0, 5.0) })
+				{
+					Squares.Add(FIntPoint(FMath::FloorToInt32((Spot.X + Corner.X) / Side), FMath::FloorToInt32((Spot.Y + Corner.Y) / Side)));
+				}
+			}
+		};
+		// (only where something changed: a spot that was clear and is clear still needs nothing)
+		TArray<FVector2D> Changed;
+		for (const FVector2D& Spot : ClearedBefore)
+		{
+			if (!GunClearings.ContainsByPredicate([&Spot](const FVector2D& Each) { return FVector2D::DistSquared(Each, Spot) < 0.01; }))
+			{
+				Changed.Add(Spot);
+			}
+		}
+		for (const FVector2D& Spot : GunClearings)
+		{
+			if (!ClearedBefore.ContainsByPredicate([&Spot](const FVector2D& Each) { return FVector2D::DistSquared(Each, Spot) < 0.01; }))
+			{
+				Changed.Add(Spot);
+			}
+		}
+		Touch(Changed);
+		if (Squares.Num() > 0)
+		{
+			BuildTrees(&Squares);
+		}
+	};
 	if (Wanted.Num() == 0)
 	{
+		Replant();
 		return;
 	}
 	FMiniatureMesh Model;
@@ -7768,6 +8486,10 @@ void ACampaignMapActor::BuildGunLines()
 		}
 		Swung += Swing != 0.0 ? 1 : 0;
 		Beside += FMath::Abs(Swing) > 45.0 ? 1 : 0;
+		if (FMath::Abs(Swing) > 45.0)
+		{
+			NoRoomAt += (NoRoomAt.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::Printf(TEXT("at the side in %s"), *Data.Regions[Here].Name);
+		}
 		Closed += Gap < 1.0 ? 1 : 0;
 		Dropped += Guns < Line.Guns ? 1 : 0;
 		if (Swing != 0.0 || Gap < 1.0 || Guns < Line.Guns)
@@ -7801,6 +8523,12 @@ void ACampaignMapActor::BuildGunLines()
 			}
 			Taken.Add(Place);
 			Middle += Ground;
+			// (no tree on its earth: at the gun, and half way to the next)
+			GunClearings.Add(Place);
+			if (K + 1 < Guns)
+			{
+				GunClearings.Add((Place + Spot(Swing, Round(Guns, K + 1, Gap))) * 0.5);
+			}
 		}
 		FGunLine& Kept = GunLines.AddDefaulted_GetRef();
 		Kept.Piece = Line.Piece;
@@ -7844,6 +8572,7 @@ void ACampaignMapActor::BuildGunLines()
 		GunLineMesh->SetMaterial(0, PieceMaterial);
 	}
 	Earth.Commit(GunLineMesh, 1, GunEarthInk ? static_cast<UMaterialInterface*>(GunEarthInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	Replant();
 	UE_LOG(LogTheater, Log, TEXT("Gun lines: %d armies show their guns (%d swung round, %d of them to the base's side, %d closed up, %d a gun short), %d have no room (%s), %d are in the hand or on the road; %d corners. Straight behind was shut by water or the border %d, ground not its own %d, a town %d, a river or railway %d, a base %d, other guns %d"),
 		GunLines.Num(), Swung, Beside, Closed, Dropped, NoRoom, *NoRoomAt, GunsAway.Num(), Model.Vertices.Num(), Shut[1], Shut[2], Shut[3], Shut[4], Shut[5], Shut[6]);
 }
@@ -8617,6 +9346,7 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	{
 		SetRailLight(FRailLight()); // (the railway's light goes out with the reach it belongs to: whoever shows a reach lights it again)
 	}
+	bReachShown = Reach.Num() > 0;
 	OrdersMesh->ClearMeshSection(0);
 	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
 	if (EnemyReachMesh)
@@ -11188,7 +11918,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (round 37: at 1.55 a burst was 40 by 34 px from playing height and eleven of them ran together; the brief's 28 by 21)
 			const double Held = FMath::Lerp(1.0, 1.1, Playing);
 			// (it fades out, it does not pop: over its last second and a half; from playing height from the four-and-a-half-second look)
-			const double Going = 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.6, Playing), SmokeLife, Age);
+			const double Going = 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.0, Playing), SmokeLife, Age);
 			// (it drifts the way the flags fly: about half a wingspan over its life)
 			const FVector Heartland = Burst.At + Downwind * (0.055 * W * Age) + FVector(0.0, 0.0, 0.01 * W * Age);
 			// (The art director's round 36: "the lobes are round".) The smoke is her painted shapes, one or two a burst and
@@ -11198,7 +11928,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			static const double SheetAge[3] = { 0.1, 0.45, 0.9 }, SheetSquare[3] = { 1.21, 2.22, 3.95 }, SheetSmoke[3] = { 0.77, 1.17, 1.70 };
 			// (Round 37, the count from playing height: seen from there a burst keeps the look of its first seconds,
 			// small and dark, for the six seconds it is shown; its wide pale age could not be counted.)
-			const double Lived = FMath::Clamp(Age / FMath::Lerp(9.0, 20.0, Playing), 0.0, 1.0);
+			// (Round 38: about five of the dozen alive could be counted. From playing height a burst is at its darkest
+			// and smallest for its first three seconds, and ages only a little in the three that follow.)
+			const double Lived = FMath::Clamp(FMath::Lerp(Age / 9.0, Age <= 3.0 ? Age / 30.0 : 0.1 + (Age - 3.0) / 20.0, Playing), 0.0, 1.0);
 			const double SmokeWide = Lived < SheetAge[0] ? FMath::Lerp(0.55, SheetSmoke[0], Lived / SheetAge[0])
 				: Lived < SheetAge[1] ? FMath::Lerp(SheetSmoke[0], SheetSmoke[1], (Lived - SheetAge[0]) / (SheetAge[1] - SheetAge[0]))
 				: Lived < SheetAge[2] ? FMath::Lerp(SheetSmoke[1], SheetSmoke[2], (Lived - SheetAge[1]) / (SheetAge[2] - SheetAge[1]))
@@ -11211,7 +11943,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			else if (Lived < SheetAge[2]) { AgeShare[2] = static_cast<float>((Lived - SheetAge[1]) / (SheetAge[2] - SheetAge[1])); AgeShare[1] = 1.0f - AgeShare[2]; }
 			else { AgeShare[2] = 1.0f; }
 			// (how much of it is left: as painted, a third thicker from playing height; in at its birth and out at its end, never popping)
-			const float Remains = static_cast<float>(0.5 * FMath::Lerp(1.0, 1.7, Playing) * Going * FMath::SmoothStep(0.0, 0.12, Age));
+			const float Remains = static_cast<float>(FMath::Min(0.5 * FMath::Lerp(1.0, 2.0, Playing), 1.0) * Going * FMath::SmoothStep(0.0, 0.12, Age));
 			// (Smoke of every age takes the hour's light as the bombers do: about half by night, and bluer. The painted
 			// shapes carry their own dark and grey. From playing height a burst is held a little darker.)
 			const float Held2 = static_cast<float>(FMath::Lerp(1.0, 0.6, Playing));

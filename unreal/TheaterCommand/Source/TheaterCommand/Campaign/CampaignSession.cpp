@@ -1338,7 +1338,22 @@ void FCampaignSession::StageCut(int32 RegionId, const FString& Cause, const FStr
 void FCampaignSession::StageGuns(int32 RegionId, int32 Level)
 {
 	TSharedPtr<FJsonObject> Object;
-	CallRules(TEXT("stageGuns"), FString::Printf(TEXT("[%d,%d]"), RegionId, Level), Object);
+	if (CallRules(TEXT("stageGuns"), FString::Printf(TEXT("[%d,%d]"), RegionId, Level), Object))
+	{
+		TakeView(Object);
+	}
+}
+
+FString FCampaignSession::StageRecon(int32 RegionId)
+{
+	FString Said;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stageRecon"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("said"), Said);
+		TakeView(Object);
+	}
+	return Said;
 }
 
 FString FCampaignSession::Stands(int32 RegionId)

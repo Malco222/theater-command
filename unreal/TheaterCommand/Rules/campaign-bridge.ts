@@ -1369,7 +1369,21 @@ function stageCut(region: number, cause: string, how: string) {
 function stageGuns(region: number, level: number) {
   const s = game();
   if (s.regions[region]) s.flags[`wk:aa:${region}`] = Math.max(0, Math.min(3, Math.round(level)));
-  return { ok: !!s.regions[region] };
+  return { ok: !!s.regions[region], view: view() };
+}
+
+/** (For the photographer only.) Flies a reconnaissance flight over a province by the rules' own sendScout, with the first of the player's air groups that can go. */
+function stageRecon(region: number) {
+  const s = game();
+  let said = '';
+  try {
+    for (const f of s.airFleets) {
+      if (f.nat !== s.human) continue;
+      const flown = sendScout(s, f.id, region);
+      if (flown.ok) { said = flown.text || 'flown'; break; }
+    }
+  } catch { /* none could go */ }
+  return { ok: !!said, said, view: view() };
 }
 
 /** How much of the army in a province stands this month: 'all', 'some', 'none', or '' where it has nothing to stand. */
@@ -3950,7 +3964,9 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
     const picture = (t: number, holder: string): string => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || 'X'}`;
     // (The art director's defences brief: a place's anti-aircraft guns, 0 to 3, which the rules never hide; -1 for a
     // target that is not a place.)
-    const gunsOf = (t: number): number => (sea || !s.regions[t] ? -1 : gunsRound(s, t));
+    // (The art director's round 38: the guns round a place take part in the bombing of its industry, its town and its
+    // harbour, by day or by night. In any other raid they take none, and the targets carry no pips.)
+    const gunsOf = (t: number): number => (sea || !s.regions[t] || !['bomb', 'night', 'town', 'harbour'].includes(kind) ? -1 : gunsRound(s, t));
     const stops = raidStopsFor(s, k, -1);
     const here = stops.find((t) => t.id === target);
     const lead = p.seats.find((x) => x.picked && x.kind !== 'ftr') ?? p.seats.find((x) => x.picked);
@@ -4930,4 +4946,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, move, previewAttack: preview, attack, endMonth };

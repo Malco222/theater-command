@@ -2478,6 +2478,26 @@ bool ACampaignPlayerController::IsRoundMixed() const
 	return Session && Session->GetView().Round.Front > 0 && Session->GetView().Round.Bright > Session->GetView().Round.Front;
 }
 
+void ACampaignPlayerController::StageGuns(int32 RegionId, int32 Level)
+{
+	if (FCampaignSession* Session = GetSession())
+	{
+		Session->StageGuns(RegionId, Level);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+}
+
+FString ACampaignPlayerController::StageRecon(int32 RegionId)
+{
+	FString Said;
+	if (FCampaignSession* Session = GetSession())
+	{
+		Said = Session->StageRecon(RegionId);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	return Said;
+}
+
 void ACampaignPlayerController::StageCut(int32 RegionId, const FString& Cause, const FString& How)
 {
 	if (FCampaignSession* Session = GetSession())

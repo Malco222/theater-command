@@ -495,6 +495,68 @@ namespace
 	};
 
 	/**
+	 * (The art director's round 38: "a cut ends after a whole word".) One line of words that is cut, where it must be,
+	 * after a whole word, with the mark of a cut after it. It takes whatever width its row gives it.
+	 */
+	class SWordLine : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SWordLine) {}
+			SLATE_ARGUMENT(FString, Words)
+			SLATE_ARGUMENT(FSlateFontInfo, Face)
+			SLATE_ARGUMENT(FLinearColor, Ink)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Words = Args._Words;
+			Face = Args._Face;
+			Ink = Args._Ink;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			return FVector2D(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Face));
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const double Room = Geometry.GetLocalSize().X;
+			FString Shown = Words;
+			if (Measure->Measure(Shown, Face).X > Room + 0.5)
+			{
+				for (;;)
+				{
+					int32 Space = INDEX_NONE;
+					if (!Shown.FindLastChar(TEXT(' '), Space) || Space <= 0)
+					{
+						break;
+					}
+					Shown = Shown.Left(Space);
+					// (a comma, a colon or a dash left hanging at the cut goes with it)
+					while (Shown.Len() > 1 && (Shown.EndsWith(TEXT(",")) || Shown.EndsWith(TEXT(":")) || Shown.EndsWith(TEXT(";")) || Shown.EndsWith(TEXT("\u00B7")) || Shown.EndsWith(TEXT(" "))))
+					{
+						Shown.LeftChopInline(1);
+					}
+					if (Measure->Measure(Shown + TEXT(" \u2026"), Face).X <= Room)
+					{
+						Shown += TEXT(" \u2026");
+						break;
+					}
+				}
+			}
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Shown, Face, ESlateDrawEffect::None, Ink * Style.GetColorAndOpacityTint());
+			return LayerId;
+		}
+
+	private:
+		FString Words;
+		FSlateFontInfo Face;
+		FLinearColor Ink = FLinearColor::White;
+	};
+
+	/**
 	 * The art director's sign for a kind of unit on order (Content/CityOrders/order-<key>.png): white on a clear
 	 * ground, to be tinted. Read once for the life of the game; null for a key she has not drawn.
 	 */
@@ -4796,7 +4858,8 @@ namespace
 				// 1. Armies at the front remain: the one bright thing.
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SBox).WidthOverride(252.0f).HeightOverride(46.0f)
+					// (wider by a little where its line names both kinds: "12 at the front and 1 newly raised")
+					SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->IsRoundMixed() ? 282.0f : 252.0f); }).HeightOverride(46.0f)
 					.Visibility_Lambda([this]() { return ArmiesWait() ? EVisibility::Visible : EVisibility::Collapsed; })
 					[
 						SNew(SButton).ButtonStyle(&PillStyle).ContentPadding(FMargin(3.0f)).IsFocusable(false)
@@ -4828,6 +4891,15 @@ namespace
 											SNew(STextBlock).Text(FText::FromString(TEXT("NEXT ARMY"))).Font(Serif(TEXT("Bold"), 14, 120)).ColorAndOpacity(DeskInk)
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(9.0f, 1.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), DeskInk)]
+										// (where the line below names both kinds it needs the whole width, and the chevron rides up here)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right).VAlign(VAlign_Center)
+										[
+											SNew(SBox)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsRoundMixed() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											[
+												SNew(SLineIcon).Kind(8).Size(16.0f).Weight(2.2f).Ink(DeskInk)
+											]
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -1.0f, 0.0f, 0.0f)
 									[
@@ -4835,18 +4907,24 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 										[
 											// (where the disc counts only armies raised this month, and none at the front, the line says so)
-											SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
-											// (the longer line of both kinds is set a size smaller, to stay on the pill)
-											.Font_Lambda([this]() { return Typed(Controller.IsValid() && Controller->IsRoundMixed() ? 8 : 9); })
-											// (ruling 111(f): where it counts both kinds, the rules' own words say how many of each)
+											SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f)).Font(Typed(9))
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsRoundMixed() && !Controller->GetRoundWords().IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 											.Text_Lambda([this]()
 											{
-												if (Controller.IsValid() && Controller->IsRoundMixed() && !Controller->GetRoundWords().IsEmpty())
-												{
-													return FText::FromString(Controller->GetRoundWords());
-												}
 												return FText::FromString(Controller.IsValid() && Controller->IsRoundNewlyRaised() ? TEXT("newly raised") : TEXT("at the front"));
 											})
+										]
+										// (Ruling 111(f): where it counts both kinds, the rules' own words say how many of each. The longer
+										// line is set smaller and has the whole width; were it ever longer still, it shrinks to fit and is
+										// never cut short.)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly).HAlign(HAlign_Left)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsRoundMixed() && !Controller->GetRoundWords().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											[
+												SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f)).Font(Typed(7.5f))
+												.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->GetRoundWords() : FString()); })
+											]
 										]
 										// (Ruling 101.) The quieter number, at about 60 percent of the ink's strength: the rest that can
 										// still move. With nobody in the rear the line reads "at the front" alone.
@@ -4860,7 +4938,11 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 								[
-									SNew(SLineIcon).Kind(8).Size(16.0f).Weight(2.2f).Ink(DeskInk)
+									SNew(SBox)
+									.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsRoundMixed() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+									[
+										SNew(SLineIcon).Kind(8).Size(16.0f).Weight(2.2f).Ink(DeskInk)
+									]
 								]
 							]
 						]
@@ -5045,8 +5127,8 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()[Top]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Told.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.88f))
-					.OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Told.Text))
+					// (cut, where it must be, after a whole word: the art director's round 38)
+					SNew(SWordLine).Words(Told.Text).Face(Font(TEXT("Regular"), 11)).Ink(Cream.CopyWithNewOpacity(0.88f)).ToolTipText(FText::FromString(Told.Text))
 				]
 			];
 			for (const FMonthFigure& Figure : Told.Figures)

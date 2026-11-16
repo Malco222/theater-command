@@ -199,6 +199,11 @@ public:
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }
 	FVector2D ParadeSpot(int32 Index) const;
+	/** (For the photographer.) Where a train now runs in the open, a little ahead of it; one made up under guns of at least that level. */
+	bool TrainSpot(int32 MinFlak, FVector2D& Out) const;
+	/** (For the photographer.) The next look at a train chooses its train afresh. */
+	void ForgetTrain() { WatchedTrain.Reset(); }
+	mutable TWeakObjectPtr<UProceduralMeshComponent> WatchedTrain;
 	float ParadeHeight() const { return ParadeLevel; }
 
 	/** Lays the rivers and railways the rules know on the table (once, when a campaign begins). */
@@ -500,7 +505,10 @@ private:
 	void BuildParade();
 	TArray<FVector2D> ParadeSpots;
 	float ParadeLevel = 0.0f;
-	void BuildTrees();
+	void BuildTrees(const TSet<FIntPoint>* Only = nullptr);
+	/** (The art director's round 38.) Where the gun lines' trodden earth lies: no tree stands within a few units of any of these. */
+	TArray<FVector2D> GunClearings;
+	TArray<FIntPoint> TreeSquareOf; // which square of country each of the woods' meshes holds
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);
 	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;
@@ -611,10 +619,17 @@ private:
 	 */
 	void UpdateSearchlights(float CameraDistance);
 	void UpdateCutLamps(float CameraDistance);
+	/**
+	 * (The art director's round 38.) Where a cut province's lamp, board and post stand: on the longest stretch of its
+	 * own track, halfway between the town's last house and the border, clear of where its army stands.
+	 */
+	FVector2D CutSpot(int32 RegionId) const;
 	void UpdateRailLight(float CameraDistance);
 	FRailLight RailLight;
 	int32 RailRouteTo = INDEX_NONE;
 	TSet<FIntPoint> RailRoute; // the tracks of the route to the province under the pointer
+	TMap<int32, int32> RailBack; // by province on a lit line: the next province toward the army in hand
+	TMap<int32, double> DotOut; // by province: how far out along that track its station dot now stands (nothing: over its town)
 	bool bRailLightDirty = false;
 	float RailLightBuiltFor = -1.0f; // (the eye's height the lines were last drawn for: they keep their width on the screen)
 	UPROPERTY()
@@ -658,11 +673,22 @@ private:
 		bool bBackward = false; // from the link's second province to its first
 		double Began = 0.0;
 		int32 Links = 0; // how many links it has run so far
+		// (Brian, 16 November 2026: the trains turn round.) While it stands at a station being turned: when the turn
+		// began, the headings it turns between, the point it turns about where that is its own middle, and how far
+		// along its new line it then stands (a train turned about its middle stands a little way out of the town).
+		double TurnBegan = -1.0;
+		float TurnFrom = 0.0f, TurnTo = 0.0f;
+		bool bPivotMiddle = false;
+		FVector Pivot = FVector::ZeroVector;
+		double StartAlong = 0.0;
+		int32 FlakLevel = -1; // (ruling 125) the guns that guard the province it last set out from: its flak wagons are made up there
 		TObjectPtr<UProceduralMeshComponent> Mesh;
 	};
 	TArray<FTrain> Trains;
 	double NextTrain = 0.0;
 	void UpdateTrains(const FVector& CameraFocus, float CameraDistance);
+	/** (Ruling 125.) Makes a train up for the province it sets out from: a flak wagon at its tail where guns guard the line, a second behind the tender at level 3. */
+	void MakeUpTrain(FTrain& Train, int32 FromRegion) const;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed
@@ -1200,6 +1226,7 @@ private:
 
 	int32 SelectedRegion = INDEX_NONE;
 	int32 HoveredRegion = INDEX_NONE;
+	bool bReachShown = false; // an army is in hand and its reach is on the table
 	int32 LabelState = -1;
 	float LastPieceYaw = 0.0f;
 	float StandardGrowth = 1.0f, StandardLean = 0.0f; // how large the pieces' standards are drawn just now, and how far they lean back toward the eye

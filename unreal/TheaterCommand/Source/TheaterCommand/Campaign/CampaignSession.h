@@ -80,6 +80,8 @@ public:
 	void StageGuns(int32 RegionId, int32 Level);
 	/** (For the photographer only.) Cuts a province's railway, with a cause; "report" or "seen" only writes down that the player knows of a cut there. */
 	void StageCut(int32 RegionId, const FString& Cause, const FString& How);
+	/** (For the photographer only.) Flies a reconnaissance flight over a province; what the flight reported, or empty. */
+	FString StageRecon(int32 RegionId);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */
