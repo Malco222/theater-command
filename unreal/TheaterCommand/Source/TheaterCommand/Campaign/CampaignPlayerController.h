@@ -553,11 +553,14 @@ public:
 	/** For the photographer: the question at the month's end, as it would be asked now. */
 	void ShowEndAsk();
 	/** Where the pointer is, in the window's own pixels. */
-	FVector2D GetPointer() const { return (StagedHover != INDEX_NONE || StagedGate != INDEX_NONE) ? StagedPointer : LastMouse; }
+	FVector2D GetPointer() const { return (StagedHover != INDEX_NONE || StagedGate != INDEX_NONE || StagedSea != INDEX_NONE) ? StagedPointer : LastMouse; }
 	// For the photographer, who has no mouse: the tip as it would read with the pointer resting on this region.
 	void StageHover(int32 RegionId) { StagedHover = RegionId; }
 	/** (Ruling 86.) For the photographer: the pointer resting on the mark of the gate whose name begins so. */
 	void StageGate(const FString& NameBegins);
+	/** For the photographer: with a fleet in hand, the pointer resting on the sea whose name begins so. */
+	void StageSea(const FString& NameBegins);
+	int32 StagedSea = INDEX_NONE;
 	/** (Ruling 86.) Where the gates' marks were last drawn, in the window's own pixels: told by the screen as it paints them. */
 	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks) { GateMarks = Marks; }
 	/** Shows the model of one of the corps in hand large and turning beside the cards. */

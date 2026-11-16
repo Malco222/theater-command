@@ -949,6 +949,12 @@ def build_figure(k):
         parts.append(ball("helmet", (hx - 0.012, 0.0, top + 0.01), (0.118, 0.11, 0.1), "helmet", flat_below=0.0))
         parts.append(drum("brim", 0.15, 0.016, (hx - 0.002, 0.0, top + 0.008), "helmet", 14, axis="Z", radius2=0.122))
         parts.append(box("crest", (0.2, 0.018, 0.03), (hx - 0.022, 0.0, top + 0.105), "helmet", 0.006))
+    elif kind == "dome":
+        # (Rulings 78 and 79; the art director's numbers.) The plain helmet, our own and no army's: a low dome with a
+        # level rim all round and no crest. Wider in the rim than the Japanese one, and with no crest, so it is neither
+        # that nor the French one.
+        parts.append(ball("helmet", (hx - 0.014, 0.0, top + 0.015), (0.124, 0.114, 0.1), "helmet", flat_below=0.0))
+        parts.append(drum("brim", 0.151, 0.018, (hx - 0.014, 0.0, top + 0.006), "helmet", 14, axis="Z", radius2=0.124))
     elif kind == "eastern":
         parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.122, 0.114, 0.108), "helmet", flat_below=0.0))
         parts.append(drum("brim", 0.14, 0.014, (hx - 0.006, 0.0, top), "helmet", 14, axis="Z", radius2=0.124))
@@ -1051,6 +1057,7 @@ FIGURES = {
     "Rifleman_Round": dict(RIFLEMAN, helmet="round", rifle=1.05),
     "Rifleman_Eastern": dict(RIFLEMAN, helmet="eastern", rifle=1.27, bayonet=True),
     "Rifleman_Cap": dict(RIFLEMAN, helmet="cap", rifle=1.27, bayonet=True),
+    "Rifleman_Dome": dict(RIFLEMAN, helmet="dome"),
 }
 # (and each as a pioneer with a shovel, and mounted)
 for _name, _spec in list(FIGURES.items()):

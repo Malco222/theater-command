@@ -1155,7 +1155,7 @@ namespace VehicleParts
 	static FLinearColor NationPaint = Hex(TEXT("60664A"));
 	static FString NationTag;
 
-	/** A light tank of the Vickers six-ton kind, which a dozen armies bought or copied, in the paint of whichever nation asks. */
+	/** The plain light tank (rulings 78 and 79): no country's own, in the paint of whichever nation asks. */
 	static void LightTank(FMiniatureMesh& M)
 	{
 		LightTankIn(M, NationPaint, false);
@@ -1542,7 +1542,7 @@ namespace VehicleParts
 		{ TEXT("M13"), &M13, TEXT("M13/40  -  4.92 m long, 2.37 m high"), TEXT("ITA") },
 		{ TEXT("Type97"), &Type97, TEXT("Type 97 Chi-Ha  -  5.50 m long, 2.23 m high"), TEXT("JAP") },
 		{ TEXT("7TP"), &SevenTP, TEXT("7TP  -  4.60 m long, 2.30 m high"), TEXT("POL") },
-		{ TEXT("LightTank"), &LightTank, TEXT("Light tank (Vickers six-ton type)  -  4.60 m long, 2.30 m high"), TEXT("ROM"), true },
+		{ TEXT("LightTank"), &LightTank, TEXT("Light tank  -  4.60 m long, 2.30 m high"), TEXT("ROM"), true },
 		{ TEXT("Hanomag"), &Hanomag, TEXT("Sd.Kfz. 251 half-track  -  5.80 m long, 1.75 m high"), TEXT("GER") },
 		{ TEXT("M3Halftrack"), &M3Halftrack, TEXT("M3 half-track  -  6.18 m long, 2.26 m high"), TEXT("USA") },
 		{ TEXT("Truck"), &Truck, TEXT("Three-ton lorry  -  6.0 m long, 2.6 m high"), TEXT("GER"), true },
@@ -1550,7 +1550,7 @@ namespace VehicleParts
 		{ TEXT("25pdr"), &TwentyFivePounder, TEXT("25-pounder field gun  -  barrel 2.47 m"), TEXT("UK") },
 		{ TEXT("Howitzer105"), &Howitzer105, TEXT("105 mm M2A1 howitzer  -  barrel 2.36 m"), TEXT("USA") },
 		{ TEXT("ZiS3"), &ZiS3, TEXT("76 mm ZiS-3 field gun  -  barrel 3.46 m"), TEXT("SOV") },
-		{ TEXT("Gun75"), &SeventyFive, TEXT("75 mm mle 1897 field gun  -  barrel 2.70 m"), TEXT("FRA"), true },
+		{ TEXT("Gun75"), &SeventyFive, TEXT("Field gun  -  barrel 2.70 m"), TEXT("FRA"), true },
 	};
 
 	/** A model of this name, among the vehicles and guns here and the aircraft. */

@@ -1,5 +1,6 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 
 /**
@@ -33,13 +34,16 @@ namespace SoldierParts
 		Round,    // the Italian and Polish helmets: a smooth round bowl
 		Eastern,  // the Japanese helmet: a round bowl with a small brim
 		Cap,      // the Japanese field cap: soft, with a short peak and a sun flap to the collar
+		Dome,     // (rulings 78 and 79) the plain helmet, our own: a low dome with a level rim all round and no crest
 	};
 
 	/** What one army's rifleman wears and carries. */
 	struct FKit
 	{
 		FLinearColor Tunic, Trousers, Boots, Lower, Straps, HelmetPaint, Pack;
-		EHelmet Helmet = EHelmet::Pot;
+		// (Rulings 78 and 79: a country with no head of its own, and none shared by the record, wears the plain helmet.
+		// The American helmet is America's alone.)
+		EHelmet Helmet = EHelmet::Dome;
 		/** Tall boots to the knee; otherwise the lower leg is wrapped or gaitered in Lower. */
 		bool bTallBoots = false;
 		/** A pack on the back; a blanket roll worn across the body; the fluted canister of a gas mask at the back of the belt. */
@@ -109,7 +113,9 @@ namespace SoldierParts
 			K.bChestPouches = true;
 			K.Rifle = 1.13;
 		}
-		else if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR") || Tag == TEXT("BEL") || Tag == TEXT("ROM") || Tag == TEXT("YUG") || Tag == TEXT("GRE"))
+		// (the French helmet by the record: Belgium, Mexico and Peru. Romania, Yugoslavia and Greece come off the list:
+		// their record is mixed, or their helmet was a pattern of their own.)
+		else if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR") || Tag == TEXT("BEL") || Tag == TEXT("MEX") || Tag == TEXT("PER"))
 		{
 			K.Boots = Hex(TEXT("3A2C22"));
 			K.HelmetPaint = K.Tunic * 0.78f;
@@ -141,14 +147,20 @@ namespace SoldierParts
 			K.HelmetPaint = Hex(TEXT("5E5E44"));
 			K.Helmet = EHelmet::Round;
 		}
-		else if (Tag == TEXT("HUN") || Tag == TEXT("FIN") || Tag == TEXT("SVK") || Tag == TEXT("BUL") || Tag == TEXT("ESP") || Tag == TEXT("CHN") || Tag == TEXT("CHI"))
+		else if (Tag == TEXT("HUN") || Tag == TEXT("FIN") || Tag == TEXT("CHL"))
 		{
-			// Armies that wore the German pattern of helmet, or one very like it.
+			// (the German helmet by the record: Hungary, Finland and Chile. Slovakia, Bulgaria, Spain and China come off
+			// the list, and no country wears the British one but Britain and the Commonwealth.)
 			K.Helmet = EHelmet::Stahl;
 		}
-		else if (Tag == TEXT("NOR") || Tag == TEXT("POR") || Tag == TEXT("TUR") || Tag == TEXT("IRL"))
+		// (The head is the one the art director's table gives the country. The peaked helmet, the sun helmet and the
+		// field cap are still to be sculpted: until they are, each of those is the plain helmet.)
+		const FString Head = UnitTable::Head(Tag);
+		if (!Head.IsEmpty())
 		{
-			K.Helmet = EHelmet::Brodie;
+			K.Helmet = Head == TEXT("stahl") ? EHelmet::Stahl : Head == TEXT("brodie") ? EHelmet::Brodie : Head == TEXT("soviet") ? EHelmet::Soviet
+				: Head == TEXT("adrian") ? EHelmet::Adrian : Head == TEXT("round") ? EHelmet::Round : Head == TEXT("cap") ? EHelmet::Cap
+				: Head == TEXT("pot") ? EHelmet::Pot : EHelmet::Dome;
 		}
 		return K;
 	}
@@ -507,6 +519,12 @@ namespace SoldierParts
 			Helmet(M, Brow, 0.125, 0.132, 0.118, 0.118,
 				[](double, double) { return 0.04; }, [](double, double) { return 0.035; }, K.HelmetPaint, bFine);
 			break;
+		case EHelmet::Dome:
+			// (The art director's numbers: a low dome with a level rim all round and no crest. Wider in the rim than
+			// Japan's and with no crest, so it is neither that nor the French one.)
+			Helmet(M, Brow + FVector(0.0, 0.0, 0.015), 0.122, 0.126, 0.114, 0.1,
+				[](double, double) { return 0.018; }, [](double, double) { return 0.22; }, K.HelmetPaint, bFine);
+			break;
 		case EHelmet::Cap: // (the figure built in code wears the small helmet in the cap's cloth colour: the cap itself is on the sculpted one)
 		case EHelmet::Eastern:
 			Helmet(M, Brow, 0.124, 0.13, 0.117, 0.112,
@@ -555,14 +573,14 @@ void FMiniatureMesh::Figure(const FString& Tag, int32 Pose, const FVector& Where
 		// the table the plainer of its two meshes is used, since a base carries several of them.
 		const SoldierParts::FKit K = SoldierParts::KitFor(Tag);
 		static const TCHAR* const Poses[] = { TEXT("Rifleman_"), TEXT("Rider_"), TEXT("Pioneer_") };
-		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern"), TEXT("Cap") };
+		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern"), TEXT("Cap"), TEXT("Dome") };
 		// (the horse's coat is one of three, by the nation, as on the figure built in code)
 		const FLinearColor Coats[3] = { SoldierParts::Hex(TEXT("5B3A26")), SoldierParts::Hex(TEXT("3A2A20")), SoldierParts::Hex(TEXT("7A5636")) };
 		const FLinearColor Coat = Coats[GetTypeHash(K.Tunic.ToFColor(true).ToHex()) % 3];
 		const TArray<FLinearColor> Kit = { K.Tunic, K.Trousers, K.Boots, K.bTallBoots ? K.Boots : K.Lower, K.Straps, K.HelmetPaint, K.Pack,
 			SoldierParts::Hex(TEXT("C49A78")), SoldierParts::Hex(TEXT("5E4128")), SoldierParts::Hex(TEXT("2E2F31")),
 			Coat, Coat * 0.35f, K.Straps * 0.9f, SoldierParts::Hex(TEXT("5C5A48")), SoldierParts::Hex(TEXT("2A2420")) };
-		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 7)];
+		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 8)];
 		if (Sculpted(Name, Tag, Where, Metre, Turn, !bFine, &Kit))
 		{
 			return;

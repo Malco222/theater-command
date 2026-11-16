@@ -1235,6 +1235,25 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterHoverGate="), OnGate, false);
 		Controller->StageGate(OnGate);
 	}
+	// ("-TheaterFleetNamed=Baltic" takes the player's fleet of that name in hand, and "-TheaterHoverSea=Skagerrak"
+	// rests the pointer on that sea: for the pictures of a fleet's reach through a gate, and of a sea it is refused.)
+	{
+		FString FleetNamed, OnSea;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFleetNamed="), FleetNamed, false) && Controller->GetSession())
+		{
+			const FCampaignView& Seen = Controller->GetSession()->GetView();
+			for (const FViewFleet& Fleet : Seen.Fleets)
+			{
+				if (Fleet.Nation == Seen.Human && Fleet.Name.StartsWith(FleetNamed))
+				{
+					Controller->PickUpFleet(Fleet.Id);
+					break;
+				}
+			}
+		}
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterHoverSea="), OnSea, false);
+		Controller->StageSea(OnSea);
+	}
 	// ("-TheaterStandAll" tells every army that waits to stand this month, for the picture of the corner when none
 	// waits; "-TheaterEndAsk" puts the question at the month's end.)
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterStandAll")))

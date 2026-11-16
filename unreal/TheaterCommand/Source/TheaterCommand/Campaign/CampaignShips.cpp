@@ -1,5 +1,6 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 
 /**
@@ -47,7 +48,10 @@ namespace ShipParts
 	static FLivery LiveryOf(const FString& Tag, int32 Class)
 	{
 		const bool bJapan = Tag == TEXT("JAP") || Tag == TEXT("JPN"), bFrance = Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR");
-		const FLinearColor Hull = Tag == TEXT("GER") ? Hex(TEXT("6A7278")) : bJapan ? Hex(TEXT("5C6266")) : Tag == TEXT("USA") ? Hex(TEXT("5F6E80"))
+		// (Rulings 78 and 79: the hull grey is the one the art director's table gives the navy: four greys shared out so
+		// that no two neighbours at sea match. The greys below are what the game had, where the table cannot be read.)
+		FLinearColor Given;
+		const FLinearColor Hull = UnitTable::Hull(Tag, Given) ? Given : Tag == TEXT("GER") ? Hex(TEXT("6A7278")) : bJapan ? Hex(TEXT("5C6266")) : Tag == TEXT("USA") ? Hex(TEXT("5F6E80"))
 			: Tag == TEXT("ITA") ? Hex(TEXT("A2A8A6")) : bFrance ? Hex(TEXT("8E9AA6")) : Tag == TEXT("SOV") ? Hex(TEXT("565E6A")) : Hex(TEXT("7A848C"));
 		const FLinearColor Upper = Tag == TEXT("GER") ? Hex(TEXT("A9AEB0")) : Hull;
 		const FLinearColor Deck = Class == 4 ? Hex(TEXT("3E4448")) : Class == 0 || Class == 1 ? Planks : Plating;
@@ -434,8 +438,23 @@ namespace ShipParts
 			C.TowerHigh = 26.0;
 			C.SideTurrets = 4;
 		}
+		else if (UnitTable::PlainBattleship(Tag))
+		{
+			// (Rulings 78 and 79; the art director's numbers.) The plain battleship, no navy's own: 215 m by 30; six guns
+			// in three turrets of two, which tells it at a glance from every great navy's; two funnels close together.
+			// It takes the British layout's place on every navy with none of its own, the Soviet one among them.
+			C.H = { 215.0, 30.0, 6.5, 2.0, 0.0, 6.0, 0.5 };
+			C.Guns = { { 60.0, false, 2 }, { 44.0, true, 2 }, { -58.0, false, 2 } };
+			C.GunSize = 11.0;
+			C.GunLong = 15.0;
+			C.Funnels = { 8.0, -6.0 };
+			C.TowerX = 26.0;
+			C.TowerHigh = 18.0;
+			C.SideTurrets = 2;
+		}
 		else
 		{
+			// (Britain's own, and the Commonwealth's by the record.)
 			// King George V: 227 m long, 31 m in the beam; four guns forward, two above them, four aft; two funnels.
 			C.H = { 227.0, 31.4, 6.5, 2.0, 0.0, 6.0, 0.5 };
 			C.Guns = { { 64.0, false, 4 }, { 48.0, true, 2 }, { -64.0, false, 4 } };
@@ -496,8 +515,23 @@ namespace ShipParts
 			C.TowerHigh = 18.0;
 			C.bPagoda = true;
 		}
+		else if (UnitTable::PlainCruiser(Tag))
+		{
+			// (Rulings 78 and 79; the art director's numbers.) The plain cruiser, no navy's own: 175 m by 17.5; six guns in
+			// three turrets of two; two funnels. It takes the three-funnelled layout's place on every navy but Britain's.
+			C.H = { 175.0, 17.5, 7.0, 1.0, 0.0, 5.0, 0.5 };
+			C.Guns = { { 52.0, false, 2 }, { 41.0, true, 2 }, { -50.0, false, 2 } };
+			C.GunSize = 6.5;
+			C.GunLong = 8.5;
+			C.Funnels = { 8.0, -8.0 };
+			C.FunnelHigh = 10.0;
+			C.TowerX = 26.0;
+			C.TowerHigh = 13.0;
+			C.SideTurrets = 2;
+		}
 		else
 		{
+			// (Britain's own, and the Commonwealth's by the record.)
 			// A County-class cruiser: 192 m; four turrets of two 8-inch guns, and three tall funnels.
 			C.H = { 192.0, 20.8, 7.0, 1.0, 0.0, 5.0, 0.5 };
 			C.Guns = { { 58.0, false, 2 }, { 47.0, true, 2 }, { -47.0, true, 2 }, { -58.0, false, 2 } };

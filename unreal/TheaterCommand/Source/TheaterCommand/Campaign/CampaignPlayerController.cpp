@@ -1852,6 +1852,23 @@ int32 ACampaignPlayerController::GateUnder(const FVector2D& Pointer) const
 	return INDEX_NONE;
 }
 
+void ACampaignPlayerController::StageSea(const FString& NameBegins)
+{
+	StagedSea = INDEX_NONE;
+	if (Map.IsValid() && !NameBegins.IsEmpty())
+	{
+		const TArray<FCampaignSeaZone>& Seas = Map->GetData().Seas;
+		for (int32 Zone = 0; Zone < Seas.Num(); ++Zone)
+		{
+			if (Seas[Zone].Name.StartsWith(NameBegins))
+			{
+				StagedSea = Zone;
+				break;
+			}
+		}
+	}
+}
+
 void ACampaignPlayerController::StageGate(const FString& NameBegins)
 {
 	StagedGate = INDEX_NONE;
@@ -4156,7 +4173,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	// With a fleet in hand, the sea under the pointer is marked, and what a right-click would do is said.
 	{
-		const int32 Sea = (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel) ? SeaNear(PointerMap) : INDEX_NONE;
+		// (for the photographer, who has no mouse: the sea the pointer is staged on)
+		const bool bStagedSea = StagedSea != INDEX_NONE && FleetInHand != INDEX_NONE && Map->GetData().Seas.IsValidIndex(StagedSea);
+		if (bStagedSea)
+		{
+			const FVector2D Middle = Map->GetData().Seas[StagedSea].Center;
+			ProjectWorldLocationToScreen(Map->MapToWorld(Middle.X, Middle.Y), StagedPointer);
+		}
+		const int32 Sea = bStagedSea ? StagedSea
+			: (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel) ? SeaNear(PointerMap) : INDEX_NONE;
 		if (Sea != FleetHoverSea)
 		{
 			FleetHoverSea = Sea;

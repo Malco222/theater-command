@@ -1,6 +1,7 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Misc/ScopeExit.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
 #include "Misc/FileHelper.h"
@@ -1279,6 +1280,12 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		Star(0.82, White, 12, 0.6);
 	}
 	else if (Tag == TEXT("IRL")) Rings(Green, White, Orange);
+	else if (const TArray<FLinearColor> Ring = UnitTable::Ring(Tag); Ring.Num() >= 2)
+	{
+		// (Rulings 78 and 79: a country with no marking drawn wears a plain ring of two or three of its flag's
+		// colours, from the art director's table, where twenty-seven wore one white disc with a grey middle.)
+		Rings(Ring[0], Ring[1], Ring.Num() > 2 ? Ring[2] : Ring[0]);
+	}
 	else
 	{
 		Disc(1.0, White);
@@ -3043,6 +3050,14 @@ void FMiniatureMesh::Crag(const FVector& Where, double Scale)
 
 FLinearColor FMiniatureMesh::UniformColour(const FString& Tag)
 {
+	// (Rulings 78 and 79: the cloth is the one the art director's table gives the country: seven cloths shared out so
+	// that no two neighbours match, where there was one khaki for twenty-seven. The list below is what the game had,
+	// and stands only where the table cannot be read.)
+	FLinearColor Given;
+	if (UnitTable::Cloth(Tag, Given))
+	{
+		return Given;
+	}
 	static const TMap<FString, const TCHAR*> Cloth = {
 		{ TEXT("GER"), TEXT("5F665C") }, // field grey
 		{ TEXT("USA"), TEXT("78724C") }, // olive cloth (120, 114, 76)
@@ -3064,6 +3079,12 @@ FLinearColor FMiniatureMesh::UniformColour(const FString& Tag)
 
 FLinearColor FMiniatureMesh::VehicleColour(const FString& Tag)
 {
+	// (and so the paint of its vehicles and its aircraft: six paints, where there was one olive for forty-three)
+	FLinearColor Given;
+	if (UnitTable::Paint(Tag, Given))
+	{
+		return Given;
+	}
 	static const TMap<FString, const TCHAR*> Paint = {
 		{ TEXT("GER"), TEXT("4E5459") }, // tank grey
 		{ TEXT("USA"), TEXT("565C3A") }, // olive drab (the art director's sheet: 86, 92, 58)
