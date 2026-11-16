@@ -221,3 +221,14 @@ Version 79 is on main with Version 80's display changes (af9bafa; no war differs
 | `probe82.ts`, `v79e.tsv` | The month Germany's home ground is first entered in each war, by whom, and the months it is entered before May 1944 | `node out79b/probe82.mjs 17,18,19 70` |
 | `probe58.ts`, `v79g.tsv` | The seat probe takes the difficulty from `TC_LEVEL` (cadet, captain, colonel, general, marshal); Germany by hand at Captain and Cadet | `./jobs.sh v79g.tsv out/v79 4`, then `python3 seattab.py out/v79 seatcaptain seatcadet --seeds 25-36` |
 | `v79a.tsv` to `v79d.tsv`, `v79l.tsv` | The seat, idle, Latin and domination queues of `mk77.py` with the Version 79 bundle | `./jobs.sh v79a.tsv out/v79 4` |
+
+Stop 4 reads: the table scripts look for `watch49s3-*`, `land-*`, `army-*` in one folder, so copy the stop 4 files (`watch49s4-*`, `land4-*`, `army4-*`) into a folder of their own under those names (and `sed 's/stop 4/stop 3/'` in the watch copies) before `watchend.py`, `datestab.py`, `armytab.py`; `landtab.py` and `landyear.py` take a glob. `probe69.mjs` must be built into `out79` before `v79a.tsv` (the Americans beside a British player).
+
+## Version 81 (America fights an enemy on its own side of the ocean)
+
+Version 81 is main 4814ebf (`/home/user/tc81`, bundles in `out81`). The 24 no-player wars at stop 3 are Version 79's.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `probe83.ts` | Nobody playing; a computer-led FOE (COL, VEN, BRA, MEX, PER, PAN, CUB, ARG, or `none`) turns to the Axis and declares war on the United States in month T. One `FOE` line a war: the first American corps on its soil, when it falls, Americans across the ocean and ashore in the west to stay (frozen the month Germany falls), Germany's fall, American corps at home then and at the end | `node out81/probe83.mjs 17,18,19 80 COL 13` |
+| `v81.tsv` | The measure of rulings 75, 76 and 80(b): `probe83` on Version 81 and, for Colombia, Venezuela and Brazil, on Version 79 (`out79b`); `probe76` by hand; `peek79 17`; two watch jobs; the hemisphere set; Brazil and Argentina by hand | `./jobs.sh v81.tsv out/v81 3` |

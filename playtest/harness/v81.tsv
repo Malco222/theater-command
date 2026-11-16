@@ -1,0 +1,47 @@
+foe-COL-17	node out81/probe83.mjs 17,18,19 80 COL 13
+foe-COL-20	node out81/probe83.mjs 20,21,22 80 COL 13
+foe-COL-25	node out81/probe83.mjs 25 80 COL 13
+foe-VEN-17	node out81/probe83.mjs 17,18,19 80 VEN 13
+foe-VEN-20	node out81/probe83.mjs 20,21,22 80 VEN 13
+foe-VEN-25	node out81/probe83.mjs 25 80 VEN 13
+foe-BRA-17	node out81/probe83.mjs 17,18,19 80 BRA 13
+foe-MEX-17	node out81/probe83.mjs 17,18,19 80 MEX 13
+foe-PER-17	node out81/probe83.mjs 17,18,19 80 PER 13
+foe-PAN-17	node out81/probe83.mjs 17,18,19 80 PAN 13
+foe-CUB-17	node out81/probe83.mjs 17,18,19 80 CUB 13
+foe-ARG-17	node out81/probe83.mjs 17,18,19 80 ARG 13
+foe-none-17	node out81/probe83.mjs 17,18,19 80 none
+foe-none-20	node out81/probe83.mjs 20,21,22 80 none
+foe-none-25	node out81/probe83.mjs 25 80 none
+foe-BRA-20	node out81/probe83.mjs 20,21,22 80 BRA 13
+foe79-COL-17	node out79b/probe83.mjs 17,18,19 80 COL 13
+foe79-VEN-17	node out79b/probe83.mjs 17,18,19 80 VEN 13
+foe79-BRA-17	node out79b/probe83.mjs 17,18,19 80 BRA 13
+foe79-COL-25	node out79b/probe83.mjs 25 80 COL 13
+us-COL-25-T13	node out81/probe76.mjs COL 25 76 13
+us-COL-26-T13	node out81/probe76.mjs COL 26 76 13
+us-COL-27-T13	node out81/probe76.mjs COL 27 76 13
+us-VEN-25-T13	node out81/probe76.mjs VEN 25 76 13
+us-VEN-26-T13	node out81/probe76.mjs VEN 26 76 13
+us-VEN-27-T13	node out81/probe76.mjs VEN 27 76 13
+us-MEX-25-T13	node out81/probe76.mjs MEX 25 76 13
+us-PER-25-T13	node out81/probe76.mjs PER 25 76 13
+us-BRA-25-T13	node out81/probe76.mjs BRA 25 76 13
+us-ARG-25-T13	node out81/probe76.mjs ARG 25 76 13
+peek-17	node out81/peek79.mjs 17 80
+watch49s3-17	node out81/probe59.mjs 3 17,18,19 124
+watch49s3-20	node out81/probe59.mjs 3 20,21,22 124
+hemi-18	node out81/hemi76.mjs 18 76
+hemi-22	node out81/hemi76.mjs 22 76
+hemi-26	node out81/hemi76.mjs 26 76
+hemi-30	node out81/hemi76.mjs 30 76
+hemi-34	node out81/hemi76.mjs 34 76
+hemi-38	node out81/hemi76.mjs 38 76
+year-look-BRA-25	node out81/probe75.mjs BRA 25 76 look
+year-allies-BRA-25	node out81/probe75.mjs BRA 25 76 allies
+year-axis-BRA-25	node out81/probe75.mjs BRA 25 76 axis
+year-league-BRA-25	node out81/probe75.mjs BRA 25 76 league
+year-look-ARG-25	node out81/probe75.mjs ARG 25 76 look
+year-allies-ARG-25	node out81/probe75.mjs ARG 25 76 allies
+year-axis-ARG-25	node out81/probe75.mjs ARG 25 76 axis
+year-league-ARG-25	node out81/probe75.mjs ARG 25 76 league
