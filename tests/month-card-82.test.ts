@@ -763,6 +763,15 @@ describe('at home, what his staff did, and elsewhere', () => {
     // What is on the card nowhere is counted: it is all in the newsreel.
     expect(card.more).toBe(3);
   });
+
+  it('a line that opens with an abbreviation is not cut at its full stop (the Playtester, Version 82.1)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: 'No. 1 Bomber Group bombs Viipuri. The docks burn, and St. Olaf is lost.', nat: 'SOV' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text);
+    expect(said).toHaveLength(1);
+    expect(said[0].replace(/\.$/, '')).toBe('No. 1 Bomber Group bombs Viipuri');
+  });
 });
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {

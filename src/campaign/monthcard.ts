@@ -169,7 +169,16 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const count = (n: number): string => WORDS[n] ?? String(n);
 /** The first sentence of a line of news, without its full stop. */
-const first = (text: string): string => { const m = /^(.*?[.!?])(\s|$)/.exec(text); return (m ? m[1] : text).replace(/[.!]$/, ''); };
+// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.)
+const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$/;
+const first = (text: string): string => {
+  const stop = /[.!?](?=\s|$)/g;
+  for (let m = stop.exec(text); m; m = stop.exec(text)) {
+    const head = text.slice(0, m.index + 1);
+    if (m[0] !== '.' || !ABBR.test(head)) return head.replace(/[.!]$/, '');
+  }
+  return text.replace(/[.!]$/, '');
+};
 /** A line cut to a length a row can carry: at a colon or a comma if one falls in the last third, else at a word. */
 const brief = (text: string, max: number): string => {
   if (text.length <= max) return text;
@@ -459,7 +468,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.picture = forTown || (r.taken && city) ? 'town' : def ? 'fieldworks' : 'troops';
     row.kind = forTown ? 'SIEGE' : 'BATTLE';
     row.figures = [{ n: num(oursLost), label: 'lost' }, { n: num(theirsLost), label: 'theirs' }];
-    row.facts = [corps ? { n: plural(corps, 'corps', 'corps'), label: att ? 'went in' : 'held the line' } : { n: 'The guard', label: 'stood alone' }, { n: num(oursLost), label: 'men lost' }, { n: num(theirsLost), label: 'of theirs' }];
+    row.facts = [corps ? { n: plural(corps, 'corps', 'corps'), label: att ? 'went in' : good ? 'held the line' : 'fought' } : { n: 'The guard', label: 'stood alone' }, { n: num(oursLost), label: 'men lost' }, { n: num(theirsLost), label: 'of theirs' }];
     const prize = reg ? prizeOf(g, reg.id, me) : null;
     const worth = (gone: boolean): string => {
       if (!prize) return '';
