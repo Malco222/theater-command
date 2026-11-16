@@ -254,24 +254,28 @@ export function warWorkLeft(g: Game, nat: string): number {
 export const oilAtHome = (g: Game, nat: string): number | null => (worldOn(g) ? WORLD.oilHome[nat] ?? null : null);
 
 /**
- * True where an enemy stands across a land frontier from ground a country holds beyond the old chart: an invader
- * ashore, or a hostile neighbour. He is its army's first business. An enemy beyond the water is not: the army has
- * no road to him, and he does not keep it at home (Version 78, ruling 58a: an Axis Brazil at war with the United
- * States no longer holds America's army back from Europe).
+ * True where an enemy is at the door of a country beyond the old chart: an invader from across the ocean ashore
+ * anywhere on its side of the water (an enemy whose own capital stands on the old chart), or a hostile country of
+ * its own side of the water across a land frontier from ground it holds. He is its army's first business. A hostile
+ * country beyond the sea on its own side is not: the army has no road to him, and he does not keep it at home
+ * (Version 78, ruling 58a: an Axis Brazil at war with the United States no longer holds America's army back from
+ * Europe, whatever colonies Brazil has taken).
  */
 export function enemyAtTheDoor(g: Game, nat: string): boolean {
   const n = g.nations[nat];
   if (!n) return false;
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
-    if (n.atWar.includes(r.ctrl) && r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
+    if (!n.atWar.includes(r.ctrl)) continue;
+    const cap = g.nations[r.ctrl]?.capital ?? -1;
+    if ((cap >= 0 && !beyondEurope(cap)) || r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
   }
   return false;
 }
 
 /**
  * True for a computer-run staff across the ocean from every enemy that already has as many field corps at home as
- * it has any use for: it raises no more to stand on the quay. An enemy across a land frontier ends that.
+ * it has any use for: it raises no more to stand on the quay. An enemy at the door ends that (`enemyAtTheDoor`).
  */
 export function armyIdle(g: Game, nat: string): boolean {
   if (!worldOn(g) || nat === g.human) return false;
@@ -293,8 +297,8 @@ export function armyIdle(g: Game, nat: string): boolean {
 
 /**
  * The rules a computer-run country ships its army across the ocean by, while they apply: it is at war, it has
- * shipping, its capital stands in its own hands beyond the old chart, and no enemy stands across a land frontier
- * from ground it holds there (`enemyAtTheDoor`: an invader at home is the army's first business). Null for the
+ * shipping, its capital stands in its own hands beyond the old chart, and no enemy is at its door there
+ * (`enemyAtTheDoor`: an invader ashore or a hostile neighbour is the army's first business). Null for the
  * player's country, whose army is his to ship.
  */
 export function overseasOf(g: Game, nat: string): OverseasRules | null {

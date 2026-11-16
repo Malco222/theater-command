@@ -72,7 +72,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     expect(atWar(g, 'PAN', 'GER')).toBe(true);
   });
 
-  it('does not let an enemy beyond the water keep America\'s army at home: only one across a land frontier does', () => {
+  it('does not let a hostile country beyond the sea keep America\'s army at home: only an invader or a hostile neighbour does', () => {
     const O = WORLD.overseas.USA;
     // The Playtester's case again, with America run by the computer: an Axis Brazil at war with it since 1940.
     const g = war();
@@ -90,16 +90,19 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     expect(guiana).toBeDefined();
     capture(g, guiana, 'BRA');
     expect(overseasOf(g, 'USA')).toBe(O);
-    // An enemy across a land frontier is the army's first business: a hostile Mexico, or an invader ashore.
+    // A hostile neighbour across a land frontier is the army's first business.
     const m = war();
     setWar(m, 'USA', 'MEX');
     expect(enemyAtTheDoor(m, 'USA')).toBe(true);
     expect(overseasOf(m, 'USA')).toBeNull();
     expect(armyIdle(m, 'USA')).toBe(false);
+    // So is an invader from across the ocean ashore anywhere on its side of the water, an island included.
     const inv = war();
     setWar(inv, 'USA', 'GER');
     expect(overseasOf(inv, 'USA')).toBe(O);
-    capture(inv, inv.byName.Miami ?? inv.regions.find((r) => r.owner === 'USA' && !r.overseas && r.port)!, 'GER');
+    const cuba = inv.regions.find((r) => r.owner === 'CUB')!;
+    expect(cuba.nb.some((j) => inv.regions[j].ctrl === 'USA')).toBe(false);
+    capture(inv, cuba, 'GER');
     expect(enemyAtTheDoor(inv, 'USA')).toBe(true);
     expect(overseasOf(inv, 'USA')).toBeNull();
     // A country with no war and a player's own country are as they were.
