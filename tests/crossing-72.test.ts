@@ -507,6 +507,9 @@ describe('the computer under the same rule', () => {
   const descent = (): { g: Game; quay: Region; force: Corps[]; shores: Region[] } => {
     const g = opened();
     g.turn += D.after + 1;
+    // (Since Version 79 Britain's staff keeps history's dates for its great landings where they hold, and Germany's own
+    // shore is not on its list: the rule is weighed at the stop of the history dial where it has no list.)
+    expect(setStop(g, 4)).toBe(true);
     for (const c of g.corps) c.ap = c.apMax;
     g.airFleets = g.airFleets.filter((f) => f.nat !== 'GER');
     for (const f of g.fleets) if (f.nat === 'GER') sail(g, f, f.home, 'port');
@@ -570,11 +573,23 @@ describe('the computer under the same rule', () => {
       g.flags['hist:off:second'] = 40;
       expect(shoreOpen(g, 'UK', false)).toBe(true);
     }
-    const free = descent();
-    free.g.fleets = free.g.fleets.filter((f) => f.nat !== 'GER');
-    expect(setStop(free.g, 3)).toBe(true);
-    month(free.g, 'UK');
-    expect(free.force.every((c) => !c.dead && free.shores.includes(free.g.regions[c.reg]))).toBe(true);
+    // At "History's shape" the book is shut, and Britain's staff still keeps history's order for its great landings
+    // (Version 79): Germany's own shore is not on its list, and it names no beach there.
+    const shape = descent();
+    shape.g.fleets = shape.g.fleets.filter((f) => f.nat !== 'GER');
+    expect(setStop(shape.g, 3)).toBe(true);
+    expect(onBook(shape.g, 'second')).toBe(false);
+    month(shape.g, 'UK');
+    expect(shape.shores.every((r) => r.ctrl === 'GER' && !r.units.some((u) => u.nat === 'UK'))).toBe(true);
+    expect(shape.g.flags['st:aim:UK']).toBeUndefined();
+    // Where neutrals have ambitions, and where nobody has read the books, it goes where it judges best.
+    for (const stop of [4, 5]) {
+      const free = descent();
+      free.g.fleets = free.g.fleets.filter((f) => f.nat !== 'GER');
+      expect(setStop(free.g, stop)).toBe(true);
+      month(free.g, 'UK');
+      expect(free.force.every((c) => !c.dead && free.shores.includes(free.g.regions[c.reg])), `stop ${stop}`).toBe(true);
+    }
   });
 });
 

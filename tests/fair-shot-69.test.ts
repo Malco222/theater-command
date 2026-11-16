@@ -11,6 +11,7 @@ import arsenalData from '../data/campaign/arsenal.json';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
 import { aiFortify } from '../src/campaign/arsenal';
+import { setStop } from '../src/campaign/history';
 import { PRODUCTION, aiProduction, armyWorn, corpsCost, fortCost, gunsWanted, isHome, orderFort } from '../src/campaign/economy';
 import { addCorps, armySize, atWar, createGame, removeCorps } from '../src/campaign/game';
 import { menSpare } from '../src/campaign/manpower';
@@ -54,6 +55,9 @@ const monthWith = (g: Game, nat: string, chance: number): void => {
 /** Britain with a landing force by its quay, and every German harbour in reach emptied, with the country behind it. */
 const descent = (): { g: Game; quay: Region; force: Corps[]; shores: Region[] } => {
   const g = quietYear();
+  // (Since Version 79 Britain's staff keeps history's dates for its great landings where they hold, and Germany's own
+  // shore is not on its list: the rule is weighed at the stop of the history dial where it has no list.)
+  expect(setStop(g, 4)).toBe(true);
   g.fleets = g.fleets.filter((f) => f.nat !== 'GER');
   g.airFleets = g.airFleets.filter((f) => f.nat !== 'GER');
   const quay = seaBase(g, 'UK')!;
@@ -70,6 +74,10 @@ describe('the second front', () => {
     expect(seaFoe(g, 'UK')).toBeNull();
     expect(seaBase(g, 'UK')).toBeNull();
     g.turn += D.after + 1;
+    // Where history's dates hold, Britain's staff waits for them (Version 79: shores-79.test.ts). Where neutrals have
+    // ambitions it has no list, and goes when the year is up.
+    expect(seaFoe(g, 'UK')).toBeNull();
+    expect(setStop(g, 4)).toBe(true);
     const sea = seaFoe(g, 'UK')!;
     expect(sea.foe).toBe('GER');
     expect(sea.second).toBe(true);
