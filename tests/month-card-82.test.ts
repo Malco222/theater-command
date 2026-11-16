@@ -750,10 +750,27 @@ describe('at home, what his staff did, and elsewhere', () => {
     const card = monthCard(g, mark, ME);
     expect(card.staff).toHaveLength(1);
     expect(card.staff[0]).toMatchObject({ desk: 'build', sign: 'inf' });
+    // The soldier is for infantry corps only: works and the other arms take the star (the art director's review of 82.1),
+    // and anti-aircraft guns take her gun sign (her brief of the raid card's defences).
+    for (const [text, sign] of [['Your staff ordered anti-aircraft guns at Ruhr.', 'aa'], ['Your staff ordered an armoured corps at Essen.', 'star'], ['Your staff ordered a factory at Essen and two infantry corps at Berlin.', 'star'], ['Your staff ordered I Commonwealth Corps at London.', 'inf']] as const) {
+      const k = game();
+      const mk = monthMark(k, ME);
+      news(k, { kind: 'info', text, nat: ME, desk: 'build' });
+      expect(monthCard(k, mk, ME).staff[0].sign, text).toBe(sign);
+    }
     expect(card.elsewhere.map((e) => `${e.nat}: ${e.text}`)).toEqual(['BRA: Brazil declares war on Argentina.', 'SOV: Soviet troops take Viipuri.']);
     expect(card.letters).toEqual([{ text: 'We crossed the river at dawn.', by: 'A corporal of I Corps' }]);
     // What is on the card nowhere is counted: it is all in the newsreel.
     expect(card.more).toBe(3);
+  });
+
+  it('a line that opens with an abbreviation is not cut at its full stop (the Playtester, Version 82.1)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: 'No. 1 Bomber Group bombs Viipuri. The docks burn, and St. Olaf is lost.', nat: 'SOV' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text);
+    expect(said).toHaveLength(1);
+    expect(said[0].replace(/\.$/, '')).toBe('No. 1 Bomber Group bombs Viipuri');
   });
 });
 

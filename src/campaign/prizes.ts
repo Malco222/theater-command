@@ -172,10 +172,10 @@ export function prizeIncome(g: Game, nat: string): PrizeIncome {
 const monthsWord = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
 
 /** Puts a prize out of use for so many months. False where there is none, or it is out already. */
-export function wreckPrize(g: Game, r: Region, kind: PrizeKind, months: number): boolean {
+export function wreckPrize(g: Game, r: Region, kind: PrizeKind, months: number, by?: string): boolean {
   if (!hasPrize(g, r, kind) || prizeOut(g, r, kind) > 0) return false;
   if (kind === 'oil') return fireField(g, r, months, 1);
-  if (kind === 'junction') return cutRail(g, r.id);
+  if (kind === 'junction') return cutRail(g, r.id, 'order', by);
   g.flags[outKey(r, kind)] = g.turn + months;
   g.supplyDirty = true;
   return true;
@@ -222,7 +222,7 @@ export function orderWreckPrize(g: Game, nat: string, region: number, kind: Priz
   const months = kind === 'junction' ? 0 : PRIZES.wreck[kind];
   // Engineers do it for choice; otherwise the corps with the most of its month left.
   const c = handsAt(g, nat, r, kind).filter((u) => u.ap >= PRIZES.ap && u.leave === undefined).sort((a, b) => (b.kind === 'eng' ? 1 : 0) - (a.kind === 'eng' ? 1 : 0) || b.ap - a.ap)[0];
-  if (!wreckPrize(g, r, kind, months)) return false;
+  if (!wreckPrize(g, r, kind, months, nat)) return false;
   c.ap = 0;
   tellPrize(g, r, `${g.nations[nat].adj} troops ${wreckWords(g, r, kind, months)}.`, nat, [nat, r.ctrl, r.owner]);
   return true;
@@ -299,7 +299,7 @@ export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which
 export function railOnScorch(g: Game, r: Region, by: string, from: string): boolean {
   if (!prizeRules(g) || !g.nations[from] || !atWar(g, by, from) || !onNet(r.id) || railCut(g, r.id) || !willBurn(g, from, r)) return false;
   const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:rail`)).next();
-  if (roll >= burnChance(g, r, by, from) || !cutRailHasty(g, r.id, PRIZES.burn.months.rail)) return false;
+  if (roll >= burnChance(g, r, by, from) || !cutRailHasty(g, r.id, PRIZES.burn.months.rail, from)) return false;
   noteBurnt(g, r, from, by, ['rail']);
   return true;
 }

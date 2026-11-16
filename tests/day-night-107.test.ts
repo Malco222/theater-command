@@ -4,6 +4,7 @@
 // so the browser's raid card and the 3D game's say the same thing. Display only: it changes nothing in the game, and
 // no rule of the night raid is touched here.
 import { describe, expect, it } from 'vitest';
+import { gunsAt } from '../src/campaign/air';
 import { dayOrNight, planRaid, type RaidKind } from '../src/campaign/airwar';
 import { createGame, setWar } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
@@ -76,8 +77,13 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
         if (p.figures.rail) want.push(`${pct(p.figures.rail)} chance the railway is cut`);
         if (p.figures.factory) want.push(`${pct(p.figures.factory)} chance a factory is wrecked`);
         if (!want.length) want.push(' No industry there, and too few bombers to cut the railway.');
-        expect(w.hits.map((h) => `${h.n} ${h.words}`)).toEqual(want);
+        // (A line the other way has and this way lacks is printed too, dim, at 0%; then the "nothing there" line gives way to it.)
+        const dim = w.hits.filter((h) => h.dim);
+        const other = w === dn.day ? dn.night : dn.day;
+        for (const h of dim) { expect(h.n).toBe('0%'); expect(other.hits.some((x) => x.words === h.words && !x.dim), h.words).toBe(true); }
+        expect(w.hits.filter((h) => !h.dim).map((h) => `${h.n} ${h.words}`)).toEqual(dim.length ? want.filter((x) => !x.startsWith(' No industry')) : want);
         expect(w.hits.length).toBeLessThanOrEqual(3);
+        if (!other.why) expect(w.hits.map((h) => h.words)).toEqual(other.hits.map((h) => h.words));
         if (g.regions[t].fac > 0) { works++; expect(p.effects[0]).toContain(`about ${pct(p.figures.output!)} of`); } else { yards++; expect(p.figures.output).toBeUndefined(); }
       }
     }
@@ -145,6 +151,62 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
     const alone = dayOrNight(g, 'bomb', t, ftr)!;
     expect(alone.day.why).not.toBeNull();
     expect(alone.night.why).not.toBeNull();
+  });
+
+  it('shows the defences on the ground: the anti-aircraft guns, and the bombers the flak should bring down', () => {
+    // The player's ask of 16 November: "also show defenses meaning anticipated flak and AA guns". The guns were always
+    // in the forecast's numbers; now the card names them, and sets apart the bombers that fall to them.
+    const g = west();
+    let seen = 0, works = 0;
+    for (const t of targets(g, 20)) {
+      const dn = dayOrNight(g, 'bomb', t)!;
+      if (dn.day.why || dn.night.why) continue;
+      seen++;
+      expect(dn.guns).toBe(gunsAt(g, t));
+      expect(dn.gunsLabel).toBe(dn.guns ? `Level ${dn.guns} anti-aircraft guns` : 'No anti-aircraft guns');
+      for (const [w, p] of [[dn.day, planRaid(g, 'bomb', t)], [dn.night, planRaid(g, 'night', t)]] as const) {
+        expect(w.gunLossN).toBe(p.guns.lossN);
+        expect(w.gunLoss).toBe(p.guns.loss);
+        expect(w.gunsStop).toBe(p.guns.stop);
+        expect(w.toGuns).toBe(`about ${num(p.guns.lossN)}`);
+        expect(w.gunsWords).toBe(p.guns.level ? 'of them to flak and guns' : 'of them to flak');
+        expect(w.stopNote).toBe(p.guns.stop > 0 ? `after the guns stop ${Math.round(p.guns.stop * 100)}% of the bombing` : '');
+        // A part of the bombers lost, never more: the rest fall to fighters.
+        expect(w.gunLossN).toBeLessThanOrEqual(w.bomberLossN);
+        expect(w.gunLoss).toBeLessThanOrEqual(w.bomberLoss + 1e-12);
+        expect(w.gunLoss).toBeGreaterThan(0);
+      }
+      // Flak finds fewer of them in the dark.
+      expect(dn.night.gunLoss).toBeLessThan(dn.day.gunLoss);
+      // Guns built round the target bring down more, and stop part of the bombing; with none, only the flak any target puts up.
+      const key = `wk:aa:${t}`, was = g.flags[key];
+      g.flags[key] = 0;
+      const none = dayOrNight(g, 'bomb', t)!;
+      g.flags[key] = 2;
+      const armed = dayOrNight(g, 'bomb', t)!;
+      if (was === undefined) delete g.flags[key]; else g.flags[key] = was;
+      expect(none.guns).toBe(0);
+      expect(none.gunsLabel).toBe('No anti-aircraft guns');
+      expect(none.day.gunsStop).toBe(0);
+      expect(none.day.gunsWords).toBe('of them to flak');
+      expect(none.day.stopNote).toBe('');
+      expect(armed.guns).toBe(2);
+      expect(armed.gunsLabel).toBe('Level 2 anti-aircraft guns');
+      expect(armed.day.gunsStop).toBeCloseTo(0.3, 9);
+      expect(armed.day.gunsWords).toBe('of them to flak and guns');
+      expect(armed.night.stopNote).toBe('after the guns stop 30% of the bombing');
+      expect(armed.night.gunsStop).toBeCloseTo(0.3, 9);
+      expect(armed.day.gunLoss).toBeGreaterThan(none.day.gunLoss);
+      expect(armed.day.bomberLoss).toBeGreaterThan(none.day.bomberLoss);
+      if (g.regions[t].fac > 0) { works++; expect(armed.day.figures.output!).toBeLessThan(none.day.figures.output!); }
+    }
+    expect(seen).toBeGreaterThan(2);
+    expect(works).toBeGreaterThan(0);
+    // A way that cannot be flown has no figures for the guns either.
+    const idle = dayOrNight(g, 'bomb', targets(g)[0], [])!;
+    expect(idle.day.toGuns).toBe('');
+    expect(idle.day.gunsWords).toBe('');
+    expect(idle.day.gunLossN).toBe(0);
   });
 
   it('changes nothing, and is plain data both builds can read', () => {

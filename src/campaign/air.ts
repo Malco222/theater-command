@@ -240,6 +240,8 @@ export const hasAirfield = (g: Game, region: number): boolean => !airWar(g) || a
 export const gunsAt = (g: Game, region: number): number => g.flags[`wk:aa:${region}`] ?? 0;
 
 const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: number }; field: { holds: number } } }).works;
+/** The share of a bombing raid that anti-aircraft guns of this level stop. */
+export const gunsStop = (level: number): number => Math.max(0, Math.min(1, level * WORKS.aa.cut));
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
@@ -683,6 +685,12 @@ export interface AirAssess {
   bomberLoss: number;
   /** The level of anti-aircraft guns round the industry being bombed. */
   aa: number;
+  /**
+   * Of the bombers expected to be lost, the share the guns bring down: the flak any target puts up, the anti-aircraft
+   * guns built round it, and a fleet's own guns. The rest fall to fighters. It is a part of `bomberLoss`, set apart for
+   * the raid card to show, and nothing in the rules reads it.
+   */
+  gunLoss: number;
   lines: TicketLine[];
   /** A strike on a fleet or a raid on a harbour: the fleets under attack, the share of the bombers their guns bring down, and the share of the strike the fighter cover spoils. */
   ships: Fleet[];
@@ -738,7 +746,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const zone = m === 'fleet' ? quarry?.zone ?? -1 : target;
   const nat = fleets[0]?.nat ?? '';
   const place = sea ? `the ${g.seas[zone]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
   if (m === 'fleet') out.ships = [quarry!];
@@ -809,6 +817,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));
     out.again = Math.pow(CARRIERS.strike.again, before);
   }
+  // What of the bombers' loss is the guns' doing, for the raid card (the player's ask of 2026-11-16).
+  if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) + out.aa * WORKS.aa.flak * unready + out.flak) * I);
 
   // The Battle Ticket.
   const af = out.att.reduce((s, a) => s + a.f.ftr, 0);

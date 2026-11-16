@@ -119,7 +119,7 @@ describe('a siege laid on his town that holds', () => {
     land(g, city, { siege: true, taken: false, attLost: 500, defLost: 800 } as Partial<BattleReport>);
     const lead = monthCard(g, mark, ME).lead!;
     expect(lead.facts[0]).toEqual({ n: num(shut), label: 'men shut in' });
-    expect(lead.follows).toBe(`Only its guard holds ${townName(city)}. The province is yours while the town holds.`);
+    expect(lead.follows).toBe(`${townName(city)} is held by its guard alone. The province is yours while the town holds.`);
     const h = game();
     const m2 = monthMark(h, ME);
     const c2 = germanCity(h);
@@ -174,6 +174,9 @@ describe('a siege laid on his town that holds', () => {
     const row = order(card).find((r) => r.region === city.id)!;
     expect(row).toMatchObject({ tag: 'LOST', tone: 'bad', line: 'The field was lost, and the town fell after it.', head: `${townName(city)} is lost` });
     expect(row.facts).toEqual([{ n: '1 corps', label: 'fought outside' }, { n: '41,188', label: 'men lost' }, { n: '2,635', label: 'of theirs' }]);
+    // Beneath the lead's picture the truth of it comes first, then what the town was worth (the art director's review of 82.1).
+    expect(row.follows.startsWith('The field was lost, and the town fell after it. ')).toBe(true);
+    expect(row.follows.length).toBeGreaterThan('The field was lost, and the town fell after it. '.length + 8);
     expect(box(card, 'battles')).toMatchObject({ figure: '0 – 1', sub: '0 won · 1 lost' });
     // The besieger's side of the same month: the town he laid siege to is his as the card is made.
     const h = game();
@@ -184,6 +187,7 @@ describe('a siege laid on his town that holds', () => {
     const c2 = monthCard(h, m2, ME);
     const won = order(c2).find((r) => r.region === theirs.id)!;
     expect(won).toMatchObject({ tag: 'WON', tone: 'good', line: 'The field was won, and the town fell after it.', head: `${townName(theirs)} is taken` });
+    expect(won.follows.startsWith('The field was won, and the town fell after it. ')).toBe(true);
     expect(box(c2, 'battles')).toMatchObject({ figure: '1 – 0' });
     // Still besieged, it is as before: the field is won and the town is under siege.
     const k = game();
@@ -293,7 +297,7 @@ describe("the art director's two rules for a band", () => {
   it('a warning flies the flag of the country its news is about, and his own where it names none', () => {
     const g = game();
     const mark = monthMark(g, ME);
-    warning(g, 'Rome wavers', 'Italy makes peace if the Allies hold Sardinia in August 1943.', ME, g.byName.Sardinia.id, 'ITA');
+    warning(g, 'Rome wavers', 'Italy makes peace if the Allies still hold Sardinia in August 1943.', ME, g.byName.Sardinia.id, 'ITA');
     warning(g, 'History\'s book', 'History\'s book is closed in the west.', ME);
     const card = monthCard(g, mark, ME);
     expect(card.bands.map((x) => [x.word, x.title, x.nats])).toEqual([['WARNING', 'Rome wavers', ['ITA']], ['WARNING', 'History\'s book', [ME]]]);

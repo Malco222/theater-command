@@ -108,6 +108,26 @@ export function roundCount(g: Game): RoundCount {
   return { bright: bright.length, quiet: all.filter((a) => !a.bright && a.untouched).length, front: bright.filter((a) => a.front).length };
 }
 
+/**
+ * The bright count in words, the same beside NEXT ARMY and in the question before END THE MONTH (the design
+ * director's ruling 111(f)): "10 at the front and 1 newly raised". One kind alone is named alone: "10 at the front".
+ */
+export function roundWords(c: RoundCount): string {
+  const raised = c.bright - c.front;
+  return c.front && raised ? `${c.front} at the front and ${raised} newly raised` : c.front ? `${c.front} at the front` : raised ? `${raised} newly raised` : '';
+}
+
+/**
+ * The headline of the question before END THE MONTH, in words true of every army counted (ruling 116): an army that
+ * has fought with one corps has had an order, but it still has moves left. "11 armies still have moves left: 10 at the
+ * front and 1 newly raised"; one kind alone: "3 armies at the front still have moves left".
+ */
+export function roundQuestion(c: RoundCount): string {
+  const n = c.bright, raised = n - c.front;
+  if (c.front && raised) return `${n} armies still have moves left: ${roundWords(c)}`;
+  return `${n} ${n === 1 ? 'army' : 'armies'} ${c.front ? 'at the front' : 'newly raised'} still ${n === 1 ? 'has' : 'have'} moves left`;
+}
+
 export interface NextArmy {
   /** The army to show, or null when every army has its orders. */
   army: RoundArmy | null;
