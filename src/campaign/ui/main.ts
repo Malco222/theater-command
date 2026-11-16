@@ -548,7 +548,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
@@ -864,6 +864,7 @@ function refresh(): void {
   const picked = pickedCorps();
   reaches = [];
   $('#route').innerHTML = '';
+  $('#kept').innerHTML = keptRoad();
   routeShown = -1;
   trayArmy = armyShown();
   lands = picked.length && (g.regions[picked[0].reg].port || byAir(picked)) && g.nations[picked[0].nat].atWar.length ? landTargets(g, picked) : [];
@@ -1047,11 +1048,27 @@ function slipSeen(): boolean {
 function slipDone(): void {
   try { localStorage.setItem('tc-march-slip', '1'); } catch { /* storage is off: the slip shows again */ }
 }
+/** The road still ahead of the army in hand, where it is on a kept march: cream and dashed, ending in a small ring. */
+function keptRoad(): string {
+  if (!g.human || !humanUp(g) || mapBusy() || ui.tab !== 'region') return '';
+  const seen = new Set<string>();
+  let out = '';
+  for (const c of heldCorps()) {
+    const m = marchState(g, c);
+    if (!m || !m.road.length) continue;
+    const ids = [c.reg, ...m.road], k = ids.join('-');
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const d = `M${ids.map((id) => `${g.regions[id].x} ${g.regions[id].y}`).join('L')}`, end = g.regions[m.to];
+    out += `<path class="road under" d="${d}"/><path class="road kept" d="${d}"/><circle class="roadring" cx="${end.x}" cy="${end.y}" r="4.2"/>`;
+  }
+  return out;
+}
 /** What a corps of the player's says of a kept march: where it is bound, or that it has no move left this month. */
 function marchTag(c: Corps): string {
   if (!g.human || !humanUp(g) || c.kind === 'fort' || !canOrder(g, c)) return '';
   const m = marchState(g, c);
-  if (m) return `<span class="tag march" title="A kept march: it goes on by itself as each month opens, through friendly ground only, and halts with a line in the month's report if the enemy comes near or the way is closed. Any other order ends it.">Marching to ${esc(g.regions[m.to].name)} · ${esc(aboutMonths(m.months))}</span>`;
+  if (m) return `<span class="tag march" title="A kept march, ${esc(aboutMonths(m.months))} more: it goes on by itself as each month opens, through friendly ground only, and halts with a line in the month's report if the enemy comes near or the way is closed. Any other order ends it.">Marching to ${esc(g.regions[m.to].name)}</span>`;
   return c.ap <= 0 ? '<span class="tag nomoves" title="Right-click a friendly place and it marches there by itself, starting next month.">No moves left this month</span>' : '';
 }
 
@@ -1629,7 +1646,7 @@ function drawTray(): void {
   const bound = mine ? field.map((c) => marchState(g, c)).filter((m): m is NonNullable<typeof m> => !!m) : [];
   const ends = [...new Set(bound.map((m) => m.to))];
   const marching = bound.length
-    ? `<div class="tmarch"><small>On the march</small><span>${bound.length < field.length ? `${bound.length} corps ` : ''}to <b>${esc(ends.length === 1 ? g.regions[ends[0]].name : `${ends.length} places`)}</b> · ${esc(aboutMonths(Math.max(...bound.map((m) => m.months))))}</span><button data-act="stopmarch" title="Ends the march. The army waits where it stands for orders.">Halt</button></div>`
+    ? `<div class="tmarch"><span class="grow"><small>${bound.length < field.length ? `${bound.length} corps marching to` : 'Marching to'}</small><span><b>${esc(ends.length === 1 ? g.regions[ends[0]].name : `${ends.length} places`)}</b> · ${esc(aboutMonths(Math.max(...bound.map((m) => m.months))))}</span></span><button data-act="stopmarch" title="Ends the march. The army waits where it stands for orders.">Halt</button></div>`
     : '';
   // The first time he picks up an army with no moves left: a slip he cannot miss, pinned on the card's top edge.
   const slip = mine && !slipSeen() && spentInHand() && heldCorps().some((c) => c.reg === a.reg)

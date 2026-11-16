@@ -113,7 +113,7 @@ svg#map.mid .ctr.led .cmdr, .ctr.led.chosen .cmdr { display: block; }
 svg#map.mid .ctr.led .size, .ctr.led.chosen .size { display: none; }
 .ctr.chosen .base { opacity: 1; stroke: #fff6d8; stroke-width: 1.5; }
 .ctr.chosen rect.box { stroke: #fff6d8; stroke-width: 1.6; }
-#route, #ghost { pointer-events: none; }
+#route, #kept, #ghost { pointer-events: none; }
 .road { fill: none; stroke: #f4eeda; stroke-width: 2; stroke-dasharray: 5 3.5; stroke-linecap: round; stroke-linejoin: round; }
 .road.under { stroke: #15181b; stroke-width: 3.6; stroke-dasharray: none; opacity: .55; }
 .road.strike { stroke: #f2a08e; }
@@ -2079,15 +2079,16 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 /* The words for an army with no moves left, and for ground a kept march may not go to. */
 .hint .nomoves, .tip .nomoves { color: #e0b872; }
 .tip .tipno { color: #e08a6a; }
-.tag.march { background: #3d3521; color: #f0e2b8; }
+.tag.march { background: #3d3521; color: #f0e2b8; white-space: nowrap; }
 .tag.nomoves { color: #e0b872; }
 /* The road of a march that would be kept: cream, dashed, ending in a small ring. */
 .road.kept { stroke: #f4eeda; stroke-dasharray: 6 4.5; }
 .roadring { fill: rgba(21, 24, 27, .55); stroke: #f4eeda; stroke-width: 1.7; }
 /* Where the army in the tray is bound, and the order that ends its march. */
-.tmarch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); min-width: 0; }
-.tmarch small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
-.tmarch span { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmarch { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); min-width: 0; padding: 3px 0 1px; border-top: 1px dashed rgba(244, 238, 218, .22); }
+.tmarch .grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.tmarch small { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.tmarch .grow > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tmarch b { color: var(--ink); font-weight: 600; }
 .tmarch button { flex: none; font: inherit; font-size: 11.5px; line-height: 1.25; padding: 2px 9px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-2); cursor: pointer; }
 .tmarch button:hover { border-color: var(--brass); color: var(--ink); }
