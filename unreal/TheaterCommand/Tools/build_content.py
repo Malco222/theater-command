@@ -634,11 +634,13 @@ def build_land():
     # warm. (First tried by a fine noise, which left white specks that read as snow: it is the land's own light
     # places that stay straw, in patches as broad as the slopes. The ground's picture is read as a colour, so its
     # lightness here is the light's own measure and not the paint's: a dry plain is about a quarter. And the straw
-    # is laid a full straw yellow, so that it is never taken for snow on the Andes.)
+    # is laid a full straw yellow, so that it is never taken for snow on the Andes. Its edge is crisp: brought in
+    # softly, the straw and the blue mixed to grey again, which is the very fault. At 0.17 about a quarter of
+    # Patagonia is straw; at 0.14 two thirds of the Chaco was, and the country lost its colour.)
     lightness = times(m, (ground, "G"), plus(m, times(m, (relief, "B"), scalar(m, "CoolStrawSun", 0.9, -2000, 420), -1900, 420), 0.55, -1800, 420), -1700, 400)
     straw = times(m, times(m, cool_paint, one_in(m, unreal.MaterialExpressionOneMinus, square, -1900, 260), -1800, 260),
                   one_in(m, unreal.MaterialExpressionSaturate,
-                         times(m, plus(m, lightness, times(m, scalar(m, "CoolStraw", 0.2, -2000, 340), -1.0, -1900, 340), -1800, 320), scalar(m, "CoolStrawSharp", 6.0, -1900, 500), -1700, 340), -1600, 340), -1500, 300)
+                         times(m, plus(m, lightness, times(m, scalar(m, "CoolStraw", 0.17, -2000, 340), -1.0, -1900, 340), -1800, 320), scalar(m, "CoolStrawSharp", 30.0, -1900, 500), -1700, 340), -1600, 340), -1500, 300)
     c = lerp(m, c, lerp(m, (ground, "RGB"), vector(m, "CoolStrawColour", (0.46, 0.35, 0.15, 1.0), -1700, 520), scalar(m, "CoolStrawTint", 0.85, -1700, 600), -1600, 560), straw, -1400, -150)
     c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
     c = lerp(m, c, vector(m, "SquareRoadColour", (0.552, 0.479, 0.262, 1.0), -1750, -200), road, -1550, -330)
@@ -689,7 +691,13 @@ def build_land():
     # the eye is a little above its working height: or from high up the land is a web of veins.)
     great = sat(times(m, plus(m, half, -0.8, -2150, 2880), 8.0, -2050, 2880), -1950, 2880)
     far = sat(times(m, plus(m, px, -0.3, -1700, 2960), 5.0, -1600, 2960), -1500, 2960)
-    half_seen = lerp(m, half, larger(times(m, px, scalar(m, "WetLeast", 1.25, -1700, 3040), -1550, 3040), times(m, half, 0.5, -1550, 3100), -1400, 3060), times(m, great, far, -1400, 2960), -1250, 2900)
+    half_seen = lerp(m, half, larger(times(m, px, plus(m, scalar(m, "WetLeast", 1.25, -1700, 3040),
+                                                                  # (The art director's round 31: from the top the Amazon should be the one river
+                                                                  # to be picked out across its basin. Every great river was drawn there at the
+                                                                  # one least width. The very greatest, half-broad beyond a map unit, are drawn
+                                                                  # up to as broad again and a little more.)
+                                                                  times(m, sat(times(m, plus(m, half, -1.0, -1900, 3120), 2.0, -1800, 3120), -1700, 3120), scalar(m, "WetGreatest", 1.5, -1700, 3180), -1600, 3140),
+                                                                  -1600, 3060), -1550, 3040), times(m, half, 0.5, -1550, 3100), -1400, 3060), times(m, great, far, -1400, 2960), -1250, 2900)
     inside = less(sat(plus(m, over(less(half_seen, off, -1100, 2600), px, -950, 2600), 0.5, -800, 2600), -650, 2600),
                   sat(plus(m, over(less(times(m, half_seen, -1.0, -1100, 2700), off, -950, 2700), px, -800, 2700), 0.5, -650, 2700), -500, 2700), -350, 2650)
     # (the picture's points round about must all look to this one line: where they look to different waters, the
