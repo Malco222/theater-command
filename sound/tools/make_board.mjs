@@ -48,8 +48,8 @@ const tests = [
     a: { label: 'A march', hint: 'boots on a road', clips: ['marching', 'marching_loop'].map(clip) },
     b: { label: 'A train', hint: 'an army sent by rail', clips: ['rail_move', 'train_loop'].map(clip) } },
   { key: 'test_day_night', q: 'A raid by day or by night?',
-    a: { label: 'A raid by day', hint: 'the sting for the raid card', clips: ['raid_day'].map(clip) },
-    b: { label: 'A raid by night', hint: 'the sting for the raid card', clips: ['raid_night'].map(clip) } },
+    a: { label: 'A raid by day', hint: 'four engines or two', clips: ['raid_day_heavy', 'raid_day_medium'].map(clip) },
+    b: { label: 'A raid by night', hint: 'four engines or two', clips: ['raid_night_medium', 'raid_night_heavy'].map(clip) } },
 ];
 const have = new Set(sounds.map((s) => s.n));
 for (const t of tests) for (const c of [...t.a.clips, ...t.b.clips]) if (!have.has(c.n)) throw new Error(`${c.n} is in a test but was not made`);

@@ -18,7 +18,7 @@
   "bus": "interface",
   "gain": 0,
   "hook": "ui.primary",
-  "on": "the brass button of a screen: act end, dodeclare, doraid, attack confirmed",
+  "on": "the brass button of a screen: act dodeclare, doraid, doair, dosplit, govappoint, an attack confirmed. Not END THE MONTH, which has month_ask and month_end",
   "about": "The one brass button of a screen pressed (END THE MONTH, Attack, Send): a heavier click with brass in it, and its release."
  },
  {
@@ -39,7 +39,8 @@
   "seconds": 0.22,
   "bus": "interface",
   "gain": 0,
-  "on": "act close, unpick, wreckno, govkeep; any Cancel or Back",
+  "hook": "ui.back",
+  "on": "act unpick, wreckno, govkeep; any Cancel, or a step back to the screen before. Not the close stud or Esc: those are card_close and screen_close",
   "about": "Close, cancel, step back: the same click, lower and softer, so that going back sounds like going back."
  },
  {
@@ -126,7 +127,7 @@
   "bus": "interface",
   "gain": 0,
   "hook": "ui.close.card",
-  "on": "openModal(null) when a card was open",
+  "on": "openModal(null) when a card was open: act close, the close stud, Esc, a click outside the card",
   "about": "A card taken up again: the same slide, backwards and lighter."
  },
  {
@@ -158,6 +159,7 @@
   "seconds": 0.63,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.page",
   "on": "moving from one report to the next; a page of the ledger or the guide",
   "about": "A page of a heavy book turned: for the ledger, the roll of honour, the guide, and moving from one report to the next."
  },
@@ -191,7 +193,7 @@
   "bus": "interface",
   "gain": 0,
   "hook": "ui.order.placed",
-  "on": "something bought or ordered: an arsenal order, a job, dosplit, govappoint",
+  "on": "something bought or ordered in the arsenal or a city: an arsenal order, act job. Not a move on the map",
   "about": "Something bought or ordered: the same stamp, lightly, as a clerk marks a chit. For the everyday order; \"stamp\" is for the ones that matter."
  },
  {
@@ -201,6 +203,7 @@
   "seconds": 0.29,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.piece.up",
   "on": "act pick, pickall, fleet, airfleet, wing (something taken in hand)",
   "about": "A piece lifted off the table: an army or a fleet taken in the hand. (The 3D game already calls this name; it has been silent until now.)"
  },
@@ -211,6 +214,7 @@
   "seconds": 0.26,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.piece.down",
   "on": "act standmonth, joinarmy, joinall, gotmarch (the piece set down)",
   "about": "A piece set down on the table: wood on wood, and it settles."
  },
@@ -221,6 +225,7 @@
   "seconds": 0.43,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.order.march",
   "on": "march() when the player orders a move by road",
   "about": "An order to march drawn on the map: one stroke of a wax pencil."
  },
@@ -231,6 +236,7 @@
   "seconds": 0.73,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.order.attack",
   "on": "act attack, storm, sally, probe (an attack ordered)",
   "about": "An attack ordered: two hard strokes of the red pencil, an arrowhead, and the pencil rapped on the map."
  },
@@ -241,6 +247,7 @@
   "seconds": 0.55,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.order.cancel",
   "on": "act stopmarch, stopjob, cancelbuild, sendback",
   "about": "An order taken back: the mark rubbed out."
  },
@@ -251,6 +258,7 @@
   "seconds": 0.22,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.select",
   "on": "selectRegion() from a click on the map",
   "about": "A province chosen on the map: a fingertip on paper."
  },
@@ -282,7 +290,7 @@
   "seconds": 0.85,
   "bus": "interface",
   "gain": 0,
-  "hook": "ui.research.start",
+  "hook": "ui.research.start; ui.sign",
   "on": "a technology goes into work; act tradesign, govpromise: a treaty or a promise signed",
   "about": "A paper signed: a steel nib across it and a full stop. For treaties, pacts, promotions, a save made."
  },
@@ -303,6 +311,7 @@
   "seconds": 2.43,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.month.ask",
   "on": "openModal({kind: \"askend\"})",
   "about": "The question before the month ends (\"armies at the front have no orders\"): a clock's single soft chime, and two ticks. A pause, not an alarm."
  },
@@ -328,7 +337,8 @@
    "from": 0.25,
    "length": 4.4
   },
-  "on": "runOthers() starts it, the end of passStep() stops it",
+  "hook": "ui.month.passing",
+  "on": "runOthers() starts it; it stops the moment month_yours plays",
   "about": "The other countries moving, very fast: a clock running quick and a teleprinter chattering somewhere. Goes round under the playback of everyone else's month."
  },
  {
@@ -338,6 +348,7 @@
   "seconds": 2.54,
   "bus": "calls",
   "gain": -2,
+  "hook": "ui.month.yours",
   "on": "arrive(): the month is the player's again",
   "about": "The others have moved and the month is yours: two notes, like a hand on the shoulder. Never loud."
  },
@@ -348,6 +359,7 @@
   "seconds": 0.91,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.month.card",
   "on": "openModal({kind: \"news\"}) with a month card",
   "about": "The month's report laid before you: a dispatch case unlatched and the card drawn out onto the table."
  },
@@ -358,6 +370,7 @@
   "seconds": 3.64,
   "bus": "calls",
   "gain": -2,
+  "hook": "ui.month.card (second sound)",
   "on": "0.6 s after month_card_open, when the card has more good rows than bad",
   "about": "The month went your way: two soft rising chords, a light touch of the bell. Under the month card when the news is good."
  },
@@ -368,6 +381,7 @@
   "seconds": 4.16,
   "bus": "calls",
   "gain": -2,
+  "hook": "ui.month.card (second sound)",
   "on": "the same, more bad than good",
   "about": "The month went against you: two chords that sink, low strings, a muffled stroke. Under the month card when the news is bad."
  },
@@ -378,6 +392,7 @@
   "seconds": 3.58,
   "bus": "calls",
   "gain": -2,
+  "hook": "ui.month.card (second sound)",
   "on": "the same, even or nearly empty",
   "about": "A month in which nothing was settled: one held chord, neither up nor down. Under the month card when the news is mixed or thin."
  },
@@ -388,6 +403,7 @@
   "seconds": 0.63,
   "bus": "interface",
   "gain": 0,
+  "hook": "ui.note.in",
   "on": "a staff note appears",
   "about": "A staff note arrives: a slip of paper slid onto the desk and a knuckle's tap to say \"read me\". For each lesson of the first hour."
  },
@@ -398,7 +414,8 @@
   "seconds": 1.4,
   "bus": "interface",
   "gain": 0,
-  "on": "a staff note is stamped DONE",
+  "hook": "ui.note.done",
+  "on": "a staff note is stamped DONE: played as the stamp lands",
   "about": "A staff note stamped DONE: the stamp, and a small bright touch of the desk bell after it. The stamp alone is \"stamp\"."
  },
  {
@@ -408,6 +425,7 @@
   "seconds": 5.94,
   "bus": "calls",
   "gain": -2,
+  "hook": "ui.note.closing",
   "on": "the closing note appears",
   "about": "The last staff note of the first hour (\"the command is yours\"): the command figure, gently, with a bell on its last note. Heard once in a player's life."
  },
@@ -664,24 +682,44 @@
   "about": "Troops go ashore: the craft's engines, the surf, the ramp chains running and the ramp down on the beach. For a landing ordered and a landing made."
  },
  {
-  "name": "raid_day",
-  "file": "raid_day.mp3",
+  "name": "raid_day_heavy",
+  "file": "raid_day_heavy.mp3",
   "bytes": 39525,
   "seconds": 7.5,
   "bus": "world",
   "gain": -4,
-  "on": "openModal({kind: \"raid\"}) or \"airreport\" for a raid flown by day (mission bomb, strike, ground, line, fleet, harbour, town)",
-  "about": "For the raid card (and the browser game) when the raid was flown by day: the steady drone of heavy bombers, a fighter going through, flak, the bombs. No siren, no lamps."
+  "on": "openModal({kind: \"raid\"}) or \"airreport\" for a raid flown by day (mission bomb, strike, ground, line, fleet, harbour, town) by a country whose bomber has four engines",
+  "about": "For the raid card (and the browser game) when the raid was flown by day by four-engined bombers, with their deep steady drone: the bombers, a fighter going through, flak, the bombs. No siren, no lamps, no fire after."
  },
  {
-  "name": "raid_night",
-  "file": "raid_night.mp3",
+  "name": "raid_day_medium",
+  "file": "raid_day_medium.mp3",
+  "bytes": 39861,
+  "seconds": 7.5,
+  "bus": "world",
+  "gain": -4,
+  "on": "the same by day, for a country whose bomber has two engines",
+  "about": "For the raid card (and the browser game) when the raid was flown by day by twin-engined bombers, with their slow uneven beat: the bombers, a fighter going through, flak, the bombs. No siren, no lamps, no fire after."
+ },
+ {
+  "name": "raid_night_heavy",
+  "file": "raid_night_heavy.mp3",
+  "bytes": 53685,
+  "seconds": 9,
+  "bus": "world",
+  "gain": -4,
+  "on": "a raid flown by night (mission night) by a country whose bomber has four engines",
+  "about": "For the raid card (and the browser game) when the raid was flown by night by four-engined bombers, with their deep steady drone: the siren, a lamp struck, the bombers, flak, the bombs, and fire after."
+ },
+ {
+  "name": "raid_night_medium",
+  "file": "raid_night_medium.mp3",
   "bytes": 53277,
   "seconds": 9,
   "bus": "world",
   "gain": -4,
-  "on": "the same for a raid flown by night (mission night)",
-  "about": "For the raid card (and the browser game) when the raid was flown by night: the siren, a lamp struck, the uneven beat of the night bombers, flak, the bombs, and fire after."
+  "on": "the same by night, for a country whose bomber has two engines",
+  "about": "For the raid card (and the browser game) when the raid was flown by night by twin-engined bombers, with their slow uneven beat: the siren, a lamp struck, the bombers, flak, the bombs, and fire after."
  },
  {
   "name": "siren",

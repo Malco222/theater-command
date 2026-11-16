@@ -22,7 +22,7 @@ Everything named here was read in the `unreal` branch at c287f46: `Campaign/Camp
 The new generator is a folder, not one file. It is on the branch `claude/project-thread-qjxyv5` under `sound/`, and a copy is in the project files at `/mnt/project-files/sound/generator/`.
 
 1. Copy that folder to `unreal/TheaterCommand/Tools/sound/` (it holds `make_sounds.mjs`, `make_scenes.mjs`, `kit/`, `recipes/`, `tools/`). Delete the old `Tools/make_sounds.mjs`.
-2. In `Tools/build_sounds.sh`, run `node "$HERE/sound/make_sounds.mjs" "$PROJECT/Saved/Sounds"`, then `node "$HERE/sound/make_scenes.mjs" "$PROJECT/Saved/Sounds" "$PROJECT/Saved/Sounds"` (this adds the three stings `raid_day`, `raid_night` and `rail_move`; it also writes seven `scene_*.wav` files, which are for listening only: delete them or skip them on import).
+2. In `Tools/build_sounds.sh`, run `node "$HERE/sound/make_sounds.mjs" "$PROJECT/Saved/Sounds"`, then `node "$HERE/sound/make_scenes.mjs" "$PROJECT/Saved/Sounds" "$PROJECT/Saved/Sounds"` (this adds the five stings `raid_day_heavy`, `raid_day_medium`, `raid_night_heavy`, `raid_night_medium` and `rail_move`; it also writes seven `scene_*.wav` files, which are for listening only: delete them or skip them on import).
 3. The launcher and `build_sounds.sh` both decide whether to make the sounds again from `shasum Tools/make_sounds.mjs`. Make that the hash of the whole folder: `cat Tools/sound/*.mjs Tools/sound/*/*.mjs | shasum`.
 4. In `Tools/build_sounds.py`, after the import, set every sound whose name ends in `_loop` to loop (`set_editor_property("looping", True)` on the sound wave, then save the asset). Skip names that begin `scene_`.
 5. Making all 203 takes about two minutes on the cloud machine and should be quicker on the Mac. It needs only Node.js, as before, and it writes the same files every time.
@@ -136,7 +136,7 @@ A small manager, ticked from the game mode, holding two beds and a sprinkle time
 | When | Where | By day | By night |
 |---|---|---|---|
 | Share 0 | The base | `aircraft_takeoff` (`carrier_launch` if `bFromSea`) | The same |
-| Share 0 to 1 | Carried by the flight | `StartLoop`: `bomber_heavy_loop` if `bBombers`, else `fighter_loop`. If `bEscort`, a second loop `fighter_loop` at -6 dB | `bomber_medium_loop` |
+| Share 0 to 1 | Carried by the flight | `StartLoop`, by the aircraft drawn and not by the hour (see below): `bomber_heavy_loop` or `bomber_medium_loop` if `bBombers`, else `fighter_loop`. If `bEscort`, a second loop `fighter_loop` at -6 dB | The same loop as by day |
 | Share 0.10 | The target town | `siren` at -6 dB, only if the town has guns | `air_raid_siren` |
 | Share 0.25 | The target | Nothing | `searchlight_on`, one for each of the first three lamps, 0.2 s apart; `StartLoop` `searchlight_loop` until the lamps go out |
 | Share 0.30 to 0.64, each burst `UpdateSmoke` makes | The burst | `Voice("flak_burst", 4)`, Reach 1.6 | The same |
@@ -151,9 +151,11 @@ A small manager, ticked from the game mode, holding two beds and a sprinkle time
 | Share 1 | | `StopLoop` on the flight's loops (they will already be faint) | The same; `searchlight_off` and `StopLoop` on the lamp |
 | 2 s after the last flight on a town this month | The town | Nothing | `siren_all_clear` at -4 dB |
 
+**The bomber's sound follows the bomber, not the hour** (ruling 142, with ruling 59). Choose the loop by the model the flight is drawn with: a four-engined model (today the British four-engined bomber from 1942 and the American one) carries `bomber_heavy_loop`; every other bomber model (the German twin, the plain twin in any country's paint, the Italian bomber) carries `bomber_medium_loop`. Put the choice where the model is chosen, so that a new sculpt cannot drift from its sound.
+
 A dive-bomber attack on troops or ships (not a town) uses `dive_bomber` in place of the falling whistle, and `bomb_single`.
 
-**The raid card.** When the card that reports a raid opens, play `raid_day` or `raid_night` (the eight-second stings) if the raid itself was not watched.
+**The raid card.** When the card that reports a raid opens, play one of the four eight-second stings if the raid itself was not watched: `raid_day_` or `raid_night_` by the hour, then `heavy` or `medium` by the same rule as the loop.
 
 **The limit matters most here.** A level 3 flak town fires a burst every 0.45 s. With the 12-voice limit and the eight-a-second rule from step 3 this stays clear; without them it will turn to mud. The target to compare against is `scenes/scene_night_raid.mp3` and `scenes/scene_day_raid.mp3`; their cue lists are in `scene-list.json`.
 
@@ -200,7 +202,15 @@ A dive-bomber attack on troops or ships (not a town) uses `dive_bomber` in place
 
 ## Step 7. The month and the cards
 
-**The interface's hooks.** The UI director's kit names twenty moments of the interface (`ui.press`, `ui.primary`, `ui.stamp.won` and so on; `ui-director/ui-style-guide.md`, "Sound hooks"). Where the kit's widgets raise a hook, play the sound that `ui-hooks.md` gives for it; that file is the one table both builders work from. Three of its rules need care in code: the stamp's sound is played when the stamp lands (220 ms after it starts to fall), not when it starts; one `alert_slip` for a batch of alerts, not one a slip; and when a red band's moment has its own call (`war_declared`, `nation_falls`), play the call and skip `drum_low`. Nothing plays when the pointer merely passes over a thing.
+**The interface's hooks.** The UI director's kit names thirty-six moments of the interface (`ui.press`, `ui.primary`, `ui.stamp.won` and so on; `ui-director/ui-style-guide.md`, "Sound hooks"). Where the kit's widgets raise a hook, play the sound that `ui-hooks.md` gives for it; that file is the one table both builders work from. Its rules, in short:
+
+- One sound to an act. When a moment has a hook of its own, that sound plays and the general one does not: END THE MONTH plays `month_ask` or `month_end` and no click; a signature plays `pen_sign`; a piece set down plays `putdown`.
+- The close stud and Esc play `card_close` or `screen_close`. `ui_back` is kept for Cancel and for a step back to the screen before.
+- A stamp's sound (`stamp`, `stamp_low`, `note_done`) plays when the stamp lands, 220 ms after it starts to fall, not when it starts.
+- One `alert_slip` for a batch of alerts, not one a slip.
+- When a red band's moment has its own call (`war_declared`, `nation_falls`), play the call and skip `drum_low`.
+- `month_passing_loop` is the only interface loop, and it stops the moment `month_yours` plays (fade it over 0.3 s).
+- Nothing plays when the pointer merely passes over a thing, and the same sound never starts faster than eight times a second.
 
 | When | Sound |
 |---|---|
@@ -208,15 +218,15 @@ A dive-bomber attack on troops or ships (not a town) uses `dive_bomber` in place
 | A card opens, closes | `card_open`, `card_close` |
 | A book or the ledger opens; its pages | `screen_open`, `page_turn`, `screen_close` |
 | `ShowEndAsk` (the end-of-month question) | `month_ask` |
-| `AnswerEndAsk` | `click` |
+| `AnswerEndAsk` | Nothing of its own: the month ending plays `month_end`, staying plays `ui_back` |
 | `EndMonth` | `month_end`, and `StartLoop` `month_passing_loop` (flat, not placed) |
 | `WatchNextStep` | Leave the loop running; the things shown make their own sounds |
-| `FinishMonth` | `StopLoop`, then `month_yours` |
+| `FinishMonth` | `StopLoop` with a 0.3 s fade, and `month_yours` at the same moment |
 | The month card opens | `month_card_open`, then 0.6 s later one of `month_card_good`, `month_card_bad`, `month_card_quiet`, by the card's balance of good and bad rows |
 | `OpenFaceOff` | `drums` (today), and `StartLoop` `battle_loop` at -8 dB under the card |
 | `ConfirmAttack` | `order_attack`, then `battle` (today) |
 | The battle's result | `StopLoop`; `victory` or `defeat` (today) |
-| `OrderFromArsenal` | `stamp_light` (the old `stamp` is now kept for the WON stamp and for orders that cannot be undone), `coins`, and `OfOrder` as today |
+| `OrderFromArsenal`, a city's order | `stamp_light` (the old `stamp` is now kept for the WON stamp and for orders that cannot be undone), `coins`, and `OfOrder` as today. Not for a move on the map |
 | The treasury figure counts | `coin_run`, once, inside the 400 ms count |
 | The WON stamp, the LOST stamp | `stamp`, `stamp_low`, as the stamp lands |
 | New alerts slide in | `alert_slip`, once for the batch |

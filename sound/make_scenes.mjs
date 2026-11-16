@@ -61,7 +61,7 @@ const many = (from, to, every, fn) => { const cues = []; let k = 0; for (let t =
 export const SCENES = {
   night_raid: {
     title: 'A raid by night', seconds: 44,
-    about: 'A town with heavy guns is bombed at night. Crickets and quiet; the siren; the lamps strike; the bombers come over with their uneven beat; the guns open and the shells burst; a lamp catches one; the bombs come down; the town burns; the bombers go home; the all clear; the fire is still burning when the crickets come back.',
+    about: 'A town with heavy guns is bombed at night, here by twin-engined bombers. Crickets and quiet; the siren; the lamps strike; the bombers come over with their uneven beat; the guns open and the shells burst; a lamp catches one; the bombs come down; the town burns; the bombers go home; the all clear; the fire is still burning when the crickets come back.',
     cues: [
       [0, 'land_night_loop', { len: 44, g: 4, in: 0.3, out: 2, env: [[0, 0], [6, 0], [9, -10], [33, -10], [38, -2], [44, 0]] }],
       [1.2, 'owl_01', { g: -2, pan: -0.6 }],
@@ -86,7 +86,7 @@ export const SCENES = {
   },
   day_raid: {
     title: 'A raid by day', seconds: 38,
-    about: 'The same town bombed by day. Birds and wind; the deep steady drone of the four-engined bombers, far steadier than the night bombers; their escort weaving above; the defending fighters meet them and there is a dogfight; flak; the bombs; one bomber goes down; they go home. No siren wail in the dark, no lamps, no crickets: a different picture altogether.',
+    about: 'The same town bombed by day, here by four-engined bombers. Birds and wind; the bombers\' deep steady drone; their escort weaving above; the defending fighters meet them and there is a dogfight; flak; the bombs; one bomber goes down; they go home. No siren wail in the dark, no lamps, no crickets, no fire after: a different picture altogether, whichever bomber flies it.',
     cues: [
       [0, 'land_day_loop', { len: 38, g: 4, in: 0.3, out: 2, env: [[0, 0], [5, 0], [9, -9], [28, -9], [34, 0]] }],
       [1.0, 'bird_01', { g: 0, pan: 0.5 }], [2.6, 'bird_03', { g: -3, pan: -0.6 }], [34.5, 'bird_04', { g: -2, pan: -0.4 }],
@@ -129,11 +129,9 @@ export const SCENES = {
     cues: [
       [0, 'room_day_loop', { len: 30, g: 6, in: 0.3, out: 1.5, env: [[0, 0], [12.2, 0], [12.8, -6], [17.8, -6], [18.6, 0]] }],
       [0.8, 'select_region', { g: 4 }], [1.7, 'pickup', { g: 4 }], [2.6, 'order_march', { g: 4 }], [3.5, 'putdown', { g: 4 }],
-      [4.5, 'click', { g: 4 }], [5.2, 'stamp', { g: 3 }],
-      [6.8, 'click', { g: 4 }],
-      [7.1, 'month_ask', { g: 3 }],
-      [9.9, 'click', { g: 4 }],
-      [10.3, 'month_end', { g: 3 }],
+      [4.5, 'click', { g: 4 }], [5.2, 'stamp_light', { g: 3 }],
+      [7.1, 'month_ask', { g: 3 }],     // END THE MONTH is pressed: the question's own sound and no click (one sound to an act)
+      [10.3, 'month_end', { g: 3 }],    // the answer: the month's own sound and no click
       [12.6, 'month_passing_loop', { len: 5.4, g: 4, in: 0.3, out: 0.5 }],
       [14.0, 'radio', { g: -6, pan: 0.5 }],
       [18.2, 'month_yours', { g: 2 }],
@@ -181,30 +179,34 @@ export const SCENES = {
     ],
   },
   // ---- Stings: short mixes that are themselves sounds, for a card that reports something it cannot show ----------
-  raid_day: {
-    sting: true, lufs: -19, title: 'Sting: a raid by day', seconds: 7.5,
-    about: 'For the raid card (and the browser game) when the raid was flown by day: the steady drone of heavy bombers, a fighter going through, flak, the bombs. No siren, no lamps.',
-    cues: [
-      [0, 'bomber_heavy_loop', { len: 7.5, g: -2, pan: [-0.6, 0.6], in: 1.2, out: 3 }],
-      [0.6, 'fighter_pass_01', { g: -6, pan: [0.8, -0.8] }],
-      [1.9, 'flak_burst_02', { g: -6, pan: 0.4 }], [2.6, 'flak_burst_01', { g: -7, pan: -0.3 }], [3.3, 'flak_burst_03', { g: -8, pan: 0.1 }],
-      [2.2, 'bombs_falling_01', { g: -8, len: 1.9, out: 0.3 }],
-      [3.9, 'bomb_stick_03', { g: -1, pan: -0.1 }],
-    ],
-  },
-  raid_night: {
-    sting: true, lufs: -19, title: 'Sting: a raid by night', seconds: 9,
-    about: 'For the raid card (and the browser game) when the raid was flown by night: the siren, a lamp struck, the uneven beat of the night bombers, flak, the bombs, and fire after.',
-    cues: [
-      [0, 'air_raid_siren', { g: -7, len: 4.2, in: 0.05, out: 2.2, pan: 0.2 }],
-      [0.9, 'searchlight_on', { g: -5, pan: -0.4 }],
-      [0.5, 'bomber_medium_loop', { len: 8, g: -3, pan: [-0.6, 0.6], in: 2, out: 3.5 }],
-      [2.6, 'flak_heavy_fire_01', { g: -9, pan: -0.5 }], [3.4, 'flak_burst_01', { g: -6, pan: 0.3 }], [4.0, 'flak_burst_04', { g: -7, pan: -0.2 }],
-      [3.1, 'bombs_falling_02', { g: -8, len: 1.9, out: 0.3 }],
-      [4.9, 'bomb_stick_01', { g: -1, pan: 0.1 }],
-      [5.6, 'fire_town_loop', { len: 3.4, g: -4, in: 1.2, out: 1.6 }],
-    ],
-  },
+  // The bomber's sound follows the aircraft, not the hour (ruling 142): four engines or two, each by day and by night.
+  // The hour is told by everything else: by day a fighter and no siren's wail; by night the siren, a lamp, and fire after.
+  ...Object.fromEntries([['heavy', 'bomber_heavy_loop', 'four-engined bombers, with their deep steady drone'], ['medium', 'bomber_medium_loop', 'twin-engined bombers, with their slow uneven beat']].flatMap(([kind, loop, words]) => [
+    [`raid_day_${kind}`, {
+      sting: true, lufs: -19, title: `Sting: a raid by day, ${kind === 'heavy' ? 'four engines' : 'two engines'}`, seconds: 7.5,
+      about: `For the raid card (and the browser game) when the raid was flown by day by ${words}: the bombers, a fighter going through, flak, the bombs. No siren, no lamps, no fire after.`,
+      cues: [
+        [0, loop, { len: 7.5, g: -2, pan: [-0.6, 0.6], in: 1.2, out: 3 }],
+        [0.6, 'fighter_pass_01', { g: -6, pan: [0.8, -0.8] }],
+        [1.9, 'flak_burst_02', { g: -6, pan: 0.4 }], [2.6, 'flak_burst_01', { g: -7, pan: -0.3 }], [3.3, 'flak_burst_03', { g: -8, pan: 0.1 }],
+        [2.2, 'bombs_falling_01', { g: -8, len: 1.9, out: 0.3 }],
+        [3.9, 'bomb_stick_03', { g: -1, pan: -0.1 }],
+      ],
+    }],
+    [`raid_night_${kind}`, {
+      sting: true, lufs: -19, title: `Sting: a raid by night, ${kind === 'heavy' ? 'four engines' : 'two engines'}`, seconds: 9,
+      about: `For the raid card (and the browser game) when the raid was flown by night by ${words}: the siren, a lamp struck, the bombers, flak, the bombs, and fire after.`,
+      cues: [
+        [0, 'air_raid_siren', { g: -7, len: 4.2, in: 0.05, out: 2.2, pan: 0.2 }],
+        [0.9, 'searchlight_on', { g: -5, pan: -0.4 }],
+        [0.5, loop, { len: 8, g: -3, pan: [-0.6, 0.6], in: 2, out: 3.5 }],
+        [2.6, 'flak_heavy_fire_01', { g: -9, pan: -0.5 }], [3.4, 'flak_burst_01', { g: -6, pan: 0.3 }], [4.0, 'flak_burst_04', { g: -7, pan: -0.2 }],
+        [3.1, 'bombs_falling_02', { g: -8, len: 1.9, out: 0.3 }],
+        [4.9, 'bomb_stick_01', { g: -1, pan: 0.1 }],
+        [5.6, 'fire_town_loop', { len: 3.4, g: -4, in: 1.2, out: 1.6 }],
+      ],
+    }],
+  ])),
   rail_move: {
     sting: true, lufs: -20, title: 'Sting: an army goes by rail', seconds: 5.5,
     about: 'For the browser game when an army is sent by rail: the whistle and the engine pulling away. Set against "marching", it is how a rail move and a march are told apart with the eyes shut.',

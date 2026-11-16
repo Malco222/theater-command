@@ -1,6 +1,6 @@
 # Catalogue of sounds
 
-Every sound in the set, by family: 203 sounds and 3 stings, with 7 target scenes. This file is written by `sound/tools/make_docs.mjs` from the list the generator makes, so it always matches the files.
+Every sound in the set, by family: 203 sounds and 5 stings, with 7 target scenes. This file is written by `sound/tools/make_docs.mjs` from the list the generator makes, so it always matches the files.
 
 How to read a row. **Name** is the file name without `.wav` and the name the game calls. **Kind** says mono or stereo and whether it is a loop: mono sounds are placed on the map by the game, stereo ones are played as they are. **Seconds** is its length. **LUFS** is its loudness as made (for a loop the whole of it, for anything else its loudest moment). **Small speaker** is how many dB it loses through a laptop speaker; under 6 is safe.
 
@@ -277,14 +277,16 @@ Beds (long loops of pure texture) and sprinkles (single events dropped in at ran
 | `room_steps` | stereo | 3.85 | -34 | 3.9 | Sprinkle, war room: somebody walks past the door on a wooden floor. |
 | `room_papers` | stereo | 1.74 | -34 | 0.1 | Sprinkle, war room: papers gathered and squared on a desk. |
 
-## Stings (3)
+## Stings (5)
 
 Short mixes of the sounds above that are themselves sounds, for a card that reports something it cannot show.
 
 | Name | Seconds | Made from | What it is and when it plays |
 |---|---:|---|---|
-| `raid_day` | 7.5 | `bomber_heavy_loop`, `fighter_pass_01`, `flak_burst_02`, `flak_burst_01`, `flak_burst_03`, `bombs_falling_01`, `bomb_stick_03` | For the raid card (and the browser game) when the raid was flown by day: the steady drone of heavy bombers, a fighter going through, flak, the bombs. No siren, no lamps. |
-| `raid_night` | 9 | `air_raid_siren`, `searchlight_on`, `bomber_medium_loop`, `flak_heavy_fire_01`, `flak_burst_01`, `flak_burst_04`, `bombs_falling_02`, `bomb_stick_01`, `fire_town_loop` | For the raid card (and the browser game) when the raid was flown by night: the siren, a lamp struck, the uneven beat of the night bombers, flak, the bombs, and fire after. |
+| `raid_day_heavy` | 7.5 | `bomber_heavy_loop`, `fighter_pass_01`, `flak_burst_02`, `flak_burst_01`, `flak_burst_03`, `bombs_falling_01`, `bomb_stick_03` | For the raid card (and the browser game) when the raid was flown by day by four-engined bombers, with their deep steady drone: the bombers, a fighter going through, flak, the bombs. No siren, no lamps, no fire after. |
+| `raid_night_heavy` | 9 | `air_raid_siren`, `searchlight_on`, `bomber_heavy_loop`, `flak_heavy_fire_01`, `flak_burst_01`, `flak_burst_04`, `bombs_falling_02`, `bomb_stick_01`, `fire_town_loop` | For the raid card (and the browser game) when the raid was flown by night by four-engined bombers, with their deep steady drone: the siren, a lamp struck, the bombers, flak, the bombs, and fire after. |
+| `raid_day_medium` | 7.5 | `bomber_medium_loop`, `fighter_pass_01`, `flak_burst_02`, `flak_burst_01`, `flak_burst_03`, `bombs_falling_01`, `bomb_stick_03` | For the raid card (and the browser game) when the raid was flown by day by twin-engined bombers, with their slow uneven beat: the bombers, a fighter going through, flak, the bombs. No siren, no lamps, no fire after. |
+| `raid_night_medium` | 9 | `air_raid_siren`, `searchlight_on`, `bomber_medium_loop`, `flak_heavy_fire_01`, `flak_burst_01`, `flak_burst_04`, `bombs_falling_02`, `bomb_stick_01`, `fire_town_loop` | For the raid card (and the browser game) when the raid was flown by night by twin-engined bombers, with their slow uneven beat: the siren, a lamp struck, the bombers, flak, the bombs, and fire after. |
 | `rail_move` | 5.5 | `train_whistle_01`, `train_depart` | For the browser game when an army is sent by rail: the whistle and the engine pulling away. Set against "marching", it is how a rail move and a march are told apart with the eyes shut. |
 
 ## Target scenes (7)
@@ -293,8 +295,8 @@ Not for the game: these are what the game should sound like when the sounds are 
 
 | Scene | Seconds | What happens in it |
 |---|---:|---|
-| `scene_night_raid` | 44 | A town with heavy guns is bombed at night. Crickets and quiet; the siren; the lamps strike; the bombers come over with their uneven beat; the guns open and the shells burst; a lamp catches one; the bombs come down; the town burns; the bombers go home; the all clear; the fire is still burning when the crickets come back. |
-| `scene_day_raid` | 38 | The same town bombed by day. Birds and wind; the deep steady drone of the four-engined bombers, far steadier than the night bombers; their escort weaving above; the defending fighters meet them and there is a dogfight; flak; the bombs; one bomber goes down; they go home. No siren wail in the dark, no lamps, no crickets: a different picture altogether. |
+| `scene_night_raid` | 44 | A town with heavy guns is bombed at night, here by twin-engined bombers. Crickets and quiet; the siren; the lamps strike; the bombers come over with their uneven beat; the guns open and the shells burst; a lamp catches one; the bombs come down; the town burns; the bombers go home; the all clear; the fire is still burning when the crickets come back. |
+| `scene_day_raid` | 38 | The same town bombed by day, here by four-engined bombers. Birds and wind; the bombers' deep steady drone; their escort weaving above; the defending fighters meet them and there is a dogfight; flak; the bombs; one bomber goes down; they go home. No siren wail in the dark, no lamps, no crickets, no fire after: a different picture altogether, whichever bomber flies it. |
 | `scene_march_and_train` | 46 | Two ways to move an army, told apart with the eyes shut. First a column steps off and marches: boots, in time. Then a train: the whistle, the engine pulling away, the beat of the exhaust and the wheels over the joints; a flak wagon on it fires at something overhead; at the end of the line it brakes, the buffers close up, and it sets off back the way it came. |
 | `scene_month_end` | 30 | The war room at the end of a month. A few orders given at the desk; END THE MONTH; the question ("armies at the front have no orders"); the answer; the month ends; the other countries move, quickly; the month is yours again; the month card is laid in front of you with good news; you turn its page and close it. |
 | `scene_attack` | 32 | A gun line and an assault. The drums as the two sides are drawn up; the guns open; shells go over and land; tanks start and roll; rifles and machine guns; the noise of the fight; and it is won. |

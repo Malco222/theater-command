@@ -1,6 +1,8 @@
 # Gate 7: the sound team's list
 
-Sound director, 16 November 2026. Written for the design director's finish line (ruling 128), against gate 7's test.
+Sound director, 16 November 2026. Written for the design director's finish line (ruling 128), against gate 7's test. Accepted as gate 7's own list by ruling 142 (16 November), with one change, line D2.
+
+**How the gate closes** (ruling 142). Its first piece closes when every line is WIRED in both games, checked by the sound log the two plans give the Playtester. Its second piece closes on Brian's ear alone.
 
 **The test.** "Every order you give and every month that ends has a sound. With your eyes shut you can tell a march from a train, and a raid by day from a raid by night. Nothing loops until it grates." Effects and music each have their own volume.
 
@@ -10,7 +12,7 @@ Sound director, 16 November 2026. Written for the design director's finish line 
 - **WIRED**: the game plays it at the right moment. This is the builders' work, from the two implementation files.
 - **HEARD**: Brian has listened and it passes.
 
-**Where things stand on 16 November.** All 206 sounds are MADE (203 and three stings). None of the new ones is WIRED. None is HEARD. In the 3D game the 29 old names will play the new sounds as soon as the builder swaps the generator, with no other change.
+**Where things stand on 16 November.** All 208 sounds are MADE (203 and five stings). None of the new ones is WIRED. None is HEARD. In the 3D game the 29 old names will play the new sounds as soon as the builder swaps the generator, with no other change.
 
 ## A. Every order you give has a sound
 
@@ -77,14 +79,14 @@ Sound director, 16 November 2026. Written for the design director's finish line 
 | # | What must be true | How | Made | Wired 3D | Wired browser | Heard |
 |---|---|---|---|---|---|---|
 | D1 | The air itself differs | `land_day_loop` against `land_night_loop` | yes | no | not in the browser game | no |
-| D2 | The bombers differ | `bomber_heavy_loop` by day, `bomber_medium_loop` by night | yes | no | no | no |
+| D2 | The bomber's sound follows the bomber drawn, not the hour (ruling 142) | `bomber_heavy_loop` for a four-engined bomber, `bomber_medium_loop` for a twin, by day or by night | yes | no | no | no |
 | D3 | The defence differs | Fighters by day (`dogfight`, `fighter_pass`); lamps by night (`searchlight_on`, `_loop`, `_caught`, `_off`) | yes | no | no | no |
 | D4 | The warning differs | `siren` by day, `air_raid_siren` and `siren_all_clear` by night | yes | `siren` on swap | no | no |
 | D5 | Flak fires and its shells burst | `flak_heavy_fire`, `flak_burst`, `flak_light`, `flak_barrage_loop` | yes | no | no | no |
 | D6 | Bombs fall and burst | `bombs_falling`, `bomb_stick`, `bomb_single` | yes | no | no | no |
 | D7 | A town burns at night | `fire_start`, `fire_town_loop`, `fire_collapse` | yes | no | no | no |
-| D8 | The raid card tells day from night in one sound | `raid_day`, `raid_night` | yes | no | no | no |
-| D9 | The two can be compared side by side | Scenes `scene_day_raid` and `scene_night_raid`; on the board, the second "eyes shut" pair | yes | n/a | n/a | no |
+| D8 | The raid card tells day from night in one sound, with the right bomber | `raid_day_heavy`, `raid_day_medium`, `raid_night_heavy`, `raid_night_medium` | yes | no | no | no |
+| D9 | The two can be compared side by side | Scenes `scene_day_raid` and `scene_night_raid`; on the board, the second "eyes shut" pair, which mixes both bombers so that the engines cannot give the hour away | yes | n/a | n/a | no |
 
 ## E. Nothing loops until it grates
 

@@ -4,7 +4,7 @@ Sound director, 16 November 2026. For Brian, the coordinator, the design directo
 
 **Brian's words** (project chat, 2026-11-16 18:42:45Z): "do all of those. we definitely need great sound effects".
 
-**What this is.** The plan for how the game sounds: what the sounds are, how day differs from night, how loud each thing is, and which event each sound belongs to. The sounds themselves are made (203 of them, 3 stings and 7 target scenes) and can be heard on the [listening board](https://claude.ai/artifact/Y4PGKtarPo2J2mqs6oUuYV), where each one can be stamped Good, Fix or Cut. The lists beside this brief:
+**What this is.** The plan for how the game sounds: what the sounds are, how day differs from night, how loud each thing is, and which event each sound belongs to. The sounds themselves are made (203 of them, 5 stings and 7 target scenes) and can be heard on the [listening board](https://claude.ai/artifact/Y4PGKtarPo2J2mqs6oUuYV), where each one can be stamped Good, Fix or Cut. The lists beside this brief:
 
 | File | What it holds |
 |---|---|
@@ -12,10 +12,10 @@ Sound director, 16 November 2026. For Brian, the coordinator, the design directo
 | `gate-7-sound-list.md` | The sound team's list against gate 7's test, with the state of each line |
 | `implementation-3d.md` | The plan for the 3D builder |
 | `implementation-browser.md` | The smaller set for the browser game and how to wire it |
-| `ui-hooks.md` | The UI director's twenty interface hooks and the sound that answers each |
+| `ui-hooks.md` | The UI director's thirty-six interface hooks and the sound that answers each |
 | `licence-log.md` | Where every file came from (all original) |
 | `mp3/`, `scenes/` | Every sound and scene, to listen to |
-| `browser-set/` | The browser game's 78 sounds, packed small, with a player module |
+| `browser-set/` | The browser game's 80 sounds, packed small, with a player module |
 | `generator/` | The program that makes every sound (also in the repository, folder `sound/`) |
 
 ## 1. The one idea: a war room with a window
@@ -73,12 +73,14 @@ Night must be a different picture to the ear, as it is to the eye. The test is t
 | The sea | `sea_day_loop` and gulls | `sea_night_loop`, slower and darker, and a bell buoy |
 | The war room | `room_day_loop`: the clock and a clerk typing next door | `room_night_loop`: the clock, the lamp hissing, wind at the window, nobody else |
 | A raid: the warning | The siren far off and short (`siren`), or none | The full wailing siren (`air_raid_siren`) |
-| A raid: the bombers | `bomber_heavy_loop`: four engines in step, a deep steady drone, and the escort's fighters above | `bomber_medium_loop`: two engines out of step, the uneven beat that rises and falls |
+| A raid: who flies | The bombers, with the escort's fighters weaving above them | The bombers alone |
 | A raid: the defence | Fighters meet them: `dogfight`, `fighter_pass` | The lamps: `searchlight_on`, `searchlight_loop`, `searchlight_caught` |
 | A raid: after | Smoke, and quiet | `fire_town_loop`: the town burns for as long as its glow lasts, with `fire_collapse`; then `siren_all_clear` |
 | The switch itself | `switch_on` | `switch_off` |
 
-One short sting each, `raid_day` and `raid_night`, tells the same story in eight seconds for the raid card and for the browser game.
+**The bomber's own sound follows the aircraft, not the hour** (design director, ruling 142). The game draws each country's bomber as its own, two engines or four, so the ear must agree with the eye: a four-engined bomber is `bomber_heavy_loop` (four engines in step, a deep steady drone) and a twin is `bomber_medium_loop` (two engines out of step, the uneven beat that rises and falls), whatever the hour. A British raid by night sounds four-engined; a German raid by day sounds twin. The hour is told by every other row of the table.
+
+Four short stings tell the same story in eight seconds for the raid card and for the browser game: `raid_day_heavy`, `raid_day_medium`, `raid_night_heavy` and `raid_night_medium` (the hour, then the bomber).
 
 ## 5. A march against a train
 
@@ -120,7 +122,7 @@ The rules for both builders:
 | Calls | The band's pieces | -2 dB | No |
 | World | Everything on the map, and the sirens | 0 dB at the lowest camera, falling to -12 dB and duller at the highest | Yes |
 | Ambience | Beds and sprinkles | 0 dB | The room bed and the outdoor bed cross over with camera height |
-| Music | The three moods that exist today | As today (0.55) | No |
+| Music | The three moods that exist today | Lowered to sit under the effects: about -27 LUFS under play (the theme at volume 0.15, where it was 0.55); louder on the opening screen | No |
 
 The narrator's voice sits above all of them, as it does now.
 
@@ -155,7 +157,7 @@ The figure uses notes a bugle cannot play, so it cannot be any army's real call,
 
 ## 10. Which event gets which sound
 
-The full tables, by function name for the 3D game and by button for the browser game, are in the two implementation files. The interface's own moments are named by the UI director as twenty hooks (`ui.press`, `ui.stamp.won` and so on); `ui-hooks.md` is the one table of which sound answers which hook. In short:
+The full tables, by function name for the 3D game and by button for the browser game, are in the two implementation files. The interface's own moments are named by the UI director as thirty-six hooks (`ui.press`, `ui.stamp.won` and so on); `ui-hooks.md` is the one table of which sound answers which hook. In short:
 
 | Event | Sound |
 |---|---|

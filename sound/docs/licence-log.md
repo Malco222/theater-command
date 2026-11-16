@@ -230,7 +230,9 @@
 | `scene_month_end.wav` | target scene | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
 | `scene_attack.wav` | target scene | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
 | `scene_fleet.wav` | target scene | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
-| `raid_day.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
-| `raid_night.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
+| `raid_day_heavy.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
+| `raid_night_heavy.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
+| `raid_day_medium.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
+| `raid_night_medium.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
 | `rail_move.wav` | sting | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |
 | `scene_first_command.wav` | target scene | A mix of the files above | `make_scenes.mjs` | none | none needed (original) |

@@ -12,12 +12,12 @@ Every sound in the game is made by the program in this folder. Nothing is record
 | `docs/gate-7-sound-list.md` | The sound team's list against gate 7 of the release 1 finish line |
 | `docs/implementation-3d.md` | The plan for the 3D game |
 | `docs/implementation-browser.md` | The browser game's smaller set and how to wire it |
-| `docs/ui-hooks.md` | The interface's twenty sound hooks and the sound that answers each |
+| `docs/ui-hooks.md` | The interface's thirty-six sound hooks and the sound that answers each |
 | `docs/catalogue.md`, `docs/licence-log.md` | Every sound, and where every file came from (written by `tools/make_docs.mjs`) |
 | `make_sounds.mjs`, `recipes/`, `kit/` | The generator: 203 sounds in ten families |
-| `make_scenes.mjs` | Mixes the seven target scenes and the three stings from the sounds |
+| `make_scenes.mjs` | Mixes the seven target scenes and the five stings from the sounds |
 | `browser/` | The browser game's set (`set.mjs`) and its player (`sound.ts`) |
-| `browser-set/` | The browser game's 78 sounds, packed as small MP3s, with `browser-sounds.json` |
+| `browser-set/` | The browser game's 80 sounds, packed as small MP3s, with `browser-sounds.json` |
 | `board/`, `tools/make_board.mjs` | The listening board's page and its builder |
 | `tools/` | The fault check, the MP3 packer, the loudness meter, the spectrogram |
 
@@ -28,7 +28,7 @@ It needs Node.js (no packages) and, for the MP3s only, `ffmpeg`. `OUT` is any fo
 ```
 node sound/make_sounds.mjs $OUT/wav                      # 203 WAVs and sound-list.json, about two minutes
 node sound/tools/check.mjs $OUT/wav                      # the fault check
-node sound/make_scenes.mjs $OUT/wav $OUT/scenes          # 7 scenes, 3 stings, scene-list.json
+node sound/make_scenes.mjs $OUT/wav $OUT/scenes          # 7 scenes, 5 stings, scene-list.json
 node sound/tools/make_mp3.mjs $OUT/wav $OUT/mp3          # MP3 copies to listen to
 node sound/tools/make_mp3.mjs $OUT/scenes $OUT/mp3scenes
 node sound/tools/make_browser_set.mjs $OUT/wav $OUT/scenes sound/browser-set
