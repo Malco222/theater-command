@@ -183,8 +183,9 @@ describe('the army sent across the ocean', () => {
       // Never a shore the enemy holds: the ocean run puts nobody ashore against a defence.
       expect(p.units.some((u) => atWar(g, 'USA', u.nat))).toBe(false);
     }
-    // The harbour where the army is built up is Britain's.
-    expect(run.to[0].owner).toBe('UK');
+    // The harbour where the army is built up is one Britain holds. (In this war since the support weapons came in
+    // it is Sardinia, which the British took the month before: the nearest of them to an enemy shore.)
+    expect(run.to[0].ctrl).toBe('UK');
   });
 
   it('puts its corps across month by month, keeps a guard at home, and takes no dated formation from history', () => {
@@ -272,7 +273,7 @@ describe('the army sent across the ocean', () => {
     const careful = oceanRuns(g, 'USA')[0];
     expect(careful.front).toBe(false);
     expect(careful.to).not.toContain(beach);
-    expect(careful.to[0].owner).toBe('UK');
+    expect(careful.to[0].ctrl).toBe('UK');
     // With a staff that would bear any danger the beachhead comes first, and Britain's ports stand behind it for
     // the month its harbour is full.
     const keep = O.risk;
@@ -282,7 +283,7 @@ describe('the army sent across the ocean', () => {
       expect(bold.front).toBe(true);
       expect(bold.to[0]).toBe(beach);
       expect(bold.to.length).toBeGreaterThan(1);
-      expect(bold.to.slice(1).every((p: Region) => p.owner === 'UK' && p !== beach)).toBe(true);
+      expect(bold.to.slice(1).every((p: Region) => p.ctrl === 'UK' && p !== beach)).toBe(true);
     } finally { O.risk = keep; }
   });
 });

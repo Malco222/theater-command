@@ -7,9 +7,9 @@
 // after it (who paid), as far as the player's reports know it; the computer's staffs do not send tanks alone at a
 // gunned line. None of it is in a history campaign. The numbers are in data/campaign/support.json.
 import { describe, expect, it } from 'vitest';
-import { notTanksAlone } from '../src/campaign/ai';
+import { footBeside, notTanksAlone, twoWaves } from '../src/campaign/ai';
 import { GUNS_AND_MINES_UNKNOWN, GUNS_UNKNOWN, briefTicket, gunsKnown, minesKnown, whatYouFace } from '../src/campaign/facing';
-import { DEFENCE, addCorps, assess, createGame, relocate, resolveBattle, worksShare } from '../src/campaign/game';
+import { DEFENCE, addCorps, assess, createGame, limitAttackers, relocate, resolveBattle, worksShare } from '../src/campaign/game';
 import { SIGHT, identify, setFog, sightOf } from '../src/campaign/intel';
 import { startOpen } from '../src/campaign/staff';
 import {
@@ -704,6 +704,49 @@ describe('the computer\'s staffs', () => {
     const m = line(h, undefined, [['arm', 3], ['inf', 3]]);
     expect(at(h, m, [m.att[0]]).strength).toBeLessThan(SUPPORT.staff.gunned);
     expect(notTanksAlone(h, [m.att[0]], m.att, m.target)).toEqual([m.att[0]]);
+  });
+
+  it('hold their marks at the printed value, whatever the machine\'s arithmetic makes of the sum', () => {
+    // 1943 in the open (a half), two divisions of guns in the line (0.08), and armour one design ahead of its day
+    // (0.08 off): 0.58 less 0.08 is a half on the card, and a hair under it in the machine. (The 48 wars: 17 and 22
+    // attacks by tanks alone slipped through here.)
+    const g = playing('POL');
+    g.turn = january(1943);
+    const l = line(g, [['inf', 3], ['inf', 3], ['art', 2]], [['arm', 3], ['arm', 3]]);
+    give(g, 'GER', ...T.armour);
+    const s = at(g, l).strength;
+    expect(Math.abs(s - SUPPORT.staff.never)).toBeLessThan(1e-9);
+    expect(notTanksAlone(g, l.att, l.att, l.target)).toBeNull();
+  });
+
+  it('keep the rule for a counter-stroke, a relief and a first wave: infantry next door goes in, or nobody does', () => {
+    const g = playing('POL');
+    g.turn = january(1943);
+    const l = line(g, undefined, [['arm', 3], ['arm', 2], ['inf', 3], ['inf', 2]]);
+    give(g, 'GER', T.armour[0], T.armour[1]);
+    const [p1, p2, i1, i2] = l.att;
+    expect(at(g, l, [p1, p2]).strength).toBeGreaterThanOrEqual(SUPPORT.staff.never);
+    // A force of tanks cut to the roads, with infantry standing next door: the best of it goes in beside them.
+    const sent = footBeside(g, [p1, p2], l.att, l.target)!;
+    expect(sent).toContain(i1);
+    expect(limitAttackers(g, sent, l.target).length).toBe(sent.length);
+    // Where the staff can run only two corps in a battle, the infantry takes the weaker tank corps' place.
+    g.nations.GER.maxAttack = 2;
+    expect(footBeside(g, [p1, p2], l.att, l.target)).toEqual([p1, i1]);
+    delete g.nations.GER.maxAttack;
+    // Nobody on foot to send: the stroke is not made.
+    expect(footBeside(g, [p1, p2], [p1, p2], l.target)).toBeNull();
+    // A force that has its infantry already is left as it was.
+    expect(footBeside(g, [p1, i2], l.att, l.target)).toEqual([p1, i2]);
+    // A first wave of two is picked from the corps the main body does not need. Tanks alone are no first wave here.
+    expect(twoWaves(g, l.att, [i1, i2], l.target, 0.01)).toBeNull();
+    const two = twoWaves(g, l.att, [i1], l.target, 0.01);
+    if (two) expect(two.corps.some((c) => c.kind === 'inf')).toBe(true);
+    // A history campaign is worked out as it always was.
+    const tanks = [p1, p2];
+    g.flags.open = 0;
+    expect(footBeside(g, tanks, tanks, l.target)).toBe(tanks);
+    g.flags.open = 1;
   });
 
   it('want Anti-tank guns sooner once they are at war with an army that has tanks', () => {
