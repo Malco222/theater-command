@@ -333,6 +333,8 @@ struct FRaidSeat
 	bool bLocked = false; // it goes because it is ordered to stick with its bombers
 	bool bLead = false;
 	bool bAfloat = false;
+	bool bStays = false; // (ruling 107(d)) an escort picked for a raid that is planned by night: it stays on the card and stays at home
+	bool bDayOnly = false; // an escort that could join by day and cannot by night
 };
 
 /** A target on the raid card: the one being planned, or another in reach to step to. */
@@ -360,6 +362,23 @@ struct FRaidMeet
 	int32 Able = 0; // how many of them can reach the raid
 };
 
+/** (Ruling 107(d).) One way of flying a bombing raid, by day or by night: a whole small forecast in the rules' own words. */
+struct FRaidWay
+{
+	FString Label; // BY DAY, BY NIGHT
+	FString Why; // why it cannot be flown this way; empty when it can
+	FString Verdict;
+	FString Lost, FightersLost; // "2% · about 7"; the second empty where no fighters fly
+	FString Foot;
+	FString Act; // what to pass back to choose it; empty for the one chosen
+	FString Tip;
+	float Success = 0.0f, LostShare = 0.0f, FighterShare = 0.0f;
+	bool bNight = false;
+	bool bChosen = false;
+	TArray<TPair<FString, FString>> Hits; // a number, and a few words
+	TArray<bool> HitDim; // a line printed only to stand beside the other column's
+};
+
 /** The raid card: the target as a picture, the forecast as numbers for bars, and a seat for every air group. */
 struct FRaidCard
 {
@@ -384,6 +403,10 @@ struct FRaidCard
 	float BomberShare = 0.0f;
 	FString Massed, OffPatrol, Ticket; // for the pointer: what meeting up is worth, what it costs at home, the battle ticket
 	FPageButton Fly;
+	// (Ruling 107(d).) A bombing raid by day and by night, side by side: empty for any other kind of raid.
+	TArray<FRaidWay> Ways;
+	FString WaysLabel, WaysFoes, WaysFoesWords;
+	int32 WaysBombers = 0;
 };
 
 /** A figure on the month's card: "3,000" over "lost". */

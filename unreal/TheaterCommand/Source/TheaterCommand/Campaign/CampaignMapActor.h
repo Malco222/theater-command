@@ -570,6 +570,28 @@ private:
 	TArray<FFlight> Flights;
 	void UpdateSorties();
 	/**
+	 * (Brian, 16 November 2026; rulings 108 and 109; the art director's brief.) The gun lines: for every army that
+	 * holds artillery, its guns on the ground behind its base, on the side away from the enemy, barrels over the base.
+	 * Made again whenever the armies or the fronts change, and when an army with guns is picked up or put down.
+	 */
+	void BuildGunLines();
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> GunLineMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GunEarthInk; // the trodden earth under the guns: let down by night with the ground
+	/** Where each line stands, for the pointer: a click on a gun picks up its army. */
+	struct FGunLine
+	{
+		TWeakObjectPtr<AArmyPiece> Piece;
+		FVector Middle = FVector::ZeroVector;
+		double Radius = 0.0;
+	};
+	TArray<FGunLine> GunLines;
+	TArray<TWeakObjectPtr<AArmyPiece>> GunsAway; // armies with guns that are in the hand or on the road: their lines wait for them
+	FString GunLinesBuilt = TEXT("-"); // (what the lines were last made from)
+	TArray<FString> GunStanding; // how each province stands to the player, as the armies were last laid out
+	TSet<FString> GunFoes; // the countries at war with the player
+	/**
 	 * (Brian, 16 November 2026: "if the air raid is at night have search lights shown from the cities"; ruling 107
 	 * (f); the art director's brief.) The searchlights of every place under raid by night: lamps on the ground round
 	 * it, by its guns, and their beams, light added over the scene. Some search and some hold a bomber.

@@ -1319,6 +1319,12 @@ namespace
 			BrassStyle = MakeButtonStyle(FLinearColor(FColor::FromHex(TEXT("D2A04E"))), FLinearColor(FColor::FromHex(TEXT("E6BC6C"))), FLinearColor(FColor::FromHex(TEXT("F0CF8A"))), 1.5f);
 			BrassStyle.SetDisabled(FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("D2A04E"))).CopyWithNewOpacity(0.25f), 4.0f, Faint, 1.0f));
 			CardBrush = FSlateRoundedBoxBrush(CardFill, 5.0f, Faint.CopyWithNewOpacity(0.55f), 1.0f);
+			// (Ruling 107(d).) The two ways of a bombing raid, each a button: the chosen one framed in brass, the other
+			// quietly; a hollow ring waits where the CHOSEN tag would be; and a quiet tag for a group that stays at home.
+			WayChosenStyle = MakeButtonStyle(CardFill, CardFill, BrightBrass, 2.0f);
+			WayQuietStyle = MakeButtonStyle(CardFill, CardHover, FLinearColor(FColor(104, 92, 72)), 1.0f);
+			WayRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 9.0f, BrightBrass, 1.5f);
+			WayTagBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, Faint, 1.0f);
 			DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 6.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.7f), 1.0f);
 			PickedCard = MakeButtonStyle(CardFill, CardHover, Brass, 1.5f);
 			LeftCard = MakeButtonStyle(CardFill.CopyWithNewOpacity(0.7f), CardHover, Faint.CopyWithNewOpacity(0.6f), 1.0f);
@@ -2645,6 +2651,8 @@ namespace
 									[
 										SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)]
 									]
+									// (what a page pins to its foot stays on the screen whatever scrolls above it: the raid card's buttons)
+									+ SVerticalBox::Slot().AutoHeight()[SAssignNew(PageFoot, SVerticalBox)]
 								]
 							]
 							]
@@ -5605,7 +5613,8 @@ namespace
 		TSharedRef<SWidget> RaidSeatCard(const FRaidSeat& Seat)
 		{
 			const FLinearColor Red = FLinearColor(FColor::FromHex(TEXT("CF5A41")));
-			const bool bCan = Seat.Why.IsEmpty();
+			// (an escort picked for a raid planned by night stays on the card, dimmed, and stays at home)
+			const bool bCan = Seat.Why.IsEmpty() && !Seat.bStays;
 			const FString Model = Seat.Kind == TEXT("ftr") ? FMiniatureMesh::MainFighterOf(Seat.Nation) : FMiniatureMesh::MainBomberOf(Seat.Nation);
 			const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : CutOutOf(Model);
 			const FString Craft = Seat.Kind == TEXT("ftr") ? TEXT("fighters") : Seat.Kind == TEXT("bmr") ? TEXT("bombers") : TEXT("aircraft");
@@ -5645,6 +5654,17 @@ namespace
 					]
 				]
 			];
+			if (Seat.bDayOnly)
+			{
+				Head->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&WayTagBrush).Padding(FMargin(6.0f, 2.0f, 6.0f, 2.0f))
+					.ToolTipText(FText::FromString(Seat.bStays ? TEXT("No escort flies by night. Planned by day again, it goes with the bombers.") : TEXT("It could join the raid by day. No escort flies by night.")))
+					[
+						SNew(STextBlock).Text(FText::FromString(Seat.bStays ? TEXT("STAYS HOME") : TEXT("BY DAY ONLY"))).Font(Font(TEXT("Bold"), 8, 160)).ColorAndOpacity(Muted)
+					]
+				];
+			}
 			if (Seat.bLead)
 			{
 				Head->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
@@ -5656,7 +5676,7 @@ namespace
 					]
 				];
 			}
-			else if (bCan)
+			else if (Seat.Why.IsEmpty())
 			{
 				const FString Tip = Seat.bLocked ? FString(TEXT("It goes because it is ordered to stick with its bombers. Change its standing order to take it off escort."))
 					: Seat.bPicked ? FString(TEXT("Leave it out of the raid."))
@@ -5696,7 +5716,7 @@ namespace
 				Whole->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 				[
 					// (the reason is a sentence of the rules': it runs on from "Cannot fly", so its capital goes)
-					SNew(STextBlock).Text(FText::FromString(TEXT("Cannot fly: ") + Seat.Why.Left(1).ToLower() + Seat.Why.Mid(1))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Seat.bStays ? FString(TEXT("Stays home: no escort by night")) : TEXT("Cannot fly: ") + Seat.Why.Left(1).ToLower() + Seat.Why.Mid(1))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
 				];
 			}
 			return SNew(SBox).WidthOverride(364.0f)
@@ -5792,8 +5812,184 @@ namespace
 			}
 
 			// The forecast: one large number with its verdict, who goes and who rises, what it costs, what a hit does.
-			TSharedRef<SVerticalBox> Forecast = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Heading(TEXT("THE FORECAST"))];
-			if (!Card.Why.IsEmpty())
+			const bool bTwoWays = Card.Ways.Num() == 2;
+			TSharedRef<SVerticalBox> Forecast = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Heading(bTwoWays && !Card.WaysLabel.IsEmpty() ? Card.WaysLabel : FString(TEXT("THE FORECAST")))];
+			if (bTwoWays)
+			{
+				// (Brian, 16 November 2026; ruling 107(d); the art director's brief.) A bombing raid by day and by night,
+				// side by side: two whole small forecasts, the way two price tags hang side by side. A row above them
+				// holds what is common to both. The whole column is the button; the one not chosen is never dimmed.
+				{
+					FString Who;
+					for (const FRaidMeet& Meet : Card.Meets)
+					{
+						Who += FString::Printf(TEXT("%s%s at %s: about %s of %s fighters"), Who.IsEmpty() ? TEXT("") : TEXT("\n"), *Meet.Name, *Meet.Base, *Number(Meet.Able), *Number(Meet.Fighters));
+					}
+					auto Count = [this](const FString& Figure, const FString& Of) -> TSharedRef<SWidget>
+					{
+						return SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)[SNew(STextBlock).Text(FText::FromString(Figure)).Font(Font(TEXT("Bold"), 16)).ColorAndOpacity(Cream)]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(7.0f, 0.0f, 0.0f, 2.0f)[SNew(STextBlock).Text(FText::FromString(Of)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)];
+					};
+					TSharedRef<SHorizontalBox> Common = SNew(SHorizontalBox);
+					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Number(Card.WaysBombers), Card.WaysBombers == 1 ? TEXT("bomber") : TEXT("bombers"))];
+					Common->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
+					if (Card.Meets.Num() > 0 && !Card.Meets[0].Tag.IsEmpty())
+					{
+						Common->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(24.0f).HeightOverride(16.0f)[SNew(SImage).Image(FlagBrush(Card.Meets[0].Tag))]
+						];
+					}
+					Common->AddSlot().AutoWidth().VAlign(VAlign_Center)[Count(Card.WaysFoes, Card.WaysFoesWords)];
+					Forecast->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(13.0f, 6.0f, 13.0f, 6.0f))
+						.ToolTipText(FText::FromString(Card.Meets.Num() == 0 ? FString(TEXT("No enemy fighters are in reach of the target.")) : Who))
+						[
+							Common
+						]
+					];
+				}
+				auto Column = [&](const FRaidWay& Way) -> TSharedRef<SWidget>
+				{
+					const FLinearColor Lead = Way.bChosen ? BrightBrass : Cream;
+					TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox);
+					if (const FSlateBrush* Sign = OrderSignBrush(Way.bNight ? TEXT("night") : TEXT("day")))
+					{
+						Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(27.0f).HeightOverride(18.0f)[SNew(SImage).Image(Sign).ColorAndOpacity(Lead)]
+						];
+					}
+					Top->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Way.Label)).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Lead)
+					];
+					if (Way.bChosen)
+					{
+						Top->AddSlot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass).Padding(FMargin(8.0f, 2.0f, 8.0f, 2.0f))
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("CHOSEN"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Ink)
+							]
+						];
+					}
+					else
+					{
+						Top->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(18.0f).HeightOverride(18.0f)[SNew(SImage).Image(&WayRingBrush)]];
+					}
+					TSharedRef<SVerticalBox> Inside = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Top];
+					if (!Way.Why.IsEmpty())
+					{
+						// (it cannot be flown this way this time: the reason stands in place of its figures)
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Way.Why)).Font(Serif(TEXT("Bold"), 15)).ColorAndOpacity(Red).AutoWrapText(true)
+						];
+					}
+					else
+					{
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox).ToolTipText(FText::FromString(Way.bChosen ? Card.Ticket : FString()))
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+							[
+								SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Way.Success * 100.0f)))).Font(Serif(TEXT("Bold"), 25)).ColorAndOpacity(BrightBrass)
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(9.0f, 0.0f, 0.0f, 5.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Way.Verdict)).Font(Serif(TEXT("Bold"), 11)).ColorAndOpacity(Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+							]
+						];
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[RaidMeter(Way.Success, BrightBrass, 4.0f)];
+						auto Lost = [&](const TCHAR* Name, const FString& Says, float Share) -> TSharedRef<SWidget>
+						{
+							return SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+									// (the rules' own words, "2% · about 7", with a little more room about the dot)
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Says.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[RaidMeter(Share, Red, 4.0f)];
+						};
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)[Lost(TEXT("BOMBERS LOST"), Way.Lost, Way.LostShare)];
+						if (Way.Hits.Num() > 0)
+						{
+							Inside->AddSlot().AutoHeight().Padding(0.0f, 11.0f, 0.0f, 3.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)
+							];
+							for (int32 K = 0; K < Way.Hits.Num() && K < 3; ++K)
+							{
+								const bool bDim = Way.HitDim.IsValidIndex(K) && Way.HitDim[K];
+								if (Way.Hits[K].Key.IsEmpty())
+								{
+									// (a sentence with no figure: no industry there)
+									Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Text(FText::FromString(Way.Hits[K].Value)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+									];
+									continue;
+								}
+								Inside->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+								[
+									SNew(SHorizontalBox).ToolTipText(FText::FromString(Way.bChosen ? Card.Effects : FString()))
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+									[
+										SNew(SBox).WidthOverride(58.0f).HAlign(HAlign_Right)
+										[
+											SNew(STextBlock).Text(FText::FromString(Way.Hits[K].Key)).Font(Serif(TEXT("Bold"), 15)).ColorAndOpacity(bDim ? Faint : Cream)
+										]
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 2.0f)
+									[
+										SNew(STextBlock).Text(FText::FromString(Way.Hits[K].Value)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bDim ? Faint : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									]
+								];
+							}
+						}
+					}
+					// (the foot line, at the foot whatever stands above it)
+					Inside->AddSlot().FillHeight(1.0f)[SNew(SSpacer)];
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 5.0f)[SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Faint.CopyWithNewOpacity(0.45f))]];
+					if (Way.Why.IsEmpty() && !Way.FightersLost.IsEmpty())
+					{
+						// (The art director's defences brief, section 4: the column cannot grow, so when an escort flies the
+						// foot line gives way to FIGHTERS LOST, in the BOMBERS LOST type and without a bar. Nothing in the
+						// column moves when an escort is added or dropped.)
+						Inside->AddSlot().AutoHeight()
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("FIGHTERS LOST"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.FightersLost.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
+						];
+					}
+					else
+					{
+						Inside->AddSlot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Way.Foot)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))
+						];
+					}
+					return SNew(SButton).ButtonStyle(Way.bChosen ? &WayChosenStyle : &WayQuietStyle).ContentPadding(FMargin(12.0f, 9.0f, 12.0f, 8.0f)).HAlign(HAlign_Fill).VAlign(VAlign_Fill).IsFocusable(false)
+						.ToolTipText(FText::FromString(Way.Tip))
+						.OnClicked_Lambda(Go(Way.Act))
+						[
+							Inside
+						];
+				};
+				Forecast->AddSlot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f)[Column(Card.Ways[0])]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(11.0f, 0.0f, 0.0f, 0.0f)[Column(Card.Ways[1])]
+				];
+			}
+			else if (!Card.Why.IsEmpty())
 			{
 				Forecast->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 				[
@@ -6016,8 +6212,9 @@ namespace
 			Deal(TEXT("FLYING THE RAID"), Going, TEXT("No group is picked. Add one from those that could join."));
 			Deal(TEXT("COULD JOIN"), Could, TEXT("No other group can reach it this month."));
 
-			// One brass button flies the raid.
-			PageBody->AddSlot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+			// One brass button flies the raid. (Pinned to the card's foot: it names what he is about to do, and stays on
+			// the screen while he chooses.)
+			(PageFoot.IsValid() ? PageFoot : PageBody)->AddSlot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 8.0f, 12.0f, 0.0f)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
@@ -6044,6 +6241,10 @@ namespace
 		void LayOutPage(const FOfficePage& Page)
 		{
 			PageBody->ClearChildren();
+			if (PageFoot.IsValid())
+			{
+				PageFoot->ClearChildren();
+			}
 			if (Page.Top.Num() > 0)
 			{
 				PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)[PageButtons(Page.Top)];
@@ -8818,6 +9019,8 @@ namespace
 		FSlateBrush BarBrush;
 		FSlateBrush DotBrush;
 		FSlateBrush CardBrush;
+		FButtonStyle WayChosenStyle, WayQuietStyle;
+		FSlateBrush WayRingBrush, WayTagBrush;
 		FButtonStyle PickedCard;
 		FButtonStyle LeftCard;
 		FButtonStyle EndMonthStyle;
@@ -8851,6 +9054,7 @@ namespace
 		FSlateBrush BigCardBrush; // the bigger card's backing: leather that lets nothing through
 		TSharedPtr<FSlateBrush> ShowBrush;
 		TSharedPtr<SVerticalBox> PageBody;
+		TSharedPtr<SVerticalBox> PageFoot;
 		int32 ShownRoom = -1;
 		TSharedPtr<SVerticalBox> GeneralsList;
 		TSharedPtr<SVerticalBox> GeneralsVacant;

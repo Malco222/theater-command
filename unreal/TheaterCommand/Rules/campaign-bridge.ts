@@ -93,8 +93,8 @@ import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarc
 import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
-import type { RaidKind, RaidPlan } from '../../../src/campaign/airwar';
-import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
+import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
+import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
@@ -3839,6 +3839,12 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
     const me = s.human ?? '';
     const sea = kind === 'fleet' || kind === 'strike';
     const link = (t: number, list: number[]): string => `open:plan:${kind}:${t}:${list.join('.')}`;
+    // (Ruling 107(d), the art director's brief of 16 November.) A bombing raid is weighed by day and by night, side
+    // by side: the rules' own two forecasts for the same groups. Fighters asked for go by day and stay at home by
+    // night, so every link on the night card carries them still and a change of mind drops nobody.
+    const dn = kind === 'bomb' || kind === 'night' ? (() => { try { return weighDayNight(s, k, target, picked); } catch { return null; } })() : null;
+    const keep = (list: number[]): number[] => (dn && kind === 'night' ? [...list, ...dn.home.filter((id) => !list.includes(id))] : list);
+    const carry = keep(p.picked);
     const picture = (t: number, holder: string): string => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || 'X'}`;
     const stops = raidStopsFor(s, k, -1);
     const here = stops.find((t) => t.id === target);
@@ -3887,18 +3893,50 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (the same groups against the next target where they can fly it; the rules' own pick where they cannot)
         let q = weighRaid(s, k, t.id, p.picked);
         if (q.why || !q.picked.length) q = weighRaid(s, k, t.id);
-        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
+        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), ...titled(t, t.name) };
       }),
-      seats: p.seats.map((x) => ({
-        id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
-        picked: x.picked, locked: x.locked, lead: !!lead && x.id === lead.id, why: x.why ?? '', note: x.note, nat: me,
-        act: x.why ? '' : x.picked ? link(target, p.picked.filter((id) => id !== x.id)) : link(target, [...p.picked, x.id]),
-      })),
+      seats: p.seats.map((x) => {
+        // (by night: an escort that was picked stays on the card and stays at home; one that could join by day says so)
+        const stays = !!dn && kind === 'night' && dn.home.includes(x.id);
+        const dayOnly = !!dn && kind === 'night' && !stays && dn.barred.includes(x.id);
+        return {
+          id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
+          picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : x.why ?? '', note: x.note, nat: me,
+          stays, dayOnly,
+          act: stays ? link(target, carry.filter((id) => id !== x.id)) : x.why ? '' : x.picked ? link(target, carry.filter((id) => id !== x.id)) : link(target, [...carry, x.id]),
+        };
+      }),
+      ways: dn ? ((): unknown => {
+        // (a line that one column has, the other prints too, with its own figure: he compares row for row)
+        const words: string[] = [];
+        for (const w of [dn.day, dn.night]) for (const h of w.hits) if (h.n && !words.includes(h.words)) words.push(h.words);
+        const figure = (w: RaidWay, word: string): string => {
+          const f = w.figures;
+          const x = word.startsWith('output') ? f.output : word.includes('railway') ? f.rail : word.includes('factory') ? f.factory : undefined;
+          return x === undefined || x <= 0 ? '0%' : x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`;
+        };
+        const one = (w: RaidWay) => ({
+          label: w.label, night: w.kind === 'night', chosen: w.kind === kind,
+          why: w.why ? `Cannot fly ${w.kind === 'night' ? 'by night' : 'by day'}: ${w.why.charAt(0).toLowerCase()}${w.why.slice(1)}` : '',
+          success: w.success, verdict: w.verdict, lost: w.lost, lostShare: w.bomberLoss, fightersLost: w.fightersLost, fighterShare: w.fighterLoss,
+          hits: w.why ? [] : w.hits.some((h) => !h.n) ? w.hits.map((h) => ({ n: h.n, words: h.words, dim: false }))
+            : words.map((word) => { const h = w.hits.find((y) => y.words === word); return h ? { n: h.n, words: word, dim: false } : { n: figure(w, word), words: word, dim: true }; }),
+          foot: w.foot,
+          act: w.kind === kind ? '' : `open:plan:${w.kind}:${target}:${carry.join('.')}`,
+          tip: w.kind === kind ? `The raid is planned ${w.kind === 'night' ? 'by night' : 'by day'}.` : `Plan it ${w.kind === 'night' ? 'by night' : 'by day'} instead. Nobody you picked is dropped.`,
+        });
+        const foes = Math.round(dn.foes);
+        return {
+          label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
+          foes: foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
+          day: one(dn.day), night: one(dn.night),
+        };
+      })() : null,
       success: p.success, verdict: p.verdict, bombers: Math.round(p.bombers), bomberLoss: Math.round(p.bomberLossN), bomberShare: p.bomberLoss,
       fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
       meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
       massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
-      fly: { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
+      fly: { label: dn ? (kind === 'night' ? 'FLY THE RAID BY NIGHT' : 'FLY THE RAID BY DAY') : 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
     // (the same round: the one line of prose is dropped when it only repeats a lone box)
     if (card.hits.length === 1 && card.effect.includes(` ${card.hits[0].n.replace(/[^0-9.]/g, '')}`)) card.effect = '';

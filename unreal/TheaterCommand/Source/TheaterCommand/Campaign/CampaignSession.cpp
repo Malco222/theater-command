@@ -2917,6 +2917,52 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetNumberField(TEXT("fighters"), Card.Fighters);
 		Told->TryGetNumberField(TEXT("fighterLoss"), Card.FighterLoss);
 		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
+		// (Ruling 107(d).) A bombing raid by day and by night.
+		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())
+		{
+			(*WaysObject)->TryGetStringField(TEXT("label"), Card.WaysLabel);
+			(*WaysObject)->TryGetStringField(TEXT("foes"), Card.WaysFoes);
+			(*WaysObject)->TryGetStringField(TEXT("foesWords"), Card.WaysFoesWords);
+			(*WaysObject)->TryGetNumberField(TEXT("bombers"), Card.WaysBombers);
+			for (const TCHAR* Which : { TEXT("day"), TEXT("night") })
+			{
+				const TSharedPtr<FJsonObject>* WayObject = nullptr;
+				if (!(*WaysObject)->TryGetObjectField(Which, WayObject) || !WayObject || !WayObject->IsValid())
+				{
+					continue;
+				}
+				FRaidWay& Way = Card.Ways.AddDefaulted_GetRef();
+				(*WayObject)->TryGetStringField(TEXT("label"), Way.Label);
+				(*WayObject)->TryGetStringField(TEXT("why"), Way.Why);
+				(*WayObject)->TryGetStringField(TEXT("verdict"), Way.Verdict);
+				(*WayObject)->TryGetStringField(TEXT("lost"), Way.Lost);
+				(*WayObject)->TryGetStringField(TEXT("fightersLost"), Way.FightersLost);
+				(*WayObject)->TryGetStringField(TEXT("foot"), Way.Foot);
+				(*WayObject)->TryGetStringField(TEXT("act"), Way.Act);
+				(*WayObject)->TryGetStringField(TEXT("tip"), Way.Tip);
+				(*WayObject)->TryGetNumberField(TEXT("success"), Way.Success);
+				(*WayObject)->TryGetNumberField(TEXT("lostShare"), Way.LostShare);
+				(*WayObject)->TryGetNumberField(TEXT("fighterShare"), Way.FighterShare);
+				(*WayObject)->TryGetBoolField(TEXT("night"), Way.bNight);
+				(*WayObject)->TryGetBoolField(TEXT("chosen"), Way.bChosen);
+				const TArray<TSharedPtr<FJsonValue>>* WayHits = nullptr;
+				if ((*WayObject)->TryGetArrayField(TEXT("hits"), WayHits))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *WayHits)
+					{
+						const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+						FString HitNumber, HitWords;
+						bool bHitDim = false;
+						Entry->TryGetStringField(TEXT("n"), HitNumber);
+						Entry->TryGetStringField(TEXT("words"), HitWords);
+						Entry->TryGetBoolField(TEXT("dim"), bHitDim);
+						Way.Hits.Emplace(HitNumber, HitWords);
+						Way.HitDim.Add(bHitDim);
+					}
+				}
+			}
+		}
 		auto ReadStop = [](const TSharedPtr<FJsonObject>& Entry, FRaidStop& Stop)
 		{
 			Entry->TryGetNumberField(TEXT("id"), Stop.Id);
@@ -2965,6 +3011,8 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Entry->TryGetBoolField(TEXT("locked"), Seat.bLocked);
 				Entry->TryGetBoolField(TEXT("lead"), Seat.bLead);
 				Entry->TryGetBoolField(TEXT("afloat"), Seat.bAfloat);
+				Entry->TryGetBoolField(TEXT("stays"), Seat.bStays);
+				Entry->TryGetBoolField(TEXT("dayOnly"), Seat.bDayOnly);
 			}
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Meets = nullptr;

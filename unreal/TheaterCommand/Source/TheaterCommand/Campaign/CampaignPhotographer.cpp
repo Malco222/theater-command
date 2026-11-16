@@ -763,6 +763,14 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shots[0].Months = FMath::Clamp(LookMonths, 0, 80);
 		Shots[0].bDismiss = true; // (a nation fallen in those months is told on a screen of its own, which would cover the picture)
 	}
+	// "-TheaterLookLater=6" plays that many months more before the second "-TheaterLook" picture: what was ordered
+	// before the first has come by then.
+	int32 LookLater = 0;
+	if (!Look.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLookLater="), LookLater) && Shots.Num() > 1)
+	{
+		Shots[1].Months = FMath::Clamp(LookLater, 0, 80);
+		Shots[1].bDismiss = true;
+	}
 
 	// "-TheaterRoom=plan:bomb:12:5.6" opens that room of the rules' own over the first "-TheaterLook" picture.
 	FString RoomAsked;

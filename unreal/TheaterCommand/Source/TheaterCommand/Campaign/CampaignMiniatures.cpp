@@ -3128,7 +3128,9 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	// One big thing takes the middle of the base: a tank before a gun before a lorry before a bunker.
 	int32 Heavy = INDEX_NONE; // 0 tank, 1 gun, 2 lorry, 3 bunker
 	if (Armour > 0) Heavy = 0;
-	else if (Guns > 0) Heavy = 1;
+	// (Rulings 108 and 109; the art director's brief.) An army's guns stand in a line behind its base, so a gun no
+	// longer takes the middle of a base that has other troops: only an army that is nothing but artillery keeps it.
+	else if (Guns > 0 && Motor + Horse + Mountain + Fort + Foot + Sappers == 0) Heavy = 1;
 	else if (Motor > 0) Heavy = 2;
 	else if (Fort > 0) Heavy = 3;
 	else if (Sappers > 0 && Foot + Mountain + Horse == 0) Heavy = 4; // engineers alone stand by their bridging gear

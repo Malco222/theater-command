@@ -125,6 +125,7 @@ ACampaignMapActor::ACampaignMapActor()
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	FlakSmokeMesh = MakeMesh(TEXT("FlakSmoke"), false);
 	BeamMesh = MakeMesh(TEXT("Searchlights"), false);
+	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
 
@@ -1268,6 +1269,11 @@ void ACampaignMapActor::SetPiecesShown(bool bShown)
 	{
 		Set(Pair.Value);
 	}
+	if (bShown)
+	{
+		ApplyCrowds(); // (an army that was put away behind another's flag stays put away)
+		BuildGunLines();
+	}
 }
 
 void ACampaignMapActor::ShowIdle(const TArray<int32>& FromRules)
@@ -1490,6 +1496,7 @@ void ACampaignMapActor::LoadMaterials()
 	ProvincePaleInk = MakeInk();
 	RailInk = MakeInk();
 	SleeperInk = MakeInk();
+	GunEarthInk = MakeInk(); // (the trodden earth under an army's guns)
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
 	FMiniatureMesh::bTrialTank = FParse::Param(FCommandLine::Get(), TEXT("TheaterTrialTank")); // (the sculpted trial tank on every armoured base, to be judged)
@@ -5783,6 +5790,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			OrdersInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(WashNight.R, WashNight.G, WashNight.B), Moon));
 		}
+		if (GunEarthInk)
+		{
+			// (the trodden earth under the guns goes down with the ground it lies on: nothing of a gun line glows)
+			GunEarthInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.16f, 0.2f, 0.3f), Moon));
+		}
 		if (WakeInk)
 		{
 			// (a wake dims with the sea: the ribbon about 0.25 at its whitest by night)
@@ -6916,6 +6928,20 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 	{
 		Try(Pair.Value);
 	}
+	if (!Best && GunLineMesh && GunLineMesh->IsVisible())
+	{
+		// (Rulings 108 and 109.) A gun of an army's line: it belongs to the army, and a click on it picks the army up.
+		for (const FGunLine& Line : GunLines)
+		{
+			const double Along = FVector::DotProduct(Line.Middle - Origin, Direction);
+			AArmyPiece* Owner = Line.Piece.Get();
+			if (Owner && !Owner->IsHidden() && Along > 0.0 && Along < Nearest && FVector::DistSquared(Origin + Direction * Along, Line.Middle) < Line.Radius * Line.Radius)
+			{
+				Nearest = Along;
+				Best = Owner;
+			}
+		}
+	}
 	return Best;
 }
 
@@ -7105,8 +7131,364 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 
 	ApplyCrowds(); // (a piece on the march is not put away)
 
+	// (How each province stands to the player, and who is at war with him: an army's guns stand on the side away
+	// from its enemy.)
+	GunStanding = View.RegionStanding;
+	GunFoes.Reset();
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		if (GunStanding.IsValidIndex(Region.Id) && GunStanding[Region.Id] == TEXT("enemy"))
+		{
+			GunFoes.Add(Region.Owner);
+		}
+	}
+	BuildGunLines();
+
 	// The fleets and the air fleets are part of the same picture.
 	ShowFleets(View);
+}
+
+void ACampaignMapActor::BuildGunLines()
+{
+	if (!GunLineMesh || !Data.IsLoaded() || !bPiecesShown)
+	{
+		return; // (with the pieces lifted off the table the lines are out of sight, and are made again when they are set back)
+	}
+	// ("-TheaterGuns" gives two armies in three guns they have not got, for a picture.)
+	static const bool bGunsLent = FParse::Param(FCommandLine::Get(), TEXT("TheaterGuns"));
+	const double U = UnitScale;
+	struct FWanted
+	{
+		AArmyPiece* Piece = nullptr;
+		int32 Guns = 0;
+		int32 Side = 0; // 0 the player's, 1 his enemy's, 2 neither
+		FVector2D At = FVector2D::ZeroVector; // the base's middle, on the map
+		FVector2D Toward = FVector2D(0.0, -1.0); // where the enemy lies
+		double Wide = 0.0; // the base's width, in the map's units
+	};
+	TArray<FWanted> Wanted;
+	GunsAway.Reset();
+	FString Made;
+	uint32 Stood = 0; // (where every base stands: a line gives way to another army's base)
+	for (AArmyPiece* Piece : Pieces)
+	{
+		if (!Piece || Piece->IsHidden() || !Piece->IsArmy() || !Data.Regions.IsValidIndex(Piece->GetRegionId()))
+		{
+			continue;
+		}
+		const FVector2D At = WorldToMap(Piece->GetRestLocation());
+		Stood = HashCombine(Stood, GetTypeHash(FIntPoint(FMath::RoundToInt32(At.X * 4.0), FMath::RoundToInt32(At.Y * 4.0))));
+		// (Only what the player knows: a corps only glimpsed is not known to be artillery, and an army under a
+		// question mark shows no guns.)
+		int32 Artillery = 0, Rest = 0, Known = 0;
+		for (const FViewCorps& Unit : Piece->GetCorps())
+		{
+			Known += Unit.bDim ? 0 : 1;
+			if (!Unit.bDim && Unit.Kind == TEXT("art"))
+			{
+				++Artillery;
+			}
+			else
+			{
+				++Rest;
+			}
+		}
+		if (bGunsLent && Known > 0 && Rest > 0)
+		{
+			Artillery = FMath::Max(Artillery, Piece->GetRegionId() % 3);
+		}
+		if (Artillery == 0 || Rest == 0)
+		{
+			continue; // (no guns; or nothing but guns, which keeps its gun on the base)
+		}
+		if (Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > FMath::Square(0.5 * U))
+		{
+			GunsAway.Add(Piece); // (in the hand or on the road: its guns are put down with it)
+			continue;
+		}
+		FWanted& Line = Wanted.AddDefaulted_GetRef();
+		Line.Piece = Piece;
+		Line.Guns = Artillery >= 2 ? 3 : 2;
+		Line.At = At;
+		// (the base as it is seen: the counters' width and the wooden foot's ring round them)
+		Line.Wide = 2.0 * (Piece->GetBaseRadius() + 0.72 * 1.4 * U) * Piece->GetActorScale3D().X / U;
+		Line.Side = CrowdFriends.Contains(Piece->GetNationTag()) ? 0 : GunFoes.Contains(Piece->GetNationTag()) ? 1 : 2;
+		// Where the enemy lies: the enemy's ground next door; failing that, his nearest ground; failing that (a country
+		// at peace) away from its own capital.
+		const int32 Here = Piece->GetRegionId();
+		const int32 Side = Line.Side;
+		auto Foe = [this, Side](int32 Region)
+		{
+			if (!GunStanding.IsValidIndex(Region) || Side == 2)
+			{
+				return false;
+			}
+			const FString& Standing = GunStanding[Region];
+			return Side == 0 ? Standing == TEXT("enemy") : (Standing == TEXT("own") || Standing == TEXT("ally"));
+		};
+		FVector2D Sum = FVector2D::ZeroVector;
+		for (const int32 Next : Data.Regions[Here].Neighbors)
+		{
+			if (Data.Regions.IsValidIndex(Next) && Foe(Next))
+			{
+				Sum += (Data.Regions[Next].Center - At).GetSafeNormal();
+			}
+		}
+		if (Sum.IsNearlyZero(0.05) && Side != 2)
+		{
+			double Nearest = FMath::Square(900.0);
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				const double Far = FVector2D::DistSquared(Region.Center, At);
+				if (Far < Nearest && Region.Id != Here && Foe(Region.Id))
+				{
+					Nearest = Far;
+					Sum = Region.Center - At;
+				}
+			}
+		}
+		if (Sum.IsNearlyZero(0.05))
+		{
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				if (Region.bCapital && Region.Owner == Piece->GetNationTag() && Region.Id != Here)
+				{
+					Sum = At - Region.Center;
+					break;
+				}
+			}
+		}
+		Line.Toward = Sum.IsNearlyZero(0.05) ? FVector2D(0.0, -1.0) : Sum.GetSafeNormal();
+		Made += FString::Printf(TEXT("%d|%s|%d|%.1f,%.1f|%.2f|%.2f;"), Here, *Piece->GetNationTag(), Line.Guns, At.X, At.Y, Line.Wide, FMath::Atan2(Line.Toward.Y, Line.Toward.X));
+	}
+	Made += FString::Printf(TEXT("#%u"), Stood);
+	if (Made == GunLinesBuilt)
+	{
+		return;
+	}
+	GunLinesBuilt = Made;
+	GunLines.Reset();
+	GunLineMesh->ClearAllMeshSections();
+	if (Wanted.Num() == 0)
+	{
+		return;
+	}
+	FMiniatureMesh Model;
+	FCampaignMeshBuffers Earth;
+	// (the art director's earth: about (166,138,96), at half strength, soft at its edges)
+	const FLinearColor Trodden(FColor(166, 138, 96));
+	TArray<FVector2D> Taken; // (where other armies' guns already stand)
+	int32 NoRoom = 0, Swung = 0, Closed = 0, Dropped = 0, Beside = 0;
+	FString NoRoomAt;
+	int32 Shut[7] = { 0, 0, 0, 0, 0, 0, 0 }; // (what shut the ground straight behind: water or the border, ground not its own, a town, a river or railway, a base, other guns)
+	for (const FWanted& Line : Wanted)
+	{
+		const int32 Here = Line.Piece->GetRegionId();
+		const double Wide = Line.Wide;
+		// (the rivers and railways near enough to matter, found once)
+		TArray<TPair<FVector2D, FVector2D>> Ways;
+		const double Reach = FMath::Square(2.2 * Wide);
+		for (const FLandRail& Rail : Land.Rails)
+		{
+			if (Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) && FVector2D::DistSquared(Rail.At, Line.At) < FMath::Square(160.0))
+			{
+				const FVector2D Stops[3] = { Data.Regions[Rail.A].Center, Rail.At, Data.Regions[Rail.B].Center };
+				for (int32 Leg = 0; Leg < 2; ++Leg)
+				{
+					if (FMath::PointDistToSegmentSquared(FVector(Line.At, 0.0), FVector(Stops[Leg], 0.0), FVector(Stops[Leg + 1], 0.0)) < Reach)
+					{
+						Ways.Emplace(Stops[Leg], Stops[Leg + 1]);
+					}
+				}
+			}
+		}
+		for (const FLandRiver& River : Land.Rivers)
+		{
+			for (int32 K = 0; K + 1 < River.Course.Num(); ++K)
+			{
+				if (FMath::PointDistToSegmentSquared(FVector(Line.At, 0.0), FVector(River.Course[K], 0.0), FVector(River.Course[K + 1], 0.0)) < Reach)
+				{
+					Ways.Emplace(River.Course[K], River.Course[K + 1]);
+				}
+			}
+		}
+		auto Spot = [&Line, Wide](double Aside, double Along)
+		{
+			const double Turn = FMath::Atan2(-Line.Toward.Y, -Line.Toward.X) + FMath::DegreesToRadians(Aside + Along);
+			return Line.At + FVector2D(FMath::Cos(Turn), FMath::Sin(Turn)) * (1.1 * Wide);
+		};
+		// (what shuts a place to a gun: 0 nothing, it is open)
+		auto ShutBy = [&](const FVector2D& Place, bool bAtHome)
+		{
+			const int32 Under = Data.FindRegionAt(Place.X, Place.Y);
+			if (!Data.Regions.IsValidIndex(Under) || GroundAt(Place.X, Place.Y) <= 0.0f || (bAtHome && Under != Here))
+			{
+				return 1; // (water, or off the map, or over the border when room at home is asked for)
+			}
+			// (never on ground that stands otherwise than the army's own: not the enemy's, not a neutral's)
+			if (Under != Here && GunStanding.IsValidIndex(Under) && GunStanding.IsValidIndex(Here) && GunStanding[Under] != GunStanding[Here])
+			{
+				return 2;
+			}
+			// (never on a town)
+			for (const int32 Town : { Under, Here })
+			{
+				if (FVector2D::DistSquared(Place, Data.Regions[Town].Center) < FMath::Square(TownRadius(Town) + 0.24 * Wide))
+				{
+					return 3;
+				}
+			}
+			// (never on a railway or in a river: a gun's own length clear of it)
+			for (const TPair<FVector2D, FVector2D>& Way : Ways)
+			{
+				if (FMath::PointDistToSegmentSquared(FVector(Place, 0.0), FVector(Way.Key, 0.0), FVector(Way.Value, 0.0)) < FMath::Square(0.3 * Wide))
+				{
+					return 4;
+				}
+			}
+			// (never over another base, nor among another army's guns)
+			for (const AArmyPiece* Other : Pieces)
+			{
+				if (Other && Other != Line.Piece && !Other->IsHidden() && FVector2D::DistSquared(WorldToMap(Other->GetRestLocation()), Place) < FMath::Square(0.8 * Wide))
+				{
+					return 5;
+				}
+			}
+			for (const FVector2D& Stands : Taken)
+			{
+				if (FVector2D::DistSquared(Stands, Place) < FMath::Square(0.4 * Wide))
+				{
+					return 6;
+				}
+			}
+			return 0;
+		};
+		auto Open = [&ShutBy](const FVector2D& Place, bool bAtHome) { return ShutBy(Place, bAtHome) == 0; };
+		// The guns in a shallow arc, 20 degrees either side of the middle for three and 11 for two. Straight behind
+		// first; then swung either way, up to 45 degrees; then closed up; then one gun fewer. Room in the army's own
+		// province is taken before room over a friendly border.
+		auto Round = [](int32 Count, int32 K, double Close) { return (Count == 2 ? (K == 0 ? -11.0 : 11.0) : (K - 1) * 20.0) * Close; };
+		int32 Guns = 0;
+		double Swing = 0.0, Gap = 1.0;
+		// (Last of all, where even that finds no room, the line may stand at the base's side, up to a quarter turn
+		// round: better beside it than not at all, or he could not tell that the army has guns.)
+		static const double Swings[] = { 0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0, 75.0, -75.0, 90.0, -90.0 };
+		for (int32 Resort = 0; Resort < 2 && Guns == 0; ++Resort)
+		for (int32 Asked = Line.Guns; Asked >= 2 && Guns == 0; --Asked)
+		{
+			for (const double TryGap : { 1.0, 0.75 })
+			{
+				for (int32 Home = 1; Home >= 0 && Guns == 0; --Home)
+				{
+					for (int32 Which = Resort == 0 ? 0 : 7; Which < (Resort == 0 ? 7 : 13); ++Which)
+					{
+						const double TrySwing = Swings[Which];
+						bool bAll = true;
+						for (int32 K = 0; K < Asked && bAll; ++K)
+						{
+							bAll = Open(Spot(TrySwing, Round(Asked, K, TryGap)), Home == 1);
+						}
+						if (bAll)
+						{
+							Guns = Asked;
+							Swing = TrySwing;
+							Gap = TryGap;
+							break;
+						}
+					}
+				}
+				if (Guns > 0)
+				{
+					break;
+				}
+			}
+		}
+		if (Guns == 0)
+		{
+			++NoRoom; // (never one gun alone, which reads as a stray piece: an army with no room shows none)
+			NoRoomAt += (NoRoomAt.IsEmpty() ? TEXT("") : TEXT(", ")) + Data.Regions[Here].Name;
+			continue;
+		}
+		Swung += Swing != 0.0 ? 1 : 0;
+		Beside += FMath::Abs(Swing) > 45.0 ? 1 : 0;
+		Closed += Gap < 1.0 ? 1 : 0;
+		Dropped += Guns < Line.Guns ? 1 : 0;
+		if (Swing != 0.0 || Gap < 1.0 || Guns < Line.Guns)
+		{
+			for (int32 K = 0; K < Line.Guns; ++K)
+			{
+				const int32 Why = ShutBy(Spot(0.0, Round(Line.Guns, K, 1.0)), true);
+				if (Why != 0)
+				{
+					++Shut[Why];
+					break;
+				}
+			}
+		}
+		// The nation's own gun or the standard one, at four fifths of the size of the pieces on the base: on the
+		// art director's painting a gun runs 190 px beside a base 410 px across.
+		const double Metre = (Line.Piece->GetBaseRadius() * Line.Piece->GetActorScale3D().X / 3.7) * 0.8;
+		const FString Gun = FMiniatureMesh::MainGunOf(Line.Piece->GetNationTag());
+		// (A model's front is toward -X: turned so that its front looks where the enemy lies. The way there is taken
+		// on the table, whose axes are not the map's.)
+		const FVector Ahead = MapToWorld(Line.At.X + Line.Toward.X, Line.At.Y + Line.Toward.Y) - MapToWorld(Line.At.X, Line.At.Y);
+		const double Faces = FMath::RadiansToDegrees(FMath::Atan2(Ahead.Y, Ahead.X)) + 180.0;
+		FVector Middle = FVector::ZeroVector;
+		for (int32 K = 0; K < Guns; ++K)
+		{
+			const FVector2D Place = Spot(Swing, Round(Guns, K, Gap));
+			const FVector Ground = SurfacePointOver(Place.X, Place.Y, 0.1);
+			if (!Model.Vehicle(Gun, Ground, Metre, Faces, false))
+			{
+				Model.Vehicle(TEXT("Gun75:") + Line.Piece->GetNationTag(), Ground, Metre, Faces, false);
+			}
+			Taken.Add(Place);
+			Middle += Ground;
+		}
+		FGunLine& Kept = GunLines.AddDefaulted_GetRef();
+		Kept.Piece = Line.Piece;
+		Kept.Middle = Middle / Guns + FVector(0.0, 0.0, 0.5 * U);
+		Kept.Radius = (Guns == 3 ? 0.52 : 0.4) * Wide * U;
+		// The trodden earth: one worn band under the guns that joins them, half strength in the middle and nothing
+		// at its edges and ends. No base, no rim.
+		{
+			const double First = Round(Guns, 0, Gap) - 13.0, Last = Round(Guns, Guns - 1, Gap) + 13.0;
+			const int32 Steps = FMath::Max(4, FMath::CeilToInt32((Last - First) / 4.0));
+			const double Across[4] = { -0.36, -0.17, 0.17, 0.36 };
+			const double Back = FMath::Atan2(-Line.Toward.Y, -Line.Toward.X);
+			TArray<int32> Before;
+			for (int32 Step = 0; Step <= Steps; ++Step)
+			{
+				const double Bearing = Back + FMath::DegreesToRadians(Swing + FMath::Lerp(First, Last, static_cast<double>(Step) / Steps));
+				const float End = static_cast<float>(FMath::SmoothStep(0.0, 1.0, FMath::Min(Step, Steps - Step) / 2.0));
+				TArray<int32> Row;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					const FVector2D Place = Line.At + FVector2D(FMath::Cos(Bearing), FMath::Sin(Bearing)) * ((1.1 + Across[K]) * Wide);
+					FLinearColor Ink = Trodden;
+					Ink.A = (K == 1 || K == 2) ? 0.5f * End : 0.0f;
+					Row.Add(Earth.AddVertex(SurfacePointOver(Place.X, Place.Y, 0.07), FVector::UpVector, Ink.ToFColor(false)));
+				}
+				if (Before.Num() == 4)
+				{
+					for (int32 K = 0; K < 3; ++K)
+					{
+						Earth.AddTriangleFacingUp(Before[K], Before[K + 1], Row[K]);
+						Earth.AddTriangleFacingUp(Before[K + 1], Row[K], Row[K + 1]);
+					}
+				}
+				Before = Row;
+			}
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		GunLineMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		GunLineMesh->SetMaterial(0, PieceMaterial);
+	}
+	Earth.Commit(GunLineMesh, 1, GunEarthInk ? static_cast<UMaterialInterface*>(GunEarthInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	UE_LOG(LogTheater, Log, TEXT("Gun lines: %d armies show their guns (%d swung round, %d of them to the base's side, %d closed up, %d a gun short), %d have no room (%s), %d are in the hand or on the road; %d corners. Straight behind was shut by water or the border %d, ground not its own %d, a town %d, a river or railway %d, a base %d, other guns %d"),
+		GunLines.Num(), Swung, Beside, Closed, Dropped, NoRoom, *NoRoomAt, GunsAway.Num(), Model.Vertices.Num(), Shut[1], Shut[2], Shut[3], Shut[4], Shut[5], Shut[6]);
 }
 
 void ACampaignMapActor::ApplyCrowds()
@@ -10794,6 +11176,36 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		}
 	}
 
+	// (The gun lines go from the height where the bases' own pieces can no longer be told apart. A line goes with its
+	// army when that is picked up or sets out, and is put down with it.)
+	if (GunLineMesh)
+	{
+		const bool bGunsSeen = bPiecesShown && CameraDistance < 12500.0f;
+		if (GunLineMesh->IsVisible() != bGunsSeen)
+		{
+			GunLineMesh->SetVisibility(bGunsSeen);
+		}
+		if (bGunsSeen)
+		{
+			const double Slack = FMath::Square(0.5 * UnitScale);
+			bool bMoved = false;
+			for (const FGunLine& Line : GunLines)
+			{
+				const AArmyPiece* Piece = Line.Piece.Get();
+				bMoved |= !Piece || Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > Slack;
+			}
+			for (const TWeakObjectPtr<AArmyPiece>& Waited : GunsAway)
+			{
+				const AArmyPiece* Piece = Waited.Get();
+				bMoved |= !Piece || (!Piece->IsMarching() && FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) <= Slack);
+			}
+			if (bMoved)
+			{
+				BuildGunLines();
+			}
+		}
+	}
+
 	// The flock on the pieces' bases is seen only close to: from higher it swallowed the figures and the holder's
 	// colour, so there the base is plain trodden earth inside its ring.
 	{
@@ -11035,6 +11447,7 @@ void ACampaignMapActor::SetSelectedRegion(int32 RegionId)
 		if (CrowdLead.Num() > 0)
 		{
 			ApplyCrowds(); // (a crowded province that is picked stays fanned out)
+			BuildGunLines();
 		}
 	}
 }
@@ -11048,6 +11461,7 @@ void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 		if (CrowdLead.Num() > 0)
 		{
 			ApplyCrowds(); // (the crowded province that is pointed at fans out; the one left folds up)
+			BuildGunLines();
 		}
 	}
 }

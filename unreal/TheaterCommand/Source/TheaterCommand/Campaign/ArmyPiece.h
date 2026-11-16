@@ -102,6 +102,8 @@ public:
 	void ReturnToRest();
 
 	int32 GetRegionId() const { return RegionId; }
+	/** Half the width of its base, in its own units (the table's, before the piece's own size). */
+	double GetBaseRadius() const { return BaseRadius; }
 	/** For an air fleet: the province its airfield is in. */
 	int32 GetBaseRegion() const { return What == 2 ? Wing.Base : RegionId; }
 	const FString& GetGeneral() const { return General; }
