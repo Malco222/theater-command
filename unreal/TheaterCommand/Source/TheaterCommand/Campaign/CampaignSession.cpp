@@ -2916,6 +2916,11 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetNumberField(TEXT("week"), Band.Week);
 				Each->TryGetStringField(TEXT("when"), Band.When);
 				Each->TryGetNumberField(TEXT("region"), Band.Region);
+				Each->TryGetStringField(TEXT("title"), Band.Title);
+				Each->TryGetStringField(TEXT("sub"), Band.Sub);
+				Each->TryGetStringField(TEXT("note"), Band.Note);
+				Each->TryGetBoolField(TEXT("good"), Band.bGood);
+				Each->TryGetBoolField(TEXT("spent"), Band.bSpent);
 			}
 		}
 		if (Told->TryGetArrayField(TEXT("score"), List))

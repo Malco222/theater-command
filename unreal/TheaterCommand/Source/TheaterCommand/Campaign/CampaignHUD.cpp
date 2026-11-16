@@ -1169,9 +1169,9 @@ namespace
 			if (Picked)
 			{
 				const FTechNode& Node = *Picked;
-				Round(46.0, 921.0, 11.0, StateInk(Node.State), 1.2f, 3);
-				Sign(Node.State, 46.0, 921.0, 1.0, StateInk(Node.State), 4);
-				Write(Node.Name, 66.0, 906.0, Name18, Cream, 3);
+				Round(46.0, 918.0, 11.0, StateInk(Node.State), 1.2f, 3);
+				Sign(Node.State, 46.0, 918.0, 1.0, StateInk(Node.State), 4);
+				Write(Node.Name, 66.0, 904.0, Name18, Cream, 3);
 				double Cursor = 66.0 + Wide(Node.Name, Name18) + 16.0;
 				{
 					FString BranchName = Node.Branch.ToUpper();
@@ -1180,7 +1180,7 @@ namespace
 						BranchName = Branch.Id == Node.Branch ? Branch.Label.ToUpper() : BranchName;
 					}
 					const FString Where = BranchName + TEXT("  \u00B7  ") + (Labs.Eras.IsValidIndex(Node.Tier) ? Labs.Eras[Node.Tier].ToUpper() : FString());
-					Write(Where, Cursor, 912.0, Typed(Px(11.0f), true, 60), Brass, 3);
+					Write(Where, Cursor, 910.0, Typed(Px(11.0f), true, 60), Brass, 3);
 					Cursor += Wide(Where, Typed(Px(11.0f), true, 60)) + 18.0;
 				}
 				{
@@ -1189,31 +1189,32 @@ namespace
 						: Node.State == TEXT("work") ? FString::Printf(TEXT("A team is at work on it: %d of %d months."), FMath::Max(Node.Of - Node.Left, 0), Node.Of)
 						: bAhead ? FString::Printf(TEXT("%d months now: it is ahead of its time. %d months from %d."), Node.Months, Node.Base, Node.Year)
 						: FString::Printf(TEXT("%d months of one team's work."), Node.Months);
-					Write(Months, Cursor, 911.0, Typed12, bAhead && Node.State != TEXT("done") && Node.State != TEXT("work") ? Amber : Muted, 3);
+					Write(Months, Cursor, 909.0, Typed12, bAhead && Node.State != TEXT("done") && Node.State != TEXT("work") ? Amber : Muted, 3);
 				}
 				// (what it needs, a tick or a cross by each name; and what it leads to, naming the branch when it is another one)
-				double Along = 66.0;
+				// (it begins where the name ends: the name is two typed lines tall, and a line begun under it ran through its feet)
+				double Along = 66.0 + Wide(Node.Name, Name18) + 16.0;
 				const FSlateFontInfo Small = Typed(Px(11.0f), true, 60), Plain = Typed(Px(11.0f));
 				if (Node.NeedIds.Num() > 0)
 				{
-					Write(TEXT("NEEDS"), Along, 931.0, Small, Brass, 3);
+					Write(TEXT("NEEDS"), Along, 922.0, Small, Brass, 3);
 					Along += Wide(TEXT("NEEDS"), Small) + 10.0;
 					for (int32 K = 0; K < Node.NeedIds.Num(); ++K)
 					{
 						const bool bHas = Node.NeedDone.IsValidIndex(K) && Node.NeedDone[K];
 						if (bHas)
 						{
-							Stroke({ FVector2D(Along, 938.0), FVector2D(Along + 3.0, 941.5), FVector2D(Along + 8.5, 933.5) }, BrightBrass, 1.8f, 4);
+							Stroke({ FVector2D(Along, 929.0), FVector2D(Along + 3.0, 932.5), FVector2D(Along + 8.5, 924.5) }, BrightBrass, 1.8f, 4);
 						}
 						else
 						{
 							// (ruling 160: red means act by a date or lose. A need not yet met is said in paper.)
-							Stroke({ FVector2D(Along + 0.5, 934.0), FVector2D(Along + 8.0, 941.5) }, Dim, 1.8f, 4);
-							Stroke({ FVector2D(Along + 0.5, 941.5), FVector2D(Along + 8.0, 934.0) }, Dim, 1.8f, 4);
+							Stroke({ FVector2D(Along + 0.5, 925.0), FVector2D(Along + 8.0, 932.5) }, Dim, 1.8f, 4);
+							Stroke({ FVector2D(Along + 0.5, 932.5), FVector2D(Along + 8.0, 925.0) }, Dim, 1.8f, 4);
 						}
 						Along += 13.0;
 						const FString Name = Node.NeedNames.IsValidIndex(K) ? Node.NeedNames[K] : Node.NeedIds[K];
-						Write(Name, Along, 930.0, Plain, bHas ? Cream : Muted, 3);
+						Write(Name, Along, 921.0, Plain, bHas ? Cream : Muted, 3);
 						Along += Wide(Name, Plain) + 14.0;
 					}
 					Along += 12.0;
@@ -1237,21 +1238,22 @@ namespace
 					}
 					if (Leads.Num() > 0)
 					{
-						Write(TEXT("LEADS TO"), Along, 931.0, Small, Brass, 3);
+						Write(TEXT("LEADS TO"), Along, 922.0, Small, Brass, 3);
 						Along += Wide(TEXT("LEADS TO"), Small) + 10.0;
-						Write(Fitted(FString::Join(Leads, TEXT(", ")), Plain, 1290.0 - Along), Along, 930.0, Plain, Cream, 3);
+						Write(Fitted(FString::Join(Leads, TEXT(", ")), Plain, 1290.0 - Along), Along, 921.0, Plain, Cream, 3);
 					}
 				}
 				{
 					// (what it is and what it does; and when it is locked, what it waits on, in the alarm's colour)
+					// (the art director's review of build 1448: the sentence stood on the strip's lower rule; the strip's three lines are set higher, and it now clears the rule by more than eight pixels)
 					const FSlateFontInfo Body = Serif(TEXT("Regular"), Px(15.0f));
 					const FString Waits = Node.State == TEXT("locked") && !Node.Needs.IsEmpty() ? FString::Printf(TEXT("Needs %s first."), *Node.Needs.Replace(TEXT(", "), TEXT(" and "))) : FString();
 					const double WaitsW = Waits.IsEmpty() ? 0.0 : Wide(Waits, Body) + 12.0;
 					const FString Says = Fitted(Node.Text + TEXT(" ") + Node.Rule, Body, 1290.0 - 66.0 - WaitsW);
-					Write(Says, 66.0, 941.0, Body, Muted, 3);
+					Write(Says, 66.0, 933.0, Body, Muted, 3);
 					if (!Waits.IsEmpty())
 					{
-						Write(Waits, 66.0 + Wide(Says, Body) + 12.0, 941.0, Body, Cream, 3);
+						Write(Waits, 66.0 + Wide(Says, Body) + 12.0, 933.0, Body, Cream, 3);
 					}
 				}
 				// (the one brass button: RESEARCH and its months, dimmed when the card is locked or every team is busy; STOP on a card in work)
@@ -1271,7 +1273,7 @@ namespace
 						// (why it cannot be begun now, whole, on the strip's first line and ending where the button begins)
 						const FSlateFontInfo WhyFace = Typed(Px(11.0f));
 						const FString WhySays = Fitted(Node.Why, WhyFace, 560.0);
-						Write(WhySays, Button.Min.X - 18.0 - Wide(WhySays, WhyFace), 912.0, WhyFace, Cream, 5);
+						Write(WhySays, Button.Min.X - 18.0 - Wide(WhySays, WhyFace), 910.0, WhyFace, Cream, 5);
 					}
 				}
 			}
@@ -2224,6 +2226,9 @@ namespace
 			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
 			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
 			MonthBandBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(104, 34, 26)), 3.0f, FLinearColor(FColor(208, 86, 61)), 1.0f);
+			// (Ruling 160: news that is not a warning, WAR, FALLEN, FREED, is brass on a dark ground; and the small plate a label can stand on.)
+			MonthNewsBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(96, 71, 32)), 3.0f, FLinearColor(FColor(224, 184, 114)), 1.0f);
+			MonthLabelBrush = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f);
 			MonthStampBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), 3.0f, FLinearColor::White, 2.5f);
 			MonthDiscBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.3f), 18.0f, BrightBrass, 1.5f);
 			MonthTagBrush = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f);
@@ -6182,21 +6187,46 @@ namespace
 			// 2. The red band: at most two, for news that changes the war.
 			for (const FMonthBand& Band : Card.Bands)
 			{
+				// (Ruling 160: red is "act", never "bad". Only a WARNING is a red band; WAR, FALLEN and FREED are news, and
+				// stand in brass on a dark ground. A warning whose month of grace is spent wears its label on a cream
+				// plate in red letters and a cream edge; a FREED by his own side takes the rows' green edge.)
+				const bool bWarning = Band.Kind == TEXT("WARNING");
+				const FLinearColor Brass300(FColor(224, 184, 114)), NewsInk(FColor(31, 24, 8));
+				const FLinearColor EdgeInk = Band.bGood ? Good : Band.bSpent ? Cream : bWarning ? Bad : Brass300;
+				const FString Label = Band.Title.IsEmpty() ? Band.Kind : Band.Kind + TEXT("  \u00B7  ") + Band.Title.ToUpper();
+				TSharedRef<SWidget> KindTag = bWarning && !Band.bSpent
+					? StaticCastSharedRef<SWidget>(SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(Cream))
+					: StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&MonthLabelBrush).BorderBackgroundColor(Band.bSpent ? Cream : Brass300).Padding(FMargin(7.0f, 2.0f, 7.0f, 1.0f))
+						[
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(Band.bSpent ? FLinearColor(FColor(150, 40, 28)) : NewsInk)
+						]);
 				TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Band.Kind)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(Cream)
+						KindTag
 					];
 				for (const FString& Tag : Band.Flags)
 				{
 					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)[Flag(Tag, 38.0f, 24.0f)];
 				}
+				// (ruling 149: no headline is cut with dots: it wraps)
 				Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock).Text(FText::FromString(Band.Text)).Font(Serif(TEXT("Bold"), 18)).ColorAndOpacity(Cream)
-					.OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Band.Tip.IsEmpty() ? Band.Text : Band.Tip))
+					.AutoWrapText(true).ToolTipText(FText::FromString(Band.Tip.IsEmpty() ? Band.Text : Band.Tip))
 				];
-				if (Band.Week > 0 || !Band.When.IsEmpty())
+				// (The sentence that says what to do stands small where the date stood; with none, the date.)
+				if (!Band.Note.IsEmpty())
+				{
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 14.0f, 0.0f)
+					[
+						SNew(SBox).MaxDesiredWidth(300.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Band.Note)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+						]
+					];
+				}
+				else if (Band.Week > 0 || !Band.When.IsEmpty())
 				{
 					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 14.0f, 0.0f)
 					[
@@ -6207,16 +6237,26 @@ namespace
 				{
 					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region)];
 				}
+				// (A second line that must be read whole is printed in full under the headline: the band is as tall as
+				// it needs. Rulings 133(a) and 167: it may run to three lines, and it is never cut.)
+				TSharedRef<SVerticalBox> Whole = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Line];
+				if (!Band.Sub.IsEmpty())
+				{
+					Whole->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 8.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Band.Sub)).Font(Serif(TEXT("Regular"), 12.5f)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f)).AutoWrapText(true).LineHeightPercentage(1.15f)
+					];
+				}
 				PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 				[
-					SNew(SBorder).BorderImage(&MonthBandBrush).Padding(FMargin(0.0f))
+					SNew(SBorder).BorderImage(bWarning ? &MonthBandBrush : &MonthNewsBrush).Padding(FMargin(0.0f))
 					[
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth()
 						[
-							SNew(SBox).WidthOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Bad)]
+							SNew(SBox).WidthOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(EdgeInk)]
 						]
-						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(16.0f, 9.0f, 12.0f, 9.0f))[Line]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(16.0f, 9.0f, 12.0f, 9.0f))[Whole]
 					]
 				];
 			}
@@ -10207,6 +10247,7 @@ namespace
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;
 		FSlateBrush MonthBoxBrush, MonthBandBrush, MonthStampBrush, MonthDiscBrush, MonthTagBrush; // the month's card
+		FSlateBrush MonthNewsBrush, MonthLabelBrush;
 		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read
 		bool bMonthRowsOpen = false; // its rows past the seventh unfolded
 		FString ShownMonthDate; // the month it was last laid out for

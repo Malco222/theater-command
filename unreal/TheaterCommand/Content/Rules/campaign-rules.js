@@ -31040,7 +31040,21 @@
     return {
       date: c.month,
       // (Ruling 102(a): the rules give each item its date in words, "week 3" or "as July opens"; nothing else is printed for a date.)
-      bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.when ?? "", region: x.region ?? -1 })),
+      // (Version 83.1: a band's own title, the second line it must be read with, the sentence that says what to do, and how its edge is worn.)
+      bands: c.bands.map((x) => ({
+        kind: x.word,
+        flags: x.nats.slice(0, 3),
+        text: x.head,
+        tip: x.text,
+        week: x.week,
+        when: x.when ?? "",
+        region: x.region ?? -1,
+        title: x.title ?? "",
+        sub: x.sub ?? "",
+        note: x.note ?? "",
+        good: !!x.good,
+        spent: !!x.spent
+      })),
       score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? "", figure: x.figure, sub: x.sub, tone: x.tone === "good" ? 1 : x.tone === "bad" ? -1 : 0 })),
       lead: lead2 ? {
         tag: lead2.when ? `${lead2.kind.toUpperCase()}  ·  ${lead2.when.toUpperCase()}` : lead2.kind.toUpperCase(),

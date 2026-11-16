@@ -1337,14 +1337,19 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// The highest crests are snow, and a narrow strip along the shore is sand.
 			const float Rock = FMath::Min(0.85f, 0.72f * FMath::SmoothStep(0.16f, 0.62f, Steepness) * FMath::SmoothStep(0.7f, 2.2f, H)
 				+ 0.3f * FMath::SmoothStep(3.6f, 5.4f, H));
-			float Snow = 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.5f * Steepness);
+			// (SMOOTH HILLS, the art director's review of build 1448: the snow line stepped in bricks along a crest. It is
+			// read from the softened height and the softened lean, as the shade is.)
+			const int32 SnowW = FMath::Max(I - 1, 0), SnowE = FMath::Min(I + 1, NX - 1), SnowN = FMath::Max(J - 1, 0), SnowS = FMath::Min(J + 1, NY - 1);
+			const float SnowLean = FMath::Clamp(FVector2f((BroadLie[Terrain.Index(SnowE, J)] - BroadLie[Terrain.Index(SnowW, J)]) / static_cast<float>((SnowE - SnowW) * Terrain.Cell),
+				(BroadLie[Terrain.Index(I, SnowS)] - BroadLie[Terrain.Index(I, SnowN)]) / static_cast<float>((SnowS - SnowN) * Terrain.Cell)).Size() * 0.9f, 0.0f, 1.0f);
+			float Snow = 0.9f * FMath::SmoothStep(5.0f, 6.6f, 0.5f * (H + BroadLie[Idx])) * (1.0f - 0.5f * SnowLean);
 			const float Beyond = bBeyond ? Outside[Idx] : 0.0f;
 			// (a jungle keeps its roof on the steepest range: no rock shows through it below about 3,300 metres)
 			const float JungleRoof = bBeyond ? LookTropic[Idx] * (1.0f - FMath::SmoothStep(3000.0f, 3600.0f, Metres[Idx])) : 0.0f;
 			if (Beyond > 0.0f)
 			{
 				// (one snow height for the whole world would whiten New Guinea and leave Alaska bare)
-				Snow = FMath::Lerp(Snow, 0.9f * FMath::SmoothStep(LookSnow[Idx], LookSnow[Idx] + 800.0f, Metres[Idx]) * (1.0f - 0.5f * Steepness), Beyond);
+				Snow = FMath::Lerp(Snow, 0.9f * FMath::SmoothStep(LookSnow[Idx], LookSnow[Idx] + 800.0f, Metres[Idx]) * (1.0f - 0.5f * SnowLean), Beyond);
 			}
 			const float Sand = 0.35f * (1.0f - FMath::SmoothStep(0.1f, 0.75f, Shore)); // (a thin strand, not a halo round every coast)
 

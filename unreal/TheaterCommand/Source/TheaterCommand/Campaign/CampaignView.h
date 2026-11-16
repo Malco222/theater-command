@@ -432,6 +432,11 @@ struct FMonthBand
 	int32 Week = 0;
 	FString When; // "week 1", or "July, week 1" for news dated after the month turned
 	int32 Region = INDEX_NONE;
+	// (Rules version 83.1.) A warning's own short title ("The country in danger"); a second line that is printed in
+	// full under the headline; the sentence that says what to do, printed small where the date stood; a FREED by his
+	// own side (a green edge); and a warning whose month of grace is spent (its label on cream, a cream edge).
+	FString Title, Sub, Note;
+	bool bGood = false, bSpent = false;
 };
 
 /** One box of the month's score. */

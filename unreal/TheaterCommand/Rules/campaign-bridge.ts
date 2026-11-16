@@ -1789,7 +1789,7 @@ function attack(ids: number[], to: number) {
 interface CardFigure { value: string; label: string }
 interface MonthCard {
   date: string;
-  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number }[];
+  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number; title: string; sub: string; note: string; good: boolean; spent: boolean }[];
   score: { label: string; sign: string; figure: string; sub: string; tone: number }[];
   lead: null | { tag: string; stamp: string; tone: number; headline: string; a: string; aName: string; b: string; bName: string; picture: string; line: string; figures: CardFigure[]; region: number; report: number };
   rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; text: string; figures: CardFigure[]; region: number; sea: number }[];
@@ -1854,7 +1854,9 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
   return {
     date: c.month,
     // (Ruling 102(a): the rules give each item its date in words, "week 3" or "as July opens"; nothing else is printed for a date.)
-    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.when ?? '', region: x.region ?? -1 })),
+    // (Version 83.1: a band's own title, the second line it must be read with, the sentence that says what to do, and how its edge is worn.)
+    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.when ?? '', region: x.region ?? -1,
+      title: x.title ?? '', sub: x.sub ?? '', note: x.note ?? '', good: !!x.good, spent: !!x.spent })),
     score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? '', figure: x.figure, sub: x.sub, tone: x.tone === 'good' ? 1 : x.tone === 'bad' ? -1 : 0 })),
     lead: lead ? {
       tag: lead.when ? `${lead.kind.toUpperCase()}  ·  ${lead.when.toUpperCase()}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
