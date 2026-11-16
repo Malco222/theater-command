@@ -16,16 +16,30 @@
  * 7 elsewhere; 8 letters. Within a class the larger first. Classes 1 and 2 are the red bands at the top (at most
  * two; a great power entering the war or falling always takes the first), and the pictured lead story is the first
  * row from class 3 down.
+ *
+ * "The larger first" (rulings 84 and 95): every item has a weight, and what is stamped LOST ranks at twice its
+ * weight, so bad news leads good news until the good news is twice its size. HELD and WON count once.
+ *   On the ground the weight is his side's men, lost or cut off, and the place adds by its rank on the map: a town
+ *   half a corps, a city a corps and a half, a capital more than any ordinary battle of the month, open country
+ *   nothing. A ring that closes weighs all the men cut off. Battles, sieges, rings and surrenders are one list; the
+ *   provinces lost or won without a battle come after it, one count a front.
+ *   At sea and in the air the weight is what both sides lost, ships by class and aircraft by number, and a fleet
+ *   meeting a fleet is never ranked below a single ship lost alone.
+ * One measure runs across the three: the cost to build what was lost, counted in men (an infantry corps is its
+ * men; a ship or an aircraft is the men its cost would have raised). The pictured lead story is the heaviest item
+ * of ground, sea and air together, and a light ground item (a count, or a battle that cost less than a corps) never
+ * takes the picture from a fleet action or a great ship sunk. The rows keep land first, then sea and air.
  */
 import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
 import { majorsOf } from './diplomacy';
-import { BUDGET, ledger } from './economy';
+import { ARSENAL } from './arsenal';
+import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { prizeOf, townName, townSize } from './towns';
-import type { AirReport, Game, Headline, SeaSide, Ships } from './types';
+import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
 /** The eight pictures both builds have (art-director/raid-card/targets). */
@@ -184,7 +198,29 @@ export function monthMark(g: Game, viewer: string | null = g.human): MonthMark {
   };
 }
 
-interface Ranked { row: CardRow; sub: number; weight: number; /** A siege laid, and the losses of the two sides in it: told with the town's own fight if that came the same month. */ laid?: { region: number; ours: number; theirs: number; first: CardFigure } }
+/** The one measure across land, sea and air (ruling 95): the cost to build what was lost, counted in men. */
+const CORPS_MEN = PRODUCTION.builds.inf.divs * MEN_PER_DIV;
+const MEN_A_COST = CORPS_MEN / PRODUCTION.builds.inf.cost;
+const shipMen = (c: ShipClass): number => (ARSENAL.ships[c].cost / ARSENAL.ships[c].count) * MEN_A_COST;
+const shipsWeight = (s: Ships): number => CLASSES.reduce((t, c) => t + shipMen(c) * s[c], 0);
+const greatShips = (s: Ships): boolean => s.bb + s.cv > 0;
+/** The same from a line of news, which names the class in a word. */
+const wordClass = (word: string): ShipClass => (/^battleship/.test(word) ? 'bb' : /^carrier/.test(word) ? 'cv' : /^cruiser/.test(word) ? 'ca' : /^submarine/.test(word) ? 'ss' : 'dd');
+const PLANE_MEN = ((ARSENAL.air.ftr.cost / ARSENAL.air.ftr.count + ARSENAL.air.bmr.cost / ARSENAL.air.bmr.count) / 2) * MEN_A_COST;
+/** What a place adds to the fight for it, by its rank on the map. A capital adds more than any ordinary battle of the month, and never less than this. */
+const PLACE_MEN: Record<string, number> = { capital: 3 * CORPS_MEN, city: 1.5 * CORPS_MEN, town: 0.5 * CORPS_MEN };
+/** A province lost or won without a battle, in a front's count; and news that names no men and no ship. */
+const PROVINCE_MEN = 1000, NEWS_MEN = 500, SHELLED_MEN = 2000;
+/** The ground's three parts: the fighting in one list, the provinces counted a front, other news. */
+const GROUND_FIGHTING = 0, GROUND_PROVINCES = 1, GROUND_NEWS = 2;
+
+interface Ranked {
+  row: CardRow; sub: number; weight: number;
+  /** A fight for a place: its rank on the map, added to the weight when the month's battles are all known. */
+  place?: string;
+  /** A fleet meeting a fleet, a single ship lost alone, and whether a battleship or a carrier went down in it. */
+  fleet?: boolean; alone?: boolean; great?: boolean;
+  /** A siege laid, and the losses of the two sides in it: told with the town's own fight if that came the same month. */ laid?: { region: number; ours: number; theirs: number; first: CardFigure } }
 
 /** The card for everything that has happened since the mark was taken. */
 export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human): MonthCard {
@@ -282,17 +318,19 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.head = r.taken ? `${place} is lost` : `${place} holds`;
       row.follows = r.taken ? worth(true) || 'The front falls back.' : 'The line holds where it stood.';
     }
-    const lostCity = !good && city && r.taken, wonCity = good && city && r.taken;
+    // What it weighs: his side's men, and the place by its rank (a capital is a capital in the month it falls).
+    let ourMen = oursLost;
     // One story, one row: a siege laid and the town's own fight in the same month are told as the town's fight,
     // with the losses of both.
     const before = forTown && !r.siege ? ranked.findIndex((x) => x.laid?.region === r.region) : -1;
     if (before >= 0) {
       const laid = ranked.splice(before, 1)[0].laid!;
       const o = oursLost + laid.ours, t = theirsLost + laid.theirs;
+      ourMen += laid.ours;
       row.figures = [{ n: num(o), label: 'lost' }, { n: num(t), label: 'theirs' }];
       row.facts = [corps ? row.facts[0] : laid.first, { n: num(o), label: 'men lost' }, { n: num(t), label: 'of theirs' }];
     }
-    ranked.push({ row, sub: lostCity ? 0 : wonCity ? 1 : 2, weight: r.attLost + r.defLost + r.prisoners + (city ? 5e5 : 0), ...(r.siege ? { laid: { region: r.region, ours: oursLost, theirs: theirsLost, first: row.facts[0] } } : {}) });
+    ranked.push({ row, sub: GROUND_FIGHTING, weight: ourMen, place: reg?.cap ? 'capital' : size, ...(r.siege ? { laid: { region: r.region, ours: oursLost, theirs: theirsLost, first: row.facts[0] } } : {}) });
   }
 
   // Provinces that changed hands without a battle of his: one count a front.
@@ -322,7 +360,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.head = gain ? `${plural(ids.length, 'province')} occupied${other ? ` from ${theName(other)}` : ''}` : `${plural(ids.length, 'province')} lost${other ? ` to ${theName(other)}` : ''}`;
       row.follows = ids.length > 1 ? `The largest is ${g.regions[best].name}.` : '';
       row.facts = row.figures;
-      ranked.push({ row, sub: 3, weight: ids.length });
+      ranked.push({ row, sub: GROUND_PROVINCES, weight: ids.length * PROVINCE_MEN });
     }
   }
 
@@ -355,7 +393,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.head = good ? `Victory in the ${r.zoneName.replace(/^the /i, '')}` : `Defeat in the ${r.zoneName.replace(/^the /i, '')}`;
     row.follows = shipCount(theirSunk) || shipCount(ourSunk) ? `${cap(shipCount(theirSunk) ? shipList(theirSunk) : 'no enemy ship')} sunk${shipCount(ourSunk) ? ` for the loss of ${shipList(ourSunk)}` : ', and no ship of yours lost'}.` : 'Neither side lost a ship.';
     row.facts = [{ n: String(shipCount(sumShips(us, 'ships'))), label: 'ships engaged' }, { n: String(shipCount(ourSunk)), label: 'lost' }, { n: String(shipCount(theirSunk)), label: 'of theirs sunk' }];
-    ranked.push({ row, sub: good ? 1 : 0, weight: 40 * (shipCount(theirSunk) + shipCount(ourSunk)) + 20 });
+    // (A fleet action is never a light thing: it starts at a corps, and the ships sunk add their cost.)
+    ranked.push({ row, sub: 0, weight: CORPS_MEN + shipsWeight(theirSunk) + shipsWeight(ourSunk), fleet: true, great: true });
   }
   const airAt = new Set<number>();
   const airAtSea: string[] = [];
@@ -413,7 +452,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       : att ? (ourLost ? [{ n: num(ourLost), label: r.att.every((u) => !u.lostFtr) ? 'bombers lost' : 'aircraft lost' }] : theirLost ? [{ n: num(theirLost), label: 'shot down' }] : [])
       : theirLost ? [{ n: num(theirLost), label: 'shot down' }] : ourLost ? [{ n: num(ourLost), label: 'fighters lost' }] : [];
     row.facts = [{ n: num(flown), label: att ? 'aircraft flew' : 'aircraft came' }, { n: num(ourLost), label: 'lost' }, { n: num(theirLost), label: 'of theirs shot down' }];
-    ranked.push({ row, sub: good ? 1 : 0, weight: flown / 10 + ourLost + theirLost + 60 * sunkHere });
+    ranked.push({ row, sub: 0, weight: (flown / 20 + ourLost + theirLost) * PLANE_MEN + (shipsHit ? shipsWeight(shipsHit) : 0), great: !!shipsHit && greatShips(shipsHit) });
   }
   const shelled = new Set<number>();
   for (const r of shores) {
@@ -440,18 +479,21 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.head = `${r.place} is shelled from the sea`;
     row.follows = r.result;
     row.facts = [{ n: String(shipCount(r.ships)), label: 'ships stood in' }, ...row.figures];
-    ranked.push({ row, sub: att ? 1 : 0, weight: 15 + 40 * lost });
+    ranked.push({ row, sub: 0, weight: SHELLED_MEN + shipsWeight(r.sunk), great: greatShips(r.sunk) });
   }
 
   // News of fighting that no battle report tells: bridges blown, a landing, a ship torpedoed, an army cut off.
-  const involves = (h: Headline): boolean => mine(h.nat) || mine(h.won) || mine(h.lost) || (h.region !== undefined && (g.regions[h.region]?.ctrl === me || mark.before[h.region] === me));
+  // (His ring that closes on the enemy is his news too: an enemy army cut off on ground that touches his own.)
+  const hisRing = (h: Headline): boolean => h.region !== undefined && foe(h.lost) && /^The ring closes at /.test(h.text) && (g.regions[h.region]?.nb ?? []).some((n) => g.regions[n]?.ctrl === me);
+  const involves = (h: Headline): boolean => mine(h.nat) || mine(h.won) || mine(h.lost) || (h.region !== undefined && (g.regions[h.region]?.ctrl === me || mark.before[h.region] === me)) || hisRing(h);
   for (const h of hs) {
     if (!h.arm || h.warn || (h.kind !== 'battle' && h.kind !== 'event')) continue;
     if (!involves(h)) continue;
     // One story, one row: the battle report tells it better.
     const told = h.arm === 'land' ? h.region !== undefined && fought.has(h.region)
       : h.arm === 'air' ? (h.region !== undefined ? airAt.has(h.region) || shelled.has(h.region) : airAtSea.includes(h.nat ?? '') || airs.some((r) => r.zone >= 0))
-      : (h.region !== undefined && shelled.has(h.region)) || (h.won !== undefined && h.lost !== undefined && seaPairs.some(([a, b]) => (a === h.won && b === h.lost) || (a === h.lost && b === h.won)));
+      // (At sea only the fleet action's own line: a submarine sunk by escorts the same month is another story.)
+      : (h.region !== undefined && shelled.has(h.region)) || (h.won !== undefined && h.lost !== undefined && /\bdefeats?\b/.test(h.text) && seaPairs.some(([a, b]) => (a === h.won && b === h.lost) || (a === h.lost && b === h.won)));
     if (told) { used.add(h); continue; }
     const good = side(h.won) || (h.won === undefined && foe(h.lost)), bad = !good && (side(h.lost) || (h.lost === undefined && foe(h.won)));
     const bridges = /\bbridges?\b/.test(h.text);
@@ -474,11 +516,14 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const said = first(where ? h.text.replace(where[0], '') : h.text);
     const river = bridges ? /bridges over (the [A-Z][A-Za-z' -]*?)(?= at | between | as | before |[.,]|$)/.exec(h.text) : null;
     const ships = sinking ? CLASS_WORD.exec(h.text) : null;
+    // A heavy ship torpedoed out of its fleet: one ship, named by its class.
+    const torpedoed = sinking && !ships ? /\btorpedoes and sinks an? (battleship|carrier|cruiser|destroyer|submarine) of (the [^:.]+?) in the /.exec(h.text) : null;
     // A row says it in one short sentence; the whole line of news is in the newsreel.
     row.line = river ? (/\bseize\b/.test(h.text) ? `The bridges over ${river[1]} were taken intact.` : /\bblow\b/.test(h.text) ? `The bridges over ${river[1]} are blown.` : `${said}.`) : `${said}.`;
     row.kind = h.arm === 'land' ? 'ON LAND' : h.arm === 'sea' ? 'AT SEA' : 'IN THE AIR';
     row.head = ships ? `${cap(count(Number(ships[1])).toLowerCase())} ${ships[2]} ${ships[3]} sunk` : brief(said, 64);
     if (ships) row.figures = [{ n: ships[1], label: `${ships[3]} ${good ? 'sunk' : 'lost'}` }];
+    if (torpedoed) { row.line = `Torpedoed: a ${torpedoed[1]} of ${torpedoed[2]}.`; row.head = `A ${torpedoed[1]} is torpedoed and sunk`; row.figures = [{ n: '1', label: `${torpedoed[1]} ${good ? 'sunk' : 'lost'}` }]; }
     // An army cut off: the row carries the men as its figure.
     const ring = /^The ring closes at [^:]+: (.+?), ([\d,]+) men, (?:is|are) cut off/.exec(h.text);
     if (ring) {
@@ -486,13 +531,21 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       const who = force ? `${force[1]} ${force[2]}` : ring[1];
       row.line = `The ring closes: ${who} ${/^(1|one|a|an) /i.test(who) ? 'is' : 'are'} cut off.`;
       row.figures = [{ n: ring[2], label: 'men cut off' }];
+      // (As the lead story it is told whole: where, who, and how many.)
+      row.head = `The ring closes at ${row.place}`;
+      row.follows = `${cap(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? 'is' : 'are'} cut off from all supply.`;
+      row.facts = row.figures;
     }
     const escorts = /^The escorts of (?:the )?(.+?) sinks? /.exec(h.text);
     if (escorts && ships) row.line = `Sunk by escorts of the ${escorts[1]}.`;
     const arms = /^Cut off and out of supply, (.+?) lays? down (?:its|their) arms(?: at ([^:.]+))?(?:: (?:.+?, )?([\d,]+) men)?\./.exec(h.text);
     if (arms) { row.line = `${cap(arms[1])} lays down its arms${arms[2] ? ` at ${arms[2]}` : ''}.`; if (arms[3]) row.figures = [{ n: arms[3], label: side(h.lost) || mine(h.nat) ? 'men lost' : 'prisoners' }]; }
     used.add(h);
-    ranked.push({ row, sub: h.arm === 'land' ? (bad ? 2 : 4) : bad ? 0 : 1, weight: bad ? 30 : 10 });
+    // What it weighs: the men of a ring or of an army that lays down its arms; the ships a line of news names.
+    const menNamed = Number((ring?.[2] ?? arms?.[3] ?? '0').replace(/,/g, ''));
+    const sunkWord = ships?.[3] ?? torpedoed?.[1] ?? '', sunkCount = ships ? Number(ships[1]) : torpedoed ? 1 : 0;
+    const weight = h.arm === 'land' ? menNamed || (bad ? 0 : NEWS_MEN) : sunkCount ? sunkCount * shipMen(wordClass(sunkWord)) : NEWS_MEN;
+    ranked.push({ row, sub: h.arm === 'land' ? (menNamed || bad ? GROUND_FIGHTING : GROUND_NEWS) : 0, weight, alone: sunkCount > 0, great: /^(battleship|carrier)/.test(sunkWord) });
   }
 
   // ---- 5. Goals and honours ---------------------------------------------------------------------------------
@@ -582,17 +635,30 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   }
 
   // ---- The order, the lead and the fold ---------------------------------------------------------------------
-  const badFirst = (t: CardTone): number => (t === 'bad' ? 0 : t === 'warn' ? 1 : t === 'good' ? 2 : 3);
-  ranked.sort((a, b) => a.row.cls - b.row.cls || a.sub - b.sub || badFirst(a.row.tone) - badFirst(b.row.tone) || b.weight - a.weight);
+  // The place adds by its rank, and a capital more than any ordinary battle of the month.
+  const placed = ranked.filter((x) => x.place !== undefined);
+  const ordinary = Math.max(0, ...placed.filter((x) => x.place !== 'capital').map((x) => x.weight + (PLACE_MEN[x.place!] ?? 0)));
+  for (const x of placed) x.weight += x.place === 'capital' ? Math.max(PLACE_MEN.capital, ordinary + 1) : PLACE_MEN[x.place!] ?? 0;
+  // (Rulings 84 and 95: what is stamped LOST ranks at twice its weight, the larger rank first, and at equal ranks the loss first.)
+  const lost = (x: Ranked): boolean => x.row.tag === 'LOST' || (x.row.cls === 4 && x.row.tone === 'bad');
+  const rank = (x: Ranked): number => x.weight * (lost(x) ? 2 : 1);
+  // A fleet meeting a fleet is never ranked below a single ship lost alone.
+  const alone = Math.max(0, ...ranked.filter((x) => x.alone).map(rank));
+  const order = (x: Ranked): number => (x.fleet ? Math.max(rank(x), alone + 1) : rank(x));
+  ranked.sort((a, b) => a.row.cls - b.row.cls || a.sub - b.sub || order(b) - order(a) || Number(lost(b)) - Number(lost(a)));
   const all = ranked.map((x) => x.row);
   const fighting = all.filter((r) => r.cls === 3 || r.cls === 4);
-  card.lead = fighting.find((r) => r.picture !== null) ?? null;
+  // The lead story is the heaviest of ground, sea and air together; a light ground item never takes the picture
+  // from a fleet action or a great ship sunk.
+  const topG = ranked.find((x) => x.row.cls === 3 && x.row.picture !== null), topS = ranked.find((x) => x.row.cls === 4 && x.row.picture !== null);
+  const light = (x: Ranked): boolean => x.sub !== GROUND_FIGHTING || x.weight < CORPS_MEN;
+  card.lead = (topG && topS ? ((topS.great && light(topG)) || order(topS) > order(topG) ? topS : topG) : topG ?? topS)?.row ?? null;
   card.rows = all.filter((r) => r !== card.lead);
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
   card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);
   for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one);
   card.quiet = fighting.length ? '' : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
-  if (card.rows.length > card.show) card.count = all.every((r) => r.cls === 3 || r.cls === 4) ? `ALL ${all.length} BATTLES` : `ALL ${all.length} ITEMS`;
+  if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
 
   // ---- The score --------------------------------------------------------------------------------------------
   const tone = (good: number, bad: number): CardTone => (good > bad ? 'good' : bad > good ? 'bad' : 'plain');
