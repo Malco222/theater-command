@@ -1,0 +1,89 @@
+arm-25	node out82/probe85.mjs 25 76
+arm-26	node out82/probe85.mjs 26 76
+arm-27	node out82/probe85.mjs 27 76
+arm-28	node out82/probe85.mjs 28 76
+arm-29	node out82/probe85.mjs 29 76
+arm-30	node out82/probe85.mjs 30 76
+arm-31	node out82/probe85.mjs 31 76
+arm-32	node out82/probe85.mjs 32 76
+arm-33	node out82/probe85.mjs 33 76
+arm-34	node out82/probe85.mjs 34 76
+arm-35	node out82/probe85.mjs 35 76
+arm-36	node out82/probe85.mjs 36 76
+arm-37	node out82/probe85.mjs 37 76
+arm-38	node out82/probe85.mjs 38 76
+arm-39	node out82/probe85.mjs 39 76
+arm-40	node out82/probe85.mjs 40 76
+arm-41	node out82/probe85.mjs 41 76
+arm-42	node out82/probe85.mjs 42 76
+arm-43	node out82/probe85.mjs 43 76
+arm-44	node out82/probe85.mjs 44 76
+arm-45	node out82/probe85.mjs 45 76
+arm-46	node out82/probe85.mjs 46 76
+arm-47	node out82/probe85.mjs 47 76
+arm-48	node out82/probe85.mjs 48 76
+armsecure-25	node out82/probe85.mjs 25 76 '{"secure":true}'
+armsecure-28	node out82/probe85.mjs 28 76 '{"secure":true}'
+seat-ITA-25	node out82/probe58.mjs ITA 1 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-25	node out82/probe58.mjs ITA 1 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-26	node out82/probe58.mjs ITA 1 26 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-26	node out82/probe58.mjs ITA 1 26 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-27	node out82/probe58.mjs ITA 1 27 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-27	node out82/probe58.mjs ITA 1 27 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-28	node out82/probe58.mjs ITA 1 28 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-28	node out82/probe58.mjs ITA 1 28 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-29	node out82/probe58.mjs ITA 1 29 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-29	node out82/probe58.mjs ITA 1 29 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-30	node out82/probe58.mjs ITA 1 30 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-30	node out82/probe58.mjs ITA 1 30 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-31	node out82/probe58.mjs ITA 1 31 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-31	node out82/probe58.mjs ITA 1 31 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-32	node out82/probe58.mjs ITA 1 32 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-32	node out82/probe58.mjs ITA 1 32 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-33	node out82/probe58.mjs ITA 1 33 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-33	node out82/probe58.mjs ITA 1 33 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-34	node out82/probe58.mjs ITA 1 34 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-34	node out82/probe58.mjs ITA 1 34 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-35	node out82/probe58.mjs ITA 1 35 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-35	node out82/probe58.mjs ITA 1 35 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-36	node out82/probe58.mjs ITA 1 36 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-36	node out82/probe58.mjs ITA 1 36 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-37	node out82/probe58.mjs ITA 1 37 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-37	node out82/probe58.mjs ITA 1 37 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-38	node out82/probe58.mjs ITA 1 38 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-38	node out82/probe58.mjs ITA 1 38 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-39	node out82/probe58.mjs ITA 1 39 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-39	node out82/probe58.mjs ITA 1 39 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-40	node out82/probe58.mjs ITA 1 40 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-40	node out82/probe58.mjs ITA 1 40 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-41	node out82/probe58.mjs ITA 1 41 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-41	node out82/probe58.mjs ITA 1 41 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-42	node out82/probe58.mjs ITA 1 42 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-42	node out82/probe58.mjs ITA 1 42 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-43	node out82/probe58.mjs ITA 1 43 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-43	node out82/probe58.mjs ITA 1 43 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-44	node out82/probe58.mjs ITA 1 44 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-44	node out82/probe58.mjs ITA 1 44 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-45	node out82/probe58.mjs ITA 1 45 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-45	node out82/probe58.mjs ITA 1 45 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-46	node out82/probe58.mjs ITA 1 46 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-46	node out82/probe58.mjs ITA 1 46 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-47	node out82/probe58.mjs ITA 1 47 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-47	node out82/probe58.mjs ITA 1 47 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-48	node out82/probe58.mjs ITA 1 48 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-48	node out82/probe58.mjs ITA 1 48 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seatsecure-ITA-25	node out82/probe58.mjs ITA 1 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"secure":true}'
+seatsecure-ITA-28	node out82/probe58.mjs ITA 1 28 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"secure":true}'
+gerarm-25	TC_ME=GER node out82/probe85.mjs 25 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-26	TC_ME=GER node out82/probe85.mjs 26 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-27	TC_ME=GER node out82/probe85.mjs 27 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-28	TC_ME=GER node out82/probe85.mjs 28 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-29	TC_ME=GER node out82/probe85.mjs 29 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-30	TC_ME=GER node out82/probe85.mjs 30 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-31	TC_ME=GER node out82/probe85.mjs 31 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-32	TC_ME=GER node out82/probe85.mjs 32 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-33	TC_ME=GER node out82/probe85.mjs 33 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-34	TC_ME=GER node out82/probe85.mjs 34 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-35	TC_ME=GER node out82/probe85.mjs 35 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+gerarm-36	TC_ME=GER node out82/probe85.mjs 36 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+land-17	node out82/probe78.mjs 17,18,19 80
