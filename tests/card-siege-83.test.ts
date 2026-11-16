@@ -263,7 +263,7 @@ describe("ruling 106: the first case of ruling 95(d), rewritten", () => {
     const card = monthCard(g, mark, ME);
     expect(inParis).toBeGreaterThan(110000);
     expect(inLille).toBeGreaterThan(120000);
-    expect(card.lead).toMatchObject({ place: townName(capital), tag: 'HELD', head: `${townName(capital)} is besieged`, follows: `${townName(capital)} holds, at a cost of 48,342 men. 3 corps are shut in.` });
+    expect(card.lead).toMatchObject({ place: townName(capital), tag: 'HELD', head: `${townName(capital)} is besieged`, follows: `${townName(capital)} holds, at a cost of 48,342 men. 3 corps are shut in. It is your capital: the country will not long outlast it.` });
     expect(card.lead!.facts).toEqual([{ n: num(inParis), label: 'men shut in' }, { n: '48,342', label: 'men lost' }, { n: '18,261', label: 'of theirs' }]);
     expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`HELD ${townName(city)}`, `LOST ${a.name}`, `LOST ${b.name}`, `LOST ${c.name}`]);
     expect(card.rows[0]).toMatchObject({ line: 'The town is besieged and holds.', figures: [{ n: num(inLille), label: 'shut in' }] });

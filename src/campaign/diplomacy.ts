@@ -555,6 +555,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     const live = (id: string): boolean => !!g.nations[id]?.alive && g.nations[id].atWar.length > 0;
     const stake = (id: string): number => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== 'fort') ? 1 : 0), 0);
     const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));
+    const held = new Set(g.regions.filter((r) => r.ctrl === X.id).map((r) => r.id));
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     fleetsOnFall(g, X.id);
     airOnFall(g, X.id);
@@ -579,13 +580,25 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (!heir) return false;
     // Anything the terms forgot goes with the rest.
     for (const r of g.regions) if (r.ctrl === X.id) { r.ctrl = heir; r.cap = false; r.since = g.turn; }
+    // (For the news: what passed to somebody other than the heir, by the terms or because his army stood on it.)
+    const others = new Map<string, string[]>();
+    for (const r of g.regions) if (held.has(r.id) && r.ctrl !== heir) others.set(r.ctrl, [...(others.get(r.ctrl) ?? []), r.name]);
     X.alive = false;
     X.align = 'independent'; // its ground is nobody's ally's now: whoever holds a piece holds it as a conquest
     X.fellOn = { turn: g.turn, week: g.week, to: heir, how: 'terms' };
-    // Where the terms went to somebody history's treaty does not name, the news is told as it happened here.
-    if (open && heir !== e.partition.shares[0]?.[0]?.[0]) {
+    // The grand campaign: history's own words are kept only where the treaty ran as history wrote it, to its first
+    // heir and with every place it names in the hands it names (or their ally's). Anywhere else the news is told as
+    // it happened here and says what truly changed hands (ruling 134(e)): history's words name ground that an army
+    // standing on it has kept, or that went to somebody else.
+    const asWritten = heir === e.partition.shares[0]?.[0]?.[0] && e.partition.shares.every(([takers, names]) => names.every((nm) => {
+      const r = g.byName[nm];
+      return !r || r.ctrl === takers[0] || allied(g, r.ctrl, takers[0]);
+    }));
+    if (open && !asWritten) {
       const H = g.nations[heir];
-      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id, undefined, { arm: 'land', won: H.id, lost: X.id });
+      const also = [...others.entries()].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+        .map(([id, names]) => ` ${theName(g.nations[id], true)} takes ${names.length <= 3 ? listed(names) : `${names.length} of its provinces`}.`).join('');
+      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.${also}`, X.id, undefined, { arm: 'land', won: H.id, lost: X.id });
       told = true;
     }
     recordFall(g, X.id, heir, 'terms');
@@ -817,8 +830,30 @@ export function stakeDue(g: Game, viewer: string | null = g.human): StakeDue | n
  * News only: no rule reads it. The grounds and the dates are read from the two events themselves.
  */
 function romeWaversOwn(g: Game): void {
-  const st = romeStake(g);
-  if (!st) return;
+  const w = stakeWarning(g);
+  if (w) warning(g, w.title, w.text, w.nat, w.region, w.about);
+}
+
+/** A stake's standing warning: its title, its words as things stand, the country it is about and a place to show. */
+export interface StakeWarning {
+  title: string;
+  text: string;
+  nat: string;
+  about: string;
+  region?: number;
+  /** The next moment the test is made, as the month that will open then ('September'): the stake is tried as each month opens. */
+  tested: string;
+}
+
+/**
+ * The warning of a seat's stake as things stand this moment, or null where no stake is live. The month's news is
+ * made from it (romeWaversOwn), and a month card takes its band from it, so that the card which opens a campaign
+ * carries the warning before any month's events have run (ruling 123(a)) and every card says the stake as it is
+ * when he reads it.
+ */
+export function stakeWarning(g: Game, viewer: string | null = g.human): StakeWarning | null {
+  const st = romeStake(g, viewer);
+  if (!st) return null;
   const { grounds, lost, who, falls } = st;
   const six = listed(grounds, 'or');
   const held = listed(lost);
@@ -835,5 +870,5 @@ function romeWaversOwn(g: Game): void {
     : lost.length
       ? `Mussolini falls ${g.turn < falls ? `in ${date}` : 'next month'} unless ${held} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.`
       : `Mussolini falls if ${who} take one of six places. They are ${listed(grounds)}${g.turn < falls ? `, and they count from ${date}` : ''}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
-  warning(g, changed && !lost.length ? ROME_HOLDS : 'Rome wavers', text, 'ITA', g.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, 'ITA');
+  return { title: changed && !lost.length ? ROME_HOLDS : 'Rome wavers', text, nat: 'ITA', about: 'ITA', region: g.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, tested: turnToDate(g.turn + 1).label.split(' ')[0] };
 }

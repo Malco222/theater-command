@@ -293,6 +293,43 @@ describe('standing orders', () => {
   });
 });
 
+describe('a target\'s distance in words (ruling 133(g))', () => {
+  it('is that of the nearest group able to fly the raid itself, not of fighters that could only go with it', () => {
+    const g = grand('GER');
+    const near = raidTargetsFor(g, 'bomb')[0];
+    expect(near.far).toBe(`${Math.round(near.km).toLocaleString('en-US')} km`);
+    // The bombers move to Berlin; the fighters stay where they were, nearer the frontier.
+    for (const f of mine(g, 'bmr')) f.base = g.byName['Berlin'].id;
+    const bomb = raidTargetsFor(g, 'bomb').find((t) => t.id === near.id)!;
+    const sweep = raidTargetsFor(g, 'superiority').find((t) => t.id === near.id)!;
+    expect(sweep.km).toBe(near.km);
+    expect(bomb.km).toBeGreaterThan(sweep.km);
+    expect(bomb.groups).toBeGreaterThan(mine(g, 'bmr').length);
+    // Led by one bomber group, it is that group's own.
+    const b = mine(g, 'bmr')[0];
+    expect(raidTargetsFor(g, 'bomb', b.id).find((t) => t.id === near.id)!.km).toBe(bomb.km);
+  });
+
+  it('never reads "0 km": carriers lying off the coast and groups based at the target are said in words', () => {
+    const g = grand('UK');
+    for (const kind of ['bomb', 'night', 'ground', 'superiority', 'strike'] as const) {
+      for (const t of raidTargetsFor(g, kind)) {
+        if (Math.round(t.km) > 0) expect(t.far, `${kind} ${t.name}`).toBe(`${Math.round(t.km).toLocaleString('en-US')} km`);
+        else expect(['carriers off this coast', 'based at the target', 'carriers in these waters', 'based on these shores'], `${kind} ${t.name}`).toContain(t.far);
+      }
+    }
+    // The Home Fleet's carriers lie in the North Sea in September 1939: the nearest bombers to Hamburg are theirs.
+    expect(raidTargetsFor(g, 'bomb').find((t) => t.name === 'Hamburg')!.far).toBe('carriers off this coast');
+    expect(raidTargetsFor(g, 'strike').find((t) => t.name === 'North Sea')!.far).toBe('based on these shores');
+    // The page that lists a raid's targets prints the words, and no "0 km".
+    for (let k = 0; !humanUp(g) && k < 200; k++) stepAI(g);
+    beginHuman(g);
+    const page = JSON.stringify(airPage(g, 'raid:bomb'));
+    expect(page).toContain('Carriers off this coast. ');
+    expect(page).not.toMatch(/\b0 km\b/);
+  });
+});
+
 describe('the raid planner', () => {
   it('offers every kind of raid with its targets, nearest first, and nothing to a nation at peace', () => {
     const g = grand('GER');

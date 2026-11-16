@@ -724,6 +724,33 @@ describe('at home, what his staff did, and elsewhere', () => {
     expect(card.home[1].text).toMatch(/ next month$/);
   });
 
+  it('guns and airfields are not counted: the line says what is ready, with the place and its level under it (ruling 133(g))', () => {
+    const g = game();
+    const N = g.nations[ME];
+    const at = germanCity(g);
+    N.queue.length = 0;
+    N.queue.push({ id: 9921, what: 'work', item: 'aa', name: `Anti-aircraft guns at ${at.name}`, region: at.id, ordered: g.turn - 2, eta: g.turn, cost: 20 } as never);
+    N.queue.push({ id: 9922, what: 'work', item: 'field', name: `Airfield at ${at.name}`, region: at.id, ordered: g.turn - 2, eta: g.turn, cost: 20 } as never);
+    const mark = monthMark(g, ME);
+    expect(mark.orders.map((o) => o.label).sort()).toEqual(['airfields', 'anti-aircraft guns']);
+    // The month passes: both are finished, the guns at their second level.
+    N.queue.length = 0;
+    g.flags[`wk:aa:${at.id}`] = 2;
+    g.flags[`wk:field:${at.id}`] = 1;
+    // (The month's own news of the same two works, as the Arsenal tells it, and a line of other news.)
+    news(g, { kind: 'info', text: `The anti-aircraft guns at ${at.name} are in place: level 2.`, nat: ME });
+    news(g, { kind: 'info', text: `The airfields at ${at.name} are ready: level 1.`, nat: ME });
+    news(g, { kind: 'info', text: 'A new bridge is open at Cologne.', nat: ME });
+    const card = monthCard(g, mark, ME);
+    // What stands among the deliveries is not said a second time as news; other news is.
+    expect(card.alsoFull.join(' ')).not.toMatch(/are in place|are ready/);
+    expect(card.alsoFull).toContain('A new bridge is open at Cologne.');
+    expect(card.home).toHaveLength(2);
+    expect(card.home.find((h) => h.sign === mark.orders.find((o) => o.label === 'anti-aircraft guns')!.mark)).toMatchObject({ text: 'Anti-aircraft guns ready', place: `${townName(at)}, level 2`, region: at.id, bare: true });
+    expect(card.home.map((h) => h.text).sort()).toEqual(['Airfields finished', 'Anti-aircraft guns ready']);
+    expect(card.home.every((h) => !/^\d/.test(h.text))).toBe(true);
+  });
+
   it('an order he struck off himself was not delivered', () => {
     const g = game();
     const N = g.nations[ME];
@@ -794,7 +821,7 @@ describe('a year of war with nobody playing, a card a month for four countries',
         // The rows in order of class, the red ones first; the lead story is the heaviest of ground, sea and air.
         expect(card.rows.map((r) => r.cls)).toEqual([...card.rows.map((r) => r.cls)].sort((a, b) => a - b));
         const fighting = rows.filter((r) => r.cls === 3 || r.cls === 4);
-        if (fighting.length) { leads++; expect(card.lead, `${nat} ${card.month}`).not.toBeNull(); expect(card.lead!.picture).not.toBeNull(); expect(card.quiet).toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 5 : 6); }
+        if (fighting.length) { leads++; expect(card.lead, `${nat} ${card.month}`).not.toBeNull(); if (!card.lead!.stake) expect(card.lead!.picture).not.toBeNull(); expect(card.quiet).toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 5 : 6); }
         else { quiet++; expect(card.lead).toBeNull(); expect(card.quiet).not.toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 6 : 7); if (card.bands.length) expect(card.quiet).not.toBe('A quiet month.'); }
         for (const r of rows) {
           expect(r.place, `${nat} ${card.month}`).not.toBe('');

@@ -165,6 +165,14 @@ export interface AshoreSaid {
   /** How the staff would call it: it would expect to hold, an even thing, or it would not expect the force to be still ashore. */
   tone: 'holds' | 'even' | 'lost';
   chance: number;
+  /** The divisions the line names: the enemy's within the months, and his own there. */
+  divs: { ours: number; theirs: number };
+  /**
+   * Where his staff would not expect the force to be still ashore, the card's red headline (ruling 134(d); ruling
+   * 24(b): the headline is never more cheerful than the worst ticket). It is third in the order, after the fight's own
+   * and 'Ashore, then cut off'. `text` is the line under it; `also` says the same as a second line under another headline.
+   */
+  warn?: { head: string; text: string; also: string };
 }
 
 /**
@@ -182,9 +190,18 @@ export function ashoreSays(g: Game, cs: Corps[], to: Region, viewer: string | nu
   const months = ['no', 'one', 'two', 'three', 'four', 'five', 'six'][S.months] ?? String(S.months);
   const head = `${months.charAt(0).toUpperCase()}${months.slice(1)} months on`;
   const reports = fog ? ', by your reports' : '';
-  const n = (x: number): string => { const k = Math.max(1, Math.round(x)); return `${k} division${k === 1 ? '' : 's'}`; };
-  if (R.theirs <= 0) return { head, line: `No enemy army can reach ${to.name} by land within ${months} months${reports}.`, tone: 'holds', chance: 1 };
+  const count = (x: number): number => Math.max(1, Math.round(x));
+  const n = (x: number): string => { const k = count(x); return `${k} division${k === 1 ? '' : 's'}`; };
+  if (R.theirs <= 0) return { head, line: `No enemy army can reach ${to.name} by land within ${months} months${reports}.`, tone: 'holds', chance: 1, divs: { ours: count(R.divs.ours), theirs: 0 } };
   const tone = R.chance >= S.sure ? 'holds' : R.chance >= S.even ? 'even' : 'lost';
   const says = tone === 'holds' ? 'Your staff would expect to hold it.' : tone === 'even' ? 'Your staff calls it an even thing.' : 'Your staff would not expect this force to be still ashore by then.';
-  return { head, line: `Within ${months} months the enemy can bring about ${n(R.divs.theirs)} against ${to.name}${reports}; you would have about ${n(R.divs.ours)} there. ${says}`, tone, chance: R.chance };
+  const said: AshoreSaid = { head, line: `Within ${months} months the enemy can bring about ${n(R.divs.theirs)} against ${to.name}${reports}; you would have about ${n(R.divs.ours)} there. ${says}`, tone, chance: R.chance, divs: { ours: count(R.divs.ours), theirs: count(R.divs.theirs) } };
+  if (tone === 'lost') {
+    said.warn = {
+      head: 'Ashore, then outnumbered',
+      text: `The force can land, but within ${months} months the enemy can bring about ${n(R.divs.theirs)} against it${reports}${fog ? ',' : ''} and you would have about ${count(R.divs.ours)} there. Your staff would not expect it to be still ashore.`,
+      also: `And a force that did get ashore would be outnumbered: within ${months} months the enemy can bring about ${n(R.divs.theirs)} against it${reports}${fog ? ',' : ''} and you would have about ${count(R.divs.ours)} there.`,
+    };
+  }
+  return said;
 }

@@ -1948,12 +1948,13 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
  * The words under the pointer on a province an army in hand can ride to (the art director's railway brief, section
  * 8, as ruled at 15:45 UTC on Version 82.2's pictures): the one line, in the rail's own blue, naming the press that
  * sends it (the build's own: 'Right-click'); and engineers pointed at a cut they can reach are told what they can do
- * there.
+ * there, and that it is the works train that takes them (Version 82.4, the art director's mend).
  */
 export function rideLines(g: Game, corps: Corps[], to: number, press: string): { line: string; relay: string } {
+  const works = corps.length > 0 && corps.every((c) => c.kind === 'eng') && railCut(g, to);
   return {
-    line: `${press}: by rail to ${g.regions[to].name}, there this month. It takes the whole month.`,
-    relay: corps.length > 0 && corps.every((c) => c.kind === 'eng') && railCut(g, to) ? 'Engineers can relay the track here.' : '',
+    line: `${press}: by ${works ? 'works train' : 'rail'} to ${g.regions[to].name}, there this month. It takes the whole month.`,
+    relay: works ? 'Engineers can relay the track here.' : '',
   };
 }
 
@@ -2001,7 +2002,10 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
  * places a train would take it to that its march does not reach, which the build knows from the reaches it draws:
  * the line counts them, so he looks for them. `where` names the build's own sign for such a place, of one and of
  * several ({ one: 'the station dot', many: 'a station dot' }; { one: 'the blue one', many: 'a blue one' }), and
- * `press` its press. Null where nothing in hand could ever ride (no field corps).
+ * `press` its press. Null where nothing in hand could ever ride (no field corps). Given the places themselves in
+ * place of their count (province ids, the nearest by rail first, as `railReachFor` hands them), the line names them
+ * where there are three or fewer (Version 82.4, ruling 123(3)): "By rail this month to Tyrol, Styria and Slovakia:
+ * right-click a blue one. It takes the whole month."; of one, "right-click it".
  */
 export interface RailSaid {
   can: boolean;
@@ -2009,11 +2013,19 @@ export interface RailSaid {
   strong: string;
   line: string;
 }
-export function railSays(g: Game, corps: Corps[], beyond: number, press: string, where: { one: string; many: string }): RailSaid | null {
+export function railSays(g: Game, corps: Corps[], beyond: number | number[], press: string, where: { one: string; many: string }): RailSaid | null {
   const ride = corps.filter((c) => !c.dead);
   if (!ride.length) return null;
   const no = whyNoTrainFor(g, ride);
   if (no) return { can: false, strong: '', line: no.line };
+  if (typeof beyond !== 'number') {
+    const names = beyond.map((id) => g.regions[id].name);
+    if (names.length > 0 && names.length <= 3) {
+      const strong = `By rail this month to ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}:`;
+      return { can: true, strong, line: `${strong} ${press} ${names.length === 1 ? 'it' : where.many}. It takes the whole month.` };
+    }
+    beyond = names.length;
+  }
   if (beyond > 0) {
     const strong = `By rail this month to ${beyond} more place${beyond === 1 ? '' : 's'}:`;
     return { can: true, strong, line: `${strong} ${press} ${beyond === 1 ? where.one : where.many}. It takes the whole month.` };
@@ -2029,23 +2041,35 @@ export function homeLost(g: Game, nat: string): number {
   return vp ? 1 - held / vp : 0;
 }
 
-export function collapseScore(g: Game, nat: string): number {
+/** What each loss weighs when a country reckons whether to give in: its capital, its home country by worth, and its army. */
+export const COLLAPSE = { capital: 0.45, home: 0.35, army: 0.2 };
+
+/**
+ * How far a nation's capital counts as lost, 0 to 1. `ahead` reads it as it will stand that many months on if
+ * nothing changes (a siege that much older): the warnings ask that; the rule itself asks with none.
+ */
+export function capitalLost(g: Game, nat: string, ahead = 0): number {
   const n = g.nations[nat];
-  if (n.capital < 0) return 0;
   // Shut in its capital by an army strong enough to close the ring, a government counts the city part lost already
   // (the grand campaign): a country overrun and beaten in the field does not fight on for months from inside one town.
   const seat = g.regions[n.capital];
   // And a government shut in loses its hold on the country month by month, until the capital counts as lost outright.
   const shut = siegeRules(g) && besieged(g, seat) && ringClosed(g, seat);
   const since = g.flags[`siege:${seat.id}`];
-  const sat = since === undefined ? 0 : Math.max(0, g.turn - since);
+  const sat = (since === undefined ? 0 : Math.max(0, g.turn - since)) + ahead;
   // (Nothing in the month the ring closes: a capital stands a siege before its country gives in.)
   const after = SIEGE.capitalAfter;
   const hold = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
-  const capLost = !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, hold) : 0;
+  return !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, hold) : 0;
+}
+
+export function collapseScore(g: Game, nat: string): number {
+  const n = g.nations[nat];
+  if (n.capital < 0) return 0;
+  const capLost = capitalLost(g, nat);
   // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
-  const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army) + exhausted(g, nat);
+  const score = COLLAPSE.capital * capLost + COLLAPSE.home * homeLost(g, nat) + COLLAPSE.army * (1 - army) + exhausted(g, nat);
   // A people gone short for months will bear less (the grand campaign): this is how a blockade chokes a country.
   const worn = willLost(g, nat);
   return worn > 0 ? score + worn : score;
