@@ -113,7 +113,7 @@ svg#map.mid .ctr.led .cmdr, .ctr.led.chosen .cmdr { display: block; }
 svg#map.mid .ctr.led .size, .ctr.led.chosen .size { display: none; }
 .ctr.chosen .base { opacity: 1; stroke: #fff6d8; stroke-width: 1.5; }
 .ctr.chosen rect.box { stroke: #fff6d8; stroke-width: 1.6; }
-#route, #ghost { pointer-events: none; }
+#route, #kept, #ghost { pointer-events: none; }
 .road { fill: none; stroke: #f4eeda; stroke-width: 2; stroke-dasharray: 5 3.5; stroke-linecap: round; stroke-linejoin: round; }
 .road.under { stroke: #15181b; stroke-width: 3.6; stroke-dasharray: none; opacity: .55; }
 .road.strike { stroke: #f2a08e; }
@@ -1939,3 +1939,222 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .tip.wide { max-width: 340px; }
 .tip .otip { display: block; white-space: nowrap; margin-top: 2px; }
 .tip .otip b { font-family: inherit; font-size: 12.5px; letter-spacing: 0; font-weight: 600; }
+
+/* ---- The month's report on one card (Version 82): the art director's mock-up, class for class ---- */
+.card.month { width: min(1300px, 100%); background: rgba(47, 36, 27, .975); border: 1px solid #6b5a36; border-radius: 6px; padding: 12px 24px 8px; box-shadow: 0 18px 60px rgba(0, 0, 0, .65); }
+.mc { --mc-ink: #ede5d5; --mc-soft: #d9cfba; --mc-dim: #a89e8e; --mc-brass: #d8aa62; --mc-red: #d0563d; --mc-green: #93b56c; --mc-amber: #e0a13c; --mc-panel: #3e3a36; --mc-serif: Georgia, 'DejaVu Serif', serif;
+  font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; color: var(--mc-ink); font-size: 14px; line-height: 1.25; }
+.mc .t-good { --c: var(--mc-green); } .mc .t-bad { --c: var(--mc-red); } .mc .t-warn { --c: var(--mc-amber); } .mc .t-plain { --c: #6b6252; }
+.mc button { font-family: inherit; font-weight: 400; font-size: 13px; }
+.mc-eyebrow, .mc-lab { font-size: 13px; letter-spacing: .16em; color: var(--mc-brass); text-transform: uppercase; font-weight: 700; }
+.mc-flag { display: inline-flex; vertical-align: middle; border: 1px solid rgba(0, 0, 0, .55); box-shadow: 0 1px 2px rgba(0, 0, 0, .5); line-height: 0; flex: none; }
+.mc-flag svg { display: block; }
+.mc-ag { font-style: normal; font-size: 12px; color: var(--mc-dim); }
+.mc-head { display: flex; align-items: flex-end; gap: 18px; }
+.mc-head h1 { font: 700 40px/1 var(--mc-serif); margin: 2px 0 0; letter-spacing: 0; }
+.mc-btns { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.mc-alt { border: 1px solid #7a7468; background: var(--mc-panel); color: var(--mc-ink); letter-spacing: .1em; padding: 10px 16px; border-radius: 4px; white-space: nowrap; }
+.mc-alt:hover, .mc-go:hover, .mc-it .tb:hover { border-color: var(--mc-brass); }
+.mc-fly { border: 2px solid #f0d08c; background: var(--mc-brass); color: #1c1508; letter-spacing: .14em; padding: 11px 26px; border-radius: 4px; white-space: nowrap; }
+.mc-fly:hover { filter: brightness(1.07); }
+.mc-banner { margin-top: 12px; display: flex; align-items: center; gap: 14px; background: linear-gradient(90deg, #7a2a1e, #5a2218 60%, #4a2018); border: 1px solid #b5503a; border-left: 8px solid var(--mc-red); border-radius: 4px; padding: 9px 14px; min-width: 0; }
+.mc-banner + .mc-banner { margin-top: 6px; }
+.mc-banner .k { font-size: 13px; letter-spacing: .18em; font-weight: 700; color: #ffd9c9; }
+.mc-banner b { font: 700 23px/1.15 var(--mc-serif); color: #fff3e6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-banner small { font-size: 14px; color: #f0cdbd; white-space: nowrap; }
+.mc-banner .mc-alt { margin-left: auto; background: rgba(0, 0, 0, .25); border-color: #c98a78; }
+.mc-tally { display: grid; grid-template-columns: repeat(var(--n, 6), 1fr); gap: 10px; margin-top: 10px; }
+.mc-tile { background: var(--mc-panel); border-radius: 4px; padding: 8px 12px 9px; border-top: 3px solid #57503f; min-width: 0; }
+.mc-tile u { display: flex; align-items: center; gap: 7px; text-decoration: none; font-size: 12px; letter-spacing: .14em; color: var(--mc-dim); font-weight: 700; }
+.mc-tile b { display: block; font: 700 30px/1.1 var(--mc-serif); margin-top: 3px; color: var(--c); white-space: nowrap; }
+.mc-tile.t-plain b { color: var(--mc-ink); }
+.mc-tile small { font-size: 13px; color: var(--mc-soft); }
+.mc-main { display: grid; grid-template-columns: 470px minmax(0, 1fr); gap: 22px; margin-top: 12px; }
+.mc-main.solo { grid-template-columns: minmax(0, 1fr); }
+.mc-rt { min-width: 0; }
+.tpic { display: block; background: #2a2019 center / cover no-repeat; }
+.mc-photo { position: relative; width: 470px; max-width: 100%; aspect-ratio: 470 / 310; border: 5px solid #e9e2cf; box-shadow: 0 6px 18px rgba(0, 0, 0, .55); background: #000; margin-top: 7px; }
+.mc-photo.opens, .mc-row.opens { cursor: pointer; }
+.mc-photo .tpic { width: 100%; height: 100%; }
+.mc-cap { position: absolute; left: 0; bottom: 0; right: 0; padding: 30px 14px 10px; background: linear-gradient(transparent, rgba(20, 15, 10, .9) 55%); }
+.mc-cap h2 { font: 700 27px/1.05 var(--mc-serif); margin: 0; letter-spacing: 0; }
+.mc-cap span { font-size: 14px; color: var(--mc-soft); display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+.mc-kind { position: absolute; left: 10px; top: 10px; background: rgba(20, 15, 10, .82); border: 1px solid #6b5a36; color: var(--mc-brass); font-size: 12px; letter-spacing: .14em; padding: 4px 8px; font-weight: 700; }
+.mc-stamp { position: absolute; right: 12px; top: 12px; transform: rotate(-7deg); border: 3px solid var(--c); color: var(--c); font: 700 22px var(--mc-serif); letter-spacing: .12em; padding: 2px 12px; background: rgba(20, 15, 10, .6); border-radius: 3px; }
+.mc-so { font-size: 14px; color: var(--mc-soft); margin: 9px 0 0; }
+.mc-facts { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 8px; margin-top: 10px; }
+.mc-facts div { background: var(--mc-panel); border-radius: 4px; padding: 7px 10px; font-size: 12.5px; color: var(--mc-dim); min-width: 0; }
+.mc-facts b { display: block; font: 700 22px var(--mc-serif); color: var(--mc-ink); white-space: nowrap; }
+.mc-leadb { display: flex; gap: 10px; margin-top: 9px; flex-wrap: wrap; }
+.mc-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 7px; }
+.mc-row { position: relative; display: grid; grid-template-columns: 92px 34px minmax(0, 1fr) auto 38px; align-items: center; column-gap: 9px; background: var(--mc-panel); border-left: 6px solid var(--c); border-radius: 4px; padding: 5px 10px 5px 6px; height: 71px; }
+.mc-row.red { background: linear-gradient(90deg, #6a281d, #4a2018); }
+.mc-row.opens:hover { background: #47423d; }
+.mc-row .tpic { width: 92px; height: 59px; border: 1px solid #1c1712; }
+.mc-nopic { width: 92px; height: 59px; display: flex; align-items: center; justify-content: center; }
+.mc-disc { width: 34px; height: 34px; border-radius: 50%; background: #2a2019; border: 1.5px solid var(--mc-brass); display: flex; align-items: center; justify-content: center; }
+.mc-rtx { min-width: 0; }
+/* (The two lines of a row are set tight, so the row centres its words and not their leading.) */
+.mc-rtx .r1 { display: flex; align-items: center; gap: 10px; min-width: 0; height: 24px; }
+.mc-rtx .pl { font: 700 20px/24px var(--mc-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mc-rtx .pl.long { font-size: 17px; }
+.mc-rtx .vs { display: flex; align-items: center; gap: 6px; margin-left: 2px; flex: none; }
+.mc-chip { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #1b1610; background: var(--c); padding: 3px 8px; border-radius: 2px; flex: none; }
+.mc-rtx .r2 { font-size: 13.5px; line-height: 17px; color: var(--mc-soft); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-nums { display: flex; gap: 14px; text-align: right; }
+.mc-nums span { font-size: 12px; color: var(--mc-dim); line-height: 1.15; white-space: nowrap; }
+.mc-nums b { display: block; font: 700 19px var(--mc-serif); color: var(--mc-ink); }
+.mc-go { width: 36px; height: 36px; border-radius: 4px; border: 1px solid #6b5a36; background: #2a2019; display: flex; align-items: center; justify-content: center; padding: 0; }
+.mc-go.none { visibility: hidden; }
+.mc-more { font-size: 13px; color: var(--mc-dim); margin-top: 7px; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.mc-more span { min-width: 0; }
+.mc-all { border: 0; background: none; padding: 0; color: var(--mc-brass); font-weight: 700 !important; letter-spacing: .08em; white-space: nowrap; margin-left: auto; }
+.mc-quiet { font: 700 22px/1.2 var(--mc-serif); color: var(--mc-ink); margin: 12px 0 6px; }
+/* (The staff's box is the widest: its line stands whole beside its button.) */
+.mc-low { display: grid; grid-template-columns: .86fr 1.52fr .98fr; gap: 14px; margin-top: 10px; }
+.mc-box { background: rgba(62, 58, 54, .6); border: 1px solid #57503f; border-radius: 4px; padding: 8px 12px 8px; min-width: 0; }
+.mc-it { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-top: 5px; color: #e4dccb; min-width: 0; }
+/* A foot line may run to two lines. Its words are cut to that room where the card is made, at a whole word, so nothing is clipped here. */
+.mc-it > span:not(.sg):not(.mc-flag) { min-width: 0; line-height: 1.3; overflow-wrap: break-word; }
+.mc-it b { font: 700 19px var(--mc-serif); color: var(--mc-brass); min-width: 22px; text-align: right; }
+.mc-it small { color: var(--mc-dim); font-size: 12.5px; white-space: nowrap; }
+.mc-it .sg { width: 30px; display: flex; justify-content: center; flex: none; }
+.mc-it.next, .mc-it.next b, .mc-it.none { color: var(--mc-dim); }
+.mc-it .tb { margin-left: auto; border: 1px solid #7a7468; background: #2a2019; color: var(--mc-ink); letter-spacing: .08em; padding: 6px 8px; border-radius: 3px; white-space: nowrap; flex: none; }
+.mc-it.el { align-items: flex-start; line-height: 1.3; }
+.mc-it.el .mc-flag { margin-top: 1px; }
+.mc-letters { margin-top: 12px; }
+.mc-letters blockquote { margin: 7px 0 0; padding: 8px 12px; border-left: 3px solid #6b5a36; background: rgba(62, 58, 54, .45); font-size: 13.5px; color: var(--mc-soft); }
+.mc-letters blockquote p { margin: 0; font-style: italic; }
+.mc-letters cite { display: block; margin-top: 4px; font-style: normal; font-size: 12.5px; color: var(--mc-dim); }
+.mc-foot { margin-top: 8px; font-size: 12.5px; color: var(--mc-dim); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 1100px) {
+  .mc-main { grid-template-columns: minmax(0, 1fr); }
+  .mc-photo { width: 100%; }
+  .mc-low { grid-template-columns: minmax(0, 1fr); }
+  .mc-tally { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .card.month { padding: 14px 16px 10px; }
+  .mc-head { flex-wrap: wrap; align-items: flex-start; }
+  .mc-head h1 { font-size: 30px; }
+  .mc-btns { margin-left: 0; width: 100%; }
+  .mc-btns button { flex: 1; padding-left: 8px; padding-right: 8px; }
+  .mc-banner { flex-wrap: wrap; gap: 8px 10px; }
+  .mc-banner b { white-space: normal; font-size: 19px; flex: 1 1 100%; order: 5; }
+  .mc-banner .mc-alt { order: 6; margin-left: 0; }
+  .mc-tally { grid-template-columns: repeat(2, 1fr); }
+  .mc-tile b { font-size: 24px; }
+  .mc-cap h2 { font-size: 21px; }
+  .mc-row { grid-template-columns: 34px minmax(0, 1fr) 38px; height: auto; min-height: 71px; row-gap: 4px; }
+  .mc-row .tpic, .mc-row .mc-nopic { display: none; }
+  .mc-rtx .r1 { flex-wrap: wrap; gap: 4px 8px; }
+  .mc-rtx .pl, .mc-rtx .r2 { white-space: normal; }
+  .mc-nums { grid-column: 2; grid-row: 2; justify-content: flex-start; text-align: left; }
+  .mc-row .mc-go { grid-column: 3; grid-row: 1 / span 2; }
+  .mc-it .tb { white-space: normal; }
+}
+.mc-it .mc-took { margin-left: auto; font-style: italic; }
+.mc-it.over { color: var(--mc-dim); font-size: 13px; padding-left: 39px; }
+/* What was delivered and where: the city keeps whole, beside the unit where there is room and on a line of its own in grey where there is not. */
+.mc-it.gd { align-items: baseline; }
+.mc-it.gd .sg { align-self: center; }
+.mc-it.gd .gt small { display: inline-block; margin-left: 5px; }
+.mc-it.st { align-items: center; }
+.mc-rt .mc-letters blockquote p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* A second band: everything under it gives up a little room, so the month is still one look. */
+.mc.two .mc-banner { padding-top: 6px; padding-bottom: 6px; margin-top: 10px; }
+.mc.two .mc-banner + .mc-banner { margin-top: 5px; }
+.mc.two .mc-tally { margin-top: 10px; }
+.mc.two .mc-photo { aspect-ratio: 470 / 262; }
+.mc.two .mc-main, .mc.two .mc-low { margin-top: 10px; }
+
+/* ---- The kept march on the page (Version 82; rulings 87 and 93, the art director's brief) ---- */
+/* The first-time slip: typing paper pinned on the top edge of the army's card, the red binding bar down its left. */
+.mslip { position: absolute; left: 14px; bottom: calc(100% - 6px); width: min(560px, calc(100% - 28px)); min-height: 62px; display: flex; align-items: center; gap: 14px; padding: 8px 12px 9px 16px; background: #d8cba8; color: #2b2118; border-left: 9px solid #7a2f22; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 13.5px; line-height: 1.3; transform: rotate(-.35deg); transform-origin: left bottom; z-index: 2; }
+.mslip .grow { flex: 1 1 auto; min-width: 0; }
+.mslip b { display: block; color: #8e2c20; letter-spacing: .16em; text-transform: uppercase; font-size: 12.5px; margin-bottom: 1px; }
+.mslip button { flex: none; font: inherit; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; padding: 6px 12px 5px; background: #e6dcc0; color: #2b2118; border: 1.5px solid #2b2118; border-radius: 2px; cursor: pointer; }
+.mslip button:hover { background: #f2ead4; }
+/* The words for an army with no moves left, and for ground a kept march may not go to. */
+.hint .nomoves, .tip .nomoves { color: #e0b872; }
+.tip .tipno { color: #e08a6a; }
+.tag.march { background: #3d3521; color: #f0e2b8; white-space: nowrap; }
+.tag.nomoves { color: #e0b872; }
+/* The road of a march that would be kept: cream, dashed, ending in a small ring. */
+.road.kept { stroke: #f4eeda; stroke-dasharray: 6 4.5; }
+.roadring { fill: rgba(21, 24, 27, .55); stroke: #f4eeda; stroke-width: 1.7; }
+/* Where the army in the tray is bound, and the order that ends its march. */
+.tmarch { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); min-width: 0; padding: 3px 0 1px; border-top: 1px dashed rgba(244, 238, 218, .22); }
+.tmarch .grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.tmarch small { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.tmarch .grow > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmarch b { color: var(--ink); font-weight: 600; }
+.tmarch button { flex: none; font: inherit; font-size: 11.5px; line-height: 1.25; padding: 2px 9px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-2); cursor: pointer; }
+.tmarch button:hover { border-color: var(--brass); color: var(--ink); }
+@media (max-width: 820px) {
+  .tray.slim .tmarch { display: none; }
+  .mslip { left: 6px; width: calc(100% - 12px); font-size: 12.5px; }
+}
+
+/* NEXT ARMY (Version 82, ruling 88): the brass button at the head of the alerts, the quiet line at zero, and END
+   MONTH dark while armies still have a move and lit when every army has its orders. */
+.alerts { max-width: 244px; }
+kbd { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1; padding: 2px 5px 1px; margin-left: 7px; border: 1px solid currentColor; border-radius: 3px; opacity: .82; vertical-align: 1px; }
+.nextarmy { display: flex; align-items: center; gap: 9px; width: 236px; min-height: 46px; padding: 4px 11px 4px 6px; margin-bottom: 3px; border-radius: 24px; background: #b6924e; border: 2px solid #4b391c; color: #2b2118; text-align: left; box-shadow: 0 3px 10px rgba(0, 0, 0, .5); cursor: pointer; }
+.nextarmy:hover { filter: brightness(1.08); }
+.nextarmy .disc { flex: 0 0 32px; height: 32px; border-radius: 50%; background: #2b2118; color: #f0d28a; display: grid; place-items: center; font-family: var(--head); font-size: 17px; font-weight: 700; }
+.nextarmy .disc.many { font-size: 13px; }
+.nextarmy .grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.12; }
+.nextarmy b { font-family: var(--head); font-size: 17px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.nextarmy small { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 12px; color: #3a2c16; }
+.nextarmy .chev { font-size: 24px; font-weight: 700; line-height: 1; margin-top: -3px; }
+.allset { display: flex; align-items: center; gap: 7px; min-height: 25px; padding: 3px 10px; margin-bottom: 3px; border-radius: 4px; background: rgba(46, 36, 26, .96); border: 1px solid #4b391c; color: #9cc08a; font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.allset .tick { font-size: 14px; line-height: 1; }
+/* The rear's quieter number (ruling 101(e)): dimmer beside "at the front", and a quiet chip that is still a button
+   once the front has its orders. It never lights and never holds the light from END MONTH. */
+.nextarmy .top { display: flex; align-items: center; }
+.nextarmy .top kbd { margin-left: 8px; }
+.nextarmy small { white-space: nowrap; }
+.nextarmy small i { font-style: normal; opacity: .62; }
+.nextrear { display: flex; align-items: center; gap: 8px; width: 236px; min-height: 25px; padding: 2px 9px 2px 6px; margin-bottom: 3px; border-radius: 4px; background: rgba(46, 36, 26, .96); border: 1px solid #6f5d38; color: #b9a06a; font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; text-align: left; white-space: nowrap; cursor: pointer; }
+.nextrear:hover { border-color: #8a7245; }
+.nextrear .ring { flex: none; min-width: 24px; height: 17px; padding: 0 5px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 9px; font-family: var(--head); font-size: 12px; letter-spacing: 0; }
+.nextrear b { flex: 1 1 auto; font: inherit; }
+.nextrear kbd { margin-left: 0; }
+.nextrear .chev { font-size: 16px; line-height: 1; margin-top: -2px; }
+.btn.go.wait { background: #2e241a; border-color: #8a7245; color: #e0b872; }
+.btn.go.lit { background: #e9c679; border-color: #f0d28a; color: #2b2118; box-shadow: 0 0 0 2px rgba(240, 210, 138, .5), 0 0 18px rgba(240, 210, 138, .5); animation: litgo 3.4s ease-in-out infinite; }
+@keyframes litgo { 50% { box-shadow: 0 0 0 2px rgba(240, 210, 138, .5), 0 0 26px rgba(240, 210, 138, .75); } }
+@media (prefers-reduced-motion: reduce) { .btn.go.lit { animation: none; } }
+@media (max-width: 1500px) { .bar .btn.go kbd { display: none; } }
+/* STAND THIS MONTH on the army's card, away from what it does if attacked. */
+.tnow { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-3); min-width: 0; }
+.tnow i { font-style: italic; white-space: nowrap; }
+.tnow button { font: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; line-height: 1.3; padding: 2px 10px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.tnow button:hover { border-color: var(--brass); color: var(--ink); }
+.tnow button.on { border-color: var(--brass); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass); }
+/* The question before the month ends. */
+.card.ask { width: min(620px, 100%); }
+.card.ask .body p { font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+.card.ask footer { justify-content: flex-start; }
+.card.ask footer .btn:not(.go) { color: var(--ink-2); }
+.asktick { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 0; background: none; border: 0; color: var(--ink-3); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.asktick:hover { color: var(--ink-2); }
+.asktick .box { flex: none; width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--ink-3); border-radius: 2px; font-size: 12px; line-height: 1; color: var(--brass); }
+@media (max-width: 820px) {
+  .nextarmy { width: 190px; min-height: 40px; }
+  .nextrear { width: 190px; letter-spacing: .04em; }
+  .nextarmy b { font-size: 15px; }
+  .tray.slim .tnow { display: none; }
+}
+
+/* The gate marks (Version 82, rulings 86 and 90): the holder's flag and a lamp on the water at the Panama Canal and
+   the three straits. With its name close up, the flag and the lamp at the height he plays at, the lamp alone from far up. */
+#gates .gatemark { cursor: help; }
+.gatemark .gfull, .gatemark .gmid, .gatemark .gfar { display: none; }
+svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark .gfar { display: inline; }
+.gatemark .gplate { fill: #261f1a; fill-opacity: .96; stroke: #120e0b; stroke-width: 1.5; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .5)); }
+.gatemark:hover .gplate { stroke: #b6924e; }
+.gatemark .gfl { fill: none; stroke: rgba(10, 12, 14, .6); stroke-width: .8; }
+.gatemark .gname { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 13px; fill: #f2e8d5; }

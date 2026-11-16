@@ -4,6 +4,11 @@
 
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
+import { markFor, monthCard, monthOrders, type MonthCard, type MonthMark } from '../monthcard';
+import { monthCardHtml } from './monthview';
+import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
+import { armyRound, armyStands, frontIdle, nextArmy, roundCount, settleStands, standArmy } from '../round';
+import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
@@ -158,6 +163,12 @@ const ui = {
   flash: [] as number[],
   auto: 0 as number,
   modal: null as null | { kind: string; [k: string]: any },
+  /** The month's report on one card (Version 82): the mark kept as the player's month opened, the card last shown (R opens it again), and whether its rows are unfolded. */
+  mark: null as MonthMark | null,
+  lastCard: null as MonthCard | null,
+  monthAll: false,
+  /** NEXT ARMY (Version 82): the provinces visited this round. */
+  roundSeen: [] as number[],
   /** The start screen: the grand campaign's front door, or the list of historical scenarios behind it. */
   menu: 'grand' as 'grand' | 'scenarios',
   /** Which shelf of the arsenal the Build tab shows in the grand campaign. */
@@ -257,6 +268,8 @@ let lands: Region[] = [];
 let reaches: { from: number; ap: number; map: Map<number, Reach> }[] = [];
 /** The army whose general and units the tray shows. */
 let trayArmy: { reg: number; nat: string } | null = null;
+/** The march that would be kept to the province under the cursor, for the army in hand (Version 82). */
+let marchPlan: { id: number; plan: MarchPlan; lead: Corps; n: number } | null = null;
 /** The enemy coasts the fleet that is picked up could shell from where it is. */
 let shellAt: number[] = [];
 /** The piece kept off the map while a copy of it is still being slid along its road, and the march being drawn. */
@@ -539,7 +552,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
@@ -564,7 +577,10 @@ function mount(): void {
   document.addEventListener('keydown', onKey);
   wireMap();
   window.addEventListener('resize', applyView);
+  // (The map's width on the screen is kept as it changes, so that no redraw has to ask the page for it.)
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { const w = $('#map').clientWidth; if (w && w !== mapPixels) { mapPixels = w; sizeGates(); } }).observe($('#map'));
   window.addEventListener('resize', drawTechLines);
+  window.addEventListener('resize', fitMonth);
 }
 
 function drawStatic(): void {
@@ -634,6 +650,14 @@ function drawLabels(): void {
   const cities = g.human && g.nations[g.human]?.alive ? ordersByCity(g).filter((c) => c.badge) : [];
   const badged = new Set(cities.map((c) => c.region));
   $('#towns').innerHTML = list.map((t) => `<g${badged.has(t.region) ? ' class="haso"' : ''} transform="translate(${t.x} ${t.y})${t.size === 'capital' || t.size === 'city' ? ' scale(1.2)' : ''}">${townGlyph(t.size, t.rank, t.size !== 'capital' && !!g.regions[t.region].cap)}</g>`).join('');
+  // Where each name would stand, and then where it does: names that run into each other are settled first.
+  const spots: NameSpot[] = g.regions.map((r) => {
+    const busy = r.units.length > 0, t = list[r.id], place = WORLD.labels?.[r.name];
+    const lx = place === 'under' ? t.x : place === 'west' ? Math.min(t.x, r.x) - (busy ? 15 : 9) : r.x;
+    const ly = place === 'under' ? Math.max(t.y + 13, r.y + (busy ? 26.5 : 3)) : place === 'west' ? t.y + 2 : r.y + (busy ? 26.5 : 3);
+    return { lx, ly, west: place === 'west', nw: r.name.length * (r.cap ? 4.5 : 3.4), fw: figuresWide(t) };
+  });
+  const slid = settleNames(spots, list);
   $('#labels').innerHTML = g.regions.map((r) => {
     const busy = r.units.length > 0;
     const t = list[r.id];
@@ -644,13 +668,132 @@ function drawLabels(): void {
     // A name sits on the middle of its province, under its counters. Where two would run into each other one is
     // written by its own town mark instead (world.json, 'labels'): centred under it, or to the west of it and ending there.
     const place = WORLD.labels?.[r.name];
-    const lx = place === 'under' ? t.x : place === 'west' ? Math.min(t.x, r.x) - (busy ? 15 : 9) : r.x;
-    const ly = place === 'under' ? Math.max(t.y + 13, r.y + (busy ? 26.5 : 3)) : place === 'west' ? t.y + 2 : r.y + (busy ? 26.5 : 3);
+    const lx = spots[r.id].lx + slid[r.id].dx, ly = spots[r.id].ly + slid[r.id].dy;
     // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
+    // Where the name and the worth line under it lie, for the marks that give way to them (Version 82).
+    labelBox[r.id] = { ...nameBoxes(spots[r.id], slid[r.id].dx, slid[r.id].dy), cap: !!r.cap, size: t.size };
     return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
   }).join('');
+  badgeDrawn = { cities, list };
   $('#obadges').innerHTML = orderBadges(cities, list);
+}
+
+/** Where a province's name would stand: the point it is written at, whether it ends there, and how wide the name and the worth line under it are. */
+interface NameSpot { lx: number; ly: number; west: boolean; nw: number; fw: number }
+/** The boxes a name and its worth line fill, moved by so much. */
+function nameBoxes(s: NameSpot, dx = 0, dy = 0): { name: Box; figs: Box | null } {
+  const lx = s.lx + dx, ly = s.ly + dy;
+  const nx = s.west ? lx - s.nw : lx - s.nw / 2, fx = s.west ? lx - s.fw : lx - s.fw / 2;
+  return { name: { x0: nx, y0: ly - 5.6, x1: nx + s.nw, y1: ly + 1.6 }, figs: s.fw ? { x0: fx, y0: ly + 2, x1: fx + s.fw, y1: ly + 7.6 } : null };
+}
+/** The ways a name may slide, the shortest first: so far sideways, so far up or down, and how far that is. */
+const NAME_SLIDES: [number, number, number][] = [];
+for (let i = -9; i <= 9; i++) for (let j = -5; j <= 6; j++) if (i || j) NAME_SLIDES.push([i * 3, j * 3.6, Math.hypot(i * 3, j * 3.6 * 1.15)]);
+NAME_SLIDES.sort((a, b) => a[2] - b[2]);
+/** How many names had no room and print over a richer one still (for the page checks). */
+let namesCrowded = 0, namesMoved = 0;
+/**
+ * Names that run into each other (the art director, 2026-11-16: close up, "Ruhr" and "Westphalia" printed over each
+ * other, and their worth lines). The richer place keeps its spot: a capital before a city before the rest, and then
+ * by worth. The poorer name, with the worth line under it, slides clear by the least move, as an order badge does:
+ * whole, a map unit clear of the richer name and its line, never further onto a town's mark, an airfield or an
+ * army's flag than it lay, and for choice not out of its own province. A name with no room stays where it was.
+ */
+function settleNames(spots: NameSpot[], list: TownView[]): { dx: number; dy: number }[] {
+  const out = spots.map(() => ({ dx: 0, dy: 0 }));
+  const tier = (id: number): number => (g.regions[id].cap ? 2 : list[id].size === 'city' ? 1 : 0);
+  const order = spots.map((_, id) => id).sort((a, b) => tier(b) - tier(a) || list[b].worth - list[a].worth || a - b);
+  const boxes = (id: number, dx = 0, dy = 0): Box[] => { const b = nameBoxes(spots[id], dx, dy); return b.figs ? [b.name, b.figs] : [b.name]; };
+  /** A name and its line as one block, with a map unit to spare. */
+  const block = (xs: Box[]): Box => ({ x0: Math.min(...xs.map((x) => x.x0)) - 1, y0: xs[0].y0 - 1, x1: Math.max(...xs.map((x) => x.x1)) + 1, y1: xs[xs.length - 1].y1 + 1 });
+  // (A touch at the edges is not a clash: the boxes are a little wider than the letters.)
+  const lie = (xs: Box[], on: Box[]): number => xs.reduce((s, x) => s + on.reduce((q, o) => { const v = boxOver(x, o); return q + (v > 1.2 ? v : 0); }, 0), 0);
+  const near = (xs: Box[], all: Box[]): Box[] => { const k = block(xs); return all.filter((o) => o.x1 > k.x0 - 34 && o.x0 < k.x1 + 34 && o.y1 > k.y0 - 26 && o.y0 < k.y1 + 26); };
+  const inside = (id: number, x: number, y: number): boolean => g.regions[id].polys.some((poly) => {
+    let inn = false;
+    poly.forEach((ring, k) => {
+      let odd = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) odd = !odd;
+      }
+      if (odd) inn = k === 0;
+    });
+    return inn;
+  });
+  const set: Box[] = [], blocks: Box[] = [];
+  // (Most names touch nothing: the settled ones are kept by squares of the map, so that each new one is tried
+  // against its neighbours only. Without this the pass costs a quarter of a redraw.)
+  const CELL = 48, squares = new Map<number, Box[]>();
+  const over = (b: Box, fn: (k: number) => void): void => { for (let cx = Math.floor(b.x0 / CELL); cx <= Math.floor(b.x1 / CELL); cx++) for (let cy = Math.floor(b.y0 / CELL); cy <= Math.floor(b.y1 / CELL); cy++) fn(cx * 8192 + cy); };
+  const touches = (xs: Box[]): boolean => xs.some((x) => { let hit = false; over(x, (k) => { if (!hit && squares.get(k)?.some((o) => boxOver(x, o) > 1.2)) hit = true; }); return hit; });
+  let flags: Box[] | null = null, marks: Box[] | null = null;
+  namesCrowded = 0;
+  namesMoved = 0;
+  const keep = (x: Box): void => over(x, (k) => { const at = squares.get(k); if (at) at.push(x); else squares.set(k, [x]); });
+  for (const id of order) {
+    let best = boxes(id);
+    if (touches(best)) {
+      const richer = near(best, set);
+      flags ??= flagBoxes();
+      marks ??= [...list.map(markBox), ...(airWar(g) ? airfieldsSeen(g).map((a) => { const k = Math.max(1, Math.min(4, a.size)), w = [0, 11, 14, 17, 19][k], h = [0, 8, 10, 12, 13.5][k]; return { x0: a.x - 17 - w / 2, y0: a.y + 11 - h / 2, x1: a.x - 17 + w / 2, y1: a.y + 11 + h / 2 }; }) : [])];
+      const fl = near(best, flags), mk = near(best, marks), rb = near(best, blocks);
+      const onFlags = lie(best, fl), onMarks = lie(best, mk);
+      // First whole and a unit clear of every richer name with its line; failing that, clear of their letters.
+      for (const whole of [true, false]) {
+        let cost = Infinity;
+        for (const [dx, dy, far] of NAME_SLIDES) {
+          // (The nearest first: once one is found, nothing farther than its cost need be tried.)
+          if (far >= cost) break;
+          const x = boxes(id, dx, dy), k = block(x);
+          if (whole ? rb.some((o) => boxOver(k, o) > 0) : lie(x, richer) > 0) continue;
+          const m = lie(x, mk), f = lie(x, fl);
+          if (m > onMarks || f > onFlags) continue;
+          // (Open ground before a spot it must share with a mark or a flag, and its own province before a neighbour's.)
+          let v = far + (m + f) * 0.4;
+          if (v >= cost) continue;
+          if (!inside(id, (x[0].x0 + x[0].x1) / 2, spots[id].ly + dy - 2)) v += 9;
+          if (v >= cost) continue;
+          cost = v; best = x; out[id] = { dx, dy };
+        }
+        if (cost < Infinity) namesMoved++;
+        if (cost < Infinity) break;
+        if (!whole) namesCrowded++;
+      }
+    }
+    set.push(...best);
+    blocks.push(block(best));
+    best.forEach(keep);
+  }
+  return out;
+}
+
+/** How wide a town's worth line is drawn (townFigures). */
+function figuresWide(t: TownView): number {
+  const parts: number[] = [];
+  if (t.name !== t.province) parts.push(t.name.length * 2.75);
+  if (t.worth > 0) parts.push(4.4, String(t.worth).length * 2.9);
+  if (t.factories > 0) { parts.push(4.4); if (t.factories > 1) parts.push(String(t.factories).length * 2.9); }
+  if (t.signs.includes('harbour')) parts.push(4.4);
+  if (t.signs.includes('oil')) parts.push(4.4);
+  return parts.length ? parts.reduce((s, w) => s + w, 0) + 1.5 * (parts.length - 1) : 0;
+}
+/** Each province's name and the worth line under it as boxes on the map, written down as they are drawn. */
+const labelBox: { name: Box; figs: Box | null; cap: boolean; size: string }[] = [];
+/** What was last drawn as city badges, so they can find their places again when the map comes nearer and names appear. */
+let badgeDrawn: { cities: CityOrders[]; list: TownView[] } | null = null;
+let namesShown = '';
+/** The names and worth lines showing at this height of the map: all of them close in, the cities' and capitals' at the middle distance, the capitals' names from farther up. */
+function shownLabels(only?: number): Box[] {
+  const svg = $('#map'), near = svg.classList.contains('near'), mid = svg.classList.contains('mid'), lens = mid && svg.classList.contains('lensworth');
+  const out: Box[] = [];
+  labelBox.forEach((l, id) => {
+    if (!l || (only !== undefined && id !== only)) return;
+    if (l.cap || near || lens || (mid && l.size === 'city')) out.push(l.name);
+    if (l.figs && (near || lens || (mid && (l.size === 'capital' || l.size === 'city')))) out.push(l.figs);
+  });
+  return out;
 }
 
 // ---- What each city has on order (Version 78) -------------------------------------------------
@@ -702,6 +845,94 @@ function markBox(t: TownView): Box {
   const [hw, up, k] = t.size === 'capital' ? [7, 5.9, 1.2] : t.size === 'city' ? [6, 6.5, 1.2] : t.size === 'town' ? [4.7, 3.9, 1] : [2.3, 1.1, 1];
   return { x0: t.x - hw * k, y0: t.y - up * k, x1: t.x + hw * k, y1: t.y + 3.4 * k };
 }
+/** How many map units one pixel of the screen covers just now. */
+const unitsPerPixel = (): number => ui.view.w / Math.max(1, mapPixels || (mapPixels = $('#map').clientWidth));
+/** The map's width on the screen as applyView last measured it. (Asking the page for it in the middle of a redraw makes the page lay itself out again, some 70 ms each time.) */
+let mapPixels = 0;
+
+/** The gate mark's lamps (the art director's drawing of 16 November 2026), each in a box 16 across; the far lamps in a box 10 across. */
+const LAMP = {
+  open: '<circle cx="8" cy="8" r="7.3" fill="#9CC08A" stroke="#1d2a17" stroke-width="1"/><rect x="4.3" y="7.6" width="7.4" height="5.2" rx="1" fill="#1d2a17"/><path d="M5.9 7.6V5a2.1 2.1 0 0 1 4.2 -.5" fill="none" stroke="#1d2a17" stroke-width="1.5" stroke-linecap="round"/>',
+  shut: '<circle cx="8" cy="8" r="7.3" fill="#CF5A41" stroke="#2a110b" stroke-width="1"/><rect x="4.3" y="7.6" width="7.4" height="5.2" rx="1" fill="#2a110b"/><path d="M5.9 7.6V5.6a2.1 2.1 0 0 1 4.2 0V7.6" fill="none" stroke="#2a110b" stroke-width="1.5"/>',
+  farOpen: '<circle cx="5" cy="5" r="4.2" fill="#9CC08A" stroke="#17210f" stroke-width="1.3"/>',
+  farShut: '<circle cx="5" cy="5" r="4.2" fill="#CF5A41" stroke="#2a110b" stroke-width="1.3"/><rect x="2.3" y="4.1" width="5.4" height="1.8" fill="#F2E8D5"/>',
+};
+let gateTimer = 0;
+
+/**
+ * The gate marks (Version 82, rulings 86 and 90): on the water at the Panama Canal and the three straits, the
+ * holder's flag and a lamp, green and unlocked where the player's ships may pass and red and locked where they may
+ * not. Close up the gate's name follows the lamp; from far up the lamp stands alone. The mark keeps its size on the
+ * screen at every height, and slides clear of the flags, fleets and town marks beside it, staying on the water.
+ */
+function drawGates(): void {
+  const el = $('#gates');
+  if (!g.gates.length) { el.innerHTML = ''; return; }
+  const k = unitsPerPixel();
+  const views = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null);
+  // What a mark must not lie on: every army's flag, every fleet at sea or in port, and the marks of the towns.
+  const solid: Box[] = [...flagBoxes()];
+  for (const f of document.querySelectorAll('#fleets g.ctr')) {
+    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(f.getAttribute('transform') ?? '');
+    if (m) solid.push({ x0: +m[1] - 13, y0: +m[2] - 11, x1: +m[1] + 13, y1: +m[2] + 9 });
+  }
+  const list = towns(g);
+  for (const t of list) if (t.size !== 'village') solid.push(markBox(t));
+  solid.push(...shownLabels());
+  const stage = k < 0.42 ? 1 : k < 1.25 ? 2 : 3;
+  let out = '';
+  views.forEach((v, i) => {
+    const spot = gateSpot(g, g.gates[i]);
+    const lamp = v.open !== null;
+    const wide = 5 + 24 + (lamp ? 5 + 18 : 0) + 5, tall = 22;
+    const nameW = Math.ceil(v.name.length * 7.1) + 8, full = wide + nameW;
+    // (The room it needs is the room of what is shown at this height: the lamp alone from far up, the name too close in.)
+    const w = (stage === 3 ? 14 : stage === 1 ? full : wide) * k, h = (stage === 3 ? 14 : tall) * k;
+    // Close in the plate grows to the east of the flag, so its middle lies east of the mark's own point.
+    const shift = stage === 1 ? ((full - wide) / 2) * k : 0;
+    const box = (x: number, y: number): Box => ({ x0: x + shift - w / 2, y0: y - h / 2, x1: x + shift + w / 2, y1: y + h / 2 });
+    const over = (x: number, y: number): number => solid.reduce((s, o) => s + boxOver(box(x, y), o), 0);
+    let at = spot, worst = over(spot.x, spot.y);
+    // The nearest place on the water that lies on nothing: sideways first, then up and down, then the corners.
+    for (const far of [0.65, 1.1, 1.6, 2.2]) {
+      if (worst <= 0) break;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+        const x = spot.x + dx * far * w * (dy ? 0.75 : 1), y = spot.y + dy * far * h * 1.5;
+        if (seaAt(x, y, g) < 0 || onLand(g, x, y)) continue;
+        const o = over(x, y);
+        if (o < worst - 1e-6) { worst = o; at = { x, y }; }
+      }
+    }
+    solid.push(box(at.x, at.y));
+    const flag = `<g transform="translate(5 3)">${flagUse(v.holder, natColor(v.holder), 24, 16)}<rect class="gfl" width="24" height="16"/></g>`;
+    const lampAt = (x: number): string => (lamp ? `<g transform="translate(${x} 2) scale(1.125)">${v.open ? LAMP.open : LAMP.shut}</g>` : '');
+    out += `<g class="gatemark${v.open === false ? ' shut' : ''}" data-id="${i}" data-x="${at.x.toFixed(1)}" data-y="${at.y.toFixed(1)}" transform="translate(${at.x.toFixed(1)} ${at.y.toFixed(1)}) scale(${k.toFixed(4)})">
+      <g class="gmid" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${wide}" height="${tall}" rx="4"/>${flag}${lampAt(34)}</g>
+      <g class="gfull" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${full}" height="${tall}" rx="4"/>${flag}${lampAt(34)}<text class="gname" x="${wide + 1}" y="15.6">${esc(v.name)}</text></g>
+      ${lamp ? `<g class="gfar" transform="translate(-6 -6) scale(1.2)">${v.open ? LAMP.farOpen : LAMP.farShut}</g>` : ''}</g>`;
+  });
+  el.innerHTML = out;
+}
+/** As the map is brought nearer or sent farther: the gate marks keep their size on the screen, and find their places again once it rests. */
+function sizeGates(): void {
+  const k = unitsPerPixel().toFixed(4);
+  for (const m of document.querySelectorAll<SVGGElement>('#gates .gatemark')) m.setAttribute('transform', `translate(${m.dataset.x} ${m.dataset.y}) scale(${k})`);
+  clearTimeout(gateTimer);
+  gateTimer = window.setTimeout(() => {
+    drawGates();
+    // The city badges give way to names only while names show: they find their places again as that changes.
+    const svg = $('#map'), now = `${svg.classList.contains('near')}${svg.classList.contains('mid')}`;
+    if (now !== namesShown && badgeDrawn) { namesShown = now; $('#obadges').innerHTML = orderBadges(badgeDrawn.cities, badgeDrawn.list); }
+  }, 180);
+}
+/** What pointing at a gate says: its name, who holds it, and whether the player's ships may pass, in that gate's own words. */
+function gateTip(id: number): string {
+  const v = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null)[id];
+  if (!v) return '';
+  const line = esc(v.line).replace(/(Open to your ships)/, '<span class="tipgo"><b>$1</b></span>').replace(/(Shut to your ships)/, '<span class="tipno"><b>$1</b></span>');
+  return `<b>${esc(v.name)}</b><br>${line}`;
+}
+
 /** The box of every army's flag on the map just now, with the size it carries over it: read from what is drawn, so only what the player sees. */
 function flagBoxes(): Box[] {
   const out: Box[] = [];
@@ -733,6 +964,7 @@ function orderBadges(cities: CityOrders[], list: TownView[]): string {
     for (const c of order) {
       const b = orderBadge(c, stage), t = list[c.region], area = b.w * b.h;
       const spot = badgeSpot[c.region] ?? { x: g.regions[c.region].x, y: g.regions[c.region].y + 8 };
+      const names = shownLabels();
       const solid = [...placed, ...marks.filter((m) => m.id !== c.region).map((m) => m.box)];
       const onFlags = (x: Box): number => flags.reduce((s, f) => s + boxOver(x, f), 0);
       // (One map unit clear of every other badge and every other town's mark.)
@@ -761,6 +993,26 @@ function orderBadges(cities: CityOrders[], list: TownView[]): string {
           if (ok && onFlags(x) <= area / 3 && (!best || Math.abs(x.x0 - box.x0) < Math.abs(best.x0 - box.x0))) best = x;
         }
         if (best) box = best;
+      }
+      // While names are showing, a name and the worth line under it count as marks do (the art director's rider on
+      // Version 80; her two cases were a badge on its own province's name, and one on a neighbour's worth figure).
+      // A badge that lies on one moves the least way that clears it: a little lower, or sideways, never onto a
+      // mark, another badge or a flag, and never far from its own town. A corner's touch is let be.
+      const onNames = (x: Box): number => names.reduce((s, o) => { const v = boxOver(x, o); return s + (v > area * 0.03 ? v : 0); }, 0);
+      if (names.length && onNames(box) > 0) {
+        const own = markBox(t), flagged = Math.max(area / 3, onFlags(box));
+        const free = (x: Box): boolean => !hit(x) && boxOver(x, own) <= 0 && onFlags(x) <= flagged;
+        let best = box, cost = (onNames(box) / area) * 30;
+        const tryAt = (x: Box, moved: number): void => {
+          if (!free(x)) return;
+          const v = (onNames(x) / area) * 30 + moved;
+          if (v < cost - 1e-9) { cost = v; best = x; }
+        };
+        for (const dy of [0, 0.2, 0.4, 0.6]) for (let k = -12; k <= 12; k++) tryAt(at(box.x0 + (k / 10) * b.w, box.y0 + dy * b.h), Math.abs(k) / 10 + dy * 1.5);
+        // (And the two sides of its own town's mark.)
+        tryAt(at(own.x0 - 1 - b.w, own.y1 - b.h), 0.8);
+        tryAt(at(own.x1 + 1, own.y1 - b.h), 0.8);
+        box = best;
       }
       placed.push(box);
       out += b.draw(box.x0, box.y0);
@@ -811,6 +1063,8 @@ function refresh(): void {
   ensureSupply(g);
   const me = g.human;
   const myTurn = humanUp(g);
+  // Any other order to a corps ends its kept march: the page says so as soon as the order is given (Version 82).
+  if (me && myTurn) settleMarches(g);
   // Region colours: who holds it.
   const regs = $('#regs').children;
   let occ = '';
@@ -852,6 +1106,7 @@ function refresh(): void {
   const picked = pickedCorps();
   reaches = [];
   $('#route').innerHTML = '';
+  $('#kept').innerHTML = keptRoad();
   routeShown = -1;
   trayArmy = armyShown();
   lands = picked.length && (g.regions[picked[0].reg].port || byAir(picked)) && g.nations[picked[0].nat].atWar.length ? landTargets(g, picked) : [];
@@ -974,12 +1229,18 @@ function refresh(): void {
   ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !crossingsOf(g).some((x) => bridgeDown(g, x));
   ($('#legrail') as HTMLElement).hidden = !groundRules(g);
   ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !g.regions.some((r) => railCut(g, r.id));
-  $('#hint').textContent = hintText();
-  $('#alerts').innerHTML = alertButtons();
+  const hint = hintText();
+  if (hint.startsWith(NO_MOVES)) $('#hint').innerHTML = `<span class="nomoves">${esc(NO_MOVES)}</span>${esc(hint.slice(NO_MOVES.length))}`; else $('#hint').textContent = hint;
+  $('#alerts').innerHTML = roundPill() + alertButtons();
+  drawGates();
   const pass = $('#passing');
   if (passing) {
     const n = passing.nat ? g.nations[passing.nat] : null;
     pass.innerHTML = `<div class="prow">${n ? `${chip(passing.nat)}<b>${esc(natName(passing.nat))}</b>` : '<b>The month goes on</b>'}<span class="grow">${esc(passing.note || 'The other nations give their orders.')}</span><button class="btn small" data-act="skip">Skip ▸▸</button></div><div class="pbar"><i style="width:${Math.round(100 * Math.min(1, passing.done / Math.max(1, passing.total)))}%"></i></div>`;
+    pass.classList.add('open');
+  } else if (tour) {
+    const s = tour.stops[Math.min(tour.i, tour.stops.length - 1)];
+    pass.innerHTML = `<div class="prow">${s.who && g.nations[s.who] ? chip(s.who) : ''}<b>${esc(s.place)}</b><span class="grow">${esc(s.text)}</span><button class="btn small" data-act="skip">Back to the report ▸</button></div><div class="pbar"><i style="width:${Math.round((100 * (tour.i + 1)) / tour.stops.length)}%"></i></div>`;
     pass.classList.add('open');
   } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   queueSave();
@@ -1009,6 +1270,49 @@ const rollDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs, 0);
 function pickedCorps(): Corps[] {
   if (!humanUp(g)) return [];
   return g.corps.filter((c) => ui.picked.has(c.id) && canOrder(g, c) && c.ap > 0);
+}
+
+/**
+ * The army in hand, with a move left or with none (Version 82). An army that has used its month can still be picked
+ * up and marched to a friendly place: the march is kept, and it sets off as the next month opens.
+ */
+function heldCorps(): Corps[] {
+  if (!humanUp(g)) return [];
+  return g.corps.filter((c) => ui.picked.has(c.id) && canOrder(g, c) && c.kind !== 'fort');
+}
+/** True when the army in hand has no move left this month: all it can be given is a march that is kept. */
+const spentInHand = (): boolean => heldCorps().length > 0 && !pickedCorps().length;
+/** Where no order comes with a place: the modes in which a click on the map means something else. */
+const mapBusy = (): boolean => ui.land || ui.rail || ui.ship || ui.tab === 'build' || ui.tab === 'navy' || ui.tab === 'air';
+/** The first-time slip for an army with no moves left is shown until he presses GOT IT or orders one kept march. */
+function slipSeen(): boolean {
+  try { return localStorage.getItem('tc-march-slip') === '1'; } catch { return true; }
+}
+function slipDone(): void {
+  try { localStorage.setItem('tc-march-slip', '1'); } catch { /* storage is off: the slip shows again */ }
+}
+/** The road still ahead of the army in hand, where it is on a kept march: cream and dashed, ending in a small ring. */
+function keptRoad(): string {
+  if (!g.human || !humanUp(g) || mapBusy() || ui.tab !== 'region') return '';
+  const seen = new Set<string>();
+  let out = '';
+  for (const c of heldCorps()) {
+    const m = marchState(g, c);
+    if (!m || !m.road.length) continue;
+    const ids = [c.reg, ...m.road], k = ids.join('-');
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const d = `M${ids.map((id) => `${g.regions[id].x} ${g.regions[id].y}`).join('L')}`, end = g.regions[m.to];
+    out += `<path class="road under" d="${d}"/><path class="road kept" d="${d}"/><circle class="roadring" cx="${end.x}" cy="${end.y}" r="4.2"/>`;
+  }
+  return out;
+}
+/** What a corps of the player's says of a kept march: where it is bound, or that it has no move left this month. */
+function marchTag(c: Corps): string {
+  if (!g.human || !humanUp(g) || c.kind === 'fort' || !canOrder(g, c)) return '';
+  const m = marchState(g, c);
+  if (m) return `<span class="tag march" title="A kept march, ${esc(aboutMonths(m.months))} more: it goes on by itself as each month opens, through friendly ground only, and halts with a line in the month's report if the enemy comes near or the way is closed. Any other order ends it.">Marching to ${esc(g.regions[m.to].name)}</span>`;
+  return c.ap <= 0 ? '<span class="tag nomoves" title="Right-click a friendly place and it marches there by itself, starting next month.">No moves left this month</span>' : '';
 }
 
 /** What an air mission does, with what the grand campaign adds to bombing. */
@@ -1065,9 +1369,12 @@ function hintText(): string {
     : invasions(g, pickedCorps()).size
     ? 'Right-click a green region to march there, or a red one to plan an attack. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.'
     : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
+  // An army with no move left, in hand: what it can still be given (Version 82).
+  if (spentInHand()) return `${NO_MOVES} ${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and they march there from next month.`;
   const ready = g.corps.some((c) => c.nat === g.human && c.ap > 0 && c.kind !== 'fort');
   if (fingers()) return ready ? 'Tap one of your armies (gold outline) to pick it up.' : 'All of your armies have used their month.';
-  return ready ? 'Click one of your armies (gold outline) to pick it up. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
+  if (ready && !onEve(g) && !roundCount(g).bright) return roundCount(g).quiet ? 'No army at the front waits for orders. Tab shows the armies in the rear, or end the month.' : 'Every army has its orders. End the month when you are done.';
+  return ready ? `Click one of your armies (gold outline) to pick it up${onEve(g) ? '' : ', or press Tab for the next with a move left'}. End the month when you are done.` : 'All of your armies have used their month. End the month to continue.';
 }
 
 /** The treasury, always in sight on the top bar: what is in hand and what the month will add or take. Click for the ledger. */
@@ -1098,7 +1405,9 @@ function drawBar(): void {
     if (!eve && isOpen(g) && !cabinetIsOff(g)) { const fl = cabinetFlag(); b += `<button class="btn${fl ? ' flag' : ''}" data-act="cabinet" title="${esc(fl || 'Your government: the war cabinet and its trust in you, your ministers, your decrees and the directive.')}">Cabinet${fl ? '<i class="dotn"></i>' : ''}</button>`; }
     if (!eve && isOpen(g) && hasTraits(me)) b += `<button class="btn wideonly" data-act="traits" title="What ${esc(natName(me))} does best: its abilities and its special formation.">Abilities</button>`;
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
-    b += `<button class="btn go" data-act="end">${eve ? 'Finish deployment ▸' : 'End month ▸'}</button>`;
+    // END MONTH is never barred (ruling 88): it is dark while armies have a move left, and lights when every army has its orders.
+    const yet = eve ? 0 : roundCount(g).bright;
+    b += `<button class="btn go${eve ? '' : yet ? ' wait' : ' lit'}" data-act="end" title="${eve ? 'The war begins.' : yet ? `Ends the month. You may at any time: ${yet} ${yet === 1 ? 'army is' : 'armies are'} yet to move.` : roundCount(g).quiet ? 'No army at the front waits for orders.' : 'Every army has its orders.'}${fingers() ? '' : ' Key: Enter.'}">${eve ? 'Finish deployment ▸' : `End month ▸${fingers() ? '' : '<kbd>Enter</kbd>'}`}</button>`;
   } else {
     b += `<button class="btn" data-act="auto">${ui.auto ? 'Pause' : 'Play ▸▸'}</button><button class="btn go" data-act="next">Next month ▸</button>`;
   }
@@ -1281,6 +1590,7 @@ function corpsRow(c: Corps, mine: boolean): string {
   const tags: string[] = [];
   if (!c.supplied) tags.push('<span class="tag bad">Cut off</span>');
   if (c.fought) tags.push('<span class="tag">Fought this month</span>');
+  if (mine && marchTag(c)) tags.push(marchTag(c));
   // A foreign corps is shown whole only because it has been identified this month: the row says how.
   const src = mine || friendOf(c.nat) ? null : corpsKnownAs(g, c)?.source ?? null;
   if (src) tags.push(`<span class="tag good" title="Exact this month. From next month the report goes stale: its strength becomes an estimate, and its rest and morale are no longer known.">Identified · ${sourceWord(src)}</span>`);
@@ -1428,7 +1738,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -1578,7 +1888,22 @@ function drawTray(): void {
       ? `<button class="${!under.has('back') ? 'on' : ''}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_HOLD)}">Stand and dig in</button>`
       : `<button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button>`}<button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
-  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
+  // STAND THIS MONTH (Version 82): the one small order that takes the army in hand out of NEXT ARMY's round until next month.
+  const st = mine && !onEve(g) ? armyStands(g, a.reg) : null;
+  const standRow = st
+    ? `<div class="tnow"><i>This month:</i><button class="${st === 'all' ? 'on' : ''}" data-act="standmonth" title="${st === 'all' ? 'This army stands where it is this month, and NEXT ARMY passes it by. Press again to take the order back.' : 'The army stays where it is this month, and NEXT ARMY passes it by until next month. Any other order can still be given.'}">${st === 'all' ? 'Standing this month' : 'Stand this month'}</button></div>`
+    : '';
+  // A march that is kept (Version 82): where the army is bound and how long, with the order that ends it.
+  const bound = mine ? field.map((c) => marchState(g, c)).filter((m): m is NonNullable<typeof m> => !!m) : [];
+  const ends = [...new Set(bound.map((m) => m.to))];
+  const marching = bound.length
+    ? `<div class="tmarch"><span class="grow"><small>${bound.length < field.length ? `${bound.length} corps marching to` : 'Marching to'}</small><span><b>${esc(ends.length === 1 ? g.regions[ends[0]].name : `${ends.length} places`)}</b> · ${esc(aboutMonths(Math.max(...bound.map((m) => m.months))))}</span></span><button data-act="stopmarch" title="Ends the march. The army waits where it stands for orders.">Halt</button></div>`
+    : '';
+  // The first time he picks up an army with no moves left: a slip he cannot miss, pinned on the card's top edge.
+  const slip = mine && !slipSeen() && spentInHand() && heldCorps().some((c) => c.reg === a.reg)
+    ? `<div class="mslip"><span class="grow"><b>No moves left this month</b>${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and this army marches there by itself, starting next month.</span><button data-act="gotmarch">Got it</button></div>`
+    : '';
+  el.innerHTML = `${slip}<div class="thead">${head}${standRow}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${marching}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
 }
@@ -1605,6 +1930,20 @@ function drawRoute(id: number): void {
   if (id === routeShown) return;
   routeShown = id;
   const way = id >= 0 && !ui.rail && !ui.ship && !ui.land && ui.tab === 'region' ? routeTo(id) : null;
+  // No road for this month: the road of a march that would be kept, for the army in hand (Version 82). A spent corps
+  // speaks for the army where there is one; the road is cream and dashed and ends in a small ring.
+  marchPlan = null;
+  if (!way && id >= 0 && !mapBusy() && ui.tab === 'region') {
+    const held = heldCorps().filter((c) => c.reg !== id);
+    const lead = held.find((c) => c.ap <= 0) ?? held[0];
+    if (lead) marchPlan = { id, plan: planMarch(g, lead, id), lead, n: held.length };
+  }
+  if (!way && marchPlan && marchPlan.plan.ok && !marchPlan.plan.now) {
+    const pts = [marchPlan.lead.reg, ...marchPlan.plan.road].map((k) => [g.regions[k].x, g.regions[k].y]);
+    const [ex, ey] = pts[pts.length - 1];
+    $('#route').innerHTML = `<path class="road under" d="M${pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/><path class="road kept" d="M${pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/><circle class="roadring" cx="${ex}" cy="${ey}" r="4.2"/>`;
+    return;
+  }
   if (!way) { $('#route').innerHTML = ''; return; }
   const [ax, ay] = way.pts[way.pts.length - 2], [bx, by] = way.pts[way.pts.length - 1];
   const turn = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
@@ -1728,11 +2067,7 @@ function alertList(): Alert[] {
   const out: Alert[] = [];
   const cut = [...new Set(g.corps.filter((c) => c.nat === me && !c.dead && !c.supplied).map((c) => c.reg))];
   if (cut.length) out.push({ kind: 'cut', text: `${cut.length} ${cut.length === 1 ? 'army is' : 'armies are'} cut off from supply`, regs: cut });
-  if (n.atWar.length) {
-    // An army under orders to dig in is doing its work by staying where it is.
-    const idle = g.regions.filter((r) => r.units.some((c) => canOrder(g, c) && c.ap >= c.apMax && !c.fought && !c.digs) && r.nb.some((j) => atWar(g, me, g.regions[j].ctrl))).map((r) => r.id);
-    if (idle.length) out.push({ kind: 'front', text: `${idle.length} ${idle.length === 1 ? 'army' : 'armies'} at the front ${idle.length === 1 ? 'has' : 'have'} not moved`, regs: idle });
-  }
+  // (The alert that armies at the front had not moved grew into NEXT ARMY in Version 82: see roundPill.)
   // What was on order and is ready this month: the places to visit in turn.
   if (ui.ready.length) out.push({ kind: 'ready', text: ui.ready.length === 1 ? `${ui.ready[0].name} is ready at ${g.regions[ui.ready[0].region].name}` : `${ui.ready.length} orders are ready this month`, regs: [...new Set(ui.ready.map((x) => x.region))] });
   const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
@@ -1799,6 +2134,63 @@ function alertList(): Alert[] {
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
   const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
+}
+
+/**
+ * NEXT ARMY (Version 82, the design director's rulings 88 and 101(e)): the brass button at the head of the alerts.
+ * Three states, and only one thing is ever bright (the art director's drawing of 2026-11-16):
+ * 1. Armies at the front remain (or one raised this month has no order): the brass button, their number on its disc,
+ *    and under it "at the front" and, dimmer, the rear's number. END MONTH is dark.
+ * 2. The front is done and the rear is not: END MONTH lights, and this is a quiet chip that is still a button.
+ * 3. Every army has its orders: the green tick.
+ */
+function roundPill(): string {
+  const me = g.human;
+  if (!me || !humanUp(g) || onEve(g) || passing || !g.nations[me].alive) return '';
+  const { bright, quiet, front } = roundCount(g);
+  if (!bright && !quiet) return g.corps.some((c) => canOrder(g, c)) ? '<div class="allset"><span class="tick">✓</span>Every army has its orders</div>' : '';
+  const cap = fingers() ? '' : '<kbd>Tab</kbd>';
+  if (bright) {
+    const tip = 'Shows the next army of yours you have not touched: those at the front first, then the rear, the nearest first. Each is shown once a round.';
+    return `<button class="nextarmy" data-act="nextarmy" title="${tip}"><span class="disc${bright > 99 ? ' many' : ''}">${bright}</span><span class="grow"><span class="top"><b>Next army</b>${cap}</span><small>${front ? 'at the front' : 'newly raised'}${quiet ? `<i> · rear ${quiet}</i>` : ''}</small></span><span class="chev">›</span></button>`;
+  }
+  return `<button class="nextrear" data-act="nextarmy" title="No army at the front waits for orders. Shows the next army in the rear you have not touched. The rear never keeps the month from ending."><span class="ring">${quiet}</span><b>Next in the rear</b>${cap}<span class="chev">›</span></button>`;
+}
+
+/** NEXT ARMY: takes up the next army of the round and brings the map to it. */
+function goNextArmy(): void {
+  if (!g.human || !humanUp(g) || onEve(g) || passing) return;
+  const svg = $('#map');
+  const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
+  const here = ui.sel >= 0 ? g.regions[ui.sel] : null;
+  const nx = nextArmy(g, ui.roundSeen, here ? { x: here.x, y: here.y } : { x: ui.view.x + ui.view.w / 2, y: ui.view.y + (ui.view.w * tall) / 2 });
+  if (!nx.army) { ui.msg = 'Every army has its orders.'; refresh(); return; }
+  ui.roundSeen = nx.seen;
+  const id = nx.army.reg, all = armyRound(g).length;
+  ui.tab = 'region';
+  ui.rail = ui.ship = ui.land = ui.rebase = false;
+  selectRegion(id);
+  ui.msg = nx.again && all > 1 ? `Every army has been shown once. The round starts again: ${all} still have a move.` : '';
+  refresh();
+  const w = Math.min(ui.view.w, 700);
+  // The army's card covers the foot of the map: the army is brought to rest a little above the middle.
+  glide({ x: g.regions[id].x - w / 2, y: g.regions[id].y - w * tall * 0.4, w });
+}
+
+/** The question before the month ends is asked until he ticks that it is not to be. */
+function askPref(): boolean {
+  try { return localStorage.getItem('tc-ask-end') !== '0'; } catch { return true; }
+}
+function setAskPref(on: boolean): void {
+  try { localStorage.setItem('tc-ask-end', on ? '1' : '0'); } catch { /* storage is off: it goes on asking */ }
+}
+/** Before the month ends (ruling 88): asked once, only when armies at the front have not moved and have no orders. */
+function askEndCard(n: number): string {
+  const off = !askPref(), keys = !fingers();
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Before the month ends</div><h2>${n} ${n === 1 ? 'army' : 'armies'} at the front ${n === 1 ? 'has' : 'have'} no orders</h2></header>
+    <div class="body"><p>${n === 1 ? 'It has not moved this month and no order stands for it.' : 'They have not moved this month and no order stands for them.'} Armies in the rear are not counted.</p>
+    <button class="asktick" data-act="asktick" role="checkbox" aria-checked="${off}"><span class="box">${off ? '✓' : ''}</span>Do not ask me this again. ${isOpen(g) ? 'Settings brings it back.' : 'The guide brings it back.'}</button></div>
+    <footer><button class="btn go" data-act="askshow">Show me${keys ? '<kbd>Tab</kbd>' : ''}</button><button class="btn" data-act="end" data-sure="1">End the month${keys ? '<kbd>Enter</kbd>' : ''}</button></footer>`;
 }
 
 const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}">${esc(a.text)}</button>`).join('');
@@ -2461,7 +2853,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human && !g.nations[g.human].alive ? `${esc(natName(g.human))} has fallen` : g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human && !g.nations[g.human].alive ? 'Your country has laid down its arms. End the month and the war goes on without you.' : g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${prizesBlock()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li>${autoDig() ? '<li>An army left where it stands for a whole month digs in, yours and the enemy\'s alike: an earth bank shows under its flag, and the works take three months to finish. Against a line that is dug in and supplied, luck runs against the attacker: odds that are safe in the open become a gamble, the attack costs more men, and one thrown back is spent for the month. Massed guns, the first two months of a German offensive, and tanks against a line with no armour all weaken it. The attack card shows the chance before you commit.</li>' : ''}<li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>The town is the key to its province. Beat the army in the field and you hold only the country round the town: the province is yours when the town itself falls. A town held by nobody but its guard opens its gates to a strong army. A town with troops inside must be <b>stormed</b> (once a month, costly, and weaker the month you arrive), <b>softened</b> first by bombers, ships\' guns and artillery, or <b>starved</b> by keeping an army round it until its stores are gone. An army that closes round a held town marches no further that month. Put your own corps inside a town (click the province, then <b>Into the town</b>) and they fight from behind its walls; a garrison shut in can <b>sally out</b>, and an attack from a neighbouring province can raise the siege. A province under siege pays nothing, raises nothing and runs no trains. A country that is overrun, with its capital ringed, asks for terms.</li><li>Towns grow by what you build in them. The chief place of every province has building plots, one in a village and four in the capital: click a province and look under <b>The town</b>. Commerce pays money, farming feeds the depots, learning quickens research, training and medicine serve the army, and administration brings tax and makes conquered ground pay. Trade agreements pay you and your partner every month: open <b>Build</b>, <b>Towns</b>, <b>Trade agreements</b>. Each needs a trading house, and goods that go by sea can be sunk.</li><li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + (budgeted(g) ? '<li>Your government is under <b>Cabinet</b> on the top bar. The war cabinet has four offices: put a minister in one, for political capital, and he brings a gain and a price. Decrees put the economy and the call-up on a war footing, one step at a time. The cabinet\'s trust in you rises with ground and battles won and falls with home ground lost and debt. A cabinet that doubts you withholds political capital and a share of the treasury\'s income, and one with no trust left for three months running falls and takes your ministers with it. Every few months the cabinet, or an ally, sets a directive: a job with a last month and a reward. It is yours to carry out or to ignore, but each one ignored in a row costs more trust than the last, and setting one aside early costs half. The town a directive names carries a brass seal on the map with the months left. The cabinet also talks back. Every minister sits with the <b>hawks</b> or the <b>doves</b>: two more of one wing than the other and that wing shapes what the cabinet asks for and what it takes hard. You can <b>call your shot</b>: promise the cabinet an enemy town by a day you name, from the cabinet room or from the province the town stands in, and the odds on the day set what keeping your word earns and breaking it costs. The cabinet reckons a town the way the attack card does, with your corps in reach brought up, and it remembers how each month opened, so marching back a province before you promise changes nothing. And after defeats that could have been won the cabinet may <b>ask for the head of a general</b>, and shows the battles it holds against him: dismiss him and its trust recovers, or stand by him and let his next battle settle who was right. If you would sooner fight the war without the politics, click the level badge beside the date and switch the war cabinet off: what stands open is settled first, at its usual price. Or keep the cabinet and make <b>your office secure</b> on the same card: ministers, directives and trust all work as before, and a cabinet that doubts you still holds money back, but it never falls and you are never turned out.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' + (budgeted(g) ? '<li>Fleets are pieces on the map, handled like armies. Click one of your fleets to pick it up: its ships are laid out as cards by class, and the seas it can reach are ringed. Give it one of five orders. <b>Patrol</b> holds a sea and brings enemy fleets to battle. <b>Raid</b> goes after merchant ships. <b>Escort</b> binds it to one shipping lane and guards the convoys the whole way. <b>Hunt</b> sends its destroyers and carrier aircraft after submarines, which nothing else can sink. <b>Port</b> brings it home to refit. Battleships and cruisers standing off an enemy coast can shell the troops or the factories there once a month: shell first, attack after. Heavy ships need destroyers round them, or a submarine may get one. <b>Split off ships</b> makes an escort group or a bombardment force out of a big fleet.</li><li>A carrier is a floating airfield. Every fleet with carriers brings a wing of fighters and a wing of strike aircraft, laid out as cards beside its ships. At sea they reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. The fighters keep enemy bombers off the fleet and rise to meet any raid on it. The strike aircraft go for a fleet at sea, for ships lying in a harbour, or for anything ashore: click a wing, or open <b>Air</b>, and plan the strike like any raid. Bombers on land can strike ships too, though few crews are trained for it. A fleet has to be found before it can be struck. You see only the enemy ships your side has identified or had reported, so keep the seas searched: ships and carriers search the sea they are in, aircraft search from your coasts, and any group can fly a search of one sea a month. Wings are made up to strength only in harbour, and a carrier with empty decks is worth little in a fight. A harbour raided in the month war is declared is caught unready.</li>' : '') + '<li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with an escort; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>An army is made of men, and no country has them without end. Every nation has a reserve of men fit to bear arms, shown as <b>Men</b> on the top bar. Replacements for worn corps and every new corps are drawn from it, and each month a class of young men comes of age and joins it: a larger class in a great country, a smaller one as home ground is lost. When the reserve is spent only the month\'s class reaches the armies and no new corps can be raised, so a war of attrition is lost by the side that runs out of men first. The call-up decrees in the Cabinet enlarge the class. The count is in the ledger, and so is your say over the call-up: take the next class early, which is men now and none for some months after, or hold the standing call-up so that the men go to the corps in the field.</li><li>Allies can fight as one army. Where an ally\'s corps stands in a province with yours, the tray and the province panel offer <b>Join my army</b>. A corps that joins keeps its own flag, pay and supply, but takes your orders in your month: it marches and attacks with your corps, and the ground you take together is yours. Its country lends only a share of its army, and only against enemies it is itself at war with. Send it back from the same place, or leave it behind for a month and it goes home by itself.</li><li>The fog of war hides what your side cannot see. Beside your own lines a foreign army is a flag, a count of its corps and your staff\'s estimate of its strength; a province further off it is a flag and a count; deeper than that the map is dark. What an army is made of is known only once its corps are identified: by fighting them, by an agent with them in view, or by a reconnaissance flight over their province. A report is exact in the month it is made and then goes stale: the strength becomes an estimate that widens every month, morale and rest are no longer known, and after ' + INTEL.reports.keep + ' months the corps is unidentified again. Where the defence is not known, the card that plans an attack gives the odds as a band. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent identifies every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>A friendly place too far for this month can still be ordered: right-click it and the army marches there by itself, going on as each month opens. An army with no moves left can be given the same order, and sets off next month. It halts and tells you if the enemy comes near or the way is closed, and any other order ends the march.</li><li>NEXT ARMY, the brass button at the top right of the map, takes you to each army that still has a move, one at a time (key: Tab). STAND THIS MONTH on an army's card takes it out of that round until next month. Its number is the armies at the front you have not touched, and any raised this month; the untouched armies in the rear are a quieter number beside it. END MONTH is never barred: it lights when the front has its orders.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li>${autoDig() ? '<li>An army left where it stands for a whole month digs in, yours and the enemy\'s alike: an earth bank shows under its flag, and the works take three months to finish. Against a line that is dug in and supplied, luck runs against the attacker: odds that are safe in the open become a gamble, the attack costs more men, and one thrown back is spent for the month. Massed guns, the first two months of a German offensive, and tanks against a line with no armour all weaken it. The attack card shows the chance before you commit.</li>' : ''}<li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>The town is the key to its province. Beat the army in the field and you hold only the country round the town: the province is yours when the town itself falls. A town held by nobody but its guard opens its gates to a strong army. A town with troops inside must be <b>stormed</b> (once a month, costly, and weaker the month you arrive), <b>softened</b> first by bombers, ships\' guns and artillery, or <b>starved</b> by keeping an army round it until its stores are gone. An army that closes round a held town marches no further that month. Put your own corps inside a town (click the province, then <b>Into the town</b>) and they fight from behind its walls; a garrison shut in can <b>sally out</b>, and an attack from a neighbouring province can raise the siege. A province under siege pays nothing, raises nothing and runs no trains. A country that is overrun, with its capital ringed, asks for terms.</li><li>Towns grow by what you build in them. The chief place of every province has building plots, one in a village and four in the capital: click a province and look under <b>The town</b>. Commerce pays money, farming feeds the depots, learning quickens research, training and medicine serve the army, and administration brings tax and makes conquered ground pay. Trade agreements pay you and your partner every month: open <b>Build</b>, <b>Towns</b>, <b>Trade agreements</b>. Each needs a trading house, and goods that go by sea can be sunk.</li><li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + (budgeted(g) ? '<li>Your government is under <b>Cabinet</b> on the top bar. The war cabinet has four offices: put a minister in one, for political capital, and he brings a gain and a price. Decrees put the economy and the call-up on a war footing, one step at a time. The cabinet\'s trust in you rises with ground and battles won and falls with home ground lost and debt. A cabinet that doubts you withholds political capital and a share of the treasury\'s income, and one with no trust left for three months running falls and takes your ministers with it. Every few months the cabinet, or an ally, sets a directive: a job with a last month and a reward. It is yours to carry out or to ignore, but each one ignored in a row costs more trust than the last, and setting one aside early costs half. The town a directive names carries a brass seal on the map with the months left. The cabinet also talks back. Every minister sits with the <b>hawks</b> or the <b>doves</b>: two more of one wing than the other and that wing shapes what the cabinet asks for and what it takes hard. You can <b>call your shot</b>: promise the cabinet an enemy town by a day you name, from the cabinet room or from the province the town stands in, and the odds on the day set what keeping your word earns and breaking it costs. The cabinet reckons a town the way the attack card does, with your corps in reach brought up, and it remembers how each month opened, so marching back a province before you promise changes nothing. And after defeats that could have been won the cabinet may <b>ask for the head of a general</b>, and shows the battles it holds against him: dismiss him and its trust recovers, or stand by him and let his next battle settle who was right. If you would sooner fight the war without the politics, click the level badge beside the date and switch the war cabinet off: what stands open is settled first, at its usual price. Or keep the cabinet and make <b>your office secure</b> on the same card: ministers, directives and trust all work as before, and a cabinet that doubts you still holds money back, but it never falls and you are never turned out.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' + (budgeted(g) ? '<li>Fleets are pieces on the map, handled like armies. Click one of your fleets to pick it up: its ships are laid out as cards by class, and the seas it can reach are ringed. Give it one of five orders. <b>Patrol</b> holds a sea and brings enemy fleets to battle. <b>Raid</b> goes after merchant ships. <b>Escort</b> binds it to one shipping lane and guards the convoys the whole way. <b>Hunt</b> sends its destroyers and carrier aircraft after submarines, which nothing else can sink. <b>Port</b> brings it home to refit. Battleships and cruisers standing off an enemy coast can shell the troops or the factories there once a month: shell first, attack after. Heavy ships need destroyers round them, or a submarine may get one. <b>Split off ships</b> makes an escort group or a bombardment force out of a big fleet.</li><li>A carrier is a floating airfield. Every fleet with carriers brings a wing of fighters and a wing of strike aircraft, laid out as cards beside its ships. At sea they reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. The fighters keep enemy bombers off the fleet and rise to meet any raid on it. The strike aircraft go for a fleet at sea, for ships lying in a harbour, or for anything ashore: click a wing, or open <b>Air</b>, and plan the strike like any raid. Bombers on land can strike ships too, though few crews are trained for it. A fleet has to be found before it can be struck. You see only the enemy ships your side has identified or had reported, so keep the seas searched: ships and carriers search the sea they are in, aircraft search from your coasts, and any group can fly a search of one sea a month. Wings are made up to strength only in harbour, and a carrier with empty decks is worth little in a fight. A harbour raided in the month war is declared is caught unready.</li>' : '') + '<li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with an escort; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>An army is made of men, and no country has them without end. Every nation has a reserve of men fit to bear arms, shown as <b>Men</b> on the top bar. Replacements for worn corps and every new corps are drawn from it, and each month a class of young men comes of age and joins it: a larger class in a great country, a smaller one as home ground is lost. When the reserve is spent only the month\'s class reaches the armies and no new corps can be raised, so a war of attrition is lost by the side that runs out of men first. The call-up decrees in the Cabinet enlarge the class. The count is in the ledger, and so is your say over the call-up: take the next class early, which is men now and none for some months after, or hold the standing call-up so that the men go to the corps in the field.</li><li>Allies can fight as one army. Where an ally\'s corps stands in a province with yours, the tray and the province panel offer <b>Join my army</b>. A corps that joins keeps its own flag, pay and supply, but takes your orders in your month: it marches and attacks with your corps, and the ground you take together is yours. Its country lends only a share of its army, and only against enemies it is itself at war with. Send it back from the same place, or leave it behind for a month and it goes home by itself.</li><li>The fog of war hides what your side cannot see. Beside your own lines a foreign army is a flag, a count of its corps and your staff\'s estimate of its strength; a province further off it is a flag and a count; deeper than that the map is dark. What an army is made of is known only once its corps are identified: by fighting them, by an agent with them in view, or by a reconnaissance flight over their province. A report is exact in the month it is made and then goes stale: the strength becomes an estimate that widens every month, morale and rest are no longer known, and after ' + INTEL.reports.keep + ' months the corps is unidentified again. Where the defence is not known, the card that plans an attack gives the odds as a band. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent identifies every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>${g.human && !askPref() ? '<p class="sub">The question before the month ends is switched off. <button class="btn tiny" data-act="setask" data-on="1">Ask me again</button></p>' : ''}`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -4307,7 +4699,8 @@ function seaPane(): string {
     if (gt.a !== z.id && gt.b !== z.id) continue;
     const other = g.seas[gt.a === z.id ? gt.b : gt.a];
     const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
-    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}, held by ${esc(natName(holder))}.${me ? ` ${canPass(g, gt.a, gt.b, me) ? 'Open to your ships.' : 'Closed to your ships.'}` : ''}</div>`;
+    const gv = gateViews(g, me || null)[g.gates.indexOf(gt)];
+    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(natName(holder))}.`}</div>`;
   }
   return `<h2>${esc(z.name)}</h2>${head}${straits}
     <h3>Fleets at sea here</h3>${here.length ? here.map(rowOf).join('') : `<div class="empty">${pic ? 'No fleet has been found at sea here.' : 'No fleet at sea here.'}</div>`}
@@ -4848,6 +5241,8 @@ function openModal(m: typeof ui.modal): void {
   const card = $('#card');
   card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'siege' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'town' || m.kind === 'trade' || m.kind === 'cabinet' || m.kind === 'tech' || m.kind === 'stores' || m.kind === 'books' || m.kind === 'raid');
   card.classList.toggle('techcard', m.kind === 'tech');
+  card.classList.toggle('ask', m.kind === 'askend');
+  card.classList.toggle('month', m.kind === 'news' && !!m.card);
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
@@ -4878,6 +5273,12 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'siege') card.innerHTML = siegeCard();
   else if (m.kind === 'fold') card.innerHTML = foldCard(m.reg);
   else if (m.kind === 'swap') card.innerHTML = swapCard(m.corps, m.target);
+  else if (m.kind === 'news' && m.card) {
+    const mc = m.card as MonthCard;
+    // (A desk taken back on the card stays taken: the button is offered only while the staff still runs it.)
+    for (const s of mc.staff) s.mayTake = !!g.human && isOpen(g) && g.nations[g.human].alive && staffRunsDesk(g, s.desk as DeskId);
+    card.innerHTML = monthCardHtml(mc, { esc, flag: (nat, w) => flagIcon(nat, g.nations[nat]?.color ?? '#888', w), name: natName, all: ui.monthAll, orders: !!g.human && humanUp(g), tour: tourStops(mc).length > 0 });
+  }
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'invade') {
@@ -4885,6 +5286,7 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = invadeCard(m.on, m.target ?? -1);
   }
   else if (m.kind === 'level') card.innerHTML = levelCard();
+  else if (m.kind === 'askend') card.innerHTML = askEndCard(m.n);
   else if (m.kind === 'lastact') {
     if (!lastAct(g)?.decided || lastAct(g)!.on) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = lastActCard(!!m.ask);
@@ -4965,6 +5367,25 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = awardCard(a);
   }
   card.scrollTop = 0;
+  fitMonth();
+}
+
+/**
+ * The month's report is one look. Where the window is too short for it the whole card is drawn a little smaller
+ * rather than scrolled, down to four fifths of its size; below that, and on a narrow screen, it scrolls.
+ */
+function fitMonth(): void {
+  const card = document.getElementById('card');
+  const mc = card?.querySelector<HTMLElement>(':scope > .mc');
+  if (!card || !mc) return;
+  mc.style.removeProperty('zoom');
+  // (Every row asked for is a list to scroll, at its full size.)
+  if (!card.classList.contains('month') || ui.monthAll || window.innerWidth < 1000 || card.scrollHeight <= card.clientHeight + 1) return;
+  const cs = getComputedStyle(card);
+  const room = card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const k = Math.max(0.8, Math.min(1, room / Math.max(1, mc.offsetHeight)));
+  if (k >= 1) return;
+  mc.style.setProperty('zoom', k.toFixed(3));
 }
 
 // ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----
@@ -5373,7 +5794,9 @@ function levelCard(): string {
     ${dialOf(g) ? `<h3 id="sethist">The history dial</h3><p class="sub">How far the war the computer runs may move away from the war that was fought.</p>${dialPicker(dialOf(g)!.stop, 'sethist', dialOf(g))}` : ''}
     <h3 id="setcab">The war cabinet</h3>${cabinetPicker(!cabinetIsOff(g), 'setcabinet', true)}${cabinetOffAsk()}
     <h3 id="setoffice">Your office</h3>${cabinetIsOff(g) ? '<p class="sub">With no war cabinet there is nobody to bring you down. Switch the cabinet on and you can say here whether it may.</p>' : officePicker(officeIsSecure(g), 'setoffice')}
-    ${cmd ? `<h3 id="setfog">The fog of war</h3>${fogPicker(cmd.fog)}` : ''}</div>
+    ${cmd ? `<h3 id="setfog">The fog of war</h3>${fogPicker(cmd.fog)}` : ''}
+    <h3 id="setask">Before the month ends</h3><div class="gclevels two"><button class="gclevel${askPref() ? ' on' : ''}" data-act="setask" data-on="1" aria-pressed="${askPref()}"><b>Ask me</b><span>When armies at the front have no orders</span></button><button class="gclevel${askPref() ? '' : ' on'}" data-act="setask" data-on="0" aria-pressed="${!askPref()}"><b>Never ask</b><span>End the month at once</span></button></div>
+    <div class="gclevelnote"><p>END MONTH is never barred. With this on it asks once, and only when armies beside the enemy have not moved at all and have no orders. Armies in the rear never raise the question.</p></div></div>
     <footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
@@ -5476,7 +5899,7 @@ function scenarioCard(): string {
     <div class="sides">
       ${side(null, 'Watch Sicily and Italy', 'The computer plays the first 46 months, then the landing in Sicily, the fall of Mussolini, the Italian armistice, Salerno and Naples, and the German winter line across the mountains south of Rome.', true, 47, 'italy')}
       ${side('UK', 'United Kingdom', 'Two armies wait at Malta and your air force has spent a month over Sicily. Keep the sky, put the Eighth Army ashore, and follow it across the strait before the Germans have dug in across the mountains.', false, 47, 'italy')}
-      ${side('ITA', 'Italy', 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If Sicily falls the King will dismiss Mussolini, and an armistice follows. Hold the island and Italy stays in the war.', false, 47, 'italy')}
+      ${side('ITA', 'Italy', 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If the Allies take Sicily, Sardinia, Calabria, Apulia, Naples or Rome, the King will dismiss Mussolini, and an armistice follows. Hold all six and Italy stays in the war.', false, 47, 'italy')}
     </div>
     <h3>January 1944 · The eastern front, from Leningrad to the Danube</h3>
     <div class="sides">
@@ -6193,12 +6616,25 @@ function continueGame(): boolean {
   const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
   applyView();
-  if (me && !humanUp(g)) advanceToHuman(false); else refresh();
+  if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = markFor(g); refresh(); }
   return true;
 }
 
 /** Lets the computer play until it is the player's month again. */
-type Since = { h: number; r: number; s: number; a: number; shore?: number; /** The player's orders as his month ended. */ q?: { id: number; region: number; name: string; what: string }[] };
+type Since = { h: number; r: number; s: number; a: number; shore?: number; /** The player's orders as his month ended. */ q?: { id: number; region: number; name: string; what: string }[]; /** The mark the month's report is told from. */ mark?: MonthMark };
+
+/**
+ * The mark for the month's report as the player hands his month over: the one kept when it opened, while it is still
+ * this month's and this game's (else one taken now), with what he has on order at this moment.
+ */
+function markNow(): MonthMark | undefined {
+  if (!g.human) return undefined;
+  const m = ui.mark;
+  const ok = !!m && m.turn === g.turn && m.before.length === g.regions.length && m.h <= g.headlines.length && m.r <= g.reports.length && m.s <= g.seaReports.length && m.a <= g.airReports.length && m.shore <= g.shoreReports.length;
+  const mark = ok ? m! : markFor(g);
+  mark.orders = monthOrders(g);
+  return mark;
+}
 
 /** The other nations' months being played out in front of the player, one nation at a time. */
 let passing: { since: Since; before: string[]; show: boolean; view: { x: number; y: number; w: number }; timer: number; nat: string; note: string; done: number; total: number } | null = null;
@@ -6210,7 +6646,7 @@ function watchPref(): boolean {
 }
 
 function advanceToHuman(show: boolean, since?: Since): void {
-  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
+  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
   const before = g.regions.map((r) => r.ctrl);
   if (show && g.human && watchPref() && !humanUp(g)) {
     passing = { since: from, before, show, view: { ...ui.view }, timer: 0, nat: '', note: '', done: 0, total: g.order.length - 1 };
@@ -6289,6 +6725,9 @@ function endPassing(): void {
 /** Drops a watched month without finishing it: a new game is about to replace this one. */
 function dropPassing(): void {
   if (passing) clearTimeout(passing.timer);
+  // (A new game: the month's report of the old one goes with it.)
+  dropTour();
+  ui.mark = null; ui.lastCard = null; ui.monthAll = false;
   passing = null;
   glideToken++;
 }
@@ -6306,12 +6745,22 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   let lost = fell();
   // A country can also fall as its own month opens, starved out or with its capital lost to hunger: the same is done then.
   if (humanUp(g)) { beginHuman(g); lost = lost ?? fell(); }
+  // Marches that are kept go on as his month opens (Version 82): each that ends is a line in the month's report.
+  const marched = !lost && g.human && humanUp(g) ? advanceMarches(g).went : [];
+  // NEXT ARMY: last month's orders to stand are over, and the round starts afresh.
+  if (g.human && humanUp(g)) settleStands(g);
+  ui.roundSeen = [];
   ui.raidsFrom = aFrom;
   ui.shoreFrom = from.shore ?? -1;
   ui.ready = readyNow(from.q ?? []);
-  ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
+  ui.flash = [...new Set([...g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id), ...marched])];
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
+  // The month's report on one card (Version 82), for a player still in the war; and the mark for the month now opening.
+  // (No card in the war's first month: no month has passed. The first card tells the war from its opening.)
+  const card = !lost && g.human && from.mark && g.turn > 1 ? monthCard(g, from.mark) : null;
+  ui.mark = g.human && humanUp(g) ? markFor(g) : null;
+  if (card) { ui.lastCard = card; ui.monthAll = false; }
   refresh();
   if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
@@ -6325,8 +6774,76 @@ function arrive(show: boolean, from: Since, before: string[]): void {
       : `${natName(lost)} has fallen. The war goes on without you.`) + back;
     return;
   }
-  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
+  if (show && card) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom, card });
+  else if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
   else { const next = nextCard(); if (next) openModal(next); }
+}
+
+/** The card a battle report goes back to when it is put down: the month's report it was opened from. */
+const monthBack = (): typeof ui.modal | undefined => (ui.modal?.kind === 'news' && ui.modal.card ? ui.modal : ui.modal?.back ?? undefined);
+
+/** The month's report again (the R key): the card last shown, as it was. */
+function reopenMonth(): void {
+  if (ui.lastCard) openModal({ kind: 'news', from: g.headlines.length, reports: g.reports.length, card: ui.lastCard });
+}
+
+/**
+ * TOUR THE MAP (Version 82; WATCH IT AGAIN in the 3D game). The browser keeps no film of the month's moves to run a second time, so the map
+ * visits the places on the card in the card's own order, each under the line that says what happened there, and
+ * then the card comes back. Space or the button ends it at once.
+ */
+let tour: { card: MonthCard; stops: { region: number; who: string; place: string; text: string }[]; i: number; timer: number; view: { x: number; y: number; w: number } } | null = null;
+const TOUR_PAUSE = 2400;
+
+function tourStops(card: MonthCard): { region: number; who: string; place: string; text: string }[] {
+  const out: { region: number; who: string; place: string; text: string }[] = [];
+  const add = (region: number | undefined, who: string | null | undefined, place: string, text: string): void => {
+    if (region === undefined || !g.regions[region] || out.some((s) => s.region === region) || out.length >= 9) return;
+    out.push({ region, who: who ?? '', place, text });
+  };
+  for (const b of card.bands) add(b.region, b.nats[0], g.regions[b.region ?? -1]?.name ?? '', b.head);
+  if (card.lead) add(card.lead.region, card.lead.theirs ?? card.lead.ours, card.lead.place, card.lead.head);
+  for (const r of card.rows) add(r.region, r.theirs ?? r.ours, r.place, r.line);
+  return out;
+}
+
+function startTour(): void {
+  const card = ui.modal?.kind === 'news' ? (ui.modal.card as MonthCard | undefined) : undefined;
+  if (!card) return;
+  const stops = tourStops(card);
+  if (!stops.length) return;
+  dropTour();
+  ui.modal = null;
+  $('#veil').classList.remove('open');
+  tour = { card, stops, i: 0, timer: 0, view: { ...ui.view } };
+  ui.sel = -1; ui.picked.clear();
+  tourStep();
+}
+
+function tourStep(): void {
+  const t = tour;
+  if (!t) return;
+  if (t.i >= t.stops.length) { endTour(true); return; }
+  ui.flash = [t.stops[t.i].region];
+  refresh();
+  glide(viewFor([t.stops[t.i].region]), 420);
+  t.timer = window.setTimeout(() => { if (tour !== t) return; t.i++; tourStep(); }, TOUR_PAUSE);
+}
+
+/** Ends the tour: back to where the map stood, and to the card when asked. */
+function endTour(reopen: boolean): void {
+  const t = tour;
+  if (!t) return;
+  clearTimeout(t.timer);
+  tour = null;
+  ui.flash = [];
+  if (reopen) { glide(t.view, 260); refresh(); openModal({ kind: 'news', from: g.headlines.length, reports: g.reports.length, card: t.card }); }
+  else refresh();
+}
+
+function dropTour(): void {
+  if (tour) clearTimeout(tour.timer);
+  tour = null;
 }
 
 function nextMonth(): void {
@@ -6480,7 +6997,7 @@ function onSea(z: number): void {
   if (fl) {
     if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
     else if (!g.nations[fl.nat].atWar.length) ui.msg = 'At peace the fleet stays in harbour.';
-    else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
+    else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
     refresh();
     return;
   }
@@ -6497,8 +7014,10 @@ function stopAuto(): void {
 
 function onClick(e: MouseEvent): void {
   const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
-  if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(null); return; }
+  if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(ui.modal.back ?? null); return; }
   const act = t.dataset.act!;
+  // Any other order ends the tour of the month's places where it stands.
+  if (tour && act !== 'skip') endTour(false);
   const id = Number(t.dataset.id ?? t.dataset.agent);
   ui.msg = '';
   switch (act) {
@@ -6514,7 +7033,7 @@ function onClick(e: MouseEvent): void {
     }
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
-    case 'skip': endPassing(); break;
+    case 'skip': if (tour) endTour(true); else endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
     case 'ledger': openModal({ kind: 'ledger', nat: t.dataset.nat || g.human || '' }); if (t.dataset.part === 'men') document.querySelector('#card #lmen')?.scrollIntoView({ block: 'start' }); break;
     case 'stores': {
@@ -6685,7 +7204,9 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'watchpref': { try { localStorage.setItem('tc-watch', watchPref() ? '0' : '1'); } catch { /* storage is off: the choice lasts as long as the default */ } refresh(); break; }
-    case 'close': openModal(null); refresh(); break;
+    case 'close': openModal(ui.modal?.back ?? null); refresh(); break;
+    case 'monthall': { ui.monthAll = true; if (ui.modal) { const keep = $('#card').scrollTop; openModal(ui.modal); $('#card').scrollTop = keep; } break; }
+    case 'watchagain': startTour(); break;
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
       if (ui.tab === 'reel') ui.unread = 0;
@@ -6705,8 +7226,15 @@ function onClick(e: MouseEvent): void {
       break;
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
-      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
-      if (onEve(g)) endEve(g); else { judgeGoals(g, g.human!); endHuman(g); }
+      // (The month's report counts from the month's opening instead: his own attacks are part of his month.)
+      // Asked once, and only when armies at the front have not moved at all and have no orders (ruling 88).
+      if (!onEve(g) && t.dataset.sure !== '1' && askPref()) {
+        const idle = frontIdle(g).length;
+        if (idle) { openModal({ kind: 'askend', n: idle, at: performance.now() }); break; }
+      }
+      if (ui.modal?.kind === 'askend') { ui.modal = null; $('#veil').classList.remove('open'); }
+      const since: Since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
+      if (onEve(g)) endEve(g); else { settleMarches(g); judgeGoals(g, g.human!); endHuman(g); }
       advanceToHuman(true, since);
       break;
     }
@@ -6715,6 +7243,25 @@ function onClick(e: MouseEvent): void {
       ui.rail = ui.ship = ui.land = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
+    case 'gotmarch': slipDone(); refresh(); break;
+    case 'nextarmy': goNextArmy(); break;
+    case 'standmonth': {
+      const a = trayArmy;
+      if (!a || a.nat !== g.human) break;
+      const on = armyStands(g, a.reg) !== 'all';
+      if (standArmy(g, a.reg, on)) { ui.msg = on ? `The army at ${g.regions[a.reg].name} stands where it is this month.` : `The army at ${g.regions[a.reg].name} waits for orders again.`; queueSave(); }
+      refresh(); break;
+    }
+    case 'askshow': { ui.modal = null; $('#veil').classList.remove('open'); ui.roundSeen = []; ui.picked.clear(); ui.sel = -1; goNextArmy(); break; }
+    case 'asktick': { setAskPref(!askPref()); if (ui.modal?.kind === 'askend') openModal(ui.modal); break; }
+    case 'setask': { setAskPref(t.dataset.on === '1'); if (ui.modal?.kind === 'level') { const keep = $('#card').scrollTop; openModal({ kind: 'level' }); $('#card').scrollTop = keep; } else refresh(); break; }
+    case 'stopmarch': {
+      // The army in the tray halts where it stands: its kept marches are ended, and it waits for orders.
+      const a = trayArmy;
+      const on = a ? g.regions[a.reg].units.filter((c) => canOrder(g, c) && marchState(g, c)) : [];
+      if (on.length) { forgetMarch(g, on.map((c) => c.id)); ui.msg = `The march is ended. ${on.length === 1 ? on[0].name : `The army at ${g.regions[a!.reg].name}`} waits for orders.`; queueSave(); }
+      refresh(); break;
+    }
     case 'joinarmy': {
       const c = g.corps.find((x) => x.id === id);
       if (c && orderJoin(g, c)) { ui.msg = `${c.name} marches with your army at ${g.regions[c.reg].name}.`; selectRegion(c.reg); queueSave(); }
@@ -6847,7 +7394,7 @@ function onClick(e: MouseEvent): void {
       if (rep) openModal({ kind: 'shorereport', id: rep.id }); else { ui.msg = 'The bombardment could not be made.'; openModal(null); refresh(); }
       break;
     }
-    case 'shorereport': openModal({ kind: 'shorereport', id }); break;
+    case 'shorereport': openModal({ kind: 'shorereport', id, back: monthBack() }); break;
     case 'fleetsplit': {
       const f = myFleet();
       if (f) openModal({ kind: 'split', fleet: f.id, take: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 } });
@@ -6886,7 +7433,7 @@ function onClick(e: MouseEvent): void {
     case 'toport': { const f = myFleet(); if (f) orderFleet(g, f.id, f.home, 'port'); ui.rebase = false; refresh(); break; }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
     case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
-    case 'seareport': openModal({ kind: 'seareport', id }); break;
+    case 'seareport': openModal({ kind: 'seareport', id, back: monthBack() }); break;
     case 'airfleet': {
       ui.air = ui.air === id ? -1 : id;
       ui.airMode = ''; ui.raid = ''; ui.lead = -1;
@@ -7003,7 +7550,7 @@ function onClick(e: MouseEvent): void {
       if (orderAir(g, m.fleet, m.mission, m.target)) ui.airMode = ''; else ui.msg = 'That order could not be given.';
       openModal(null); refresh(); break;
     }
-    case 'airreport': openModal({ kind: 'airreport', id }); break;
+    case 'airreport': openModal({ kind: 'airreport', id, back: monthBack() }); break;
     case 'doland': {
       const m = ui.modal!;
       const h = g.headlines.length;
@@ -7044,7 +7591,7 @@ function onClick(e: MouseEvent): void {
       for (const c of pickedCorps()) orderEvacuate(g, c);
       ui.picked.clear(); refresh(); break;
     }
-    case 'report': openModal({ kind: 'report', id }); break;
+    case 'report': openModal({ kind: 'report', id, back: monthBack() }); break;
     case 'general': openModal({ kind: 'general', id }); break;
     case 'appoint': openModal({ kind: 'appoint', corps: id }); break;
     case 'assign': orderAssign(g, id, Number(t.dataset.corps)); refresh(); openModal({ kind: 'general', id }); break;
@@ -7312,13 +7859,27 @@ function onKey(e: KeyboardEvent): void {
   const el = e.target as HTMLElement | null;
   if (e.ctrlKey || e.metaKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
   if (e.key === 'Escape') {
-    if (ui.modal) { if (ui.modal.kind !== 'start' || ui.live) { openModal(null); refresh(); } }
+    if (tour) endTour(true);
+    else if (ui.modal) { if (ui.modal.kind !== 'start' || ui.live) { openModal(ui.modal.back ?? null); refresh(); } }
     else if (ui.picked.size || ui.sel >= 0) { ui.picked.clear(); ui.sel = -1; ui.rail = ui.ship = ui.land = false; ui.msg = ''; refresh(); }
     return;
   }
+  // The question before the month ends: Tab is SHOW ME and Enter is END THE MONTH, and it takes no key for its first half second.
+  if (ui.modal?.kind === 'askend' && (e.key === 'Tab' || e.key === 'Enter')) {
+    e.preventDefault();
+    if (e.repeat || performance.now() - (ui.modal.at ?? 0) < 500) return;
+    ($('#card').querySelector(e.key === 'Tab' ? '[data-act="askshow"]' : '[data-act="end"]') as HTMLElement | null)?.click();
+    return;
+  }
+  // NEXT ARMY: Tab takes up the next army that still has a move.
+  if (e.key === 'Tab' && !e.shiftKey && !ui.modal && !passing && !tour && g.human && humanUp(g) && !onEve(g)) { e.preventDefault(); goNextArmy(); return; }
   // A key pressed on a button belongs to that button.
   if (el && el.tagName === 'BUTTON') return;
-  if (e.key === ' ' && passing) { e.preventDefault(); endPassing(); }
+  // The month's report: Enter puts it down (GIVE ORDERS), and R opens it again at any time.
+  if (e.key === 'Enter' && ui.modal?.kind === 'news' && ui.modal.card) { e.preventDefault(); openModal(null); refresh(); return; }
+  if ((e.key === 'r' || e.key === 'R') && !ui.modal && !passing && !tour && ui.lastCard && g.human) { e.preventDefault(); reopenMonth(); return; }
+  if (e.key === ' ' && tour) { e.preventDefault(); endTour(true); }
+  else if (e.key === ' ' && passing) { e.preventDefault(); endPassing(); }
   else if (e.key === 'Enter' && !ui.modal && !passing && g.human && humanUp(g)) { e.preventDefault(); ($('#barbtns').querySelector('[data-act="end"]') as HTMLElement | null)?.click(); }
 }
 
@@ -7326,12 +7887,17 @@ function selectRegion(id: number): void {
   ui.sel = id;
   ui.sea = -1;
   ui.rail = ui.ship = ui.land = false;
-  ui.picked = new Set(humanUp(g) ? g.regions[id].units.filter((c) => canOrder(g, c) && c.ap > 0).map((c) => c.id) : []);
+  // The corps with a move left; and where none has one, the army as it stands: a spent army can still be given a
+  // march to a friendly place, kept until the next month opens (Version 82).
+  const own = humanUp(g) ? g.regions[id].units.filter((c) => canOrder(g, c)) : [];
+  const fresh = own.filter((c) => c.ap > 0);
+  ui.picked = new Set((fresh.length ? fresh : own.filter((c) => c.kind !== 'fort')).map((c) => c.id));
   ui.tab = 'region';
 }
 
 function onRegion(id: number): void {
   const r = g.regions[id];
+  if (tour) endTour(false);
   ui.flash = [];
   ui.msg = '';
   // The raid planner is open on a kind of raid: a click on the map is its target.
@@ -7414,6 +7980,59 @@ function onRegion(id: number): void {
   refresh();
 }
 
+/** The line a kept march is offered in, for one corps or for the army: "IX Corps marches here from next month, about 2 months." */
+const marchLine = (plan: MarchPlan, lead: Corps, n: number): string => (n > 1 ? plan.line.replace(`${lead.name} marches`, `${n} corps march`).replace('by itself', 'by themselves') : plan.line);
+
+/**
+ * A right-click (or a press and hold) with an army in hand: the ordinary order where there is one; and where the
+ * place is friendly ground too far for this month, or the army has no move left, a march that is kept (Version 82,
+ * the design director's rulings 87 and 93). True if an order was given, or the click was answered.
+ */
+function orderOrMarch(id: number): boolean {
+  const held = heldCorps();
+  const done = orderAt(id);
+  // (An attack to plan, a frontier to cross, two corps to change places: the card that opened is the answer.)
+  if (ui.modal) return done;
+  return keepMarches(id, held.filter((c) => c.reg !== id && !c.dead)) || done;
+}
+
+/** Orders the corps in hand to a friendly place on a march that is kept. False if there is no such order to give. */
+function keepMarches(id: number, held: Corps[]): boolean {
+  if (!held.length || mapBusy() || !g.regions[id]) return false;
+  const plans = held.map((c) => ({ c, plan: planMarch(g, c, id) }));
+  const go = plans.filter((p) => p.plan.ok && !p.plan.now);
+  if (!go.length) {
+    // An army with no move left is told why in one line: an attack is planned in the month it is made, and a kept
+    // march goes through friendly ground only.
+    const no = plans.find((p) => p.plan.spent && !p.plan.ok);
+    if (!no || pickedCorps().length) return false;
+    ui.msg = no.plan.line;
+    refresh();
+    return true;
+  }
+  const h = g.headlines.length;
+  const lead = go[0].c, from = lead.reg, road = go[0].plan.road, spent = go.every((p) => p.plan.spent);
+  let months = 0, kept = 0;
+  for (const { c } of go) { const o = orderMarch(g, c, id); if (o.kept) { kept++; months = Math.max(months, o.months); } }
+  if (!kept && go.every((p) => p.c.reg !== id)) return false;
+  slipDone();
+  ui.unread += g.headlines.length - h;
+  const place = g.regions[id].name, who = go.length === 1 ? lead.name : `${go.length} corps`;
+  ui.msg = !kept ? '' : spent
+    ? `${who} will march to ${place} from next month, ${aboutMonths(months)}. Any other order ends the march.`
+    : `${who} ${go.length === 1 ? 'is' : 'are'} on the march to ${place}: ${aboutMonths(months)} more, going on as each month opens. Any other order ends the march.`;
+  // The army goes with its leading corps: where that has marched to this month, the corps that came with it stay in hand.
+  const moved = lead.reg !== from;
+  if (moved) { ui.sel = lead.reg; ui.picked = new Set(go.filter((p) => p.c.reg === lead.reg).map((p) => p.c.id)); ui.tab = 'region'; }
+  const at = road.indexOf(lead.reg);
+  const pts: [number, number][] = moved && at >= 0 ? [from, ...road.slice(0, at + 1)].map((k) => [g.regions[k].x, g.regions[k].y]) : [];
+  marchHide = pts.length > 1 ? { reg: lead.reg, nat: lead.nat } : null;
+  queueSave();
+  refresh();
+  if (pts.length > 1) march(pts, lead.nat, lead.kind, lead.reg);
+  return true;
+}
+
 /**
  * Ships the picked corps to a port. When none of them can sail there the page says why (no room on the quay, the
  * enemy holds the sea between, no shipping left) and keeps the corps picked up, so another port can be tried.
@@ -7469,6 +8088,13 @@ function applyView(): void {
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
+  // The gate marks: with the name close up, the flag and the lamp at the height he plays at, the lamp alone from far up.
+  mapPixels = svg.clientWidth;
+  const upp = v.w / Math.max(1, mapPixels);
+  svg.classList.toggle('gk1', upp < 0.42);
+  svg.classList.toggle('gk2', upp >= 0.42 && upp < 1.25);
+  svg.classList.toggle('gk3', upp >= 1.25);
+  sizeGates();
   // The city order badge in three sizes: whole, without its count, and the sign alone; beyond that it is put away.
   svg.classList.toggle('ob1', v.w < 700);
   svg.classList.toggle('ob2', v.w >= 700 && v.w < 900);
@@ -7511,7 +8137,7 @@ function wireMap(): void {
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderAt(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
   });
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -7522,7 +8148,7 @@ function wireMap(): void {
       hold = window.setTimeout(() => {
         if (moved || pts.size !== 1 || !humanUp(g)) return;
         const id = regionAt(x, y);
-        if (id >= 0 && orderAt(id)) held = true;
+        if (id >= 0 && orderOrMarch(id)) held = true;
       }, 520);
     }
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -7557,9 +8183,11 @@ function wireMap(): void {
       if (z < 0) { tip.style.display = 'none'; return; }
       const by = new Map<string, number>();
       for (const f of g.fleets) if (f.zone === z && atSea(f)) by.set(f.nat, (by.get(f.nat) ?? 0) + shipCount(f.ships));
-      tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}`;
+      tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}${spentInHand() && !mapBusy() && ui.tab === 'region' ? `<br><span class="tipno">${esc(NO_MOVES)} A kept march goes through friendly ground only.</span>` : ''}${((): string => { const fl = ui.tab === 'navy' && !ui.rebase ? myFleet() : null, bar = fl ? gateBar(g, fl, z) : null; return bar ? `<br><span class="tipno">${esc(bar.line)}</span>` : ''; })()}`;
     } else if (el.classList.contains('obadge')) {
       tip.innerHTML = ordersTip(Number(el.dataset.id));
+    } else if (el.classList.contains('gatemark')) {
+      tip.innerHTML = gateTip(Number(el.dataset.id));
     } else {
     const r = g.regions[Number(el.dataset.id)];
     const armies = new Map<string, Corps[]>();
@@ -7576,7 +8204,11 @@ function wireMap(): void {
       return `<br>${esc(g.nations[nat].adj)} army${who ? ` under ${esc(surname(who.name))}` : ''}: ${cs.length} corps, ${num(sumDivs(cs))} divisions${guests.length ? ` <span class="tipgo">· joint army with ${esc(guests.join(' and '))} troops</span>` : ''}`;
     }).join('') + (fogOn(g) && seen[r.id] === 0 ? '<br><span class="tipfog">Unseen ground: nothing is known of what stands here</span>' : '');
     const way = routeShown === r.id ? routeTo(r.id) : null;
-    const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>` : '';
+    // (No road this month: the march that would be kept there for the army in hand, or why none can be.)
+    const mp = !way && marchPlan && marchPlan.id === r.id ? marchPlan : null;
+    const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>`
+      : mp && mp.plan.ok && !mp.plan.now ? `${mp.plan.spent ? `<br><span class="nomoves">${esc(NO_MOVES)}</span>` : ''}<br><span class="tipgo">Right-click: ${esc(marchLine(mp.plan, mp.lead, mp.n))}</span>`
+      : mp && mp.plan.spent && !mp.plan.ok ? `<br><span class="tipno">${esc(mp.plan.line.startsWith(NO_MOVES) ? mp.plan.line : `${NO_MOVES} ${mp.plan.line}`)}</span>` : '';
     const rel = relationWord(r.ctrl);
     // The town, and what the ground is worth: to the player if it is the player's own, or as a prize.
     const t = townIn(g, r.id)!;
@@ -7621,6 +8253,12 @@ function wireMap(): void {
           if (e.pointerType !== 'mouse') { $('#tip').innerHTML = ordersTip(id); placeTip(e.clientX, e.clientY, true); }
         }
       }
+      else if (el && el.classList.contains('gatemark')) {
+        // A gate's mark: with a fleet in hand the click is for the sea under it; otherwise it says what pointing says (a finger has no pointing).
+        const p = mapPoint(e.clientX, e.clientY), z = seaAt(p.x, p.y, g);
+        if (ui.tab === 'navy' && myFleet() && z >= 0) onSea(z);
+        else { const v = gateViews(g)[Number(el.dataset.id)]; if (v) { ui.msg = `${v.name}. ${v.line}`; refresh(); } }
+      }
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
         const id = Number(el.dataset.id);
@@ -7653,4 +8291,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };
+(window as any).theater = { game: () => g, ui, crowded: () => `${namesCrowded} (${namesMoved} moved)`, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };

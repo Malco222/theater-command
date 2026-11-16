@@ -8,8 +8,9 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName } from './game';
-import { leagueMonth, ownPath, standsWith } from './league';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName, warning } from './game';
+import { leagueMonth, ownPath, playersOwn, standsWith } from './league';
+import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
 import { fleetsOnFall } from './navy';
@@ -356,6 +357,9 @@ export function holds(g: Game, cond: string): boolean {
   const N = (id: string): Nation | undefined => g.nations[id];
   switch (key) {
     case 'alive': return !!N(a[0])?.alive;
+    // 'computer:ITA': nobody leads this country in the grand campaign. What history does to a government is done to
+    // the computer's; the player's own stands or falls by the cabinet's rules (ruling 99).
+    case 'computer': return !playersOwn(g, a[0]);
     case 'fallen': return !N(a[0])?.alive;
     case 'peace': return !N(a[0])?.atWar.includes(a[1]);
     case 'atPeace': return !N(a[0])?.atWar.length;
@@ -383,6 +387,10 @@ export function holds(g: Game, cond: string): boolean {
     // "anyHeld:allies,Oran,Algiers": some place on the list is in the hands of that bloc.
     case 'allHeld': return a.slice(1).every((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
     case 'anyHeld': return a.slice(1).some((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
+    // 'taken:allies,Cassino,event:italian-armistice': the place is in that bloc's hands, and since that flag was
+    // raised it has stood in other hands at a month's opening. News of a fight is told only where there was one:
+    // ground that came over by a treaty's terms and was never fought for has not been taken (ruling 100).
+    case 'taken': { const r = g.byName[a[1]], at = g.flags[a[2]]; return !!r && !!at && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0] && (g.flags[`others:${a[1]}`] ?? 0) >= at; }
     default: return false; // an unknown condition never holds, so a typo cannot fire an event
   }
 }
@@ -425,11 +433,14 @@ function transfer(g: Game, r: Region, to: string): void {
 
 function fire(g: Game, e: DiploEvent): boolean {
   let did = false, told = false;
+  // Ruling 99: no event takes the player's own country out of the war or deals out its ground, at any stop of the
+  // dial, at any level and whatever the office setting. An event that carries a partition never fires on it.
+  if (e.partition && playersOwn(g, e.partition.nation)) return false;
   if (e.annex) {
     for (const id of e.annex.nations) {
       const n = g.nations[id];
       // A country already in the war is no longer Moscow's to take, nor one that stands in an alliance, nor the player's own.
-      if (!n?.alive || n.atWar.length || bloc(n) || ownPath(g, id)) continue;
+      if (!n?.alive || n.atWar.length || bloc(n) || playersOwn(g, id)) continue;
       for (const c of g.corps.filter((c) => c.nat === id)) removeCorps(g, c);
       recordFall(g, id, e.annex.by, 'annexed');
       for (const r of g.regions) if (r.owner === id) transfer(g, r, e.annex.by);
@@ -440,8 +451,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (!did) return false;
   }
   if (e.cede) {
-    // No treaty signs away the ground of a small country in the player's hands: whoever wants it must come and take it.
-    if (ownPath(g, e.cede.from)) {
+    // No treaty signs away the ground of a country in the player's hands: whoever wants it must come and take it.
+    if (playersOwn(g, e.cede.from)) {
       const to = g.nations[e.cede.to], lost = e.cede.regions.filter((nm) => g.byName[nm]?.owner === e.cede!.from);
       if (!to?.alive || !lost.length) return false;
       headline(g, 'event', `${to.name} demands ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`}. ${g.nations[e.cede.from].name} gives up nothing without a fight.`, e.cede.from);
@@ -654,4 +665,51 @@ export function monthlyDiplomacy(g: Game): void {
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
   }
+  // (For 'taken': each watched place that stands in other hands, now that its flag is raised, is noted.)
+  for (const [side, place, flag] of WATCHED) {
+    const r = g.byName[place], h = r ? g.nations[r.ctrl] : undefined;
+    if (r && g.flags[flag] && !(h && bloc(h) === side)) g.flags[`others:${place}`] = g.turn;
+  }
+  romeWavers(g);
+}
+
+/** The places some event's 'taken' condition watches: [the bloc, the place, the flag]. */
+const WATCHED: string[][] = DIPLOMACY.events.flatMap((e) => (e.if ?? []).filter((c) => c.startsWith('taken:')).map((c) => c.slice('taken:'.length).split(',')));
+
+const listed = (xs: string[], last = 'and'): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} ${last} ${xs[xs.length - 1]}`);
+
+/**
+ * Rulings 99(f) and 100(a): any player at war on the side of the computer's Italy is warned what Rome will do. From the month an
+ * enemy first holds one of the grounds the fall of Mussolini waits on, a warning names the ground, says when Rome
+ * changes its government and when it signs, and what then becomes of Italy's ground. It is told the month a ground
+ * is lost, and every month from two months before the date. The grounds and the date are read from the two events
+ * themselves. News only: no rule reads it, and nothing is said where nobody plays.
+ */
+function romeWavers(g: Game): void {
+  const me = g.human, I = g.nations.ITA;
+  if (g.flags.open !== 1 || !me || me === 'ITA' || !I?.alive || !g.nations[me]?.alive || !g.nations[me].atWar.length || !allied(g, me, 'ITA')) return;
+  const falls = DIPLOMACY.events.find((e) => e.id === 'mussolini-falls');
+  const test = falls?.if?.find((c) => c.startsWith('anyHeld:'));
+  if (!falls || !test || g.flags['event:italian-armistice']) return;
+  const [side, ...grounds] = test.slice('anyHeld:'.length).split(',');
+  if (bloc(g.nations[me]) === side) return;
+  const lost = grounds.filter((nm) => { const h = g.nations[g.byName[nm]?.ctrl ?? '']; return !!h && h.id !== 'ITA' && bloc(h) === side; });
+  let now = 0;
+  for (const nm of lost) now |= 1 << grounds.indexOf(nm);
+  // (A ground won back and lost again is news again.)
+  const fresh = now & ~(g.flags['told:rome'] ?? 0);
+  if (now) g.flags['told:rome'] = now; else delete g.flags['told:rome'];
+  const changed = !!g.flags['event:mussolini-falls'];
+  if (!now || !(fresh || changed || g.turn >= falls.from - 2)) return;
+  const who = side === 'allies' ? 'the Allies' : 'the Axis';
+  const held = lost.length <= 2 ? listed(lost) : `${lost[0]} and ${lost.length - 1} more of its grounds`;
+  const six = listed(grounds, 'or');
+  // (The art director's words of 2026-11-16, the condition first. "Or later" and "if one is still held" are the
+  // rule: in a grand campaign both events stay armed from their month on.)
+  const when = g.turn < falls.from ? `in ${turnToDate(falls.from).label}` : 'next month';
+  const ground = 'Italy\'s ground then goes to whoever has an army on Italian soil, your own corps included.';
+  const text = changed
+    ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}`
+    : `Italy makes peace if ${who} hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
+  warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id);
 }

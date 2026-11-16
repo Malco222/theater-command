@@ -36,8 +36,14 @@ export const partOf = (id: string): string => PARTS.parts.of[id] ?? (PARTS.natio
 export const partName = (id: string): string => PARTS.parts.names[partOf(id)] ?? partOf(id);
 const farFrom = (id: string, members: string[]): string | undefined => members.find((m) => partOf(m) !== partOf(id));
 
+/**
+ * The country the player leads in the grand campaign. None of history's events ends it, signs it out of the war or
+ * deals out its ground (ruling 99): in its player's hands a country falls only by defeat in the field.
+ */
+export const playersOwn = (g: Game, id: string): boolean => g.flags.open === 1 && id === g.human;
+
 /** The nation whose place among the powers only its player decides: a small country in the player's hands, in the grand campaign. */
-export const ownPath = (g: Game, id: string): boolean => g.flags.open === 1 && id === g.human && small(id);
+export const ownPath = (g: Game, id: string): boolean => playersOwn(g, id) && small(id);
 
 /** The League's members still standing. */
 export const leagueMembers = (g: Game): Nation[] => Object.values(g.nations).filter((n) => n.league && n.alive);
