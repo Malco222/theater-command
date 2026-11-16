@@ -26,6 +26,8 @@
   "lineDefence": 0.5,
   "open": 0.65,
   "digLate": 1,
+  "_box": "A desert box is its guns (the design director's ruling 170, the grand campaign). Works keep men on foot from being driven round only where the defence's anti-tank strength against this attack (support.json) is 'box' or more: two thirds. The infantry's own guns of 1939 to 1941 never make a box, guns in the line beside them can, a finished box of 1942 does, and a fort takes no cut at all. Under the mark the men are dug in, their works count as works do everywhere, and they are still driven round: the cut in full.",
+  "box": 0.666667,
   "stores": 2,
   "retreat": [1.25, 1.6],
   "replace": 0.35,
