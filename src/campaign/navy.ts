@@ -810,21 +810,11 @@ export function planCrossing(g: Game, nat: string, from: Region | null, to: Regi
 }
 
 /**
- * The ground a nation's side can reach by land: its own and its allies', and on from there through the ground of
- * its enemies. The coast watch counts by it (a coast any of the attacker's allies can march to is not watched).
- */
-function landReach(g: Game, nat: string): Uint8Array {
-  const byLand = new Uint8Array(g.regions.length);
-  const q: number[] = [];
-  for (const r of g.regions) if (allied(g, nat, r.ctrl)) { byLand[r.id] = 1; q.push(r.id); }
-  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
-  return byLand;
-}
-
-/**
  * The ground a nation's own army can march to: enemy ground joined by land to ground it holds itself or to where a
  * field corps of its own stands. An ally's front is not its own: the Red Army on the Bug does not put Brittany
  * within a march of a British or an American corps in Devon, and those shores stay on the list of crossings.
+ * The coast watch counts by it too (until Version 77 it counted an ally's front as the attacker's own, and with
+ * the Soviet Union in the war no German coast was watched).
  */
 function armyReach(g: Game, nat: string): Uint8Array {
   const byLand = new Uint8Array(g.regions.length);
@@ -944,8 +934,8 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
  * The coast watch (the grand campaign). When a nation's month closes with troops standing on a quay, shipping
  * to carry them, and an enemy's home coast within a landing's range over seas its troopships can use, that enemy's
  * coast watch reports it: his staff mans its harbours, and a player is told. Only a corps that has not moved in
- * the month can embark, so the report always comes a month before the landing can. A coast the army could march
- * to is not watched for this: the war there is a land war already.
+ * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
+ * army could march to is not watched for this: the war there is a land war already.
  */
 export function coastReport(g: Game, att: string): void {
   const W = NAVY.watch;
@@ -955,7 +945,7 @@ export function coastReport(g: Game, att: string): void {
   const idle = (r: Region): number => r.units.reduce((s, u) => s + (u.nat === att && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && !u.town ? 1 : 0), 0);
   const quays = g.regions.filter((r) => r.port && r.seas.length > 0 && allied(g, att, r.ctrl) && idle(r) >= W.corps).sort((a, b) => idle(b) - idle(a) || a.id - b.id);
   if (!quays.length) return;
-  const byLand = landReach(g, att);
+  const byLand = armyReach(g, att);
   for (const d of [...n.atWar].sort()) {
     const x = g.nations[d];
     if (!x?.alive || x.capital < 0) continue;

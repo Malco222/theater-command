@@ -64,7 +64,7 @@
     "after": 12, "per": 0.01
   },
   "stalemate": {
-    "_note": "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Never a war the player is fighting in.",
+    "_note": "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Not while a staff on either side is still building its army up across the sea for the front history planned (open.json, 'descent.planned', 'with'): the months are then counted from the month that army is ready. Never a war the player is fighting in.",
     "after": 12
   }
 }

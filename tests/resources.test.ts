@@ -513,6 +513,10 @@ describe("the computer's staffs", () => {
   it('fight a whole war with stocks that stay sane', () => {
     const g = grand(null, 7);
     let shortSeen = false;
+    // The depots hold so many months of the need, and the need falls for a month when a fleet changes base and
+    // lies in harbour (since Version 77 America's follows its army across the ocean): the stock is held against
+    // the most the depots were ever built to hold.
+    const most: Record<string, number> = {};
     for (let k = 0; k < 48; k++) {
       runTurnAI(g);
       for (const nat of POWERS) {
@@ -525,7 +529,8 @@ describe("the computer's staffs", () => {
         if (st.oilMet < 1 || st.supMet < 1) shortSeen = true;
         if (g.nations[nat].alive) {
           const v = stores(g, nat)!;
-          expect(v.oil.stock).toBeLessThanOrEqual(v.oil.cap * 1.5 + 1e-6);
+          most[nat] = Math.max(most[nat] ?? 0, v.oil.cap);
+          expect(v.oil.stock, `${nat} oil stock turn ${g.turn}`).toBeLessThanOrEqual(most[nat] * 1.5 + 1e-6);
           expect(v.lanes.every((l) => l.flow >= 0 && l.flow <= 1)).toBe(true);
         }
       }

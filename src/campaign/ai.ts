@@ -5,7 +5,7 @@
 
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { airAI } from './air';
+import { afloat, airAI, airFleetsOf, fieldRoom, km, rebaseAir, whyNotBase } from './air';
 import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
@@ -13,11 +13,11 @@ import { aiArsenal, aiFortify } from './arsenal';
 import { blocked, blowBridges } from './rivers';
 import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, crossingRisk, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, seaPath } from './navy';
+import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, frontAshore, heedsCard, isOpen, lodgment, oceanRuns, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
-import { overseasOf } from './world';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, frontAshore, heedsCard, isOpen, lodgment, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
+import { beyondEurope, overseasOf, type OverseasRules } from './world';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -1012,6 +1012,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
   let best: Region | null = null, bv = 0, bw = false, bz = -1;
   for (const r of landingTargets(g, force)) {
     if (r.ctrl !== you || !r.port) continue;
+    // (A staff with history's list of shores opens its second front on those and nowhere else.)
+    if (sea.second && (!opensOn(g, nat, r) || !builtUp(g, nat, r))) continue;
     // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
     if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
     const plan = planLanding(g, force, r);
@@ -1057,14 +1059,30 @@ function ferry(g: Game, nat: string): void {
   const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax;
   const byWorth = (a: Corps, b: Corps): number => atkPower(g, b) - atkPower(g, a) || a.id - b.id;
   const went = (c: Corps): void => { c.hold = false; g.flags[`sf:${c.id}`] = 1; };
-  // No corps is shipped to a full harbour, or over a crossing too dangerous for its staff ('risk').
+  // No corps is shipped to a full harbour, or over a crossing too dangerous for its staff ('risk'). A hop over a
+  // narrow sea (no further than a landing can go) into a harbour its side already holds is a reinforcement and not
+  // a venture: it has a ceiling of its own ('hop').
   const sails = (c: Corps, p: Region): boolean => {
     if (friendlyUnits(g, p, nat).length >= STACK) return false;
     const path = seaPath(g, nat, g.regions[c.reg], p);
-    return !!path && crossingRisk(g, nat, path) <= O.risk && shipMove(g, c, p);
+    if (!path) return false;
+    const limit = path.length <= NAVY.landing.range ? Math.max(O.risk, O.hop ?? 0) : O.risk;
+    return crossingRisk(g, nat, path) <= limit && shipMove(g, c, p);
   };
-  // The far shore: idle corps go on to a front their side holds beyond a narrow sea.
+  // The far shore: idle corps go on to a front their side holds beyond a narrow sea. Into the harbours of a
+  // landing first; after those, of the harbours its side holds near the enemy, the one the fewest seas away.
   const front = frontAshore(g, nat);
+  const order = new Map<number, Region[]>();
+  const portsFor = (c: Corps): Region[] => {
+    if (!front) return [];
+    let ports = order.get(c.reg);
+    if (!ports) {
+      const far = new Map(front.ports.slice(front.lodged).map((p) => [p.id, seaPath(g, nat, g.regions[c.reg], p)?.length ?? Infinity]));
+      ports = [...front.ports.slice(0, front.lodged), ...front.ports.slice(front.lodged).sort((a, b) => far.get(a.id)! - far.get(b.id)!)];
+      order.set(c.reg, ports);
+    }
+    return ports;
+  };
   if (front) {
     for (const c of g.corps.filter(fit).sort(byWorth)) {
       if (liftLeft(g, nat) < 1) break;
@@ -1072,7 +1090,7 @@ function ferry(g: Game, nat: string): void {
       if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g, nat, here.ctrl)) continue;
       // One with the enemy next to it has a front of its own already.
       if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
-      if (front.ports.some((p) => sails(c, p))) went(c);
+      if (portsFor(c).some((p) => sails(c, p))) went(c);
     }
   }
   // The ocean runs.
@@ -1081,12 +1099,15 @@ function ferry(g: Game, nat: string): void {
     const key = `fy:${nat}:${run.ocean}`, at = `fyAt:${nat}:${run.ocean}`;
     if (g.flags[at] !== g.turn) { g.flags[at] = g.turn; g.flags[key] = Math.min(O.bank, (g.flags[key] ?? 0) + run.share * n.sealift); }
     let spare = home().length - O.guard;
+    // (An expeditionary force of history's size: no more than 'most' of its field corps are kept across the ocean.)
+    let more = O.most === undefined ? Infinity : O.most - g.corps.reduce((s, c) => s + (c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !beyondEurope(c.reg) ? 1 : 0), 0);
     for (const c of run.from.units.filter((u) => fit(u) && !u.hold).sort(byWorth)) {
-      if (spare <= 0 || (g.flags[key] ?? 0) < 1 || liftLeft(g, nat) < 1) break;
+      if (spare <= 0 || more <= 0 || (g.flags[key] ?? 0) < 1 || liftLeft(g, nat) < 1) break;
       const to = run.to.find((p) => sails(c, p));
       if (!to) break;
       g.flags[key] -= 1;
       spare--;
+      more--;
       went(c);
       // The first to cross is news for everyone; after that, for the player whose war they have come to.
       const first = !g.flags[`fy:first:${nat}`];
@@ -1105,6 +1126,49 @@ function ferry(g: Game, nat: string): void {
       if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; }
     }
   }
+  if (g.flags[`fy:first:${nat}`]) follow(g, nat, O);
+}
+
+/**
+ * Where a country's army has gone across an ocean, its fleet and its air groups go too (world.json 'overseas'). Once
+ * the first corps is across: each fleet named under 'fleet' moves its base to the harbour where the army is built
+ * up (or the port of its side's nearest to it that the ships can reach) and takes the sea off it for its beat, so
+ * that it can cover the crossing its staff has its eye on (navalAI). And the air groups still at home, beyond the
+ * 'air' kept there, are shipped one a month to the airfield of its side's nearest that harbour with room for them:
+ * from there its air staff flies them as it flies any group based abroad (airAI: raids, and the sky over the beach).
+ */
+function follow(g: Game, nat: string, O: OverseasRules): void {
+  const id = Object.keys(O.oceans).map((o) => g.flags[`st:base:${nat}:${o}`] ?? 0).find((x) => x > 0);
+  const base = id ? g.regions[id - 1] : null;
+  if (!base || !allied(g, nat, base.ctrl)) return;
+  const n = g.nations[nat];
+  const far = (r: Region): number => Math.hypot(r.x - base.x, r.y - base.y);
+  for (const f of fleetsOf(g, nat)) {
+    if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships)) continue;
+    let to: Region | null = null;
+    for (const r of g.regions) {
+      if (beyondEurope(r) || !r.port || !r.seas.length || !allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || !canSailTo(g, f, r)) continue;
+      if (!to || far(r) < far(to)) to = r;
+    }
+    if (!to || !rebase(g, f, to)) continue;
+    f.station = to.seas[0];
+    headline(g, 'event', `The ${f.name} crosses the ocean to ${to.name}: the ${n.adj} fleet goes where its army has gone, to cover the crossings still to come.`, nat, to.id);
+  }
+  if (O.air === undefined || g.flags[`fy:air:${nat}`] === g.turn) return;
+  const home = airFleetsOf(g, nat).filter((f) => !afloat(f) && beyondEurope(f.base)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
+  if (home.length <= O.air) return;
+  for (const f of home) {
+    let to: Region | null = null, bd = Infinity;
+    for (const r of g.regions) {
+      if (beyondEurope(r) || whyNotBase(g, f, r, true) !== null || !fieldRoom(g, r.id, f)) continue;
+      const d = km(g, base.id, r.id);
+      if (d < bd) { bd = d; to = r; }
+    }
+    if (!to || !rebaseAir(g, f, to, true)) continue;
+    g.flags[`fy:air:${nat}`] = g.turn;
+    if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat))) headline(g, 'info', `${f.name} of the ${n.adj} air force has crossed the ocean with the army, to the airfields of ${to.name}.`, nat, to.id);
+    break;
+  }
 }
 
 /**
@@ -1121,7 +1185,7 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
   let best: Region | null = null, bv = 0;
   for (const r of g.regions) {
     if (r.ctrl !== you || !r.port || !r.seas.length || g.turn < (g.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
-    if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
+    if (!opensOn(g, nat, r) || !builtUp(g, nat, r) || !shoreOpen(g, r.owner, !!r.overseas)) continue;
     // The way there over the water, whoever holds it now.
     if (!seaPath(g, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
     const defended = hostileUnits(g, r, nat).length > 0;
