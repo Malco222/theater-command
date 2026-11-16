@@ -738,6 +738,84 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   return plan;
 }
 
+/** One figure on a way of flying a raid: the number, what it counts, and a smaller line beneath it. */
+export interface WayFigure { n: string; label: string; sub: string }
+
+/**
+ * One way of flying a bombing raid, by day or by night, as the choice between the two shows it (ruling 107(d)).
+ * The words are ready to print, so both builds say the same thing; the numbers behind them are there for a card
+ * that draws them.
+ */
+export interface RaidWay {
+  kind: 'bomb' | 'night';
+  /** BY DAY or BY NIGHT. */
+  label: string;
+  /** Why it cannot be flown this way with these groups, or null. */
+  why: string | null;
+  /** Who would go this way: by day the escorts sworn to the bombers go too, by night the bombers alone. */
+  picked: number[];
+  bombers: number;
+  fighters: number;
+  /** The share and the count of the bombers likely lost, as the raid card gives them. */
+  bomberLoss: number;
+  bomberLossN: number;
+  /** The damage expected, as the raid card's figures give it: output, national, rail, factory. */
+  figures: RaidFigures;
+  /** Bombers likely lost, and the damage expected, ready to print. */
+  lost: WayFigure;
+  harm: WayFigure;
+  /** The smaller chances that go with the damage: the railway cut, a factory wrecked. */
+  more: string[];
+  /** Who flies with the bombers, in a few words. */
+  with: string;
+  success: number;
+  verdict: string;
+}
+
+/** A bombing raid weighed by day and by night, side by side: the same bombers against the same target. */
+export interface DayNight {
+  /** The way the plan on the card is flown. */
+  chosen: 'bomb' | 'night';
+  day: RaidWay;
+  night: RaidWay;
+  /** What the choice is, in a sentence. */
+  note: string;
+}
+
+/**
+ * BY DAY and BY NIGHT for one bombing raid (ruling 107(d)): the same groups against the same target, each way with
+ * the bombers likely lost and the damage expected, in the counts and odds the raid card gives. Fighters asked for go
+ * by day and stay at home by night. Null for any other kind of raid. Nothing is changed.
+ */
+export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human): DayNight | null {
+  if (kind !== 'bomb' && kind !== 'night') return null;
+  const way = (k: 'bomb' | 'night'): RaidWay => {
+    const p = planRaid(g, k, target, ids, nat);
+    const f = p.figures;
+    const flown = !p.why;
+    const owner = g.regions[target] ? g.nations[g.regions[target].ctrl]?.adj ?? '' : '';
+    const harm: WayFigure = !flown ? { n: '', label: '', sub: '' }
+      : f.output !== undefined ? { n: pct(f.output), label: `${p.place}'s output stopped`, sub: `for a month: ${((f.national ?? 0) * 100).toFixed(1)}% of ${owner} production` }
+        : f.rail ? { n: pct(f.rail), label: 'Chance of cutting the railway', sub: `No industry at ${p.place}: the bombers go for its rail yards.` }
+          : { n: 'None', label: 'Damage expected', sub: `No industry at ${p.place}, and too few bombers to cut its railway.` };
+    const more: string[] = [];
+    if (flown && f.output !== undefined && f.rail) more.push(`${pct(f.rail)} chance of cutting the railway`);
+    if (flown && f.factory) more.push(`${pct(f.factory)} chance of wrecking a factory`);
+    return {
+      kind: k, label: k === 'bomb' ? 'BY DAY' : 'BY NIGHT', why: p.why, picked: p.picked, bombers: p.bombers, fighters: p.fighters,
+      bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, figures: f,
+      lost: flown ? { n: `${num(p.bomberLossN)} of ${num(p.bombers)}`, label: 'Bombers likely lost', sub: `${pct(p.bomberLoss)} of them` } : { n: '', label: '', sub: '' },
+      harm, more,
+      with: !flown ? '' : k === 'night' ? 'The bombers go alone: no escort flies by night.' : p.fighters ? `${num(p.fighters)} fighters go as escort.` : 'No escort goes with them.',
+      success: p.success, verdict: p.verdict,
+    };
+  };
+  return {
+    chosen: kind, day: way('bomb'), night: way('night'),
+    note: 'By night the fighters and the guns find fewer of the bombers, and the bombers find less of the target.',
+  };
+}
+
 /**
  * Flies a raid the planner has weighed up, at once: the report is filed and its news told. Every group that flew is
  * away for the rest of the month (it flies no second raid and meets no raid on its own sky) and is back at its airfield,

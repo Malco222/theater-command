@@ -18,7 +18,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
-  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor, seaForecast,
+  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
@@ -60,7 +60,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { RAILWAYS, railCut, railLinks, railNote } from '../rails';
 import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
-import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan } from '../airwar';
+import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import type { FleetSeen, WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
@@ -5127,12 +5127,27 @@ const myGroupRow = (f: AirFleet): GroupRow => (f.ship !== undefined ? groupRow(g
   leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
 });
 
+/** The signs for a raid by day and a raid by night on the raid card's choice: a plain sun and a plain moon. */
+const SUN_SIGN = '<svg class="wayic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="currentColor"/><path d="M8 1.2v2M8 12.8v2M1.2 8h2M12.8 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>';
+const MOON_SIGN = '<svg class="wayic" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.9 1.9a6.3 6.3 0 1 0 3.2 9.9 5.4 5.4 0 0 1-3.2-9.9z" fill="currentColor"/></svg>';
+
 /** The raid planner's card: the target, the chance of success and the losses to expect, and who flies it. Ticking groups works the odds out again. */
 function raidCard(): string {
   const m = ui.modal!;
   const kind = m.raid as RaidKind;
   const p: RaidPlan = previewRaid(g, kind, m.target, m.ids);
   m.ids = p.picked;
+  // Day and night side by side (ruling 107(d)). Escorts ticked by hand are kept while the card shows the night, so a change back to day brings them along.
+  if (kind === 'bomb') m.esc = p.seats.filter((s) => s.picked && s.kind === 'ftr').map((s) => s.id);
+  const dn = previewDayNight(g, kind, m.target, kind === 'night' ? [...p.picked, ...((m.esc as number[] | undefined) ?? [])] : p.picked);
+  const wayFact = (f: RaidWay['lost']): string => `<div class="fact"><span>${esc(f.label)}</span><b>${esc(f.n)}</b><small>${esc(f.sub)}</small></div>`;
+  const wayHtml = (w: RaidWay, on: boolean): string => {
+    const inner = w.why ? `<div class="waywhy">${esc(w.why)}</div>`
+      : `<div class="wayfigs">${wayFact(w.lost)}${wayFact(w.harm)}</div>${w.more.length ? `<div class="waymore">${esc(upFirst(w.more.join(' · ')))}</div>` : ''}<div class="waymore">${esc(w.with)}</div>`;
+    const foot = on ? '<span class="tag good">This plan</span>' : w.why ? '' : `<span class="tag">Change to ${w.kind === 'bomb' ? 'day' : 'night'}</span>`;
+    return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${foot}</span>${inner}</button>`;
+  };
+  const choice = dn && !(p.why && !p.picked.length && dn.day.why && dn.night.why) ? `<div class="daynight">${wayHtml(dn.day, dn.chosen === 'bomb')}${wayHtml(dn.night, dn.chosen === 'night')}</div><p class="sub" style="margin:0 0 10px">${esc(dn.note)}</p>` : '';
   const me = g.human!;
   const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
   const seat = (s: RaidPlan['seats'][number]): string => `<button class="pickrow seat${s.picked ? ' pick' : ''}" data-act="raidtick" data-id="${s.id}" ${s.locked ? 'disabled title="It goes because it is ordered to stick with its bombers. Change its standing order to take it off escort."' : ''}>
@@ -5153,7 +5168,7 @@ function raidCard(): string {
   }
   const meets = p.meets.length ? p.meets.map((x) => `<div class="pickrow">${groupIcon('ftr', x.nat)}<span class="grow"><b>${esc(x.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.nat].adj}, ${x.afloat ? 'from the carriers of the' : 'from'} ${esc(x.baseName)} · ${num(x.ftr)} fighters, about ${num(x.able)} able to meet the raid</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
-    <div class="body">${head}
+    <div class="body">${choice}${head}
       <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}
       ${could.length ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}` : ''}
       ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
@@ -7495,6 +7510,18 @@ function onClick(e: MouseEvent): void {
       if (!m || m.kind !== 'raid') break;
       const ids: number[] = m.ids ?? [];
       m.ids = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+      const at = $('#card').scrollTop;
+      openModal(m);
+      $('#card').scrollTop = at;
+      break;
+    }
+    case 'raidway': {
+      // The raid card's change between day and night: the same target and the same bombers, flown the other way.
+      const m = ui.modal;
+      const k = t.dataset.kind;
+      if (!m || m.kind !== 'raid' || (k !== 'bomb' && k !== 'night') || (m.raid !== 'bomb' && m.raid !== 'night')) break;
+      if (k === 'bomb') m.ids = [...new Set([...((m.ids as number[] | undefined) ?? []), ...((m.esc as number[] | undefined) ?? [])])];
+      m.raid = k;
       const at = $('#card').scrollTop;
       openModal(m);
       $('#card').scrollTop = at;
