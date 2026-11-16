@@ -80,7 +80,7 @@ export const STARTS: StartGroup[] = [
   {
     title: 'July 1943 · Sicily and Italy', from: 47, view: 'italy', sides: [
       { nat: 'UK', name: 'United Kingdom', blurb: 'Two armies wait at Malta and your air force has spent a month over Sicily. Keep the sky, put the Eighth Army ashore, and follow it across the strait before the Germans have dug in across the mountains.' },
-      { nat: 'ITA', name: 'Italy', blurb: 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If Sicily falls the King will dismiss Mussolini, and an armistice follows. Hold the island and Italy stays in the war.' },
+      { nat: 'ITA', name: 'Italy', blurb: 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If the Allies take Sicily, Sardinia, Calabria, Apulia, Naples or Rome, the King will dismiss Mussolini, and an armistice follows. Hold all six and Italy stays in the war.' },
       { nat: null, name: 'Watch Sicily and Italy', blurb: 'The computer plays the first 46 months, then the landing in Sicily, the fall of Mussolini, the Italian armistice, Salerno and Naples, and the German winter line across the mountains south of Rome.' },
     ],
   },

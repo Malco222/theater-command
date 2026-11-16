@@ -73,7 +73,11 @@ SPEC = {
     "turret_y": 0.0,         # the turret set to one side
     "bustle": True, "cupola": True, "brake": True,
     "hull_gun": None,        # a gun in the hull's front beside the driver: (calibre, length, how far to the side)
-    "stowage": True,
+    "stowage": True,         # True: the tools, cans, jack and cable; "box": one stowage box on the right rear guard; False: nothing
+    "waist": 0.0,            # an upright band of this height under the sloped upper hull (its nose plate then starts that much higher)
+    "mantlet": "taper",      # "taper" (narrowing toward the gun) or "square" (a plain square plate)
+    "bow_gun": True, "spare_links": True,
+    "silencer": False,       # one silencer across the tail in place of the two exhausts
 }
 
 # The tanks the game asks for by name. Each is the trial tank's numbers with some changed: generic tanks of the
@@ -137,6 +141,19 @@ VARIANTS = {
                   "turret_taper": 0.84, "turret_x": 0.2, "bustle": False, "gun_long": 1.5, "gun_calibre": 0.045, "brake": False},
 }
 VARIANTS["7TP"] = dict(VARIANTS["LightTank"])
+# The medium tank of every army with none of its own (the art director's generic units brief, part 5): 5.7 m over
+# the tracks, 2.7 wide, 2.5 to the turret's roof. Five middle-sized road wheels and three rollers a side, the drive
+# in front; upright hull sides with a nose plate sloping back from 1.3 m to the deck at 1.86 m and a tail plate
+# sloping down again; a six-sided turret amidships, its sides leaning in, with a flat hatch, a plain square mantlet
+# and a short gun; one stowage box, a silencer across the tail, a lamp on each guard, the driver's flap in the nose.
+VARIANTS["MediumTank"] = {"hull_long": 5.5, "hull_wide": 1.78, "hull_deck": 1.0, "upper_long": 5.3, "upper_wide": 2.7, "upper_high": 0.86,
+                          "upper_lean": 1.0, "waist": 0.3, "glacis": 1.1, "tail": 0.55,
+                          "wheels": 5, "wheel_r": 0.36, "wheel_first": -1.96, "wheel_step": 0.98, "rollers": (-1.3, 0.0, 1.3),
+                          "roller_z": 0.98, "roller_r": 0.12, "sprocket_x": 2.55, "sprocket_z": 0.66, "sprocket_r": 0.30,
+                          "idler_x": -2.55, "idler_z": 0.62, "idler_r": 0.30, "track_wide": 0.40, "track_out": 1.15,
+                          "turret": "hex", "turret_long": 2.5, "turret_wide": 2.0, "turret_high": 0.6, "turret_taper": 0.72, "turret_x": 0.1,
+                          "bustle": False, "cupola": False, "mantlet": "square", "gun_long": 1.8, "gun_calibre": 0.075, "brake": False,
+                          "bow_gun": False, "spare_links": False, "silencer": True, "stowage": "box"}
 
 
 def fresh_scene():
@@ -271,7 +288,10 @@ def build(s):
                 p.x += s["tail"] / s["upper_long"]       # the engine deck's tail
         return p
     upper_x = -0.12
-    parts.append(box("upper", (s["upper_long"], s["upper_wide"], s["upper_high"]), (upper_x, 0.0, deck + s["upper_high"] * 0.5), "paint", b, shape=upper))
+    waist = s["waist"]
+    if waist > 0.0:
+        parts.append(box("waist", (s["upper_long"], s["upper_wide"], waist), (upper_x, 0.0, deck + waist * 0.5), "paint", b))
+    parts.append(box("upper", (s["upper_long"], s["upper_wide"], s["upper_high"] - waist), (upper_x, 0.0, deck + waist + (s["upper_high"] - waist) * 0.5), "paint", b, shape=upper))
     # The nose between the glacis and the lower plate.
     parts.append(box("nose", (0.62, s["hull_wide"] + 0.02, 0.34), (s["upper_long"] * 0.5 + upper_x + 0.16, 0.0, deck - 0.02), "paint", b,
                      shape=lambda p: Vector((p.x - (0.35 if p.z > 0.0 else 0.0), p.y, p.z))))
@@ -324,6 +344,14 @@ def build(s):
             v.co.y *= s["turret_wide"] * (s["turret_taper"] if roofed else 1.0) * (0.8 if v.co.x > 0.0 else 1.0)
             v.co.x *= s["turret_long"] * (0.9 if roofed else 1.0)
             v.co.z = (v.co.z + 0.5) * s["turret_high"]
+    elif s["turret"] == "hex":
+        # Six-sided in plan, flat across the front and the back, its sides leaning in to the roof.
+        bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=6, radius1=1.0, radius2=s["turret_taper"], depth=1.0)
+        bmesh.ops.rotate(bm, cent=(0.0, 0.0, 0.0), matrix=Matrix.Rotation(math.radians(30.0), 3, "Z"), verts=bm.verts)
+        for v in bm.verts:
+            v.co.x *= s["turret_long"] * 0.5 / math.cos(math.radians(30.0))
+            v.co.y *= s["turret_wide"] * 0.5
+            v.co.z = (v.co.z + 0.5) * s["turret_high"]
     else:
         bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=16, radius1=1.0, radius2=s["turret_taper"], depth=1.0)
         for v in bm.verts:
@@ -364,8 +392,11 @@ def build(s):
 
     # ---- The gun: a mantlet, a sleeve, the barrel and its muzzle brake; and the machine-gun beside it.
     gx, gz = tx + s["turret_long"] * 0.5 * (0.86 if s["turret"] == "cast" else 0.92) - 0.16, tz + s["turret_high"] * 0.52
-    parts.append(box("mantlet", (0.36, 1.0 * tw, 0.56 * min(s["turret_high"] / 0.62, 1.2)), (gx + 0.06, ty, gz), "paint", b * 1.3,
-                     shape=lambda p: Vector((p.x, p.y * (0.72 if p.x > 0.0 else 1.0), p.z * (0.74 if p.x > 0.0 else 1.0)))))
+    if s["mantlet"] == "square":
+        parts.append(box("mantlet", (0.3, 0.66 * tw, 0.5 * min(s["turret_high"] / 0.62, 1.2)), (gx + 0.06, ty, gz), "paint", b * 1.3))
+    else:
+        parts.append(box("mantlet", (0.36, 1.0 * tw, 0.56 * min(s["turret_high"] / 0.62, 1.2)), (gx + 0.06, ty, gz), "paint", b * 1.3,
+                         shape=lambda p: Vector((p.x, p.y * (0.72 if p.x > 0.0 else 1.0), p.z * (0.74 if p.x > 0.0 else 1.0)))))
     cal = s["gun_calibre"]
     parts.append(drum("sleeve", cal * 1.75, 0.6, (gx + 0.5, ty, gz), "paint", 10, axis="X", radius2=cal * 1.35))
     parts.append(drum("barrel", cal, s["gun_long"], (gx + 0.24 + s["gun_long"] * 0.5, ty, gz), "paint", 10, axis="X", radius2=cal * 0.82))
@@ -383,16 +414,17 @@ def build(s):
         parts.append(drum("hull_muzzle", hc * 0.8, 0.1, (hx + 0.25 + hl, hy, deck + 0.1), "steel", 8, axis="X"))
 
     # ---- On the glacis: the driver's visor, the bow gun in its ball, spare links, and the headlamps.
-    slope_x, slope_z = s["upper_long"] * 0.5 + upper_x - s["glacis"] * 0.5, deck + s["upper_high"] * 0.5
-    lean = math.degrees(math.atan2(s["upper_high"], s["glacis"]))
+    slope_x, slope_z = s["upper_long"] * 0.5 + upper_x - s["glacis"] * 0.5, deck + waist + (s["upper_high"] - waist) * 0.5
+    lean = math.degrees(math.atan2(s["upper_high"] - waist, s["glacis"]))
     parts.append(box("visor", (0.08, 0.5, 0.16), (slope_x + 0.05, -0.55, slope_z + 0.07), "shade", 0.008, turn=(0.0, -lean, 0.0)))
     parts.append(box("visor_slit", (0.085, 0.3, 0.035), (slope_x + 0.07, -0.55, slope_z + 0.085), "glass", 0.0, turn=(0.0, -lean, 0.0)))
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=10, v_segments=6, radius=0.15)
-    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector((slope_x + 0.02, 0.56, slope_z + 0.03))), verts=bm.verts)
-    parts.append(make("ball", bm, "paint"))
-    parts.append(drum("bow_gun", 0.02, 0.42, (slope_x + 0.26, 0.56, slope_z + 0.02), "steel", 5, axis="X"))
-    for k in range(3):
+    if s["bow_gun"]:
+        bm = bmesh.new()
+        bmesh.ops.create_uvsphere(bm, u_segments=10, v_segments=6, radius=0.15)
+        bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector((slope_x + 0.02, 0.56, slope_z + 0.03))), verts=bm.verts)
+        parts.append(make("ball", bm, "paint"))
+        parts.append(drum("bow_gun", 0.02, 0.42, (slope_x + 0.26, 0.56, slope_z + 0.02), "steel", 5, axis="X"))
+    for k in range(3 if s["spare_links"] else 0):
         # (spare track links carried across the nose, where they thicken the armour a little)
         parts.append(box("spare_link", (0.11, 0.42, 0.045), (slope_x + 0.34 - 0.15 * k, 0.0, slope_z - 0.13 + 0.079 * k), "track", 0.0,
                          turn=(0.0, -lean, 0.0)))
@@ -407,10 +439,22 @@ def build(s):
         parts.append(box("grille", (0.95, 0.72, 0.03), (deck_x, side * 0.52, up_top + 0.012), "shade", 0.006))
         for k in range(6):
             parts.append(box("louvre", (0.05, 0.66, 0.035), (deck_x - 0.4 + 0.16 * k, side * 0.52, up_top + 0.035), "paint", 0.0, turn=(0.0, 30.0, 0.0)))
-        parts.append(drum("exhaust", 0.11, 0.78, (-half - 0.07, side * 0.52, deck + 0.22), "rust", 10))
-        parts.append(drum("exhaust_pipe", 0.04, 0.3, (-half - 0.07, side * 0.98, deck + 0.3), "rust", 6, axis="Z"))
+        if not s["silencer"]:
+            parts.append(drum("exhaust", 0.11, 0.78, (-half - 0.07, side * 0.52, deck + 0.22), "rust", 10))
+            parts.append(drum("exhaust_pipe", 0.04, 0.3, (-half - 0.07, side * 0.98, deck + 0.3), "rust", 6, axis="Z"))
+    if s["silencer"]:
+        # One silencer across the tail, on two brackets, with its pipe turned down at one end.
+        parts.append(drum("silencer", 0.13, 1.5, (-half - 0.09, 0.0, deck + 0.24), "rust", 12))
+        for side in (-1.0, 1.0):
+            parts.append(box("silencer_bracket", (0.12, 0.05, 0.2), (-half - 0.04, side * 0.55, deck + 0.2), "shade"))
+        parts.append(drum("silencer_pipe", 0.04, 0.26, (-half - 0.09, 0.82, deck + 0.14), "rust", 6, axis="Z"))
     parts.append(box("tail_plate", (0.06, 1.9, 0.5), (-half + 0.03, 0.0, deck + 0.1), "paint", 0.012))
     if not s["stowage"]:
+        return parts
+    if s["stowage"] == "box":
+        # One stowage box on the right rear guard, and nothing else.
+        parts.append(box("stowage_box", (0.9, 0.36, 0.26), (-1.35 * k_long, -s["track_out"], deck + 0.2), "paint", 0.012))
+        parts.append(box("stowage_lid", (0.92, 0.38, 0.02), (-1.35 * k_long, -s["track_out"], deck + 0.34), "shade"))
         return parts
 
     # ---- Stowed on the guards and the deck: a tool box, a shovel and a pick, jerrycans, the jack and its
@@ -955,6 +999,23 @@ def build_figure(k):
         # that nor the French one.
         parts.append(ball("helmet", (hx - 0.014, 0.0, top + 0.015), (0.124, 0.114, 0.1), "helmet", flat_below=0.0))
         parts.append(drum("brim", 0.151, 0.018, (hx - 0.014, 0.0, top + 0.006), "helmet", 14, axis="Z", radius2=0.124))
+    elif kind == "peaked":
+        # (The art director's numbers.) The peaked helmet, our own: a taller egg with a peak in front only, close to
+        # the head behind. It has no flare at the sides or the neck, so it is not the German one.
+        parts.append(ball("helmet", (hx - 0.014, 0.0, top), (0.13, 0.117, 0.132), "helmet", flat_below=0.0))
+        parts.append(drum("helmet_skirt", 0.127, 0.04, (hx - 0.016, 0.0, top - 0.02), "helmet", 12, axis="Z", radius2=0.125))
+        parts.append(box("peak", (0.075, 0.19, 0.012), (hx + 0.128, 0.0, top - 0.014), "helmet", 0.004, turn=(0.0, 10.0, 0.0)))
+    elif kind == "sun":
+        # The sun helmet, our own: a tall cloth-covered dome with a sloping brim, longest over the neck, and a darker
+        # band round the foot of the crown.
+        parts.append(ball("helmet", (hx - 0.014, 0.0, top + 0.015), (0.13, 0.12, 0.138), "helmet", flat_below=0.0))
+        parts.append(drum("brim", 0.186, 0.055, (hx - 0.034, 0.0, top - 0.012), "helmet", 14, axis="Z", radius2=0.126))
+        parts.append(drum("band", 0.1305, 0.02, (hx - 0.014, 0.0, top + 0.027), "straps", 12, axis="Z", radius2=0.1285))
+    elif kind == "fieldcap":
+        # The field cap, our own: the soft cap's crown, flatter on top, with a short peak and no sun flap.
+        parts.append(ball("helmet", (hx - 0.008, 0.0, top - 0.005), (0.112, 0.104, 0.06), "helmet", flat_below=0.0))
+        parts.append(drum("cap_band", 0.107, 0.036, (hx - 0.008, 0.0, top - 0.015), "helmet", 12, axis="Z", radius2=0.105))
+        parts.append(box("visor", (0.06, 0.15, 0.01), (hx + 0.12, 0.0, top - 0.022), "helmet", 0.004))
     elif kind == "eastern":
         parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.122, 0.114, 0.108), "helmet", flat_below=0.0))
         parts.append(drum("brim", 0.14, 0.014, (hx - 0.006, 0.0, top), "helmet", 14, axis="Z", radius2=0.124))
@@ -1058,6 +1119,9 @@ FIGURES = {
     "Rifleman_Eastern": dict(RIFLEMAN, helmet="eastern", rifle=1.27, bayonet=True),
     "Rifleman_Cap": dict(RIFLEMAN, helmet="cap", rifle=1.27, bayonet=True),
     "Rifleman_Dome": dict(RIFLEMAN, helmet="dome"),
+    "Rifleman_Peaked": dict(RIFLEMAN, helmet="peaked"),
+    "Rifleman_Sun": dict(RIFLEMAN, helmet="sun"),
+    "Rifleman_Fieldcap": dict(RIFLEMAN, helmet="fieldcap"),
 }
 # (and each as a pioneer with a shovel, and mounted)
 for _name, _spec in list(FIGURES.items()):

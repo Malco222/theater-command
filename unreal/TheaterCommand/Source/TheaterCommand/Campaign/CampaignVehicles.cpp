@@ -1161,6 +1161,16 @@ namespace VehicleParts
 		LightTankIn(M, NationPaint, false);
 	}
 
+	/**
+	 * (Rulings 78 and 79; the art director's brief.) The medium tank of every army with no tank of its own. It is
+	 * sculpted outside the game (Tools/build_tank.py, "MediumTank"): what is built here stands in only if that
+	 * model's file is missing.
+	 */
+	static void MediumTank(FMiniatureMesh& M)
+	{
+		LightTankIn(M, NationPaint, false);
+	}
+
 	/** A wheel on an axle across the vehicle: a tyre, a painted wheel inside it, a hub. For lorries and guns. */
 	static void RoadWheel(const FBuild& B, double F, double R, double Radius, double Wide, bool bSpoked)
 	{
@@ -1543,6 +1553,7 @@ namespace VehicleParts
 		{ TEXT("Type97"), &Type97, TEXT("Type 97 Chi-Ha  -  5.50 m long, 2.23 m high"), TEXT("JAP") },
 		{ TEXT("7TP"), &SevenTP, TEXT("7TP  -  4.60 m long, 2.30 m high"), TEXT("POL") },
 		{ TEXT("LightTank"), &LightTank, TEXT("Light tank  -  4.60 m long, 2.30 m high"), TEXT("ROM"), true },
+		{ TEXT("MediumTank"), &MediumTank, TEXT("Medium tank  -  5.70 m long, 2.50 m high"), TEXT("ROM"), true },
 		{ TEXT("Hanomag"), &Hanomag, TEXT("Sd.Kfz. 251 half-track  -  5.80 m long, 1.75 m high"), TEXT("GER") },
 		{ TEXT("M3Halftrack"), &M3Halftrack, TEXT("M3 half-track  -  6.18 m long, 2.26 m high"), TEXT("USA") },
 		{ TEXT("Truck"), &Truck, TEXT("Three-ton lorry  -  6.0 m long, 2.6 m high"), TEXT("GER"), true },
@@ -1753,7 +1764,10 @@ FString FMiniatureMesh::MainTankOf(const FString& Tag)
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Type97");
 	if (Tag == TEXT("POL")) return TEXT("7TP");
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Matilda");
-	return TEXT("LightTank:") + Tag;
+	// (The medium tank from the month the country holds the tree's medium tanks, which the rules send as a design
+	// year of 1942; in a history campaign with no tree, from January 1942. Until then the light tank. A country that
+	// goes on to heavy tanks keeps the medium tank.)
+	return (Reached >= 1942 ? TEXT("MediumTank:") : TEXT("LightTank:")) + Tag;
 }
 
 FString FMiniatureMesh::MainGunOf(const FString& Tag)

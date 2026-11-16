@@ -80,6 +80,7 @@ import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../..
 import { railCut, railLinks, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
+import { armyRound, armyStands, frontIdle, nextArmy, roundCount, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
@@ -427,6 +428,8 @@ function view() {
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
     gates: gatesOf(s),
+    // (Rulings 88, 101 and 102.) The round of armies, counted by the rules for both builds.
+    round: roundOf(s),
     // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
     // many groups and aircraft stand on it, or -1 where the fog hides that.
     airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
@@ -440,7 +443,9 @@ function view() {
       if (techOf(s, n.id)) {
         // The grand campaign: the technology tree decides. No medium tanks, no later tank; heavy tanks bring the
         // heavy models as soon as they are researched, and so with long-range fighters and four-engined bombers.
-        const armour = !hasTech(s, n.id, 'mediums') ? 1939 : !hasTech(s, n.id, 'heavies') ? Math.min(year, 1942) : Math.max(year, 1943);
+        // (With medium tanks held the year is 1942 at once: the game shows the medium tank from that month, and no
+        // country's own models change between 1939 and 1942.)
+        const armour = !hasTech(s, n.id, 'mediums') ? 1939 : !hasTech(s, n.id, 'heavies') ? 1942 : Math.max(year, 1943);
         const fighters = hasTech(s, n.id, 'escorts') ? Math.max(year, 1943) : Math.min(year, 1941);
         const bombers = hasTech(s, n.id, 'heavybombers') ? Math.max(year, 1942) : Math.min(year, 1941);
         return [n.id, [armour, fighters, bombers]];
@@ -700,7 +705,7 @@ const corpsById = (s: Game, ids: number[]): Corps[] =>
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
-interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number }
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean }
 
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
@@ -722,6 +727,7 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
           from: a.base, ...(deck(a) ? { fromX: a.x, fromY: a.y, fleet: (s.airFleets.find((g) => g.id === a.id) as { ship?: number } | undefined)?.ship ?? -1 } : {}), x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
           aa: first && r.region >= 0 ? workLevel(s, 'aa', r.region) : 0, meet: first && riser ? riser.nat : '', meetFrom: first && riser ? riser.base : -1,
           loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
+          night: (r as { mission?: string }).mission === 'night',
         });
         first = false;
       }
@@ -1298,6 +1304,42 @@ function reachOf(ids: number[]) {
 }
 
 /**
+ * (Rulings 88, 101 and 102(b).) The round of armies as the rules count it (round.ts), so that both builds show the
+ * same numbers: `bright` on NEXT ARMY's disc (while it is above nothing END THE MONTH stays dark), `quiet` for the
+ * rear, `front` for how many of the bright stand at the front, `all` for every army Tab still goes to, and `idle`
+ * for the question at the month's end.
+ */
+function roundOf(s: Game) {
+  try {
+    const c = roundCount(s);
+    return { bright: c.bright, quiet: c.quiet, front: c.front, all: armyRound(s).length, idle: frontIdle(s).length };
+  } catch { return { bright: 0, quiet: 0, front: 0, all: 0, idle: 0 }; }
+}
+
+/** The army Tab goes to next, given those already visited this round and where the eye is (the rules' nextArmy). */
+function nextArmyOf(seen: number[], x: number, y: number) {
+  try {
+    const n = nextArmy(game(), seen, Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null);
+    return { reg: n.army ? n.army.reg : -1, seen: n.seen, again: n.again };
+  } catch { return { reg: -1, seen: [] as number[], again: false }; }
+}
+
+/** STAND THIS MONTH for the army in a province, or taking it back: kept in the game itself, so in its saves. */
+function standOf(reg: number, on: boolean) {
+  const s = game();
+  let changed = 0;
+  try { changed = standArmy(s, reg, on); } catch { changed = 0; }
+  let stands = '';
+  try { stands = armyStands(s, reg) ?? ''; } catch { stands = ''; }
+  return { changed, stands, view: view() };
+}
+
+/** How much of the army in a province stands this month: 'all', 'some', 'none', or '' where it has nothing to stand. */
+function standsOf(reg: number) {
+  try { return { stands: armyStands(game(), reg) ?? '' }; } catch { return { stands: '' }; }
+}
+
+/**
  * (Ruling 86.) Where each gate's mark stands: on the water at its narrowest, by latitude and longitude. A gate the
  * rules add later, and not named here, stands on the province that holds it until it is given a place.
  */
@@ -1755,11 +1797,11 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
   const over = c.more + homeOver + Math.max(0, staffAll.length - lines) + Math.max(0, c.elsewhere.length - lines) + c.letters.length;
   return {
     date: c.month,
-    // (An item dated after the month turned names its month: "July, week 1" under June's title.)
-    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.week > 0 ? `${x.month ? `${x.month}, ` : ''}week ${x.week}` : (x.month ?? ''), region: x.region ?? -1 })),
+    // (Ruling 102(a): the rules give each item its date in words, "week 3" or "as July opens"; nothing else is printed for a date.)
+    bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.when ?? '', region: x.region ?? -1 })),
     score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? '', figure: x.figure, sub: x.sub, tone: x.tone === 'good' ? 1 : x.tone === 'bad' ? -1 : 0 })),
     lead: lead ? {
-      tag: lead.week > 0 ? `${lead.kind.toUpperCase()}  ·  ${lead.month ? `${lead.month.toUpperCase()}, ` : ''}WEEK ${lead.week}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
+      tag: lead.when ? `${lead.kind.toUpperCase()}  ·  ${lead.when.toUpperCase()}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
       a: lead.ours ?? '', aName: name(lead.ours), b: lead.theirs ?? '', bName: name(lead.theirs), picture: lead.picture ?? '',
       line: lead.follows || lead.line, figures: figures(lead.facts), region: lead.region ?? -1, report: lead.report?.type === 'land' ? lead.report.id : -1,
     } : null,
@@ -1815,6 +1857,8 @@ function endMonth() {
     fallen = arrive(s);
     // (release 1) The player's armies on a standing march go on as his month opens: shown as the month's last move.
     if (!fallen && s.human) {
+      // (as his month opens, last month's orders to stand are forgotten)
+      try { settleStands(s); } catch { /* the marks are dated: an old one counts for nothing */ }
       const out = advanceMarches(s);
       marched = out.ended;
       const said = [out.went.length ? `${out.went.length === 1 ? 'One of your corps is' : `${out.went.length} of your corps are`} on the march.` : '', ...out.ended.slice(0, 2).map((x) => x.note)].filter(Boolean).join(' ');
@@ -4244,7 +4288,7 @@ function act(action: string, region = -1) {
     const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
     note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
-    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, ...meets }; }
+    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
@@ -4744,4 +4788,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, move, previewAttack: preview, attack, endMonth };

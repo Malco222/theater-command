@@ -280,6 +280,7 @@ struct FSortie
 	FVector2D FromPoint = FVector2D::ZeroVector;
 	int32 FromFleet = INDEX_NONE; // the fleet itself, where that is known: the flight leaves from where its ships are drawn
 	float Loss = 0.0f; // the share of the bombers likely to be lost
+	bool bNight = false; // (ruling 107) flown by night: the place raided shows its searchlights, and the raid is watched in the dark
 };
 
 /** A button in one of the rooms the rules set out themselves. */
@@ -521,6 +522,17 @@ struct FViewGate
 	FString Shut; // for a fleet's route that is refused: "The Panama Canal is shut to your ships: ..."
 };
 
+/**
+ * (Rulings 88, 101 and 102.) The round of armies as the rules count it, the same in both builds: Bright on NEXT
+ * ARMY's disc (untouched armies at the front, and armies raised this month with no order), Quiet for the rear, Front
+ * for how many of the bright stand at the front, All for every army Tab still goes to, and Idle for the question at
+ * the month's end.
+ */
+struct FViewRound
+{
+	int32 Bright = 0, Quiet = 0, Front = 0, All = 0, Idle = 0;
+};
+
 /** An airfield as the player knows it (the grand campaign). */
 struct FViewAirfield
 {
@@ -666,6 +678,7 @@ struct FCampaignView
 	TArray<int32> RailsCut; // regions whose railway is cut
 	TArray<FViewFleet> Fleets;
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
+	FViewRound Round; // (rulings 88, 101, 102) the round of armies
 	TArray<FViewAirFleet> AirFleets;
 
 	const FViewCorps* FindCorps(int32 Id) const

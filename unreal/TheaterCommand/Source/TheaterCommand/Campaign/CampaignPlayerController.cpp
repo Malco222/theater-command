@@ -2437,125 +2437,47 @@ void ACampaignPlayerController::GoToKeptView(int32 Slot)
 
 int32 ACampaignPlayerController::ArmiesYetToMove() const
 {
-	return ArmiesWaiting().Num();
+	// (Ruling 102(b).) Every number of the round is the rules' own, so that both builds count alike.
+	const FCampaignSession* Session = GetSession();
+	return Session && !bWatching && !Opening.bVisible ? Session->GetView().Round.All : 0;
 }
 
 int32 ACampaignPlayerController::ArmiesIdleAtFront() const
 {
-	return ArmiesWaiting(true).Num();
+	const FCampaignSession* Session = GetSession();
+	return Session && !bWatching && !Opening.bVisible ? Session->GetView().Round.Bright : 0;
 }
 
-TArray<int32> ACampaignPlayerController::ArmiesWaiting(bool bIdleAtFront) const
+int32 ACampaignPlayerController::ArmiesInRear() const
 {
-	TArray<int32> Places;
 	const FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || bWatching || Opening.bVisible || !Session->GetView().bHumanUp)
-	{
-		return Places;
-	}
-	const FCampaignView& View = Session->GetView();
-	const FCampaignMapData& Data = Map->GetData();
-	struct FPlace
-	{
-		bool bUntouched = true;
-		bool bFront = false;
-		double Far = 0.0;
-	};
-	TMap<int32, FPlace> Found;
-	for (const FViewCorps& Unit : View.Corps)
-	{
-		// (an army on a kept march has its orders, a garrison and a fort have their place, an army digging in or told
-		// to stand this month has been seen to)
-		if (Unit.Nation != View.Human || !Unit.bCanOrder || Unit.Moves <= 0 || Unit.Kind == TEXT("fort") || Unit.bInTown || Unit.MarchTo != INDEX_NONE
-			|| (!View.bAutoDig && Unit.Posture == TEXT("dig")) || (StandingTurn == View.Turn && StandingCorps.Contains(Unit.Id)) || !Data.Regions.IsValidIndex(Unit.Region))
-		{
-			continue;
-		}
-		Found.FindOrAdd(Unit.Region).bUntouched &= Unit.Moves >= Unit.MovesMax;
-	}
-	// Where the round is measured from: the army in hand, or else what the eye is on.
-	FVector2D From = FVector2D::ZeroVector;
-	if (Data.Regions.IsValidIndex(ArmyRegion))
-	{
-		From = Data.Regions[ArmyRegion].Center;
-	}
-	else if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
-	{
-		From = Map->WorldToMap(Eye->GetFocus());
-	}
-	for (TPair<int32, FPlace>& Each : Found)
-	{
-		for (const int32 Near : Data.Regions[Each.Key].Neighbors)
-		{
-			Each.Value.bFront |= View.RegionStanding.IsValidIndex(Near) && View.RegionStanding[Near] == TEXT("enemy");
-		}
-		Each.Value.Far = FVector2D::Distance(Data.Regions[Each.Key].Center, From);
-		if (!bIdleAtFront || (Each.Value.bFront && Each.Value.bUntouched))
-		{
-			Places.Add(Each.Key);
-		}
-	}
-	Places.Sort([&Found](int32 A, int32 B)
-	{
-		const FPlace& One = Found[A];
-		const FPlace& Other = Found[B];
-		// (Ruling 101.) The front first, then the rear; in each, those not yet touched before the others, then the nearest.
-		if (One.bFront != Other.bFront)
-		{
-			return One.bFront;
-		}
-		if (One.bUntouched != Other.bUntouched)
-		{
-			return One.bUntouched;
-		}
-		return One.Far != Other.Far ? One.Far < Other.Far : A < B;
-	});
-	return Places;
+	return Session && !bWatching && !Opening.bVisible ? Session->GetView().Round.Quiet : 0;
+}
+
+bool ACampaignPlayerController::IsRoundNewlyRaised() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().Round.Bright > 0 && Session->GetView().Round.Front <= 0;
 }
 
 void ACampaignPlayerController::StandThisMonth()
 {
-	const FCampaignSession* Session = GetSession();
+	FCampaignSession* Session = GetSession();
 	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0)
 	{
 		return;
 	}
-	const bool bWas = IsStandingThisMonth();
-	if (StandingTurn != Session->GetView().Turn)
-	{
-		StandingCorps.Reset();
-		StandingTurn = Session->GetView().Turn;
-	}
-	for (const int32 Id : PickedCorps)
-	{
-		if (bWas)
-		{
-			StandingCorps.Remove(Id);
-		}
-		else
-		{
-			StandingCorps.Add(Id);
-		}
-	}
+	// (The order is the rules' own, kept in the game and so in its saves: a save moves between the two builds.)
+	const bool bWas = bHandStands;
+	bHandStands = Session->Stand(ArmyRegion, !bWas) == TEXT("all");
+	++Tray.Revision;
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	Notify(bWas ? TEXT("The order to stand is taken back: this army waits for orders again.") : TEXT("This army stands where it is this month. NEXT ARMY passes it by until the next."), 5.0);
 }
 
 bool ACampaignPlayerController::IsStandingThisMonth() const
 {
-	const FCampaignSession* Session = GetSession();
-	if (!Session || StandingTurn != Session->GetView().Turn || PickedCorps.Num() == 0)
-	{
-		return false;
-	}
-	for (const int32 Id : PickedCorps)
-	{
-		if (!StandingCorps.Contains(Id))
-		{
-			return false;
-		}
-	}
-	return true;
+	return bHandStands && ArmyRegion != INDEX_NONE;
 }
 
 void ACampaignPlayerController::AnswerEndAsk(bool bShowMe)
@@ -2584,7 +2506,8 @@ void ACampaignPlayerController::ToggleEndAskWanted()
 void ACampaignPlayerController::ShowEndAsk()
 {
 	EndAsk.bVisible = true;
-	EndAsk.Count = FMath::Max(ArmiesWaiting(true).Num(), 1);
+	EndAsk.Count = FMath::Max(GetSession() ? GetSession()->GetView().Round.Bright : 0, 1);
+	EndAsk.Raised = GetSession() ? FMath::Max(GetSession()->GetView().Round.Bright - GetSession()->GetView().Round.Front, 0) : 0;
 	EndAsk.Since = FPlatformTime::Seconds();
 }
 
@@ -3329,36 +3252,30 @@ void ACampaignPlayerController::NextArmy()
 		}
 		EndAsk.bVisible = false;
 	}
-	// (Ruling 88.) The round: untouched armies first, the front before the rear, the nearest first; each is shown once
-	// before any is shown again.
-	const TArray<int32> Places = ArmiesWaiting();
-	if (Places.Num() == 0)
+	// (Rulings 88, 101 and 102.) The round is the rules' own: the front first, then the rear; in each, those not yet
+	// touched before the others, then the nearest; each is shown once before any is shown again.
+	if (Session->GetView().Round.All <= 0)
 	{
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
-	RoundSeen.RemoveAll([&Places](int32 Each) { return !Places.Contains(Each); });
-	int32 Next = INDEX_NONE;
-	for (int32 Pass = 0; Pass < 2 && Next == INDEX_NONE; ++Pass)
+	// (where the round is measured from: the army in hand, or else what the eye is on)
+	FVector2D From = FVector2D::ZeroVector;
+	if (Map->GetData().Regions.IsValidIndex(ArmyRegion))
 	{
-		for (const int32 Place : Places)
-		{
-			if (Place != ArmyRegion && !RoundSeen.Contains(Place))
-			{
-				Next = Place;
-				break;
-			}
-		}
-		if (Next == INDEX_NONE)
-		{
-			RoundSeen.Reset(); // (all have been shown: the round begins again)
-		}
+		From = Map->GetData().Regions[ArmyRegion].Center;
+		RoundSeen.AddUnique(ArmyRegion); // (the army in hand has been seen: Tab goes on from it)
 	}
-	if (Next == INDEX_NONE)
+	else if (const ACampaignCameraPawn* Looking = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
-		Next = Places[0]; // (the one army left is the one in hand)
+		From = Map->WorldToMap(Looking->GetFocus());
 	}
-	RoundSeen.Add(Next);
+	const int32 Next = Session->NextArmy(RoundSeen, From);
+	if (!Map->GetData().Regions.IsValidIndex(Next))
+	{
+		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
+		return;
+	}
 	SelectRegion(Next);
 	PickUpArmyIn(Next);
 	CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
@@ -5061,6 +4978,12 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		Tray.HintLead = FText::FromString(TEXT("No moves left this month."));
 		Tray.Hint = FText::FromString(TEXT("Right-click a friendly place and they march there from next month."));
 	}
+	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
+	{
+		// (the order is given: the card says so, and how to change it)
+		Tray.HintLead = FText::FromString(bHandSpent ? TEXT("They march from next month.") : TEXT("On the march."));
+		Tray.Hint = FText::FromString(TEXT("They go on by themselves as each month opens. Right-click another place to change the order."));
+	}
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
 	{
@@ -5464,6 +5387,7 @@ void ACampaignPlayerController::RefreshOrders()
 	TArray<int32> Danger, Road;
 	TMap<int32, int32> Far;
 	bHandSpent = false;
+	bHandStands = ArmyRegion != INDEX_NONE && Session && Session->Stands(ArmyRegion) == TEXT("all");
 	KeptPlanRegion = -2; // (whatever was planned was planned for another hand)
 	if (bBySea)
 	{
@@ -5504,15 +5428,15 @@ void ACampaignPlayerController::RefreshOrders()
 	StandingRoad = MoveTemp(Road);
 	Map->SetReach(Reach, bByRail || bBySea);
 	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
-	// (an army on a standing march shows the road still ahead of it while it is in hand)
-	RouteTarget = -2;
-	ShowRouteTo(INDEX_NONE);
-
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
 	{
 		RingedPiece->SetSelected(true);
 	}
+	// (an army on a standing march shows the road still ahead of it while it is in hand: drawn from its flag, so
+	// once the flag is known)
+	RouteTarget = -2;
+	ShowRouteTo(INDEX_NONE);
 	SetPending(INDEX_NONE); // sets the line that says what to do next
 	--Tray.Revision; // already counted above
 }
@@ -6393,7 +6317,9 @@ void ACampaignPlayerController::EndMonth()
 	}
 	else if (!bScripted && bAskAtMonthsEnd && EndAskedTurn != Session->GetView().Turn)
 	{
-		const int32 Idle = ArmiesWaiting(true).Num();
+		// (Ruling 111(4): the question's number is the button's number.)
+		const int32 Idle = Session->GetView().Round.Bright;
+		EndAsk.Raised = FMath::Max(Session->GetView().Round.Bright - Session->GetView().Round.Front, 0);
 		if (Idle > 0)
 		{
 			EndAskedTurn = Session->GetView().Turn;

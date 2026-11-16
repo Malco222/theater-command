@@ -564,7 +564,7 @@ namespace
 			TArray<FBox2D> Badges;
 			if (Plates.Num() == 0)
 			{
-				Controller->NoteGateMarks(GateBoxes);
+				Controller->NoteGateMarks(GateBoxes, Geometry.Scale);
 				return LayerId;
 			}
 			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
@@ -968,7 +968,7 @@ namespace
 					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(LineSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 1.0 + NameSize.Y))), Each.Line, LineFont, ESlateDrawEffect::None, LineInk);
 				}
 			}
-			Controller->NoteGateMarks(GateBoxes);
+			Controller->NoteGateMarks(GateBoxes, Scale);
 			return LayerId + 1;
 		}
 
@@ -1575,6 +1575,18 @@ namespace
 						// placed by its own width.)
 						const float Width = static_cast<float>(Size.X) / Scale;
 						const float Wide = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().X) : 300.0f;
+						// (The art director's round 36: the box that explains a gate's mark never covers the mark, whose flag
+						// says who holds the gate. It opens under the plate, or above it where there is no room, six points clear.)
+						FBox2D Mark(ForceInit);
+						if (Controller.IsValid() && Controller->GetTipAnchor(Mark))
+						{
+							const float High = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().Y) : 60.0f;
+							const float Tall = static_cast<float>(Size.Y) / Scale;
+							// (the mark's place is in the screen's own units already)
+							const float AnchorLeft = FMath::Clamp(static_cast<float>(Mark.Min.X), 8.0f, FMath::Max(Width - 262.0f - Wide, 8.0f));
+							const float Under = static_cast<float>(Mark.Max.Y) + 6.0f;
+							return FMargin(AnchorLeft, Under + High > Tall - 8.0f ? static_cast<float>(Mark.Min.Y) - 6.0f - High : Under, 0.0f, 0.0f);
+						}
 						const float Left = static_cast<float>(At.X) + 18.0f + Wide > Width - 262.0f ? FMath::Max(static_cast<float>(At.X) - Wide - 14.0f, 8.0f) : static_cast<float>(At.X) + 18.0f;
 						return FMargin(Left, static_cast<float>(At.Y) + 20.0f, 0.0f, 0.0f);
 					}))
@@ -3108,13 +3120,21 @@ namespace
 										.Text_Lambda([this]()
 										{
 											const int32 Count = Controller.IsValid() ? Controller->GetEndAsk().Count : 0;
-											return FText::FromString(Count == 1 ? FString(TEXT("1 army at the front has no orders")) : FString::Printf(TEXT("%d armies at the front have no orders"), Count));
+											// (where some are armies raised this month, they are not all "at the front")
+											const bool bAllAtFront = !Controller.IsValid() || Controller->GetEndAsk().Raised <= 0;
+											return FText::FromString(Count == 1 ? FString(bAllAtFront ? TEXT("1 army at the front has no orders") : TEXT("1 newly raised army has no orders"))
+												: bAllAtFront ? FString::Printf(TEXT("%d armies at the front have no orders"), Count) : FString::Printf(TEXT("%d armies have no orders"), Count));
 										})
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Text(FText::FromString(TEXT("They have not moved this month and no order stands for them. Armies in the rear are not counted.")))
+										.Text_Lambda([this]()
+										{
+											const int32 Raised = Controller.IsValid() ? Controller->GetEndAsk().Raised : 0;
+											return FText::FromString(Raised <= 0 ? FString(TEXT("They have not moved this month and no order stands for them. Armies in the rear are not counted."))
+												: FString::Printf(TEXT("They have not moved this month and no order stands for them: %d newly raised, the rest at the front. Armies in the rear are not counted."), Raised));
+										})
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 20.0f, 0.0f, 0.0f)
 									[
@@ -4578,7 +4598,7 @@ namespace
 		 */
 		bool ArmiesWait() const { return Controller.IsValid() && !Controller->IsWatching() && Controller->ArmiesIdleAtFront() > 0; }
 		/** (Ruling 101.) The quieter number: the armies that can still move and are not counted on NEXT ARMY. */
-		int32 ArmiesBesides() const { return Controller.IsValid() && !Controller->IsWatching() ? FMath::Max(Controller->ArmiesYetToMove() - Controller->ArmiesIdleAtFront(), 0) : 0; }
+		int32 ArmiesBesides() const { return Controller.IsValid() && !Controller->IsWatching() ? Controller->ArmiesInRear() : 0; }
 
 		/**
 		 * (Ruling 88; the art director's brief: "one bright button, and it is always the next thing to press".) The
@@ -4724,7 +4744,9 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("at the front"))).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
+											// (where the disc counts only armies raised this month, and none at the front, the line says so)
+											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f))
+											.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsRoundNewlyRaised() ? TEXT("newly raised") : TEXT("at the front")); })
 										]
 										// (Ruling 101.) The quieter number, at about 60 percent of the ink's strength: the rest that can
 										// still move. With nobody in the rear the line reads "at the front" alone.
@@ -5102,6 +5124,12 @@ namespace
 							]
 						]
 					];
+				}
+				// (The art director's round 36: a lone score box ran the whole width of the card. No box is wider than a
+				// quarter of it: fewer than four keep a quarter each, and stand at the left.)
+				if (Card.Score.Num() < 4)
+				{
+					Boxes->AddSlot().FillWidth(static_cast<float>(4 - Card.Score.Num())).Padding(10.0f, 0.0f, 0.0f, 0.0f)[SNew(SSpacer)];
 				}
 				PageBody->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[Boxes];
 			}

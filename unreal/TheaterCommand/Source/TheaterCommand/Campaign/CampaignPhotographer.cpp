@@ -363,6 +363,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Tilt = -25.0f; // (looked down on more steeply than the closest view does of itself, so that no army's flag stands in front)
 		}
 		{
+			// The same raid from the top, where a burst of flak is a mark of smoke and no more.
+			FShot& Shot = Add(TEXT("31k3-raid-top"), TEXT("@capital"), 0.85f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("open:raid:bomb|@row|@top");
+			Shot.bCloseRoom = true;
+			Shot.RaidAt = 0.22f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterRaidAt="), Shot.RaidAt);
+		}
+		{
 			// A raid on troops, caught over them.
 			FShot& Shot = Add(TEXT("31l-raid-met"), TEXT("@capital"), 0.7f);
 			Shot.Select = TEXT("@capital");
@@ -773,6 +783,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		// pointer would. "-TheaterSpend=Ruhr>Rhineland>Ruhr" first marches the army in the first place through the
 		// others in turn, to use up its moves: for pictures of an army with none left.)
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterArmy="), Shots[0].Army, false);
+		// ("-TheaterOrderTo=Mecklenburg" gives the army in hand that order: for the card after a march is kept.)
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterOrderTo="), Shots[0].Attack, false);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterRoute="), Shots[0].Route, false);
 	}
 
@@ -1258,9 +1270,11 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	// waits; "-TheaterEndAsk" puts the question at the month's end.)
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterStandAll")))
 	{
-		for (int32 Guard = 0; Guard < 400 && Controller->ArmiesWaiting().Num() > 0; ++Guard)
+		for (int32 Guard = 0; Guard < 400 && Controller->ArmiesYetToMove() > 0; ++Guard)
 		{
-			if (!Controller->PickUpArmyIn(Controller->ArmiesWaiting()[0]) || Controller->IsStandingThisMonth())
+			Controller->PutDownArmy();
+			Controller->NextArmy();
+			if (Controller->IsStandingThisMonth())
 			{
 				break;
 			}

@@ -35,6 +35,9 @@ namespace SoldierParts
 		Eastern,  // the Japanese helmet: a round bowl with a small brim
 		Cap,      // the Japanese field cap: soft, with a short peak and a sun flap to the collar
 		Dome,     // (rulings 78 and 79) the plain helmet, our own: a low dome with a level rim all round and no crest
+		Peaked,   // the peaked helmet, our own: a taller egg with a peak in front only, close to the head behind
+		Sun,      // the sun helmet, our own: a tall cloth-covered dome with a sloping brim, longest over the neck
+		FieldCap, // the field cap, our own: the soft cap's crown with a short peak and no sun flap
 	};
 
 	/** What one army's rifleman wears and carries. */
@@ -153,14 +156,24 @@ namespace SoldierParts
 			// the list, and no country wears the British one but Britain and the Commonwealth.)
 			K.Helmet = EHelmet::Stahl;
 		}
-		// (The head is the one the art director's table gives the country. The peaked helmet, the sun helmet and the
-		// field cap are still to be sculpted: until they are, each of those is the plain helmet.)
+		// (The head is the one the art director's table gives the country: its own, one shared by the record, or
+		// one of the four plain heads.)
 		const FString Head = UnitTable::Head(Tag);
 		if (!Head.IsEmpty())
 		{
 			K.Helmet = Head == TEXT("stahl") ? EHelmet::Stahl : Head == TEXT("brodie") ? EHelmet::Brodie : Head == TEXT("soviet") ? EHelmet::Soviet
 				: Head == TEXT("adrian") ? EHelmet::Adrian : Head == TEXT("round") ? EHelmet::Round : Head == TEXT("cap") ? EHelmet::Cap
-				: Head == TEXT("pot") ? EHelmet::Pot : EHelmet::Dome;
+				: Head == TEXT("pot") ? EHelmet::Pot : Head == TEXT("peaked") ? EHelmet::Peaked : Head == TEXT("sun") ? EHelmet::Sun
+				: Head == TEXT("fieldcap") ? EHelmet::FieldCap : EHelmet::Dome;
+			// (the sun helmet is covered in cloth a little paler than the tunic, and the field cap is the cloth itself)
+			if (K.Helmet == EHelmet::Sun)
+			{
+				K.HelmetPaint = K.Tunic * 1.1f;
+			}
+			else if (K.Helmet == EHelmet::FieldCap)
+			{
+				K.HelmetPaint = K.Tunic * 0.96f;
+			}
 		}
 		return K;
 	}
@@ -525,6 +538,20 @@ namespace SoldierParts
 			Helmet(M, Brow + FVector(0.0, 0.0, 0.015), 0.122, 0.126, 0.114, 0.1,
 				[](double, double) { return 0.018; }, [](double, double) { return 0.22; }, K.HelmetPaint, bFine);
 			break;
+		case EHelmet::Peaked:
+			// (The art director's numbers: a taller egg, a peak in front only, close to the head behind. No flare at the
+			// sides or the neck, so it is not the German one.)
+			Helmet(M, Brow, 0.126, 0.134, 0.117, 0.132,
+				[](double C, double) { return C > 0.3 ? 0.02 : 0.05; },
+				[](double C, double) { return C > 0.45 ? 0.30 : C > 0.2 ? FMath::Lerp(0.03, 0.30, (C - 0.2) / 0.25) : 0.03; }, K.HelmetPaint, bFine);
+			break;
+		case EHelmet::Sun:
+			// (A tall cloth-covered dome with a sloping brim, longest over the neck.)
+			Helmet(M, Brow + FVector(0.0, 0.0, 0.015), 0.126, 0.134, 0.12, 0.138,
+				[](double C, double) { return FMath::Lerp(0.075, 0.045, (C + 1.0) * 0.5); },
+				[](double C, double) { return C > 0.0 ? FMath::Lerp(0.28, 0.34, C) : FMath::Lerp(0.28, 0.50, -C); }, K.HelmetPaint, bFine);
+			break;
+		case EHelmet::FieldCap: // (as the cap: the figure built in code wears the small helmet in the cloth's colour)
 		case EHelmet::Cap: // (the figure built in code wears the small helmet in the cap's cloth colour: the cap itself is on the sculpted one)
 		case EHelmet::Eastern:
 			Helmet(M, Brow, 0.124, 0.13, 0.117, 0.112,
@@ -573,14 +600,15 @@ void FMiniatureMesh::Figure(const FString& Tag, int32 Pose, const FVector& Where
 		// the table the plainer of its two meshes is used, since a base carries several of them.
 		const SoldierParts::FKit K = SoldierParts::KitFor(Tag);
 		static const TCHAR* const Poses[] = { TEXT("Rifleman_"), TEXT("Rider_"), TEXT("Pioneer_") };
-		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern"), TEXT("Cap"), TEXT("Dome") };
+		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern"), TEXT("Cap"), TEXT("Dome"),
+			TEXT("Peaked"), TEXT("Sun"), TEXT("Fieldcap") };
 		// (the horse's coat is one of three, by the nation, as on the figure built in code)
 		const FLinearColor Coats[3] = { SoldierParts::Hex(TEXT("5B3A26")), SoldierParts::Hex(TEXT("3A2A20")), SoldierParts::Hex(TEXT("7A5636")) };
 		const FLinearColor Coat = Coats[GetTypeHash(K.Tunic.ToFColor(true).ToHex()) % 3];
 		const TArray<FLinearColor> Kit = { K.Tunic, K.Trousers, K.Boots, K.bTallBoots ? K.Boots : K.Lower, K.Straps, K.HelmetPaint, K.Pack,
 			SoldierParts::Hex(TEXT("C49A78")), SoldierParts::Hex(TEXT("5E4128")), SoldierParts::Hex(TEXT("2E2F31")),
 			Coat, Coat * 0.35f, K.Straps * 0.9f, SoldierParts::Hex(TEXT("5C5A48")), SoldierParts::Hex(TEXT("2A2420")) };
-		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 8)];
+		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 11)];
 		if (Sculpted(Name, Tag, Where, Metre, Turn, !bFine, &Kit))
 		{
 			return;

@@ -1065,11 +1065,81 @@ def build_level():
     unreal.log(f"Theater Command: wrote {LEVEL}")
 
 
+def build_flak_smoke():
+    """A burst of flak as hanging smoke, from the art director's painted sheet: the picture's own colour and its own
+    see-through edge, times the mesh's colour (the light of the hour) and its alpha (how much of the smoke is left:
+    a half is the smoke as painted, more than a half is thicker). Light of its own, not shaded, seen from both sides."""
+    m = new_material("M_FlakSmoke")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    picture = node(m, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0,
+                   parameter_name="Sheet",
+                   texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
+                   sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -700, 320)
+    lit = node(m, unreal.MaterialExpressionMultiply, -400, 0)
+    connect(picture, "RGB", lit, "A")
+    connect(colour, "", lit, "B")
+    to_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    left = node(m, unreal.MaterialExpressionMultiply, -400, 320)
+    connect(picture, "A", left, "A")
+    connect(colour, "A", left, "B")
+    doubled = node(m, unreal.MaterialExpressionMultiply, -200, 320)
+    connect(left, "", doubled, "A")
+    connect(scalar(m, "Thick", 2.0, -400, 480), "", doubled, "B")
+    kept = node(m, unreal.MaterialExpressionSaturate, 0, 320)
+    connect(doubled, "", kept, "")
+    to_property(kept, "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
+def build_beam():
+    """A searchlight's beam, its lamp, and the bomber it holds: light added over the scene, never darkening anything.
+    The mesh's own colour is the light's colour and its alpha how strong it is there."""
+    m = new_material("M_Beam")
+    # (drawn after the lens's blur: from close by the ground is out of focus, and a beam blurred with it was a smear)
+    m.set_editor_property("translucency_pass", unreal.MaterialTranslucencyPass.MTP_AFTER_DOF)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -700, 0)
+    lit = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(colour, "", lit, "A")
+    connect(colour, "A", lit, "B")
+    strong = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(lit, "", strong, "A")
+    connect(scalar(m, "Strength", 1.0, -450, 200), "", strong, "B")
+    to_property(strong, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+def build_flak_lit():
+    """Flak smoke inside a searchlight's beam: the painted shape again, as light added where the smoke is."""
+    m = new_material("M_FlakLit")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    picture = node(m, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0,
+                   parameter_name="Sheet",
+                   texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
+                   sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -700, 320)
+    lit = node(m, unreal.MaterialExpressionMultiply, -450, 160)
+    connect(colour, "", lit, "A")
+    connect(colour, "A", lit, "B")
+    shaped = node(m, unreal.MaterialExpressionMultiply, -250, 80)
+    connect(lit, "", shaped, "A")
+    connect(picture, "A", shaped, "B")
+    to_property(shaped, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
 # Each asset is left alone if it is already there, so adding one does not rewrite the others.
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

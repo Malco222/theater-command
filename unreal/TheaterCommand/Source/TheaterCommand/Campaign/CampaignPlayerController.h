@@ -562,7 +562,24 @@ public:
 	void StageSea(const FString& NameBegins);
 	int32 StagedSea = INDEX_NONE;
 	/** (Ruling 86.) Where the gates' marks were last drawn, in the window's own pixels: told by the screen as it paints them. */
-	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks) { GateMarks = Marks; }
+	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks, float PixelsToAUnit = 1.0f) { GateMarks = Marks; GateMarkScale = FMath::Max(PixelsToAUnit, 0.01f); }
+	/**
+	 * Where the pointer's box should stand clear of: the mark of the gate it explains, in the screen's own units (the
+	 * units the mark was painted in, whatever the window's pixels are). False when it explains no mark.
+	 */
+	bool GetTipAnchor(FBox2D& Out) const
+	{
+		for (const TPair<int32, FBox2D>& Mark : GateMarks)
+		{
+			if (HoverGate != INDEX_NONE && Mark.Key == HoverGate)
+			{
+				Out = FBox2D(Mark.Value.Min / GateMarkScale, Mark.Value.Max / GateMarkScale);
+				return true;
+			}
+		}
+		return false;
+	}
+	float GateMarkScale = 1.0f;
 	/** Shows the model of one of the corps in hand large and turning beside the cards. */
 	void ShowCorpsModel(int32 CorpsId);
 	FText GetShowTitle() const { return ShowTitle; }
@@ -636,13 +653,10 @@ public:
 	 * this) are the quieter number: Tab still goes to them after the front, and they never hold the month.
 	 */
 	int32 ArmiesIdleAtFront() const;
-	/**
-	 * (Ruling 88.) The provinces where an army of the player's still waits for an order this month, in the order the
-	 * round takes them: untouched first, the front before the rear, then the nearest. Left out: armies on a kept
-	 * march, digging in, told to stand this month, garrisons and forts. With bIdleAtFront, only the armies at the
-	 * front that have not been touched at all: the ones the question at the month's end is about.
-	 */
-	TArray<int32> ArmiesWaiting(bool bIdleAtFront = false) const;
+	/** (Ruling 101.) The quieter number: untouched armies in the rear. Tab goes to them after the front, and they never hold the month. */
+	int32 ArmiesInRear() const;
+	/** True when the armies on the disc are all newly raised and none stands at the front: the line under NEXT ARMY then says so. */
+	bool IsRoundNewlyRaised() const;
 	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
 	void StandThisMonth();
 	bool IsStandingThisMonth() const;
@@ -651,6 +665,7 @@ public:
 	{
 		bool bVisible = false;
 		int32 Count = 0;
+		int32 Raised = 0; // how many of them are armies raised this month, not at the front
 		double Since = 0.0; // (it takes no key for its first half second)
 	};
 	const FEndAsk& GetEndAsk() const { return EndAsk; }
@@ -900,8 +915,7 @@ private:
 	bool bWatching = false;
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
 	bool bRewatching = false; // the month is being watched again from its card
-	TSet<int32> StandingCorps; // (ruling 88) the corps told to stand this month, and the month that was
-	int32 StandingTurn = -1;
+	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
 	FEndAsk EndAsk;
 	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month

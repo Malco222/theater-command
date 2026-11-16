@@ -785,6 +785,16 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	// (Rulings 88, 101 and 102.) The round of armies, as the rules count it.
+	const TSharedPtr<FJsonObject>* Round = nullptr;
+	if (Object->TryGetObjectField(TEXT("round"), Round) && Round && Round->IsValid())
+	{
+		(*Round)->TryGetNumberField(TEXT("bright"), Out.Round.Bright);
+		(*Round)->TryGetNumberField(TEXT("quiet"), Out.Round.Quiet);
+		(*Round)->TryGetNumberField(TEXT("front"), Out.Round.Front);
+		(*Round)->TryGetNumberField(TEXT("all"), Out.Round.All);
+		(*Round)->TryGetNumberField(TEXT("idle"), Out.Round.Idle);
+	}
 	// (Ruling 86.) The sea gates.
 	const TArray<TSharedPtr<FJsonValue>>* Gates = nullptr;
 	if (Object->TryGetArrayField(TEXT("gates"), Gates))
@@ -1259,6 +1269,50 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 		Object->TryGetBoolField(TEXT("spent"), *OutSpent);
 	}
 	return Out;
+}
+
+int32 FCampaignSession::NextArmy(TArray<int32>& InOutSeen, const FVector2D& From)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("nextArmy"), FString::Printf(TEXT("[[%s],%.1f,%.1f]"), *IdList(InOutSeen), From.X, From.Y), Object))
+	{
+		return INDEX_NONE;
+	}
+	int32 Region = INDEX_NONE;
+	Object->TryGetNumberField(TEXT("reg"), Region);
+	const TArray<TSharedPtr<FJsonValue>>* Seen = nullptr;
+	if (Object->TryGetArrayField(TEXT("seen"), Seen))
+	{
+		InOutSeen.Reset();
+		for (const TSharedPtr<FJsonValue>& Value : *Seen)
+		{
+			InOutSeen.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
+	return Region < 0 ? INDEX_NONE : Region;
+}
+
+FString FCampaignSession::Stand(int32 RegionId, bool bOn)
+{
+	FString Now;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stand"), FString::Printf(TEXT("[%d,%s]"), RegionId, bOn ? TEXT("true") : TEXT("false")), Object))
+	{
+		Object->TryGetStringField(TEXT("stands"), Now);
+		TakeView(Object);
+	}
+	return Now;
+}
+
+FString FCampaignSession::Stands(int32 RegionId)
+{
+	FString Now;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stands"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("stands"), Now);
+	}
+	return Now;
 }
 
 FMarchPlan FCampaignSession::PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId)
@@ -2986,6 +3040,7 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 		Fly->TryGetNumberField(TEXT("aa"), Sortie.Flak);
 		Fly->TryGetStringField(TEXT("meet"), Sortie.Meet);
 		Fly->TryGetNumberField(TEXT("meetFrom"), Sortie.MeetFrom);
+		Fly->TryGetBoolField(TEXT("night"), Sortie.bNight);
 		double Loss = 0.0, X = 0.0, Y = 0.0;
 		Fly->TryGetNumberField(TEXT("loss"), Loss);
 		Sortie.Loss = static_cast<float>(Loss);

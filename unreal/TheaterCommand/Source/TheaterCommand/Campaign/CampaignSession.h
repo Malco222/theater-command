@@ -66,6 +66,16 @@ public:
 	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr);
 	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
 	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId);
+	/**
+	 * (Ruling 102.) The province of the army the round goes to next, by the rules' own order: those not yet visited
+	 * this round first, the nearest to From (on the map's own scale) among equals. InOutSeen is the round so far and
+	 * comes back with this one added. INDEX_NONE when every army has its orders.
+	 */
+	int32 NextArmy(TArray<int32>& InOutSeen, const FVector2D& From);
+	/** STAND THIS MONTH for the army in a province, or taking it back. Returns how the army there now stands: "all", "some", "none", or empty. */
+	FString Stand(int32 RegionId, bool bOn);
+	/** How the army in a province stands this month, without changing it. */
+	FString Stands(int32 RegionId);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */

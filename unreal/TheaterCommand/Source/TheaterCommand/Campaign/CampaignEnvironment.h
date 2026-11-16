@@ -49,6 +49,12 @@ public:
 	 */
 	void SetMonthsEnd(bool bEnded);
 	bool IsMonthsEnd() const { return bMonthsEnd; }
+	/**
+	 * (Ruling 107; the art director's brief.) A raid flown by night is watched in the dark: while one plays the hour
+	 * falls to night, over about a second and a half, whatever the hour was and however the player keeps time; when
+	 * it is over the hour goes back to where it was.
+	 */
+	void SetRaidNight(bool bOn) { bRaidNight = bOn; }
 	/** The night as it was first made: the room's warm lamp alone. Otherwise the night is moonlight. */
 	void SetLamplight(bool bLamp) { if (bLamp != bLamplight) { bLamplight = bLamp; ApplyLight(); } }
 	bool IsLamplight() const { return bLamplight; }
@@ -84,6 +90,7 @@ private:
 	FString DayClockHeld; // (only read from the command line)
 	int32 TimeKeeping = 0; // 0 the day runs, 1 held at day, 2 held at night
 	bool bMonthsEnd = false; // the month has ended and the others are moving: it is evening
+	bool bRaidNight = false; // a raid by night is playing: it is night until it is over
 	float HeldNight = -1.0f; // (for pictures, "-TheaterDusk=0.5": the hour is held this far into the night)
 	bool bLamplight = false;
 	void ApplyLight();

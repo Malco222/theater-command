@@ -562,9 +562,38 @@ private:
 		double Share = 0.0; // how far through its flight it is, 0 to 1
 		bool bEngaged = false; // the defender's fighters are among the bombers
 		double NextFlak = 0.0; // when the guns under it fire next (nothing until it comes under fire)
+		// (Ruling 107.) By night: each bomber again as a shell of light, shown while a searchlight holds it.
+		int32 LitMachines = 0;
+		int32 LitShown = INDEX_NONE;
+		TObjectPtr<UMaterialInstanceDynamic> LitInk;
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
+	/**
+	 * (Brian, 16 November 2026: "if the air raid is at night have search lights shown from the cities"; ruling 107
+	 * (f); the art director's brief.) The searchlights of every place under raid by night: lamps on the ground round
+	 * it, by its guns, and their beams, light added over the scene. Some search and some hold a bomber.
+	 */
+	void UpdateSearchlights(float CameraDistance);
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> BeamMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BeamMaterial;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> FlakLitInk;
+	/** A beam as it stands this moment, for whatever it lights: its lamp, its way, how long it is, how far along it reaches the bombers' height, and how strong it is. */
+	struct FLitBeam
+	{
+		FVector Lamp = FVector::ZeroVector;
+		FVector Way = FVector::UpVector;
+		double Long = 0.0, ToHeight = 0.0, Wings = 0.0;
+		float Strength = 0.0f;
+	};
+	TArray<FLitBeam> LitBeams;
+	bool bRaidNightAsked = false;
+	TArray<FVector> FlakLitVertices;
+	TArray<FVector2D> FlakLitPlaces;
+	TArray<FColor> FlakLitColours;
 	/** Ground that has just changed hands flashes once: the province, and when. */
 	TArray<TPair<int32, double>> Flashes;
 	double FlashesDrawn = 0.0;
@@ -764,6 +793,19 @@ private:
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
+	// (The art director's round 36: "the lobes are round".) The smoke of a burst is one or two of her own painted
+	// shapes, torn at the edge and never round: twelve on one sheet, four shapes at each of three ages. Each is a
+	// flat picture turned to the wind and to the eye.
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> FlakSmokeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> FlakSmokeInk;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> FlakSheet;
+	TArray<FVector> FlakVertices;
+	TArray<FVector2D> FlakPlaces; // where on the sheet each corner is
+	TArray<FColor> FlakColours;
+	bool bFlakSmokeMade = false;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;

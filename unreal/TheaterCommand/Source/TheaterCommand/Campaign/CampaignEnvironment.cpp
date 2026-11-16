@@ -276,9 +276,14 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 			Wanted = FMath::Max(Wanted, DuskRests());
 		}
 	}
+	// (a raid by night is playing: night, come to quickly, as the bombers come in)
+	if (bRaidNight)
+	{
+		Wanted = 1.0f;
+	}
 	// A held time is come to over a few seconds, not at a jump.
 	UpdateAir();
-	const float Next = FMath::FInterpTo(Night, Wanted, DeltaSeconds, 0.9f);
+	const float Next = bRaidNight ? FMath::FInterpConstantTo(Night, Wanted, DeltaSeconds, 0.7f) : FMath::FInterpTo(Night, Wanted, DeltaSeconds, 0.9f);
 	if (FMath::Abs(Next - Night) > 0.0015f || (Next != Night && FMath::IsNearlyEqual(Next, Wanted, 0.002f)))
 	{
 		Night = FMath::IsNearlyEqual(Next, Wanted, 0.002f) ? Wanted : Next;
