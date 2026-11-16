@@ -148,7 +148,7 @@ public:
 	/** The mud of the eastern spring and autumn: the ground it lies on is washed brown. None clears it. */
 	void ShowMud(const TArray<int32>& Regions);
 	/** The fog of war: ground the player has no eyes on lies under a shadow, on the table and on the small map. */
-	void ShowShroud(const TArray<int32>& Unseen);
+	void ShowShroud(const TArray<int32>& Unseen, const TArray<int32>& Glimpsed = TArray<int32>());
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
 	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
@@ -199,6 +199,11 @@ public:
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }
 	FVector2D ParadeSpot(int32 Index) const;
+	/**
+	 * (The fog of war as a haze.) Softens a picture of unseen ground at its edge: the haze starts a little outside an
+	 * unseen province's border, stands at about a third on it, and is whole some three and a half map units inside.
+	 */
+	static void SoftenFog(TArray<FColor>& Pixels, int32 NX, int32 NY, double Cell);
 	/** (For the photographer.) Where a train now runs in the open, a little ahead of it; one made up under guns of at least that level. */
 	bool TrainSpot(int32 MinFlak, FVector2D& Out) const;
 	/** (For the photographer.) The next look at a train chooses its train afresh. */
@@ -914,7 +919,7 @@ private:
 	TArray<FVector> CloudVertices;
 	TArray<FColor> CloudColours;
 	void UpdateClouds();
-	TArray<int32> ShownUnseen;
+	TArray<int32> ShownUnseen, ShownGlimpsed;
 	/** Where the ground nobody of the player's can see lies, a pixel to a point of the terrain: there the land is the staff's paper map, and what stands on it is drawn, not coloured. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> FogPicture;
@@ -983,6 +988,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MarginShade;
 	TSet<int32> UnseenSet;
+	TSet<int32> GlimpsedSet; // (ruling 154) ground he only glimpses
+	TSet<int32> HazeSet; // the two together: where the haze lies
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;
 	bool bSides = false;

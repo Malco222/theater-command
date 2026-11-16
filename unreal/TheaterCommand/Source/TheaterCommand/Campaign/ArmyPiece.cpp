@@ -129,6 +129,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	NewSignature += FString::Printf(TEXT("|%dh"), HonourCount);
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
+	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -523,6 +524,12 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		{
 			Figure = Figure + TEXT("?"); // known from reports gone stale (a mark that cannot be misread as a minus at map size)
 		}
+		if (bGlimpsed)
+		{
+			// (Ruling 154: at a glimpse the tag is the question mark alone. How many corps is on the box when he points at the flag.)
+			Size = 1.0;
+			Figure = TEXT("?");
+		}
 	}
 
 	// The standard: a pole at the back of the base, the nation's flag of the period, and a brass finial.
@@ -537,7 +544,15 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Standard->SetRelativeLocation(StandardFoot);
 	Standard->RegisterComponent();
 	FMiniatureMesh Staff;
-	Staff.Pillar(FVector::ZeroVector, 0.2 * U, 0.2 * U, PoleHeight, IronPaint, 8);
+	if (bGlimpsed)
+	{
+		// (ruling 154: the pole is gone before it reaches the ground: it thins away to nothing over its lower part)
+		Staff.Pillar(FVector(0.0, 0.0, PoleHeight * 0.3), 0.02 * U, 0.2 * U, PoleHeight * 0.7, IronPaint, 8);
+	}
+	else
+	{
+		Staff.Pillar(FVector::ZeroVector, 0.2 * U, 0.2 * U, PoleHeight, IronPaint, 8);
+	}
 	Staff.Ball(FVector(0.0, 0.0, PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
 	const double Hoist = 0.2 * U; // where the cloth begins, just clear of the pole
 	const FVector FlagAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
@@ -725,8 +740,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Body->SetupAttachment(Root);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->RegisterComponent();
-	Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-	Body->SetMaterial(0, Map->GetPieceMaterial());
+	if (!bGlimpsed) // (ruling 154: an army he only glimpses has no base and no pieces)
+	{
+		Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		Body->SetMaterial(0, Map->GetPieceMaterial());
+	}
 	// (a fleet at sea: its wake, foam lying on the water. Two of them, on patrol and on passage: the one that is not wanted is hidden.)
 	bHasWake = false;
 	if (Model.Wake[0].Vertices.Num() > 0 && Map->GetWakeMaterial())
@@ -741,7 +759,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Body->SetMeshSectionVisible(1, !bMarching);
 		Body->SetMeshSectionVisible(2, bMarching);
 	}
-	if (Turf.Vertices.Num() > 0)
+	if (Turf.Vertices.Num() > 0 && !bGlimpsed)
 	{
 		Flock = NewObject<UProceduralMeshComponent>(this);
 		Flock->SetupAttachment(Root);
@@ -752,7 +770,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Flock->SetCastShadow(false);
 		Flock->SetVisibility(bFlockNear);
 	}
-	if (DarkEarth.Vertices.Num() > 0)
+	if (DarkEarth.Vertices.Num() > 0 && !bGlimpsed)
 	{
 		FarEarth = NewObject<UProceduralMeshComponent>(this);
 		FarEarth->SetupAttachment(Root);
@@ -842,7 +860,7 @@ void AArmyPiece::ApplyStandard()
 		Standard->SetRelativeRotation(FRotator(-StandardTilt, 0.0f, 0.0f));
 		// (a standard drawn larger than life throws no shadow: a shadow that size would not be the flag's own,
 		// and from high up it lay across the map as a dark bar beside every army)
-		const bool bShadow = StandardScale < 1.12f;
+		const bool bShadow = StandardScale < 1.12f && !bGlimpsed; // (and a flag at a glimpse throws none)
 		if (Cloth && Cloth->CastShadow != bShadow)
 		{
 			Cloth->SetCastShadow(bShadow);

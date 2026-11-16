@@ -329,6 +329,8 @@ function view() {
     })(),
     // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
     unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
+    // (Ruling 154.) Ground he only glimpses (the rules' sight 1): the haze stays over it, and an army there is a flag and no more.
+    glimpsed: s.human ? s.regions.filter((r) => seen[r.id] === 1).map((r) => r.id) : [],
     // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
     weather: (() => {
       const w = weatherNow(s);

@@ -1380,6 +1380,40 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	const double BandReach = FMath::Max(0.13 * CameraDistance, 190.0);
 	const FVector Heart = CameraFocus + FVector(-0.25, -0.55, 0.0) * (0.14 * CameraDistance);
 	SeaVector(TEXT("GlintAt"), FLinearColor(static_cast<float>(Heart.X), static_cast<float>(Heart.Y), static_cast<float>(1.0 / (BandReach * BandReach)), 0.0f));
+
+	// THE FOG OF WAR AS A HAZE: its wisps by the hour and by the eye's height. By day they are a pale slate; by night
+	// they are paler than the ground under them, like mist under a moon. From high up they fade into a flat veil.
+	// ("-TheaterHaze=0.67,0.5,0.38" tries another darkness, drain and thickness of wisp; "-TheaterHazeInk=r,g,b,r,g,b"
+	// other colours for the wisps by day and by night, as the land's paint takes them.)
+	// (Tuned by measure on Paris from playing height, 16 November 2026: France in view stood at 121 of brightness; the
+	// brief's two thirds is about 81, with the pockets near 55 and the wisps near 101. The paint's 0.4 comes out as
+	// two thirds on the screen, since the lens lifts dark paint.)
+	static float HazeDark = 0.4f, HazeDrain = 0.5f, HazeWisps = 0.34f;
+	static FLinearColor HazeDay(0.17f, 0.19f, 0.22f), HazeNight(0.26f, 0.3f, 0.43f);
+	static bool bHazeRead = false;
+	if (!bHazeRead)
+	{
+		bHazeRead = true;
+		FString Asked;
+		TArray<FString> Bits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHaze="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 3)
+		{
+			HazeDark = FCString::Atof(*Bits[0]);
+			HazeDrain = FCString::Atof(*Bits[1]);
+			HazeWisps = FCString::Atof(*Bits[2]);
+		}
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeInk="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 6)
+		{
+			HazeDay = FLinearColor(FCString::Atof(*Bits[0]), FCString::Atof(*Bits[1]), FCString::Atof(*Bits[2]));
+			HazeNight = FLinearColor(FCString::Atof(*Bits[3]), FCString::Atof(*Bits[4]), FCString::Atof(*Bits[5]));
+		}
+	}
+	// (by night the same paint came out at 57% of ground in view, where two thirds is asked: it is lifted a little there)
+	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * 1.35f, Moon));
+	LandScalar(TEXT("HazeDrain"), HazeDrain);
+	LandScalar(TEXT("HazeWisps"), HazeWisps);
+	LandVector(TEXT("HazeColour"), FMath::Lerp(HazeDay, HazeNight, Moon));
+	LandScalar(TEXT("HazeWispy"), 1.0f - FMath::SmoothStep(7000.0f, 13000.0f, CameraDistance));
 }
 
 void ACampaignMapActor::SeaVector(FName Name, const FLinearColor& Value)
@@ -1824,6 +1858,7 @@ void ACampaignMapActor::PaintGround()
 			Stands->SetTextureParameterValue(TEXT("Fog"), FogPicture);
 			Stands->SetVectorParameterValue(TEXT("FogFrame"), FLinearColor(1.0f / (UnitScale * Data.Width), 0.5f, -1.0f / (UnitScale * Data.Height), 0.5f));
 			Stands->SetScalarParameterValue(TEXT("Drawn"), 1.0f);
+			Stands->SetScalarParameterValue(TEXT("DrawnDark"), 0.45f); // (a town or a wood under the haze: as dark as the ground it stands on)
 		}
 	}
 	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
@@ -2722,16 +2757,17 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 		// (the staff's paper over what nobody of the player's can see there, as it stands now)
 		TArray<FColor> Fogged;
 		Fogged.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
-		if (UnseenSet.Num() > 0 && Sheet.Shape.Region.Num() == Fogged.Num())
+		if (HazeSet.Num() > 0 && Sheet.Shape.Region.Num() == Fogged.Num())
 		{
 			for (int32 Index = 0; Index < Fogged.Num(); ++Index)
 			{
 				const int32 Id = Painted.PaintedRegion(Index, Sheet.Shape);
-				if (Id >= 0 && UnseenSet.Contains(Id))
+				if (Id >= 0 && HazeSet.Contains(Id))
 				{
 					Fogged[Index].R = 255;
 				}
 			}
+			SoftenFog(Fogged, Painted.NX, Painted.NY, Sheet.Shape.Cell);
 		}
 		Sheet.FogPicture = Picture(Fogged, Painted.NX, Painted.NY, false, TEXT("Fog"));
 		Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Sheet.FogPicture);
@@ -4618,6 +4654,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		FTrain& Train = Trains[Index];
 		double Share = (Now - Train.Began) / LinkLasts;
 		const bool bGone = !bNear || !Land.Rails.IsValidIndex(Train.Rail) || ShownCut.Contains(Land.Rails[Train.Rail].A) || ShownCut.Contains(Land.Rails[Train.Rail].B)
+			|| HazeSet.Contains(Land.Rails[Train.Rail].A) || HazeSet.Contains(Land.Rails[Train.Rail].B) // (nothing moves under the haze)
 			|| FVector2D::DistSquared(Land.Rails[Train.Rail].At, Looking) > 260.0 * 260.0;
 		if (!bGone && Share >= 1.0 && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].A) && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].B))
 		{
@@ -4633,6 +4670,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 			for (int32 Other = 0; Other < Land.Rails.Num(); ++Other)
 			{
 				if (Other != Train.Rail && (Land.Rails[Other].A == Here || Land.Rails[Other].B == Here) && !ShownCut.Contains(Land.Rails[Other].A) && !ShownCut.Contains(Land.Rails[Other].B)
+					&& !HazeSet.Contains(Land.Rails[Other].A) && !HazeSet.Contains(Land.Rails[Other].B)
 					&& Data.Regions.IsValidIndex(Land.Rails[Other].A) && Data.Regions.IsValidIndex(Land.Rails[Other].B))
 				{
 					Onward.Add(Other);
@@ -4736,6 +4774,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	{
 		const FLandRail& Rail = Land.Rails[Index];
 		if (Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) && FVector2D::DistSquared(Rail.At, Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
+			&& !HazeSet.Contains(Rail.A) && !HazeSet.Contains(Rail.B)
 			&& !Trains.ContainsByPredicate([Index](const FTrain& Each) { return Each.Rail == Index; }))
 		{
 			Near.Add(Index);
@@ -6900,7 +6939,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			const uint32 Chance = (static_cast<uint32>(Light) * 2246822519u) >> 24;
 			const float Moment = 0.15f + 0.6f * (Chance / 255.0f);
-			const bool bDark = Black.Contains(VillageRegion[Light]) || Chance % 6 == 0;
+			const bool bDark = Black.Contains(VillageRegion[Light]) || Chance % 6 == 0 || HazeSet.Contains(VillageRegion[Light]); // (and no village's lamp shows through the haze)
 			const float Strength = Chance % 6 == 1 ? 1.0f : 0.4f + 0.42f * ((Chance >> 3) % 8) / 7.0f;
 			const float Lit = bDark ? 0.0f : FMath::Clamp((Night - Moment) / 0.12f, 0.0f, 1.0f) * Strength;
 			const uint8 Red = static_cast<uint8>(215 + Chance % 30), Green = static_cast<uint8>(150 + Chance % 34), Blue = static_cast<uint8>(62 + Chance % 30);
@@ -6927,7 +6966,9 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		}
 		for (int32 Glow = 0; Glow < GlowRegion.Num(); ++Glow)
 		{
-			const float Lit = Black.Contains(GlowRegion[Glow]) ? 0.0f : Dusk;
+			// (the fog of war as a haze: a town's lights under it burn at a quarter strength and throw no pool)
+			const bool bHazed = HazeSet.Contains(GlowRegion[Glow]);
+			const float Lit = Black.Contains(GlowRegion[Glow]) || (bHazed && GlowKind[Glow] == 2) ? 0.0f : bHazed ? 0.25f * Dusk : Dusk;
 			for (int32 K = 0; K < PerGlow; ++K)
 			{
 				GlowShown[Glow * PerGlow + K] = Lit > 0.003f ? GlowPoints[Glow * PerGlow + K] : GlowPoints[Glow * PerGlow];
@@ -8132,6 +8173,8 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		}
 		if (Piece)
 		{
+			// (Ruling 154: a foreign army in a province he only glimpses is a flag and no more.)
+			Piece->SetGlimpsed(Group[0].Nation != View.Human && View.Glimpsed.Contains(Group[0].Region));
 			Piece->SetArmy(this, *Nation, Group[0].Region, Group);
 			Piece->SetRestLocation(Spot);
 			Piece->SetSize(static_cast<float>(PieceSize.X));
@@ -8183,9 +8226,9 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		AArmyPiece* Piece = Arrival.Key;
 		const FCorpsMove& Lead = *Arrival.Value[0];
 		const FVector* From = Before.Find(Lead.CorpsId);
-		if (!From)
+		if (!From || Piece->IsGlimpsed())
 		{
-			continue;
+			continue; // (ruling 154: a flag at a glimpse does not march: it is simply found where it now is)
 		}
 		TArray<FVector> Road;
 		if (CarriedFrom)
@@ -8898,6 +8941,42 @@ void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed)
 	bMiniStale = true;
 }
 
+void ACampaignMapActor::SoftenFog(TArray<FColor>& Pixels, int32 NX, int32 NY, double Cell)
+{
+	if (NX < 3 || NY < 3 || Pixels.Num() != NX * NY || Cell <= 0.0)
+	{
+		return;
+	}
+	bool bAny = false;
+	TArray<float> Field;
+	Field.SetNumUninitialized(Pixels.Num());
+	for (int32 Index = 0; Index < Pixels.Num(); ++Index)
+	{
+		Field[Index] = Pixels[Index].R > 127 ? 1.0f : 0.0f;
+		bAny |= Pixels[Index].R > 127;
+	}
+	if (!bAny)
+	{
+		return;
+	}
+	// (Blurred twice over a box: across a straight border that is a hat whose half-breadth is about (2R + 1) cells.
+	// The share of it that lies inside, at a distance from the border, is then stretched so that the haze is nothing
+	// 1.3 map units outside, about a third on the border, and whole 3.5 units inside: the art director's edge.)
+	const int32 Radius = FMath::Clamp(FMath::RoundToInt32((4.5 / Cell - 1.0) * 0.5), 1, 4);
+	FCampaignTerrain::Smooth(Field, NX, NY, Radius, 2);
+	const double Half = (2.0 * Radius + 1.0) * Cell;
+	auto Inside = [Half](double Off)
+	{
+		const double At = FMath::Clamp(Off / Half, -1.0, 1.0);
+		return 0.5 + At - 0.5 * At * FMath::Abs(At);
+	};
+	const float From = static_cast<float>(Inside(-1.3)), To = static_cast<float>(Inside(3.5));
+	for (int32 Index = 0; Index < Pixels.Num(); ++Index)
+	{
+		Pixels[Index].R = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0f * (Field[Index] - From) / FMath::Max(To - From, 0.05f)), 0, 255));
+	}
+}
+
 void ACampaignMapActor::FogBeyond()
 {
 	if (!Data.bWorld || !WorldLandMaterial || Data.Regions.Num() <= Data.FirstBeyond)
@@ -8907,7 +8986,7 @@ void ACampaignMapActor::FogBeyond()
 	TArray<bool> Hidden;
 	Hidden.Init(false, Data.Regions.Num());
 	bool bAnyHidden = false;
-	for (const int32 RegionId : UnseenSet)
+	for (const int32 RegionId : HazeSet)
 	{
 		if (Hidden.IsValidIndex(RegionId) && RegionId >= Data.FirstBeyond)
 		{
@@ -8934,6 +9013,7 @@ void ACampaignMapActor::FogBeyond()
 				OutPixels[Index].R = 255;
 			}
 		}
+		SoftenFog(OutPixels, Painted.NX, Painted.NY, Shape.Cell);
 	};
 	TArray<FColor> Pixels;
 	Lay(WorldPaint, WorldTerrain, Pixels);
@@ -9882,14 +9962,17 @@ void ACampaignMapActor::UpdateClouds()
 	CloudMesh->UpdateMeshSection(0, CloudVertices, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
 }
 
-void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
+void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int32>& Glimpsed)
 {
-	if (Unseen == ShownUnseen)
+	if (Unseen == ShownUnseen && Glimpsed == ShownGlimpsed)
 	{
 		return;
 	}
 	ShownUnseen = Unseen;
+	ShownGlimpsed = Glimpsed;
 	UnseenSet = TSet<int32>(Unseen);
+	GlimpsedSet = TSet<int32>(Glimpsed);
+	HazeSet = UnseenSet.Union(GlimpsedSet); // (ruling 154: the haze stays over ground he only glimpses, at the same depth)
 	bMiniStale = true;
 	OrdersMesh->ClearMeshSection(6);
 	// Ground nobody of the player's can see is the staff's own paper map (art fix 11): the land's material draws
@@ -9901,11 +9984,11 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 	}
 	TArray<FColor> Pixels;
 	Pixels.Init(FColor(0, 0, 0, 255), Paint.NX * Paint.NY);
-	if (Unseen.Num() > 0)
+	if (HazeSet.Num() > 0)
 	{
 		TArray<bool> Hidden;
 		Hidden.Init(false, Data.Regions.Num());
-		for (const int32 RegionId : Unseen)
+		for (const int32 RegionId : HazeSet)
 		{
 			if (Hidden.IsValidIndex(RegionId))
 			{
@@ -9922,6 +10005,7 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 			}
 		}
 	}
+	SoftenFog(Pixels, Paint.NX, Paint.NY, Terrain.Cell);
 	CampaignTextures::Update(FogPicture, Pixels);
 	FogBeyond();
 }

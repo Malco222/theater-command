@@ -939,6 +939,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Out.Unseen.Add(FMath::RoundToInt32(Value->AsNumber()));
 		}
 	}
+	const TArray<TSharedPtr<FJsonValue>>* Glimpsed = nullptr;
+	if (Object->TryGetArrayField(TEXT("glimpsed"), Glimpsed))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Glimpsed)
+		{
+			Out.Glimpsed.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Free = nullptr;
 	if (Object->TryGetArrayField(TEXT("free"), Free))
 	{

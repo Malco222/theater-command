@@ -37,6 +37,13 @@ public:
 	/** Says what the piece stands for. It is rebuilt only if that has changed. */
 	void SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 InRegionId, const TArray<FViewCorps>& InCorps);
 	/**
+	 * (Ruling 154.) An army he only glimpses through the haze is a flag and no more: its flag, its finial and a "?"
+	 * under the cloth; no base, no pieces, no shadow, no number, and its pole gone before it reaches the ground. It
+	 * reads as a report pinned on the haze, not as an army standing there. Set before SetArmy.
+	 */
+	void SetGlimpsed(bool bOn) { bGlimpsed = bOn; }
+	bool IsGlimpsed() const { return bGlimpsed; }
+	/**
 	 * How large the standard is drawn beside its life size, and how far it leans back toward an eye above it, in
 	 * degrees. The base is not touched. (The size is what is seen: a piece that is itself drawn small keeps a
 	 * standard of the same size as its neighbours'.)
@@ -170,6 +177,7 @@ private:
 	double MarchTime = 1.0;
 	double LiftHeight = 40.0;
 	bool bMarching = false;
+	bool bGlimpsed = false; // (ruling 154) only glimpsed: a flag and no more
 	bool bHasWake = false; // a fleet at sea: its body carries a wake for patrol (section 1) and one for passage (section 2)
 	// What the army is about, shown round its base so it can be read without a click: 0 nothing, 1 digging in,
 	// 2 entrenched; in camp, resting; 0 not known, 1 supplied, 2 cut off.

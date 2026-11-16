@@ -684,6 +684,7 @@ struct FCampaignView
 	TMap<int32, FString> Folds; // (Version 64) provinces where two of the player's corps are worn thin and could be folded into one: their names
 	TArray<int32> WorksLeft; // (Version 64) fieldworks standing empty on the player's side's ground: three numbers each, the region, tenths of a month of work, room for how many corps
 	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
+	TArray<int32> Glimpsed; // (ruling 154) provinces he only glimpses: the haze stays, and an army there is a flag and no more
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
 	TArray<FCityOrders> CityOrders; // what each of the player's cities has on order

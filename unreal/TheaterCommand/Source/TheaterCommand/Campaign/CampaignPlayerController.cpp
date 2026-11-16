@@ -6036,7 +6036,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowAirfieldSigns(View.Airfields);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
-		Map->ShowShroud(View.Unseen);
+		Map->ShowShroud(View.Unseen, View.Glimpsed);
 		Map->ShowMud(View.bMud ? View.WeatherGround : TArray<int32>());
 		if (Map->AreSidesShown())
 		{

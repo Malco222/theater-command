@@ -132,8 +132,10 @@ def build_map_surface():
     light2 = node(m, unreal.MaterialExpressionDotProduct, -300, -1000)
     connect(tinted, "", light2, "A")
     connect(weights2, "", light2, "B")
-    sketched = times(m, vector(m, "DrawnTone", (1.0, 0.92, 0.76, 1.0), -300, -1150), light2, -150, -1050)
-    tinted = lerp(m, tinted, lerp(m, tinted, sketched, 0.55, 0, -950), drawn, 150, -500)
+    # (The fog of war as a haze: what stands on unseen ground, a town or a wood, is in shadow with the ground it stands
+    # on: two thirds as bright, half its colour gone, the same cold cast. It was drawn on paper there before.)
+    sketched = times(m, vector(m, "DrawnTone", (0.92, 1.0, 1.07, 1.0), -300, -1150), lerp(m, tinted, light2, 0.5, -300, -1050), -150, -1050)
+    tinted = lerp(m, tinted, times(m, sketched, scalar(m, "DrawnDark", 0.67, -150, -1150), 0, -950), drawn, 150, -500)
     # The paint job of a piece (art fix 12): worn painted metal. "Wear" is nothing unless C++ says so (the pieces'
     # own material does). All paint is mottled a little, as paint is that has seen weather. Where the mesh marks
     # itself as painted metal (its alpha at a half: the tanks, guns, lorries, ships and aircraft), the paint is
@@ -967,36 +969,49 @@ def build_land():
     # whoever holds it, the wash is thin, and the holder's colour is carried by the ink: fine slanting lines ruled
     # across it, and the band inside the frontier.
     paper = scalar(m, "Paper", 0.0, 0, -900)
-    fog = times(m, (fog_picture, "R"), scalar(m, "FogStrength", 0.92, -2300, -1700), -2100, -1800)
-    sheeted = node(m, unreal.MaterialExpressionMax, -1900, -1800)
-    connect(paper, "", sheeted, "A")
-    connect(fog, "", sheeted, "B")
-    unseen = times(m, fog, one_in(m, unreal.MaterialExpressionOneMinus, paper, -2100, -1650), -1900, -1650)  # fogged, and not yet the staff map
+    fog = times(m, (fog_picture, "R"), scalar(m, "FogStrength", 1.0, -2300, -1700), -2100, -1800)
+    # (only the staff map is a sheet of paper now: unseen ground keeps its real ground, under the haze below)
+    sheeted = paper
     hill = one_in(m, unreal.MaterialExpressionSaturate,
                   plus(m, scalar(m, "PaperShade", 0.6, -600, -1000), times(m, (relief, "B"), scalar(m, "PaperSun", 0.92, -600, -900), -450, -950), -300, -950), -150, -950)
-    ground_paper = lerp(m, vector(m, "PaperColour", (0.74, 0.66, 0.5, 1.0), -300, -1300), vector(m, "FogColour", (0.25, 0.215, 0.145, 1.0), -300, -1400), unseen, -150, -1350)
-    sheet = lerp(m, vector(m, "PaperInk", (0.2, 0.135, 0.075, 1.0), -300, -1150), ground_paper, hill, 0, -1100)
-    wash_p = lerp(m, scalar(m, "PaperWash", 0.5, -600, -1450), scalar(m, "FogWash", 0.18, -600, -1520), fog, -500, -1480)
+    sheet = lerp(m, vector(m, "PaperInk", (0.2, 0.135, 0.075, 1.0), -300, -1150), vector(m, "PaperColour", (0.74, 0.66, 0.5, 1.0), -300, -1300), hill, 0, -1100)
     tinted = one_in(m, unreal.MaterialExpressionSaturate,
-                    plus(m, times(m, wash_p, plus(m, boost, 1.0, -600, -1380), -450, -1420),
+                    plus(m, times(m, scalar(m, "PaperWash", 0.5, -600, -1450), plus(m, boost, 1.0, -600, -1380), -450, -1420),
                          times(m, (tint, "A"), scalar(m, "PaperBand", 0.62, -600, -1620), -450, -1620), -300, -1480), -150, -1480)
     stain_p = times(m, tint_rgb, plus(m, times(m, hill, 0.5, 0, -1380), 0.6, 100, -1380), 150, -1300)
     sheet = lerp(m, sheet, stain_p, tinted, 250, -1200)
-    # (the ruling: lines that slant across the table, a little under two map units apart, in the holder's colour)
-    hatch_place = world_uv(m, "HatchTiling", 0.006, -1600, -2100)
-    hatch_east = node(m, unreal.MaterialExpressionComponentMask, -1100, -2150, r=True, g=False, b=False, a=False)
-    connect(hatch_place, "", hatch_east, "")
-    hatch_south = node(m, unreal.MaterialExpressionComponentMask, -1100, -2050, r=False, g=True, b=False, a=False)
-    connect(hatch_place, "", hatch_south, "")
-    across = one_in(m, unreal.MaterialExpressionFrac, plus(m, hatch_east, hatch_south, -950, -2100), -800, -2100)
-    middle = one_in(m, unreal.MaterialExpressionAbs, plus(m, across, -0.5, -650, -2100), -500, -2100)
-    ruled = one_in(m, unreal.MaterialExpressionSaturate,
-                   plus(m, times(m, middle, scalar(m, "HatchSharp", -9.0, -500, -1950), -350, -2100), 1.0, -200, -2100), -50, -2100)
-    sheet = lerp(m, sheet, times(m, (tint, "RGB"), scalar(m, "HatchInk", 0.8, 100, -1950), 250, -2000),
-                 times(m, times(m, ruled, fog, 100, -2100), scalar(m, "Hatch", 0.7, 100, -2200), 250, -2150), 400, -1500)
     # (and on the paper the waters are drawn in a blue-grey ink)
     sheet = lerp(m, sheet, vector(m, "PaperWater", (0.13, 0.19, 0.27, 1.0), 300, -1750), times(m, waters, scalar(m, "PaperWaters", 0.75, 300, -1650), 450, -1700), 500, -1500)
-    c = lerp(m, c, sheet, sheeted, 550, -600)
+    # (on the paper, ground nobody of his can see takes a flat darker wash of its own colour: no lines)
+    sheet = times(m, sheet, lerp(m, 1.0, scalar(m, "PaperUnseen", 0.76, 500, -1850), fog, 650, -1800), 800, -1500)
+    # THE FOG OF WAR AS A HAZE (Brian, 16 November 2026: "i dont like the lines across. can we make it dark and hazy
+    # almost where you can see the map"; the art director's brief; ruling 154). A lamp over a dark table: where he
+    # sees, the lamp is on; everywhere else the map is still there, in shadow and haze. The real ground stays under
+    # it: two thirds as bright, about half its colour drained (so the holder's stain still shows at half), a cold
+    # slate cast; and over it a soft veil of wisps, long and low, that drifts slowly one way. The "Fog" picture says
+    # where, and is soft at its edge. From high up the wisps fade into a flat veil, so that they never turn to grain.
+    grey_weights = node(m, unreal.MaterialExpressionConstant3Vector, 600, -2300, constant=unreal.LinearColor(0.3, 0.59, 0.11, 0.0))
+    grey = node(m, unreal.MaterialExpressionDotProduct, 800, -2300)
+    connect(c, "", grey, "A")
+    connect(grey_weights, "", grey, "B")
+    drained = lerp(m, c, grey, scalar(m, "HazeDrain", 0.5, 800, -2450), 1000, -2300)
+    shaded = times(m, times(m, drained, vector(m, "HazeCast", (0.92, 1.0, 1.07, 1.0), 1000, -2450), 1200, -2300), scalar(m, "HazeDark", 0.67, 1200, -2450), 1400, -2300)
+    haze_place = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, 0, -2900), 200, -2900, r=True, g=True, b=False, a=False)
+
+    def wisps(long, deep, speed, x, y):
+        """The slow unevenness of the waves' picture, read long (east and west) and low, and drifting eastward."""
+        east = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y, r=False, g=True, b=False, a=False)
+        north = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y + 120, r=True, g=False, b=False, a=False)
+        drift = node(m, unreal.MaterialExpressionPanner, x + 500, y, speed_x=-speed / long, speed_y=0.0)
+        connect(pair(m, times(m, east, 1.0 / long, x + 180, y), times(m, north, 1.0 / deep, x + 180, y + 120), x + 340, y), "", drift, "Coordinate")
+        return (picture(m, "Waves", drift, x + 700, y, numbers=True), "A")
+
+    veil = plus(m, times(m, wisps(1800.0, 660.0, 7.0, 0, -2700), 0.68, 1000, -2700), times(m, wisps(640.0, 250.0, 11.0, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
+    wisp = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, veil, -0.4, 1350, -2900), 3.6, 1500, -2900), 1650, -2900)
+    wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.4, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
+    hazed = lerp(m, shaded, vector(m, "HazeColour", (0.21, 0.24, 0.27, 1.0), 1800, -2600), wisp, 2100, -2500)
+    c = lerp(m, c, hazed, fog, 2250, -1500)
+    c = lerp(m, c, sheet, paper, 2400, -600)
     to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     # Which way the surface leans: the ground itself, and the tree-tops and the rock on it.

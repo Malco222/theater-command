@@ -184,7 +184,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowAirfieldSigns(Session->GetView().Airfields);
 		Table->ShowLanes(Session->GetView().Lanes);
 		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
-		Table->ShowShroud(Session->GetView().Unseen);
+		Table->ShowShroud(Session->GetView().Unseen, Session->GetView().Glimpsed);
 		Table->ShowMud(Session->GetView().bMud ? Session->GetView().WeatherGround : TArray<int32>());
 		Table->SetSeason(Session->GetView().Turn);
 		// (and what the war has left on the table: works in hand, scars, sieges, and who keeps the blackout)
