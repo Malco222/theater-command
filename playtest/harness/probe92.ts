@@ -20,6 +20,7 @@ const mind: string[] = plan.mind ?? [];
 if (mind.includes('synth')) plan.research = ['synthetics', 'hydrogenation', ...(plan.research ?? ['winterkit', 'mediums', 'tanks', 'motor'])];
 const rows: any[] = []; let farmSpent = 0, farmOrders = 0; const errs: string[] = [];
 const line = (b: any, keys: RegExp): number => b.income.filter((l: any) => keys.test(l.key)).reduce((s: number, l: any) => s + l.amount, 0);
+const seen: Record<string, string> = {};
 const first = (g: any): void => {
   const n = g.nations[me];
   if (!n.alive) return;
@@ -38,6 +39,10 @@ const first = (g: any): void => {
       count: r ? r.score : null, limit: r ? r.limit : n.resilience, lanes: v.lanes.map((l: any) => `${l.id}:${l.state}`).join(' '),
     };
     rows.push(row);
+    // why a lane or a deal changed its state, said once each time it changes (TC_LANES=1)
+    if (process.env.TC_LANES) for (const l of v.lanes as any[]) {
+      if (seen[l.id] !== l.state) { console.log(`LANE ${me} seed ${seedS} ${date(g.turn)}: ${l.id} ${seen[l.id] ?? 'first'} -> ${l.state}${l.why ? ` (${l.why})` : ''}, oil ${l.oil.toFixed(1)} of ${l.full.oil.toFixed(1)}`); seen[l.id] = l.state; }
+    }
     if (mind.includes('farms')) {
       const L: any = ledger(g, me); const keep = (plan.farmKeep ?? 0) / (L.scale || 1);
       const offers: { region: number; cost: number }[] = [];
