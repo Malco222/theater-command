@@ -405,8 +405,8 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`;
   // The same ships shelling the same shore month after month are one line of the month's summary; a ship lost is news.
-  if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id);
-  else routineNews(g, `shell:${f.nat}:${what}:${r.id}`, 'battle', news, what === 'troops' ? `the ${adj} troops at ${r.name} shelled from the sea` : what === 'town' ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id);
+  if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id, { arm: 'sea', won: defNat, lost: f.nat });
+  else routineNews(g, `shell:${f.nat}:${what}:${r.id}`, 'battle', news, what === 'troops' ? `the ${adj} troops at ${r.name} shelled from the sea` : what === 'town' ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id, { arm: 'sea' });
   return rep;
 }
 

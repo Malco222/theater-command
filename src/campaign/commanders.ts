@@ -296,7 +296,7 @@ function rise(g: Game, c: Corps, rng: Rng, place: string): void {
 function lose(g: Game, gen: General, status: 'captured' | 'dead', text: string, region: number): void {
   appoint(g, gen, null);
   gen.status = status;
-  if (notable(g, gen)) headline(g, 'battle', text, gen.nat, region);
+  if (notable(g, gen)) headline(g, 'battle', text, gen.nat, region, { arm: 'land', lost: gen.nat });
 }
 
 /** The risks of the job: a general can be hit in any battle, and goes into the bag with his corps. */
@@ -320,7 +320,7 @@ function hazard(g: Game, gen: General, c: Corps, lossFrac: number, rng: Rng, rep
     gen.status = 'wounded';
     gen.backOn = g.turn + months;
     gen.rec.wounds++;
-    if (notable(g, gen)) headline(g, 'battle', `${gen.name} is wounded at ${rep.regionName} and will be out for ${months} months.`, gen.nat, rep.region);
+    if (notable(g, gen)) headline(g, 'battle', `${gen.name} is wounded at ${rep.regionName} and will be out for ${months} months.`, gen.nat, rep.region, { arm: 'land' });
   }
 }
 

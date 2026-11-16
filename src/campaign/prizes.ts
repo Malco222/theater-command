@@ -212,7 +212,7 @@ const wreckWords = (g: Game, r: Region, kind: PrizeKind, months: number): string
 /** News of a prize wrecked is for the player when it is his, his ally's, or his enemy's doing against him; a great prize is news to everyone. */
 function tellPrize(g: Game, r: Region, text: string, nat: string, parties: string[]): void {
   const mine = g.human !== null && parties.some((p) => p === g.human || allied(g, p, g.human!));
-  if (mine || r.oil || r.cap || r.fac >= 4) headline(g, 'battle', text, nat, r.id);
+  if (mine || r.oil || r.cap || r.fac >= 4) headline(g, 'battle', text, nat, r.id, { arm: 'land' });
 }
 
 /** Wrecks a prize by order of the nation whose troops hold it: a corps' work for the month. */
@@ -360,7 +360,7 @@ export function tellBurnt(g: Game): void {
     const did = [places.length ? `wrecked ${andList(places)}` : '', tracks.length ? `tore up the railway at ${where}` : ''].filter(Boolean).join(', and ');
     const cost = [places.length ? `${theName(g.nations[by], true)} will get nothing from the wrecks for months` : '',
       tracks.length ? `${places.length ? 'the' : 'The'} track will take about ${monthsWord(PRIZES.burn.months.rail)} to make good, less with engineers` : ''].filter(Boolean).join(', and ');
-    headline(g, 'battle', `Scorched earth: ${g.nations[from].adj} troops ${did} as they were driven off. ${cost}.`, from, at >= 0 ? at : rows[0].r.id);
+    headline(g, 'battle', `Scorched earth: ${g.nations[from].adj} troops ${did} as they were driven off. ${cost}.`, from, at >= 0 ? at : rows[0].r.id, { arm: 'land', won: by, lost: from });
   }
 }
 

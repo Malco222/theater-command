@@ -177,7 +177,7 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   const player = g.human === null && g.flags[`was:${nat}`] !== undefined;
   if (player) { g.human = nat; delete g.flags[`was:${nat}`]; }
   const foe = after ? g.nations[after] : null;
-  headline(g, 'event', fill(player ? LIB.lines.freedSelf : foe ? LIB.lines.freedAfter : LIB.lines.freed, { Name: theName(X, true), name: theName(X), adj: H.adj, capital: cap.name, side: LIB.lines.sides[side], foe: foe ? theName(foe) : '' }), nat, cap.id);
+  headline(g, 'event', fill(player ? LIB.lines.freedSelf : foe ? LIB.lines.freedAfter : LIB.lines.freed, { Name: theName(X, true), name: theName(X), adj: H.adj, capital: cap.name, side: LIB.lines.sides[side], foe: foe ? theName(foe) : '' }), nat, cap.id, { arm: 'land', won: by });
   g.passings.push({ id: g.passings.length + 1, turn: g.turn, week: g.week, kind: 'freed', nat, by, how: 'freed', capital: cap.id, provinces, corps, side, ...(after ? { after } : {}), ...(player ? { player: true } : {}) });
   return true;
 }

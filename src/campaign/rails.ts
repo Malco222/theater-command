@@ -149,7 +149,7 @@ export function whyNotCutRail(g: Game, nat: string, region: number): string | nu
 export function tearUp(g: Game, nat: string, region: number): boolean {
   if (whyNotCutRail(g, nat, region) || !cutRail(g, region)) return false;
   const r = g.regions[region];
-  if (concerns(g, nat)) headline(g, 'info', `${g.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region);
+  if (concerns(g, nat)) headline(g, 'info', `${g.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region, { arm: 'land' });
   return true;
 }
 
@@ -171,7 +171,7 @@ export function railOnCapture(g: Game, taken: Region, by: string, from: string):
   if (!groundRules(g) || !onNet(taken.id) || railCut(g, taken.id)) return;
   const roll = new Rng(hashString(`rail:${g.seed}:${g.turn}:${taken.id}`)).next();
   if (roll >= wreckChance(g, taken, by) || !cutRail(g, taken.id)) return;
-  if (concerns(g, by, from)) headline(g, 'battle', `${g.nations[from].adj} troops tear up the railway at ${taken.name} as they fall back.`, from, taken.id);
+  if (concerns(g, by, from)) headline(g, 'battle', `${g.nations[from].adj} troops tear up the railway at ${taken.name} as they fall back.`, from, taken.id, { arm: 'land', won: by, lost: from });
 }
 
 /** The chance that a raid cuts the line of the province it bombs: the bombers that got through, less what the guns stop. */

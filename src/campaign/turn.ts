@@ -1,9 +1,10 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
   airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
@@ -1325,6 +1326,34 @@ export const fleetsInSight = (g: Game): FleetSeen[] => fleetsSeen(g, g.human);
 
 /** One sea as the player knows it: each side's known strength, enemy forces only reported, and how well his side has it searched. Null with nobody at the table. */
 export const seaPictureOf = (g: Game, zone: number): SeaPicture | null => (g.human && g.seas[zone] ? seaPicture(g, zone, g.human) : null);
+
+/**
+ * A fleet action weighed up before it is fought (Version 80; display only, it changes nothing): one of the player's
+ * fleets on patrol in a sea, with whatever else of his side patrols there, against the enemy as far as his side has
+ * found him. Each side's fleets and their weight, the aircraft that reach from the coasts, the odds as a band, the
+ * chance of winning in words, whether his admiral will offer battle, who may decline it, and the ships each side is
+ * likely to lose by class. A force only reported is listed and not counted; one not found is not there. `why` says
+ * so when there is nothing to forecast. Null with nobody at the table or for a fleet that is not his side's.
+ * After the action the result is the last entry of `g.seaReports` for that sea.
+ */
+export const seaForecast = (g: Game, id: number, zone: number): SeaPlan | null => (g.human ? planSeaBattle(g, id, zone, g.human) : null);
+
+/**
+ * How a piece of news reads to whoever is looking (Version 80; display only): 'won' when his side had the better of
+ * the fighting or his enemy the worse, 'lost' the other way round, and null for news with no winner or loser, or of
+ * a fight that was none of his. Which arm fought is on the line itself (`arm`: land, sea or air).
+ */
+export function newsSide(g: Game, h: Headline, viewer: string | null = g.human): 'won' | 'lost' | null {
+  if (viewer === null || !g.nations[viewer]) return null;
+  const ours = (id?: string): boolean => id !== undefined && (id === viewer || allied(g, id, viewer));
+  const foe = (id?: string): boolean => id !== undefined && atWar(g, id, viewer);
+  if (ours(h.won)) return 'won';
+  if (ours(h.lost)) return 'lost';
+  // A line that names only one side: an enemy's loss is good news, and an enemy's success bad.
+  if (h.won === undefined && foe(h.lost)) return 'won';
+  if (h.lost === undefined && foe(h.won)) return 'lost';
+  return null;
+}
 
 /** The aircraft one fleet's carriers bring, as cards: fighters first. Empty for a fleet without carriers, one that is not identified, and outside the grand campaign. */
 export function wingsOfFleet(g: Game, id: number): WingCard[] {

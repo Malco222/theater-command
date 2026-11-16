@@ -325,7 +325,7 @@ export function pocketMonth(g: Game, nat: string): void {
         const mine = pocketNat(g, r) === nat;
         const dry = g.flags[`pktx:${r.id}`] === 1;
         clearPocket(g, r);
-        if (mine && allied(g, nat, fieldCtrl(g, r))) tell(g, r, `The ring round ${townName(r)} is broken: ${dry ? 'supplies reach' : 'the roads are open to'} the ${n.adj} troops there again.`, nat, [nat]);
+        if (mine && allied(g, nat, fieldCtrl(g, r))) tell(g, r, `The ring round ${townName(r)} is broken: ${dry ? 'supplies reach' : 'the roads are open to'} the ${n.adj} troops there again.`, nat, [nat], { won: nat });
       }
       continue;
     }
@@ -354,7 +354,7 @@ export function pocketMonth(g: Game, nat: string): void {
       // Fed from an ally's town, the news is of the army and the province it holds: the town is not this nation's to lose.
       const own = town.ctrl !== nat && mine.length ? g.regions[mine[0]] : null;
       const lead = own ? `The ${n.adj} troops round ${townName(own)} are surrounded, with their allies in ${townName(town)}: no road and no ship reaches them` : `${townName(town)} is surrounded: no road and no ship reaches it`;
-      tell(g, own ?? town, `${lead} from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
+      tell(g, own ?? town, `${lead} from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by], { lost: nat });
     }
   }
 }
@@ -490,10 +490,10 @@ export function canShelter(g: Game, c: Corps, r: Region): boolean {
 // ---- News ---------------------------------------------------------------------------------------
 
 /** Sieges of cities are news to everyone; of smaller places, only to the player if his side is in it. */
-function tell(g: Game, r: Region, text: string, nat: string, parties: string[]): void {
+function tell(g: Game, r: Region, text: string, nat: string, parties: string[], out: { won?: string; lost?: string } = {}): void {
   const size = townSize(g, r);
   const mine = g.human !== null && parties.some((p) => p === g.human || allied(g, p, g.human!));
-  if (size === 'capital' || size === 'city' || mine) headline(g, 'battle', text, nat, r.id);
+  if (size === 'capital' || size === 'city' || mine) headline(g, 'battle', text, nat, r.id, { arm: 'land', ...out });
 }
 
 const placeWords = (g: Game, r: Region): string => (r.cap && r.owner === r.ctrl ? `the capital of ${g.nations[r.owner].name}` : `the ${TOWNS.words[townSize(g, r)].toLowerCase()}`);
@@ -519,7 +519,7 @@ export function invest(g: Game, r: Region, by: string): void {
   tallySiege(g, 'begun');
   const inside = garrisonOf(r);
   const who = inside.length ? `${inside.length === 1 ? 'one corps' : `${inside.length} corps`} inside` : 'only its guard inside';
-  tell(g, r, `${g.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside.map((c) => c.nat)]);
+  tell(g, r, `${g.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside.map((c) => c.nat)], { won: by, lost: r.ctrl });
   // What lies outside the walls goes with the field: the side driven off it burns what it was ordered to. What
   // changed hands whole is news in the month it starts to work for its new holder (prizes.ts).
   prizesOnLoss(g, r, by, r.ctrl, 'outside');
@@ -538,7 +538,7 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   if (by) g.flags[`relieved:${r.id}`] = g.turn;
   g.supplyDirty = true;
   tallySiege(g, 'raised');
-  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)]);
+  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl });
   // Driven off by a relieving army, the besiegers burn what they held outside the walls, if that is their order.
   if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }
@@ -572,7 +572,7 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   if (!cap && how !== 'empty' && how !== 'storm') {
     const text = how === 'gates' ? `${townName(r)} opens its gates to ${adj} troops without a fight.`
       : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
-    tell(g, r, text, old, [by, old]);
+    tell(g, r, text, old, [by, old], { won: by, lost: old });
   }
   capture(g, r, by);
   g.supplyDirty = true;

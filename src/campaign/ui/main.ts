@@ -13,7 +13,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
-  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
+  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
@@ -630,7 +630,10 @@ function bridgeMarks(): string {
 function drawLabels(): void {
   // Cities and towns: each stands at its own fixed place in its province, drawn by its size and gilded by its worth.
   const list = towns(g);
-  $('#towns').innerHTML = list.map((t) => `<g transform="translate(${t.x} ${t.y})${t.size === 'capital' || t.size === 'city' ? ' scale(1.2)' : ''}">${townGlyph(t.size, t.rank, t.size !== 'capital' && !!g.regions[t.region].cap)}</g>`).join('');
+  // (A town with an order badge keeps its mark for as long as the badge is drawn: a badge with no town over it reads as its neighbour's.)
+  const cities = g.human && g.nations[g.human]?.alive ? ordersByCity(g).filter((c) => c.badge) : [];
+  const badged = new Set(cities.map((c) => c.region));
+  $('#towns').innerHTML = list.map((t) => `<g${badged.has(t.region) ? ' class="haso"' : ''} transform="translate(${t.x} ${t.y})${t.size === 'capital' || t.size === 'city' ? ' scale(1.2)' : ''}">${townGlyph(t.size, t.rank, t.size !== 'capital' && !!g.regions[t.region].cap)}</g>`).join('');
   $('#labels').innerHTML = g.regions.map((r) => {
     const busy = r.units.length > 0;
     const t = list[r.id];
@@ -647,7 +650,7 @@ function drawLabels(): void {
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
     return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
   }).join('');
-  $('#obadges').innerHTML = orderBadges();
+  $('#obadges').innerHTML = orderBadges(cities, list);
 }
 
 // ---- What each city has on order (Version 78) -------------------------------------------------
@@ -668,9 +671,8 @@ function orderSign(l: { mark: string; elite?: boolean; starred?: boolean }, px =
  * of exactly that are on order there (left off at one), a brass plus where other kinds of unit are on order too, and
  * the months to it in a brass disc. Pulling back, the count and the plus go first, then the disc.
  */
-function orderBadge(c: CityOrders, stage: 1 | 2 | 3): string {
+function orderBadge(c: CityOrders, stage: 1 | 2 | 3): { w: number; h: number; draw: (left: number, top: number) => string } {
   const b = c.badge!;
-  const spot = badgeSpot[c.region] ?? { x: g.regions[c.region].x, y: g.regions[c.region].y + 8 };
   const H = 8, sh = H * 0.66, k = sh / 16, bar = H * 0.14;
   let x = bar + 0.9;
   let body = `<g transform="translate(${x.toFixed(2)} ${((H - sh) / 2).toFixed(2)}) scale(${k.toFixed(4)})"><path class="osg" d="${ORDER_SIGN[b.mark] ?? ORDER_SIGN.inf}"/>${b.starred ? `<path class="ostar" transform="translate(22.5 1.5) scale(1.15)" d="${ORDER_STAR}"/>` : ''}</g>`;
@@ -687,15 +689,83 @@ function orderBadge(c: CityOrders, stage: 1 | 2 | 3): string {
     x += 2 * r + 0.7;
   } else x += 0.2;
   const w = x, sc = stage === 1 ? 1.1 : stage === 2 ? 1.3 : 1.55;
-  const left = spot.x - (w * sc) / 2;
-  return `<g class="obadge s${stage}${c.spied ? ' spied' : ''}" data-id="${c.region}" transform="translate(${left.toFixed(1)} ${spot.y.toFixed(1)}) scale(${sc})"><rect class="oplate" width="${w.toFixed(2)}" height="${H}" rx="1.1"/><path d="M${bar.toFixed(2)} 0H1.1A1.1 1.1 0 0 0 0 1.1V${H - 1.1}A1.1 1.1 0 0 0 1.1 ${H}H${bar.toFixed(2)}Z" fill="${g.nations[c.holder].color}"/>${body}</g>`;
+  const draw = (left: number, top: number): string => `<g class="obadge s${stage}${c.spied ? ' spied' : ''}" data-id="${c.region}" transform="translate(${left.toFixed(1)} ${top.toFixed(1)}) scale(${sc})"><rect class="oplate" width="${w.toFixed(2)}" height="${H}" rx="1.1"/><path d="M${bar.toFixed(2)} 0H1.1A1.1 1.1 0 0 0 0 1.1V${H - 1.1}A1.1 1.1 0 0 0 1.1 ${H}H${bar.toFixed(2)}Z" fill="${g.nations[c.holder].color}"/>${body}</g>`;
+  return { w: w * sc, h: H * sc, draw };
 }
 
-/** Every city's badge: the player's own cities with a unit forming, and another country's only where an agent of his reports it. */
-function orderBadges(): string {
-  if (!g.human || !g.nations[g.human]?.alive) return '';
+/** A box on the map, in map units. */
+interface Box { x0: number; y0: number; x1: number; y1: number }
+/** How much of one box lies on another. */
+const boxOver = (a: Box, b: Box): number => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+/** The box a town's mark fills on the map: the buildings, not a capital's star. */
+function markBox(t: TownView): Box {
+  const [hw, up, k] = t.size === 'capital' ? [7, 5.9, 1.2] : t.size === 'city' ? [6, 6.5, 1.2] : t.size === 'town' ? [4.7, 3.9, 1] : [2.3, 1.1, 1];
+  return { x0: t.x - hw * k, y0: t.y - up * k, x1: t.x + hw * k, y1: t.y + 3.4 * k };
+}
+/** The box of every army's flag on the map just now, with the size it carries over it: read from what is drawn, so only what the player sees. */
+function flagBoxes(): Box[] {
+  const out: Box[] = [];
+  for (const el of document.querySelectorAll('#units g.ctr.army')) {
+    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(el.getAttribute('transform') ?? '');
+    if (m) out.push({ x0: +m[1], y0: +m[2] - 6, x1: +m[1] + 22, y1: +m[2] + 14 });
+  }
+  return out;
+}
+
+/**
+ * Every city's badge: the player's own cities with a unit forming, and another country's only where an agent of his
+ * reports it. Each hangs centred under its town's mark. Two cases move it (the art director's review of Version 78):
+ * a badge that would lie on another badge or on another town's mark slides sideways until it is one map unit clear,
+ * the smaller town's giving way; and one that would lie on an army's flag by more than a third hangs beside its
+ * mark instead, level with the mark's foot, on the side with room (open sea is room). With no room it stays as built.
+ */
+function orderBadges(cities: CityOrders[], list: TownView[]): string {
+  if (!cities.length) return '';
+  const RANK = { capital: 3, city: 2, town: 1, village: 0 };
+  const order = [...cities].sort((a, b) => RANK[list[b.region].size] - RANK[list[a.region].size] || a.region - b.region);
+  const flags = flagBoxes();
+  const has = new Set(cities.map((c) => c.region));
   let out = '';
-  for (const c of ordersByCity(g)) if (c.badge) out += orderBadge(c, 1) + orderBadge(c, 2) + orderBadge(c, 3);
+  for (const stage of [1, 2, 3] as const) {
+    // The marks drawn at this size of the map: villages only close in, towns to the middle distance, and every town with a badge.
+    const marks = list.filter((t) => has.has(t.region) || t.size === 'capital' || t.size === 'city' || (stage < 3 && t.size === 'town') || stage === 1).map((t) => ({ id: t.region, box: markBox(t) }));
+    const placed: Box[] = [];
+    for (const c of order) {
+      const b = orderBadge(c, stage), t = list[c.region], area = b.w * b.h;
+      const spot = badgeSpot[c.region] ?? { x: g.regions[c.region].x, y: g.regions[c.region].y + 8 };
+      const solid = [...placed, ...marks.filter((m) => m.id !== c.region).map((m) => m.box)];
+      const onFlags = (x: Box): number => flags.reduce((s, f) => s + boxOver(x, f), 0);
+      // (One map unit clear of every other badge and every other town's mark.)
+      const hit = (x: Box): Box | undefined => solid.find((o) => boxOver({ x0: x.x0 - 1, y0: x.y0 - 1, x1: x.x1 + 1, y1: x.y1 + 1 }, o) > 0);
+      const at = (left: number, top: number): Box => ({ x0: left, y0: top, x1: left + b.w, y1: top + b.h });
+      const built = at(spot.x - b.w / 2, spot.y);
+      let box = built;
+      if (onFlags(box) > area / 3) {
+        const M = markBox(t), top = M.y1 - b.h;
+        const sides = [at(M.x0 - 1 - b.w, top), at(M.x1 + 1, top)].filter((x) => onFlags(x) <= area / 12 && !hit(x));
+        // (Of two clear sides, the one farther from the flags in the province.)
+        const mid = flags.length ? flags.reduce((best, f) => (boxOver(built, f) > boxOver(built, best) ? f : best), flags[0]) : null;
+        if (sides.length) box = sides.length === 1 || !mid ? sides[0] : sides[(mid.x0 + mid.x1) / 2 >= spot.x ? 0 : 1];
+      }
+      if (hit(box)) {
+        // Sideways, the shorter way that comes clear: never onto an army's flag, and never far from its own town.
+        let best: Box | null = null;
+        for (const dir of [-1, 1]) {
+          let x = box, ok = false;
+          for (let i = 0; i < 8; i++) {
+            const o = hit(x);
+            if (!o) { ok = true; break; }
+            x = dir < 0 ? at(o.x0 - 1.05 - b.w, x.y0) : at(o.x1 + 1.05, x.y0);
+            if (Math.abs(x.x0 - box.x0) > b.w * 1.2) break;
+          }
+          if (ok && onFlags(x) <= area / 3 && (!best || Math.abs(x.x0 - box.x0) < Math.abs(best.x0 - box.x0))) best = x;
+        }
+        if (best) box = best;
+      }
+      placed.push(box);
+      out += b.draw(box.x0, box.y0);
+    }
+  }
   return out;
 }
 
@@ -3931,6 +4001,18 @@ function fleetRow(f: Fleet, mine: boolean, whose = false): string {
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span></${el}>${recStrip('fleet', f)}`;
 }
 
+/** A fleet action in a sea in one line, from the forecast (Version 80): the odds as a band, how it is likely to go, and what it is likely to cost. */
+function seaOddsLine(f: Fleet, zone: number, meet: 'battle' | 'shy'): string {
+  const p = seaForecast(g, f.id, zone);
+  const offers = p && p.odds ? p.offers : meet === 'battle';
+  const lead = offers ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle';
+  if (!p || !p.odds) return lead;
+  const n = (s: Record<string, number>): number => Object.values(s).reduce((a, b) => a + b, 0);
+  const one = (x: number): string => (x >= 9.95 ? 'over 10' : x.toFixed(1));
+  const ours = n(p.likely.ours), theirs = n(p.likely.theirs);
+  return `${lead}: odds ${one(p.odds.mid)} to 1 (${one(p.odds.low)} to ${one(p.odds.high)}), ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ship${ours === 1 ? '' : 's'} for ${theirs} of his`;
+}
+
 /** The orders the player can give the fleet that is picked. */
 function fleetOrders(f: Fleet): string {
   const o = fleetOptions(g, f.id);
@@ -3949,7 +4031,7 @@ function fleetOrders(f: Fleet): string {
       more.push(`${s.subs} enemy submarine${s.subs === 1 ? '' : 's'} at work${pieces ? `: a hunt here would sink ${sunk < 0.5 ? 'less than one' : `about ${Math.round(sunk)}`} a month` : ''}`);
     }
     if (s.torpedo >= 0.02) more.push(`<span style="color:var(--red)">${pc100(s.torpedo)} chance of a heavy ship torpedoed: too few destroyers</span>`);
-    if (now === 'patrol' && s.meet !== 'clear') more.push(s.meet === 'battle' ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle');
+    if (now === 'patrol' && s.meet !== 'clear') more.push(esc(seaOddsLine(f, s.zone, s.meet)));
     return `<button class="pickrow${s.here ? ' pick' : ''}" data-act="sail" data-zone="${s.zone}"><span class="grow"><b>${esc(s.name)}</b><br>${small(`${foe} · your side ${num(s.ours)}${more.length ? `<br>${more.join(' · ')}` : ''}`)}</span>${s.here ? '<span class="tag good">Here now</span>' : ''}</button>`;
   }).join('');
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;

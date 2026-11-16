@@ -130,7 +130,7 @@ export function blowBridges(g: Game, nat: string, c: Crossing, from: number): bo
   if (whyNotBlow(g, nat, c, from)) return false;
   blow(g, c);
   const far = g.regions[farBank(c, from)];
-  if (concerns(g, nat, far.ctrl)) headline(g, 'battle', `${g.nations[nat].adj} troops blow the bridges over the ${riverName(c)} between ${g.regions[from].name} and ${far.name}.`, nat, from);
+  if (concerns(g, nat, far.ctrl)) headline(g, 'battle', `${g.nations[nat].adj} troops blow the bridges over the ${riverName(c)} between ${g.regions[from].name} and ${far.name}.`, nat, from, { arm: 'land' });
   return true;
 }
 
@@ -159,9 +159,9 @@ export function bridgesOnCapture(g: Game, taken: Region, by: string): void {
     const name = riverName(c), holder = g.nations[far.ctrl].adj, captor = g.nations[by].adj;
     if (roll < blowChance(g, c, taken, by)) {
       blow(g, c);
-      if (concerns(g, by, far.ctrl)) headline(g, 'battle', `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id);
+      if (concerns(g, by, far.ctrl)) headline(g, 'battle', `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id, { arm: 'land' });
     } else if (concerns(g, by, far.ctrl)) {
-      headline(g, 'battle', `${captor} troops seize the bridges over the ${name} at ${taken.name} before they can be blown.`, by, taken.id);
+      headline(g, 'battle', `${captor} troops seize the bridges over the ${name} at ${taken.name} before they can be blown.`, by, taken.id, { arm: 'land', won: by, lost: far.ctrl });
     }
   }
 }

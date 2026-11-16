@@ -632,6 +632,15 @@ export interface Headline {
   desk?: string;
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
+  /**
+   * Two tags on news of fighting (Version 80; display only, no rule reads them). `arm` is the arm that did the
+   * fighting: on land, at sea or from the air. `won` and `lost` are the nation that had the better of it and the one
+   * that had the worse, where the news has a winner or a loser; either may be missing. An interface asks `newsSide`
+   * (turn.ts) whether that is good news or bad for whoever is looking.
+   */
+  arm?: 'land' | 'sea' | 'air';
+  won?: string;
+  lost?: string;
 }
 
 export type UnitKind = 'corps' | 'air' | 'fleet';
