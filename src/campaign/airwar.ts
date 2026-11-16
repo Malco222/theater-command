@@ -738,6 +738,102 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   return plan;
 }
 
+/** One line of WHAT A HIT DOES: a number and a few words. */
+export interface HitLine { n: string; words: string }
+
+/**
+ * One way of flying a bombing raid, by day or by night: a whole small forecast, as the raid card's two columns show
+ * it (ruling 107(d), the art director's brief of 16 November). The words are ready to print, so both builds say the
+ * same thing; the numbers behind them are there for a card that draws them.
+ */
+export interface RaidWay {
+  kind: 'bomb' | 'night';
+  /** BY DAY or BY NIGHT. */
+  label: string;
+  /** Why it cannot be flown this way with these groups, or null. */
+  why: string | null;
+  /** Who would go this way: by day the escorts go too, by night the bombers alone. */
+  picked: number[];
+  bombers: number;
+  fighters: number;
+  /** The chance of success and its verdict, as the raid card gives them. */
+  success: number;
+  verdict: string;
+  /** The share and the count of the bombers likely lost, and of the fighters where fighters fly. */
+  bomberLoss: number;
+  bomberLossN: number;
+  fighterLoss: number;
+  fighterLossN: number;
+  /** BOMBERS LOST and FIGHTERS LOST in print: the share and the aircraft, "2% · about 7". The second is '' where no fighters fly. */
+  lost: string;
+  fightersLost: string;
+  /** The damage expected, as the raid card's figures give it: output, national, rail, factory. */
+  figures: RaidFigures;
+  /** WHAT A HIT DOES: up to three lines, the output stopped, the railway cut, a factory wrecked. */
+  hits: HitLine[];
+  /** The line at the column's foot. */
+  foot: string;
+  /** The card's one line of prose for this way. */
+  prose: string;
+}
+
+/** A bombing raid weighed by day and by night, side by side: the same groups against the same target. */
+export interface DayNight {
+  /** The way the plan on the card is flown. */
+  chosen: 'bomb' | 'night';
+  day: RaidWay;
+  night: RaidWay;
+  /** What is common to both: the bombers going, and the enemy's fighters in reach. */
+  bombers: number;
+  foes: number;
+  /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
+  home: number[];
+  /** Fighter groups that could join by day and cannot by night: "Cannot fly: no escort by night". */
+  barred: number[];
+}
+
+/**
+ * BY DAY and BY NIGHT for one bombing raid (ruling 107(d)): the same groups against the same target, each way a whole
+ * small forecast in the counts and odds the raid card gives. Fighters asked for go by day and stay at home by night,
+ * so `ids` may hold both and a change of mind drops nobody. Null for any other kind of raid. Nothing is changed.
+ */
+export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human): DayNight | null {
+  if (kind !== 'bomb' && kind !== 'night') return null;
+  const plans = { bomb: planRaid(g, 'bomb', target, ids, nat), night: planRaid(g, 'night', target, ids, nat) };
+  const way = (k: 'bomb' | 'night'): RaidWay => {
+    const p = plans[k];
+    const f = p.figures;
+    const flown = !p.why;
+    const hits: HitLine[] = [];
+    // A share that rounds to nothing is still something: "<1%", never "−0%".
+    if (flown && f.output !== undefined) hits.push({ n: f.output <= 0 ? '0%' : f.output < 0.005 ? '<1%' : `−${pct(f.output)}`, words: 'output, for a month' });
+    if (flown && f.rail) hits.push({ n: pct(f.rail), words: 'chance the railway is cut' });
+    if (flown && f.factory) hits.push({ n: pct(f.factory), words: 'chance a factory is wrecked' });
+    if (flown && !hits.length) hits.push({ n: '', words: 'No industry there, and too few bombers to cut the railway.' });
+    const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
+    return {
+      kind: k, label: k === 'bomb' ? 'BY DAY' : 'BY NIGHT', why: p.why, picked: p.picked, bombers: p.bombers, fighters: p.fighters,
+      success: p.success, verdict: p.verdict,
+      bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, fighterLoss, fighterLossN: p.fighterLossN,
+      lost: flown ? `${pct(p.bomberLoss)} · about ${num(p.bomberLossN)}` : '',
+      fightersLost: flown && p.fighters > 0 ? `${pct(fighterLoss)} · about ${num(p.fighterLossN)}` : '',
+      figures: f, hits,
+      foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
+      prose: flown ? p.effects[0] ?? '' : '',
+    };
+  };
+  const day = way('bomb'), night = way('night');
+  const lead = !plans.bomb.why ? plans.bomb : plans.night;
+  const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
+  return {
+    chosen: kind, day, night,
+    bombers: lead.bombers,
+    foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
+    home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
+    barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
+  };
+}
+
 /**
  * Flies a raid the planner has weighed up, at once: the report is filed and its news told. Every group that flew is
  * away for the rest of the month (it flies no second raid and meets no raid on its own sky) and is back at its airfield,

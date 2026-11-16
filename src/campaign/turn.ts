@@ -6,8 +6,8 @@ import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, ty
 import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
-  airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
-  type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
+  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
+  type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
 import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
@@ -1293,6 +1293,9 @@ export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[]
  * the losses to expect and what meeting up is worth. Leave `ids` out for the staff's proposal.
  */
 export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => planRaid(g, kind, target, ids, g.human);
+
+/** A bombing raid by day and by night, side by side, for the raid card (ruling 107(d)). Null for any other kind of raid. */
+export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
 export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {

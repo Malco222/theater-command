@@ -52,7 +52,7 @@ describe('no event takes the player\'s own country out of the war', () => {
   });
 
   it('the Grand Council\'s vote is for the computer\'s Italy only', () => {
-    expect(DIPLOMACY.events.find((e) => e.id === 'mussolini-falls')!.if).toContain('computer:ITA');
+    expect(DIPLOMACY.events.find((e) => e.id === 'mussolini-falls')!.if).toContain('computer:ITA,47');
     expect(holds(game('ITA'), 'computer:ITA')).toBe(false);
     expect(holds(game('GER'), 'computer:ITA')).toBe(true);
     expect(holds(game(null), 'computer:ITA')).toBe(true);
@@ -172,7 +172,9 @@ describe('a player at war beside the computer\'s Italy is warned', () => {
     g.byName.Sardinia.ctrl = 'UK';
     month(g, DEC_42 + 1);
     const band = monthCard(g, mark, 'GER').bands.find((b) => b.title === 'Rome wavers');
-    expect(band).toMatchObject({ word: 'WARNING', head: 'Italy makes peace if the Allies hold Sardinia in August 1943', nats: ['GER'], region: g.byName.Sardinia.id });
+    expect(band).toMatchObject({ word: 'WARNING', head: 'Italy makes peace if the Allies hold Sardinia in August 1943', nats: ['ITA'], region: g.byName.Sardinia.id });
+    // (The band flies Italy's flag, the country the news is about, and not the player's own: the art director's rule.)
+    expect(g.headlines.find((h) => h.warn === 'Rome wavers')!.about).toBe('ITA');
   });
 });
 

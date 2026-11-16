@@ -42,6 +42,16 @@ const farFrom = (id: string, members: string[]): string | undefined => members.f
  */
 export const playersOwn = (g: Game, id: string): boolean => g.flags.open === 1 && id === g.human;
 
+/**
+ * Whether history's hand is stayed from the country the player leads (rulings 99 and 103). An event may take the
+ * player's country out of the war only where his campaign's card states it as the stake: never in the grand
+ * campaign, and in a history campaign only from a seat the event names by the month it is taken (Italy's from July
+ * 1943: a campaign in the desert is not lost in Rome). A game saved before seats were recorded (goals.ts, openGoals)
+ * is left to history as it was.
+ */
+export const spared = (g: Game, id: string, stake: number[] = []): boolean =>
+  id === g.human && (g.flags.open === 1 || (g.flags.seat !== undefined && !stake.includes(g.flags.seat)));
+
 /** The nation whose place among the powers only its player decides: a small country in the player's hands, in the grand campaign. */
 export const ownPath = (g: Game, id: string): boolean => playersOwn(g, id) && small(id);
 

@@ -230,7 +230,7 @@ export function claimsMonth(g: Game): void {
         g.flags[`amb:${a.id}`] = g.turn;
         const told = `${n.name} presses its claim to ${a.name}: ${why}. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`;
         // (A claim on the player's own ground is a warning to him, on a card of its own, with the ground to look at.)
-        if (a.on === g.human) warning(g, 'A claim on your ground', `${told} It will not march for ${C.notice === 1 ? 'a month' : `${C.notice} months`} at least, and what it weighs is the troops you keep there.`, a.on, groundOf(g, a)[0]?.id);
+        if (a.on === g.human) warning(g, 'A claim on your ground', `${told} It will not march for ${C.notice === 1 ? 'a month' : `${C.notice} months`} at least, and what it weighs is the troops you keep there.`, a.on, groundOf(g, a)[0]?.id, a.nat);
         else headline(g, 'event', told, a.nat);
       } else if (g.turn - warned >= C.notice && dialDraw(g, 'march', a.id, g.turn) < C.chance * deterred(g, a.nat, [a.on])) {
         // (A staff thinks twice before a march that would bring the whole League down on it.)

@@ -1959,6 +1959,7 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-fly:hover { filter: brightness(1.07); }
 .mc-banner { margin-top: 12px; display: flex; align-items: center; gap: 14px; background: linear-gradient(90deg, #7a2a1e, #5a2218 60%, #4a2018); border: 1px solid #b5503a; border-left: 8px solid var(--mc-red); border-radius: 4px; padding: 9px 14px; min-width: 0; }
 .mc-banner + .mc-banner { margin-top: 6px; }
+.mc-banner.good { border-left-color: var(--mc-green); }
 .mc-banner .k { font-size: 13px; letter-spacing: .18em; font-weight: 700; color: #ffd9c9; }
 .mc-banner b { font: 700 23px/1.15 var(--mc-serif); color: #fff3e6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-banner small { font-size: 14px; color: #f0cdbd; white-space: nowrap; }
@@ -2158,3 +2159,39 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .gatemark:hover .gplate { stroke: #b6924e; }
 .gatemark .gfl { fill: none; stroke: rgba(10, 12, 14, .6); stroke-width: .8; }
 .gatemark .gname { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 13px; fill: #f2e8d5; }
+
+/* The raid card's forecast in two columns, BY DAY and BY NIGHT (ruling 107(d), the art director's brief of 16 November):
+   each a whole small forecast, the column itself the button, and the one not chosen never dimmed. */
+.waycommon { display: flex; justify-content: space-between; gap: 12px; background: var(--panel-2); border-radius: 4px; padding: 6px 11px; margin: 0 0 8px; font-size: 12.5px; color: var(--ink-2); }
+.waycommon b { font-family: var(--head); font-size: 19px; font-weight: 600; color: var(--ink); margin-right: 6px; }
+.daynight { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 8px; }
+.way { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; color: var(--ink); background: var(--panel-2); border: 1px solid #685c48; border-radius: 4px; padding: 10px 12px; min-width: 0; }
+.way.on { border: 2px solid var(--brass); padding: 9px 11px; }
+.way:disabled { color: var(--ink); opacity: 1; cursor: default; }
+.way:not(:disabled):hover { border-color: var(--brass); }
+.wayhead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.wayhead b { flex: 1; font-family: var(--head); font-size: 15px; font-weight: 700; letter-spacing: .16em; }
+.wayic { flex: 0 0 30px; width: 30px; height: 20px; fill: var(--ink); }
+.way.on .wayic { fill: var(--brass); }
+.way.on .wayhead b { color: var(--brass); }
+.waytag { background: var(--brass); color: var(--brass-ink); font-family: var(--head); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 1px 8px; border-radius: 2px; }
+.wayring { flex: 0 0 16px; width: 16px; height: 16px; border: 1.5px solid var(--brass); border-radius: 50%; }
+.waytop { display: flex; align-items: baseline; gap: 10px; }
+.waytop b { font-family: var(--head); font-size: 34px; font-weight: 700; line-height: 1; color: var(--brass); }
+.waytop span { font-size: 14px; }
+.waytop span.win { color: var(--green); }
+.waytop span.loss { color: var(--red); }
+.waybar { height: 3px; background: rgba(0, 0, 0, .4); border-radius: 2px; margin: 5px 0 9px; overflow: hidden; }
+.waybar i { display: block; height: 100%; background: var(--brass); }
+.waybar.red i { background: var(--red); }
+.wayrow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wayrow span { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.wayrow b { font-family: var(--head); font-size: 15px; font-weight: 600; }
+.wayhit { display: flex; align-items: baseline; gap: 9px; margin-top: 3px; font-size: 12.5px; color: var(--ink-2); }
+.wayhits { margin-bottom: 10px; }
+.wayhit b { flex: 0 0 50px; text-align: right; font-family: var(--head); font-size: 17px; font-weight: 600; color: var(--ink); }
+.wayfoot { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.waywhy { font-size: 12.5px; color: var(--ink-2); padding: 4px 0; }
+.waywhy b { color: var(--ink); }
+.pickrow.seat.ghost { opacity: .55; cursor: default; }
+@media (max-width: 620px) { .daynight { grid-template-columns: 1fr; } }

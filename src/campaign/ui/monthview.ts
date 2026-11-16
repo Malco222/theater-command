@@ -45,7 +45,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const head = `<div class="mc-head"><div><div class="mc-eyebrow kick">Dispatches · the month in one look</div><h1>${esc(card.month)}</h1></div>
     <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
 
-  const bands = card.bands.map((b) => `<div class="mc-banner"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small>${esc(b.when)}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
+  const bands = card.bands.map((b) => `<div class="mc-banner${b.good ? ' good' : ''}"><span class="k">${esc(b.word)}</span>${b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small>${esc(b.when)}</small>${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
 
   const tileSign: Record<string, string> = { provinces: glyph(PENNANT, 13, DIM), men: monthSign('inf', 11, DIM), sea: monthSign('hull', 11, DIM), air: monthSign('ftr', 11, DIM) };
   const tally = card.boxes.length ? `<div class="mc-tally" style="--n:${Math.max(4, card.boxes.length)}">${card.boxes.map((b) => `<div class="mc-tile ${toneClass(b.tone)}"><u>${tileSign[b.key] ?? ''}${esc(b.label)}</u><b>${esc(b.figure)}</b><small>${esc(b.sub)}</small></div>`).join('')}</div>` : '';

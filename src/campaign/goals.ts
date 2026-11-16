@@ -90,6 +90,8 @@ export function goalWhen(goal: Goal, date: (turn: number) => string): string {
  * neither is a goal that a later start hands the player already won.
  */
 export function openGoals(g: Game, nat: string, from: number): void {
+  // (The month the seat is taken names the campaign: an event that may end the player's country asks for it. Ruling 103.)
+  g.flags.seat = from;
   for (const key of GOAL_KEYS) {
     const goal = GOALS[nat]?.[key];
     delete g.flags[`goal:${key}`];

@@ -1,7 +1,7 @@
 // The city order badge signs: one filled path each, in a 24 x 16 box (the star in -4 -4 8 8). Default fill rule.
 // Which sign an order takes: inf, mtn, cav, eng, mot, art, arm by kind; para for airborne; ftr, bmr; dd, ca and bb take hull; cv; ss; tp.
 export const ORDER_SIGN: Record<string, string> = {
-  inf: 'M4.71 5.19C4.71-1.73 19.29-1.73 19.29 5.19L21.18 6.82H2.82ZM8.73 6.82H15.27V9.71H8.73ZM2.19 16C2.19 11.47 6.47 10.22 12 10.22S21.81 11.47 21.81 16Z', // Infantry corps
+  inf: 'M4.8 7.7V5.7C4.8 -1.3 15.4 -1.3 15.4 5.7V7.7L16.2 8.5H4.0ZM6.4 9.1H13.8V9.9C13.8 12.9 6.4 12.9 6.4 9.9ZM8.2 11.6H12.0V13.8H8.2ZM0.9 16C0.9 13.9 5.1 13.1 10.1 13.1S19.3 13.9 19.3 16ZM18.7 16L20.6 3.3L22.3 3.5L20.9 16ZM21.15 3.5L21.9 0L22.25 3.5Z', // Infantry corps
   arm: 'M2.89 9.09H19.06A2.77 2.77 0 0 1 19.06 14.63H2.89A2.77 2.77 0 0 1 2.89 9.09ZM2.05 5.71H19.66L22.07 8.36H0ZM6.39 1.37H13.87L15.32 4.98H5.43ZM14.47 2.21H24V4.02H14.47Z', // Armoured corps
   mot: 'M0 1.87Q7-0.88 14 1.87V9.87H0ZM15 3.87H19.5L23.25 7.37V9.87H15ZM0 9.87H24V11.37H0ZM2.37 12.75A2.75 2.75 0 1 1 7.87 12.75A2.75 2.75 0 1 1 2.37 12.75ZM16.12 12.75A2.75 2.75 0 1 1 21.62 12.75A2.75 2.75 0 1 1 16.12 12.75Z', // Motorized corps
   cav: 'M3.54 16C3.54 10.25 5.04 6.75 7.54 4L6.54 0L9.79 1.38C12.54 0.13 15.16 1 16.54 3.13L20.29 8.63C20.91 9.75 19.79 11.13 18.41 10.75L14.41 9.75C12.79 9.63 11.91 10.75 12.29 12.38L13.54 16Z', // Cavalry corps

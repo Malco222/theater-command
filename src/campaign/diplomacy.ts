@@ -9,7 +9,7 @@ import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
 import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName, warning } from './game';
-import { leagueMonth, ownPath, playersOwn, standsWith } from './league';
+import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
@@ -49,6 +49,8 @@ export interface DiploEvent {
    * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
    */
   partition?: { nation: string; shares: [string[], string[]][]; occupied?: boolean };
+  /** The history campaigns, by the month the seat is taken, whose card states this event as the stake: only there does it fire on the country the player leads (league.ts, spared). */
+  stake?: number[];
   /** Pairs of nations that make peace: each hands back the other's ground and takes its troops home. */
   peace?: [string, string][];
   /** Countries whose armies are remade: from now on these ratings stand in place of the ones they began the war with. */
@@ -359,7 +361,9 @@ export function holds(g: Game, cond: string): boolean {
     case 'alive': return !!N(a[0])?.alive;
     // 'computer:ITA': nobody leads this country in the grand campaign. What history does to a government is done to
     // the computer's; the player's own stands or falls by the cabinet's rules (ruling 99).
-    case 'computer': return !playersOwn(g, a[0]);
+    // 'computer:ITA,47': the same, and in a history campaign the Italy of a player who took his seat in any month
+    // but the 47th (July 1943, whose card states Rome's fall as the stake) is spared too (ruling 103).
+    case 'computer': return !spared(g, a[0], a.slice(1).map(Number));
     case 'fallen': return !N(a[0])?.alive;
     case 'peace': return !N(a[0])?.atWar.includes(a[1]);
     case 'atPeace': return !N(a[0])?.atWar.length;
@@ -435,7 +439,7 @@ function fire(g: Game, e: DiploEvent): boolean {
   let did = false, told = false;
   // Ruling 99: no event takes the player's own country out of the war or deals out its ground, at any stop of the
   // dial, at any level and whatever the office setting. An event that carries a partition never fires on it.
-  if (e.partition && playersOwn(g, e.partition.nation)) return false;
+  if (e.partition && spared(g, e.partition.nation, e.stake)) return false;
   if (e.annex) {
     for (const id of e.annex.nations) {
       const n = g.nations[id];
@@ -711,5 +715,5 @@ function romeWavers(g: Game): void {
   const text = changed
     ? `Italy signs an armistice next month unless ${listed(lost)} ${lost.length === 1 ? 'is' : 'are'} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}`
     : `Italy makes peace if ${who} hold ${held} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
-  warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id);
+  warning(g, 'Rome wavers', text, me, g.byName[lost[0]]?.id, 'ITA');
 }
