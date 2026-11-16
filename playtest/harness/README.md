@@ -208,3 +208,16 @@ Traps met on Versions 77 and 78:
 - The rules builder's two: the memorial wall is `g.stories.fallen`, and a `Fallen.id` is the wall's own count, not the corps id; "ashore to stay" counted by who controls French ground breaks the month France is freed (count by owner, as `probe78` and `probe79` do).
 - A German or Italian player is never offered war on the United States (`declarable` lists only countries in reach of a frontier or a landing), so "Germany declares in September 1939" can only be played forced (`declareWar`).
 - The British and American landings in France in 1943 on Version 77 total the same (18 landings, 22 of 54 dead) by chance: they are two sets.
+
+## Version 79 (history's dates for the western Allies' own landings)
+
+Version 79 is on main with Version 80's display changes (af9bafa; no war differs). Build with `./build70.sh NAME /home/user/tc79 out79` and anything new into `out79b` while a queue runs.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v79s3.tsv`, `v79s4.tsv` | The war nobody plays on seeds 17 to 40 at the dial's stop 3 and stop 4: every landing, the endings, the armies of America, Britain and Canada | `./jobs.sh v79s3.tsv out/v79 4` |
+| `probe78.ts`, `probe68.ts` | Now take the dial's stop from `TC_DIAL` (default 3). `probe78`'s `LAND` line ends with who stood on Germany's home ground that month (the rules' test for the lapse of France's date) | `TC_DIAL=4 node out79/probe78.mjs 17,18,19 80` |
+| `landyear.py` | `LAND` lines by flag, ground and year; `--list` lists every landing in France before May 1944 with the lapse | `python3 landyear.py 'out/v79/landb-*.txt' --list` |
+| `probe82.ts`, `v79e.tsv` | The month Germany's home ground is first entered in each war, by whom, and the months it is entered before May 1944 | `node out79b/probe82.mjs 17,18,19 70` |
+| `probe58.ts`, `v79g.tsv` | The seat probe takes the difficulty from `TC_LEVEL` (cadet, captain, colonel, general, marshal); Germany by hand at Captain and Cadet | `./jobs.sh v79g.tsv out/v79 4`, then `python3 seattab.py out/v79 seatcaptain seatcadet --seeds 25-36` |
+| `v79a.tsv` to `v79d.tsv`, `v79l.tsv` | The seat, idle, Latin and domination queues of `mk77.py` with the Version 79 bundle | `./jobs.sh v79a.tsv out/v79 4` |

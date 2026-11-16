@@ -8,7 +8,7 @@ const [seedsS = '17', untilS = '80', nat = 'USA'] = process.argv.slice(2);
 const WEST = new Set(['FRA', 'BEL', 'NED', 'LUX', 'GER', 'DEN']);
 const CAPS = ['FRA', 'BEL', 'NED', 'ITA', 'GER', 'DEN', 'NOR', 'GRE', 'POL'];
 for (const seed of seedsS.split(',').map(Number)) {
-  const g: any = start(null, 1, seed, 'colonel', 3);
+  const g: any = start(null, 1, seed, 'colonel', Number(process.env.TC_DIAL ?? 3));
   const capOf: Record<string, number> = {}; for (const n of CAPS) capOf[n] = g.nations[n]?.capital ?? -1;
   let war = 0, firstOver = 0, firstCont = 0, firstContWhere = '', westFrom = 0, westFirst = 0, gerFell = 0, most = 0, mostAt = 0, raised = 0, err = '';
   let britainMost = 0, britainMonths = 0, idleBritain = 0;

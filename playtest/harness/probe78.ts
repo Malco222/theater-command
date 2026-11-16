@@ -5,17 +5,19 @@
 // one into the same lodgment, whether the beach was warned, and six months on how many of those corps were dead and
 // who held the beach. One FIRST line a war: each nation's first landing and its first on the western mainland.
 // usage: probe78 SEEDS(a,b,c) [UNTIL=80]     (build with build70.sh)
-import { start, date, T } from './lib';
+import { start, date, T, atWar } from './lib';
 import { landingWatch } from '@tc/campaign/ai';
 const [seedsS = '17', untilS = '80'] = process.argv.slice(2);
 const WEST = new Set(['FRA', 'BEL', 'NED', 'LUX', 'GER', 'DEN']);
 for (const seed of seedsS.split(',').map(Number)) {
-  const g: any = start(null, 1, seed, 'colonel', 3);
+  const g: any = start(null, 1, seed, 'colonel', Number(process.env.TC_DIAL ?? 3));
   type L = { t: number; nat: string; reg: number; name: string; owner: string; west: boolean; ids: number[]; wave: boolean; warned: boolean; taken: boolean; dead?: number; held?: string; done?: boolean };
   const lands: L[] = []; let gerFell = 0, err = '';
+  // Who stands on Germany's home ground this month (the rules' own test for the lapse of France's date, Version 79).
+  const enteredBy = (): string => { const who = new Set<string>(); for (const r of g.regions) { if (r.owner !== 'GER' || r.overseas) continue; if (atWar(g, 'GER', r.ctrl)) who.add(r.ctrl); for (const u of r.units ?? []) if (!u.dead && atWar(g, 'GER', u.nat)) who.add(u.nat); } return [...who].sort().join(' '); };
   landingWatch.tell = (e: any) => {
     const r = e.to; if (!r) return;
-    lands.push({ t: g.turn, nat: e.nat, reg: r.id ?? g.regions.indexOf(r), name: r.name, owner: r.owner, west: WEST.has(r.owner) && !r.overseas && r.name !== 'Corsica', ids: (e.force ?? []).map((c: any) => c.id), wave: !!e.wave, warned: !!e.warned, taken: !!e.taken });
+    lands.push({ t: g.turn, nat: e.nat, reg: r.id ?? g.regions.indexOf(r), name: r.name, owner: r.owner, west: WEST.has(r.owner) && !r.overseas && r.name !== 'Corsica', ids: (e.force ?? []).map((c: any) => c.id), wave: !!e.wave, warned: !!e.warned, taken: !!e.taken, entered: enteredBy() });
   };
   const close = (l: L): void => {
     const alive = new Set(g.corps.filter((c: any) => !c.dead).map((c: any) => c.id));
@@ -33,7 +35,7 @@ for (const seed of seedsS.split(',').map(Number)) {
   landingWatch.tell = null;
   for (const l of lands) {
     const six = l.done ? `six months on: dead ${l.dead} of ${l.ids.length}, beach held by ${l.held}` : 'six months on: the war was over or the run ended';
-    console.log(`LAND seed ${seed}: ${l.nat} ${date(l.t)} at ${l.name} (${l.owner})${l.west ? ' WEST' : ''} | corps ${l.ids.length} | ${l.wave ? 'later wave' : 'first wave'}${l.warned ? ', warned' : ''}${l.taken ? '' : ', thrown back'} | ${six}`);
+    console.log(`LAND seed ${seed}: ${l.nat} ${date(l.t)} at ${l.name} (${l.owner})${l.west ? ' WEST' : ''} | corps ${l.ids.length} | ${l.wave ? 'later wave' : 'first wave'}${l.warned ? ', warned' : ''}${l.taken ? '' : ', thrown back'} | ${six} | Germany's home ground entered that month: ${l.entered || 'no'}`);
   }
   const firsts = ['UK', 'USA', 'CAN', 'BRA', 'ITA', 'GER', 'SOV', 'FRA'].map((n) => {
     const mine = lands.filter((l) => l.nat === n && !l.wave); if (!mine.length) return `${n} none`;

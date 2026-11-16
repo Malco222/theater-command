@@ -87,7 +87,7 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, first: (g: any
     atWarMonths++; if (!firstWar) firstWar = g.turn;
     if (fought) { foughtMonths++; quiet = 0; } else { quiet++; if (quiet > longest) { longest = quiet; longestEnd = g.turn; } }
   }
-} } as any, { until: Number(untilS), quiet: true } as any);
+} } as any, { until: Number(untilS), quiet: true, level: process.env.TC_LEVEL || 'colonel' } as any);
 for (const e of run.errors) console.log('ERROR', String(e).slice(0, 600));
 const g: any = run.g, N = g.nations, M = N[me];
 const stands = !!M.alive;
