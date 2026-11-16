@@ -419,6 +419,11 @@ export interface RaidTarget {
   x: number;
   y: number;
   km: number;
+  /**
+   * The distance in words, as a list of targets prints it (ruling 133(g)): that of the nearest group able to fly the
+   * raid itself, '1,240 km'; and never '0 km', which reads as a fault: 'carriers off this coast', 'based at the target'.
+   */
+  far: string;
   groups: number;
   what: string;
 }
@@ -491,17 +496,22 @@ export function raidTargets(g: Game, kind: RaidKind, nat: string | null = g.huma
   if (!airWar(g) || nat === null || !g.nations[nat].atWar.length) return [];
   const sea = kind === 'strike' || kind === 'fleet';
   const sight = sightOf(g, nat);
+  const needs = kindRow(kind).needs;
   const out: RaidTarget[] = [];
   for (const [t, can] of reachable(g, nat, kind)) {
     if (lead >= 0 && !can.some((f) => f.id === lead)) continue;
     const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === t)! : null;
     const zone = quarry ? quarry.zone : kind === 'strike' ? t : -1;
     const p = sea ? g.seas[zone] : g.regions[t];
-    // With a group leading, the distance is its own; otherwise the nearest group's.
-    const d = Math.min(...can.filter((f) => lead < 0 || f.id === lead).map((f) => distTo(g, f, kind, t)));
+    // With a group leading, the distance is its own; otherwise that of the nearest group able to fly the raid itself
+    // (ruling 133(g)): where the raid needs bombers, fighters that could only go with it do not set the distance.
+    const flies = can.filter((f) => (lead < 0 ? needs !== 'bmr' || f.bmr > 0 : f.id === lead));
+    const from = (flies.length ? flies : can).reduce((a, b) => (distTo(g, b, kind, t) < distTo(g, a, kind, t) ? b : a));
+    const d = distTo(g, from, kind, t);
+    const far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
     const known = quarry && fleetKnown(g, quarry, nat) !== 'exact' ? 'report' : 'exact';
     const name = kind === 'fleet' ? placeOf(g, kind, t, nat).replace(/^the /, '') : p.name;
-    out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
+    out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
   }
   return out.sort((a, b) => a.km - b.km || a.id - b.id);
 }

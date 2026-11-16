@@ -21,7 +21,7 @@
   "works": {
     "factory": { "label": "Factory", "cost": 30, "step": 5, "months": 8, "most": { "city": 3, "town": 2 }, "blurb": "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
     "yard": { "label": "Shipyard", "cost": [0, 20, 30, 45], "months": 8, "blurb": "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
-    "aa": { "label": "Anti-aircraft guns", "cost": [0, 8, 12, 18], "months": 2, "upkeep": 0.05, "cut": 0.15, "flak": 0.012, "blurb": "Heavy guns round the factories. Each level stops part of the bombing of this province and brings down more of the bombers." },
+    "aa": { "label": "Anti-aircraft guns", "cost": [0, 8, 12, 18], "months": 2, "upkeep": 0.05, "cut": 0.15, "flak": 0.012, "blurb": "Heavy guns round the factories and the rail yards. Each level stops part of the bombing of this province, its railway included, and brings down more of the bombers." },
     "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
   },
   "yards": {

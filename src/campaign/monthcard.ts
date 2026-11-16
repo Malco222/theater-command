@@ -32,8 +32,9 @@
  */
 import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
-import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue } from './diplomacy';
-import { ARSENAL } from './arsenal';
+import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
+import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './diplomacy';
+import { ARSENAL, workLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
@@ -61,6 +62,8 @@ export interface MonthMark {
   /** The countries at war with anyone: a great power not among them that is at war a month later has entered the war. */
   warring: string[];
   orders: MonthOrder[];
+  /** The enemy was within reach of his capital, or his country could give in, as the mark was taken (danger.ts): so that the card says it once. */
+  reach?: boolean;
 }
 
 /** A red band: classes 1 and 2 of the ranking. */
@@ -89,8 +92,16 @@ export interface CardBand {
    * be taken for the band of the months before.
    */
   spent?: boolean;
-  /** With `spent`, the sentence that says what to do, printed small where the date stands: 'There will be no last month: hold all six.' */
+  /**
+   * The sentence that says what to do, printed small where the date stands: with `spent`, 'There will be no last
+   * month: hold all six.'; on the band of a country in danger (danger.ts), 'Hold Berlin, or win back home ground.'
+   */
   note?: string;
+  /**
+   * A second line under the headline, printed in full and never cut: a band that must be read whole (ruling 133(a),
+   * the country in danger: what is lost, and that the campaign ends with it). The band is as tall as the line needs.
+   */
+  sub?: string;
 }
 
 /** One of the six score boxes. A box with nothing to count is left out. */
@@ -144,7 +155,13 @@ export interface CardRow {
   stake?: boolean;
 }
 
-export interface CardHome { sign: string; count: number; text: string; place: string; region?: number; /** Next month's: drawn in grey. */ next?: boolean }
+export interface CardHome {
+  sign: string; count: number; text: string; place: string; region?: number;
+  /** Next month's: drawn in grey. */
+  next?: boolean;
+  /** Works that are not counted (ruling 133(g)): 'Anti-aircraft guns ready', with the place and the level under it and no number before it. */
+  bare?: boolean;
+}
 export interface CardStaff { /** The whole line of news, and its short form for the card: the desk, then what it did ('Research: 2 teams set to work'). */ text: string; short: string; desk: string; sign: string; /** True while the staff still runs that desk: the button takes it back from next month. */ mayTake: boolean }
 export interface CardElse { nat: string; text: string; /** The whole line of news. */ full?: string; region?: number }
 export interface CardLetter { text: string; by: string; unit?: number }
@@ -154,6 +171,11 @@ export interface MonthCard {
   turn: number;
   month: string;
   viewer: string;
+  /**
+   * The card that opens a campaign (ruling 123(b)): it reports no month of his, so it is headed by the moment and
+   * not by a month ('As July 1943 opens': see cardHead), and its fronts line never calls the month quiet.
+   */
+  opening?: boolean;
   bands: CardBand[];
   boxes: CardBox[];
   lead: CardRow | null;
@@ -339,6 +361,7 @@ export function monthMark(g: Game, viewer: string | null = g.human): MonthMark {
     before: g.regions.map((r) => r.ctrl),
     warring: Object.values(g.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
     orders: monthOrders(g, viewer),
+    ...(withinReach(g, viewer) ? { reach: true } : {}),
   };
 }
 
@@ -390,15 +413,32 @@ interface Ranked {
  */
 export const dateWords = (x: { week: number; month?: string }): string => (x.month ? `as ${x.month} opens` : `week ${x.week}`);
 
-/** The card for everything that has happened since the mark was taken. */
-export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human): MonthCard {
+/**
+ * Whether a card told from this mark is the one that opens a campaign: the mark was taken in the month now opening,
+ * so no month of the player's has passed. (A war played from its first month has no such card: its first card
+ * tells September 1939.) Both interfaces ask this and pass the answer to monthCard.
+ */
+export const opensCampaign = (g: Game, mark: MonthMark): boolean => g.turn > 1 && mark.turn === g.turn;
+
+/** What stands on an opening card where another would say the month was quiet: there is no month yet to be quiet. */
+export const NOT_YET_FOUGHT = 'Nothing has been fought on your fronts yet.';
+
+/**
+ * A card's head in three parts. Every card is headed by the month it reports ('July 1943'); the card that opens a
+ * campaign by the moment ('As July 1943 opens'), the month in the title's own colour and the two small words dimmer.
+ */
+export const cardHead = (card: { month: string; opening?: boolean }): { before: string; month: string; after: string } =>
+  (card.opening ? { before: 'As', month: card.month, after: 'opens' } : { before: '', month: card.month, after: '' });
+
+/** The card for everything that has happened since the mark was taken. `opening` marks the card that opens a campaign (see opensCampaign). */
+export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human, opts: { opening?: boolean } = {}): MonthCard {
   const me = viewer ?? '';
   const N = g.nations[me];
   const card: MonthCard = {
-    turn: mark.turn, month: turnToDate(mark.turn).label, viewer: me, bands: [], boxes: [], lead: null, quiet: '', rows: [], show: 7, count: '', foot: '',
+    turn: mark.turn, month: turnToDate(mark.turn).label, viewer: me, ...(opts.opening ? { opening: true } : {}), bands: [], boxes: [], lead: null, quiet: '', rows: [], show: 7, count: '', foot: '',
     home: [], research: [], also: [], alsoFull: [], staff: [], elsewhere: [], letters: [], more: 0,
   };
-  if (!N) { card.quiet = 'A quiet month.'; return card; }
+  if (!N) { card.quiet = opts.opening ? NOT_YET_FOUGHT : 'A quiet month.'; return card; }
   const mine = (nat?: string | null): boolean => nat === me;
   // (A line of news may name a country that is not in this game: it is nobody's ally and nobody's enemy.)
   const side = (nat?: string | null): boolean => !!nat && !!g.nations[nat] && (nat === me || allied(g, nat, me));
@@ -553,6 +593,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.facts = [still.men > 0 ? { n: num(still.men), label: 'men shut in' } : corps ? row.facts[0] : laid.first, { n: num(o), label: 'men lost' }, { n: num(t), label: 'of theirs' }];
       if (still.men > 0) row.follows = shutWords(place, o, still);
     }
+    // His own capital besieged and holding: the sentence under the picture says what hangs on it (ruling 133(a), point 4).
+    if (reg && reg.id === N?.capital && mine(reg.ctrl) && besieged(g, reg) && row.follows && !row.follows.includes(CAPITAL_BESIEGED)) row.follows = `${row.follows} ${CAPITAL_BESIEGED}`;
     ranked.push({ row, sub: GROUND_FIGHTING, weight: ourMen, place: reg?.cap ? 'capital' : size, ...(r.siege ? { laid: { region: r.region, ours: oursLost, theirs: theirsLost, first: row.facts[0] } } : {}) });
   }
 
@@ -835,6 +877,27 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, when: '', ...dated(h.turn), region: h.region, ...(lib && (mine(h.nat) || side(lib.by)) ? { good: true } : {}) }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said, good: !!lib && (mine(h.nat) || side(lib.by)) });
     used.add(h);
   });
+  // A seat's stake speaks for itself (rulings 121(c) and 123(a)). Its band is made from the stake as it stands when
+  // he reads the card, never from a month's news: so the card that opens a campaign carries it before any month's
+  // events have run, and a place lost since the news was written is on the band. Its small line names the next
+  // moment the test is made ('as September opens' on the card read as August opens), not the date of the news.
+  const stake = stakeWarning(g, me);
+  if (stake) {
+    for (const b of banded.filter((x) => x.band.word === 'WARNING' && (x.band.title === 'Rome wavers' || x.band.title === ROME_HOLDS))) banded.splice(banded.indexOf(b), 1);
+    const h: Headline = { turn: g.turn, week: 1, text: stake.text, kind: 'event', nat: stake.nat, region: stake.region, warn: stake.title, about: stake.about };
+    banded.push({ band: { word: 'WARNING', title: stake.title, nats: [g.nations[stake.about] ? stake.about : me], head: first(stake.text), text: stake.text, week: 1, when: '', month: stake.tested, region: stake.region }, rank: 1, h });
+  }
+  // The country in danger (rulings 117(d) and 133(a)): no campaign ends on him without a red band at least a month
+  // before. His own country able to give in next month is the first band of the card, whatever else the month
+  // brought; the enemy within reach of his capital is a band once, the month it becomes true (the mark keeps whether
+  // it was so when his last month opened). Like a stake's band it is made from the position as he reads the card
+  // (danger.ts), and its small line says what would stop it. In the last month of a siege it is the lead instead.
+  const fall = fallWarning(g, me, !opts.opening && !!mark.reach);
+  const due = stakeDue(g, me);
+  if (fall && (fall.level !== 'last' || due)) {
+    const h: Headline = { turn: g.turn, week: 1, text: fall.text, kind: 'event', nat: fall.nat, region: fall.region, warn: fall.title, about: fall.nat };
+    banded.push({ band: { word: 'WARNING', title: fall.title, nats: [fall.nat], head: fall.head, text: fall.text, sub: fall.sub, week: 1, when: '', region: fall.region, note: fall.note }, rank: fall.level === 'reach' ? 1 : -1, h });
+  }
   // One story, one band. A country's fall is told once, by the line that says the country fell (the capital's own
   // fall is the same news); and a country that declares war on several in a month does so in one band.
   for (const nat of new Set(banded.filter((b) => b.h.kind === 'fall' && b.h.nat).map((b) => b.h.nat!))) {
@@ -894,7 +957,6 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     Object.assign(b.band, { head: ROME_HOLDS, spent: true }, short ? { note: short } : {});
   }
   // The month a stake falls due the warning is the lead story, and is not said twice (ruling 118(f)).
-  const due = stakeDue(g, me);
   if (due) for (const b of banded.filter((x) => x.band.word === 'WARNING' && x.band.title === due.title)) banded.splice(banded.indexOf(b), 1);
   // (Of the same rank: war declared on him, then his own doing, then the rest.)
   const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
@@ -942,6 +1004,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   if (due) {
     card.lead = { ...blank(), cls: 2, stake: true, tag: 'LAST MONTH', tone: 'bad', ours: due.nat, place: g.nations[due.nat]?.name ?? '', kind: 'THE STAKE', month: due.month,
       head: due.head, line: due.sub, follows: due.sentence, facts: due.figures, ...(due.region !== undefined ? { region: due.region } : {}) };
+  } else if (fall?.level === 'last' && fall.frame) {
+    // The month the siege of his capital runs out leads in the same frame (ruling 133(a), point 3).
+    card.lead = { ...blank(), cls: 2, stake: true, tag: 'LAST MONTH', tone: 'bad', ours: fall.nat, place: g.nations[fall.nat]?.name ?? '', kind: 'THE CAPITAL', month: fall.frame.month,
+      head: fall.frame.head, line: fall.frame.sub, follows: fall.frame.sentence, facts: fall.frame.figures, region: fall.region };
   }
   card.rows = all.filter((r) => r !== card.lead);
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
@@ -960,7 +1026,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   }
   // (A long word under the figure takes its width from the sentence beside it.)
   for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
-  card.quiet = fighting.length ? '' : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
+  card.quiet = fighting.length ? '' : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
   if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
 
   // ---- The score --------------------------------------------------------------------------------------------
@@ -994,13 +1060,23 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // A corps stands where it formed, which is the capital if its own place was full or lost; a work is lost with its province.
     const c = o.what === 'corps' ? g.corps.filter((x) => x.nat === me && !x.dead && x.name === o.name).sort((x, y) => y.id - x.id)[0] : undefined;
     if (o.what === 'corps' ? !c : g.regions[o.region]?.ctrl !== me) continue;
+    // Guns, airfields and works are not counted: one order is a level of them at a place (ruling 133(g): never
+    // '1 anti-aircraft guns finished'). The line says what is ready, and the place and its level stand under it.
+    const item = o.what === 'work' ? (o.label === 'anti-aircraft guns' ? 'aa' : o.label === 'airfields' ? 'field' : null) : null;
+    if (!o.unit && (item || o.label === 'fortifications')) {
+      const level = item ? workLevel(g, item, o.region) : 0;
+      const town = g.regions[o.region] ? townName(g.regions[o.region]) : '';
+      const text = `${cap(o.label)} ${item === 'aa' ? 'ready' : 'finished'}`, place = level > 0 ? `${town}, level ${level}` : town;
+      if (!done.some((x) => x.bare && x.text === text && x.place === place)) done.push({ sign: o.mark, count: 1, text, place, region: o.region, bare: true });
+      continue;
+    }
     group(done, o.mark, o.unit ? `${o.label}|${o.plural}|ready` : `${o.label}|${o.plural}|finished`, c ? c.reg : o.region, false);
   }
   for (const c of cityOrders(g, me)) {
     if (c.spied) continue;
     for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
   }
-  card.home = [...done, ...coming].map((x) => { const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
+  card.home = [...done, ...coming].map((x) => { if (x.bare) return x; const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
   const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
@@ -1010,6 +1086,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.
     if (h.kind === 'info' && h.arm === 'sea' && !card.foot) { card.foot = h.text; used.add(h); continue; }
+    // (A work already said among the deliveries, 'Anti-aircraft guns ready' with its place and level, is not said a
+    // second time as a line of news.)
+    const built = h.kind === 'info' ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
+    if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2] && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
     if (h.kind === 'info') news.push(h);
   }
   // The other news of home, in the lines the box has left. The three foot boxes share one height: three items of

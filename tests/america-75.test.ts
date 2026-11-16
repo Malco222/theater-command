@@ -33,6 +33,7 @@ import { beginHuman, crossingStaffWord, crossings, declarable, endHuman, humanUp
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
 import { WORLD, acrossTheWater, armyIdle, beyondEurope, overseasOf, sailings, shipsItsOwn, standWithAllies, warFooting, warWorkLeft, warWorkMonth, wouldStandWithAllies } from '../src/campaign/world';
+import { turnToDate } from '../src/core/ticket';
 import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
@@ -518,8 +519,10 @@ describe('an American player goes to war when he chooses (rulings 31 to 33)', ()
     const small = startOpen(createGame(3, 'USA'), false);
     expect(acrossTheWater(small, 'USA', ['GER', 'ITA'])).toEqual([]);
     // The start screen says when America comes in if he does nothing.
-    const us = (grand as unknown as { nations: { id: string; under?: string }[] }).nations.find((n) => n.id === 'USA')!;
-    expect(us.under).toBe('America stays out until December 1941 unless you decide otherwise. Start in 1942 to begin at war.');
+    const us = (grand as unknown as { nations: { id: string; under?: string; peaceUntil?: number }[] }).nations.find((n) => n.id === 'USA')!;
+    expect(us.under).toBe('A long peace comes first: in history the United States was not at war until December 1941. Take over in 1942 to begin at war.');
+    // (Ruling 138. The line is shown for as long as the year picked begins before that month.)
+    expect(turnToDate(us.peaceUntil!).label).toBe('December 1941');
   });
 
   it('at war with Germany he stands with the Allies, and their ports are open to his corps the same month', () => {

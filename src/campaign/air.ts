@@ -1044,7 +1044,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
     result = result.trim();
   } else if (m === 'town') {

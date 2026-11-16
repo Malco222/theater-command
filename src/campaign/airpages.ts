@@ -116,7 +116,7 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
   const all = raidTargetsFor(g, kind, group);
   const rows: PageRow[] = all.slice(0, 12).map((t) => {
     const p = previewRaid(g, kind, t.id, lead);
-    const lines = [`${num(t.km)} km. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ''} ${t.groups} of your groups could fly it.`];
+    const lines = [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ''} ${t.groups} of your groups could fly it.`];
     if (p.why) lines.push(p.why);
     else if (kind === 'recon') lines.push(`${p.verdict}. ${p.effects[0]}`);
     else lines.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(', ')}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
@@ -167,7 +167,7 @@ function scoutPage(g: Game, id: number): Page | null {
   if (!x) return null;
   const up = humanUp(g);
   const rows: PageRow[] = raidTargetsFor(g, 'recon', id).slice(0, 14).map((t) => ({ t, p: previewRaid(g, 'recon', t.id, [id]) })).map(({ t, p }) => ({
-    nat: t.holder, title: t.name, lines: [`${num(t.km)} km. ${t.what}. ${p.verdict}.`], buttons: [{ label: 'SEND THE FLIGHT', act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? '' }],
+    nat: t.holder, title: t.name, lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`], buttons: [{ label: 'SEND THE FLIGHT', act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? '' }],
   }));
   return {
     id: `scout:${id}`, title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`, headline: rows.length ? `${rows.length} province${rows.length === 1 ? '' : 's'} it could photograph, nearest first` : x.scouted ? 'It has flown its reconnaissance this month' : 'Nothing in its reach is hidden',

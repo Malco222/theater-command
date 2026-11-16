@@ -343,11 +343,33 @@ describe('the landing card\'s line', () => {
     put(g, 'GER', B, 2);
     s = ashoreSays(g, force, P)!;
     expect(s.line).toMatch(new RegExp(`^Within three months the enemy can bring about 2 divisions against ${P.name}; you would have about \\d+ divisions? there\\. Your staff would expect to hold it\\.$`));
+    // A landing his staff would expect to hold carries no red headline.
+    expect(s.warn).toBeUndefined();
+    expect(s.divs.theirs).toBe(2);
     for (let k = 0; k < 10; k++) put(g, 'GER', B, 6);
     s = ashoreSays(g, force, P)!;
     expect(s.tone).toBe('lost');
     expect(s.line).toMatch(/Your staff would not expect this force to be still ashore by then\.$/);
     expect(s.chance).toBeLessThan(0.5);
+    // Ruling 134(d): the card's red headline, with the same two numbers as the line.
+    expect(s.divs.theirs).toBe(62);
+    expect(s.warn!.head).toBe('Ashore, then outnumbered');
+    expect(s.warn!.text).toBe(`The force can land, but within three months the enemy can bring about 62 divisions against it and you would have about ${s.divs.ours} there. Your staff would not expect it to be still ashore.`);
+    expect(s.warn!.also).toBe(`And a force that did get ashore would be outnumbered: within three months the enemy can bring about 62 divisions against it and you would have about ${s.divs.ours} there.`);
+    expect(s.line).toContain(`about 62 divisions against ${P.name}; you would have about ${s.divs.ours} division`);
+  });
+
+  it('the red headline counts only what his side knows of, and says so', () => {
+    const { g, P, B, force } = germany();
+    g.human = 'UK';
+    setFog(g, true);
+    const seen: number[] = [];
+    for (let k = 0; k < 10; k++) seen.push(put(g, 'GER', B, 6).id);
+    expect(ashoreSays(g, force, P)!.warn).toBeUndefined();
+    g.intel.known = { ...(g.intel.known ?? {}), ...Object.fromEntries(seen.map((id) => [id, g.turn])) };
+    const s = ashoreSays(g, force, P)!;
+    expect(s.tone).toBe('lost');
+    expect(s.warn!.text).toBe(`The force can land, but within three months the enemy can bring about 60 divisions against it, by your reports, and you would have about ${s.divs.ours} there. Your staff would not expect it to be still ashore.`);
   });
 
   it('counts only what his side knows of, and says so', () => {

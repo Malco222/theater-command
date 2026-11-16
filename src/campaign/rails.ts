@@ -75,6 +75,12 @@ const WKEYS: string[] = [];
 const whyKey = (r: number): string => (WKEYS[r] ??= `railwhy:${r}`);
 /** What cut a province's railway, or null for a whole line and for a cut whose cause was never kept. */
 export const cutCause = (g: Game, r: number): RailCause | null => (railCut(g, r) ? CAUSES[(g.flags[whyKey(r)] ?? 0) - 1] ?? null : null);
+// The anti-aircraft guns that stood in a province the month bombers cut its line (ruling 125): their level plus
+// one, kept beside the cut for the page to say and changing no rule. A cut made before it was kept has none.
+const AKEYS: string[] = [];
+const gunsKey = (r: number): string => (AKEYS[r] ??= `railaa:${r}`);
+/** The level of guns a bombed line was cut through (0 where none stood), or null for a whole line, another cause, or a cut whose guns were never kept. */
+export const cutThroughGuns = (g: Game, r: number): number | null => (cutCause(g, r) === 'bombed' && g.flags[gunsKey(r)] !== undefined ? g.flags[gunsKey(r)] - 1 : null);
 
 /**
  * Cuts the railway of a province, whoever does it and however: retreating troops, an order, bombers, agents and
@@ -95,6 +101,7 @@ export function mendRail(g: Game, r: number): boolean {
   if (!railCut(g, r)) return false;
   delete g.flags[key(r)];
   delete g.flags[whyKey(r)];
+  delete g.flags[gunsKey(r)];
   delete g.flags[hastyKey(r)];
   g.supplyDirty = true;
   return true;
@@ -200,11 +207,16 @@ export function railBombChance(g: Game, target: number, through: number, gunsSto
   return Math.min(RAILWAYS.bomb.most, through / RAILWAYS.bomb.scale) * (1 - gunsStop);
 }
 
-/** A raid on a province's rail yards and junctions. Returns true if the line is cut. */
-export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0): boolean {
+/**
+ * A raid on a province's rail yards and junctions. Returns true if the line is cut. `guns` is the level of the
+ * anti-aircraft guns that stand there: it is kept with the cut for the page to say (the rule is in `gunsStop`).
+ */
+export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number): boolean {
   const p = railBombChance(g, target, through, gunsStop);
   if (p <= 0) return false;
-  return new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target, 'bombed', by);
+  if (!(new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target, 'bombed', by))) return false;
+  if (guns !== undefined) g.flags[gunsKey(target)] = Math.max(0, Math.round(guns)) + 1;
+  return true;
 }
 
 // ---- The railhead ---------------------------------------------------------------------------
