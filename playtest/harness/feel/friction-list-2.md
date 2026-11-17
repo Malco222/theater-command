@@ -59,6 +59,11 @@ Pictures: `america-1942-landing-refused.png`, `america-1942-channel-closed.png`.
   to Hamburg by way of the Irish Sea, then the North Atlantic, then the North Sea". The short crossing every
   player will try first is not on it, and no line says why.
 
+- The other road does open, and speaks plainly: shipped on to Gibraltar (3 presses), the same army's landing card
+  for Brittany heads itself "THIS LANDING WILL FAIL · odds 0.07 to 1". Sent anyway, it lost 5,190 men, 38% of
+  those sent. That head is the plain speech the refusal lacks. The card is 537 words and 1,739 px, with LAND THE
+  TROOPS 740 px below its edge (ruling 206 trims it).
+
 It is like a ferry desk that says "no sailing today" when the board behind it already reads "Channel closed, storm".
 **Fix (words only):** the refusal carries what the sea's panel already knows: "The English Channel is closed to
 your troopships: the enemy's strength there is 38 to your 14. Put a fleet to sea there or win its sky." Where the

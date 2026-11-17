@@ -1,0 +1,15 @@
+load	out/click/us42d.save.txt
+select-province	Wales
+press	Ship by sea
+select-province	Gibraltar
+end-month
+select-province	Gibraltar
+order-province	Brittany
+press	Invade by sea
+select-province	Brittany
+press	LAND THE TROOPS
+watch	4
+close
+end-month
+select-province	Brittany
+end-month
