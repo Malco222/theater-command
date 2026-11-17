@@ -1,0 +1,136 @@
+# France, run 1: 1939-09, at war with GER. Step file version 1 (see README.md). Written by mksteps.cjs from what the seat holds.
+start	FRA 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Every army once: a march on its own ground, a neutral frontier, enemy ground with and without an army in it.
+select-province	Paris	does
+order-province	Orleans	moves
+press-each	tray
+restore	start
+select-province	Lille	does
+order-province	Champagne	moves
+press-each	tray
+restore	start
+select-province	Calais	does
+order-province	Lille	moves
+press-each	tray
+restore	start
+select-province	Somme	does
+order-province	Rouen	moves
+press-each	tray
+restore	start
+select-province	Verdun	does
+order-province	Champagne	moves
+press-each	tray
+restore	start
+select-province	Savoy	does
+order-province	Lyon	moves
+press-each	tray
+restore	start
+select-province	Lorraine	does
+order-province	Saar	card
+press-each	card
+close
+restore	start
+select-province	Lille	does
+order-province	Namur	card
+press-each	card
+close
+restore	start
+# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
+select-unit	Atlantic Fleet	does
+order-sea	Bay of Biscay	says-why
+select-sea	Western Approaches	moves
+select-sea	Iberian Coast	
+press-each	tray
+restore	start
+select-unit	Mediterranean Fleet	does
+order-sea	Western Mediterranean	says-why
+select-sea	Iberian Coast	moves
+select-sea	Tyrrhenian Sea	
+press-each	tray
+restore	start
+# --- C. Every air group once.
+open-page	Air	does
+select-unit	Groupe de Chasse 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Groupe de Chasse 2	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Groupe de Bombardement 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Groupe de Chasse 3	does
+press-each	page
+restore	start
+open-page	Air
+# --- D. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+restore	start
+open-page	Research	does
+press-each	page
+restore	start
+open-page	Generals	does
+press-each	page
+restore	start
+open-page	Honours	does
+press-each	page
+restore	start
+open-page	Navy	does
+press-each	page
+restore	start
+open-page	Air	does
+press-each	page
+restore	start
+open-page	Spies	does
+press-each	page
+restore	start
+open-page	News	does
+press-each	page
+restore	start
+open-page	Battles	does
+press-each	page
+restore	start
+open-page	Powers	does
+press-each	page
+restore	start
+open-page	Staff	does
+press-each	page
+restore	start
+press	CABINET	card
+press-each	card
+close
+restore	start
+press	ABILITIES	card
+press-each	card
+close
+restore	start
+press	DECLARE WAR	card
+press-each	card
+close
+restore	start
+press	Treasury	card
+press-each	card
+close
+restore	start
+# --- E. Province cards: the capital, a port, a neighbour.
+select-province	Paris	does
+press-each	page
+restore	start
+select-province	Calais	does
+press-each	page
+restore	start
+select-province	Namur	does
+press-each	page
+restore	start
+# --- F. Three months ended by the game's own button, the month card read each time.
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card

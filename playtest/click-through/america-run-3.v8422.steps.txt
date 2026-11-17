@@ -1,0 +1,101 @@
+# America, run 3: the orders new in Version 84.1, and tries at breaking them. Step file version 1 (see README.md).
+start	USA 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. A carrier's wing ashore and back aboard (ruling 175(b)).
+open-page	Air	does
+select-unit	Atlantic Fleet carrier fighters	does
+# a field that is not its fleet's harbour: the game says why not
+order-province	Chicago	says-why
+order-province	Norfolk	says flies ashore
+# ashore: asked again, and asked back aboard in the same month
+order-province	Norfolk	says-why
+press	BACK ABOARD	says-why
+press-each	page
+# both wings ashore: the carrier lies empty
+select-unit	Atlantic Fleet strike wing	does
+order-province	Norfolk	says flies ashore
+snapshot	ashore
+open-page	Navy	does
+select-unit	Atlantic Fleet	does
+press-each	page
+# a save and a load with the wings ashore: they are still ashore
+restore	ashore
+open-page	Air	does
+select-unit	Atlantic Fleet carrier fighters	does
+press	BACK ABOARD	says-why
+# a month later: one wing back aboard, the other moved inland and then asked back aboard
+end-month		card
+close
+open-page	Air	
+select-unit	Atlantic Fleet carrier fighters	does
+press	BACK ABOARD	does
+select-unit	Atlantic Fleet strike wing	does
+press	MOVE TO ANOTHER AIRFIELD	does
+click-mark	airfield Washington	does
+select-unit	Atlantic Fleet strike wing	does
+press	BACK ABOARD	says-why
+press-each	page
+# two more months with a wing inland: nothing breaks
+end-month		card
+close
+end-month		card
+close
+open-page	Air	
+select-unit	Atlantic Fleet strike wing	does
+press-each	page
+# --- B. The Panama Canal: shut and opened by its holder, from the map and from the sea beside it.
+restore	start
+point-at	gate Panama Canal	says-why
+click-mark	gate Panama Canal	card
+press-each	card
+close
+click-mark	gate Panama Canal	card
+press	SHUT THE GATE	says is shut
+snapshot	shut
+click-mark	gate Panama Canal	card
+press-each	card
+close
+# shut for a month: the month card and the treasury say what it costs
+end-month		card
+press-each	card
+close
+press	Treasury	card
+close
+click-mark	gate Panama Canal	card
+press	OPEN THE GATE	does
+restore	shut
+open-page	Navy	does
+select-sea	Caribbean Sea	does
+press-each	page
+restore	shut
+open-page	Navy	does
+select-sea	Gulf of Panama	does
+press-each	page
+# --- C. Things that cannot be done now say why.
+restore	start
+select-province	Canal Zone	does
+order-province	Panama City	says Fortress troops
+order-province	Chiriqui	says Fortress troops
+press-each	tray
+open-page	Navy	does
+select-unit	Atlantic Fleet	does
+order-sea	Eastern Seaboard	says At peace
+select-sea	Eastern Seaboard	says-why
+open-page	Air	does
+select-unit	Atlantic Fleet strike wing	does
+press	SCOUT FROM THE AIR	says-why
+press	SEARCH A SEA	says-why
+open-page	Region
+select-province	Washington	does
+press	Build a factory	says short
+press	Works No works	says short
+select-province	Norfolk	does
+press-each	page
+press	Treasury	card
+press	CALL THEM UP NOW	says-why
+close
+# --- D. At war: a wing ashore and its fleet at sea; the canal shut against an enemy.
+restore	ashore
+press	DECLARE WAR	card
+press-each	card
+close

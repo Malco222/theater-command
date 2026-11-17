@@ -1,0 +1,133 @@
+# Italy, run 1: 1939-09, at peace. Step file version 1 (see README.md). Written by mksteps.cjs from what the seat holds.
+start	ITA 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Every army once: a march on its own ground, a neutral frontier, enemy ground with and without an army in it.
+select-province	Rome	does
+order-province	Marche	moves
+press-each	tray
+restore	start
+select-province	Lombardy	does
+order-province	Alto Adige	moves
+press-each	tray
+restore	start
+select-province	Piedmont	does
+order-province	Lombardy	moves
+press-each	tray
+restore	start
+select-province	Liguria	does
+order-province	Emilia	moves
+press-each	tray
+restore	start
+select-province	Tobruk	does
+order-province	Mechili	moves
+press-each	tray
+restore	start
+select-province	Lombardy	does
+order-province	Bern	card
+press-each	card
+close
+restore	start
+# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
+select-unit	1st Fleet	does
+order-sea	Ionian Sea	says-why
+select-sea	Tyrrhenian Sea	says-why
+select-sea	Adriatic Sea	
+press-each	tray
+restore	start
+select-unit	2nd Fleet	does
+order-sea	Tyrrhenian Sea	says-why
+select-sea	Western Mediterranean	says-why
+select-sea	Ionian Sea	
+press-each	tray
+restore	start
+select-unit	Submarine Command	does
+order-sea	Tyrrhenian Sea	says-why
+select-sea	Western Mediterranean	says-why
+select-sea	Ionian Sea	
+press-each	tray
+restore	start
+# --- C. Every air group once.
+open-page	Air	does
+select-unit	Stormo Caccia 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Stormo Bombardieri 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Stormo Bombardieri 2	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Stormo Caccia 2	does
+press-each	page
+restore	start
+open-page	Air
+# --- D. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+restore	start
+open-page	Research	does
+press-each	page
+restore	start
+open-page	Generals	does
+press-each	page
+restore	start
+open-page	Honours	does
+press-each	page
+restore	start
+open-page	Navy	does
+press-each	page
+restore	start
+open-page	Air	does
+press-each	page
+restore	start
+open-page	Spies	does
+press-each	page
+restore	start
+open-page	News	does
+press-each	page
+restore	start
+open-page	Battles	does
+press-each	page
+restore	start
+open-page	Powers	does
+press-each	page
+restore	start
+open-page	Staff	does
+press-each	page
+restore	start
+press	CABINET	card
+press-each	card
+close
+restore	start
+press	ABILITIES	card
+press-each	card
+close
+restore	start
+press	DECLARE WAR	card
+press-each	card
+close
+restore	start
+press	Treasury	card
+press-each	card
+close
+restore	start
+# --- E. Province cards: the capital, a port, a neighbour.
+select-province	Rome	does
+press-each	page
+restore	start
+select-province	Liguria	does
+press-each	page
+restore	start
+select-province	Bern	does
+press-each	page
+restore	start
+# --- F. Three months ended by the game's own button, the month card read each time.
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card
