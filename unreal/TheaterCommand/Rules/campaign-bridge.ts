@@ -58,7 +58,7 @@ import {
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
-  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, whyNotSallyOut, sallyOutlook, orderSally,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -502,6 +502,8 @@ function view() {
       canOrder: up && canOrder(s, c), noOrders: whyNotOrder(s, c) ?? '', supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0,
       // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
       works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
+      // (Rules 84.2.4; the UI director, 17 November.) A corps of his own inside a town: the rules' refusal, naming the town, for its card.
+      garrison: (c as { town?: unknown }).town && c.nat === s.human ? (() => { try { return garrisonLine(s, [c]); } catch { return ''; } })() : '',
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
@@ -3346,7 +3348,12 @@ function order(key: string, region = -1) {
 /** The player declares war on a country he is at peace with. */
 function declare(on: string) {
   const s = game();
-  return { ok: humanUp(s) && orderDeclare(s, on), view: view() };
+  const h0 = s.headlines.length;
+  const ok = humanUp(s) && orderDeclare(s, on);
+  // (Rules 84.2.5; the UI director, 17 November: one voice after a press.) What the declaration brought at once, as the
+  // rules head it ("Britain stands by Canada", "Britain stays out of Canada's war"): the paper answers the press with it.
+  const note = s.headlines.slice(h0).filter((h) => !!(h as { head?: string }).head).map((h) => `${(h as { head?: string }).head}. ${h.text}`).join(' ');
+  return { ok, note, view: view() };
 }
 
 /** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */

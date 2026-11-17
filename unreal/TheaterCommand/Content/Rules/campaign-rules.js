@@ -30864,6 +30864,14 @@
           works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1,
           town: !!c.town,
           men: men(c),
+          // (Rules 84.2.4; the UI director, 17 November.) A corps of his own inside a town: the rules' refusal, naming the town, for its card.
+          garrison: c.town && c.nat === s.human ? (() => {
+            try {
+              return garrisonLine(s, [c]);
+            } catch {
+              return "";
+            }
+          })() : "",
           // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
           xp: Math.round(c.xp * 100),
           grade: grade(c.xp),
@@ -33688,7 +33696,10 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function declare(on) {
     const s = game();
-    return { ok: humanUp(s) && orderDeclare(s, on), view: view2() };
+    const h0 = s.headlines.length;
+    const ok = humanUp(s) && orderDeclare(s, on);
+    const note4 = s.headlines.slice(h0).filter((h) => !!h.head).map((h) => `${h.head}. ${h.text}`).join(" ");
+    return { ok, note: note4, view: view2() };
   }
   var theName2 = (s, id) => {
     const nm = s.nations[id]?.name ?? id;
