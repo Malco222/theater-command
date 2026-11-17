@@ -1,4 +1,5 @@
 #include "Campaign/CampaignHUD.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Campaign/CampaignText.h"
 
 #include "Campaign/CampaignMapActor.h"
@@ -431,6 +432,7 @@ namespace
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
 		{
+			THEATER_SPEED_SCOPE(PaintMapLettering);
 			if (!Controller.IsValid())
 			{
 				return LayerId;
@@ -2613,6 +2615,7 @@ namespace
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
 		{
+			THEATER_SPEED_SCOPE(PaintSkyPlates);
 			const ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
 			const float Shown = Table ? Table->GetSkyView() : 0.0f;
 			if (Shown <= 0.01f || Table->GetSkyPlates().Num() == 0)
@@ -2842,6 +2845,7 @@ namespace
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
 		{
+			THEATER_SPEED_SCOPE(PaintTownPlates);
 			if (!Controller.IsValid())
 			{
 				return LayerId;
@@ -3337,6 +3341,7 @@ namespace
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
 		{
+			THEATER_SPEED_SCOPE(PaintMinimap);
 			if (!Controller.IsValid())
 			{
 				return LayerId;

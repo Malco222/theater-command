@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMapActor.h"
+#include "Campaign/TheaterSpeed.h"
 #include "ImageUtils.h"
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
@@ -425,6 +426,7 @@ void ACampaignMapActor::ShowVictorFlags()
 
 void ACampaignMapActor::DrawVictorFlags()
 {
+	THEATER_SPEED_SCOPE(DrawVictorFlags);
 	if (!VictorFlagMesh)
 	{
 		VictorFlagMesh = NewObject<UProceduralMeshComponent>(this);
@@ -851,6 +853,7 @@ void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FStr
 
 void ACampaignMapActor::UpdateSinkings()
 {
+	THEATER_SPEED_SCOPE(UpdateSinkings);
 	if (SinkingShips.Num() == 0 || !GetWorld())
 	{
 		return;
@@ -1351,6 +1354,7 @@ void ACampaignMapActor::SeaScalar(FName Name, float Value)
 
 void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSeaMotion);
 	if (!SeaMaterial)
 	{
 		return;
@@ -2251,6 +2255,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 
 bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
 {
+	THEATER_SPEED_SCOPE(UpdateLand);
 	if (Sheet.Heights.Num() == 0 || !Sheet.Shape)
 	{
 		return false;
@@ -2612,6 +2617,7 @@ void ACampaignMapActor::BuildWorld()
 
 void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateFineSheets);
 	if (!Data.bWorld || FineXs.Num() < 2 || FineYs.Num() < 2 || !WorldLandMaterial)
 	{
 		return;
@@ -3593,6 +3599,7 @@ void ACampaignMapActor::SetRailRoute(int32 ToRegion)
 
 void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateRailLight);
 	if (!RailLightMesh)
 	{
 		return;
@@ -3811,6 +3818,7 @@ void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 
 void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateCutLamps);
 	UWorld* World = GetWorld();
 	if (!CutLampMesh || !World)
 	{
@@ -4776,6 +4784,7 @@ void ACampaignMapActor::MakeUpTrain(FTrain& Train, int32 FromRegion) const
 
 void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateTrains);
 	UWorld* World = GetWorld();
 	if (!World || Land.Rails.Num() == 0)
 	{
@@ -6107,6 +6116,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 
 void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(ShowParkedPlanes);
 	// (The art director's ruling of round 21: a parked aircraft must be recognisably the one on its card, by its
 	// outline, its hood, its blades, its marking and its paint. Close to, each airfield in use shows its country's
 	// own fighter, its plainer model, standing on its wheels, in place of the silver box aircraft. Only close to,
@@ -6392,6 +6402,7 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 
 void ACampaignMapActor::BuildTowns()
 {
+	THEATER_SPEED_SCOPE(BuildTowns);
 	TownMarkers->ClearInstances();
 	CapitalMarkers->ClearInstances();
 	if (!TownMesh)
@@ -6918,6 +6929,7 @@ void ACampaignMapActor::BuildSheetMargin()
 
 void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 {
+	THEATER_SPEED_SCOPE(SetNight);
 	const bool bLampChanged = bLamplight != bLamplightNow;
 	NightNow = Night;
 	bLamplightNow = bLamplight;
@@ -8445,6 +8457,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 
 void ACampaignMapActor::BuildGunLines()
 {
+	THEATER_SPEED_SCOPE(BuildGunLines);
 	if (!GunLineMesh || !Data.IsLoaded() || !bPiecesShown)
 	{
 		return; // (with the pieces lifted off the table the lines are out of sight, and are made again when they are set back)
@@ -8844,6 +8857,7 @@ void ACampaignMapActor::BuildGunLines()
 
 void ACampaignMapActor::ApplyCrowds()
 {
+	THEATER_SPEED_SCOPE(ApplyCrowds);
 	for (AArmyPiece* Piece : Pieces)
 	{
 		if (!Piece)
@@ -9565,6 +9579,7 @@ void ACampaignMapActor::EndInk()
 
 void ACampaignMapActor::UpdateOwnershipPaint()
 {
+	THEATER_SPEED_SCOPE(UpdateOwnershipPaint);
 	UWorld* World = GetWorld();
 	if (!World || (InkRuns.Num() == 0 && !bSiegesMoving))
 	{
@@ -9981,6 +9996,7 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 
 void ACampaignMapActor::UpdateFlashes()
 {
+	THEATER_SPEED_SCOPE(UpdateFlashes);
 	UWorld* World = GetWorld();
 	if (!World || (Flashes.Num() == 0 && FlashesDrawn <= 0.0))
 	{
@@ -10040,6 +10056,7 @@ void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
 
 void ACampaignMapActor::UpdateClouds()
 {
+	THEATER_SPEED_SCOPE(UpdateClouds);
 	UWorld* World = GetWorld();
 	if (!CloudMesh || !World || !HighlightMaterial || !Data.IsLoaded())
 	{
@@ -10210,6 +10227,7 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int
 
 void ACampaignMapActor::UpdateFogFade(float DeltaSeconds)
 {
+	THEATER_SPEED_SCOPE(UpdateFogFade);
 	if (!bFogFading || !FogPicture || FogShownPixels.Num() != Paint.NX * Paint.NY || FogWantedPixels.Num() != FogShownPixels.Num())
 	{
 		return;
@@ -11094,6 +11112,7 @@ bool ACampaignMapActor::FirstRaidTarget(FVector2D& OutSpot, float& OutHeight) co
 
 void ACampaignMapActor::UpdateSorties()
 {
+	THEATER_SPEED_SCOPE(UpdateSorties);
 	UWorld* World = GetWorld();
 	if (!SortieMesh || !World)
 	{
@@ -11244,6 +11263,7 @@ void ACampaignMapActor::UpdateSorties()
 
 void ACampaignMapActor::UpdateSearchlights(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateSearchlights);
 	UWorld* World = GetWorld();
 	if (!BeamMesh || !World)
 	{
@@ -11555,6 +11575,7 @@ void ACampaignMapActor::AddSeaBattle(int32 Zone)
 
 void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSmoke);
 	UWorld* World = GetWorld();
 	if (!SmokeMesh || !World || !HighlightMaterial)
 	{
@@ -12701,6 +12722,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(MapUpdate);
 	if (bVictorsMoving)
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
@@ -13587,6 +13609,7 @@ void ACampaignMapActor::DrawSkyEdge(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSky);
 	UWorld* World = GetWorld();
 	if (!World || !LandMaterial || !Data.IsLoaded())
 	{
@@ -14198,6 +14221,7 @@ int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direct
 
 void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 {
+	THEATER_SPEED_SCOPE(UpdateAgents);
 	if (AgentStands.Num() > 0)
 	{
 		const float Delta = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
@@ -14466,6 +14490,7 @@ void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
 
 void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(SetHoveredRegion);
 	if (RegionId != HoveredRegion)
 	{
 		HoveredRegion = RegionId;
@@ -14480,6 +14505,7 @@ void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 
 void ACampaignMapActor::RebuildHighlight()
 {
+	THEATER_SPEED_SCOPE(RebuildHighlight);
 	HighlightMesh->ClearAllMeshSections();
 	if (SelectedRegion != INDEX_NONE)
 	{

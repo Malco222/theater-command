@@ -1,0 +1,83 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "HAL/PlatformTime.h"
+#include "ProfilingDebugging/CsvProfiler.h"
+
+class UWorld;
+
+/**
+ * (Speed, 17 November 2026. Brian: "how do we make the game run more smooth, its not very easy and enjoyable to
+ * play".) What the frame costs, and the switches for the changes made to bring that down.
+ *
+ * The log: "-TheaterSpeedLog" on the command line, or "tc.Speed.Log 1" at the console, writes a few lines every
+ * five seconds: the frames a second, the worst frame and how many went over 33 ms, the game, draw and graphics
+ * chip times, how long each of the map's jobs took a frame, and every call into the rules with what it cost. Every
+ * thirty seconds it adds a count of what is drawn: how many parts, how many throw shadows, and the largest meshes.
+ *
+ * The same jobs are also timed for Unreal's own frame recorder ("-csvCaptureFrames=600", or "csvprofile start" and
+ * "csvprofile stop" at the console), in its "Theater" columns, beside the engine's own game, draw and chip times.
+ *
+ * The switches, each a console variable so that "-TheaterTime=" can try them against each other in one run:
+ *   tc.Speed.TownSquares  1 (default): the towns are cut into squares of country, so that only those in view are
+ *                         drawn and only those near a change are drawn again into the shadows. 0: one piece, as before.
+ *   tc.Speed.SmokeTrim    1 (default): only as much of the smoke's mesh as is in use is sent to the graphics chip
+ *                         each frame. 0: all of it, as before.
+ *   tc.Speed.RulesMemo    1 (default): the odds and the like, asked again of the rules for the same army and the
+ *                         same place with nothing changed between, are answered from the last asking. 0: always asked.
+ * And two for measuring only, which change the picture and are not to be left off without the art director:
+ *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
+ *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
+ */
+CSV_DECLARE_CATEGORY_EXTERN(Theater);
+
+namespace TheaterSpeed
+{
+	/** True while the speed log is being written (read once a frame, on the game thread). */
+	bool IsLogging();
+
+	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
+	void NoteFrame(float DeltaSeconds, UWorld* World);
+
+	/** A call into the rules has been answered: how long it took, and whether it was answered from the memo. */
+	void NoteRulesCall(const FString& Function, double Seconds, bool bFromMemo);
+
+	/** The switches above, as they stand now. */
+	bool TownSquares();
+	bool TownShadows();
+	bool SmokeTrim();
+	bool RulesMemo();
+	bool TrainShadows();
+
+	/** (for THEATER_SPEED_SCOPE) */
+	int32 SlotFor(const TCHAR* Name);
+	void AddTime(int32 Slot, uint64 Cycles);
+
+	/** Times what is left of the block it stands in, while the speed log is being written. */
+	struct FScope
+	{
+		explicit FScope(int32 InSlot)
+			: Slot(InSlot), Start(IsLogging() ? FPlatformTime::Cycles64() : 0)
+		{
+		}
+		~FScope()
+		{
+			if (Start != 0)
+			{
+				AddTime(Slot, FPlatformTime::Cycles64() - Start);
+			}
+		}
+		FScope(const FScope&) = delete;
+		FScope& operator=(const FScope&) = delete;
+
+	private:
+		int32 Slot;
+		uint64 Start;
+	};
+}
+
+/** Times the rest of the block, under a name: in the speed log, and in the frame recorder's "Theater" columns. */
+#define THEATER_SPEED_SCOPE(Name) \
+	CSV_SCOPED_TIMING_STAT(Theater, Name); \
+	static const int32 PREPROCESSOR_JOIN(TheaterSpeedSlot_, __LINE__) = TheaterSpeed::SlotFor(TEXT(#Name)); \
+	const TheaterSpeed::FScope PREPROCESSOR_JOIN(TheaterSpeedScope_, __LINE__)(PREPROCESSOR_JOIN(TheaterSpeedSlot_, __LINE__))
