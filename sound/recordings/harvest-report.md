@@ -1,9 +1,15 @@
 # Harvest report
 
-Run 2026-11-17T01:32:27.861Z
+Run 2026-11-17T01:43:18.587Z
 
 | id | for | licence | format | seconds | events | flags | MB |
 |---|---|---|---|---|---|---|---|
+| t34_estonia_museum | tank | CC0 | vorbis 48000 Hz 2 ch 109 kbps | 50.6 | 0 | LOW RATE, NOISY | 0.7 |
+| t34_85_finnish_flagday | tank | Public domain | vorbis 48000 Hz 2 ch 146 kbps | 34.4 | 0 | NOISY | 0.6 |
+| bradley_poland_broll | tank | Public domain | opus 48000 Hz 2 ch 118 kbps | 60.1 | 7 | none | 0.9 |
+| leopard2_setc_driving | tank | Public domain | vorbis 48000 Hz 2 ch 324 kbps | 130.6 | 1 | NOISY | 5.3 |
+| abrams_livefire_bulgaria | tank gun | Public domain | opus 48000 Hz 2 ch 113 kbps | 60 | 90 | none | 0.8 |
+| abrams_gunnery_2_37 | tank gun | Public domain | opus 48000 Hz 2 ch 124 kbps | 25.9 | 3 | NOISY | 0.4 |
 | b17_paine_2011 | bomber | CC0 | vorbis 44100 Hz 2 ch 94 kbps | 111.4 | 3 | LOW RATE | 1.3 |
 | b25_paine_2011 | bomber | CC0 | vorbis 44100 Hz 2 ch 114 kbps | 86.7 | 3 | LOW RATE | 1.2 |
 | b25_p38_hahnweide | bomber | CC BY 3.0 (credit: LEJ.approach/dvldi) | vorbis 44100 Hz 2 ch 288 kbps | 178.2 | 16 | NOISY | 6.4 |
@@ -33,33 +39,8 @@ Run 2026-11-17T01:32:27.861Z
 | steam_tornado_mortimer | train | CC BY 3.0 (credit: MoiUnMouton) | vorbis 44100 Hz 2 ch 99 kbps | 38 | 1 | LOW RATE | 0.5 |
 | steam_mala_morava | train | CC0 | opus 48000 Hz 1 ch 120 kbps | 16.2 | 0 | NOISY | 0.2 |
 | steam_grand_canyon_depot | train | CC BY 2.0 (credit: Grand Canyon National Park) | opus 48000 Hz 2 ch 120 kbps | 27.4 | 0 | NOISY | 0.4 |
-| steam_53808_somerset | train | NOT FETCHED: Node.js v26.13.0 | | | | | |
 | steam_dorset_4492 | train | CC BY 3.0 (credit: ilovesuni) | vorbis 44100 Hz 1 ch 73 kbps | 130.4 | 10 | LOW RATE, NOISY | 1.2 |
 | wws_steam_s06_starting | train | CC BY 4.0 (credit: Work With Sounds / Technical Museum of Slovenia) | vorbis 48000 Hz 2 ch 112 kbps | 57.3 | 0 | LOW RATE, NOISY | 0.7 |
-| wws_steam_anna6 | train | NOT FETCHED: File:WWS Steamlocomotive.ogg: download failed: curl: (56) The requested URL returned error: 429 | | | | | |
-| wws_steam_p8 | train | NOT FETCHED: File:WWS PrussianpassengersteamlocomotiveP-8.ogg: download failed: curl: (56) The requested URL returned error: 429 | | | | | |
-| train_iowa_glaneur | train | NOT FETCHED: File:Train sounds from Iowa - Glaneur de sons.ogg: download failed: curl: (56) The requested URL returned error: 429 | | | | | |
-
-## Searches
-
-- "T-72 tank driving" (film): 0 found, 0 a game may use
-- "Leopard 2 tank driving" (film): 0 found, 0 a game may use
-- "Bradley fighting vehicle maneuver B-roll" (film): 0 found, 0 a game may use
-- "M88 recovery vehicle" (film): 0 found, 0 a game may use
-- "M109 Paladin moving convoy" (film): 0 found, 0 a game may use
-- "tank museum running engine Sherman OR Panzer OR T-34 OR Churchill" (film): 50 found, 35 a game may use
-- "T-34 parade driving" (film): 0 found, 0 a game may use
-- "tank live fire gunnery" (film): 5 found, 4 a game may use
-- "rifle volley salute honor guard" (film): 0 found, 0 a game may use
-- "rifle range live fire marksmanship B-roll" (film): 1 found, 1 a game may use
-- "reenactment World War II battle" (film): 11 found, 9 a game may use
-- "Bofors 40 mm firing" (film): 2 found, 2 a game may use
-- "air defense live fire gun" (film): 4 found, 4 a game may use
-- "ZU-23 firing" (film): 2 found, 1 a game may use
-- "B-17 flyover engines" (film): 0 found, 0 a game may use
-- "Lancaster bomber flypast" (film): 0 found, 0 a game may use
-- "C-47 Skytrain engine start takeoff" (film): 0 found, 0 a game may use
-- "DC-3 takeoff" (film): 8 found, 8 a game may use
-- "warbird radial engine start" (film): 0 found, 0 a game may use
-- "steam locomotive passing whistle" (film): 1 found, 1 a game may use
-- "mortar live fire B-roll" (film): 0 found, 0 a game may use
+| wws_steam_anna6 | train | CC BY 4.0 (credit: Work With Sounds / Konrad Gutkowski) | vorbis 44100 Hz 2 ch 112 kbps | 35.4 | 0 | LOW RATE | 0.5 |
+| wws_steam_p8 | train | CC BY 4.0 (credit: Work With Sounds / Konrad Gutkowski) | vorbis 44100 Hz 2 ch 112 kbps | 27 | 3 | LOW RATE, NOISY | 0.4 |
+| train_iowa_glaneur | train | CC BY 3.0 (credit: Glaneur de sons) | vorbis 44100 Hz 2 ch 128 kbps | 93.9 | 3 | LOW RATE, NOISY | 1.3 |

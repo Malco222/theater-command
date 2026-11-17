@@ -1,0 +1,39 @@
+[
+ {
+  "file": "wws_steam_anna6.ogg",
+  "format": "vorbis 44100 Hz 2 ch 112 kbps",
+  "seconds": 35.4,
+  "read": [
+   0,
+   35.4
+  ],
+  "fromFilm": false,
+  "peakDb": -2.4,
+  "lufs": -20.5,
+  "loudestMomentLufs": -10.7,
+  "floorDb": -48.6,
+  "rangeDb": 31.1,
+  "topKhz": 18,
+  "bands": {
+   "sub": -13.9,
+   "low": -8.2,
+   "lowmid": -10,
+   "mid": -17.8,
+   "presence": -12.3,
+   "air": -2.1
+  },
+  "stereo": 0.44,
+  "talk": 0.11,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 16,
+   "to": 24,
+   "wobbleDb": 1.8
+  },
+  "flags": [
+   "LOW RATE: vorbis at 112 kbps"
+  ]
+ }
+]

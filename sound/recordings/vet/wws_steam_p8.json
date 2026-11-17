@@ -1,0 +1,66 @@
+[
+ {
+  "file": "wws_steam_p8.ogg",
+  "format": "vorbis 44100 Hz 2 ch 112 kbps",
+  "seconds": 27,
+  "read": [
+   0,
+   27
+  ],
+  "fromFilm": false,
+  "peakDb": 3,
+  "lufs": -12.4,
+  "loudestMomentLufs": -2,
+  "floorDb": -43.8,
+  "rangeDb": 35.1,
+  "topKhz": 18,
+  "bands": {
+   "sub": -10.7,
+   "low": -12.6,
+   "lowmid": -9.7,
+   "mid": -11.9,
+   "presence": -7.3,
+   "air": -3.1
+  },
+  "stereo": 0.41,
+  "talk": 0.31,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 14.81,
+    "db": -9.3
+   },
+   {
+    "at": 19.505,
+    "db": -9.7
+   },
+   {
+    "at": 23.04,
+    "db": -21.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 14.81,
+    "db": -9.3
+   },
+   {
+    "at": 19.505,
+    "db": -9.7
+   },
+   {
+    "at": 23.04,
+    "db": -21.9
+   }
+  ],
+  "steady": {
+   "from": 5,
+   "to": 13,
+   "wobbleDb": 2.53
+  },
+  "flags": [
+   "LOW RATE: vorbis at 112 kbps",
+   "NOISY: the quietest moments sit at -44 dB (no clean silence between events)"
+  ]
+ }
+]

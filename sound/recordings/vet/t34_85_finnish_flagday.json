@@ -1,0 +1,39 @@
+[
+ {
+  "file": "t34_85_finnish_flagday.mka",
+  "format": "vorbis 48000 Hz 2 ch 146 kbps",
+  "seconds": 34.4,
+  "read": [
+   0,
+   34.4
+  ],
+  "fromFilm": false,
+  "peakDb": 0.1,
+  "lufs": -13,
+  "loudestMomentLufs": -10.6,
+  "floorDb": -20.9,
+  "rangeDb": 8.6,
+  "topKhz": 22.6,
+  "bands": {
+   "sub": -39.9,
+   "low": -10.2,
+   "lowmid": -1.9,
+   "mid": -6.8,
+   "presence": -15.1,
+   "air": -28.5
+  },
+  "stereo": 1,
+  "talk": 0.3,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 17,
+   "to": 25,
+   "wobbleDb": 0.56
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -21 dB (no clean silence between events)"
+  ]
+ }
+]
