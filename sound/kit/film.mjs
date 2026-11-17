@@ -213,3 +213,75 @@ export function steady(x, at, period, lead = 0.06) {
 
 /** A shelf or a band of the sound lifted or lowered: tone(x, 'high', 700, -5) takes 5 dB off everything above 700 Hz. */
 export const tone = (x, kind, hz, gainDb, q) => both(x, (ch) => eq(Float32Array.from(ch), kind, hz, gainDb, q));
+
+// ---- For the battle pack ----------------------------------------------------------------------------------
+
+/** The gains that set a mono or two-sided layer at "pan" (-1 left to 1 right) in a two-sided mix. */
+const sides = (x, pan) => {
+  const p = clamp(pan ?? 0, -1, 1), a = (p + 1) * Math.PI / 4;
+  return isStereo(x) ? [p > 0 ? 1 - p : 1, p < 0 ? 1 + p : 1] : [Math.cos(a) * Math.SQRT2, Math.sin(a) * Math.SQRT2];
+};
+
+/**
+ * Events laid on a ring "seconds" long, as layers() lays them, except that whatever runs past the end comes round to
+ * the start. The result loops with no join at all: a firefight in which shots keep falling, round and round.
+ */
+export function ring(list, seconds, { stereo = false } = {}) {
+  const n = sec(seconds);
+  const out = stereo ? { L: new Float32Array(n), R: new Float32Array(n) } : new Float32Array(n);
+  const put = (dst, src, at, g) => { const o = ((sec(at) % n) + n) % n; for (let i = 0; i < src.length; i++) dst[(o + i) % n] += src[i] * g; };
+  for (const l of list) {
+    const g = db(l.db ?? 0);
+    if (stereo) { const s = toStereo(l.x), [gl, gr] = sides(l.x, l.pan); put(out.L, s.L, l.at ?? 0, g * gl); put(out.R, s.R, l.at ?? 0, g * gr); }
+    else put(out, toMono(l.x), l.at ?? 0, g);
+  }
+  return out;
+}
+
+/**
+ * Plays a recording at a speed that changes as it goes: "ratioAt(t)" gives the speed at t, from 0 (its start) to 1
+ * (its end). An engine that speeds up rises in pitch, as a plane's does when it falls into a dive.
+ */
+export function bend(x, ratioAt) {
+  const one = (ch) => {
+    const out = []; let p = 0;
+    while (p < ch.length - 1) { const j = Math.floor(p), u = p - j; out.push(ch[j] + (ch[j + 1] - ch[j]) * u); p += Math.max(0.05, ratioAt(p / ch.length)); }
+    return Float32Array.from(out);
+  };
+  return both(x, one);
+}
+
+/** The quietest moment within "span" seconds of "t": the gap between two rounds of a burst, where a cut is not heard. */
+export function gapNear(x, t, span = 0.05) {
+  const m = toMono(x), w = sec(0.006), a = Math.max(0, sec(t - span)), b = Math.min(m.length - w, sec(t + span));
+  let best = a, low = Infinity;
+  for (let i = a; i <= b; i += 24) { let s = 0; for (let k = 0; k < w; k++) s += m[i + k] * m[i + k]; if (s < low) { low = s; best = i; } }
+  return (best + w / 2) / SR;
+}
+
+/**
+ * A long burst made short, as a gunner who lets go sooner: its first "keep" seconds, then its own last round and the
+ * echo after it, joined in a gap between two rounds so that no round is cut in half.
+ */
+export function shorten(x, keep, tailFrom, fold = 0.008) {
+  const a = sec(gapNear(x, keep)), b = sec(gapNear(x, tailFrom)), f = sec(fold);
+  const one = (ch) => {
+    const tail = ch.subarray(b), out = new Float32Array(a + tail.length);
+    out.set(ch.subarray(0, a));
+    for (let i = 0; i < f; i++) out[a - f + i] *= 1 - i / f;
+    for (let i = 0; i < tail.length; i++) out[a - f + i] += tail[i] * (i < f ? i / f : 1);
+    return out.subarray(0, a - f + tail.length);
+  };
+  return both(x, one);
+}
+
+/**
+ * A cut made to die away as a sound does in the open: whole for "hold" seconds, then falling smoothly (by 8.7 dB
+ * every "tau" seconds). Without it, the hiss and wind under a cut stop dead where the cut ends, and a bed built from
+ * many cuts steps up and down in level.
+ */
+export function tailOff(x, hold = 0.15, tau = 0.4) {
+  const n = lengthOf(x), h = sec(hold), env = new Float32Array(n);
+  for (let i = 0; i < n; i++) env[i] = i < h ? 1 : Math.exp(-(i - h) / (tau * SR));
+  return mul(copy(x), env);
+}

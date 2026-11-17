@@ -100,6 +100,12 @@ input[type=range] { accent-color: var(--brass); width: 110px; }
 /* The real recordings */
 .scene.real .src { font-family: var(--typed); font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
 .scene.real .src b { color: var(--ink-2); font-weight: 400; }
+/* The battle pack */
+.bgroup { margin-top: 26px; }
+.bgroup:first-child { margin-top: 0; }
+.bgroup > h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; color: var(--ink-2); text-wrap: balance; }
+.scene.real .on { font-size: 12px; color: var(--ink-3); margin: 0; }
+.scene.real .on b { color: var(--ink-2); font-weight: 400; }
 .oldwrap { display: flex; align-items: center; gap: 10px; border-top: 1px dashed var(--line); padding-top: 10px; color: var(--ink-3); font-size: 14px; }
 .oldwrap > .play { width: 32px; height: 32px; background: var(--panel-3); color: var(--ink-2); border-color: var(--line); }
 .oldwrap > .play svg { width: 12px; height: 12px; }
@@ -177,6 +183,15 @@ footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 14px;
       <p>The first set was drawn from tones and noise, and it failed your ear. These are real recordings of real engines and guns, mixed for weight. Play each one, hear the old one beside it if you like, and stamp it. If these pass, the other two hundred are remade the same way.</p>
     </div>
     <div class="scenes" id="real"></div>
+  </section>
+
+  <section id="battle-sec" hidden>
+    <div class="sec-head">
+      <p class="label">Next &middot; the battle pack</p>
+      <h2>Battle sounds</h2>
+      <p>For the real-time battles: the moments the animated soldiers, tanks, planes and ships make a sound. Every one is cut from a real recording and mixed for weight and distance. Where a battle sound of that name already existed, the old one plays beside it.</p>
+    </div>
+    <div id="battle"></div>
   </section>
 
   <details class="old-set" id="old-set" open>
@@ -333,7 +348,7 @@ function paint(name) {
 }
 function tally() {
   let g = 0, f = 0, c = 0;
-  const counted = [...hosts.keys()].filter((name) => !(DATA.real || []).length || name.startsWith('real_'));
+  const counted = [...hosts.keys()].filter((name) => !(DATA.real || []).length || name.startsWith('real_') || name.startsWith('battle_'));
   for (const name of counted) { const k = get(name).mark; if (k === 'good') g++; else if (k === 'fix') f++; else if (k === 'cut') c++; }
   const all = counted.length;
   $('#t-done').textContent = g + f + c; $('#t-all').textContent = all; $('#t-good').textContent = g; $('#t-fix').textContent = f; $('#t-cut').textContent = c;
@@ -384,6 +399,39 @@ if (REAL.length) {
       card.appendChild(ow);
     }
     $('#real').appendChild(card);
+  }
+}
+
+// ---------- next: the battle pack ----------
+const BATTLE = DATA.battle || [];
+if (BATTLE.length) {
+  $('#battle-sec').hidden = false; $('#old-sum').hidden = false; $('#old-set').open = false;
+  const groups = new Map();
+  for (const s of BATTLE) {
+    if (!groups.has(s.g)) {
+      const box = el('div', 'bgroup'); box.appendChild(el('h3', '', (DATA.groups || [])[s.g] || ''));
+      const grid = el('div', 'scenes'); box.appendChild(grid); $('#battle').appendChild(box); groups.set(s.g, grid);
+    }
+    const id = 'battle_' + s.n;
+    const card = el('article', 'scene real'); hosts.set(id, card);
+    const head = el('div', 'head');
+    const play = el('button', 'play big'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Play: ' + s.t);
+    play.addEventListener('click', () => toggle(id, { host: card, label: s.t, loop: s.lp || null }));
+    const tt = el('div'); tt.appendChild(el('h3', '', s.t)); tt.appendChild(el('p', 'meta', [secs(s.s), s.lp ? 'loop' : '', s.n].filter(Boolean).join(' · ')));
+    head.append(play, tt);
+    const on = el('p', 'on'); on.appendChild(el('b', '', 'Plays on: ')); on.appendChild(document.createTextNode(s.on));
+    const src = el('p', 'src'); src.appendChild(el('b', '', 'From: ')); src.appendChild(document.createTextNode(s.src));
+    const foot = el('div', 'foot');
+    const st = stampsFor(id); foot.appendChild(st.box);
+    card.append(head, waveEl(s.w), el('p', 'about', s.a), on, src, foot, st.wrap);
+    if (s.old) {
+      const ow = el('div', 'oldwrap');
+      const ob = el('button', 'play'); ob.type = 'button'; ob.innerHTML = ICONS; ob.setAttribute('aria-label', 'Play the old one: ' + s.t);
+      ob.addEventListener('click', () => toggle(s.n, { host: ow, label: s.t + ' (the old one)', loop: s.oldlp || null }));
+      ow.append(ob, el('span', '', 'The old one, made from tones'));
+      card.appendChild(ow);
+    }
+    groups.get(s.g).appendChild(card);
   }
 }
 

@@ -1,10 +1,10 @@
 // Builds the listening board: one page on which every sound and scene can be played and stamped Good, Fix or Cut.
 //
 //   node sound/tools/make_board.mjs <sounds> <scenes> <mp3 of sounds> <mp3 of scenes> <browser-set> <out-folder>
-//        [<sounds made from recordings> <their mp3s>]
+//        [<sounds made from recordings> <their mp3s> [<battle pack> <its mp3s>]]
 //
-// With the last two, the board opens on the real recordings, each beside the old sound of the same name, and the
-// first set is folded away below.
+// With the next two, the board opens on the real recordings, each beside the old sound of the same name, and the
+// first set is folded away below. With the last two, the battle pack follows them, grouped by who makes each sound.
 //
 // Writes <out>/listening-board.html (the page, with the list of sounds written into it), <out>/audio/*.mp3 (what it
 // plays) and <out>/files.json (the audio paths, for publishing). The page is board/board.html with the data put in.
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isStereo, readWav } from '../kit/dsp.mjs';
 
-const [src, scenesDir, mp3Dir, mp3Scenes, browserDir, out, realDir, realMp3] = process.argv.slice(2);
+const [src, scenesDir, mp3Dir, mp3Scenes, browserDir, out, realDir, realMp3, battleDir, battleMp3] = process.argv.slice(2);
 if (!out) { console.error('usage: node sound/tools/make_board.mjs <sounds> <scenes> <mp3> <mp3-scenes> <browser-set> <out-folder>'); process.exit(1); }
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const list = read(path.join(src, 'sound-list.json')), scenes = read(path.join(scenesDir, 'scene-list.json'));
@@ -72,6 +72,22 @@ if (realDir) {
     files.push({ path: `audio/real_${s.name}.mp3` });
   }
 }
+// The battle pack, stamped as "battle_" and its name, grouped by who or what makes the sound.
+const GROUPS = [['The rifleman and the machine gunner', /^(rifle_shot|lmg_burst|machine_gun)/], ['Explosions', /^(grenade|shell_|shells_|bomb_stick)/],
+  ['The tank', /^tank_/], ['The sea', /^(ship_|sea_)/], ['The air', /^(fighter|plane_|dive|flak_light)/], ['Under a fight', /./]];
+const battle = [];
+if (battleDir) {
+  const list = read(path.join(battleDir, 'sound-list.json')), mp3s = Object.fromEntries(read(path.join(battleMp3, 'mp3-list.json')).map((r) => [r.name, r]));
+  for (const s of list) {
+    const lp = mp3s[s.name]?.loop ? [mp3s[s.name].loop.from, mp3s[s.name].loop.length] : 0;
+    const from = s.sources.map((x) => `${x.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '')} (${x.licence}${x.credit ? ', credit ' + x.credit : ''})`).join('; ');
+    const g = GROUPS.findIndex(([, re]) => re.test(s.name));
+    battle.push({ n: s.name, t: s.title ?? s.name, s: s.seconds, lp, a: s.about, on: s.battle ?? '', g, src: from + '. Wikimedia Commons.', w: shape(path.join(battleDir, s.name + '.wav'), 120), old: have.has(s.name) ? 1 : 0, oldlp: loopOf(s.name) });
+    fs.copyFileSync(path.join(battleMp3, s.name + '.mp3'), path.join(out, 'audio', `battle_${s.name}.mp3`));
+    files.push({ path: `audio/battle_${s.name}.mp3` });
+  }
+  battle.sort((a, b) => a.g - b.g);
+}
 for (const name of [...sounds.map((s) => s.n), ...sceneRows.map((s) => s.n)]) {
   const from = [path.join(mp3Dir, name + '.mp3'), path.join(mp3Scenes, name + '.mp3')].find((f) => fs.existsSync(f));
   if (!from) throw new Error(`no MP3 for ${name}`);
@@ -79,9 +95,9 @@ for (const name of [...sounds.map((s) => s.n), ...sceneRows.map((s) => s.n)]) {
   files.push({ path: `audio/${name}.mp3` });
 }
 const here = path.dirname(fileURLToPath(import.meta.url));
-const data = JSON.stringify({ families: FAMILIES, sounds, scenes: sceneRows, tests, real }).replace(/</g, '\\u003c');
+const data = JSON.stringify({ families: FAMILIES, sounds, scenes: sceneRows, tests, real, battle, groups: GROUPS.map(([t]) => t) }).replace(/</g, '\\u003c');
 const page = fs.readFileSync(path.join(here, '../board/board.html'), 'utf8').replace('/*DATA*/null', () => data);
 fs.writeFileSync(path.join(out, 'listening-board.html'), page);
 fs.writeFileSync(path.join(out, 'files.json'), JSON.stringify(files));
 const bytes = files.reduce((a, f) => a + fs.statSync(path.join(out, f.path)).size, 0);
-console.log(`listening board: ${real.length} real recordings, ${sounds.length} sounds, ${sceneRows.length} scenes, ${files.length} audio files (${(bytes / 1048576).toFixed(1)} MB), page ${(page.length / 1024).toFixed(0)} KB`);
+console.log(`listening board: ${real.length} real recordings, ${battle.length} in the battle pack, ${sounds.length} sounds, ${sceneRows.length} scenes, ${files.length} audio files (${(bytes / 1048576).toFixed(1)} MB), page ${(page.length / 1024).toFixed(0)} KB`);
