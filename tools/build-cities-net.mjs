@@ -15,6 +15,7 @@ import { GROUND } from '../data/campaign/rails.mjs';
 import { WORLD_RIVER_CUT, WORLD_RIVER_ADD } from '../data/campaign/world.mjs';
 import { FAR_RIVER_CUT, FAR_RIVER_ADD } from '../data/campaign/far.mjs';
 import { CITY_RIVER_CUT, CITY_RIVER_ADD, CITY_NO_RAIL, CITY_RAIL_LINES, CITY_RAIL_CUT } from '../data/campaign/cities.mjs';
+import { moreRivers } from './more-rivers-net.mjs';
 
 const read = (name) => JSON.parse(fs.readFileSync(new URL(`../src/generated/${name}.json`, import.meta.url), 'utf8'));
 const map = read('world-cities');
@@ -87,11 +88,31 @@ for (const [a, b, river] of [...WORLD_RIVER_ADD, ...FAR_RIVER_ADD, ...CITY_RIVER
   }
   found.set(key(lo.id, hi.id), [lo.id, hi.id, k, r1(where[0]), r1(where[1])]);
 }
-const crossings = [...found.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
-fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.meta.url), JSON.stringify({ rivers, crossings }));
-console.log(`rivers: ${rivers.length} rivers, ${crossings.length} crossings (${kept} as handed over, ${crossings.length - kept} among the pieces of cut provinces, where ${lostCrossings} stood before)`);
+const carried = found.size;
+console.log(`rivers: ${rivers.length} rivers handed over, ${carried} crossings (${kept} as handed over, ${carried - kept} among the pieces of cut provinces, where ${lostCrossings} stood before)`);
 if (stale.length) console.log(`named crossings a city now lies between: ${stale.join(', ')}`);
-if (process.argv.includes('--list')) for (const [a, b, k] of crossings) if (isPiece(a) || isPiece(b)) console.log(`  ${rivers[k].name}: ${at.get(a).name} - ${at.get(b).name}`);
+if (process.argv.includes('--list')) for (const [a, b, k] of found.values()) if (isPiece(a) || isPiece(b)) console.log(`  ${rivers[k].name}: ${at.get(a).name} - ${at.get(b).name}`);
+
+// The rivers of the survey: the real courses, the rivers and streams the chart did not have, and their crossings.
+const more = moreRivers({ map, all, at, byName, nb, handed: rivers, found, struck, key, beside });
+const crossings = [...found.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.meta.url), JSON.stringify({ rivers: more.rivers, crossings }));
+{
+  const cls = (c) => more.rivers.filter((r) => r.class === c).length;
+  console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
+  if (more.off.length) console.log(`crossings handed over whose river's real course runs over 25 units away (${more.off.length}): ${more.off.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  // The new crossings, countable by country and by river: for the rules' measure.
+  const byCountry = {}, byRiver = {};
+  const rows = more.fresh.map(([a, b, k]) => {
+    const ra = at.get(a), rb = at.get(b), rv = more.rivers[k];
+    for (const o of new Set([ra.owner, rb.owner])) byCountry[o] = (byCountry[o] ?? 0) + 1;
+    byRiver[rv.name] = (byRiver[rv.name] ?? 0) + 1;
+    return [ra.name, ra.owner, rb.name, rb.owner, rv.name, rv.class];
+  });
+  const sorted = (o) => Object.fromEntries(Object.entries(o).sort((p, q) => q[1] - p[1] || (p[0] < q[0] ? -1 : 1)));
+  fs.writeFileSync(new URL('../src/generated/world-cities-crossings.json', import.meta.url), JSON.stringify({ carried, fresh: rows.length, byCountry: sorted(byCountry), byRiver: sorted(byRiver), crossings: rows }, null, 1));
+  if (process.argv.includes('--list')) for (const [a, , b, , river] of rows) console.log(`  new: ${river}: ${a} - ${b}`);
+}
 
 // ---- Railways ------------------------------------------------------------------------------------------------
 

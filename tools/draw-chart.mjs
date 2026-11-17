@@ -156,14 +156,16 @@ if (showLinks && showSeas) {
   const coreRivers = europe.length && rivers ? readCore('rivers') : null, coreRails = europe.length && rails ? readCore('rails') : null;
   const wrapTo = (x, ref) => { let v = x; if (round) { while (v - ref > W / 2) v -= W; while (ref - v > W / 2) v += W; } return v; };
   for (const d of turns) {
-    for (const rv of [...(coreRivers?.rivers ?? []), ...(rivers?.rivers ?? [])]) {
+    // Streams first, then rivers, then the great rivers over them (a river with no class is a river).
+    const rank = (rv) => (rv.class === 'small' ? 0 : rv.class === 'great' ? 2 : 1);
+    for (const rv of [...(coreRivers?.rivers ?? []), ...(rivers?.rivers ?? [])].sort((p, q) => rank(p) - rank(q))) {
       // A course is drawn unbroken, each point the short way round from the one before, and again a turn of the
       // globe to either side where it runs over the chart's edge.
       let last = null;
       const pts = rv.pts.map(([x, y]) => [(last = last === null ? px0(x) : wrapTo(px0(x), last)), y]);
       for (const over of round ? [-W, 0, W] : [0]) {
         if (!pts.some(([x, y]) => inBox(x + over, y, d, 100))) continue;
-        out.push(`<path d="M${pts.map(([x, y]) => `${X(x + over, d)} ${Y(y)}`).join('L')}" fill="none" stroke="#2f7fb5" stroke-width="${f1(1.6 * font)}" stroke-linejoin="round" opacity="0.9"/>`);
+        out.push(`<path d="M${pts.map(([x, y]) => `${X(x + over, d)} ${Y(y)}`).join('L')}" fill="none" stroke="${rank(rv) ? '#2f7fb5' : '#6fa9cf'}" stroke-width="${f1([0.7, 1.6, 3][rank(rv)] * font)}" stroke-linejoin="round" opacity="0.9"/>`);
       }
     }
     for (const [a, b, x, y] of [...(coreRails?.links ?? []), ...(rails?.links ?? [])]) {

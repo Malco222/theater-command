@@ -61,6 +61,15 @@ export function carveCities(chart) {
       (kids.get(p.id) ?? kids.set(p.id, []).get(p.id)).push(city);
     }
   }
+  // A province of today's chart that was not cut may have such a row too: a change made by ruling, not by a cut.
+  let worthOnly = 0;
+  for (const r of base) if (r.id < first && !kids.has(r.id) && parentRows.has(r.name)) {
+    const row = rows.get(r.id), t = parentRows.get(r.name);
+    if (t.vp !== '' && t.vp !== undefined) row.vp = Number(t.vp);
+    if (t.factories !== '' && t.factories !== undefined) row.fac = Number(t.factories);
+    changedSince.push(r.name);
+    worthOnly++;
+  }
   const cityTabled = tabledSoFar() - tabledBefore;
   for (const c of cities) rows.set(c.id, c);
   const sitesOf = (pid) => [rows.get(pid), ...kids.get(pid)];
@@ -360,7 +369,7 @@ export function carveCities(chart) {
   fs.writeFileSync(new URL(`../src/generated/${arg('cities-out') ?? 'world-cities'}.json`, import.meta.url), JSON.stringify(out2));
   console.log(`\ncities: ${cities.length} new provinces (${first + regions.length} to ${first + regions.length + cities.length - 1}) cut out of ${kids.size}; ${out2.regions.length + core.regions.length} provinces in the world; ${(JSON.stringify(out2).length / 1024).toFixed(0)} KB`);
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
-  if (parentTabled) console.log(`${parentTabled} cut provinces have a row in cities-parents.csv`);
+  if (parentTabled) console.log(`${parentTabled} cut provinces have a row in cities-parents.csv${worthOnly ? `, and ${worthOnly} of today's chart that were not cut` : ''}`);
   if (changedSince.length) console.log(`${changedSince.length} provinces read a row the clerk has changed since the chart was handed over: ${changedSince.join(', ')}`);
   if (!quiet && moved2.length) console.log(`pieces passed to a sister: ${moved2.join(', ')}`);
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);
