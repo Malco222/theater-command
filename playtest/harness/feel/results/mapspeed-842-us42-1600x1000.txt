@@ -1,0 +1,5 @@
+window 1600 by 1000; marks that never stop: 16 (9 freeturn on freeme, 2 freeturn on sgi, 5 pzflick on pzfire)
+on a mark (freeme)                 width  240  marks in view  1  still 60 (slow ones 60)   pointer crossing 60 (slow ones 15)   dragged 20 (slow ones 9)
+on a mark (freeme)                 width  760  marks in view  8  still 60 (slow ones 30)   pointer crossing 30 (slow ones 12)   dragged 15 (slow ones 10)
+away from every mark (Tierra del)  width  240  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 60)   dragged 30 (slow ones 15)
+away from every mark (Tierra del)  width  760  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 30)   dragged 30 (slow ones 15)

@@ -1,0 +1,5 @@
+window 1440 by 900; marks that never stop: 1 (1 freeturn on circle)
+on a mark (circle)                 width  240  marks in view  1  still 60 (slow ones 60)   pointer crossing 60 (slow ones 12)   dragged 60 (slow ones 12)
+on a mark (circle)                 width  760  marks in view  1  still 60 (slow ones 60)   pointer crossing 60 (slow ones 15)   dragged 60 (slow ones 7)
+away from every mark (Tierra del)  width  240  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 60)   dragged 60 (slow ones 20)
+away from every mark (Tierra del)  width  760  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 60)   dragged 60 (slow ones 20)
