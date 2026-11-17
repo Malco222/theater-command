@@ -1968,6 +1968,226 @@ namespace
 	}
 
 	/**
+	 * (Ruling 127; the art director's weather-sky brief, section 4.) The sky's plates: in the sky view, one for each
+	 * weather zone in sight. A disc with the sky's sign, the zone's name in small brass capitals, then the word and
+	 * what it means: "Clear sky everything flies", "Cloud flying is harder", "Closed sky nothing flies". No red and
+	 * no green: the weather takes no side. A plate stands among the parts of its zone that are in sight, keeps to
+	 * the open map, and steps down clear of a flag or of another plate.
+	 */
+	class SSkyPlates : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SSkyPlates) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+			// (a filled round of each radius up to sixteen points: a disc is a box with its corners rounded right off)
+			for (int32 Radius = 1; Radius <= 16; ++Radius)
+			{
+				Rounds.Add(FSlateRoundedBoxBrush(FLinearColor::White, static_cast<float>(Radius)));
+			}
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(16.0, 16.0); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			const float Shown = Table ? Table->GetSkyView() : 0.0f;
+			if (Shown <= 0.01f || Table->GetSkyPlates().Num() == 0)
+			{
+				return LayerId;
+			}
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
+			const FVector2D Size = Geometry.GetLocalSize();
+			// (The brief's sizes are pixels of the 1600 by 1000 frame. This screen is 900 of its own units high.)
+			const double U = Size.Y / 1000.0;
+			auto Face = [U](float Pixels) { return static_cast<float>(Pixels * 0.75 * U); };
+			const FSlateFontInfo NameFace = Typed(Face(11.0f), true, 100), WordFace = Serif(TEXT("Bold"), Face(15.0f)), MeansFace = Typed(Face(12.0f));
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& With) { return static_cast<double>(Measure->Measure(Words, With).X); };
+			const FLinearColor Desk(FColor::FromHex(TEXT("1D1610"))), Brass700(FColor::FromHex(TEXT("7A6038"))), Pale(FColor::FromHex(TEXT("EDE6D6"))), Ink(FColor::FromHex(TEXT("1F1808")));
+			auto Faded = [Shown](FLinearColor Colour, float Strength = 1.0f) { Colour.A *= Shown * Strength; return Colour; };
+			auto Fill = [&](double X, double Y, double W, double H, const FLinearColor& Colour, int32 Layer)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Colour);
+			};
+			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Colour, float Thick, int32 Layer)
+			{
+				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Colour, true, Thick);
+			};
+			auto Bend = [](double X, double Y, double R, double From, double To)
+			{
+				TArray<FVector2D> Points;
+				const int32 Steps = FMath::Max(3, FMath::CeilToInt32(FMath::Abs(To - From) / 20.0));
+				for (int32 K = 0; K <= Steps; ++K)
+				{
+					const double Angle = FMath::DegreesToRadians(FMath::Lerp(From, To, static_cast<double>(K) / Steps));
+					Points.Add(FVector2D(X + FMath::Cos(Angle) * R, Y - FMath::Sin(Angle) * R));
+				}
+				return Points;
+			};
+			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& With, const FLinearColor& Colour, int32 Layer)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(600.0, 40.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, With, ESlateDrawEffect::None, Colour);
+			};
+			// A filled round.
+			auto Dot = [&](double X, double Y, double R, const FLinearColor& Colour, int32 Layer)
+			{
+				const int32 Which = FMath::Clamp(FMath::FloorToInt32(R), 1, Rounds.Num()) - 1;
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(2.0 * R, 2.0 * R), FSlateLayoutTransform(FVector2D(X - R, Y - R))), &Rounds[Which], ESlateDrawEffect::None, Colour);
+			};
+			// What a plate must stand clear of: the armies' colours, the towns' name plates, and the plates laid before it.
+			TArray<FBox2D> Taken;
+			Controller->GetColoursOnScreen(Taken);
+			for (FBox2D& Flag : Taken)
+			{
+				Flag.Min /= Scale;
+				Flag.Max /= Scale;
+			}
+			{
+				TArray<FTownPlate> Towns;
+				Controller->GetTownPlates(Towns);
+				for (const FTownPlate& Town : Towns)
+				{
+					if (!Town.Name.IsEmpty() && !Town.bSeal)
+					{
+						const double HalfWide = Town.Name.Len() * (Town.bCapital ? 4.6 : 3.8) + 16.0;
+						Taken.Add(FBox2D(FVector2D(Town.At.X - HalfWide, Town.At.Y - 2.0), FVector2D(Town.At.X + HalfWide, Town.At.Y + (Town.Line.IsEmpty() ? 22.0 : 34.0))));
+					}
+				}
+			}
+			for (const ACampaignMapActor::FSkyPlate& Plate : Table->GetSkyPlates())
+			{
+				// Among the parts of its zone that are in sight.
+				FVector2D Sum = FVector2D::ZeroVector;
+				int32 Seen = 0;
+				for (const FVector& Ground : Plate.Grounds)
+				{
+					FVector2D Screen;
+					if (Controller->ProjectWorldLocationToScreen(Ground, Screen, false))
+					{
+						Screen /= Scale;
+						if (Screen.X > 0.0 && Screen.Y > 0.0 && Screen.X < Size.X && Screen.Y < Size.Y)
+						{
+							Sum += Screen;
+							++Seen;
+						}
+					}
+				}
+				if (Seen == 0)
+				{
+					continue;
+				}
+				const FString Name = Plate.Name.ToUpper();
+				const FString Word = Plate.Sky == 2 ? TEXT("Closed sky") : Plate.Sky == 1 ? TEXT("Cloud") : TEXT("Clear sky");
+				const FString Means = Plate.Sky == 2 ? TEXT("nothing flies") : Plate.Sky == 1 ? TEXT("flying is harder") : TEXT("everything flies");
+				const double High = 44.0 * U, Disc = 15.0 * U;
+				const double TextLeft = 12.0 * U + 2.0 * Disc + 12.0 * U;
+				const double PlateWide = TextLeft + FMath::Max(Wide(Name, NameFace), Wide(Word, WordFace) + 9.0 * U + Wide(Means, MeansFace)) + 16.0 * U;
+				// Kept to the open map: clear of the calendar, the bar along the top and the column down the right.
+				FVector2D Corner = Sum / Seen - FVector2D(0.5 * PlateWide, 0.5 * High);
+				Corner.X = FMath::Clamp(Corner.X, 20.0 * U, FMath::Max(Size.X - 290.0 * U - PlateWide, 20.0 * U));
+				Corner.Y = FMath::Clamp(Corner.Y, 270.0 * U, FMath::Max(Size.Y - 70.0 * U - High, 270.0 * U));
+				for (int32 Try = 0; Try < 12; ++Try)
+				{
+					const FBox2D Box(Corner - FVector2D(4.0, 4.0), Corner + FVector2D(PlateWide + 4.0, High + 4.0));
+					bool bClear = true;
+					for (const FBox2D& Other : Taken)
+					{
+						bClear &= !Box.Intersect(Other);
+					}
+					if (bClear || Corner.Y + High + 26.0 * U > Size.Y - 70.0 * U)
+					{
+						break;
+					}
+					Corner.Y += 26.0 * U;
+				}
+				Taken.Add(FBox2D(Corner, Corner + FVector2D(PlateWide, High)));
+				Fill(Corner.X, Corner.Y, PlateWide, High, Faded(Desk, 0.94f), 0);
+				Stroke({ Corner + FVector2D(0.5, 0.5), Corner + FVector2D(PlateWide - 0.5, 0.5), Corner + FVector2D(PlateWide - 0.5, High - 0.5), Corner + FVector2D(0.5, High - 0.5), Corner + FVector2D(0.5, 0.5) }, Faded(Brass700), 1.0f, 1);
+				// The sign in its disc. Clear: a brass sun in a brass ring. Cloud: a pale sun behind a cloud in a pale
+				// ring. Closed: a dark rain cloud on a filled pale disc, the loudest of the three.
+				const double CX = Corner.X + 12.0 * U + Disc, CY = Corner.Y + 0.5 * High;
+				const FLinearColor Sign = Faded(Plate.Sky == 2 ? Ink : Plate.Sky == 1 ? Pale : BrightBrass);
+				const float Pen = static_cast<float>(1.5 * U);
+				auto P = [CX, CY, U](double DX, double DY) { return FVector2D(CX + DX * U, CY + DY * U); };
+				if (Plate.Sky == 2)
+				{
+					Dot(CX, CY, Disc, Faded(Pale), 1);
+				}
+				else
+				{
+					Stroke(Bend(CX, CY, Disc - 0.75 * U, 0.0, 360.0), Sign, Pen, 1);
+				}
+				if (Plate.Sky == 0)
+				{
+					Stroke(Bend(CX, CY, 3.6 * U, 0.0, 360.0), Sign, Pen, 2);
+					for (int32 Ray = 0; Ray < 8; ++Ray)
+					{
+						const double Angle = Ray * UE_DOUBLE_PI / 4.0;
+						Stroke({ P(FMath::Cos(Angle) * 5.8, FMath::Sin(Angle) * 5.8), P(FMath::Cos(Angle) * 8.2, FMath::Sin(Angle) * 8.2) }, Sign, Pen, 2);
+					}
+				}
+				else
+				{
+					// The cloud: three humps over a flat foot. Filled for a closed sky, an outline for cloud.
+					auto Cloud = [&](double OX, double OY, bool bSolid)
+					{
+						if (bSolid)
+						{
+							Dot(CX + (OX - 3.8) * U, CY + (OY + 1.6) * U, 3.4 * U, Sign, 2);
+							Dot(CX + (OX + 0.4) * U, CY + (OY - 0.8) * U, 4.6 * U, Sign, 2);
+							Dot(CX + (OX + 4.4) * U, CY + (OY + 1.9) * U, 3.1 * U, Sign, 2);
+							Fill(CX + (OX - 3.8) * U, CY + (OY + 1.4) * U, 8.2 * U, 3.6 * U, Sign, 2);
+						}
+						else
+						{
+							TArray<FVector2D> Outline = Bend(CX + (OX - 3.6) * U, CY + (OY + 1.6) * U, 3.2 * U, 270.0, 110.0);
+							Outline.Append(Bend(CX + (OX + 0.4) * U, CY + (OY - 0.8) * U, 4.2 * U, 160.0, 20.0));
+							Outline.Append(Bend(CX + (OX + 4.4) * U, CY + (OY + 2.0) * U, 2.8 * U, 80.0, -90.0));
+							Outline.Add(P(OX - 3.6, OY + 4.8));
+							Stroke(Outline, Sign, Pen, 2);
+						}
+					};
+					if (Plate.Sky == 1)
+					{
+						// (the sun behind it, up and to the right, with three of its rays)
+						Stroke(Bend(CX + 4.2 * U, CY - 3.6 * U, 2.6 * U, -20.0, 200.0), Sign, Pen, 2);
+						for (const double Angle : { 20.0, 65.0, 110.0 })
+						{
+							const double Rad = FMath::DegreesToRadians(Angle);
+							Stroke({ P(4.2 + FMath::Cos(Rad) * 4.2, -3.6 - FMath::Sin(Rad) * 4.2), P(4.2 + FMath::Cos(Rad) * 6.0, -3.6 - FMath::Sin(Rad) * 6.0) }, Sign, Pen, 2);
+						}
+						Cloud(-1.0, 1.4, false);
+					}
+					else
+					{
+						Cloud(-0.3, -2.4, true);
+						for (const double Drop : { -3.4, 0.0, 3.4 })
+						{
+							Stroke({ P(Drop + 0.9, 3.4), P(Drop - 0.5, 7.4) }, Sign, static_cast<float>(1.7 * U), 2);
+						}
+					}
+				}
+				Write(Name, Corner.X + TextLeft, Corner.Y + 6.0 * U, NameFace, Faded(BrightBrass), 2);
+				Write(Word, Corner.X + TextLeft, Corner.Y + 20.0 * U, WordFace, Faded(Cream), 2);
+				Write(Means, Corner.X + TextLeft + Wide(Word, WordFace) + 9.0 * U, Corner.Y + 23.5 * U, MeansFace, Faded(Muted), 2);
+			}
+			return LayerId + 3;
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+		TArray<FSlateRoundedBoxBrush> Rounds;
+	};
+
+	/**
 	 * The name plates of the towns: each hangs before its town and faces the player, so a name can be read from
 	 * any side of the table and is never hidden by the models. A stripe in the holder's colour says whose it is.
 	 * Where plates would crowd one another the place that matters more keeps its plate.
@@ -2893,6 +3113,11 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(STownPlates).Controller(Controller)
+					]
+					// (Ruling 127.) The sky's plates, in the sky view.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SSkyPlates).Controller(Controller)
 					]
 
 					// The date plate: a desk calendar. A red binding along its top, the month in red capitals over the

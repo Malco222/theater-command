@@ -463,6 +463,86 @@ void CampaignTextures::MakeWaves(TArray<FColor>& OutPixels)
 	}
 }
 
+void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
+{
+	TArray<float> Cloud, Mist;
+	Cloud.SetNumUninitialized(Size * Size);
+	Mist.SetNumUninitialized(Size * Size);
+	for (int32 J = 0; J < Size; ++J)
+	{
+		for (int32 I = 0; I < Size; ++I)
+		{
+			const float U = (I + 0.5f) / Size, V = (J + 0.5f) / Size;
+			Cloud[J * Size + I] = Layered(U, V, 12, 3, 131u);
+			Mist[J * Size + I] = Layered(U, V, 8, 3, 137u);
+		}
+	}
+	// (the height under which a given share of a field lies: so the cloud covers what it is meant to, whatever the noise)
+	auto Level = [](const TArray<float>& Field, float Share)
+	{
+		TArray<float> Sorted = Field;
+		Sorted.Sort();
+		return Sorted[FMath::Clamp(FMath::FloorToInt32(Share * Sorted.Num()), 0, Sorted.Num() - 1)];
+	};
+	const float CloudAt = Level(Cloud, 0.6f), MistAt = Level(Mist, 0.6f);
+	// The rain: thin streaks about fifteen points long, each leaning a third of its length, soft at both ends. The
+	// snow: small soft flakes.
+	FRandomStream Dice(1944);
+	TArray<float> Falling;
+	Falling.Init(0.0f, Size * Size);
+	auto Dab = [&Falling](float X, float Y, float Much)
+	{
+		const int32 I0 = FMath::FloorToInt32(X), J0 = FMath::FloorToInt32(Y);
+		const float PX = X - I0, PY = Y - J0;
+		for (int32 DJ = 0; DJ < 2; ++DJ)
+		{
+			for (int32 DI = 0; DI < 2; ++DI)
+			{
+				float& Here = Falling[(((J0 + DJ) % Size + Size) % Size) * Size + ((I0 + DI) % Size + Size) % Size];
+				Here = FMath::Max(Here, Much * (DI == 0 ? 1.0f - PX : PX) * (DJ == 0 ? 1.0f - PY : PY));
+			}
+		}
+	};
+	if (bSnow)
+	{
+		for (int32 Flake = 0; Flake < 900; ++Flake)
+		{
+			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Bright = Dice.FRandRange(0.5f, 1.0f);
+			for (const FVector2f& Off : { FVector2f(0.0f, 0.0f), FVector2f(0.9f, 0.0f), FVector2f(0.0f, 0.9f), FVector2f(0.9f, 0.9f) })
+			{
+				Dab(AtX + Off.X, AtY + Off.Y, Bright);
+			}
+		}
+	}
+	else
+	{
+		for (int32 Streak = 0; Streak < 520; ++Streak)
+		{
+			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size));
+			const float Long = Dice.FRandRange(11.0f, 18.0f), Bright = Dice.FRandRange(0.5f, 1.0f);
+			const int32 Steps = FMath::CeilToInt32(Long * 2.0f);
+			for (int32 Step = 0; Step <= Steps; ++Step)
+			{
+				const float Along = static_cast<float>(Step) / Steps;
+				Dab(AtX + Along * Long / 3.0f, AtY + Along * Long, Bright * FMath::Sin(Along * UE_PI));
+			}
+		}
+	}
+	OutPixels.SetNumUninitialized(Size * Size);
+	for (int32 J = 0; J < Size; ++J)
+	{
+		for (int32 I = 0; I < Size; ++I)
+		{
+			const int32 Index = J * Size + I;
+			// (soft at its edge and fuller toward its middle: a cloud, not a cut-out)
+			const float Shape = FMath::SmoothStep(CloudAt - 0.07f, CloudAt + 0.2f, Cloud[Index]);
+			const float Billow = Layered((I + 0.5f) / Size, (J + 0.5f) / Size, 36, 2, 139u) * 0.5f + 0.5f;
+			const float Band = FMath::SmoothStep(MistAt - 0.1f, MistAt + 0.32f, Mist[Index]);
+			OutPixels[Index] = FColor(ToByte(Shape), ToByte(Billow), ToByte(Band), ToByte(Falling[Index]));
+		}
+	}
+}
+
 void CampaignTextures::MakeWaterBumps(TArray<FColor>& OutPixels)
 {
 	TArray<float> First, Second;

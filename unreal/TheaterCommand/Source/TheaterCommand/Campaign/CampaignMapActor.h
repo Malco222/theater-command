@@ -115,6 +115,33 @@ public:
 	/** The piece a line from Origin along Direction passes through, nearest first. */
 	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr) const;
 
+	// ---- (Ruling 127; the art director's weather-sky brief.) The weather's sky.
+	/** A weather zone and its sky this month: 0 clear, 1 in cloud, 2 closed. */
+	struct FSkyZone
+	{
+		FString Name;
+		int32 Sky = 0;
+		TArray<int32> Regions;
+	};
+	/**
+	 * Lays the month's skies on the table. Under cloud, soft shadows drift over the ground; under a closed sky the
+	 * zone sits under a dim lid with mist and rain. With no zones, no weather is known, and the drifting shadows of
+	 * old stay as they were.
+	 */
+	void ShowSky(const TArray<FSkyZone>& Zones);
+	/** The sky view: on with an air group in hand, the planner open or a raid card up, and off with them. It comes and goes over a third of a second. */
+	void SetSkyView(bool bOn) { bSkyViewWanted = bOn; }
+	const TArray<FSkyZone>& GetSkyZones() const { return SkyZones; }
+	float GetSkyView() const { return bSkyKnown ? SkyViewNow : 0.0f; }
+	/** A zone's plate, for the sky view: its name, its sky, and places on its ground (the plate stands among those of them that are in sight). */
+	struct FSkyPlate
+	{
+		FString Name;
+		int32 Sky = 0;
+		TArray<FVector> Grounds;
+	};
+	const TArray<FSkyPlate>& GetSkyPlates() const { return SkyPlates; }
+
 	// ---- (Ruling 153.) The player's agents, standing on the map as pieces that he alone sees.
 	/** Stands his agents in their provinces, and a mark where one was caught this month. Remade only when they change. Call it after ShowArmies: an agent stands clear of the armies' bases. */
 	void ShowAgents(const FCampaignView& View);
@@ -650,6 +677,41 @@ private:
 	 */
 	void UpdateSearchlights(float CameraDistance);
 	void UpdateCutLamps(float CameraDistance);
+
+	// (Ruling 127.) The weather's sky.
+	TArray<FSkyZone> SkyZones;
+	bool bSkyKnown = false, bSkyEverKnown = false, bSkyViewWanted = false, bSkyViewHeld = false, bSkySnowHeld = false, bSkySnowShown = false;
+	float SkyViewNow = 0.0f;
+	int32 SkyNX = 0, SkyNY = 0;
+	FLinearColor SkyFrame = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> SkyPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WeatherPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WeatherSnowPicture;
+	TSet<TWeakObjectPtr<UMaterialInstanceDynamic>> SkyDressed; // the materials that have been handed the sky's pictures
+	TArray<TPair<FName, float>> TuneScalars; // ("-TheaterTune=") numbers tried on the table's materials, for a picture
+	TArray<TPair<FName, FLinearColor>> TuneVectors;
+	void UpdateSky(float CameraDistance, const FVector& CameraFocus);
+	TArray<FSkyPlate> SkyPlates;
+	TMap<int32, int32> SkyOfRegion; // each province's sky, where it is not clear
+	/** A stretch of border where one sky ends: the worse sky's own side of it, and the better sky beyond. */
+	struct FSkyRun
+	{
+		TArray<FVector2D> Points;
+		int32 Worse = 0, Better = 0;
+		double Side = 1.0; // which hand the better sky lies on, going along the points
+		FBox2D Bounds = FBox2D(ForceInit);
+	};
+	TArray<FSkyRun> SkyRuns;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SkyEdgeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SkyEdgeInk; // a sign, not light on the ground: its own ink
+	float SkyEdgeDrawnAt = -1.0f, SkyEdgeDrawnView = -1.0f;
+	FVector SkyEdgeDrawnFocus = FVector::ZeroVector;
+	void DrawSkyEdge(float CameraDistance, const FVector& CameraFocus);
 
 	/** (Ruling 153.) One agent's piece on the table, or the mark left for a month where one was caught: the base alone, with the lantern set down on it and out. */
 	struct FAgentStand

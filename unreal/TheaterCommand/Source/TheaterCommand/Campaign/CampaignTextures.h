@@ -59,4 +59,11 @@ namespace CampaignTextures
 	 * flecks for the glints, and in alpha a slow unevenness that sets each stretch of coast its own moment.
 	 */
 	void MakeWaves(TArray<FColor>& OutPixels);
+
+	/**
+	 * The weather's one picture, which repeats: in red soft cloud shapes that cover about two fifths of it, in green
+	 * the billow inside a cloud, in blue long flat bands of mist, and in alpha thin leaning streaks of rain, or with
+	 * bSnow small soft flakes.
+	 */
+	void MakeWeather(TArray<FColor>& OutPixels, bool bSnow);
 }

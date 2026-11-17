@@ -129,6 +129,7 @@ ACampaignMapActor::ACampaignMapActor()
 	FireGlowMesh = MakeMesh(TEXT("FireGlow"), false);
 	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
 	CutLampMesh = MakeMesh(TEXT("CutLamps"), false);
+	SkyEdgeMesh = MakeMesh(TEXT("SkyEdge"), false);
 	WatchMesh = MakeMesh(TEXT("WatchEdge"), false);
 	RailLightMesh = MakeMesh(TEXT("RailLight"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
@@ -10036,6 +10037,16 @@ void ACampaignMapActor::UpdateClouds()
 	{
 		return;
 	}
+	// (Ruling 127: once the weather is known, the shadows belong to it. A clear sky has none, and a sky in cloud has
+	// its own, in the land's own paint. These drifting patches are for a table with no weather.)
+	if (CloudMesh->IsVisible() == bSkyKnown)
+	{
+		CloudMesh->SetVisibility(!bSkyKnown);
+	}
+	if (bSkyKnown)
+	{
+		return;
+	}
 	// The shadows of clouds, drifting slowly eastward over the map: a dozen soft patches of shade, each fading to
 	// nothing at its edge and as it comes to the edge of the map.
 	// Each is a middle of even shade with a soft edge round it: a point at the centre, a ring where the shade begins to
@@ -12705,6 +12716,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSinkings(); // (before the smoke, which reads how far each has gone)
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSeaMotion(CameraDistance, CameraFocus);
+	UpdateSky(CameraDistance, CameraFocus);
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
@@ -13137,6 +13149,539 @@ void ACampaignMapActor::SetSelectedRegion(int32 RegionId)
 	}
 }
 
+
+// ---------------------------------------------------------------------------- the weather's sky (ruling 127)
+
+void ACampaignMapActor::ShowSky(const TArray<FSkyZone>& Zones)
+{
+	SkyZones = Zones;
+	bSkyKnown = Zones.Num() > 0;
+	if (!bSkyKnown || !Data.IsLoaded())
+	{
+		return;
+	}
+	bSkyEverKnown = true;
+	// Each province's sky; each zone's plate; and the stretches of border where one sky ends. A stretch belongs to the
+	// worse of its two skies, and is laid once: the scallops bulge out of it into the better sky.
+	SkyOfRegion.Reset();
+	SkyPlates.Reset();
+	SkyRuns.Reset();
+	for (const FSkyZone& Zone : Zones)
+	{
+		FSkyPlate& Plate = SkyPlates.AddDefaulted_GetRef();
+		Plate.Name = Zone.Name;
+		Plate.Sky = FMath::Clamp(Zone.Sky, 0, 2);
+		for (const int32 RegionId : Zone.Regions)
+		{
+			if (Data.Regions.IsValidIndex(RegionId))
+			{
+				if (Zone.Sky > 0)
+				{
+					SkyOfRegion.Add(RegionId, FMath::Min(Zone.Sky, 2));
+				}
+				const FVector2D Middle = Data.Regions[RegionId].Centroid;
+				Plate.Grounds.Add(SurfacePoint(Middle.X, Middle.Y, 0.2));
+			}
+		}
+	}
+	for (const TPair<int32, int32>& Pair : SkyOfRegion)
+	{
+		const FCampaignRegion& Region = Data.Regions[Pair.Key];
+		for (const TArray<FVector2D>& Ring : Region.Polygons)
+		{
+			const int32 Count = Ring.Num();
+			if (Count < 3)
+			{
+				continue;
+			}
+			double Area = 0.0;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				Area += Ring[K].X * Ring[(K + 1) % Count].Y - Ring[(K + 1) % Count].X * Ring[K].Y;
+			}
+			const double Hand = Area > 0.0 ? 1.0 : -1.0; // (which side of each stretch the province lies on)
+			// The sky beyond each stretch of the outline: that of the province there, or none where it is the sea
+			// (a zone takes the water off its shores with it) or the edge of the map.
+			TArray<int32> Beyond;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const FVector2D A = Ring[K], B = Ring[(K + 1) % Count];
+				const double Length = FVector2D::Distance(A, B);
+				int32 Sky = -1;
+				if (Length > 0.05)
+				{
+					const FVector2D Along = (B - A) / Length;
+					const FVector2D Outside = 0.5 * (A + B) - FVector2D(-Along.Y, Along.X) * Hand * 0.4;
+					const int32 Next = Data.FindRegionAt(Outside.X, Outside.Y);
+					if (Next != INDEX_NONE && Next != Pair.Key)
+					{
+						const int32* Theirs = SkyOfRegion.Find(Next);
+						Sky = Theirs ? *Theirs : 0;
+					}
+				}
+				Beyond.Add(Sky >= 0 && Sky < Pair.Value ? Sky : -1);
+			}
+			// Begun where a run begins, so that one that passes the ring's first corner is not cut in two.
+			int32 First = 0;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				if (Beyond[K] >= 0 && Beyond[(K + Count - 1) % Count] != Beyond[K])
+				{
+					First = K;
+					break;
+				}
+			}
+			for (int32 Step = 0; Step < Count; )
+			{
+				const int32 K = (First + Step) % Count;
+				if (Beyond[K] < 0)
+				{
+					++Step;
+					continue;
+				}
+				FSkyRun& Run = SkyRuns.AddDefaulted_GetRef();
+				Run.Worse = Pair.Value;
+				Run.Better = Beyond[K];
+				Run.Side = -Hand;
+				Run.Points.Add(Ring[K]);
+				while (Step < Count && Beyond[(First + Step) % Count] == Run.Better)
+				{
+					Run.Points.Add(Ring[(First + Step + 1) % Count]);
+					++Step;
+				}
+				for (const FVector2D& Point : Run.Points)
+				{
+					Run.Bounds += Point;
+				}
+			}
+		}
+	}
+	SkyEdgeDrawnAt = -1.0f; // (the edge is drawn afresh)
+	// The picture of where each sky lies: the whole table, a pixel to every two units of the map (four on the map of
+	// the whole world). Its red is cloud and its green a closed sky.
+	const bool bWhole = Data.bWorld && Data.WorldWidth > 0.0 && Data.WorldHeight > 0.0;
+	const double X0 = bWhole ? Data.WorldMinX : 0.0, Y0 = bWhole ? Data.WorldMinY : 0.0;
+	const double Wide = bWhole ? Data.WorldWidth : Data.Width, High = bWhole ? Data.WorldHeight : Data.Height;
+	const double Texel = bWhole ? 4.0 : 2.0;
+	const int32 NX = FMath::Clamp(FMath::CeilToInt32(Wide / Texel), 4, 4096), NY = FMath::Clamp(FMath::CeilToInt32(High / Texel), 4, 4096);
+	TArray<uint8> Kind;
+	Kind.Init(0, NX * NY);
+	auto InRing = [](const TArray<FVector2D>& Ring, double X, double Y)
+	{
+		bool bIn = false;
+		for (int32 K = 0, Before = Ring.Num() - 1; K < Ring.Num(); Before = K++)
+		{
+			const FVector2D& A = Ring[K];
+			const FVector2D& B = Ring[Before];
+			if ((A.Y > Y) != (B.Y > Y) && X < (B.X - A.X) * (Y - A.Y) / (B.Y - A.Y) + A.X)
+			{
+				bIn = !bIn;
+			}
+		}
+		return bIn;
+	};
+	for (const FSkyZone& Zone : Zones)
+	{
+		if (Zone.Sky <= 0)
+		{
+			continue;
+		}
+		for (const int32 RegionId : Zone.Regions)
+		{
+			if (!Data.Regions.IsValidIndex(RegionId) || !Data.Regions[RegionId].Bounds.bIsValid)
+			{
+				continue;
+			}
+			const FCampaignRegion& Region = Data.Regions[RegionId];
+			const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Region.Bounds.Min.X - X0) / Texel), 0, NX - 1), I1 = FMath::Clamp(FMath::CeilToInt32((Region.Bounds.Max.X - X0) / Texel), 0, NX - 1);
+			const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Region.Bounds.Min.Y - Y0) / Texel), 0, NY - 1), J1 = FMath::Clamp(FMath::CeilToInt32((Region.Bounds.Max.Y - Y0) / Texel), 0, NY - 1);
+			for (int32 J = J0; J <= J1; ++J)
+			{
+				for (int32 I = I0; I <= I1; ++I)
+				{
+					const double X = X0 + (I + 0.5) * Texel, Y = Y0 + (J + 0.5) * Texel;
+					for (const TArray<FVector2D>& Ring : Region.Polygons)
+					{
+						if (InRing(Ring, X, Y))
+						{
+							Kind[J * NX + I] = FMath::Max(Kind[J * NX + I], static_cast<uint8>(FMath::Min(Zone.Sky, 2)));
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+	// A zone takes the water off its shores with it (north-west Europe with the Channel and the North Sea is one):
+	// its sky spreads over the sea for some thirty-six units of the map, and stops at any other land.
+	{
+		TArray<int8> Wet; // (unknown until asked: the ground's height is only looked up along the spreading edge)
+		Wet.Init(-1, NX * NY);
+		TArray<int32> Front;
+		for (int32 Index = 0; Index < Kind.Num(); ++Index)
+		{
+			if (Kind[Index] > 0)
+			{
+				Front.Add(Index);
+			}
+		}
+		const int32 Reach = FMath::RoundToInt32(36.0 / Texel);
+		for (int32 Depth = 0; Depth < Reach && Front.Num() > 0; ++Depth)
+		{
+			TArray<int32> Next;
+			for (const int32 From : Front)
+			{
+				const int32 I = From % NX, J = From / NX;
+				for (const FIntPoint& Step : { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) })
+				{
+					const int32 NI = I + Step.X, NJ = J + Step.Y;
+					if (NI < 0 || NJ < 0 || NI >= NX || NJ >= NY || Kind[NJ * NX + NI] > 0)
+					{
+						continue;
+					}
+					int8& Sea = Wet[NJ * NX + NI];
+					if (Sea < 0)
+					{
+						Sea = GroundAt(X0 + (NI + 0.5) * Texel, Y0 + (NJ + 0.5) * Texel) <= 0.0f ? 1 : 0;
+					}
+					if (Sea == 1)
+					{
+						Kind[NJ * NX + NI] = Kind[From];
+						Next.Add(NJ * NX + NI);
+					}
+				}
+			}
+			Front = MoveTemp(Next);
+		}
+	}
+	// Soft at the zones' edges.
+	TArray<float> Cloud, Closed;
+	Cloud.SetNumUninitialized(Kind.Num());
+	Closed.SetNumUninitialized(Kind.Num());
+	for (int32 Index = 0; Index < Kind.Num(); ++Index)
+	{
+		Cloud[Index] = Kind[Index] == 1 ? 1.0f : 0.0f;
+		Closed[Index] = Kind[Index] == 2 ? 1.0f : 0.0f;
+	}
+	FCampaignTerrain::Smooth(Cloud, NX, NY, 1, 1);
+	FCampaignTerrain::Smooth(Closed, NX, NY, 1, 1);
+	TArray<FColor> Pixels;
+	Pixels.SetNumUninitialized(Kind.Num());
+	for (int32 Index = 0; Index < Kind.Num(); ++Index)
+	{
+		Pixels[Index] = FColor(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Cloud[Index] * 255.0f), 0, 255)), static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Closed[Index] * 255.0f), 0, 255)), 0, 255);
+	}
+	if (!SkyPicture || SkyNX != NX || SkyNY != NY)
+	{
+		SkyPicture = CampaignTextures::Create(NX, NY, Pixels, false, false, TEXT("TableSky"));
+		SkyNX = NX;
+		SkyNY = NY;
+		SkyDressed.Reset(); // (every material is handed the new picture)
+	}
+	else
+	{
+		CampaignTextures::Update(SkyPicture, Pixels);
+	}
+	// (how a point of the table finds its pixel: east and north, as the fog's picture is found)
+	SkyFrame = FLinearColor(static_cast<float>(1.0 / (UnitScale * Wide)), static_cast<float>((Data.Width * 0.5 - X0) / Wide),
+		static_cast<float>(-1.0 / (UnitScale * High)), static_cast<float>((Data.Height * 0.5 - Y0) / High));
+	int32 InCloud = 0, Shut = 0;
+	for (const uint8 Each : Kind)
+	{
+		InCloud += Each == 1 ? 1 : 0;
+		Shut += Each == 2 ? 1 : 0;
+	}
+	UE_LOG(LogTheater, Log, TEXT("The sky laid: %d zones, a picture %d by %d, %.0f%% of it in cloud and %.0f%% closed"), Zones.Num(), NX, NY, 100.0 * InCloud / Kind.Num(), 100.0 * Shut / Kind.Num());
+}
+
+void ACampaignMapActor::DrawSkyEdge(float CameraDistance, const FVector& CameraFocus)
+{
+	if (!SkyEdgeMesh)
+	{
+		return;
+	}
+	const float Shown = bSkyKnown ? SkyViewNow : 0.0f;
+	if (Shown <= 0.001f || SkyRuns.Num() == 0)
+	{
+		if (SkyEdgeMesh->GetNumSections() > 0)
+		{
+			SkyEdgeMesh->ClearAllMeshSections();
+		}
+		SkyEdgeDrawnAt = -1.0f;
+		return;
+	}
+	// (Its line keeps its width on the screen: it is drawn again when the eye has risen or come down by a twelfth,
+	// when the eye has moved a quarter of its height across the table, and through the third of a second it fades.)
+	if (SkyEdgeDrawnAt > 0.0f && FMath::Abs(CameraDistance - SkyEdgeDrawnAt) < 0.085f * SkyEdgeDrawnAt && FMath::Abs(Shown - SkyEdgeDrawnView) < 0.001f
+		&& FVector::DistSquared2D(CameraFocus, SkyEdgeDrawnFocus) < FMath::Square(0.25 * CameraDistance))
+	{
+		return;
+	}
+	SkyEdgeDrawnAt = CameraDistance;
+	SkyEdgeDrawnView = Shown;
+	SkyEdgeDrawnFocus = CameraFocus;
+	SkyEdgeMesh->ClearAllMeshSections();
+	if (!SkyEdgeInk && HighlightMaterial)
+	{
+		SkyEdgeInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		SkyEdgeInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	}
+	UMaterialInterface* Ink = SkyEdgeInk ? static_cast<UMaterialInterface*>(SkyEdgeInk) : static_cast<UMaterialInterface*>(HighlightMaterial);
+	// WHERE ONE SKY ENDS (the art director's weather-sky brief, section 3). Only in the sky view. Where two zones with
+	// different skies meet, a pale scalloped line, a row of small arcs like the edge of a cloud in a child's drawing,
+	// follows the provinces' edges. The scallops bulge out of the worse sky, so that a closed zone reads as one great
+	// cloud. Arcs about 17 pixels across from the top; the line 1.9 pixels of (246, 248, 251) over a soft dark line
+	// of 4.4; thinner, 1.3 pixels at 82 parts in 100, between cloud and clear. Scallops and never dashes: it cannot
+	// be taken for the front line, a route or a railway.
+	const double Pixel = 0.00037 * CameraDistance / UnitScale; // (a pixel of the 1600 view, in the map's own measure)
+	const double Chord = FMath::Lerp(24.0, 17.0, FMath::SmoothStep(4000.0, 14000.0, static_cast<double>(CameraDistance))) * Pixel;
+	const FVector2D Eye = WorldToMap(CameraFocus);
+	const double Reach = (1.7 * CameraDistance + 600.0) / UnitScale;
+	const FBox2D Seen(Eye - FVector2D(Reach, Reach), Eye + FVector2D(Reach, Reach));
+	FLinearColor Pale(FColor(246, 248, 251)), Dark(FColor(18, 22, 30));
+	FCampaignMeshBuffers Under, Over;
+	for (const FSkyRun& Run : SkyRuns)
+	{
+		if (!Run.Bounds.Intersect(Seen) || Run.Points.Num() < 2)
+		{
+			continue;
+		}
+		const bool bFaint = Run.Worse == 1; // (between cloud and clear)
+		Pale.A = (bFaint ? 0.82f : 1.0f) * Shown;
+		Dark.A = (bFaint ? 0.3f : 0.42f) * Shown;
+		const double HalfLine = (bFaint ? 0.65 : 0.95) * Pixel, HalfUnder = 2.2 * Pixel;
+		// How far along the run each of its points lies.
+		TArray<double> Marks;
+		Marks.Add(0.0);
+		for (int32 K = 1; K < Run.Points.Num(); ++K)
+		{
+			Marks.Add(Marks.Last() + FVector2D::Distance(Run.Points[K - 1], Run.Points[K]));
+		}
+		const double Long = Marks.Last();
+		if (Long < 0.4 * Chord)
+		{
+			continue;
+		}
+		const int32 Arcs = FMath::Max(1, FMath::RoundToInt32(Long / Chord));
+		auto At = [&](double Along)
+		{
+			int32 K = 1;
+			while (K < Marks.Num() - 1 && Marks[K] < Along)
+			{
+				++K;
+			}
+			const double Span = FMath::Max(Marks[K] - Marks[K - 1], 1.0e-6);
+			return FMath::Lerp(Run.Points[K - 1], Run.Points[K], FMath::Clamp((Along - Marks[K - 1]) / Span, 0.0, 1.0));
+		};
+		for (int32 Arc = 0; Arc < Arcs; ++Arc)
+		{
+			const FVector2D From = At(Long * Arc / Arcs), To = At(Long * (Arc + 1) / Arcs);
+			if (!Seen.IsInside(From))
+			{
+				continue;
+			}
+			const double Half = 0.5 * FVector2D::Distance(From, To);
+			if (Half < 1.0e-4)
+			{
+				continue;
+			}
+			const FVector2D Way = (To - From) / (2.0 * Half), Out = FVector2D(-Way.Y, Way.X) * Run.Side, Middle = 0.5 * (From + To);
+			TArray<FVector2D> Bow;
+			for (int32 Step = 0; Step <= 8; ++Step)
+			{
+				const double Angle = PI * Step / 8.0;
+				Bow.Add(Middle - Way * (FMath::Cos(Angle) * Half) + Out * (FMath::Sin(Angle) * 0.84 * Half));
+			}
+			AppendRibbon(Under, Bow, HalfUnder, 0.3, Dark.ToFColor(false), false);
+			AppendRibbon(Over, Bow, HalfLine, 0.34, Pale.ToFColor(false), false);
+		}
+	}
+	Under.Commit(SkyEdgeMesh, 0, Ink);
+	Over.Commit(SkyEdgeMesh, 1, Ink);
+	SkyEdgeMesh->SetCastShadow(false);
+	SkyEdgeMesh->SetTranslucentSortPriority(1); // (over the ground's washes; under the table's signs)
+}
+
+void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFocus)
+{
+	UWorld* World = GetWorld();
+	if (!World || !LandMaterial || !Data.IsLoaded())
+	{
+		return;
+	}
+	// ("-TheaterSky=closed:North-west Europe:FRA+BEL+NED+UK;cloud:Poland and the Danube:POL+HUN" lays skies for a
+	// picture: each zone's sky, its name, and its ground by country as the map was drawn or by province name.
+	// "-TheaterSkyView" holds the sky view on, "-TheaterSkySnow" makes it winter under a closed sky, and
+	// "-TheaterTune=SkyDim:0.5;SkyCast:0.9,0.98,1.1" tries other numbers on the table's materials.)
+	static bool bAsked = false;
+	if (!bAsked)
+	{
+		bAsked = true;
+		bSkyViewHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkyView"));
+		bSkySnowHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkySnow"));
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSky="), Asked, false))
+		{
+			TArray<FSkyZone> Staged;
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(";"));
+			for (const FString& One : Each)
+			{
+				TArray<FString> Parts;
+				if (One.ParseIntoArray(Parts, TEXT(":")) < 3)
+				{
+					continue;
+				}
+				FSkyZone& Zone = Staged.AddDefaulted_GetRef();
+				Zone.Sky = Parts[0] == TEXT("closed") ? 2 : Parts[0] == TEXT("cloud") ? 1 : 0; // ("clear:" names a zone with a clear sky: it has a plate too)
+				Zone.Name = Parts[1];
+				TArray<FString> Grounds;
+				Parts[2].ParseIntoArray(Grounds, TEXT("+"));
+				for (const FString& Ground : Grounds)
+				{
+					if (const int32* Named = Data.RegionByName.Find(Ground))
+					{
+						Zone.Regions.AddUnique(*Named);
+						continue;
+					}
+					for (const FCampaignRegion& Region : Data.Regions)
+					{
+						if (Region.Owner == Ground)
+						{
+							Zone.Regions.AddUnique(Region.Id);
+						}
+					}
+				}
+			}
+			ShowSky(Staged);
+		}
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTune="), Asked, false))
+		{
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(";"));
+			for (const FString& One : Each)
+			{
+				FString Name, Value;
+				TArray<FString> Bits;
+				if (!One.Split(TEXT(":"), &Name, &Value))
+				{
+					continue;
+				}
+				if (Value.ParseIntoArray(Bits, TEXT(",")) >= 3)
+				{
+					TuneVectors.Emplace(FName(*Name), FLinearColor(FCString::Atof(*Bits[0]), FCString::Atof(*Bits[1]), FCString::Atof(*Bits[2]), Bits.IsValidIndex(3) ? FCString::Atof(*Bits[3]) : 1.0f));
+				}
+				else
+				{
+					TuneScalars.Emplace(FName(*Name), FCString::Atof(*Value));
+				}
+			}
+		}
+	}
+	if (!bSkyEverKnown && TuneScalars.Num() == 0 && TuneVectors.Num() == 0)
+	{
+		return; // (no weather has ever been laid: every material's sky is off, as it was made)
+	}
+	// Everything that wears the sky: the ground, the sea, the towns and the woods. Never a piece, a flag or a plate.
+	TArray<UMaterialInstanceDynamic*, TInlineAllocator<16>> Wearing;
+	for (UMaterialInstanceDynamic* Each : { LandMaterial.Get(), WorldLandMaterial.Get(), SeaMaterial.Get(), WorldSeaMaterial.Get(), SceneryMaterial.Get(), WoodsMaterial.Get() })
+	{
+		if (Each)
+		{
+			Wearing.Add(Each);
+		}
+	}
+	for (const auto& Pair : FineSheets)
+	{
+		if (Pair.Value->LandPaint)
+		{
+			Wearing.Add(Pair.Value->LandPaint);
+		}
+	}
+	if (bSkyEverKnown)
+	{
+		if (!WeatherPicture)
+		{
+			TArray<FColor> Pixels;
+			CampaignTextures::MakeWeather(Pixels, false);
+			WeatherPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableWeather"));
+			CampaignTextures::MakeWeather(Pixels, true);
+			WeatherSnowPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableWeatherSnow"));
+		}
+		// (in the rules' winter months a closed sky snows instead of rains)
+		const bool bSnow = bSkySnowHeld || WinterHard > 0.5f;
+		if (bSnow != bSkySnowShown)
+		{
+			bSkySnowShown = bSnow;
+			SkyDressed.Reset();
+		}
+		const float Delta = World->GetDeltaSeconds();
+		SkyViewNow = FMath::Clamp(SkyViewNow + ((bSkyViewWanted || bSkyViewHeld) ? Delta : -Delta) * 3.0f, 0.0f, 1.0f);
+		const float Moon = GetMoonlight();
+		const double Clock = World->GetTimeSeconds();
+		// (The cloud drifts about one screen in three minutes, and starts again unseen where both its pictures have
+		// turned a whole number of times.)
+		const float Travel = static_cast<float>(FMath::Fmod(Clock * 13.0, 327600.0));
+		// (Rain falls down the screen and a third as far across it; snow falls slowly. Neither falls fast: the picture
+		// is smoothed from frame to frame, and a streak that crossed many pixels in a frame was smoothed away to nothing.)
+		const double Fall = bSnow ? 0.05 : 0.22;
+		const FLinearColor RainFall(static_cast<float>(FMath::Frac(-Clock * Fall / 3.0)), static_cast<float>(FMath::Frac(-Clock * Fall)), 0.0f, 0.0f);
+		int32 ViewWide = 1600, ViewHigh = 1000;
+		if (const APlayerController* Viewer = World->GetFirstPlayerController())
+		{
+			Viewer->GetViewportSize(ViewWide, ViewHigh);
+		}
+		const FLinearColor RainTiles(3.125f, 3.125f * ViewHigh / FMath::Max(ViewWide, 1), 0.0f, 0.0f);
+		// By night the sheet and the puffs are moonlit, and the lid dims less: the night is already dark.
+		// (Tuned by measure over Germany from playing height, 17 November 2026. Closed at rest: the ground (108, 106, 79)
+		// stands at (84, 81, 67), 78 parts in 100 as bright, and the sea (59, 154, 169) at (66, 108, 126). In the sky
+		// view the sheet brings the sea to (109, 133, 146). Cloud at rest takes the ground down a twentieth all told.)
+		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.6f, 0.66f, 0.76f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
+		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.871f, 0.896f, 0.93f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
+		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.617f, 0.658f, 0.701f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
+		const FLinearColor RainInk = FMath::Lerp(FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
+		const float Dim = FMath::Lerp(0.57f, 0.71f, Moon);
+		for (UMaterialInstanceDynamic* Each : Wearing)
+		{
+			if (!SkyDressed.Contains(Each))
+			{
+				SkyDressed.Add(Each);
+				Each->SetTextureParameterValue(TEXT("Sky"), SkyPicture);
+				Each->SetTextureParameterValue(TEXT("Weather"), bSnow ? WeatherSnowPicture : WeatherPicture);
+				Each->SetVectorParameterValue(TEXT("SkyFrame"), SkyFrame);
+			}
+			Each->SetScalarParameterValue(TEXT("SkyOn"), bSkyKnown && SkyPicture ? 1.0f : 0.0f);
+			Each->SetScalarParameterValue(TEXT("SkyView"), SkyViewNow);
+			Each->SetScalarParameterValue(TEXT("SkyTravel"), Travel);
+			Each->SetScalarParameterValue(TEXT("SkyDim"), Dim);
+			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.5f : 0.32f);
+			// (the mist's bands are for where he plays: from high up they are gone before they can read as ruled lines)
+			Each->SetScalarParameterValue(TEXT("SkyMists"), 0.02f * (1.0f - FMath::SmoothStep(5000.0f, 9000.0f, CameraDistance)));
+			Each->SetVectorParameterValue(TEXT("RainFall"), RainFall);
+			Each->SetVectorParameterValue(TEXT("RainTiles"), RainTiles);
+			Each->SetVectorParameterValue(TEXT("SkySheet"), Sheet);
+			Each->SetVectorParameterValue(TEXT("SkyPuff"), Puff);
+			Each->SetVectorParameterValue(TEXT("SkyMist"), Mist);
+			Each->SetVectorParameterValue(TEXT("SkyRainInk"), RainInk);
+		}
+		if (SkyDressed.Num() > 96)
+		{
+			SkyDressed.Reset(); // (sheets of ground come and go: the list is begun again now and then)
+		}
+		DrawSkyEdge(CameraDistance, CameraFocus);
+	}
+	for (UMaterialInstanceDynamic* Each : Wearing)
+	{
+		for (const TPair<FName, float>& Tune : TuneScalars)
+		{
+			Each->SetScalarParameterValue(Tune.Key, Tune.Value);
+		}
+		for (const TPair<FName, FLinearColor>& Tune : TuneVectors)
+		{
+			Each->SetVectorParameterValue(Tune.Key, Tune.Value);
+		}
+	}
+}
 
 // ---------------------------------------------------------------------------- the agents' pieces (ruling 153)
 

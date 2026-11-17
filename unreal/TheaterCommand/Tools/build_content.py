@@ -136,6 +136,9 @@ def build_map_surface():
     # on: two thirds as bright, half its colour gone, the same cold cast. It was drawn on paper there before.)
     sketched = times(m, vector(m, "DrawnTone", (0.92, 1.0, 1.07, 1.0), -300, -1150), lerp(m, tinted, light2, 0.5, -300, -1050), -150, -1050)
     tinted = lerp(m, tinted, times(m, sketched, scalar(m, "DrawnDark", 0.67, -150, -1150), 0, -950), drawn, 150, -500)
+    # (The weather's sky lies on the towns and the woods as it lies on the ground they stand on; never on a piece or
+    # a flag, whose materials never say "SkyOn".)
+    tinted = sky_over(m, tinted, node_from(m, unreal.MaterialExpressionComponentMask, where, -1300, -2400, r=True, g=True, b=False, a=False), -1100, -5200, full=False)
     # The paint job of a piece (art fix 12): worn painted metal. "Wear" is nothing unless C++ says so (the pieces'
     # own material does). All paint is mottled a little, as paint is that has seen weather. Where the mesh marks
     # itself as painted metal (its alpha at a half: the tanks, guns, lorries, ships and aircraft), the paint is
@@ -423,6 +426,76 @@ def picture(material, name, uv, x, y, numbers=False):
     if uv is not None:
         connect(uv, "", n, "UVs")
     return n
+
+
+def sky_over(m, c, place, x, y, full=True):
+    """THE WEATHER'S SKY (Brian, 16 November 2026: "weather and cloud cover would be interesting parts to. if the
+    weather is bad then you cant do bombing raids and airplanes are grounded"; ruling 127; the art director's
+    weather-sky brief). Each month every weather zone is clear, in cloud, or closed. Most of the time he sees only
+    the weather's light on the ground: under cloud, soft shadows drift over about two fifths of it; under a closed
+    sky the whole zone sits under an even lid, dimmer, cooler, a third of its colour drained, with thin flat bands of
+    mist, and rain. In the sky view ("SkyView", nothing at rest) the cloud itself is drawn flat on the map: white
+    broken cloud up and left of its shadows, or one pale grey sheet over a closed zone.
+
+    Where each sky lies is in the "Sky" picture, read by where a point stands on the table ("SkyFrame"): its red is
+    cloud and its green a closed sky, soft at the zones' edges. The shapes come from one picture that repeats,
+    "Weather": red soft cloud shapes, green the billow inside a cloud, blue long flat bands of mist, alpha thin
+    streaks of rain (or flakes of snow). It drifts east by the game's own clock ("SkyTravel"). All of it is nothing
+    until the game says "SkyOn": a flag, a plate and a piece never wear it."""
+    east = node_from(m, unreal.MaterialExpressionComponentMask, place, x, y, r=False, g=True, b=False, a=False)
+    north = node_from(m, unreal.MaterialExpressionComponentMask, place, x, y + 120, r=True, g=False, b=False, a=False)
+    frame = vector(m, "SkyFrame", (0.0, 0.0, 0.0, 0.0), x, y + 260)
+    sky = picture(m, "Sky", pair(m, plus(m, times(m, east, (frame, "R"), x + 200, y), (frame, "G"), x + 350, y),
+                                 plus(m, times(m, north, (frame, "B"), x + 200, y + 120), (frame, "A"), x + 350, y + 120), x + 500, y), x + 650, y, numbers=True)
+    on = scalar(m, "SkyOn", 0.0, x + 650, y + 260)
+    cloud = times(m, (sky, "R"), on, x + 850, y)
+    closed = times(m, (sky, "G"), on, x + 850, y + 120)
+    view = scalar(m, "SkyView", 0.0, x + 850, y + 260)
+    upwind = plus(m, east, times(m, scalar(m, "SkyTravel", 0.0, x, y + 420), -1.0, x + 100, y + 420), x + 250, y + 420)
+
+    def weather(wide, high, off_east, off_north, xx, yy):
+        return picture(m, "Weather", pair(m, times(m, plus(m, upwind, off_east, xx, yy), 1.0 / wide, xx + 150, yy),
+                                          times(m, plus(m, north, off_north, xx, yy + 120), 1.0 / high, xx + 150, yy + 120), xx + 300, yy), xx + 450, yy, numbers=True)
+
+    def grey_of(v, xx, yy):
+        weights = node(m, unreal.MaterialExpressionConstant3Vector, xx, yy, constant=unreal.LinearColor(0.3, 0.59, 0.11, 0.0))
+        grey = node(m, unreal.MaterialExpressionDotProduct, xx + 150, yy)
+        _feed(m, grey, "A", v)
+        connect(weights, "", grey, "B")
+        return grey
+
+    # Cloud, at rest: shadows about 75 km across, wider than tall, soft edged; under one the ground is darker and a
+    # little drained.
+    shapes = weather(2520.0, 1800.0, 0.0, 0.0, x, y + 600)
+    shaded = times(m, lerp(m, c, grey_of(c, x + 700, y + 760), 0.12, x + 900, y + 700), scalar(m, "SkyShadeDim", 0.72, x + 900, y + 820), x + 1050, y + 700)
+    c = lerp(m, c, shaded, times(m, (shapes, "R"), cloud, x + 700, y + 600), x + 1200, y + 600)
+    # Closed, at rest: the lid.
+    lid = times(m, times(m, lerp(m, c, grey_of(c, x + 700, y + 1060), scalar(m, "SkyDrain", 0.32, x + 700, y + 1160), x + 900, y + 1000),
+                         vector(m, "SkyCast", (0.89, 0.977, 1.117, 1.0), x + 900, y + 1120), x + 1050, y + 1000), scalar(m, "SkyDim", 0.57, x + 1050, y + 1120), x + 1200, y + 1000)
+    if full:
+        mist = weather(5200.0, 600.0, 300.0, 170.0, x, y + 1350)
+        lid = lerp(m, lid, vector(m, "SkyMist", (0.617, 0.658, 0.701, 1.0), x + 700, y + 1480),
+                   times(m, (mist, "B"), scalar(m, "SkyMists", 0.02, x + 700, y + 1580), x + 900, y + 1400), x + 1350, y + 1200)
+    c = lerp(m, c, lid, closed, x + 1500, y + 900)
+    # The sky view. Cloud: puffs up and left of their shadows, with a soft billow inside, and clear ground between.
+    puffs = weather(2520.0, 1800.0, 45.0, -45.0, x, y + 1800)
+    much = times(m, times(m, (puffs, "R"), plus(m, times(m, (puffs, "G"), 0.5, x + 500, y + 1900), 0.75, x + 600, y + 1900), x + 700, y + 1800),
+                 scalar(m, "SkyPuffs", 0.12, x + 700, y + 1950), x + 850, y + 1800)
+    c = lerp(m, c, vector(m, "SkyPuff", (0.871, 0.896, 0.93, 1.0), x + 850, y + 2000), times(m, much, times(m, cloud, view, x + 850, y + 2120), x + 1000, y + 1900), x + 1650, y + 1500)
+    # Closed: one pale grey sheet, a little thicker here and thinner there so that it is not flat.
+    sheet = times(m, plus(m, times(m, (shapes, "R"), 0.25, x + 700, y + 2300), 0.75, x + 800, y + 2300), scalar(m, "SkySheets", 0.095, x + 800, y + 2420), x + 950, y + 2300)
+    c = lerp(m, c, vector(m, "SkySheet", (0.617, 0.658, 0.73, 1.0), x + 950, y + 2500), times(m, sheet, times(m, closed, view, x + 950, y + 2620), x + 1100, y + 2400), x + 1800, y + 1900)
+    if full:
+        # Rain (snow in the winter months) under a closed sky: one cheap layer across the screen, laid on the ground
+        # and the sea only. "RainTiles" is how many of the picture the view is across and down; "RainFall" is how far
+        # it has fallen, by the game's clock.
+        screen = node(m, unreal.MaterialExpressionScreenPosition, x, y + 2800)
+        tiles = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "RainTiles", (3.125, 1.953, 0.0, 0.0), x, y + 2950), x + 200, y + 2950, r=True, g=True, b=False, a=False)
+        fall = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "RainFall", (0.0, 0.0, 0.0, 0.0), x, y + 3100), x + 200, y + 3100, r=True, g=True, b=False, a=False)
+        drops = picture(m, "Weather", plus(m, times(m, screen, tiles, x + 400, y + 2850), fall, x + 550, y + 2900), x + 700, y + 2850, numbers=True)
+        c = lerp(m, c, vector(m, "SkyRainInk", (0.776, 0.823, 0.888, 1.0), x + 900, y + 3000),
+                 times(m, (drops, "A"), times(m, closed, scalar(m, "SkyRain", 0.2, x + 900, y + 3120), x + 1050, y + 3050), x + 1200, y + 2900), x + 1950, y + 2400)
+    return c
 
 
 def build_land():
@@ -1035,6 +1108,7 @@ def build_land():
     wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.72, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
     hazed = lerp(m, shaded, vector(m, "HazeColour", (0.21, 0.24, 0.27, 1.0), 1800, -2600), wisp, 2100, -2500)
     c = lerp(m, c, hazed, fog, 2250, -1500)
+    c = sky_over(m, c, haze_place, 2600, -7000)
     c = lerp(m, c, sheet, paper, 2400, -600)
     to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
@@ -1185,7 +1259,7 @@ def build_sea():
     sheet = lerp(m, vector(m, "PaperSea", (0.3, 0.37, 0.37, 1.0), -300, -1100), vector(m, "PaperDeep", (0.24, 0.31, 0.33, 1.0), -300, -1200),
                  one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, brightness, -6.0, -500, -1150), 1.0, -400, -1150), -300, -1050), -100, -1100)
     sheet = lerp(m, sheet, vector(m, "PaperSeaInk", (0.1, 0.15, 0.17, 1.0), -100, -1250), one_in(m, unreal.MaterialExpressionSaturate, lines, 0, -1350), 100, -1150)
-    colour = lerp(m, colour, sheet, paper, 250, -500)
+    colour = lerp(m, sky_over(m, colour, flat, 600, -5200), sheet, paper, 250, -500)
     to_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     first_uv = node(m, unreal.MaterialExpressionPanner, -1400, 400, speed_x=0.011, speed_y=0.006)
