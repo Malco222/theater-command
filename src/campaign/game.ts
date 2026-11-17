@@ -749,12 +749,33 @@ export interface AttackOpts {
    * luck, and the rules apply their own losses, retreats and prisoners from it. Absent, the dice roll as always.
    */
   fought?: number;
-  /**
-   * With 'fought': the share of its strength each corps lost on the field, by corps id. The bill for each side is the
-   * same as ever, but it falls on its corps as the field had it, so the report never contradicts the fight he watched
-   * (ruling 226(6)). Absent, every corps of a side pays the same share.
-   */
-  split?: Record<number, number>;
+  /** With 'fought': what the field cost each corps and each side, so the bill speaks as the field did (ruling 226(6)). */
+  field?: FieldBill;
+}
+
+/**
+ * What a battle fought on the field cost, for the campaign's bill (ruling 226(6)). 'corps': the share of its strength
+ * each corps lost on the field, by corps id: each side's bill falls on its corps as the field had it. 'att' and 'def':
+ * the share each side lost on the field. 'whole': the battle was fought to its end; handed to the staff, only the part
+ * before is the field's, and the bill for the whole day is never less than it.
+ */
+export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean }
+
+/**
+ * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one
+ * measure and must agree within a fifth (the design director, after the UI director's slice 3 review). Held a little
+ * inside the fifth, so the whole numbers the card prints agree too.
+ */
+const FIELD_HOLD = 1.15;
+
+/** Scales a side's planned loss shares so its whole bill stands within FIELD_HOLD of the field's (1 with no field). */
+function fieldScale(cs: Corps[], planned: number[], share: number | undefined, whole: boolean): number {
+  if (share === undefined) return 1;
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  const now = tot > 0 ? cs.reduce((a, _c, i) => a + m[i] * planned[i], 0) / tot : 0;
+  if (now <= 1e-9) return 1;
+  const want = Math.max(share / FIELD_HOLD, whole ? Math.min(now, share * FIELD_HOLD) : now);
+  return want / now;
 }
 
 /**
@@ -1543,10 +1564,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let held = false, gates = false;
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
-  const attW = splitWeights(attackers, opts.split), defW = splitWeights(defenders, opts.split);
+  const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
+  // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)).
+  const attK = opts.field ? fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole) : 1;
   attackers.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
@@ -1559,10 +1582,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+  const defPart = (c: Corps, i: number): number => defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const defK = opts.field ? fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole) : 1;
   defenders.forEach((c, i) => {
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
-    c.str *= 1 - Math.min(0.8, defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+    c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -1666,13 +1691,14 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
     // Fought on the field with the cost uneven, the corps that paid most is named in place of "fell evenly" (ruling 226(6)).
     const most = (us: typeof attU, w: number[]): string | undefined => {
-      if (!opts.split || us.length < 2) return undefined;
+      if (!opts.field || us.length < 2) return undefined;
       const top = us.reduce((b, u, i) => (u.lost > us[b].lost ? i : b), 0);
       const sum = us.reduce((x, u) => x + u.lost, 0);
       return w[top] >= 1.25 && sum > 0 && us[top].lost / sum > 1 / us.length + 0.1 ? us[top].name : undefined;
     };
-    const said = whoPaid(a.faced, lost, true, most(attU, attW));
-    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, most(attU, attW)).text, ...(said.sign ? { sign: said.sign } : {}) };
+    // With one corps on a side there is nothing to say about how the cost fell among them (the UI director, slice 3).
+    const said = whoPaid(a.faced, lost, true, most(attU, attW), !!opts.field && attU.length < 2);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, most(attU, attW), !!opts.field && attU.length < 2).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;

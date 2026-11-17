@@ -209,6 +209,8 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
             const P = us.reduce((a, u) => a + u.power0, 0);
             const fought = us.filter((u) => u.met || u.str < u.str0 * 0.97 || u.state === 'gone').reduce((a, u) => a + u.power0, 0);
             expect(fought / P).toBeGreaterThanOrEqual(0.5);
+            // Routing belongs to the blocks that broke; the rest fall back with their army (after the slice 3 review).
+            for (const u of us) expect(u.fellBack ? u.state !== 'routing' : ['routing', 'gone', 'withdrawn'].includes(u.state)).toBe(true);
           }
         }
       }
@@ -301,6 +303,25 @@ describe('the hand-off with a real campaign', () => {
     expect(rep).not.toBeNull();
     expect(rep.odds).toBeCloseTo(b.over!.R);
     expect(rep.taken || rep.siege === true).toBe(b.over!.R >= 1.2);
+  });
+  it('the after card\'s headline and its field line speak in one measure, within a fifth (ruling 226(6))', () => {
+    let n = 0;
+    for (const seed of [3, 5, 7, 9, 11]) {
+      const g = playing(seed);
+      const { c, r } = anAttack(g);
+      const t = landTicket(g, [c], r);
+      if (!t) continue;
+      const b = new LandBattle(t);
+      b.ai.att = true;
+      runOut(b);
+      const rep = handBack(g, [c], r, b.over!)!;
+      const sent = rep.attackers.reduce((a, u) => a + u.men, 0), lost = rep.attackers.reduce((a, u) => a + u.lost, 0);
+      const k = lost / sent / Math.max(1e-6, b.over!.lost.att);
+      expect(k).toBeGreaterThan(1 / 1.2);
+      expect(k).toBeLessThan(1.2);
+      n++;
+    }
+    expect(n).toBeGreaterThanOrEqual(3);
   });
   it('with no battle fought, the rules run exactly as before', () => {
     const g1 = playing(5), g2 = playing(5);
