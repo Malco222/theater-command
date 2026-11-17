@@ -44,7 +44,7 @@ import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/camp
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
 import * as everyRule from '../../../src/campaign/turn';
-import * as dangerRules from '../../../src/campaign/danger';
+import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -107,6 +107,9 @@ import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
 import { chanceOn } from '../../../src/campaign/game';
+// (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
+import { ENGINEERS_ALONE, GUNS_ALONE, gunsRule, newsName, theWords } from '../../../src/campaign/game';
+import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -158,7 +161,7 @@ function cardOf(s: Game, c: Corps): Record<string, unknown> {
 function armsTable(s: Game): { kind: string; label: string; atk: number; def: number; role: string; good: string; poor: string }[] {
   const out: { kind: string; label: string; atk: number; def: number; role: string; good: string; poor: string }[] = [];
   try {
-    const grand = groundRules(s);
+    const grand = groundRules(s), alone = gunsRule(s);
     const GROUNDS: [string, string][] = [['plains', 'open country'], ['desert', 'desert'], ['forest', 'forest'], ['hills', 'hills'], ['mountain', 'mountains'], ['marsh', 'marsh'], ['urban', 'cities']];
     const by = (m: number): string => `${m > 1 ? '+' : '−'}${Math.round(Math.abs(m - 1) * 100)}%`;
     const upTo = (x: number): string => `${Math.round(x * 100)}%`;
@@ -170,8 +173,9 @@ function armsTable(s: Game): { kind: string; label: string; atk: number; def: nu
       cav: 'Quick and light: for scouting and pursuit, not for a stand-up fight.',
       mtn: 'At home in hills and mountains, where everyone else struggles.',
       fort: 'A fortress garrison: it holds its works and does not march.',
-      art: grand ? `Massed guns. Against forts and dug-in troops, up to ${DEFENCE.frontage.guns} artillery corps join an attack without taking room on the roads, and their fire wears the works down.` : 'Massed guns.',
-      eng: 'Builds and breaches: bridges, fieldworks, minefields and railways. It is not there for its rifles.',
+      // (Rules 84.2.6; the design director's log b357.) Where guns never go forward alone, the card says so in the rules' sentence.
+      art: grand ? `Massed guns. Against forts and dug-in troops, up to ${DEFENCE.frontage.guns} artillery corps join an attack without taking room on the roads, and their fire wears the works down.${alone ? ` ${GUNS_ALONE.split('. ')[0]}.` : ''}` : 'Massed guns.',
+      eng: `Builds and breaches: bridges, fieldworks, minefields and railways. It is not there for its rifles.${alone ? ` ${ENGINEERS_ALONE.split('. ')[0]}.` : ''}`,
     };
     for (const kind of Object.keys(KIND) as (keyof typeof KIND)[]) {
       const k = KIND[kind];
@@ -1134,7 +1138,7 @@ function grand(from = 1, seed = 1939, world = false) {
         // What makes the country fight, build and earn in its own way, and its special formation, in words.
         abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
-        standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : 'At peace',
+        standing: foes.length ? theWords(`At war with ${listNames(foes.map((f) => h.nations[f].name))}`) : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length,
       };
@@ -1258,44 +1262,40 @@ const leftAloneAt = (g: Game, region: number): string => { try { return leadCall
 
 /** (Rules 84.2.5.) Why the corps picked cannot go forward onto that ground by themselves, in the rules' words; '' where they can. */
 function leadOf(ids: number[], to: number) {
-  const s = game();
-  return { why: s.regions[to] ? leadWhy(s, corpsById(s, ids), to) : '' };
+  const s = game(), r = s.regions[to];
+  if (!r) return { why: '' };
+  const picked = corpsById(s, ids);
+  const first = leadWhy(s, picked, to);
+  // (Rules 84.2.6; the design director's log b357.) Where enemy troops stand next door, the right-click opens the attack
+  // card on the staff's best force, which may bring infantry or tanks in beside the guns: the refusal stands only where
+  // that force is guns alone too, as the browser's hover reads it. (Not next door, the order is the march up, and the
+  // guns would still go forward alone.)
+  if (!first || !s.human || !hostileUnits(s, r, s.human).length) return { why: first };
+  const near = picked.filter((c) => s.regions[c.reg]?.nb.includes(to));
+  if (!near.length) return { why: first };
+  try { return { why: leadWhy(s, openingForce(s, near, r).corps, to) }; } catch { return { why: first }; }
 }
 
 // ---- The alarm that names the cure (Rules 84.2.6; ruling 211(c); the UI director's sheet 35) -------------------------
 // One rules reading that both games draw: homeAlarms(g, nat) in danger.ts, nearest his capital first, each with the
-// row's three sentences (the second left out where nothing of his is in reach) and where the nearest help stands. Read
-// by name, so the 3D game shows nothing until the rules that have it are bundled.
-// (The rules builder, 17 November: each alarm carries `hand`, the paper's line, '' where no army can come; and its
-// help carries `to`, the province to right-click, and `corps`, what a press picks up.)
-interface HomeAlarmRule { case: string; region: number; by: string; reach: number[]; help: { region: number; months: number; rail: boolean; to?: number; corps?: number[] } | null; raise: number; lines: string[]; hand?: string }
-const dangerByName: Record<string, unknown> = { ...dangerRules };
-const alarmRule = (dangerByName['homeAlarms'] ?? rulesByName['homeAlarms']) as ((g: Game, nat: string) => HomeAlarmRule[]) | undefined;
+// row's three sentences (the second left out where nothing of his is in reach), where the nearest help stands, what a
+// press picks up (`help.corps`), the province to right-click (`help.to`), and the paper's line after it (`hand`, ''
+// where no army can come).
 function alarmsOf(s: Game) {
-  if (!alarmRule || !s.human || !humanUp(s)) return [];
-  let all: HomeAlarmRule[] = [];
-  try { all = alarmRule(s, s.human) ?? []; } catch { return []; }
-  return all.map((a) => {
-    const lines = (a.lines ?? []).filter((t) => !!t);
-    const place = s.regions[a.region]?.name ?? '';
-    // The paper's line after a press (the words of ruling 211, section 1): the rules' own. (Only a reading from before
-    // they gave one has it made here, naming the army exactly as the row's help sentence names it.)
-    let hand = a.hand ?? '';
-    if (a.hand === undefined && a.help && place) {
-      const named = /^Nearest help: (.+?), (?:in reach this month|\d+ months? by \w+)\.$/.exec(lines[lines.length - 1] ?? '');
-      if (named) hand = `${named[1][0].toUpperCase()}${named[1].slice(1)} is in hand. Right-click ${place} to send it.`;
-    }
-    return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, pick: a.help?.corps ?? [], to: a.help?.to ?? a.region, hand };
-  });
+  if (!s.human || !humanUp(s)) return [];
+  let all: HomeAlarm[] = [];
+  try { all = homeAlarms(s, s.human) ?? []; } catch { return []; }
+  return all.map((a) => ({
+    case: a.case, region: a.region, by: a.by, lines: (a.lines ?? []).filter((t) => !!t),
+    help: a.help ? a.help.region : -1, pick: a.help?.corps ?? [], to: a.help?.to ?? a.region, hand: a.hand ?? '',
+  }));
 }
 
 // (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own row
 // in the tray, red while the cure is in his hands, plain where nothing of his can reach them. A press centres the town.
-interface GunsAloneRule { region: number; what: string; red: boolean; line: string }
-const aloneRule = (dangerByName['gunsAlone'] ?? rulesByName['gunsAlone']) as ((g: Game, nat: string) => GunsAloneRule[]) | undefined;
 function gunsAloneOf(s: Game) {
-  if (!aloneRule || !s.human || !humanUp(s)) return [];
-  try { return (aloneRule(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? '', red: !!a.red, line: a.line })); } catch { return []; }
+  if (!s.human || !humanUp(s)) return [];
+  try { return (gunsAlone(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? '', red: !!a.red, line: a.line })); } catch { return []; }
 }
 
 // ---- Crossing a defended sea (Version 72) ---------------------------------------------------------
@@ -2397,10 +2397,10 @@ function attack(ids: number[], to: number) {
 interface CardFigure { value: string; label: string }
 interface MonthCard {
   date: string;
-  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number; title: string; sub: string; note: string; good: boolean; spent: boolean }[];
+  bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number; title: string; sub: string; note: string; good: boolean; spent: boolean; alarm: boolean }[];
   score: { label: string; sign: string; figure: string; sub: string; tone: number }[];
   lead: null | { tag: string; stamp: string; tone: number; headline: string; a: string; aName: string; b: string; bName: string; picture: string; line: string; figures: CardFigure[]; region: number; report: number };
-  rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; text: string; figures: CardFigure[]; region: number; sea: number }[];
+  rows: { picture: string; sign: string; place: string; tag: string; tone: number; a: string; b: string; join: string; joinName: string; text: string; figures: CardFigure[]; region: number; sea: number }[];
   none: string; foot: string; count: string;
   home: { sign: string; count: string; text: string; where: string; grey: boolean; tip: string }[];
   staff: { text: string; tip: string; desk: string; act: string }[];
@@ -2464,7 +2464,9 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     // (Ruling 102(a): the rules give each item its date in words, "week 3" or "as July opens"; nothing else is printed for a date.)
     // (Version 83.1: a band's own title, the second line it must be read with, the sentence that says what to do, and how its edge is worn.)
     bands: c.bands.map((x) => ({ kind: x.word, flags: x.nats.slice(0, 3), text: x.head, tip: x.text, week: x.week, when: x.when ?? '', region: x.region ?? -1,
-      title: x.title ?? '', sub: x.sub ?? '', note: x.note ?? '', good: !!x.good, spent: !!x.spent })),
+      title: x.title ?? '', sub: x.sub ?? '', note: x.note ?? '', good: !!x.good, spent: !!x.spent,
+      // (Rules 84.2.6; ruling 211(c).) A warning that ends with the help of his home ground's first alarm: its SHOW ON MAP is a press on the red row.
+      alarm: !!x.alarm })),
     score: c.boxes.map((x) => ({ label: x.label.toUpperCase(), sign: boxSign[x.key] ?? '', figure: x.figure, sub: x.sub, tone: x.tone === 'good' ? 1 : x.tone === 'bad' ? -1 : 0 })),
     lead: lead ? {
       tag: lead.when ? `${lead.kind.toUpperCase()}  ·  ${lead.when.toUpperCase()}` : lead.kind.toUpperCase(), stamp: lead.tag, tone: tone(lead.tone), headline: lead.head,
@@ -2472,7 +2474,8 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
       line: lead.follows || lead.line, figures: figures(lead.facts), region: lead.region ?? -1, report: lead.report?.type === 'land' ? lead.report.id : -1,
     } : null,
     // (A province has a place on the map and a sea has one on the chart: either way the row carries the pin.)
-    rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1, sea: x.sea ?? -1 })),
+    // (Rules 84.2.6.) The word that goes with the tag and the other side's name: "WON from", "LOST to", "HELD against", "BESIEGED by".
+    rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', join: x.join?.word ?? '', joinName: x.join?.name ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1, sea: x.sea ?? -1 })),
     none: c.quiet, foot: c.foot, count: c.count,
     home: home.map((x) => ({ sign: x.sign, count: x.count, text: x.text, where: x.where, grey: x.grey, tip: x.tip })),
     staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : '' })),
@@ -2583,8 +2586,8 @@ function endMonth() {
     if (n.id === s.human || n.id === fallen) continue;
     const mine = s.human ? allied(s, s.human, n.id) : false;
     const foe = s.human ? atWar(s, s.human, n.id) : false;
-    if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName(s, n.id))} is eliminated from the war.`, good: foe });
-    else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
+    if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} has fallen`).toUpperCase(), text: said(n.id) || `${upFirst(theName(s, n.id))} is eliminated from the war.`, good: foe });
+    else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} is liberated`).toUpperCase(), text: said(n.id) || `${upFirst(theName(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
   }
   // A campaign of the player's own decided this month: won, or lost.
   // (not when the country itself has fallen: that is told in its own way, and there is no playing on)
@@ -3128,7 +3131,7 @@ function placesOf(s: Game, region: number): { head: string; lines: string[]; sei
   const lines: string[] = [];
   if (under) lines.push(`The army round ${town} holds what lies outside its walls, and has the use of it after a month.`);
   for (const p of v.prizes) {
-    const held = p.holder !== r.ctrl ? ` Held by ${s.nations[p.holder]?.name ?? p.holder}.` : '';
+    const held = p.holder !== r.ctrl ? ` Held by ${theName(s, p.holder)}.` : '';
     // (where the detail already says which side of the walls it lies, it is not said twice)
     const where = /inside|outside/.test(p.detail) ? '' : p.inside ? ' (inside the defences)' : ' (outside the walls)';
     lines.push(`${p.name}${where}: ${p.detail}. ${p.state}${held}`);
@@ -3450,6 +3453,8 @@ function declare(on: string) {
 const theName = (s: Game, id: string): string => { const nm = s.nations[id]?.name ?? id; return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
 const upFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const listOf = (names: string[]): string => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+/** (Rules 84.2.6.) A dominion's mother country, alive, in the open campaign outside World Domination: first among its friends. */
+const motherOf = (s: Game, nat: string): string | null => { const p = isOpen(s) && !s.flags.dom ? patronOf(nat) : null; return p && s.nations[p]?.alive ? p : null; };
 
 /**
  * What declaring war on a country would mean, in the words the question is asked in: where it stands, who its
@@ -3499,11 +3504,16 @@ function warPlan(on: string, target = -1) {
   const r = target >= 0 ? s.regions[target] : null;
   const lead = r ? `Your army is about to cross the frontier into ${r.name}. ${The} ${stands}. Marching in means war.` : `${The} ${stands}.`;
   // Friends that share a tie are named together, with the tie said once.
+  // (Rules 84.2.6.) A dominion's mother country stands first, by name, with the year of the tie: "Britain (the mother
+  // country: Canada has been a dominion since 1867)". Display only: the tie moves no opinion.
+  const mother = motherOf(s, on);
   const ties = new Map<string, string[]>();
-  for (const x of f.friends) ties.set(x.why, [...(ties.get(x.why) ?? []), theName(s, x.nat)]);
-  const friendsLine = f.friends.length
-    ? `Its friends: ${[...ties].map(([why, who]) => `${listOf(who)} (${why})`).join('; ')}.`
-    : `${The} has no close friends among the nations.`;
+  for (const x of f.friends) if (x.nat !== mother) ties.set(x.why, [...(ties.get(x.why) ?? []), theName(s, x.nat)]);
+  const said = [
+    ...(mother ? [`${newsName(s.nations[mother])} (${motherLine(mother, on, n.name).replace(/^The /, 'the ').replace(/\.$/, '')})`] : []),
+    ...[...ties].map(([why, who]) => `${listOf(who)} (${why})`),
+  ];
+  const friendsLine = said.length ? `Its friends: ${said.join('; ')}.` : `${The} has no close friends among the nations.`;
   return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
 }
 
@@ -3611,7 +3621,7 @@ function alertsOf(s: Game): string[] {
   const out: string[] = [];
   if (!s.human) return out;
   const act = lastAct(s);
-  if (act?.winner) out.push(`${s.nations[act.winner]?.name ?? act.winner} has won the world.`);
+  if (act?.winner) out.push(`${upFirst(theName(s, act.winner))} has won the world.`);
   else if (act?.open && !act.peace) out.push('The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.');
   // (Version 59) The reserve of men running low, and a cabinet that has begun to doubt the player.
   try {
@@ -3687,7 +3697,7 @@ function lastActPage(s: Game): Page | null {
   const needWords = Math.abs(need - 0.75) < 1e-9 ? 'three quarters' : Math.abs(need - 2 / 3) < 1e-3 ? 'two thirds' : Math.abs(need - 0.5) < 1e-9 ? 'half' : `${Math.round(need * 100)}%`;
   const laidWords = laid === 1 ? 'the last country still standing has laid down its arms' : `the last ${laid} countries still standing have laid down their arms`;
   if (act.winner) {
-    const name = s.nations[act.winner]?.name ?? act.winner, top1 = board.rows[0];
+    const name = upFirst(theName(s, act.winner)), top1 = board.rows[0];
     note = need > 0
       ? (act.winner === s.human
         ? `No great power is left to fight you. You hold ${pct(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ''}. The world is won.`
@@ -3850,7 +3860,7 @@ function monthShown(s: Game, card: MonthCard) {
 function battleReportPage(s: Game, id: number): Page | null {
   const r = s.reports.find((x) => x.id === id);
   if (!r) return null;
-  const nameOf = (nat: string): string => s.nations[nat]?.name ?? nat;
+  const nameOf = (nat: string): string => upFirst(theName(s, nat));
   const side = (units: BattleReport['attackers']): PageRow[] => units.map((u) => ({
     nat: u.nat, title: `${u.name}${u.guard ? '' : `  \u00B7  ${u.divs} division${u.divs === 1 ? '' : 's'}`}`,
     lines: [`${cardNum(u.men)} men, ${cardNum(u.lost)} lost${u.fate ? `  \u00B7  ${u.fate}` : ''}`], buttons: [],
@@ -4090,7 +4100,7 @@ function goalsPage(s: Game): Page | null {
         const r = s.byName[c.label];
         return {
           nat: r ? r.ctrl : '', title: `${c.done ? '\u2713' : '\u25CB'}  ${c.label}`,
-          lines: [r ? (c.done ? `Held by ${s.nations[r.ctrl]?.name ?? r.ctrl}.` : `In the hands of ${s.nations[r.ctrl]?.name ?? r.ctrl}: it must be yours or an ally's.`) : c.done ? 'Done.' : 'Not yet.'],
+          lines: [r ? (c.done ? `Held by ${theName(s, r.ctrl)}.` : `In the hands of ${theName(s, r.ctrl)}: it must be yours or an ally's.`) : c.done ? 'Done.' : 'Not yet.'],
           buttons: r ? [{ label: 'GO THERE', act: `goto:region:${r.id}`, ok: true, tip: 'Looks at the place on the map.' }] : [],
         };
       }),
@@ -5180,10 +5190,15 @@ function storesOf(s: Game) {
 }
 
 /** A nation's abilities and its special formation, each as a line. */
-function abilityLines(nat: string): string[] {
+function abilityLines(nat: string, s?: Game): string[] {
   const out = traitsOf(nat).map((t) => `${t.name}. ${traitRule(t, BUDGET.scale)}`);
   const u = eliteOf(nat);
   if (u) out.push(`Special formation, from the arsenal: ${u.label}. ${eliteRule(u)}`);
+  // (Rules 84.2.6.) A dominion: how often war on it brings its mother country in, the browser's own words. In the open
+  // campaign outside World Domination only, as the roll itself.
+  const patron = s && isOpen(s) && !s.flags.dom ? patronOf(nat) : null, odds = patron ? Math.round(answersOf(patron) * 10) : 0;
+  const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times'];
+  if (s && patron && odds > 0 && s.nations[patron]) out.push(`Dominion. War on it brings ${newsName(s.nations[patron])} in ${odds >= 10 ? 'every time' : `${TIMES[odds]} in ten`}, the same month.`);
   return out;
 }
 
@@ -5191,7 +5206,7 @@ function abilityLines(nat: string): string[] {
 function abilities() {
   const s = game();
   const me = s.human ? s.nations[s.human] : null;
-  return { nation: me?.name ?? '', active: traitRules(s), lines: me ? abilityLines(me.id) : [] };
+  return { nation: me?.name ?? '', active: traitRules(s), lines: me ? abilityLines(me.id, s) : [] };
 }
 
 /**
@@ -5233,13 +5248,15 @@ function diplomacy() {
     const open = (mine === 'axis' || mine === 'allies') && courtable(n);
     const c = open ? canCourt(s, me.id, n.id) : { ok: false, why: '' };
     const k = open ? receptive(n, mine as 'axis' | 'allies') : 0;
-    const frs = friendsOf(n.id).filter((f) => s.nations[f.nat]?.alive);
+    // (Rules 84.2.6: the mother country named first, as the declare card has it.)
+    const mother = motherOf(s, n.id);
+    const frs = [...(mother ? [newsName(s.nations[mother])] : []), ...friendsOf(n.id).filter((f) => f.nat !== mother && s.nations[f.nat]?.alive).map((f) => theName(s, f.nat))];
     return {
       nat: n.id, name: n.name, label: TRACK_LABEL[n.align], step: step(n), opinion: Math.round(n.opinion),
       divs: fieldArmy(s, n.id),
       court: open && up, canCourt: up && c.ok, why: open && up && !c.ok ? c.why : '',
       word: !open ? '' : k >= 1.3 ? 'Receptive' : k >= 0.8 ? 'Open to offers' : k >= 0.5 ? 'Wary' : 'Very hard to move',
-      friends: frs.length ? `Friends: ${listOf(frs.map((f) => theName(s, f.nat)))}` : '',
+      friends: frs.length ? `Friends: ${listOf(frs)}` : '',
       trades: partners.has(n.id),
       war: can.has(n.id),
     };
@@ -5322,7 +5339,7 @@ function research() {
   if (!lab) {
     return {
       nation: me.name, date: turnToDate(s.turn).label, up, own: false, teams: 0, free: 0, doctrine: '', money: inHand(me.pp),
-      note: `${me.name} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
+      note: `${upFirst(theName(s, me.id))} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
       bureau: null, fields: [], others,
     };
   }

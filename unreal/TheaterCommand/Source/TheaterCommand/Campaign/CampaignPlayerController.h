@@ -645,6 +645,8 @@ public:
 	FText GetHoverTipMarked() const { return HoverTipMarked; }
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
 	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
+	/** The same at the head of a sentence: "The United States has fallen." (84.2.6) */
+	static FString HeadThe(const FString& Name) { const FString Said = WithThe(Name); return Said.Left(1).ToUpper() + Said.Mid(1); }
 	/** A line made safe to stand inside marked text. */
 	static FString PlainInMarked(const FString& Text) { return Text.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")); }
 	/**

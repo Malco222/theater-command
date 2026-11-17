@@ -1139,10 +1139,9 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		if (Parts.Num() >= 3 && Parts[1] == TEXT("alarm"))
 		{
 			// (Rules 84.2.6; the words of ruling 211, section 2.) SHOW ON MAP on the month card's warning does what a press
-			// on the alarm's row does: the nearest help in hand and the town centred. Without an alarm it shows the place.
-			const TArray<FHomeAlarm>& Raised = Session->GetView().Alarms;
-			const int32 Which = Raised.IndexOfByPredicate([Number](const FHomeAlarm& Each) { return Each.Region == Number; });
-			AlarmShown = Which != INDEX_NONE ? Which : 0;
+			// on the alarm's row does, from its first alarm (the one the warning's help names): the nearest help in hand and
+			// the town centred. Without an alarm it shows the place.
+			AlarmShown = 0;
 			if (GetAlarm())
 			{
 				PressAlarm();
@@ -4504,7 +4503,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					if (There->IsWar())
 					{
 						const FCampaignNation* Theirs = Map->GetData().FindNation(There->War);
-						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *Theirs->Name : *There->War);
+						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *WithThe(Theirs->Name) : *There->War);
 					}
 					else if (!Alone.IsEmpty())
 					{
@@ -7205,7 +7204,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 		return false;
 	}
 	const FCampaignNation* Nation = Map->GetData().FindNation(Tag);
-	const FString Name = Nation ? Nation->Name : Tag;
+	const FString Name = Nation ? WithThe(Nation->Name) : Tag; // (84.2.6: "Declare war on the United States?")
 	WarPrompt = FWarPrompt();
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
@@ -7229,7 +7228,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 	{
 		WarPrompt.Body = FText::FromString(FString::Printf(
 			TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
-			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *Name));
+			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *HeadThe(Name)));
 	}
 	if (WarPrompt.Region != INDEX_NONE)
 	{
@@ -7298,7 +7297,7 @@ void ACampaignPlayerController::ConfirmWar()
 		return;
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
-	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? Nation->Name : Asked.Tag;
+	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? WithThe(Nation->Name) : Asked.Tag;
 	FString Answered;
 	if (!Session->Declare(Asked.Tag, &Answered))
 	{
@@ -8624,7 +8623,7 @@ void ACampaignPlayerController::FinishMonth()
 	if (!Month.Fallen.IsEmpty())
 	{
 		const FCampaignNation* Nation = Map->GetData().FindNation(Month.Fallen);
-		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *Nation->Name : *Month.Fallen), 12.0);
+		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *HeadThe(Nation->Name) : *Month.Fallen), 12.0);
 	}
 	else
 	{

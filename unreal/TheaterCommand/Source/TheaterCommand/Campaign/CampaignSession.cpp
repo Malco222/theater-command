@@ -3496,6 +3496,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("note"), Band.Note);
 				Each->TryGetBoolField(TEXT("good"), Band.bGood);
 				Each->TryGetBoolField(TEXT("spent"), Band.bSpent);
+				Each->TryGetBoolField(TEXT("alarm"), Band.bAlarm);
 			}
 		}
 		if (Told->TryGetArrayField(TEXT("score"), List))
@@ -3544,6 +3545,8 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetNumberField(TEXT("tone"), Row.Tone);
 				Each->TryGetStringField(TEXT("a"), Row.A);
 				Each->TryGetStringField(TEXT("b"), Row.B);
+				Each->TryGetStringField(TEXT("join"), Row.JoinWord);
+				Each->TryGetStringField(TEXT("joinName"), Row.JoinName);
 				Each->TryGetStringField(TEXT("text"), Row.Text);
 				Each->TryGetNumberField(TEXT("region"), Row.Region);
 				Each->TryGetNumberField(TEXT("sea"), Row.Sea);
