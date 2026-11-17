@@ -2,7 +2,7 @@
  "_about": "The six Pacific seats of ruling 209 (China, Australia, New Zealand, Thailand, Manchukuo, Mongolia), in the shapes of the files the rules builder lifts them into at step 13. Top-level keys are the target files. Written by make_seats.py from the historian's and the planner's files, so it is never edited by hand. The paper beside it (seats.md) says what each block is and what is still open.",
  "_state": "draft for the design director's ruling, 2026-11-17; nothing here has touched a shared file",
  "_sources": {
-  "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is three of the record's. The historian has also drawn a set (19 rows, 60 divisions, one for four); the two are theirs to settle into one.",
+  "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is four of the record's. The rows are the planner's places with the historian's weights, checked by the historian at 15:32Z.",
   "every other corps, the fleets, the nation figures, each first ability and unit": "the historian, /mnt/project-files/historian/seats-209-pacific.json, with each figure's mark and source in seats-209-pacific.md",
   "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
   "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
@@ -13,45 +13,54 @@
     "id": "CHN",
     "small": true,
     "years": {
-     "1939": "At war with Japan for two years, and losing. The coast, the railways and the old capital are in enemy hands, and the government has gone up the Yangtze to Chungking. Sixty-two thin divisions short of guns, a small air force and no navy. Japan's army beats yours wherever it masses, and no help is coming soon. Hold the mountains, give ground, and let the war behind the lines bleed an enemy who cannot garrison a country this size."
+     "1939": "Two years into Japan's war, and losing. The coast, the railways and the old capital are gone. Sixty-two thin divisions short of guns, a small air force, no navy. Hold the mountains, give ground, and outlast an enemy who cannot garrison a country this size."
     }
    },
    {
     "id": "AUS",
     "small": true,
     "years": {
-     "1939": "At war beside Britain from the first evening, half a world from the fighting. Nine very thin divisions of part-time Militia, five cruisers and five old destroyers guard a whole continent. Raise volunteer divisions and send them where Britain needs them, or keep them home and watch Japan. If Japan comes south you cannot stop a great power alone: Britain's fleet at Singapore, and one day perhaps America's, is your shield."
+     "1939": "At war beside Britain from the first evening. Nine very thin divisions of part-time Militia, five cruisers and five old destroyers guard a continent. Raise volunteers for Britain's war, or keep them home and watch Japan, whom you cannot stop alone."
     }
    },
    {
     "id": "NZL",
     "small": true,
     "years": {
-     "1939": "At war beside Britain from the first night: where Britain goes, you go. One thin division of part-time Territorials and one cruiser at home. You cannot defend yourself against a great power and nobody expects you to. Raise your one volunteer division, send it where it counts, guard your islands, and matter at the margin."
+     "1939": "At war beside Britain from the first night. One thin division of part-time Territorials and one cruiser at home. You cannot defend yourself against a great power, and nobody expects you to. Raise your one volunteer division and send it where it counts."
     }
    },
    {
     "id": "THA",
     "small": true,
     "years": {
-     "1939": "Siam became Thailand in June, the one country of South-East Asia that is nobody's colony. Five thin divisions, two coastal defence ships and four submarines, with France's colonies to the east, Britain's to the south and west, and Japan looking for a road through you. You cannot beat any of the three. Staying out is a quiet game of rice and trade: a fight comes only if you choose one. Keep your independence however you can."
+     "1939": "The one country of South-East Asia that is nobody's colony. Five thin divisions and a coastal navy, with France to the east, Britain to the south and west, and Japan looking for a road through you. You cannot beat any of them."
     }
    },
    {
     "id": "MAN",
     "small": true,
     "years": {
-     "1939": "A state made by Japan in 1932, with Japan's army on its soil and Japan's officials in its ministries. You are at war with China from the first day, beside Japan. If Japan and the Soviet Union ever fight, you are in that war too: a client has no say. Four thin divisions, the steel of Anshan and the coal of Fushun, and the Soviet Union and Mongolia on three sides. You would not outlive your patron's defeat."
+     "1939": "A state made by Japan, with Japan's army on its soil and Japan's officials in its ministries. At war with China from the first day. Four thin divisions, the steel of Anshan, and the Soviet Union on three sides. Without Japan you cannot stand."
     }
    },
    {
     "id": "MGL",
     "small": true,
     "years": {
-     "1939": "A people's republic recognised by no one but Moscow, with the Red Army on its soil. Two small cavalry divisions have just fought beside it at Khalkhin Gol, where Japan's attack on your border was broken in August. You are at war with nobody. If Japan and the Soviet Union ever fight, you are in that war from its first month: a client has no say. Watch the eastern frontier, and ride with the Red Army if it goes east."
+     "1939": "A people's republic recognised by no one but Moscow. Two cavalry divisions fought beside the Red Army at Khalkhin Gol, where Japan's attack on your border was broken. Watch the eastern frontier: Japan's army in Manchuria is still there."
     }
    }
   ]
+ },
+ "door": {
+  "path": {
+   "CHN": "At war with Japan from the first day, in neither alliance. Join the Allies, join the Axis, or fight on alone. Open Your path on the top bar.",
+   "AUS": "A dominion: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "NZL": "A dominion: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "MAN": "Japan's client. At war with China from the first day, and with the Soviet Union and Mongolia in any month Japan is: there you have no say. War on you is war on Japan. Every other war is your own choice. You join no League.",
+   "MGL": "The Soviet Union's client. At war with Japan and Manchukuo in any month the Soviet Union is: there you have no say. War on you is war on the Soviet Union. Every other war is your own choice. You join no League."
+  }
  },
  "world": {
   "nations": {
@@ -150,16 +159,11 @@
   },
   "parts": {
    "names": {
-    "asia": "Asia",
-    "pacific": "the Pacific"
+    "asia": "Asia"
    },
    "of": {
     "CHN": "asia",
-    "THA": "asia",
-    "MAN": "asia",
-    "MGL": "asia",
-    "AUS": "pacific",
-    "NZL": "pacific"
+    "THA": "asia"
    }
   },
   "pairs": [

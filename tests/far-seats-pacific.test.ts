@@ -31,10 +31,19 @@ describe('the rows as they wait', () => {
     for (const n of S.grand.nations) {
       expect(n.small, n.id).toBe(true);
       expect(Object.keys(n.years), n.id).toEqual(['1939']);
-      // The door's own floor, and the 80 words a panel's prose is held to.
+      // The door's own floor, and the 45 words a seat's own text is held to on the new door (sheet 33).
       expect(n.years['1939'].length, n.id).toBeGreaterThan(40);
-      expect(n.years['1939'].split(/\s+/).length, n.id).toBeLessThanOrEqual(80);
+      expect(n.years['1939'].split(/\s+/).length, n.id).toBeLessThanOrEqual(45);
     }
+    // ITS PATH on the door's paper must be true of the seat: a row for each that is bound, and none for Thailand,
+    // which is free and carries the four choices as the door already words them.
+    expect(Object.keys(S.door.path).sort()).toEqual(['AUS', 'CHN', 'MAN', 'MGL', 'NZL']);
+    expect(S.door.path.AUS).toBe(S.door.path.NZL);
+    expect(S.door.path.CHN).toMatch(/^At war with Japan from the first day/);
+    expect(S.door.path.MAN).toMatch(/^Japan's client\. At war with China from the first day/);
+    expect(S.door.path.MGL).toMatch(/^The Soviet Union's client\./);
+    // The first day's war stands and the opening text says so (T6).
+    expect(S.grand.nations.find((n: any) => n.id === 'MAN').years['1939']).toMatch(/At war with China from the first day/);
     // None is on the door already, and none is a country the League bars.
     const door = (grandData as any).nations.map((n: any) => n.id);
     for (const id of SIX) { expect(door, id).not.toContain(id); expect((leagueData as any).never, id).not.toContain(id); }
@@ -53,9 +62,12 @@ describe('the rows as they wait', () => {
       expect(n.quality, id).toBeGreaterThan(0); expect(n.quality, id).toBeLessThan(1);
       expect(n.resilience, id).toBeGreaterThan(0); expect(n.resilience, id).toBeLessThan(1);
       expect(['allies', 'independent', 'leaning_axis'], id).toContain(n.align);
-      // A new country falls into 'the Americas' unless its part is named.
-      expect(S.world.parts.names[S.world.parts.of[id]], id).toBeDefined();
     }
+    // The League's parts as ruled: Asia is China and Thailand (and Nepal, from the globe). The dominions stand as
+    // Canada stands, with no row; the two clients join no League, which is the mend's to bar and not a part's.
+    expect(S.world.parts.of).toEqual({ CHN: 'asia', THA: 'asia' });
+    expect(S.world.parts.names.asia).toBe('Asia');
+    expect(W.parts.of.CAN).toBeUndefined();
   });
 
   it('gives every seat an army in the form of world.json corps, and never more than three corps to a province', () => {
@@ -246,8 +258,10 @@ describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c
   it('T6, in the player\'s hands: every other war is his own choice, and he may turn on his patron', () => {
     for (const [client, patron] of [['MAN', 'JAP'], ['MGL', 'SOV']]) {
       const g = grand(client);
-      // A small country's own card: it is in no alliance, so it may choose one, stand alone or found a league.
-      expect(pathOptions(g, client).length, client).toBeGreaterThan(1);
+      // A small country's own card: it is in no alliance, so it may choose one or stand alone. It joins no League.
+      const card = pathOptions(g, client);
+      expect(card.filter((o) => o.id === 'axis' || o.id === 'allies' || o.id === 'alone').length, client).toBe(3);
+      expect(card.some((o) => (o.id === 'found' || o.id === 'join') && o.ok), client).toBe(false);
       // The patron is on his list of countries to declare war on, and the war is real: the two are not allies.
       expect(declarable(g), client).toContain(patron);
       declareWar(g, client, patron);
