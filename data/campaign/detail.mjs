@@ -249,6 +249,13 @@ export const RIVER_FROM_LAKE = { 'San Juan': 'Lake Nicaragua', Semliki: 'Lake Ed
  * chart's own reach of it.
  */
 export const RIVER_MEET = { 'Middle Volga': [52.5, 47.0013], Kama: 'Middle Volga' };
+/**
+ * A river that takes the lower course of the river it falls into, where the survey gives the lower course the wrong
+ * name: { taker: the river whose name the survey gave }. Below Oxley the river is the Murrumbidgee, which the Lachlan
+ * joins; the survey calls the whole of it the Lachlan (the map fact-checker, 17 November 2026). The taker takes the
+ * class of the lower course too.
+ */
+export const RIVER_TAKE = { Murrumbidgee: 'Lachlan' };
 
 /** Rivers that run dry for part of the year: drawn as a broken line. */
 export const RIVER_SEASONAL = ['Barwon', 'Gila', 'Fitzroy', 'Ord', 'Victoria', 'Mitchell', 'Desaguadero', 'Atrek', 'Hari Rud', 'Konche', 'Shara Muren', 'Webi Shebeli', 'Atbara', 'Darling', 'Lachlan', 'Limpopo', 'Tarim'];

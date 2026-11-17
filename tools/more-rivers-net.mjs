@@ -17,7 +17,7 @@
 //  - Two knots of a course under a unit apart are one: the browser draws a curve through them, and a short leg
 //    between long ones makes a hook.
 import { REAL_COURSES, MORE_RIVERS } from '../data/campaign/more-rivers.mjs';
-import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT, RIVER_FROM_LAKE, RIVER_MEET } from '../data/campaign/detail.mjs';
+import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT, RIVER_FROM_LAKE, RIVER_MEET, RIVER_TAKE } from '../data/campaign/detail.mjs';
 
 const K = Math.cos((50 * Math.PI) / 180) * 40;
 const NEAR = 0.28;
@@ -80,6 +80,23 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
   for (const [name, cls, into, ll, more] of MORE_RIVERS) {
     if (rivers.some((r) => r.name === name)) throw new Error(`two rivers called ${name}`);
     rivers.push({ name, pts: course(ll), ll, class: cls, into, ...(more?.seasonal ? { seasonal: true } : {}), real: true });
+  }
+  // A river that takes the lower course of the one it falls into (RIVER_TAKE): the other is cut where the taker
+  // meets it, and runs into the taker.
+  const taken = [];
+  for (const [name, from] of Object.entries(RIVER_TAKE)) {
+    const r = rivers.find((v) => v.name === name), o = rivers.find((v) => v.name === from);
+    if (!r || !o) { console.warn('bad river taking in detail.mjs', name, from); continue; }
+    const foot = r.pts[r.pts.length - 1];
+    let at = 0, bd = Infinity;
+    o.pts.forEach((p, i) => { const d = Math.hypot(p[0] - foot[0], p[1] - foot[1]); if (d < bd) { bd = d; at = i; } });
+    if (bd > 5 || at <= 0 || at >= o.pts.length - 1) { console.warn('river taking too far', name, from, Math.round(bd)); continue; }
+    const rank = { small: 0, middle: 1, great: 2 };
+    r.pts = [...r.pts.slice(0, -1), ...o.pts.slice(at)]; r.ll = [...r.ll.slice(0, -1), ...o.ll.slice(at)];
+    if (rank[o.class] > rank[r.class]) r.class = o.class;
+    r.into = o.into;
+    o.pts = o.pts.slice(0, at + 1); o.ll = o.ll.slice(0, at + 1); o.into = name;
+    taken.push({ name, from, at });
   }
   for (const r of rivers) {
     let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
@@ -306,5 +323,5 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); } else adrift.push(row);
   }
   for (const r of rivers) { delete r.box; delete r.real; }
-  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, met, adrift, toMouth };
+  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, met, taken, adrift, toMouth };
 }

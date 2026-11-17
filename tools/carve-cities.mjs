@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import polygonClipping from 'polygon-clipping';
 import { ringArea } from './geo-common.mjs';
 import { CELL } from './geo-seas.mjs';
-import { CITY_GROUPS, CITY_SHORES, CITY_LINKS, CITY_STRAITS } from '../data/campaign/cities.mjs';
+import { CITY_GROUPS, CITY_SHORES, CITY_LINKS, CITY_STRAITS, CITY_GIVE } from '../data/campaign/cities.mjs';
 import { cutLakes } from './cut-lakes.mjs';
 import { RULED_GROUND } from '../data/campaign/detail.mjs';
 
@@ -389,6 +389,37 @@ export function carveCities(chart) {
     check2(gone === 0, `every border of the chart as handed over is still a border: ${old2.length} of them, ${passed} passed on to pieces (${thin} by the longest stretch where none was a fair one)`);
   }
   check2([...kids.keys()].every((pid) => zones.every((z) => !z.coast.includes(pid) || sitesOf(pid).some((s) => zones2[z.i].coast.includes(s.id)))), 'every coast a cut province had is still a coast of one of its pieces');
+
+  // Ground given by ruling (CITY_GIVE), after the checks above, which hold the chart as cut: the part of the strip
+  // that lies in one province goes to the other, and the two become neighbours.
+  const given = [];
+  {
+    const named = new Map([...rows.values()].map((r) => [r.name, r]));
+    for (const [fromName, toName, shape] of CITY_GIVE) {
+      const a = named.get(fromName), b = named.get(toName);
+      if (!a || !b) { warn(`! no province called ${!a ? fromName : toName} to give ground`); continue; }
+      const strip = [[...shape.map(([lat, lon]) => proj([lon, lat])), proj([shape[0][1], shape[0][0]])]];
+      const clean = (parts) => parts.map((part) => part.filter((r) => Math.abs(ringArea(r)) > 0.5).map((r) => trim(r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]), 1))).filter((q) => q.length && q[0].length >= 3);
+      let take = [], left = [], grown = [];
+      try {
+        take = clean(polygonClipping.intersection(a.polys.map(closed), strip));
+        left = clean(polygonClipping.difference(a.polys.map(closed), strip));
+        grown = take.length ? clean(polygonClipping.union(b.polys.map(closed), take.map(closed))) : b.polys;
+      } catch (e) { warn(`! could not give ground from ${fromName} to ${toName}: ${e.message}`); continue; }
+      const area = take.reduce((t, q) => t + sizeOf(q), 0);
+      const before = a.polys.reduce((t, q) => t + sizeOf(q), 0) + b.polys.reduce((t, q) => t + sizeOf(q), 0);
+      const after = left.reduce((t, q) => t + sizeOf(q), 0) + grown.reduce((t, q) => t + sizeOf(q), 0);
+      const seeded = left.some((q) => inPoly(q, a.x, a.y)) && grown.some((q) => inPoly(q, b.x, b.y));
+      if (!take.length || !seeded || Math.abs(before - after) > 1) { warn(`! ground from ${fromName} to ${toName} not given: ${Math.round(area)} square units, seeds ${seeded ? 'kept' : 'lost'}, area ${before.toFixed(1)} to ${after.toFixed(1)}`); continue; }
+      a.polys = left; b.polys = grown;
+      if (!a.nb.includes(b.id) && !joins2.some(([p, q]) => (p === a.id && q === b.id) || (p === b.id && q === a.id))) {
+        if (family(a.id) === family(b.id)) { a.nb.push(b.id); b.nb.push(a.id); a.nb.sort((p, q) => p - q); b.nb.sort((p, q) => p - q); }
+        else { joins2.push(family(a.id) < family(b.id) ? [a.id, b.id] : [b.id, a.id]); joins2.sort((p, q) => p[0] - q[0] || p[1] - q[1]); }
+      }
+      given.push(`${Math.round(area)} square units of ${fromName} to ${toName}`);
+    }
+    check2([...rows.values()].every((r) => r.nb.every((j) => rows.get(j)?.nb.includes(r.id))), `ground given by ruling (${given.length}): ${given.join(', ') || 'none'}; every border still written on both sides`);
+  }
 
   const stages2 = [...stages, stages[stages.length - 1] + cities.length];
   const out2 = { ...out, stages: stages2, regions: [...base.map((r) => rows.get(r.id)), ...cities], links: links2, joins: joins2, seas: { ...out.seas, zones: zones2 } };

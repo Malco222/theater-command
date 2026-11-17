@@ -104,6 +104,7 @@ fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.met
   console.log(`  ${pts} points in the courses; ${more.cutBack.length} courses cut back to the shore${more.cutBack.length ? ` (the furthest: ${[...more.cutBack].sort((p, q) => q.by - p.by).slice(0, 8).map((c) => `${c.name} ${c.by}`).join(', ')})` : ''}`);
   if (more.fromLake.length) console.log(`  ${more.fromLake.length} courses begin where they leave their lake: ${more.fromLake.map((c) => `${c.name} from ${c.lake} (${c.by} cut)`).join(', ')}`);
   if (more.toLake.length) console.log(`  ${more.toLake.length} courses end where they first come to their lake's shore: ${more.toLake.map((c) => `${c.name} at ${c.lake} (${c.by} cut)`).join(', ')}`);
+  if (more.taken.length) console.log(`  lower courses taken by the river that falls in: ${more.taken.map((c) => `${c.name} from the ${c.from}`).join(', ')}`);
   if (more.met.length) console.log(`  feet laid where they meet another river: ${more.met.map((c) => `${c.name} to ${c.to} (${c.by} off)`).join(', ')}`);
   if (more.knots.length) console.log(`  ${more.knots.reduce((t, c) => t + c.by, 0)} knots under a unit from the one before dropped, on ${more.knots.length} courses`);
   if (more.runOn.length) console.log(`  ${more.runOn.length} courses run on to the shore the survey ends them short of: ${[...more.runOn].sort((p, q) => q.by - p.by).map((c) => `${c.name} ${c.by}`).join(', ')}`);

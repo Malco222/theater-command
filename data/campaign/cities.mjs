@@ -1945,6 +1945,16 @@ export const CITY_SHORES = {};
 // A crossing over a strait ('links') whose end is now one particular piece of a province that was cut: [a, b] by name.
 export const CITY_LINKS = [];
 
+// Ground given by ruling from one province to another on the chart with the cities: [from, to, the ground as
+// [lat, lon] points]. Only the part of it that lies in 'from' moves.
+export const CITY_GIVE = [
+  // Shanhaikwan, where the Peking-Mukden main line crossed the Great Wall into Manchukuo, lay on the Hopei side of
+  // the wall and stayed in Hopei after the truce of 1933; the frontier handed over runs a few km south of the town.
+  // The strip between it and the wall, from the Old Dragon's Head on the sea north to Chiumenkou, goes to Tangshan,
+  // which then touches Chinchow (the map fact-checker; the design director, 17 November 2026).
+  ['Chinchow', 'Tangshan', [[39.9, 119.6], [39.93, 119.8], [39.967, 119.797], [40.01, 119.785], [40.06, 119.765], [40.12, 119.72], [40.14, 119.6]]],
+];
+
 // Straits laid on the chart with the cities (Brian's ruling of 17 November: straits to Europe's level everywhere):
 // short crossings armies can use without a fleet, as Europe's Great Belt, Sound, Messina, Bosporus and Kerch. Each
 // had a ferry or a regular crossing in 1939 and is no wider than about 25 kilometres at its narrows: [a, b] by name.
@@ -2043,7 +2053,7 @@ export const CITY_NO_RAIL = [
   'Daly Waters', 'Halls Creek', 'Derby', 'Exmouth Gulf', 'Port Lincoln', 'Normanton', 'Cooktown', 'Nelson',
   // Africa: the Dakar-Niger line ended at Koulikoro, short of Segou; the rest were river, road or caravan towns.
   'Kikwit', 'Lisala', 'Paulis', 'Watsa', 'Fort Gouraud', 'Ziguinchor', 'Segou', 'Sikasso', 'Man', 'Sassandra', 'Tahoua',
-  'Mao', 'Ati', 'Moundou', 'Maroua', 'Ngaoundere', 'Bouar', 'Kribi', 'Bangassou', 'Dolo', 'Harper', 'Henrique de Carvalho',
+  'Mao', 'Ati', 'Moundou', 'Maroua', 'Ngaoundere', 'Bouar', 'Kribi', 'Bangassou', 'Dolo', 'Harper',
   'Farafra', 'Geneina', 'Sokoto', 'Benin City', 'Moyale', 'Iringa', 'Abercorn',
   // Alaska: the Copper River line from Cordova closed in 1938; the Alaska Railroad ran from Seward to Fairbanks only.
   'Cordova', 'Big Delta', 'McGrath', 'Galena', 'Kotzebue', 'Cold Bay',
@@ -2052,18 +2062,19 @@ export const CITY_NO_RAIL = [
   // Tientsin-Pukow line at Tehchow (Lintsing) and Yenchow (Sintai), the lines to Kiamusze by Poli and Tiehli (Sansing),
   // the Rangoon-Mandalay line at Pyinmana (Loikaw), the Trans-Iranian by Sari (Damghan), the Trans-Siberian at Tygda
   // (Zeya), the Raipur-Vizianagram line at Rayagada (Jagdalpur), the Kassala line at Haiya (Tokar), the Conakry-Niger
-  // line between Mamou and Dabola (Labe), and the lines handed over through Conquista, Mossoro, Ayacucho, Tarija and
-  // Socorro.
+  // line between Mamou and Dabola (Labe), the Tyumen-Omsk line by Nazyvayevsk (Tyukalinsk), the Benguela line at
+  // Teixeira de Sousa (Henrique de Carvalho), the Myitkyina line at Wuntho (Tamu), and the lines handed over through
+  // Mossoro, Tarija and Socorro.
   // China: the hill and mountain towns round Szechwan, the coast of Kiangsu, the south and the far north had no line in
   // September 1939 (Kutsing's came in 1941; the lines to Kingyang and Pingliang were never built).
   'Shasi', 'Enshih', 'Macheng', 'Yencheng', 'Linchwan', 'Fowyang', 'Pengshui', 'Mienyang', 'Sungpan', 'Lishih', 'Wuchow',
   'Ningtu', 'Kweihsien', 'Poseh', 'Pichieh', 'Kingyang', 'Kwangyuan', 'Ankang', 'Fusung', 'Lintung', 'Kangnung', 'Shangtu',
   'Pingliang', 'Minhsien', 'Kutsing', 'Hweitseh', 'Szemao', 'Likiang', 'Mienning',
   // Asia: the Burma Railway to Kanchanaburi came in 1942 and the Persian line to Kashan in 1949.
-  'Kengtung', 'Tamu', 'Maingkwan', 'Kanchanaburi', 'Sakon Nakhon', 'Raheng', 'Chiang Rai', 'Kratie', 'Miri', 'Samarinda',
+  'Kengtung', 'Maingkwan', 'Kanchanaburi', 'Sakon Nakhon', 'Raheng', 'Chiang Rai', 'Kratie', 'Miri', 'Samarinda',
   'Singkawang', 'Sintang', 'Ketapang', 'Sampit', 'Amoentai', 'Padang Sidempoean', 'Benkoelen', 'Pangkalpinang', 'Loralai', 
   'Bhuj', 'Ardebil', 'Quchan', 'Turbat-i-Haidari', 'Kashan', 'Jahrum', 'Girishk', 'Kalat-i-Ghilzai', 'Farah', 'Maimana',
-  'Khanabad', 'Hofuf', 'Taif', 'Chistopol', 'Beloretsk', 'Birsk', 'Tyukalinsk', 'Kamen-na-Obi', 'Oirot-Tura', 'Tetyukhe', 'Okha',
+  'Khanabad', 'Hofuf', 'Taif', 'Chistopol', 'Beloretsk', 'Birsk', 'Kamen-na-Obi', 'Oirot-Tura', 'Tetyukhe', 'Okha',
   'Undur Khan', 'Kulyab', 'Dzharkent',
   // Africa: Ethiopia had the one line from Jibuti; the rest were road, river and caravan towns.
   'Adowa', 'Quoram', 'Debra Tabor', 'Dangila', 'Waldia', 'Asosa', 'Gambela', 'Gore', 'Shashamanna', 'Yavello', 'Ginir', 'Dagabur',
@@ -2075,6 +2086,11 @@ export const CITY_NO_RAIL = [
   // The Americas and New Guinea: the line to Itabira came in 1943; Teofilo Otoni's stood alone.
   'Lages', 'Itabira', 'Teofilo Otoni', 'Villa Concepcion', 'Barinas',
   'San Fernando de Apure', 'Aitape',
+  // The map fact-checker (17 November 2026): the Hunan-Kwangsi line reached Liuchow in December 1939 and the Kwangsi
+  // line from it reached Tushan only in 1943; the line to Tamsag Bulak
+  // was never built; Villahermosa's came in 1950 (the Yucatan was a rail island); Santa Cruz's in 1955, so Camiri had
+  // none; the Rio-Bahia link by Conquista in 1950; the Huancayo line ended at Huancavelica, short of Ayacucho.
+  'Liuchow', 'Tushan', 'Tamsag Bulak', 'Villahermosa', 'Camiri', 'Conquista', 'Ayacucho',
 ];
 // Lines laid by hand, each a chain of neighbouring provinces, and lines struck.
 export const CITY_RAIL_LINES = [
@@ -2098,9 +2114,9 @@ export const CITY_RAIL_LINES = [
   // ---- South America ----
   ['La Paz', 'Oruro', 'Potosi'], ['Buenos Aires', 'Dolores', 'Mar del Plata'], ['Salvador', 'Jequie'],
   // ---- China and Manchuria: the Peiping-Hankow line by Chumatien and Sinyang (Nanyang had no line), the Lunghai line
-  // to Sian (1934) and Paoki (1936), the Kwangsi line to Tushan (1944), the lines to Peian and Heiho, to Hulin and
-  // to Arshan (1937, from Paichengtze by Wangyehmiao), the Manpo line to Kanggye (1939) ----
-  ['Hankow', 'Sinyang', 'Chumatien', 'Kaifeng'], ['Loyang', 'Tungkwan', 'Sian', 'Paoki'], ['Liuchow', 'Tushan'],
+  // to Sian (1934) and Paoki (1936), the lines to Peian and Heiho, to Hulin and to Arshan (1937, from Paichengtze by
+  // Wangyehmiao), the Manpo line to Kanggye (1939). (The Kwangsi line from Liuchow reached Tushan only in 1943.) ----
+  ['Hankow', 'Sinyang', 'Chumatien', 'Kaifeng'], ['Loyang', 'Tungkwan', 'Sian', 'Paoki'],
   ['Harbin', 'Suihwa', 'Peian', 'Heiho'], ['Kiamusze', 'Hulin'], ['Taonan', 'Wangyehmiao', 'Arshan'], ['Sinuiju', 'Kanggye'],
   ['Mutankiang', 'Sansing', 'Kiamusze'], // the Tumen-Kiamusze line of 1937, by Linkou and Poli
   // ---- Japan: the train ferries that carried the wagons across, as Europe's Great Belt and Messina do ----
@@ -2123,6 +2139,35 @@ export const CITY_RAIL_LINES = [
   ['Kindu', 'Kongolo', 'Albertville'], ['Nampula', 'Mocambique'],
   // The line round the falls from Stanleyville to Ponthierville, Sierra Leone's line to Bo, Nigeria's branch to Gusau.
   ['Stanleyville', 'Ponthierville'], ['Freetown', 'Bo'], ['Kaduna', 'Gusau'], ['Nairobi', 'Nanyuki'],
+  // ---- The map fact-checker's mends (17 November 2026, fact-check.md), each a line of 1939 by the provinces its
+  // stations fall in ----
+  // Burma: the Myitkyina line (1898) left Sagaing by Shwebo, Kanbalu (Kalewa), Wuntho (Tamu), Katha (Bhamo) and
+  // Mogaung; Lashio was a dead end where the Burma Road began.
+  ['Mandalay', 'Kalewa', 'Tamu', 'Bhamo', 'Myitkyina'],
+  // Persia: the Trans-Iranian (1938) by Qom, Arak and Dorud (Arak) to Andimeshk; Hamadan had no line.
+  ['Tehran', 'Qom', 'Arak', 'Andimeshk', 'Ahwaz'],
+  // Mexico: the Veracruz al Istmo line to Coatzacoalcos, the Tehuantepec line across the isthmus to Salina Cruz
+  // (Ixtepec), and the Pan-American line on to Chiapas.
+  ['Veracruz', 'Coatzacoalcos', 'Oaxaca', 'Salina Cruz', 'Chiapas'],
+  // Peru: Tacna's one line ran to Arica.
+  ['Tacna', 'Arica'],
+  // Angola and the Congo: the Benguela line (1931) by Teixeira de Sousa (Henrique de Carvalho) and Dilolo to Kolwezi.
+  ['Luso', 'Henrique de Carvalho', 'Dilolo', 'Kolwezi', 'Elisabethville'],
+  // Siberia and Central Asia: the Tyumen-Omsk line (1913) by Ishim and Nazyvayevsk (Tyukalinsk); Abakan's line from
+  // Achinsk (1925); the line from Kagan by Karshi and Termez to Stalinabad (1929).
+  ['Tyumen', 'Ishim', 'Tyukalinsk', 'Omsk'], ['Abakan', 'Achinsk'], ['Bukhara', 'Karshi', 'Stalinabad'],
+  // Australia: Esperance's line north to Norseman and Kalgoorlie (1927); Moree's to Narrabri and Werris Creek; the
+  // Broken Hill line by Ivanhoe and Condobolin (Griffith) to Parkes (1927); Bourke's by Nyngan (Dubbo).
+  ['Esperance', 'Kalgoorlie'], ['Moree', 'Tamworth'], ['Broken Hill', 'Griffith', 'Parkes', 'Sydney'], ['Bourke', 'Dubbo', 'Sydney'],
+  ['Albury', 'Wagga Wagga', 'Griffith'], ['Parkes', 'Dubbo'], // the Main Southern line and the Junee-Narrandera-Griffith line; Parkes-Narromine (1925)
+  // Nigeria: the Eastern line by Makurdi met the Kaduna line at Kafanchan (Jos). Venezuela: the Bolivar line from
+  // Tucacas (Puerto Cabello) to Barquisimeto, and the Great Venezuela line from Caracas to Valencia and Puerto Cabello;
+  // no line ran from Valencia to Barquisimeto.
+  ['Enugu', 'Makurdi', 'Jos', 'Kaduna'], ['Caracas', 'Puerto Cabello', 'Barquisimeto'],
+  // The Yucatan's own lines, from Merida to Campeche, which no line joined to Mexico's until 1950.
+  ['Campeche', 'Yucatan'],
+  // The Peking-Mukden main line along the coast by Tangshan and Shanhaikwan (now Tangshan's) into Chinchow.
+  ['Tientsin', 'Tangshan', 'Chinchow'],
 ];
 export const CITY_RAIL_CUT = [
   ['Monclova', 'Chihuahua'], // the line from Monterrey to Chihuahua ran by Torreon
@@ -2132,4 +2177,19 @@ export const CITY_RAIL_CUT = [
 // (the line ran through a third province), or the historian struck the line (Nanyang to Hankow: no such line).
 export const CITY_RAIL_RELAID = [
   ['Bangkok', 'Phitsanulok'], ['Toungoo', 'Mandalay'], ['Semipalatinsk', 'Alma-Ata'], ['Nanyang', 'Hankow'],
+  // The map fact-checker (17 November 2026): lines laid by hand above by the stations they ran through ...
+  ['Lashio', 'Myitkyina'], ['Tehran', 'Hamadan'], ['Hamadan', 'Ahwaz'], ['Veracruz', 'Chiapas'], ['Arequipa', 'Tarapaca'],
+  ['Elisabethville', 'Luso'], ['Tyumen', 'Tobolsk'], ['Tobolsk', 'Omsk'], ['Abakan', 'Krasnoyarsk'], ['Samarkand', 'Stalinabad'],
+  ['Broken Hill', 'Sydney'], ['Enugu', 'Kaduna'], ['Caracas', 'Barquisimeto'],
+  // ... and lines not running in September 1939: Shihkiachwang-Tehchow (1940-41); Hangchow-Ningpo (the Chientang
+  // bridge blown in December 1937, the Tsao-o gap bridged in 1955); Battambang-Bangkok (1942); Komsomolsk (1940) and
+  // Sovetskaya Gavan (1947); the Transandine (cut by the flood of 1934 until 1944); the Yucatan (1950); Santa Cruz
+  // (1955, 1957), and no line from Bolivia to Iquique; the Rio-Bahia link (1950); Harbin-Kiamusze (1940); Lima-Cuzco
+  // (never joined).
+  ['Shihkiachwang', 'Tsinan'], ['Hangchow', 'Ningpo'], ['Battambang', 'Bangkok'], ['Khabarovsk', 'Komsomolsk'],
+  ['Komsomolsk', 'Sovetskaya Gavan'], ['Santiago', 'Mendoza'], ['Chiapas', 'Yucatan'], ['La Paz', 'Santa Cruz'],
+  ['Potosi', 'Santa Cruz'], ['Potosi', 'Tarapaca'], ['Minas Gerais', 'Bahia'], ['Harbin', 'Kiamusze'], ['Lima', 'Cuzco'],
+  // The main line into Manchukuo ran along the coast by Shanhaikwan, not through Jehol: the line from Peiping to
+  // Chengteh reached only Huairou in 1938 (opened through in 1960).
+  ['Jehol', 'Tientsin'], ['Jehol', 'Peiping'],
 ];
