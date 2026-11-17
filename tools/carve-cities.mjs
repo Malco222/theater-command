@@ -11,6 +11,7 @@ import polygonClipping from 'polygon-clipping';
 import { ringArea } from './geo-common.mjs';
 import { CELL } from './geo-seas.mjs';
 import { CITY_GROUPS, CITY_SHORES, CITY_LINKS } from '../data/campaign/cities.mjs';
+import { cutLakes } from './cut-lakes.mjs';
 
 export function carveCities(chart) {
   if (!CITY_GROUPS.length) return;
@@ -366,6 +367,8 @@ export function carveCities(chart) {
 
   const stages2 = [...stages, stages[stages.length - 1] + cities.length];
   const out2 = { ...out, stages: stages2, regions: [...base.map((r) => rows.get(r.id)), ...cities], links: links2, joins: joins2, seas: { ...out.seas, zones: zones2 } };
+  // The lakes the chart was not handed over with are cut out of the ground last of all.
+  const lakeNotes = cutLakes({ out: out2, core, proj, warn });
   fs.writeFileSync(new URL(`../src/generated/${arg('cities-out') ?? 'world-cities'}.json`, import.meta.url), JSON.stringify(out2));
   console.log(`\ncities: ${cities.length} new provinces (${first + regions.length} to ${first + regions.length + cities.length - 1}) cut out of ${kids.size}; ${out2.regions.length + core.regions.length} provinces in the world; ${(JSON.stringify(out2).length / 1024).toFixed(0)} KB`);
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
@@ -375,6 +378,8 @@ export function carveCities(chart) {
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);
   if (small.length) console.log(`small (under 700 square units): ${small.map(([n, a]) => `${n} ${a}`).join(', ')}`);
   console.log(checks2.join('\n'));
+  console.log(lakeNotes.notes.join('\n'));
+  if (!quiet) console.log(lakeNotes.lines.join('\n'));
 
   // The list of the cities for whoever fills in their tables: --cities-csv=path.
   if (arg('cities-csv')) {

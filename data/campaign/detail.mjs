@@ -217,3 +217,84 @@ export const RIVER_FLIP = ['Waikato'];
 /** New crossings struck and added by hand on the chart with the cities: ['Province', 'Province', 'River']. */
 export const MORE_RIVER_CUT = [];
 export const MORE_RIVER_ADD = [];
+
+// ---- Lakes -----------------------------------------------------------------------------------------------------------
+
+/**
+ * The lakes cut out of the chart with the cities, beside the eleven it was handed over with: where the survey has
+ * the lake ('lakes' its lakes of today, 'historic' a lake at its old shore, 'playas' its dry pans), the survey's
+ * name, the name on the chart (an atlas of 1939's), its water ('fresh', 'salt', or 'pan' for a salt pan that
+ * seldom holds water) and the height of its surface above the sea in metres. No reservoir later than 1939 is here.
+ * Lake Chad and Lop Nor are at their old shores: Chad has shrunk to a tenth since, and Lop Nor held water from
+ * 1921 until the 1960s.
+ */
+export const MORE_LAKE_LIST = [
+  // North America
+  ['lakes', 'Great Bear Lake', 'Great Bear Lake', 'fresh', 156],
+  ['lakes', 'Great Slave Lake', 'Great Slave Lake', 'fresh', 156],
+  ['lakes', 'Lake Athabasca', 'Lake Athabasca', 'fresh', 213],
+  ['lakes', 'Reindeer Lake', 'Reindeer Lake', 'fresh', 337],
+  ['lakes', 'Dubawnt Lake', 'Dubawnt Lake', 'fresh', 236],
+  ['lakes', 'Lake Winnipegosis', 'Lake Winnipegosis', 'fresh', 254],
+  ['lakes', 'Lake Manitoba', 'Lake Manitoba', 'fresh', 248],
+  ['lakes', 'Lake Nipigon', 'Lake Nipigon', 'fresh', 260],
+  ['lakes', 'Lake of the Woods', 'Lake of the Woods', 'fresh', 323],
+  ['lakes', 'Iliamna Lake', 'Iliamna Lake', 'fresh', 14],
+  ['lakes', 'Great Salt Lake', 'Great Salt Lake', 'salt', 1280],
+  ['lakes', 'Lake Champlain', 'Lake Champlain', 'fresh', 29],
+  ['lakes', 'Lake Okeechobee', 'Lake Okeechobee', 'fresh', 4],
+  ['lakes', 'Lago de Chapala', 'Lake Chapala', 'fresh', 1524],
+  ['lakes', 'Lago de Nicaragua', 'Lake Nicaragua', 'fresh', 32],
+  // South America
+  ['lakes', 'Lago Titicaca', 'Lake Titicaca', 'fresh', 3812],
+  ['lakes', 'Lago Poopo', 'Lake Poopo', 'salt', 3686],
+  ['playas', 'Salar de Uyuni', 'Salar de Uyuni', 'pan', 3656],
+  ['lakes', 'Mar Chiquita', 'Mar Chiquita', 'salt', 71],
+  ['lakes', 'Lagoa Mirim', 'Lagoa Mirim', 'fresh', 1],
+  // Africa
+  ['historic', 'Lake Chad', 'Lake Chad', 'fresh', 282],
+  ['lakes', 'Lake Turkana', 'Lake Rudolf', 'salt', 375],
+  ['lakes', 'Lake Albert', 'Lake Albert', 'fresh', 619],
+  ['lakes', 'Lake Edward', 'Lake Edward', 'fresh', 912],
+  ['lakes', 'Lake Kivu', 'Lake Kivu', 'fresh', 1460],
+  ['lakes', 'Lake Kyoga', 'Lake Kyoga', 'fresh', 1033],
+  ['lakes', 'Lake Tana', 'Lake Tana', 'fresh', 1788],
+  ['lakes', 'Lac Moeru', 'Lake Mweru', 'fresh', 917],
+  ['lakes', 'Lake Bangweulu', 'Lake Bangweulu', 'fresh', 1140],
+  ['lakes', 'Lake Rukwa', 'Lake Rukwa', 'salt', 800],
+  ['lakes', 'Lac Mai-Ndombe', 'Lake Leopold II', 'fresh', 300],
+  ['playas', 'Etosha Pan', 'Etosha Pan', 'pan', 1080],
+  ['playas', 'Makgadikgadi Pans', 'Makarikari Pan', 'pan', 900],
+  // Asia
+  ['lakes', 'Lake Balkhash', 'Lake Balkhash', 'salt', 341],
+  ['lakes', 'Issyk-Kul', 'Issyk Kul', 'salt', 1607],
+  ['lakes', 'Alakol', 'Ala Kul', 'salt', 347],
+  ['lakes', 'Tengiz Koli', 'Lake Tengiz', 'salt', 304],
+  ['lakes', 'Lake Chany', 'Lake Chany', 'salt', 106],
+  ['lakes', 'Lake Khanka', 'Lake Khanka', 'fresh', 69],
+  ['lakes', 'Hulun Nuur', 'Dalai Nor', 'fresh', 545],
+  ['lakes', 'Uvs Nuur', 'Ubsa Nor', 'salt', 759],
+  ['lakes', 'Khovsgol Nuur', 'Kosogol', 'fresh', 1645],
+  ['lakes', 'Qinghai Hu', 'Koko Nor', 'salt', 3195],
+  ['lakes', 'Nam Co', 'Tengri Nor', 'salt', 4718],
+  ['lakes', 'Bosten Hu', 'Bagrash Kol', 'fresh', 1048],
+  ['historic', 'Lop Nur', 'Lop Nor', 'salt', 780],
+  ['playas', 'Hamun-e Saberi', 'Hamun Lake', 'fresh', 475],
+  ['lakes', 'Tai Hu', 'Tai Lake', 'fresh', 3],
+  ['lakes', 'Hongze Hu', 'Hungtse Lake', 'fresh', 12],
+  ['lakes', 'Poyang Hu', 'Poyang Lake', 'fresh', 16],
+  ['lakes', 'Dongting Hu', 'Tungting Lake', 'fresh', 33],
+  ['lakes', 'Tonle Sap', 'Tonle Sap', 'fresh', 5],
+  ['lakes', 'Danau Toba', 'Lake Toba', 'fresh', 905],
+  ['lakes', 'Biwa Ko', 'Lake Biwa', 'fresh', 85],
+  // Australia and New Zealand
+  ['lakes', 'Lake Eyre North', 'Lake Eyre', 'pan', -12],
+  ['lakes', 'Lake Torrens', 'Lake Torrens', 'pan', 30],
+  ['lakes', 'Lake Gairdner', 'Lake Gairdner', 'pan', 121],
+  ['lakes', 'Lake Frome', 'Lake Frome', 'pan', 1],
+  ['lakes', 'Lake Mackay', 'Lake Mackay', 'pan', 355],
+  ['lakes', 'Lake Taupo', 'Lake Taupo', 'fresh', 356],
+];
+
+/** The water of the lakes the chart was handed over with (fresh where not named). */
+export const OLD_LAKE_WATER = { 'Aral Sea': 'salt' };
