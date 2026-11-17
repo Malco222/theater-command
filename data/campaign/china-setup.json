@@ -1,0 +1,8 @@
+{
+ "_about": "The dated setup rows the record's raids in China need (the design director's word of 19:20Z, b375), for the rules builder to lift into setup-1939.json at step 13, beside china-line.json (the raids) and china-stop3.json (ruling 221). Keyed by data file, as the far-side rig lays a seats file. A landing by the book sails only from its own nation's ports (ai.ts landings; the director, 19:12Z, b373), so the Nanning landing of November 1939 (china-line.json 'nanning', ashore at Pakhoi in month 3) sails from Taihoku: the 5th Division is brought there from its 12th Army row in month 2 and lands with the Formosa Army. The historian's word of 19:02Z: under the 21st Army from 16 October 1939 (high); taken from the 12th Army's row (medium); Taihoku stands in for Sanya Bay, Hainan, as the nearest home port. The same row is in the planner's opening-armies.json 'japan_by_date' (the 25th Army takes the division from it in month 27): step 13 lays it once. Ruling 224's row for the 1941 coast raid joins it here when the planner sends it.",
+ "setup-1939": {
+  "expeditions": [
+   [2, "JAP", "21st Army (5th Division)", "inf", 1, "Taihoku", { "str": 0.9, "from": ["12th Army (5th Division)"], "war": ["JAP", "CHN"] }]
+  ]
+ }
+}

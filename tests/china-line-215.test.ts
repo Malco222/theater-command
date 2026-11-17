@@ -12,6 +12,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import china from '../data/campaign/china-line.json';
+import setupRows from '../data/campaign/china-setup.json';
 import { lineGiveBack, lineHome, ringJudgement } from '../src/campaign/ai';
 import { EASTERN, addCorps, allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
@@ -544,6 +545,33 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     // ends in 1945 goes back as in the record; only the floor lifts at month 69.
     expect(L.until).toBe(Math.max(...all.flatMap(([, s]) => s.map((x) => x.to))));
     expect(all.some(([, s]) => s.some((x) => x.kind === 'ichigo' && x.to > L.floor.until && x.to < L.until))).toBe(true);
+  });
+
+  it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {
+    const raids = ['nanning', 'wuyuan', 'ichang', 'coast41', 'yencheng', 'changsha41'];
+    for (const id of raids) {
+      const op = D.open.ops.JAP.find((o) => o.id === id)!;
+      expect(op, id).toBeTruthy();
+      // A great choice in a war already on: no side-show, nobody to declare on, so it opens the China front (216(a)).
+      expect(op.side, id).toBeUndefined();
+      expect(op.declare, id).toBeUndefined();
+      expect(D.history.theatre[`JAP:${id}`], id).toBe('china');
+      // Off the book its own conditions can never hold; the book reads its own.
+      expect(op.if, id).toEqual(['war:JAP,CHN', 'peace:JAP,CHN']);
+      expect(D.history.bookIf[`JAP:${id}`], id).toEqual(['war:JAP,CHN', 'alive:CHN']);
+      const date = D.history.dates.JAP[id];
+      expect(op.from, id).toBe(date);
+      expect(op.to!, id).toBeGreaterThan(date);
+    }
+    // No two on one date: one great choice a month at most.
+    expect(new Set(raids.map((id) => D.history.dates.JAP[id])).size).toBe(raids.length);
+    // Nanning: ashore at Pakhoi, the historian's raid span, from Taihoku, where the 5th Division is brought the month before.
+    expect(L.spans.Pakhoi).toEqual([{ from: 3, to: 15, kind: 'raid' }]);
+    const nanning = D.open.ops.JAP.find((o) => o.id === 'nanning')!;
+    expect(nanning.landings).toEqual([{ corps: '21st Army (5th Division)', with: ['Formosa Army'], to: ['Pakhoi'] }]);
+    const row = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, Record<string, unknown>][] } })['setup-1939'].expeditions.find((r) => r[2] === '21st Army (5th Division)')!;
+    expect(row.slice(0, 6)).toEqual([2, 'JAP', '21st Army (5th Division)', 'inf', 1, 'Taihoku']);
+    expect(row[0]).toBeLessThan(D.history.dates.JAP.nanning);
   });
 
   it('names only China\'s provinces, where the chart has China', () => {
