@@ -1,0 +1,56 @@
+=== SAF, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+South Africa (SAF), September 1939; part of the world: Africa; government: democracy; stands: allies; quality 0.85, air 3, resilience 0.8, sea lift 1
+  capital: Pretoria (province 1231, held by SAF)
+  provinces: holds 24, owns 24; at home 19, colonies 5; ports 8; factories 7; victory points 13; oilfields 0
+  seas it stands on: Angola Basin, Cape Basin, Mozambique Channel
+  neighbours by land: UK, POR
+  army: 3 corps, 3 divisions on paper, 1 at strength
+    Permanent Force and Special Service Battalion [inf] 1 div at 40% in Pretoria
+    Active Citizen Force, Cape Command [inf] 1 div at 30% in Cape Town
+    Active Citizen Force, Natal Command [inf] 1 div at 30% in Durban
+  fleets: none
+  air groups: none
+  books (as the interface shows them, x100): income 1422.5 a month, upkeep 4, net 1418.5, treasury 0
+  at war with: GER; follows: UK; friends: none
+  abilities: The gold of the Rand; Armoured cars for the veld
+  paths: axis (no: You have given your word to the Allies.); allies (now); alone (no: An alliance, once joined, is not left.); found (no: You have given your word to the Allies.)
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 10; barred for another reason 10
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 4250, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: The treasury cannot cover it.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: The treasury cannot cover it.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: The treasury cannot cover it.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: Pretoria has no harbour.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 4 s
+--- month by month (the line is the day the player is up)
+  September 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Pretoria; treasury 1406.5 -> 606.5; orders in hand 1
+  September 1939  alive  provinces  24  corps  3 (1 divs)  treasury   606.5  net 1418.4/month  allies  at war with: GER  [0 s]
+  October 1939    alive  provinces  24  corps  3 (1.1 divs)  treasury  2012.5  net 1418.2/month  allies  at war with: GER  [4 s]
+  November 1939   alive  provinces  24  corps  3 (1.1 divs)  treasury    3418  net 1413.1/month  allies  at war with: GER  [2 s]
+  December 1939   alive  provinces  24  corps  3 (1.1 divs)  treasury    4818  net   1413/month  allies  at war with: GER  [2 s]
+  January 1940    alive  provinces  24  corps  3 (1.2 divs)  treasury  6217.4  net 1412.8/month  allies  at war with: GER  [2 s]
+  February 1940   alive  provinces  24  corps  3 (1.2 divs)  treasury  7616.3  net 1412.7/month  allies  at war with: GER  [2 s]
+  March 1940      alive  provinces  24  corps  3 (1.2 divs)  treasury  9014.7  net 1412.6/month  allies  at war with: GER  [5 s]
+  April 1940      alive  provinces  24  corps  3 (1.3 divs)  treasury 10412.5  net 1412.4/month  allies  at war with: GER  [3 s]
+  May 1940        alive  provinces  24  corps  3 (1.3 divs)  treasury 11809.7  net 1412.3/month  allies  at war with: GER  [5 s]
+  June 1940       alive  provinces  24  corps  3 (1.3 divs)  treasury 13206.3  net 1412.1/month  allies  at war with: GER  [5 s]
+  July 1940       alive  provinces  24  corps  3 (1.4 divs)  treasury 14602.3  net 1411.9/month  allies  at war with: GER  [5 s]
+  August 1940     alive  provinces  24  corps  3 (1.4 divs)  treasury 15997.6  net 1411.8/month  allies  at war with: GER  [4 s]
+  September 1940  alive  provinces  24  corps  3 (1.5 divs)  treasury 17392.3  net 1411.6/month  allies  at war with: GER  (end)
+    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [note] saved at February 1940: 459 KB
+VERDICT SAF seed 7: PASS: started yes; order given (September 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 48 s

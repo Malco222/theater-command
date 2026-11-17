@@ -13,9 +13,10 @@
 import { T, advance, armySize, check, date, ledger, loadGame, saveGame, start, type Game } from '@pt/lib';
 import { offers } from '@tc/campaign/arsenal';
 import { friendsOf } from '@tc/campaign/diplomacy';
-import { bloc } from '@tc/campaign/game';
+import { allied, bloc } from '@tc/campaign/game';
 import { formOf } from '@tc/campaign/government';
-import { partName, small } from '@tc/campaign/league';
+import { founders, partName, partOf, small } from '@tc/campaign/league';
+import { whyNotShip } from '@tc/campaign/navy';
 import { eliteOf, traitsOf } from '@tc/campaign/traits';
 import { TRIAL_FAR, WORLD, WORLD_FIRST } from '@tc/campaign/world';
 
@@ -59,25 +60,78 @@ function firstDay(g: Game, me: string): string[] {
   L.push(`  army: ${cs.length} corps, ${r1(cs.reduce((s, c) => s + c.divs, 0))} divisions on paper, ${r1(cs.reduce((s, c) => s + c.divs * c.str, 0))} at strength`);
   for (const c of cs) L.push(`    ${c.name} [${c.kind}] ${c.divs} div at ${Math.round(c.str * 100)}% in ${g.regions[c.reg].name}${c.town !== undefined ? ' (in the town)' : ''}`);
   const fl = g.fleets.filter((f) => f.nat === me);
-  L.push(`  fleets: ${fl.length ? fl.map((f) => `${f.name} at ${f.port} (${Object.entries(f.ships).filter(([, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ') || 'no ships'}) in ${g.seas[f.zone]?.name ?? '?'}`).join('; ') : 'none'}`);
+  L.push(`  fleets: ${fl.length ? fl.map((f) => `${f.name}${f.admiral ? ` under ${f.admiral.name}` : ' (no admiral named)'} at ${f.port} (${Object.entries(f.ships).filter(([, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ') || 'no ships'}) in ${g.seas[f.zone]?.name ?? '?'}`).join('; ') : 'none'}`);
   const air = (g.airFleets as any[]).filter((a) => a.nat === me);
   L.push(`  air groups: ${air.length ? air.map((a) => `${a.name ?? a.id}`).join('; ') : 'none'}`);
   const m = money(g, me);
   L.push(`  books (as the interface shows them, x${m.scale}): income ${r1(m.gross)} a month, upkeep ${r1(m.upkeep)}, net ${r1(m.net)}, treasury ${r1(m.treasury)}`);
   L.push(`  at war with: ${wars(g, me)}; follows: ${WORLD.follow[me] ?? 'nobody'}; friends: ${friendsOf(me).map((f) => f.nat).join(', ') || 'none'}`);
   const tr = traitsOf(me), el = eliteOf(me);
-  L.push(`  abilities: ${tr.length ? tr.map((t) => t.name).join('; ') : 'NONE'}${el ? `; formation: ${el.label}` : ''}`);
+  L.push(`  ${tr.length === 1 ? 'ability' : tr.length ? 'abilities' : 'ability'}: ${tr.length ? tr.map((t) => t.name).join('; ') : 'none'}${el ? `; formation: ${el.label}` : ''}`);
   const ps = small(me) ? T.paths(g) : [];
   L.push(`  paths: ${ps.length ? ps.map((p: any) => `${p.id}${p.now ? ' (now)' : p.ok ? ' (open)' : ` (no: ${p.why})`}`).join('; ') : 'none offered'}`);
+  // The League: the countries it could found one with (league.ts founders: its own part of the world only).
+  const fs = small(me) ? founders(g, me) : [];
+  const far = fs.filter((f) => partOf(f.nat) !== partOf(me));
+  L.push(`  League founders it could ask (${fs.length}, all of ${partName(me)} unless said): ${fs.map((f) => `${f.nat}${f.ok ? ' (willing)' : ''}${partOf(f.nat) !== partOf(me) ? ` [${partName(f.nat)}]` : ''}`).join(', ') || 'none'}; of another part of the world: ${far.length ? far.map((f) => f.nat).join(', ') : 'none'}`);
   const os = offers(g, me, n.capital);
   const can = os.filter((o) => !o.why), poor = os.filter((o) => o.poor);
   L.push(`  arsenal (with the capital picked on the map): ${os.length} offers; can order today ${can.length}; short of money only ${poor.length}; barred for another reason ${os.length - can.length - poor.length}`);
   for (const o of os) L.push(`    ${o.key.padEnd(14)} ${o.label} (${o.size}) cost ${r1(o.cost * m.scale)}, ${o.months} months${o.why ? `  NO: ${o.why}` : '  can order'}`);
+  // A capital with no harbour says nothing of the shipyard: the same offers with the first home port picked.
+  const quay = cap && !cap.port ? owned.find((r) => r.ctrl === me && r.port && !r.overseas) : undefined;
+  if (quay) for (const o of offers(g, me, quay.id).filter((x) => x.key === 'work:yard' || x.key.startsWith('ship:tp'))) L.push(`    with ${quay.name} picked: ${o.key.padEnd(10)} ${o.label} (${o.size}) cost ${r1(o.cost * m.scale)}, ${o.months} months${o.why ? `  NO: ${o.why}` : '  can order'}`);
+  return L;
+}
+
+/**
+ * How the seat's army can leave home, on the day the player is first up: what the interface's own `reach` and
+ * `shipTargets` give each corps this month, and how far its own and its allies' ground runs from the capital in
+ * the end (terrain that bars tanks or wheels, and room in a province, are not counted in that second figure).
+ */
+function waysOut(g: Game, me: string): string[] {
+  const L: string[] = [], n = g.nations[me];
+  L.push(`  ways out of the country on ${date(g.turn)} (sea lift ${n.sealift}, seaSupply ${n.seaSupply}):`);
+  const anyPort = g.regions.find((r) => r.port && r.owner !== me && allied(g, me, r.ctrl));
+  for (const c of corpsOf(g, me)) {
+    const m = T.reach(g, c);
+    const all = [...m.keys()].filter((id) => id !== c.reg && !m.get(id)!.attack);
+    const abroad = all.filter((id) => g.regions[id].owner !== me);
+    const here = g.regions[c.reg];
+    const ports = T.shipTargets(g, c);
+    const sea = ports.length ? `${ports.length} ports` : `no port${here.port && anyPort ? ` ("${whyNotShip(g, c, anyPort)}")` : here.port ? ' (no friendly port abroad)' : ' (it stands in no port)'}`;
+    L.push(`    ${c.name} in ${here.name}: marches to ${all.length} provinces this month, ${abroad.length} outside its own country${abroad.length ? ` (${abroad.slice(0, 3).map((id) => `${g.regions[id].name}, ${g.regions[id].ctrl}`).join('; ')}${abroad.length > 3 ? '; ...' : ''})` : ''}; by sea to ${sea}`);
+  }
+  if (n.capital < 0) return L;
+  const road = (label: string, open: (holder: string) => boolean): void => {
+    const dist = new Map<number, number>([[n.capital, 0]]), q = [n.capital];
+    const edge = new Map<string, { d: number; at: string }>();
+    for (let i = 0; i < q.length; i++) {
+      const d = dist.get(q[i])!;
+      for (const j of g.regions[q[i]].nb) {
+        const r = g.regions[j];
+        if (open(r.ctrl)) { if (!dist.has(j)) { dist.set(j, d + 1); q.push(j); } continue; }
+        const e = edge.get(r.ctrl);
+        if (!e || e.d > d + 1) edge.set(r.ctrl, { d: d + 1, at: r.name });
+      }
+    }
+    const got = [...dist.keys()].map((id) => g.regions[id]);
+    const by: Record<string, number> = {};
+    for (const r of got) by[r.ctrl] = (by[r.ctrl] ?? 0) + 1;
+    const old = got.filter((r) => r.id < WORLD_FIRST).sort((a, b) => dist.get(a.id)! - dist.get(b.id)!);
+    const furthest = got.reduce((a, b) => (dist.get(b.id)! > dist.get(a.id)! ? b : a));
+    L.push(`    by land in the end, over ${label} from ${g.regions[n.capital].name}: ${got.length} provinces (${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}); furthest ${furthest.name}, ${dist.get(furthest.id)} provinces off; on the map of Europe ${old.length}${old.length ? ` (nearest ${old[0].name}, ${dist.get(old[0].id)} off)` : ''}`);
+    L.push(`      frontiers that road comes to: ${[...edge.entries()].sort((a, b) => a[1].d - b[1].d).map(([k, e]) => `${k}${g.nations[me].atWar.includes(k) ? ' (AT WAR)' : ''} at ${e.at}, ${e.d} off`).join('; ') || 'none'}`);
+  };
+  road("its own and its allies' ground", (h) => allied(g, me, h));
+  // A dominion: the same road over its own ground and its mother country's alone (France's Africa left out).
+  const mother = WORLD.follow[me];
+  if (mother) road(`its own ground and ${mother}'s alone`, (h) => h === me || h === mother);
   return L;
 }
 
 /** One real order, through the function the interface calls (turn.ts orderArsenal): the cheapest corps it can afford, else the cheapest of anything. */
-function oneOrder(g: Game, me: string): { line: string; ok: boolean } {
+function oneOrder(g: Game, me: string): { line: string; ok: boolean; key?: string; at?: number } {
   const os = offers(g, me, g.nations[me].capital), m = money(g, me);
   const can = os.filter((o) => !o.why).sort((a, b) => a.cost - b.cost);
   const pick = can.find((o) => o.group === 'army') ?? can[0];
@@ -85,7 +139,7 @@ function oneOrder(g: Game, me: string): { line: string; ok: boolean } {
     const before = g.nations[me].pp;
     const b = T.orderArsenal(g, pick.key, pick.at);
     if (!b) return { line: `ORDER REFUSED: ${pick.key} (${pick.label}) was on offer and orderArsenal returned nothing`, ok: false };
-    return { line: `order given: ${pick.label} (${pick.size}) for ${r1(pick.cost * m.scale)}, due in ${pick.months} months${pick.at >= 0 ? ` at ${g.regions[pick.at].name}` : ''}; treasury ${r1(before * m.scale)} -> ${r1(g.nations[me].pp * m.scale)}; orders in hand ${g.nations[me].queue.length}`, ok: true };
+    return { line: `order given: ${pick.label} (${pick.size}) for ${r1(pick.cost * m.scale)}, due in ${pick.months} months${pick.at >= 0 ? ` at ${g.regions[pick.at].name}` : ''}; treasury ${r1(before * m.scale)} -> ${r1(g.nations[me].pp * m.scale)}; orders in hand ${g.nations[me].queue.length}`, ok: true, key: pick.key, at: pick.at };
   }
   const poor = os.filter((o) => o.poor).sort((a, b) => a.cost - b.cost)[0];
   if (!poor) return { line: `no order can be given: nothing on offer is open to it (${os.length} offers, every one barred for a reason other than money)`, ok: false };
@@ -115,16 +169,20 @@ function play(me: string, seed: number, months: number, level: string): boolean 
     out(`  first month reached in ${Math.round((Date.now() - t0) / 1000)} s`);
     out('--- month by month (the line is the day the player is up)');
     let last = Date.now();
+    if (up) for (const l of waysOut(g, me)) out(l);
     while (up && g.turn <= until) {
       if (!ordered) {
         const o = oneOrder(g, me);
+        // (A game loaded from the half-way save is given the same order, so that the two can be compared to the end.)
+        if (o.ok && twin && !T.orderArsenal(twin, o.key!, o.at)) problems.push(`[${date(g.turn)}] the game loaded from the save refused the order the first game took (${o.key})`);
         if (o.ok) { ordered = true; orderLine = `${date(g.turn)}: ${o.line}`; out(`  ${orderLine}`); } else if (!orderWait) { orderWait = `${date(g.turn)}: ${o.line}`; out(`  ${orderWait}`); }
       }
       out(`  ${monthLine(g, me)}  [${Math.round((Date.now() - last) / 1000)} s]`);
       last = Date.now();
       check(g, 'after the player', problems, seen);
-      // Half-way: save, load, and play the loaded game on beside this one.
-      if (!twin && g.turn >= Math.ceil(until / 2)) {
+      // Half-way: save, load, and play the loaded game on beside this one. Never in September 1939: on today's main
+      // a save made in the first month does not play on the same (README, finding 16), with or without the trial.
+      if (!twin && g.turn >= Math.max(2, Math.ceil(until / 2))) {
         const text = saveGame(g);
         const back = loadGame(text);
         if (!back) { saveOk = false; problems.push(`[${date(g.turn)}] the game could not be loaded from its own save (${Math.round(text.length / 1024)} KB)`); } else {
@@ -183,8 +241,8 @@ function watch(seed: number, months: number, codes: string[]): boolean {
   try {
     g = start(null, 1, seed);
     for (const c of codes) if (!g.nations[c]) throw new Error(`${c} is no country in this game`);
-    const was: Record<string, { wars: string; align: string; regs: number; corps: number; alive: boolean; league: boolean }> = {};
-    const snap = (c: string) => { const n = g!.nations[c]; return { wars: wars(g!, c), align: String(bloc(n) ?? n.align), regs: heldBy(g!, c).length, corps: corpsOf(g!, c).length, alive: n.alive, league: !!(n as any).league }; };
+    const was: Record<string, { wars: string; align: string; regs: number; corps: number; away: number; alive: boolean; league: boolean }> = {};
+    const snap = (c: string) => { const n = g!.nations[c]; return { wars: wars(g!, c), align: String(bloc(n) ?? n.align), regs: heldBy(g!, c).length, corps: corpsOf(g!, c).length, away: corpsOf(g!, c).filter((x) => g!.regions[x.reg].owner !== c).length, alive: n.alive, league: !!(n as any).league }; };
     for (const c of codes) { was[c] = snap(c); log[c].push(`${date(g.turn)}: ${was[c].align}; provinces ${was[c].regs}; corps ${was[c].corps}; at war with ${was[c].wars}`); }
     while (g.turn <= months) {
       const h0 = g.headlines.length;
@@ -197,6 +255,7 @@ function watch(seed: number, months: number, codes: string[]): boolean {
         if (now.wars !== w.wars) ch.push(`at war with ${now.wars}`);
         if (now.regs !== w.regs) ch.push(`provinces ${w.regs} -> ${now.regs}`);
         if (now.corps !== w.corps) ch.push(`corps ${w.corps} -> ${now.corps}`);
+        if (now.away !== w.away) ch.push(`corps outside its own country ${w.away} -> ${now.away}`);
         const news = g.headlines.slice(h0).filter((h: any) => h.nat === c || h.text.includes(g!.nations[c].name)).map((h: any) => h.text);
         if (ch.length || news.length) log[c].push(`${date(g.turn - 1)}: ${ch.join('; ')}${news.length ? `${ch.length ? '; ' : ''}news: ${[...new Set(news)].slice(0, 3).join(' | ')}` : ''}`);
         was[c] = now;

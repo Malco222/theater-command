@@ -1,0 +1,90 @@
+=== IRN, seed 7, 40 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Iran (IRN), September 1939; part of the world: the Near East; government: authoritarian; stands: independent; quality 0.55, air 1, resilience 0.4, sea lift 0
+  capital: Tehran (province 960, held by IRN)
+  provinces: holds 23, owns 23; at home 23, colonies 0; ports 4; factories 2; victory points 8; oilfields 1
+  seas it stands on: Persian Gulf, Arabian Sea
+  neighbours by land: SOV, TUR, IRQ, UK, AFG
+  army: 6 corps, 9 divisions on paper, 4.7 at strength
+    1st and 2nd Divisions (Tehran) [inf] 2 div at 60% in Tehran
+    3rd and 4th Divisions (Azerbaijan) [inf] 2 div at 50% in Iran
+    5th and 12th Divisions (Kurdistan) [inf] 2 div at 50% in Kermanshah
+    6th Division (Khuzestan) [inf] 1 div at 50% in Ahwaz
+    7th Division (Fars) [inf] 1 div at 50% in Shiraz
+    9th Division (Khorasan) [inf] 1 div at 50% in Meshed
+  fleets: Imperial Iranian Navy at Khorramshahr (2 dd) in Persian Gulf
+  air groups: none
+  books (as the interface shows them, x100): income 573.9 a month, upkeep 10.2, net 563.7, treasury 0
+  at war with: none; follows: nobody; friends: TUR, IRQ, AFG
+  abilities: The Zagros; The oil royalty
+  paths: axis (open); allies (open); alone (now); found (open)
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 8; barred for another reason 12
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: The treasury cannot cover it.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: Needs an aircraft industry: a home province with 2 factories.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: Needs an aircraft industry: a home province with 3 factories.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: Tehran has no harbour.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 2 s
+--- month by month (the line is the day the player is up)
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 482.5; at 538.6 a month that is 1 month(s) away
+  September 1939  alive  provinces  23  corps  6 (4.8 divs)  treasury   482.5  net  538.6/month  independent  at war with: none  [0 s]
+  October 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Tehran; treasury 955.8 -> 155.8; orders in hand 1
+  October 1939    alive  provinces  23  corps  6 (5 divs)  treasury   155.8  net  531.1/month  independent  at war with: none  [2 s]
+  November 1939   alive  provinces  23  corps  6 (5.1 divs)  treasury   628.9  net  532.6/month  independent  at war with: none  [1 s]
+  December 1939   alive  provinces  23  corps  6 (5.3 divs)  treasury  1099.8  net  527.3/month  independent  at war with: none  [1 s]
+  January 1940    alive  provinces  23  corps  6 (5.4 divs)  treasury  1563.6  net  526.9/month  independent  at war with: none  [1 s]
+  February 1940   alive  provinces  23  corps  6 (5.6 divs)  treasury  2025.1  net  526.6/month  independent  at war with: none  [1 s]
+  March 1940      alive  provinces  23  corps  6 (5.8 divs)  treasury  2484.4  net  526.3/month  independent  at war with: none  [1 s]
+  April 1940      alive  provinces  23  corps  6 (6 divs)  treasury  2941.3  net  525.9/month  independent  at war with: none  [1 s]
+  May 1940        alive  provinces  23  corps  6 (6.1 divs)  treasury  3395.8  net  525.6/month  independent  at war with: none  [2 s]
+  June 1940       alive  provinces  23  corps  6 (6.3 divs)  treasury  3847.8  net  525.2/month  independent  at war with: none  [2 s]
+  July 1940       alive  provinces  23  corps  6 (6.5 divs)  treasury  4297.2  net  524.8/month  independent  at war with: none  [2 s]
+  August 1940     alive  provinces  23  corps  6 (6.7 divs)  treasury  4743.9  net  524.4/month  independent  at war with: none  [2 s]
+  September 1940  alive  provinces  23  corps  6 (6.9 divs)  treasury    5188  net    524/month  independent  at war with: none  [2 s]
+  October 1940    alive  provinces  23  corps  6 (7.1 divs)  treasury  5629.2  net  523.6/month  independent  at war with: none  [2 s]
+  November 1940   alive  provinces  23  corps  6 (7.3 divs)  treasury  6067.5  net  523.2/month  independent  at war with: none  [1 s]
+  December 1940   alive  provinces  23  corps  6 (7.5 divs)  treasury  6502.8  net  522.8/month  independent  at war with: none  [1 s]
+  January 1941    alive  provinces  23  corps  6 (7.8 divs)  treasury    6935  net  522.3/month  independent  at war with: none  [2 s]
+  February 1941   alive  provinces  23  corps  6 (8 divs)  treasury  7364.1  net  521.8/month  independent  at war with: none  [1 s]
+  March 1941      alive  provinces  23  corps  6 (8.2 divs)  treasury  7789.9  net  521.4/month  independent  at war with: none  [2 s]
+  April 1941      alive  provinces  23  corps  6 (8.5 divs)  treasury  8212.4  net  520.9/month  independent  at war with: none  [2 s]
+  May 1941        alive  provinces  23  corps  6 (8.7 divs)  treasury  8631.4  net  520.3/month  independent  at war with: none  [3 s]
+  June 1941       alive  provinces  23  corps  6 (9 divs)  treasury  9049.1  net  519.8/month  independent  at war with: none  [4 s]
+  July 1941       alive  provinces  23  corps  6 (9 divs)  treasury  9568.9  net  519.8/month  independent  at war with: none  [4 s]
+  August 1941     alive  provinces  23  corps  6 (9 divs)  treasury 10088.8  net  519.8/month  independent  at war with: none  [5 s]
+  September 1941  alive  provinces  23  corps  6 (9 divs)  treasury 10608.6  net  519.8/month  independent  at war with: none  [5 s]
+  October 1941    alive  provinces  23  corps  6 (9 divs)  treasury 11128.4  net  519.8/month  independent  at war with: none  [4 s]
+  November 1941   alive  provinces  23  corps  6 (9 divs)  treasury 11648.3  net  519.8/month  independent  at war with: none  [4 s]
+  December 1941   alive  provinces  23  corps  6 (9 divs)  treasury 12168.1  net  519.8/month  independent  at war with: none  [4 s]
+  January 1942    alive  provinces  23  corps  6 (9 divs)  treasury 12687.9  net  519.8/month  independent  at war with: none  [6 s]
+  February 1942   alive  provinces  23  corps  6 (9 divs)  treasury 13207.8  net  519.8/month  independent  at war with: none  [5 s]
+  March 1942      alive  provinces  23  corps  6 (9 divs)  treasury 13727.6  net  519.8/month  independent  at war with: none  [6 s]
+  April 1942      alive  provinces  23  corps  6 (9 divs)  treasury 14247.4  net  519.8/month  independent  at war with: none  [6 s]
+  May 1942        alive  provinces  23  corps  6 (9 divs)  treasury 14767.3  net  519.8/month  independent  at war with: none  [6 s]
+  June 1942       alive  provinces  23  corps  6 (9 divs)  treasury 15287.1  net  519.8/month  independent  at war with: none  [5 s]
+  July 1942       alive  provinces  23  corps  6 (9 divs)  treasury   15807  net  519.8/month  independent  at war with: none  [5 s]
+  August 1942     alive  provinces  23  corps  6 (9 divs)  treasury 16326.8  net  519.8/month  independent  at war with: none  [5 s]
+  September 1942  alive  provinces  23  corps  6 (9 divs)  treasury 16846.6  net  519.8/month  independent  at war with: none  [5 s]
+  October 1942    alive  provinces  23  corps  6 (9 divs)  treasury 17366.5  net  519.8/month  independent  at war with: none  [5 s]
+  November 1942   alive  provinces  23  corps  6 (9 divs)  treasury 17886.3  net  519.8/month  independent  at war with: none  [5 s]
+  December 1942   alive  provinces  23  corps  6 (9 divs)  treasury 18406.1  net  519.8/month  independent  at war with: none  [5 s]
+  January 1943    alive  provinces  23  corps  6 (9 divs)  treasury   18926  net  519.8/month  independent  at war with: none  (end)
+    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+    [note] saved at April 1941: 792 KB
+VERDICT IRN seed 7: PASS: started yes; order given (October 1939); months played 40; save and load plays on the same; invariants broken 0; still standing; 132 s
+IRN40 exit 0

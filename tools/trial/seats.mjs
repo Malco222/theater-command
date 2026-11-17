@@ -241,8 +241,9 @@ export function validate(p, chartFile = path.join(ROOT, 'src/generated/world-cit
     else if (holder(cap) !== s.id) errors.push(`${where}: its capital ${cap.name} is held by ${holder(cap)} on the first day`);
     const tr = D.traits.nations[s.id];
     if (s.placeholder) continue;
-    if (!tr) warnings.push(`${where}: no traits.json row (every playable country has two abilities, or one and a formation)`);
-    else if (!Array.isArray(tr.traits) || (tr.traits.length + (tr.unit ? 1 : 0) < 2 && !s.placeholder)) warnings.push(`${where}: its traits row has ${tr.traits?.length ?? 0} abilities${tr.unit ? ' and a formation' : ''}; the others have two, or one and a formation`);
+    // A seat may have no abilities row, or a row of one ability: the record decides (the historian struck those it
+    // could not stand behind). Only a row that is not the game's shape is refused.
+    if (tr && !Array.isArray(tr.traits)) errors.push(`${where}: its traits.json row has no list under "traits"`);
     if (!s.placeholder && !D.nations[s.id] && !W.parts.of[s.id]) warnings.push(`${where}: no part of the world under world.json parts.of: it would count as "${W.parts.new}" for the League's rule of neighbours`);
   }
   for (const gr of D.relations.groups) for (const n of gr.nations) if (!nations.has(n)) errors.push(`relations.json group "${gr.id}": ${n} is no country`);

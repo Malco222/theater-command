@@ -1,0 +1,58 @@
+=== THA, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Thailand (THA), September 1939; part of the world: Asia; government: authoritarian; stands: independent; quality 0.6, air 4, resilience 0.3, sea lift 0
+  capital: Bangkok (province 780, held by THA)
+  provinces: holds 7, owns 7; at home 7, colonies 0; ports 3; factories 0; victory points 3; oilfields 0
+  seas it stands on: Gulf of Siam, Andaman Sea, Strait of Malacca
+  neighbours by land: FRA, UK
+  army: 4 corps, 5 divisions on paper, 2.6 at strength
+    1st Army Circle (Bangkok) [inf] 2 div at 60% in Bangkok
+    3rd Army Circle (Korat) [inf] 1 div at 50% in Korat
+    4th Army Circle (Phitsanulok) [inf] 1 div at 50% in Phitsanulok
+    5th Army Circle (the south) [inf] 1 div at 40% in Singora
+  fleets: Royal Thai Fleet at Bangkok (1 ca, 5 dd, 2 ss) in Gulf of Siam
+  air groups: none
+  books (as the interface shows them, x100): income 235.5 a month, upkeep 9.2, net 226.3, treasury 0
+  at war with: none; follows: nobody; friends: none
+  abilities: The rice bowl; Jungle frontiers
+  paths: axis (open); allies (open); alone (now); found (open)
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 8; barred for another reason 12
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: Needs a home province with 1 factory. Build factories in a city first.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: Needs an aircraft industry: a home province with 2 factories.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: Needs an aircraft industry: a home province with 3 factories.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 5 s
+--- month by month (the line is the day the player is up)
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 195.1; at 226.1 a month that is 3 month(s) away
+  September 1939  alive  provinces   7  corps  4 (2.7 divs)  treasury   195.1  net  226.1/month  independent  at war with: none  [0 s]
+  October 1939    alive  provinces   7  corps  4 (2.8 divs)  treasury   389.1  net    226/month  independent  at war with: none  [3 s]
+  November 1939   alive  provinces   7  corps  4 (2.8 divs)  treasury     582  net  225.8/month  independent  at war with: none  [2 s]
+  December 1939   alive  provinces   7  corps  4 (2.9 divs)  treasury   773.7  net  225.6/month  independent  at war with: none  [2 s]
+  January 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Bangkok; treasury 964.2 -> 164.2; orders in hand 1
+  January 1940    alive  provinces   7  corps  4 (3 divs)  treasury   164.2  net  225.5/month  independent  at war with: none  [3 s]
+  February 1940   alive  provinces   7  corps  4 (3.1 divs)  treasury   353.5  net  225.3/month  independent  at war with: none  [3 s]
+  March 1940      alive  provinces   7  corps  4 (3.2 divs)  treasury   541.5  net  220.1/month  independent  at war with: none  [5 s]
+  April 1940      alive  provinces   7  corps  4 (3.3 divs)  treasury   723.3  net  219.9/month  independent  at war with: none  [4 s]
+  May 1940        alive  provinces   7  corps  4 (3.4 divs)  treasury   903.7  net  219.7/month  independent  at war with: none  [5 s]
+  June 1940       alive  provinces   7  corps  4 (3.5 divs)  treasury  1082.7  net  219.5/month  independent  at war with: none  [6 s]
+  July 1940       alive  provinces   7  corps  4 (3.6 divs)  treasury  1260.2  net  219.3/month  independent  at war with: none  [6 s]
+  August 1940     alive  provinces   7  corps  4 (3.7 divs)  treasury  1436.3  net  219.1/month  independent  at war with: none  [5 s]
+  September 1940  alive  provinces   7  corps  4 (3.8 divs)  treasury  1610.9  net  218.9/month  independent  at war with: none  (end)
+    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [note] saved at February 1940: 456 KB
+VERDICT THA seed 7: PASS: started yes; order given (January 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 52 s

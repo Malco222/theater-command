@@ -1,0 +1,57 @@
+=== IRQ, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Iraq (IRQ), September 1939; part of the world: the Near East; government: authoritarian; stands: leaning_allies; quality 0.55, air 1, resilience 0.4, sea lift 0
+  capital: Baghdad (province 366, held by IRQ)
+  provinces: holds 4, owns 4; at home 4, colonies 0; ports 1; factories 0; victory points 3; oilfields 1
+  seas it stands on: Persian Gulf
+  neighbours by land: TUR, IRN, FRA, UK, SAU
+  army: 3 corps, 4 divisions on paper, 2.3 at strength
+    1st and 3rd Divisions (Baghdad) [inf] 2 div at 60% in Baghdad
+    2nd Division (Kirkuk) [inf] 1 div at 60% in Iraq
+    4th Division (Diwaniyah) [inf] 1 div at 50% in Basra
+  fleets: none
+  air groups: none
+  books (as the interface shows them, x100): income 302.9 a month, upkeep 4.6, net 298.3, treasury 0
+  at war with: none; follows: nobody; friends: TUR, IRN, AFG, UK
+  abilities: The Kirkuk pipeline; The two rivers
+  paths: axis (open); allies (open); alone (open); found (open)
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 7; barred for another reason 13
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: Needs a home province with 1 factory. Build factories in a city first.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: Needs an aircraft industry: a home province with 2 factories.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: Needs an aircraft industry: a home province with 3 factories.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: Baghdad has no harbour.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 4 s
+--- month by month (the line is the day the player is up)
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 270.7; at 298.2 a month that is 2 month(s) away
+  September 1939  alive  provinces   4  corps  3 (2.4 divs)  treasury   270.7  net  298.2/month  leaning_allies  at war with: none  [0 s]
+  October 1939    alive  provinces   4  corps  3 (2.4 divs)  treasury   540.4  net    298/month  leaning_allies  at war with: none  [4 s]
+  November 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Baghdad; treasury 809.1 -> 9.1; orders in hand 1
+  November 1939   alive  provinces   4  corps  3 (2.5 divs)  treasury     9.1  net  297.9/month  leaning_allies  at war with: none  [2 s]
+  December 1939   alive  provinces   4  corps  3 (2.6 divs)  treasury   276.8  net  297.7/month  leaning_allies  at war with: none  [2 s]
+  January 1940    alive  provinces   4  corps  3 (2.7 divs)  treasury   543.5  net  292.6/month  leaning_allies  at war with: none  [2 s]
+  February 1940   alive  provinces   4  corps  3 (2.7 divs)  treasury     804  net  292.4/month  leaning_allies  at war with: none  [2 s]
+  March 1940      alive  provinces   4  corps  3 (2.8 divs)  treasury  1063.5  net  292.2/month  leaning_allies  at war with: none  [5 s]
+  April 1940      alive  provinces   4  corps  3 (2.9 divs)  treasury  1321.8  net  292.1/month  leaning_allies  at war with: none  [3 s]
+  May 1940        alive  provinces   4  corps  3 (3 divs)  treasury  1578.9  net  291.9/month  leaning_allies  at war with: none  [5 s]
+  June 1940       alive  provinces   4  corps  3 (3.1 divs)  treasury  1834.7  net  291.7/month  leaning_allies  at war with: none  [5 s]
+  July 1940       alive  provinces   4  corps  3 (3.2 divs)  treasury  2089.4  net  291.5/month  leaning_allies  at war with: none  [5 s]
+  August 1940     alive  provinces   4  corps  3 (3.3 divs)  treasury  2342.7  net  291.3/month  leaning_allies  at war with: none  [4 s]
+  September 1940  alive  provinces   4  corps  3 (3.4 divs)  treasury  2594.7  net  291.1/month  leaning_allies  at war with: none  (end)
+    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [note] saved at February 1940: 454 KB
+VERDICT IRQ seed 7: PASS: started yes; order given (November 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 47 s

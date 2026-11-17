@@ -1,0 +1,259 @@
+
+ RUN  v5.1.0 /home/user/theater-command
+
+ ❯ tests/latin-76.test.ts (18 tests | 5 failed) 24015ms
+   ❯ Latin America is on the chart (9)
+     × is drawn after North America, whose provinces and seas keep their numbers 190ms
+     × has the great rivers, and railways only where history had laid them 184ms
+     × puts eighteen countries on it: six a player can take and twelve small republics 196ms
+     × passes the colonies of a fallen country into a sea power's keeping 243ms
+     × loads a campaign saved on the smaller chart of Versions 74 and 75 2698ms
+ ❯ tests/world-74.test.ts (19 tests | 2 failed) 9906ms
+   ❯ the wider world (13)
+     × has a sound chart: neighbours both ways, coasts on seas that know them, and every sea joined to the rest 242ms
+     × lays the railways and rivers of the new world beside Europe's, and Europe's as they were 194ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/latin-76.test.ts > Latin America is on the chart > is drawn after North America, whose provinces and seas keep their numbers
+AssertionError: expected [ 104, 201, 513, 880 ] to deeply equal [ 104 ]
+
+- Expected
++ Received
+
+  [
+    104,
++   201,
++   513,
++   880,
+  ]
+
+ ❯ tests/latin-76.test.ts:146:26
+    144|   it('is drawn after North America, whose provinces and seas keep thei…
+    145|     const g = wide();
+    146|     expect(WORLD_STAGES).toEqual([104]);
+       |                          ^
+    147|     expect(WORLD_REGIONS).toBe(201);
+    148|     expect(g.regions.length).toBe(WORLD_FIRST + 201);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/latin-76.test.ts > Latin America is on the chart > has the great rivers, and railways only where history had laid them
+AssertionError: expected null to be 'Amazon' // Object.is equality
+
+- Expected:
+"Amazon"
+
++ Received:
+null
+
+ ❯ tests/latin-76.test.ts:188:36
+    186|     const river = (a: string, b: string): string | null => { const c =…
+    187|     expect(river('Amazonas', 'Rio Negro')).toBe('Amazon');
+    188|     expect(river('Para', 'Amapa')).toBe('Amazon');
+       |                                    ^
+    189|     expect(river('Asuncion', 'Chaco Boreal')).toBe('Paraguay');
+    190|     expect(river('Rosario', 'Corrientes')).toBe('Parana');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/latin-76.test.ts > Latin America is on the chart > puts eighteen countries on it: six a player can take and twelve small republics
+AssertionError: expected [ 'CAN', 'MEX', 'CUB', 'BRA', …(30) ] to deeply equal [ 'CAN', 'MEX', 'CUB', 'BRA', …(17) ]
+
+- Expected
++ Received
+
+@@ -18,6 +18,19 @@
+    "DOM",
+    "ECU",
+    "BOL",
+    "PAR",
+    "URU",
++   "JAP",
++   "CHN",
++   "MAN",
++   "MGL",
++   "THA",
++   "AUS",
++   "NZL",
++   "SAF",
++   "SAU",
++   "YEM",
++   "AFG",
++   "NEP",
++   "LBR",
+  ]
+
+ ❯ tests/latin-76.test.ts:207:25
+    205|   it('puts eighteen countries on it: six a player can take and twelve …
+    206|     const g = wide();
+    207|     expect(WORLD.order).toEqual(['CAN', 'MEX', 'CUB', ...LATIN]);
+       |                         ^
+    208|     const list = (grandData as unknown as { nations: { id: string; sma…
+    209|     for (const id of LATIN) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/latin-76.test.ts > Latin America is on the chart > passes the colonies of a fallen country into a sea power's keeping
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/latin-76.test.ts:293:101
+    291|     capitulate(g, 'FRA', 'GER');
+    292|     expect(['Martinique', 'French Guiana'].map((n) => g.byName[n].ctrl…
+    293|     expect(g.headlines.some((h) => /Martinique and French Guiana into …
+       |                                                                                                     ^
+    294|   });
+    295|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/latin-76.test.ts > Latin America is on the chart > loads a campaign saved on the smaller chart of Versions 74 and 75
+AssertionError: expected [ 'DOM', 'ECU', 'BOL', 'PAR', …(14) ] to deeply equal [ 'BRA', 'ARG', 'CHL', 'PER', …(14) ]
+
+- Expected
++ Received
+
+  [
+-   "BRA",
+-   "ARG",
+-   "CHL",
+-   "PER",
+-   "COL",
+-   "VEN",
+-   "GUA",
+-   "ELS",
+-   "HON",
+-   "NIC",
+-   "COS",
+-   "PAN",
+-   "HAI",
+    "DOM",
+    "ECU",
+    "BOL",
+    "PAR",
+    "URU",
++   "JAP",
++   "CHN",
++   "MAN",
++   "MGL",
++   "THA",
++   "AUS",
++   "NZL",
++   "SAF",
++   "SAU",
++   "YEM",
++   "AFG",
++   "NEP",
++   "LBR",
+  ]
+
+ ❯ tests/latin-76.test.ts:361:42
+    359|     expect(l.turn).toBe(g.turn);
+    360|     // The new countries take their places in the order of play, each …
+    361|     expect(l.order.slice(-LATIN.length)).toEqual(LATIN);
+       |                                          ^
+    362|     for (const id of LATIN) expect(l.corps.filter((c) => c.nat === id)…
+    363|     expect(l.fleets.filter((f) => LATIN.includes(f.nat)).map((f) => f.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/world-74.test.ts > the wider world > has a sound chart: neighbours both ways, coasts on seas that know them, and every sea joined to the rest
+AssertionError: Kazan and Gorky: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/world-74.test.ts:92:71
+     90|         expect(g.regions[j].nb, `${r.name} and ${g.regions[j].name}`).…
+     91|         // No land joins the new world to the old.
+     92|         expect(beyondEurope(j), `${r.name} and ${g.regions[j].name}`).…
+       |                                                                       ^
+     93|       }
+     94|       for (const z of r.seas) expect(g.seas[z].coast, `${r.name} on th…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/world-74.test.ts > the wider world > lays the railways and rivers of the new world beside Europe's, and Europe's as they were
+AssertionError: expected [ 'Mississippi', 'Missouri', …(58) ] to deeply equal [ 'Mississippi', 'Missouri', …(13) ]
+
+- Expected
++ Received
+
+@@ -12,6 +12,51 @@
+    "Paraguay",
+    "Uruguay",
+    "Orinoco",
+    "Magdalena",
+    "Sao Francisco",
++   "Yangtze",
++   "Yellow River",
++   "Han",
++   "West River",
++   "Argun",
++   "Amur",
++   "Ussuri",
++   "Sungari",
++   "Liao",
++   "Yalu",
++   "Tumen",
++   "Red River",
++   "Mekong",
++   "Chao Phraya",
++   "Salween",
++   "Sittang",
++   "Irrawaddy",
++   "Chindwin",
++   "Lena",
++   "Yukon",
++   "Murray",
++   "Middle Volga",
++   "Lower Volga",
++   "Kama",
++   "Ural",
++   "Irtysh",
++   "Ob",
++   "Yenisei",
++   "Angara",
++   "Syr Darya",
++   "Amu Darya",
++   "Shatt al-Arab",
++   "Indus",
++   "Ganges",
++   "Brahmaputra",
++   "Upper Nile",
++   "White Nile",
++   "Blue Nile",
++   "Senegal",
++   "Niger",
++   "Congo",
++   "Ubangi",
++   "Zambezi",
++   "Limpopo",
++   "Orange",
+  ]
+
+ ❯ tests/world-74.test.ts:246:65
+    244|     expect(crossingsOf(g).slice(0, CROSSINGS.length)).toEqual(CROSSING…
+    245|     expect(riversOf(g).slice(0, RIVERS.length)).toEqual(RIVERS);
+    246|     expect(riversOf(g).slice(RIVERS.length).map((r) => r.name)).toEqua…
+       |                                                                 ^
+    247|       'Amazon', 'Madeira', 'Parana', 'Paraguay', 'Uruguay', 'Orinoco',…
+    248|     const id = (name: string): number => g.byName[name].id;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 30 passed (37)
+   Start at  15:19:35
+   Duration  56.35s (import 52%, tests 40%, transform 8%)
+

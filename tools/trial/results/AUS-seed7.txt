@@ -1,0 +1,58 @@
+=== AUS, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Australia (AUS), September 1939; part of the world: the Pacific; government: democracy; stands: allies; quality 0.9, air 6, resilience 0.9, sea lift 1
+  capital: Canberra (province 881, held by AUS)
+  provinces: holds 74, owns 74; at home 62, colonies 12; ports 42; factories 6; victory points 18; oilfields 0
+  seas it stands on: Gilbert Waters, Eastern Solomons, Solomon Sea, Bismarck Sea, Coral Sea, Timor Sea, Arafura Sea, West Australian Waters, Great Australian Bight, Tasman Sea
+  neighbours by land: NED
+  no way by land from the capital to: Nauru, Bougainville, Admiralty Islands, Port Moresby, Milne Bay, Buna, Lae, Madang, Wewak, Kerema, Rabaul, Cape Gloucester, Hobart, Launceston
+  army: 4 corps, 6 divisions on paper, 2.3 at strength
+    Eastern Command (1st and 2nd Divisions) [inf] 2 div at 40% in Sydney
+    Southern Command (3rd and 4th Divisions) [inf] 2 div at 40% in Melbourne
+    Northern Command [inf] 1 div at 40% in Brisbane
+    Western Command [inf] 1 div at 30% in Perth
+  fleets: Australian Fleet at Sydney (6 ca, 5 dd) in Tasman Sea
+  air groups: none
+  books (as the interface shows them, x100): income 2489.5 a month, upkeep 31.2, net 2458.3, treasury 0
+  at war with: GER; follows: UK; friends: NZL, UK
+  abilities: Wool and wheat; At home in rough country
+  paths: axis (no: You have given your word to the Allies.); allies (now); alone (no: An alliance, once joined, is not left.); found (no: You have given your word to the Allies.)
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 9; barred for another reason 11
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: The treasury cannot cover it.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: Needs an aircraft industry: a home province with 2 factories.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: Needs an aircraft industry: a home province with 3 factories.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 6 s
+--- month by month (the line is the day the player is up)
+  September 1939: order given: Engineer corps (1 division) for 1800, due in 3 months at Canberra; treasury 2430.7 -> 630.7; orders in hand 1
+  September 1939  alive  provinces  74  corps  4 (2.4 divs)  treasury   630.7  net   2458/month  allies  at war with: GER  [0 s]
+  October 1939    alive  provinces  74  corps  4 (2.4 divs)  treasury  3060.3  net 2457.7/month  allies  at war with: GER  [3 s]
+  November 1939   alive  provinces  74  corps  4 (2.5 divs)  treasury  5488.8  net 2457.5/month  allies  at war with: GER  [2 s]
+  December 1939   alive  provinces  74  corps  5 (3.6 divs)  treasury  7916.1  net 2452.2/month  allies  at war with: GER  [2 s]
+  January 1940    alive  provinces  74  corps  5 (3.7 divs)  treasury 10325.2  net 2451.7/month  allies  at war with: GER  [2 s]
+  February 1940   alive  provinces  74  corps  5 (3.8 divs)  treasury 12732.5  net 2451.3/month  allies  at war with: GER  [2 s]
+  March 1940      alive  provinces  74  corps  5 (3.9 divs)  treasury 15138.1  net 2450.8/month  allies  at war with: GER  [5 s]
+  April 1940      alive  provinces  74  corps  5 (4 divs)  treasury 17541.9  net 2450.4/month  allies  at war with: GER  [4 s]
+  May 1940        alive  provinces  74  corps  5 (4.2 divs)  treasury 19942.8  net 2448.9/month  allies  at war with: GER  [5 s]
+  June 1940       alive  provinces  74  corps  5 (4.3 divs)  treasury 22331.9  net 2438.5/month  allies  at war with: GER  [5 s]
+  July 1940       alive  provinces  74  corps  5 (4.4 divs)  treasury 24664.3  net 2383.3/month  allies  at war with: GER  [6 s]
+  August 1940     alive  provinces  74  corps  5 (4.5 divs)  treasury 26994.6  net 2382.8/month  allies  at war with: GER  [5 s]
+  September 1940  alive  provinces  74  corps  5 (4.7 divs)  treasury 29322.8  net 2382.2/month  allies  at war with: GER  (end)
+    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [note] saved at February 1940: 460 KB
+VERDICT AUS seed 7: PASS: started yes; order given (September 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 52 s

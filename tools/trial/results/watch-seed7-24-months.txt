@@ -1,0 +1,57 @@
+=== watch, seed 7, 24 months; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json; countries: SAF IRN IRQ SAU AFG YEM NEP LBR CHN AUS NZL THA MAN MGL
+--- SAF (South Africa)
+  September 1939: allies; provinces 24; corps 3; at war with GER
+  July 1940: at war with GER,ITA; news: South Africa is at war with Italy, beside United Kingdom.
+  September 1941  alive  provinces  24  corps  3 (2 divs)  treasury    9600  net 1538.5/month  allies  at war with: GER,ITA  (end)
+--- IRN (Iran)
+  September 1939: independent; provinces 23; corps 6; at war with none
+  September 1941  alive  provinces  23  corps  6 (9 divs)  treasury    4800  net  629.8/month  independent  at war with: none  (end)
+--- IRQ (Iraq)
+  September 1939: leaning_allies; provinces 4; corps 3; at war with none
+  September 1941  alive  provinces   4  corps  3 (4 divs)  treasury    4800  net    310/month  leaning_allies  at war with: none  (end)
+--- SAU (Saudi Arabia)
+  September 1939: independent; provinces 10; corps 2; at war with none
+  September 1941  alive  provinces  10  corps  2 (1.2 divs)  treasury    4800  net    364/month  independent  at war with: none  (end)
+--- AFG (Afghanistan)
+  September 1939: independent; provinces 7; corps 4; at war with none
+  September 1941  alive  provinces   7  corps  4 (4.5 divs)  treasury  3077.3  net  168.7/month  independent  at war with: none  (end)
+--- YEM (Yemen)
+  September 1939: independent; provinces 2; corps 1; at war with none
+  September 1941  alive  provinces   2  corps  1 (0.8 divs)  treasury  4001.4  net  178.5/month  independent  at war with: none  (end)
+--- NEP (Nepal)
+  September 1939: leaning_allies; provinces 1; corps 1; at war with none
+  September 1939: now allies; at war with GER; news: Nepal declares war on Germany and offers Britain battalions of its own army for the defence of India. | Nepal declares war on Germany.
+  September 1941  alive  provinces   1  corps  1 (1 divs)  treasury    5898  net  309.5/month  allies  at war with: GER  (end)
+--- LBR (Liberia)
+  September 1939: independent; provinces 2; corps 1; at war with none
+  September 1941  alive  provinces   2  corps  1 (0.3 divs)  treasury  4556.7  net  198.2/month  independent  at war with: none  (end)
+--- CHN (China)
+  September 1939: independent; provinces 66; corps 37; at war with JAP
+  September 1939: provinces 66 -> 88
+  October 1939: provinces 88 -> 97
+  March 1940: corps 37 -> 38
+  May 1940: corps 38 -> 39
+  August 1940: at war with none; news: China and Japan sign an armistice. Neither could come at the other, and their armies had not met for a year. Each keeps what it holds.
+  September 1941  alive  provinces  97  corps 39 (80 divs)  treasury    4800  net 1001.9/month  independent  at war with: none  (end)
+--- AUS (Australia)
+  September 1939: allies; provinces 74; corps 4; at war with GER
+  July 1940: at war with GER,ITA; news: Australia is at war with Italy, beside United Kingdom.
+  April 1941: corps 4 -> 5
+  September 1941  alive  provinces  74  corps  5 (8.1 divs)  treasury    9600  net 2703.4/month  allies  at war with: GER,ITA  (end)
+--- NZL (New Zealand)
+  September 1939: allies; provinces 7; corps 1; at war with GER
+  July 1940: at war with GER,ITA; news: New Zealand is at war with Italy, beside United Kingdom.
+  March 1941: news: Henry Maitland Wilson arrives in Thessaly with W Force (New Zealand Division and 1st Armoured Brigade).
+  September 1941  alive  provinces   7  corps  1 (0.9 divs)  treasury    9600  net  519.7/month  allies  at war with: GER,ITA  (end)
+--- THA (Thailand)
+  September 1939: independent; provinces 7; corps 4; at war with none
+  September 1941  alive  provinces   7  corps  4 (5 divs)  treasury    4800  net  260.7/month  independent  at war with: none  (end)
+--- MAN (Manchukuo)
+  September 1939: leaning_axis; provinces 24; corps 6; at war with none
+  September 1941  alive  provinces  24  corps  6 (5.1 divs)  treasury    4800  net  602.4/month  leaning_axis  at war with: none  (end)
+--- MGL (Mongolia)
+  September 1939: independent; provinces 9; corps 2; at war with none
+  September 1941  alive  provinces   9  corps  2 (2 divs)  treasury    4800  net  283.6/month  independent  at war with: none  (end)
+    [October 1939 after the month] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
+    [November 1940 after the month] [note] Norway fights on with its capital Oslo in GER hands
+VERDICT watch seed 7: PASS: months played 24; invariants broken 0; fallen among the watched: none; 41 s

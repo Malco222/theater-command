@@ -1,0 +1,8 @@
+VERDICT AFG seed 7: PASS: started yes; order given (January 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT IRN seed 7: PASS: started yes; order given (October 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT IRQ seed 7: PASS: started yes; order given (December 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT LBR seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT NEP seed 7: PASS: started yes; order given (April 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 37 s
+VERDICT SAF seed 7: PASS: started yes; order given (October 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT SAU seed 7: PASS: started yes; order given (November 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
+VERDICT YEM seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 36 s
