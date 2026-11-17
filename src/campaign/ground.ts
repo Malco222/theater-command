@@ -17,7 +17,7 @@ export const GROUND = groundData as unknown as {
   attack: ByKind;
   defence: ByKind;
   march: ByKind;
-  steep: { regions: string[]; barred: Kind[]; attack: Partial<Record<Kind, number>>; march: Partial<Record<Kind, number>> };
+  steep: { regions: string[]; world?: string[]; barred: Kind[]; attack: Partial<Record<Kind, number>>; march: Partial<Record<Kind, number>> };
   says: Record<Terrain | 'steep', string>;
   arms: {
     foot: Kind[]; perTank: number; infantry: number; armour: number; alone: Partial<Record<Terrain, number>>;
@@ -25,7 +25,7 @@ export const GROUND = groundData as unknown as {
   };
 };
 
-const STEEP = new Set(GROUND.steep.regions);
+const STEEP = new Set([...GROUND.steep.regions, ...(GROUND.steep.world ?? [])]);
 const BARRED = new Set<Kind>(GROUND.steep.barred);
 const FOOT = new Set<Kind>(GROUND.arms.foot);
 

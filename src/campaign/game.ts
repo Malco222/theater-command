@@ -446,8 +446,15 @@ export function fieldArmy(g: Game, nat: string): number {
   return s;
 }
 
-/** True where the desert's supply rules apply: desert ground, and the overseas coast that feeds it. */
-export const inDesert = (r: Region): boolean => r.overseas || r.terrain === DESERT.terrain;
+/**
+ * The Western Desert's own rules (desert.json: supply counted from the port, every bound shorter, no railway) are
+ * for the desert of the map of Europe alone. Desert ground on the wider world (ruling 212, the cities version) is the
+ * ground's own row: it moves, fights and digs in as desert, but its supply is counted as anywhere else, and a
+ * railway drawn across it runs. Keyed by the chart, so nothing on Europe's map moves.
+ */
+export const sandRules = (r: Region): boolean => r.terrain === DESERT.terrain && !beyondEurope(r);
+/** True where the desert's supply rules apply: the desert of Europe's map, and the overseas coast that feeds it. */
+export const inDesert = (r: Region): boolean => r.overseas || sandRules(r);
 
 export function industry(g: Game, nat: string): number {
   let s = 0;
@@ -480,7 +487,7 @@ export function frozen(g: Game, nat: string, r: Region): boolean {
  * the front through country already held is an ordinary march.
  */
 export function lineDrag(g: Game, c: Corps, to: Region): number {
-  if (to.terrain === DESERT.terrain) {
+  if (sandRules(to)) {
     // In the desert the same holds for everyone: the further from the port, the shorter each bound.
     if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
     ensureSupply(g);
@@ -647,7 +654,7 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
     const a = q[i];
     for (const j of g.regions[a].nb) {
       if (!ok[j]) continue;
-      const far = d[a] + (g.regions[j].terrain === DESERT.terrain ? DESERT.step : 0);
+      const far = d[a] + (sandRules(g.regions[j]) ? DESERT.step : 0);
       if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
     }
   }
@@ -2116,7 +2123,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; ends: number[] } {
   const out = new Set<number>();
   // No train leaves a province under siege, unless the army round the town holds a great junction outside it (prizes.ts).
-  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
+  if (c.kind === 'fort' || c.ap < 4 || sandRules(g.regions[c.reg]) || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
   const net = groundRules(g);
   if (net && railCut(g, c.reg)) return { out, through: [], ends: [] };
   const seen = new Uint8Array(g.regions.length);
@@ -2125,7 +2132,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
   for (let i = 0; i < q.length; i++) {
     for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
-      if (seen[j] || r.terrain === DESERT.terrain) continue;
+      if (seen[j] || sandRules(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       if (net && railCut(g, j)) {
@@ -2220,13 +2227,13 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
-  if (from.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  if (sandRules(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
-  if (dest.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
+  if (sandRules(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
   if (!allied(g, c.nat, dest.ctrl) && !junctionOpenTo(g, c.nat, dest)) return { code: 'foe', line: `${dest.name} is not in friendly hands. Trains run through friendly ground only.`, at: to };
   if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
@@ -2244,7 +2251,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   while (dq.length) {
     const a = dq.shift()!;
     for (const b of net ? railsAt(a) : g.regions[a].nb) {
-      if (g.regions[b].terrain === DESERT.terrain) continue;
+      if (sandRules(g.regions[b])) continue;
       const w = weigh(a, b);
       if (cost[a] + w >= cost[b]) continue;
       cost[b] = cost[a] + w; prev[b] = a;
@@ -2359,7 +2366,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       if (seen.has(j)) continue;
       seen.add(j);
       const r = g.regions[j];
-      if (r.terrain === DESERT.terrain) continue;
+      if (sandRules(r)) continue;
       const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;

@@ -12,7 +12,7 @@
 // cannot cross.
 
 import riverData from '../generated/campaign-rivers.json';
-import worldRivers from '../generated/world-rivers.json';
+import worldRivers from '../generated/world-americas-rivers.json';
 import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';

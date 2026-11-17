@@ -31,8 +31,8 @@
     "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 2,
     "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
     "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1,
-    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Kennebec": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
-    "Nova Scotia": 1, "Vancouver": 1,
+    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
+    "Nova Scotia": 1, "Vancouver": 1, "Esquimalt": 1,
     "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
   },
   "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
