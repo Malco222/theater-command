@@ -2,7 +2,8 @@
 //
 // One block is one division, named as the campaign's army tray names it (Brian's division cards, Version 46). A side
 // with fewer than six has some divisions split into their three regiments so there is something to handle (ruling
-// 217(c)); past twenty, divisions are folded two to a block. Each side's blocks share out exactly the power the
+// 217(c)), each drawn a third of a division's frontage; no division is ever folded into another (ruling 226(10)).
+// Each side's blocks share out exactly the power the
 // attack card counted (A and D), so the card's odds are the field's.
 
 import type { ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
@@ -19,6 +20,8 @@ export interface LandOrder {
   /** An attack by several blocks at one: this block's place across the attack, metres right of its middle, and the attack's bearing. */
   lane?: number;
   axis?: number;
+  /** Sent with others: when its block breaks or leaves, it carries the attack on to the nearest enemy still fighting. */
+  press?: boolean;
 }
 
 export interface LandUnit extends UnitBase {
@@ -55,10 +58,10 @@ export interface LandUnit extends UnitBase {
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const KIND_WORD: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain', cav: 'Cavalry', eng: 'Engineers', mot: 'Motorized', arm: 'Armoured', art: 'Artillery', fort: 'Fortress' };
 
-/** What one block carries of its force: whole divisions (one, or two folded together), or one regiment of a division. */
+/** What one block carries of its force: one whole division, or one of its regiments. */
 export interface BlockPart { divs: number[]; regiment?: number }
 
-/** How each force is cut into blocks: one a division, split or folded until the side has between 'least' and 'most'. */
+/** How each force is cut into blocks: one a division, split into regiments until the side has at least 'least'. */
 export function partsFor(forces: ForceTicket[]): BlockPart[][] {
   const B = LAND.blocks;
   const parts: BlockPart[][] = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
@@ -74,18 +77,6 @@ export function partsFor(forces: ForceTicket[]): BlockPart[][] {
     if (best < 0) break;
     const p = parts[best], j = p.findIndex((x) => x.regiment === undefined && x.divs.length === 1);
     p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
-  }
-  // The force with the most blocks folds two whole divisions together first.
-  while (total() > B.most) {
-    let best = -1;
-    parts.forEach((p, i) => { if (p.filter((x) => x.regiment === undefined && x.divs.length === 1).length >= 2 && (best < 0 || p.length > parts[best].length)) best = i; });
-    if (best < 0) break;
-    const p = parts[best];
-    const singles = p.map((x, k) => (x.regiment === undefined && x.divs.length === 1 ? k : -1)).filter((k) => k >= 0);
-    const [a, b] = singles.slice(-2);
-    const merged: BlockPart = { divs: [...p[a].divs, ...p[b].divs] };
-    p.splice(b, 1);
-    p[a] = merged;
   }
   return parts;
 }
@@ -119,7 +110,9 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         : ds.length === 1 ? ds[0].name : ds.map((d) => d.short).join(' and ');
       const short = p.regiment !== undefined ? `${ORD(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
       const parent = p.regiment !== undefined ? ds[0].short : f.name;
-      const [w, d] = LAND.size[k];
+      // Drawn to its weight: a regiment's frontage a third of its division's, so three read as one division cut in three.
+      const [w0, d] = LAND.size[k];
+      const w = p.regiment !== undefined ? Math.round(w0 / LAND.blocks.regiments) : w0;
       const full = LAND.figures[k];
       const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
       const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));

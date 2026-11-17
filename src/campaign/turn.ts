@@ -507,12 +507,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, split?: Record<number, number>): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
   // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
-  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought });
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(split ? { split } : {}) });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------

@@ -212,7 +212,7 @@ export type Command = CoreCommand | DomainCommand;
 export interface FieldEvent {
   t: number;
   /** The core's kinds; a domain may add its own as '<domain>:<kind>' ('sea:sunk', 'air:lost'). */
-  what: 'contact' | 'flanked' | 'wavering' | 'routing' | 'rallied' | 'gone' | 'withdrawn' | 'broken' | 'objective' | 'ability' | 'end' | `${Domain}:${string}`;
+  what: 'contact' | 'flanked' | 'wavering' | 'routing' | 'rallied' | 'gone' | 'withdrawn' | 'broken' | 'nearBreak' | 'objective' | 'ability' | 'end' | `${Domain}:${string}`;
   unit?: number;
   side?: Side;
   text: string;
@@ -260,6 +260,13 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   /** Which sides the computer is commanding. */
   ai: Record<Side, boolean>;
   over: FieldResult | null;
+  /**
+   * How near each army is to breaking, 0 to 1, for the army bars (ruling 226(3)); a domain without one leaves it out.
+   * The player's own army is warned at three quarters ('nearBreak').
+   */
+  breaking?: Record<Side, number>;
+  /** Battle time of the first contact between the lines, null before it: until then the screens may run the clock faster (ruling 226(1)). */
+  contact?: number | null;
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

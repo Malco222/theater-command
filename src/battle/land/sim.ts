@@ -34,6 +34,10 @@ export class LandBattle implements BattleSim<LandUnit> {
   private power: Record<Side, number>;
   private nextThink = 0;
   private broke: Record<Side, boolean> = { att: false, def: false };
+  /** When the first blow fell between the lines (guns firing from far back do not count): null until then. */
+  contactAt: number | null = null;
+  /** The player has been warned that their army is near breaking (ruling 226(3)). */
+  private warned: Record<Side, boolean> = { att: false, def: false };
 
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
@@ -59,6 +63,9 @@ export class LandBattle implements BattleSim<LandUnit> {
   }
 
   unit(id: number): LandUnit | undefined { return this.units.find((u) => u.id === id); }
+
+  /** A block's name in a dispatch: the side nobody plays carries its country, so it never reads like the player's own (ruling 226(7)). */
+  named(u: LandUnit): string { return this.ticket[u.side].human ? u.name : `${this.ticket[u.side].adj} ${u.name}`; }
 
   // ---- Orders -----------------------------------------------------------------------------------------------------
 
@@ -96,7 +103,19 @@ export class LandBattle implements BattleSim<LandUnit> {
         const [rx, ry] = ahead(axis + Math.PI / 2);
         const across = [...us].sort((a, b) => (a.x - cx) * rx + (a.y - cy) * ry - ((b.x - cx) * rx + (b.y - cy) * ry));
         const step = across.reduce((s, u) => s + u.w, 0) / across.length + 30;
-        across.forEach((u, i) => this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, ...(us.length > 1 ? { lane: (i - (us.length - 1) / 2) * step, axis } : {}) }));
+        // A lane that runs past the target's flank takes the enemy block nearest it in that lane instead, so a whole
+        // army sent at one block falls on their line there, block against block (the computer general's own way),
+        // and never crowds one block while its neighbours take the attack in the flank (ruling 226(4)).
+        const foes = this.units.filter((e) => e.side !== by && fighting(e));
+        across.forEach((u, i) => {
+          const lane = (i - (us.length - 1) / 2) * step;
+          if (us.length > 1 && Math.abs(lane) > t.w / 2 + u.w / 2) {
+            const px = t.x + rx * lane, py = t.y + ry * lane;
+            const e = foes.reduce((m, f) => (dist(f.x, f.y, px, py) < dist(m.x, m.y, px, py) ? f : m), t);
+            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true }); return; }
+          }
+          this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}) });
+        });
         return true;
       }
       case 'hold': {
@@ -178,7 +197,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       const t = this.targetOf(u);
       u.engaged = t?.id;
       if (!t) continue;
-      if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${u.name} is in action.`, x: u.x, y: u.y }); }
+      if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
+      if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0 };
       h.dmg += blow.dmg; h.nerve += blow.nerve;
@@ -186,7 +206,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (blow.front) t.pinned = true;
       if (blow.aspect !== 'front' && this.t - t.flankedAt > 20) {
         t.flankedAt = this.t;
-        if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${t.name} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
+        if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve);
@@ -300,7 +320,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.clear > N.quiet) u.mor = Math.min(u.mor0, u.mor + N.runnerRecover * DT);
       if (!this.broke[u.side] && u.clear > N.quiet && u.mor >= N.rally && u.str > N.shattered) {
         u.state = 'wavering'; u.order = null; u.path = []; u.act = 'idle';
-        this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${u.name} has rallied.`, x: u.x, y: u.y });
+        this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${this.named(u)} has rallied.`, x: u.x, y: u.y });
       }
       return;
     }
@@ -308,13 +328,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.str <= N.shattered * u.str0 || u.mor < N.rout) { this.rout(u); return; }
     const was = u.state;
     u.state = u.mor < N.waver ? 'wavering' : 'steady';
-    if (was === 'steady' && u.state === 'wavering') this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${u.name} is wavering.`, x: u.x, y: u.y });
+    if (was === 'steady' && u.state === 'wavering') this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${this.named(u)} is wavering.`, x: u.x, y: u.y });
   }
 
   private rout(u: LandUnit): void {
     if (u.state === 'routing') return;
     u.state = 'routing'; u.order = null; u.path = []; u.keepFace = null; u.engaged = undefined;
-    this.say({ what: 'routing', unit: u.id, side: u.side, text: `${u.name} breaks and runs.`, x: u.x, y: u.y });
+    this.say({ what: 'routing', unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
     // Friends nearby see it go.
     for (const f of this.units) if (f !== u && f.side === u.side && fighting(f) && dist(f.x, f.y, u.x, u.y) < LAND.nerve.near) f.mor = Math.max(0, f.mor - LAND.nerve.friendRuns);
   }
@@ -325,7 +345,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') { to = [u.x, u.order.y]; }
     else if (u.order?.kind === 'attack') {
-      const t = this.unit(u.order.target!);
+      let t = this.unit(u.order.target!);
+      // An attack pressed by several blocks carries on: when its block breaks or leaves, it takes the nearest enemy
+      // still fighting within reach of the march, as the computer general would (ruling 226(4)).
+      if (u.order.press && t && !fighting(t) && !this.ai[u.side]) {
+        const next = this.units.filter((e) => e.side !== u.side && fighting(e) && dist(e.x, e.y, u.x, u.y) < LAND.press)
+          .reduce<LandUnit | null>((m, e) => (!m || dist(e.x, e.y, u.x, u.y) < dist(m.x, m.y, u.x, u.y) ? e : m), null);
+        if (next) { this.send(u, { kind: 'attack', x: next.x, y: next.y, target: next.id, press: true }); t = next; }
+      }
       if (!t || !live(t)) { u.order = null; u.path = []; }
       else {
         // Close until it is well in reach, then stand and fight.
@@ -397,14 +424,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.y < 0 || u.y > this.field.h) {
       if (u.state === 'routing') {
         u.state = 'gone'; u.act = 'down'; u.figures = 0;
-        this.say({ what: 'gone', unit: u.id, side: u.side, text: `${u.name} has fled the field.` });
+        this.say({ what: 'gone', unit: u.id, side: u.side, text: `${this.named(u)} has fled the field.` });
       } else if (u.order?.kind === 'withdraw') {
         u.state = 'withdrawn'; u.act = 'down';
-        this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${u.name} has withdrawn.` });
+        this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has withdrawn.` });
       }
     } else if (u.order?.kind === 'withdraw' && (u.side === 'att' ? u.y <= 6 : u.y >= this.field.h - 6)) {
       u.state = 'withdrawn'; u.act = 'down';
-      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${u.name} has withdrawn.` });
+      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has withdrawn.` });
     }
   }
 
@@ -457,13 +484,39 @@ export class LandBattle implements BattleSim<LandUnit> {
     return worn / this.power[s];
   }
 
+  /**
+   * How near an army is to breaking, 0 to 1: its whole worn state weighted by strength against what an army of its
+   * side will stand (LAND.spent), or half its power running, whichever is nearer. One block running counts only its
+   * own share, so it never takes the army with it while the rest is fresh (ruling 226(2)). The army bar shows this.
+   */
+  breaking(s: Side): number {
+    const worn = this.wornShare(s) / LAND.spent[s];
+    // Worn past what it will stand, it still holds while most of it has not been in the fight: the bar waits at the brink.
+    const held = worn >= 1 && this.foughtShare(s) < LAND.fought ? 0.99 : 1;
+    return Math.min(held, Math.max(this.brokenShare(s) / LAND.breaks, worn));
+  }
+
+  /** The share of a side's power that has been in the fight: struck a blow, or been worn by one. */
+  private foughtShare(s: Side): number {
+    let n = 0;
+    for (const u of this.units) if (u.side === s && (u.met || u.str < u.str0 * 0.97 || !fighting(u))) n += u.power0;
+    return n / this.power[s];
+  }
+
   private judge(): void {
     for (const s of ['att', 'def'] as Side[]) {
       const left = this.units.filter((u) => u.side === s && fighting(u));
       if (!left.length) { this.finish(other(s), this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed'); return; }
+      const near = this.breaking(s);
+      // At three quarters, a line each army's way (the UI director's words for ruling 226(3)): the player's own in amber
+      // on the page, the other's one dispatch. With nobody playing, nothing is said.
+      if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
+        this.warned[s] = true;
+        this.say({ what: 'nearBreak', side: s, text: this.ticket[s].human ? 'Your army is near breaking: pull back the worn, or hand it to the staff.' : `The ${this.ticket[s].adj} army is near breaking.` });
+      }
       // An army breaks when half its power is running or gone, or when it has bled as much as an army of its side
       // will stand (LAND.spent): so a battle fought out costs about what the campaign bills for its result (b356).
-      if (this.brokenShare(s) >= LAND.breaks || this.wornShare(s) >= LAND.spent[s]) {
+      if (near >= 1) {
         this.broke[s] = true;
         for (const u of left) this.rout(u);
         this.say({ what: 'broken', side: s, text: `The ${this.ticket[s].adj} army breaks.` });
@@ -503,11 +556,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
     const pct = (p: number): string => (p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
     const lines = [
-      how === 'rout' ? `The ${winner === 'att' ? D : A} army broke after ${Math.round(this.t / 60)} minutes.`
+      how === 'rout' ? this.brokeAfter(winner === 'att' ? D : A)
         : how === 'withdrew' ? `The ${winner === 'att' ? D : A} army withdrew from the field.`
           : how === 'time' ? `The ${D} line held until the day was done.`
             : how === 'destroyed' ? `The ${winner === 'att' ? D : A} army was driven from the field.`
-              : `The staff settled the rest of the attack on ${this.ticket.place.town ?? this.ticket.place.name} from where it stood: what you had won stays won.`,
+              : this.staffLine(),
       // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
       // campaign's bill for the whole day (the design director, b356).
       how === 'objective'
@@ -525,14 +578,50 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.say({ what: 'end', text: lines[0] });
   }
 
+  /**
+   * The staff's line, in its three forms (the UI director's words for ruling 226(5)): before any contact, the whole
+   * attack; after it, the rest, and "what you had won stays won" only where the field had moved the player's way from
+   * where the card put it.
+   */
+  private staffLine(): string {
+    const where = this.ticket.place.name;
+    if (this.contactAt === null) return `The staff settled the whole attack on ${where}: no shot had been fired.`;
+    const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
+    const bal = this.standing(), tot = this.power.att + this.power.def;
+    const moved = (bal[me] / Math.max(1e-9, bal.att + bal.def)) > this.power[me] / tot + 1e-6;
+    return `The staff settled the rest of the attack on ${where} from where it stood${moved ? ': what you had won stays won' : ''}.`;
+  }
+
+  /** How long it broke after, counted from the first contact (ruling 226(6), the UI director's words). */
+  private brokeAfter(who: string): string {
+    const m = Math.round((this.t - (this.contactAt ?? this.t)) / 60);
+    return m < 1 ? `The ${who} army broke within a minute of the first shots.` : m === 1 ? `The ${who} army broke after a minute of fighting.` : `The ${who} army broke after ${m} minutes of fighting.`;
+  }
+
+  /** Each side's standing power against what it brought, as the staff reckons the day now. */
+  private standingShares(): Record<Side, number> {
+    const st = this.standing(), tot = this.power.att + this.power.def;
+    return { att: st.att / (this.power.att / tot), def: st.def / (this.power.def / tot) };
+  }
+
+  /**
+   * The staff's chance now that the attack carries the ground, were the battle handed to them this moment: the dice's
+   * own chance at the ratio standing, held to their run at the card's odds (what toDice would roll). For HAND IT TO THE
+   * STAFF's question (ruling 226(5)).
+   */
+  chanceNow(): number {
+    const k = this.ticket.reckoning, sh = this.standingShares();
+    if (k.odds * k.dice[0] >= RATIO.carry) return 1;
+    if (k.odds * k.dice[1] < RATIO.carry) return 0;
+    const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
+    return Math.max(0, Math.min(1, (k.dice[1] - RATIO.carry / Math.max(1e-6, now)) / (k.dice[1] - k.dice[0])));
+  }
+
   /** Hand it to the staff (ruling 217(4), the button named in b348): the rest is rolled on the dice, at the ratio then standing. */
   toDice(): void {
     if (this.over) return;
     const k = this.ticket.reckoning;
-    const st = this.standing();
-    const tot = this.power.att + this.power.def;
-    const share = { att: st.att / (this.power.att / tot), def: st.def / (this.power.def / tot) };
-    const R = diceNow(k.odds, k.dice, share, this.rng.next());
+    const R = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
     this.finish(R >= RATIO.carry ? 'att' : 'def', 'objective', R);
   }
 
@@ -540,7 +629,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight in the first slice. TODO(polish): fog of war on the field.
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
   }
 }
 

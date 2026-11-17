@@ -56,7 +56,7 @@ export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket
   const date = turnToDate(g.turn);
   return {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
-    turn: g.turn, date: date.label, title: `The Battle of ${townName(target)}`, place,
+    turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
     att: sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk),
     def: sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))),
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice) },
@@ -66,7 +66,10 @@ export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */
 export function handBack(g: Game, corps: Corps[], target: Region, result: FieldResult): BattleReport | null {
-  return orderAttack(g, corps, target, result.R);
+  // Each corps' bill falls as the field had it (ruling 226(6)): its own share lost on the field.
+  const split: Record<number, number> = {};
+  for (const f of result.forces ?? []) split[f.corps] = f.lost;
+  return orderAttack(g, corps, target, result.R, split);
 }
 
 /** The odds the campaign would give this attack now, for a check that nothing moved between the ticket and the hand-back. */
