@@ -62,8 +62,12 @@ world, 45-word texts, rows of words). The Pacific's six are the first run's.
 **The globe's own test file** runs its second half only where the seats are in the data. On this branch:
 
 ```
-TC_SEATS=/mnt/project-files/far-side-seats/globe/globe-seats.json npx vitest run tests/far-seats-globe.test.ts   # 13 pass
+TC_SEATS=/mnt/project-files/far-side-seats/globe/globe-seats.json npx vitest run tests/far-seats-globe.test.ts --fsModuleCache=false   # 13 pass
 ```
+
+Pass `--fsModuleCache=false` whenever a seats file has changed: the test runner keeps the transformed data files in
+`node_modules/.vitest-cache`, its key does not know the overlay, and a `TC_SEATS` run otherwise still sees the
+earlier merge (found by the Pacific seat builder, 17 November).
 
 On `main` as it stands (the two new files alone: `data/campaign/far-seats-globe.json`, `tests/far-seats-globe.test.ts`)
 9 pass and 4 are skipped until the rows are lifted into `world.json`. Those two files are the only ones on this
