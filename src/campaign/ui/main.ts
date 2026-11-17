@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, whyNotOrderGarrison, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -8524,7 +8524,13 @@ function onClick(e: MouseEvent): void {
       ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
       if (rep) {
         ui.seenReports = g.reports.length;
-        if (rep.taken) { ui.sel = target.id; ui.picked = new Set(target.units.filter((c) => canOrder(g, c) && c.ap > 0).map((c) => c.id)); }
+        if (rep.taken) {
+          // The army that won stays in hand, spent or not, as a click on it would pick it up: a press on the next
+          // enemy then answers. (Before Version 84.2.4 a spent winner dropped out of hand and a right-click said nothing.)
+          const own = target.units.filter((c) => canOrder(g, c)), fresh = own.filter((c) => c.ap > 0);
+          ui.sel = target.id;
+          ui.picked = new Set((fresh.length ? fresh : own.filter((c) => c.kind !== 'fort')).map((c) => c.id));
+        }
         refresh();
         openModal({ kind: 'report', id: rep.id });
       } else openModal(null);
@@ -8693,11 +8699,11 @@ function sallyAt(id: number): boolean {
 function insideInHand(): string {
   if (ui.sel < 0 || !g.human || !humanUp(g) || ui.tab !== 'region' || heldCorps().length) return '';
   const r = g.regions[ui.sel];
-  if (!myGarrison(g, ui.sel).length || r.units.some((c) => c.nat === g.human && !c.dead)) return '';
-  const town = townName(r);
-  return besiegers(g, r).length
-    ? `Your corps in ${town} are shut in by the army round it. ${fingers() ? 'Press and hold' : 'Right-click'} that army to plan a sortie.`
-    : `Your corps in ${town} are inside the town. TAKE THE FIELD, on the page of ${town}, brings a corps out to march and fight like any army.`;
+  if (r.units.some((c) => c.nat === g.human && !c.dead)) return '';
+  // (The rules' sentence, the same in both games; the page adds where the order is found.)
+  const line = whyNotOrderGarrison(g, ui.sel);
+  if (!line) return '';
+  return besiegers(g, r).length ? `${line} ${fingers() ? 'Press and hold' : 'Right-click'} that army to plan it.` : `${line} TAKE THE FIELD is on the page of ${townName(r)}.`;
 }
 /** A right-click away from a town whose corps are all inside it: the line above, said. True if it was. */
 function insideSaid(id: number): boolean {
@@ -8894,8 +8900,27 @@ function wireMap(): void {
     // (A mark that takes the pointer, an airfield's pad or a city's badge, stands on a province: an order given
     // on it is for the ground under it. Before Version 84.2.3 a right-click there was lost.)
     const el = (document.elementFromPoint(x, y)?.closest('.reg') ?? document.elementsFromPoint(x, y).find((n) => n.classList.contains('reg'))) as HTMLElement | null | undefined;
-    return el ? Number(el.dataset.id) : -1;
+    return el ? Number(el.dataset.id) : flagFirst() ? flagAt(x, y) : -1;
   };
+  /**
+   * The province of the army whose flag is drawn at a point of the screen, or -1. Army pieces take no pointer (the
+   * ground under them does), but a flag is drawn over an airfield's pad and may stand out over a neighbour's pad or
+   * the sea: there the flag is what the player sees and presses, so it takes the click (Version 84.2.4, the second
+   * playtester's find: a click on the army in the Canal Zone opened Panama City's airfield).
+   */
+  const flagAt = (x: number, y: number): number => {
+    const flags = [...document.querySelectorAll<SVGGElement>('#units .army')].reverse();
+    for (const f of flags) {
+      if (f.style.visibility === 'hidden') continue;
+      const m = f.getScreenCTM();
+      if (!m) continue;
+      const p = new DOMPoint(x, y).matrixTransform(m.inverse());
+      if (p.x >= -0.6 && p.x <= 22.6 && p.y >= -0.6 && p.y <= 17.6) return Number(f.dataset.reg);
+    }
+    return -1;
+  };
+  /** The flag comes first except on the Air and Navy pages, where the pads and the sea are what is being worked. */
+  const flagFirst = (): boolean => ui.tab !== 'air' && ui.tab !== 'navy';
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
@@ -8964,7 +8989,7 @@ function wireMap(): void {
       }
       const who = leaderOf(cs);
       const guests = [...new Set(cs.filter((c) => c.nat !== nat).map((c) => g.nations[c.nat].adj))];
-      return `<br>${esc(g.nations[nat].adj)} army${who ? ` under ${esc(surname(who.name))}` : ''}: ${cs.length} corps, ${num(sumDivs(cs))} divisions${guests.length ? ` <span class="tipgo">· joint army with ${esc(guests.join(' and '))} troops</span>` : ''}`;
+      return `<br>${esc(g.nations[nat].adj)} army${who ? ` under ${esc(surname(who.name))}` : ''}: ${cs.length} corps, ${rollDivs(cs)} division${rollDivs(cs) === 1 ? '' : 's'} at ${Math.round(fitness(cs) * 100)}% strength${guests.length ? ` <span class="tipgo">· joint army with ${esc(guests.join(' and '))} troops</span>` : ''}`;
     }).join('') + (fogOn(g) && seen[r.id] === 0 ? '<br><span class="tipfog">Unseen ground: nothing is known of what stands here</span>' : '');
     const way = routeShown === r.id ? routeTo(r.id) : null;
     // (No road this month: the march that would be kept there for the army in hand, or why none can be.)
@@ -9028,6 +9053,7 @@ function wireMap(): void {
         if (ui.tab === 'navy' && myFleet() && z >= 0) onSea(z);
         else askGate(Number(el.dataset.id));
       }
+      else if (el && el.classList.contains('afm') && flagFirst() && flagAt(e.clientX, e.clientY) >= 0) onRegion(flagAt(e.clientX, e.clientY));
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
         const id = Number(el.dataset.id);
@@ -9039,7 +9065,9 @@ function wireMap(): void {
       else if (!el) {
         const p = mapPoint(e.clientX, e.clientY);
         const z = seaAt(p.x, p.y, g);
-        if (z >= 0) onSea(z);
+        const flag = flagFirst() ? flagAt(e.clientX, e.clientY) : -1;
+        if (flag >= 0) onRegion(flag);
+        else if (z >= 0) onSea(z);
       }
     }
     if (pts.size === 0) start = null;

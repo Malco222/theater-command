@@ -37,6 +37,7 @@
  *   advanceMarches(g)        as the player's month opens
  */
 import { hashString } from '../core/rng';
+import { garrisonLine } from './armies';
 import { allied, atWar, headline, moveCost } from './game';
 import { blocked } from './rivers';
 import { canOrder, humanUp, onEve, orderMove, reach, sight } from './turn';
@@ -163,6 +164,8 @@ export function whyNotMarch(g: Game, c: Corps, to: number): string {
   const r = g.regions[to];
   if (!r || !g.human || !humanUp(g)) return 'No orders can be given now.';
   if (!canOrder(g, c)) return `${c.name} takes no orders this month.`;
+  // A corps inside a town never has a move, so a march kept for it would never set off (Version 84.2.4): it is told to take the field.
+  if (c.town !== undefined) return garrisonLine(g, [c]);
   if (onEve(g)) return 'On the eve of war every army stays where it is placed.';
   if (to === c.reg) return `${c.name} is there already.`;
   if (atWar(g, c.nat, r.ctrl)) return c.ap > 0 ? 'A march is never kept onto enemy ground: an attack is planned in the month it is made, with the odds in front of you.' : 'No moves left this month. An attack is planned in the month it is made.';
