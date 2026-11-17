@@ -3602,6 +3602,7 @@ namespace
 					AlarmStyle.SetDisabled(FSlateRoundedBoxBrush(AlarmGround, 2.0f, Alarm, 1.0f));
 					AlarmStyle.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
 					AlarmEdgeBrush = FSlateRoundedBoxBrush(Alarm, FVector4(2.0f, 0.0f, 0.0f, 2.0f));
+					AlarmGroundBrush = FSlateRoundedBoxBrush(AlarmGround, 2.0f, Alarm, 1.0f);
 					AlarmCountBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, FLinearColor(FColor::FromHex(TEXT("E2D7BC"))).CopyWithNewOpacity(0.6f), 1.0f);
 				}
 				RearChipBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2E241A"))).CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("6F5D38"))), 1.0f);
@@ -4123,6 +4124,15 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
 							MakeAlarm()
+						]
+						// (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's own row, in the rules' words.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeGunsAlone(0)
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeGunsAlone(1)
 						]
 						// And the rest of it: a general with no command, a design team with no work, nothing on order.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -10873,6 +10883,45 @@ namespace
 				]);
 		}
 
+		/**
+		 * (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own
+		 * row, in the rules' sentence. Red, in the alarm's dress, while infantry or tanks of his can reach the town this month;
+		 * plain where none can. A press centres the town.
+		 */
+		TSharedRef<SWidget> MakeGunsAlone(int32 Index)
+		{
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			const FLinearColor Paper100(FColor::FromHex(TEXT("EDE6D6")));
+			auto Red = [this, Index]() { const FGunsAlone* Row = Controller.IsValid() ? Controller->GetGunsAlone(Index) : nullptr; return Row && Row->bRed; };
+			return Chip(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f)).WidthOverride(320.0f)
+				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetGunsAlone(Index) ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressGunsAlone(Index); } return FReply::Handled(); })
+					[
+						// (the red row's block where the cure is in his hands; the tray's plain leather where it is not)
+						SNew(SBorder).Padding(FMargin(0.0f))
+						.BorderImage_Lambda([this, Red]() -> const FSlateBrush* { return Red() ? &AlarmGroundBrush : &PromptStyle.Normal; })
+						[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(5.0f).Visibility_Lambda([Red]() { return Red() ? EVisibility::Visible : EVisibility::Hidden; })
+							[
+								SNew(SBorder).BorderImage(&AlarmEdgeBrush)
+							]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(10.0f, 7.0f, 12.0f, 8.0f)
+						[
+							SNew(STextBlock).Font(Serif(TEXT("Regular"), Px(13.0f))).AutoWrapText(true).LineHeightPercentage(1.15f)
+							.ColorAndOpacity_Lambda([Red, Paper100]() { return FSlateColor(Red() ? Paper100 : Muted); })
+							.Text_Lambda([this, Index]() { const FGunsAlone* Row = Controller.IsValid() ? Controller->GetGunsAlone(Index) : nullptr; return FText::FromString(Row ? Row->Line : FString()); })
+						]
+						]
+					]
+				]);
+		}
+
 		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
@@ -12092,6 +12141,7 @@ namespace
 		FButtonStyle NoButton; // (ruling 101) a button that is only what it holds: the quiet chip
 		FButtonStyle AlarmStyle; // (rules 84.2.6, sheet 35) the alarm's red row: a block on #1d0f0c with a 1px edge in the alarm's red
 		FSlateBrush AlarmEdgeBrush, AlarmCountBrush; // and its 5px left edge, and the small box round its "1 of 3"
+		FSlateBrush AlarmGroundBrush; // (rules 84.2.6) the same block, for a row that is pressed through a plain button
 		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;

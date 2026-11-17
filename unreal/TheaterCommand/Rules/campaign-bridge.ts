@@ -569,6 +569,8 @@ function view() {
     todo: todoOf(s),
     // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
     alarms: alarmsOf(s),
+    // (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's row in the rules' words. Empty until the rules have it.
+    alone: gunsAloneOf(s),
     // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
     // (release 1) What each arm is, for the bigger unit card.
@@ -1242,8 +1244,11 @@ function leadOf(ids: number[], to: number) {
 // One rules reading that both games draw: homeAlarms(g, nat) in danger.ts, nearest his capital first, each with the
 // row's three sentences (the second left out where nothing of his is in reach) and where the nearest help stands. Read
 // by name, so the 3D game shows nothing until the rules that have it are bundled.
-interface HomeAlarmRule { case: string; region: number; by: string; reach: number[]; help: { region: number; months: number; rail: boolean } | null; raise: number; lines: string[]; hand?: string }
-const alarmRule = ((dangerRules as unknown as Record<string, unknown>)['homeAlarms'] ?? rulesByName['homeAlarms']) as ((g: Game, nat: string) => HomeAlarmRule[]) | undefined;
+// (The rules builder, 17 November: each alarm carries `hand`, the paper's line, '' where no army can come; and its
+// help carries `to`, the province to right-click, and `corps`, what a press picks up.)
+interface HomeAlarmRule { case: string; region: number; by: string; reach: number[]; help: { region: number; months: number; rail: boolean; to?: number; corps?: number[] } | null; raise: number; lines: string[]; hand?: string }
+const dangerByName: Record<string, unknown> = { ...dangerRules };
+const alarmRule = (dangerByName['homeAlarms'] ?? rulesByName['homeAlarms']) as ((g: Game, nat: string) => HomeAlarmRule[]) | undefined;
 function alarmsOf(s: Game) {
   if (!alarmRule || !s.human || !humanUp(s)) return [];
   let all: HomeAlarmRule[] = [];
@@ -1251,15 +1256,24 @@ function alarmsOf(s: Game) {
   return all.map((a) => {
     const lines = (a.lines ?? []).filter((t) => !!t);
     const place = s.regions[a.region]?.name ?? '';
-    // The paper's line after a press (the words of ruling 211, section 1): the rules' own where they give one; else the
-    // passed sentence, naming the army exactly as the row's help sentence names it.
+    // The paper's line after a press (the words of ruling 211, section 1): the rules' own. (Only a reading from before
+    // they gave one has it made here, naming the army exactly as the row's help sentence names it.)
     let hand = a.hand ?? '';
-    if (!hand && a.help && place) {
+    if (a.hand === undefined && a.help && place) {
       const named = /^Nearest help: (.+?), (?:in reach this month|\d+ months? by \w+)\.$/.exec(lines[lines.length - 1] ?? '');
       if (named) hand = `${named[1][0].toUpperCase()}${named[1].slice(1)} is in hand. Right-click ${place} to send it.`;
     }
-    return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, hand };
+    return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, pick: a.help?.corps ?? [], to: a.help?.to ?? a.region, hand };
   });
+}
+
+// (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own row
+// in the tray, red while the cure is in his hands, plain where nothing of his can reach them. A press centres the town.
+interface GunsAloneRule { region: number; what: string; red: boolean; line: string }
+const aloneRule = (dangerByName['gunsAlone'] ?? rulesByName['gunsAlone']) as ((g: Game, nat: string) => GunsAloneRule[]) | undefined;
+function gunsAloneOf(s: Game) {
+  if (!aloneRule || !s.human || !humanUp(s)) return [];
+  try { return (aloneRule(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? '', red: !!a.red, line: a.line })); } catch { return []; }
 }
 
 // ---- Crossing a defended sea (Version 72) ---------------------------------------------------------
@@ -3517,7 +3531,9 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
   // Sieges: a town of the player's shut in, and towns his armies stand round.
   try {
     const all = siegesInSight(s).filter((v) => v.by);
-    const mine = all.filter((v) => v.holder === me.id), theirs = all.filter((v) => v.by === me.id);
+    // (Rules 84.2.6.) A siege whose guns are left alone has its own row, in the rules' words: it is not said twice.
+    const lone = new Set(gunsAloneOf(s).map((a) => a.region));
+    const mine = all.filter((v) => v.holder === me.id), theirs = all.filter((v) => v.by === me.id && !lone.has(v.region));
     if (mine.length) out.push({ k: `goto:${mine[0].region}`, t: mine.length === 1 ? `${mine[0].town.toUpperCase()} IS BESIEGED` : `${mine.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine.map((v) => v.town).slice(0, 4).join(', ')}: ${mine[0].lines[mine[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
     if (theirs.length) out.push({ k: `goto:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: pick the province and look under ORDERS.` });
   } catch { /* a campaign from history has no sieges */ }

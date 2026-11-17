@@ -28375,6 +28375,17 @@
   }
 
   // ../../src/campaign/danger.ts
+  var danger_exports = {};
+  __export(danger_exports, {
+    CAPITAL_BESIEGED: () => CAPITAL_BESIEGED,
+    IN_DANGER: () => IN_DANGER,
+    REACH_AT: () => REACH_AT,
+    armyWords: () => armyWords,
+    fallWarning: () => fallWarning,
+    reading: () => reading,
+    standing: () => standing3,
+    withinReach: () => withinReach
+  });
   var IN_DANGER = "The country in danger";
   var CAPITAL_BESIEGED = "It is your capital: the country will not long outlast it.";
   var REACH_AT = 2 / 3;
@@ -30954,6 +30965,8 @@
       todo: todoOf(s),
       // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
       alarms: alarmsOf(s),
+      // (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's row in the rules' words. Empty until the rules have it.
+      alone: gunsAloneOf(s),
       // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
       // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
       // (release 1) What each arm is, for the bigger unit card.
@@ -31625,7 +31638,8 @@
     const s = game();
     return { why: s.regions[to] ? leadWhy(s, corpsById(s, ids2), to) : "" };
   }
-  var alarmRule = void 0 ?? rulesByName["homeAlarms"];
+  var dangerByName = { ...danger_exports };
+  var alarmRule = dangerByName["homeAlarms"] ?? rulesByName["homeAlarms"];
   function alarmsOf(s) {
     if (!alarmRule || !s.human || !humanUp(s)) return [];
     let all = [];
@@ -31638,12 +31652,21 @@
       const lines = (a.lines ?? []).filter((t) => !!t);
       const place2 = s.regions[a.region]?.name ?? "";
       let hand = a.hand ?? "";
-      if (!hand && a.help && place2) {
+      if (a.hand === void 0 && a.help && place2) {
         const named2 = /^Nearest help: (.+?), (?:in reach this month|\d+ months? by \w+)\.$/.exec(lines[lines.length - 1] ?? "");
         if (named2) hand = `${named2[1][0].toUpperCase()}${named2[1].slice(1)} is in hand. Right-click ${place2} to send it.`;
       }
-      return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, hand };
+      return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, pick: a.help?.corps ?? [], to: a.help?.to ?? a.region, hand };
     });
+  }
+  var aloneRule = dangerByName["gunsAlone"] ?? rulesByName["gunsAlone"];
+  function gunsAloneOf(s) {
+    if (!aloneRule || !s.human || !humanUp(s)) return [];
+    try {
+      return (aloneRule(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? "", red: !!a.red, line: a.line }));
+    } catch {
+      return [];
+    }
   }
   var seaCalls = {
     crossings: rulesByName["crossings"],
@@ -33835,7 +33858,8 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     try {
       const all = siegesInSight(s).filter((v) => v.by);
-      const mine3 = all.filter((v) => v.holder === me.id), theirs2 = all.filter((v) => v.by === me.id);
+      const lone = new Set(gunsAloneOf(s).map((a) => a.region));
+      const mine3 = all.filter((v) => v.holder === me.id), theirs2 = all.filter((v) => v.by === me.id && !lone.has(v.region));
       if (mine3.length) out.push({ k: `goto:${mine3[0].region}`, t: mine3.length === 1 ? `${mine3[0].town.toUpperCase()} IS BESIEGED` : `${mine3.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine3.map((v) => v.town).slice(0, 4).join(", ")}: ${mine3[0].lines[mine3[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
       if (theirs2.length) out.push({ k: `goto:${theirs2[0].region}`, t: theirs2.length === 1 ? `YOU BESIEGE ${theirs2[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs2.length} TOWNS`, tip: `${theirs2.map((v) => v.town).slice(0, 4).join(", ")}. Starve it out, or storm it: pick the province and look under ORDERS.` });
     } catch {

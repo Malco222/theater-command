@@ -2056,6 +2056,12 @@ void ACampaignPlayerController::PressAlarm()
 	// rules' words. Where no army can come a press centres the town, and nothing more. No new mark is drawn on the map.
 	if (Alarm.HelpRegion != INDEX_NONE && PickUpArmyIn(Alarm.HelpRegion))
 	{
+		// (the rules name the corps a press picks up: the hand is those of them that can take orders now)
+		if (Alarm.HelpCorps.Num() > 0 && PickedCorps.ContainsByPredicate([&Alarm](int32 Id) { return Alarm.HelpCorps.Contains(Id); }))
+		{
+			PickedCorps.RemoveAll([&Alarm](int32 Id) { return !Alarm.HelpCorps.Contains(Id); });
+			RefreshOrders();
+		}
 		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
 		if (!Alarm.Hand.IsEmpty())
 		{
@@ -2069,6 +2075,29 @@ void ACampaignPlayerController::PressAlarm()
 			const FVector2D At = Map->GetData().Regions[Alarm.Region].Center;
 			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
 		}
+	}
+}
+
+const FGunsAlone* ACampaignPlayerController::GetGunsAlone(int32 Index) const
+{
+	const FCampaignSession* Session = GetSession();
+	const bool bShown = Session && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible && Session->GetView().Alone.IsValidIndex(Index);
+	return bShown ? &Session->GetView().Alone[Index] : nullptr;
+}
+
+void ACampaignPlayerController::PressGunsAlone(int32 Index)
+{
+	const FGunsAlone* Row = GetGunsAlone(Index);
+	if (!Row || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Row->Region))
+	{
+		return;
+	}
+	// (Ruling 211(a) as passed at 16:54 UTC: a press centres the town.)
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const FVector2D At = Map->GetData().Regions[Row->Region].Center;
+		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
 	}
 }
 

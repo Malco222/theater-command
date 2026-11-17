@@ -621,6 +621,9 @@ public:
 	int32 GetAlarmCount() const;
 	int32 GetAlarmPlace() const;
 	void PressAlarm();
+	/** (Rules 84.2.6.) His own guns left alone round an enemy town: the row at this place, or none; and a press, which centres the town. */
+	const FGunsAlone* GetGunsAlone(int32 Index) const;
+	void PressGunsAlone(int32 Index);
 	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
 	FText GetHoverTip() const { return HoverTip; }
 	/**
