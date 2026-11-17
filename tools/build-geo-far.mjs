@@ -247,10 +247,10 @@ FAR_SLICES.forEach((slice, k) => {
   for (const f of slice.frontiers ?? []) {
     let multi;
     if (f.country) {
-      multi = letOut(countryOf(f.country, f.within ?? null));
+      multi = letOut([].concat(f.country).flatMap((name) => countryOf(name, f.within ?? null)));
       if (f.clip) multi = polygonClipping.intersection(multi, ringOf(f.clip));
     } else multi = [ringOf([...f.line, ...(f.close ?? [])])];
-    sides.push({ name: f.name ?? f.country, owners: f.owners, atlas: !!f.country, multi, boxes: multi.map((p) => boxOf(p[0])), slice: k });
+    sides.push({ name: f.name ?? [].concat(f.country).join(', '), owners: f.owners, atlas: !!f.country, multi, boxes: multi.map((p) => boxOf(p[0])), slice: k });
   }
 });
 const sideAt = (x, y) => sides.findIndex((sd) => sd.multi.some((p, i) => x >= sd.boxes[i][0] && x <= sd.boxes[i][2] && y >= sd.boxes[i][1] && y <= sd.boxes[i][3] && inPoly(p, x, y)));
@@ -365,15 +365,26 @@ const joined = [];
     masses.forEach((mass, m) => {
       const p = mass.poly;
       if (seeded.has(m) || Math.abs(ringArea(p[0])) > 4000) return;
+      // An island inside a country's outline goes to a province of that country only, and one outside every
+      // outline to a province outside them: Bintan is not Singapore's, nor Tsushima Korea's.
+      // (The middle of a long bent island can fall in the water, so its shore is asked too.)
+      const n0 = p[0].length - 1;
+      let home = sideAt(p[0].slice(0, n0).reduce((t, q) => t + q[0], 0) / n0, p[0].slice(0, n0).reduce((t, q) => t + q[1], 0) / n0);
+      if (home < 0) {
+        const votes = new Map();
+        for (let i = 0; i < n0; i += Math.max(1, Math.floor(n0 / 16))) { const sd = sideAt(p[0][i][0], p[0][i][1]); votes.set(sd, (votes.get(sd) ?? 0) + 1); }
+        home = [...votes].sort((a, b) => b[1] - a[1])[0][0];
+      }
       let best = null, bd = slice.reach ?? 70;
       for (const s of mine) {
+        if (s.side !== home) continue;
         if (s.x < mass.box[0] - bd || s.x > mass.box[2] + bd || s.y < mass.box[1] - bd || s.y > mass.box[3] + bd) continue;
         for (const [x, y] of p[0]) { const d = Math.hypot(x - s.x, y - s.y); if (d < bd) { bd = d; best = s; } }
       }
       if (!best) {
         const n = p[0].length - 1;
         const cx = p[0].slice(0, n).reduce((t, q) => t + q[0], 0) / n, cy = p[0].slice(0, n).reduce((t, q) => t + q[1], 0) / n;
-        const sd = sideAt(cx, cy);
+        const sd = home;
         if (sd >= 0 && sides[sd].atlas && sides[sd].slice === k) {
           let far = 200;
           for (const s of mine) { if (s.side !== sd) continue; const d = Math.hypot(cx - s.x, cy - s.y); if (d < far) { far = d; best = s; } }
@@ -571,6 +582,7 @@ for (let r = 0; r < ROWS; r++) {
 }
 for (const r of regions) r.seas = [];
 const oldOnNew = [];
+const shown = (arg('coasts') ?? '').split(',');
 for (const [id, m] of touch) {
   const most = Math.max(...m.values());
   const ranked = [...m].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
@@ -583,6 +595,16 @@ for (const [id, m] of touch) {
     continue;
   }
   const r = regionOfId(id);
+  if (shown.includes(r.name)) console.log(`${r.name}: ${ranked.map(([zone, n]) => `${zones[zone].key ?? zones[zone].name} ${n}`).join(', ')}`);
+  // Where the count of squares misleads, the seas file says which seas a province stands on ('shores'): each
+  // must lap against it all the same.
+  const own = seaData.shores?.[r.name];
+  if (own) {
+    for (const key of own) { const zone = index.get(key); if (zone === undefined || !m.has(zone)) warn(`! ${r.name} is given a shore on ${key}, which does not lap against it`); else r.seas.push(zone); }
+    r.seas.sort((a, b) => a - b);
+    for (const zone of r.seas) zones[zone].coast.push(id);
+    continue;
+  }
   for (const [zone, n] of ranked) if (n >= 8 && n >= most * 0.2) r.seas.push(zone);
   // An islet has a shore however small it is, and a port has a sea.
   if (!r.seas.length && (r.flags.port || r.flags.depot || r.flags.islet)) r.seas.push(ranked[0][0]);
