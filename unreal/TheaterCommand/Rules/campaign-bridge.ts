@@ -108,7 +108,7 @@ import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
 import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
-import { ENGINEERS_ALONE, GUNS_ALONE, gunsRule, newsName, theWords } from '../../../src/campaign/game';
+import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
@@ -1334,10 +1334,11 @@ function alarmsOf(s: Game) {
 }
 
 // (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own row
-// in the tray, red while the cure is in his hands, plain where nothing of his can reach them. A press centres the town.
+// in the tray, red while the cure is in his hands, plain where nothing of his can reach them. (Rules 84.3: a press on a
+// red row picks up the infantry or tanks that can come, `help`, from where they stand, `from`; a plain one centres the town.)
 function gunsAloneOf(s: Game) {
   if (!s.human || !humanUp(s)) return [];
-  try { return (gunsAlone(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? '', red: !!a.red, line: a.line })); } catch { return []; }
+  try { return (gunsAlone(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? '', red: !!a.red, line: a.line, help: a.help ?? [], from: a.from ?? -1 })); } catch { return []; }
 }
 
 // ---- Crossing a defended sea (Version 72) ---------------------------------------------------------
@@ -1973,15 +1974,15 @@ function preview(ids: number[], to: number, open = false, glance = false) {
   const named = (c: Corps) => {
     const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
     return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
-      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
-        : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${corpsNamed(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
+        : { id: c.id, nat: c.nat, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
   };
   if (look && !look.exact) {
     return {
       region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds, ...pct,
       exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ''}`, even,
       lines: briefTicket([...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine], look.face),
-      attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      attackers: corps.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map(named),
     };
   }
@@ -1995,9 +1996,20 @@ function preview(ids: number[], to: number, open = false, glance = false) {
     defence: a.D,
     odds: a.odds,
     lines: briefTicket([...a.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine], look?.face),
-    attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
-    defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    attackers: corps.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
   };
+}
+
+/**
+ * (Rules 84.3; the UI director's words for b357, item 8.) The battle result as the card shows it: every corps on it
+ * carries its country's word ("German XIX Corps" against "Polish Pomorze Corps"), as the rules' corpsNamed gives it.
+ * A copy: the rules' own report is left as it is.
+ */
+function namedReport<R extends { attackers: { nat: string; name: string }[]; defenders: { nat: string; name: string }[] }>(s: Game, r: R | null | undefined): R | null {
+  if (!r) return null;
+  const named = <U extends { nat: string; name: string }>(u: U): U => ({ ...u, name: corpsNamed(s, u.nat, u.name) });
+  return { ...r, attackers: r.attackers.map(named), defenders: r.defenders.map(named) };
 }
 
 /** What a battle came to, in a sentence. */
@@ -2192,8 +2204,8 @@ function sallyLook(region: number) {
   const named = (c: Corps) => {
     const kn = c.nat !== me && !allied(s, c.nat, me) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
     return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
-      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
-        : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${corpsNamed(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
+        : { id: c.id, nat: c.nat, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
   };
   const ids = corps.map((c) => c.id);
   return {
@@ -2207,7 +2219,7 @@ function sallyLook(region: number) {
     prize: `Win, and the army round ${town} is driven off: the siege is raised. The garrison goes back inside either way.`,
     attack: look.exact ? a.A : look.odds, defence: look.exact ? a.D : 1, odds: look.exact ? a.odds : look.odds,
     lines: briefTicket(look.exact ? a.lines : look.lines, look.face),
-    attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    attackers: corps.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
     defenders: a.defenders.map(named),
   };
 }
@@ -2219,7 +2231,7 @@ function sally(region: number) {
   const why = r ? whyNotSallyOut(s, region) : 'Pick a province.';
   const report = why ? null : orderSally(s, region);
   const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? '' } : null;
-  return { report, siege: false, fell: false, stands: '', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
+  return { report: namedReport(s, report), siege: false, fell: false, stands: '', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
 }
 
 /** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; '' where he has none there. */
@@ -2262,7 +2274,7 @@ function takeOutlook(ids: number[], to: number) {
     laterVerdict: m.prepared ? verdictOf(m.prepared, 'storm').word : '',
     laterSays: m.prepared ? `${verdictOf(m.prepared, 'storm').word}. ${m.ifSiege}` : '',
     holder: r.ctrl, holderName: s.nations[r.ctrl]?.name ?? r.ctrl, prize: prizeLine(s, to), allies: [] as string[],
-    attackers: going.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    attackers: going.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
     defenders: [] as never[],
     // (where the guard will fight: the assault as the army arrives, in the fields an attack's forecast is read from)
     ...(now ? {
@@ -2306,7 +2318,7 @@ function take(ids: number[], to: number, assault = true) {
           : res.stands === 'guard' ? `Your army stands round ${town}, and its town guard holds out. The assault can go in next month made ready.`
             : '';
   const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? '' } : null;
-  return { report, siege: false, fell: res.fell, stands: res.stands ?? '', marched: res.moved, note, price: report ? priceLine(s, report) : '', paid, moved, view: view() };
+  return { report: namedReport(s, report), siege: false, fell: res.fell, stands: res.stands ?? '', marched: res.moved, note, price: report ? priceLine(s, report) : '', paid, moved, view: view() };
 }
 
 /**
@@ -2351,7 +2363,7 @@ function stormLook(region: number) {
     nowVerdict: verdict, nowSays: `${verdict}. ${choice.ifStorm}`,
     laterVerdict: choice.prepared ? verdictOf(choice.prepared, 'storm').word : '', laterSays: choice.prepared ? `${verdictOf(choice.prepared, 'storm').word}.` : '',
     holder: r.ctrl, holderName: s.nations[r.ctrl]?.name ?? r.ctrl, prize: prizeLine(s, region), allies: [] as string[],
-    attackers: going.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    attackers: going.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
     defenders: [] as never[],
     attack: look.odds, defence: 1, odds: look.odds, exact: look.exact, lo: look.lo, hi: look.hi, even: look.even, note: look.exact ? '' : `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ''}`,
     hasChance: true, chancePct: oddsPct(look.exact ? look.chance : look.guess), chancePctLo: oddsPct(look.chanceLo), chancePctHi: oddsPct(look.chanceHi), chanceWords: chanceWords(look),
@@ -2371,7 +2383,7 @@ function storm(region: number) {
   let inside = 0;
   try { inside = townSiege(s, region)?.inside ?? 0; } catch { inside = 0; }
   const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? '' } : null;
-  return { report, siege: false, fell, stands: fell || !report ? '' : inside > 0 ? 'garrison' : 'guard', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
+  return { report: namedReport(s, report), siege: false, fell, stands: fell || !report ? '' : inside > 0 ? 'garrison' : 'guard', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
 }
 
 /** (Rules 84.1; ruling 176(e).) The gate's question for its holder: what the order does and whose trade it costs, as rows, before he gives it. */
@@ -2428,7 +2440,7 @@ function attack(ids: number[], to: number) {
   // (Version 63) The price in a sentence, for the result card; the report's own ticket reads in the past tense.
   // (Version 84) Who paid and to what, under the price: one sentence or two, as the attacker reads it.
   const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? '' } : null;
-  return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : '', price: report ? priceLine(s, report) : '', paid, moved, view: view() };
+  return { report: namedReport(s, report && siege ? { ...report, taken: false } : report), siege, note: report ? battleNote(s, report) : '', price: report ? priceLine(s, report) : '', paid, moved, view: view() };
 }
 
 // ---- The month on one card ---------------------------------------------------------------------------
@@ -3907,7 +3919,8 @@ function battleReportPage(s: Game, id: number): Page | null {
   if (!r) return null;
   const nameOf = (nat: string): string => upFirst(theName(s, nat));
   const side = (units: BattleReport['attackers']): PageRow[] => units.map((u) => ({
-    nat: u.nat, title: `${u.name}${u.guard ? '' : `  \u00B7  ${u.divs} division${u.divs === 1 ? '' : 's'}`}`,
+    // (Rules 84.3.) Every corps on the report carries its country's word: "German XIX Corps".
+    nat: u.nat, title: `${corpsNamed(s, u.nat, u.name)}${u.guard ? '' : `  \u00B7  ${u.divs} division${u.divs === 1 ? '' : 's'}`}`,
     lines: [`${cardNum(u.men)} men, ${cardNum(u.lost)} lost${u.fate ? `  \u00B7  ${u.fate}` : ''}`], buttons: [],
   }));
   return {

@@ -27,7 +27,7 @@ import { willLost } from './resources';
 import { SIEGE, besieged, besiegerOf, investedOn, ringClosed, siegeRules, siegeView, whyNotStorm } from './siege';
 import { townName } from './towns';
 import { current, reach } from './turn';
-import type { Corps, Game } from './types';
+import type { Corps, Game, Region } from './types';
 
 /** The title of the warning: the band's own name on the card. */
 export const IN_DANGER = 'The country in danger';
@@ -245,8 +245,9 @@ export function fallWarning(g: Game, viewer: string | null = g.human, told = fal
   const seat = g.regions[r.region];
   const name = theName(n, true), mid = theName(n), city = seat.name;
   const parts = `${r.capital[0].toUpperCase()}${r.capital.slice(1)}, ${r.home} and ${r.army}`;
-  // The nearest alarm of his home ground: its help ends the warning (ruling 211(c); words, section 2).
-  const alarm = homeAlarms(g, r.nat)[0];
+  // The nearest alarm of his home ground: its help ends the warning (ruling 211(c); words, section 2). An enemy army's
+  // only: the empty ground of b385 keeps to its own row, as its "take it back" would not say which ground.
+  const alarm = homeAlarms(g, r.nat).find((a) => a.case !== 'empty');
   const help = alarm ? alarm.lines[2] : '';
   // (`sub` is the band's second line; `tail` closes the whole text with what would stop it, and the help comes last.)
   const make = (level: FallWarning['level'], head: string, sub: string, tail: string, note: string, more: Partial<FallWarning> = {}): FallWarning =>
@@ -311,9 +312,13 @@ export function withinReach(g: Game, viewer: string | null = g.human): boolean {
 
 /** One alarm: an enemy army on his home ground, in three sentences for the tray's red row. */
 export interface HomeAlarm {
-  /** 'stands' on his ground; 'taken' a town of his since he last ended a month; round a town of his that it can 'storm' this month, or whose 'stores' it counts. */
-  case: 'stands' | 'taken' | 'storm' | 'stores';
-  /** The province, and the enemy army's flag (the heaviest there). */
+  /**
+   * 'stands' on his ground; 'taken' a town of his since he last ended a month; round a town of his that it can
+   * 'storm' this month, or whose 'stores' it counts; 'empty', his ground still in enemy hands with no troops of
+   * theirs in it (the design director's b385), whose row names the cure and stands until the ground is his again.
+   */
+  case: 'stands' | 'taken' | 'storm' | 'stores' | 'empty';
+  /** The province, and the enemy army's flag (the heaviest there; for 'empty', its holder's). */
   region: number;
   by: string;
   /** His own towns it can reach next month, the capital first; empty where it has no corps that fights. */
@@ -384,7 +389,7 @@ function helperName(g: Game, nat: string, h: Helper): string {
  * takes this month to his ground beside it (1 month by rail); else the march the game plans to his ground beside it,
  * in its own count of months. Ties go to the train, then to the nearer.
  */
-function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails: Map<number, Set<number>>): HomeAlarm['help'] {
+function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails: Map<number, Set<number>>, walkIn = false): HomeAlarm['help'] {
   const t = g.regions[target];
   const mine = (id: number): boolean => allied(g, nat, g.regions[id].ctrl) && !g.regions[id].units.some((u) => !u.dead && atWar(g, u.nat, nat));
   const goals = [...(mine(target) ? [target] : []), ...t.nb.filter(mine)];
@@ -405,8 +410,8 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
     !best || months < best.months || (months === best.months && ((rail && !best.rail) || (rail === best.rail && h.hops < best.h.hops)));
   const turnOf = current(g) === nat;
   for (const h of near) {
-    // This month: a fighting corps beside it with a move in hand.
-    if (turnOf && h.fighters.some((c) => reach(g, c).get(target)?.attack)) { if (better(h, 0, false)) best = { h, months: 0, rail: false, to: target }; continue; }
+    // This month: a fighting corps beside it with a move in hand (or, onto empty ground, the moves to walk in).
+    if (turnOf && h.fighters.some((c) => { const e = reach(g, c).get(target); return !!e && (e.attack || (walkIn && c.reg !== target)); })) { if (better(h, 0, false)) best = { h, months: 0, rail: false, to: target }; continue; }
     // By rail, this month, to his ground beside it.
     let r = rails.get(h.region);
     if (!r) { r = railReachFor(g, h.corps); rails.set(h.region, r); }
@@ -438,7 +443,9 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
 
 /**
  * The alarms of a nation's home ground (its own provinces, not those overseas): every province of it where an enemy
- * army stands, nearest the capital first. Empty for a nation at peace.
+ * army stands, nearest the capital first; then every province of it still in enemy hands with no troops of theirs in
+ * it, nearest the capital first (b385: such a row stands until the ground is his again, and names the cure). Empty
+ * for a nation at peace.
  */
 export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   if (!nat) return [];
@@ -452,13 +459,17 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   const foe = (u: Corps): boolean => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, nat);
   let all: Helper[] | null = null;
   const rails = new Map<number, Set<number>>();
-  const out: HomeAlarm[] = [];
+  const out: HomeAlarm[] = [], empty: Region[] = [];
   for (const r of g.regions) {
     if (r.owner !== nat || r.overseas) continue;
     const held = allied(g, nat, r.ctrl);
     let foes = r.units.filter(foe), inTown = false;
     if (!foes.length && !held) { foes = (r.garr ?? []).filter(foe); inTown = foes.length > 0; }
-    if (!foes.length) continue;
+    if (!foes.length) {
+      // (Still in the hands of an enemy, with nobody of theirs in it: its row comes after every enemy army's.)
+      if (!held && atWar(g, r.ctrl, nat)) empty.push(r);
+      continue;
+    }
     // The heaviest army there.
     const w = new Map<string, number>();
     for (const u of foes) w.set(armyOf(u), (w.get(armyOf(u)) ?? 0) + u.divs * u.str);
@@ -500,7 +511,25 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const hand = help ? `${held1} is in hand. Right-click ${g.regions[help.to].name} to send it.` : '';
     out.push({ case: kase, region: r.id, by, reach: reachIds, help, raise, lines: [s1, s2, s3], hand });
   }
-  return out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
+  out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
+  // Home ground still in enemy hands with no troops in it (b385; the UI director's words, section 1): two sentences,
+  // the first bold, and the cure: "Buffalo, on your home ground, is still in Canadian hands, with no troops in it.
+  // First Army at Pittsburgh can march in and take it back this month."
+  empty.sort((a, b) => far(a.id) - far(b.id) || a.id - b.id);
+  for (const r of empty) {
+    if (!all) all = helpers(g, nat);
+    const help = nearestHelp(g, nat, r.id, all, rails, true);
+    const adj = g.nations[r.ctrl]?.adj ?? 'enemy';
+    const s1 = `${r.name}, on your home ground, is still in ${adj} hands, with no troops in it.`;
+    const who = help ? `${help.name[0].toUpperCase()}${help.name.slice(1)}` : '';
+    const s3 = !help ? `No army of yours can reach it. A new corps takes ${monthsWord(raise)}.`
+      : help.months === 0 ? `${who} can march in and take it back this month.`
+      : `${who} can march in and take it back in ${monthsWord(help.months)}, by ${help.rail ? 'rail' : 'road'}.`;
+    const held1 = help ? (help.name.startsWith('the army ') ? `The${help.name.slice(3)}` : g.corps.find((c) => c.id === help.corps[0])?.name ?? help.name) : '';
+    const hand = help ? `${held1} is in hand. Right-click ${g.regions[help.to].name} to ${help.to === r.id ? 'march in' : 'send it'}.` : '';
+    out.push({ case: 'empty', region: r.id, by: r.ctrl, reach: [], help, raise, lines: [s1, '', s3], hand });
+  }
+  return out;
 }
 
 /** One town of an enemy's where his own guns and engineers are left alone round it (ruling 211(a); the tray's row, 84.2.6). */
@@ -510,6 +539,9 @@ export interface GunsAlone {
   what: string;
   /** Whether infantry or tanks of his can reach them this month: the row is red only then. */
   red: boolean;
+  /** The fighting corps of his that can reach them this month, the nearest army's first (what a press picks up), and where they stand. */
+  help: number[];
+  from: number;
   line: string;
 }
 
@@ -528,9 +560,12 @@ export function gunsAlone(g: Game, nat: string | null = g.human): GunsAlone[] {
     if (!round.length || round.some(fights) || !round.some((c) => armyOf(c) === nat)) continue;
     const what = round.every((c) => c.kind === 'eng') ? 'engineers' : round.some((c) => c.kind === 'eng') ? 'guns and engineers' : 'guns';
     if (!fighters) fighters = g.corps.filter((c) => !c.dead && armyOf(c) === nat && fights(c) && !c.hold && c.town === undefined && c.leave === undefined && c.ap > 0);
-    const red = current(g) === nat && fighters.some((c) => reach(g, c).has(r.id));
+    const can = current(g) === nat ? fighters.filter((c) => reach(g, c).has(r.id)) : [];
+    const red = can.length > 0;
+    // (A press picks up the corps of one army: the one that stands nearest, and of two as near the larger.)
+    const at = can.length ? [...new Set(can.map((c) => c.reg))].sort((a, b) => Number(!r.nb.includes(a)) - Number(!r.nb.includes(b)) || can.filter((c) => c.reg === b).length - can.filter((c) => c.reg === a).length || a - b)[0] : -1;
     const town = townName(r);
-    out.push({ region: r.id, what, red, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.`
+    out.push({ region: r.id, what, red, help: can.filter((c) => c.reg === at).map((c) => c.id), from: at, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.`
       : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
   }
   return out;

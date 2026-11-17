@@ -25,7 +25,7 @@ import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
+import { closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -37,7 +37,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, patronOf, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
@@ -337,8 +337,8 @@ export const newsName = (n: Nation): string => (n.id === 'UK' ? 'Britain' : n.na
  * The mother country that may go to war with `a` for making war on `b`, or null (ruling 211(b) as Brian changed
  * it on 17 November 2026; the grand campaign's wider world). Britain may stand by Canada, Australia, New Zealand
  * and South Africa, one way only, when a country at peace with her makes war on one of them while the two stand
- * in the same alliance: she answers six times in ten and stays out four (world.json, 'dominions'), in every year,
- * at every stop of the dial and at every difficulty. A war a dominion starts is not hers, and war with any other
+ * in the same alliance: she answers as far as her own war in Europe allows (ruling 222, patronPress: eight, six, four
+ * or two times in ten; world.json, 'dominions'), at every stop of the dial and at every difficulty. A war a dominion starts is not hers, and war with any other
  * member of an alliance is war with that member alone. Not in World Domination, where a dominion follows nobody
  * either.
  */
@@ -351,11 +351,41 @@ export function standsByWhom(g: Game, a: string, b: string): string | null {
 }
 
 /**
- * Whether the mother country `p` answers for the war `a` made on her dominion `b` in the month `war`: the one roll
- * of that declaration. It is made from the campaign's seed, the month and the countries, so it moves no other
- * dice, both games agree on it, and the same month loaded again gives the same answer.
+ * How hard a mother country's own war in Europe presses her (ruling 222, Brian's ask of 17 November 2026: "it depends
+ * on how they are doing with the war in europe"), the step her answer for a dominion is rolled at. Counting from the
+ * bottom, the first that holds: 4, she is in danger at home, with an enemy army on her home ground or a third of her
+ * will to fight gone; 3, she is at war with a great power of Europe and France is not fighting beside her (`fallen`
+ * when France has fallen); 2, she is at war there with France fighting beside her, a France freed and back in the
+ * war as much as one that never fell; 1, she is at war with no great power of Europe, as when all her European
+ * enemies have fallen or made peace. `answers` is the share of that step (world.json, 'dominions').
  */
-export const dominionAnswers = (g: Game, p: string, a: string, b: string, war: number): boolean => hashString(`dominion:${g.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < answersOf(p);
+export interface PatronPress { step: 1 | 2 | 3 | 4; answers: number; fallen: boolean }
+
+export function patronPress(g: Game, p: string): PatronPress {
+  const P = g.nations[p], { europe, beside, willGone } = pressData(p);
+  const at = (step: PatronPress['step'], fallen = false): PatronPress => ({ step, answers: answersOf(p, step), fallen });
+  if (!P?.alive) return at(1);
+  const foe = (u: Corps): boolean => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, p);
+  // (In the field, or inside a town of hers it has taken, as the home alarm reads it.)
+  const invaded = g.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || (!allied(g, p, r.ctrl) && (r.garr ?? []).some(foe))));
+  if (invaded || (P.resilience > 0 && collapseScore(g, p) >= willGone * P.resilience)) return at(4);
+  const enemies = europe.filter((e) => e !== p && g.nations[e]?.alive && atWar(g, p, e));
+  if (!enemies.length) return at(1);
+  const F = beside ? g.nations[beside] : undefined;
+  if (F?.alive && !F.dormant && F.atWar.some((e) => enemies.includes(e))) return at(2);
+  return at(3, !F?.alive);
+}
+
+/**
+ * Whether the mother country `p` answers for the war `a` made on her dominion `b` in the month `war`: the one roll
+ * of that declaration, at the step her war in Europe stands at that day (patronPress). It is made from the
+ * campaign's seed, the month and the countries, so it moves no other dice, both games agree on it, and the same
+ * month loaded again gives the same answer. A war made in an earlier month than this one (a campaign saved before
+ * the roll was kept, rolled as a month ends) is rolled at the one share the rule had before ruling 222, six in ten:
+ * the state of Europe the day it was made is not kept, and a roll already made stands.
+ */
+export const dominionAnswers = (g: Game, p: string, a: string, b: string, war: number): boolean =>
+  hashString(`dominion:${g.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < (war < g.turn ? answersOf(p) : patronPress(g, p).answers);
 
 /**
  * The mother country answers, or does not, for the war `a` made on her dominion `b` (standsByWhom): one roll for
@@ -670,6 +700,20 @@ export function frontage(r: Region): number {
  * which brings ruling 146's second fix forward and widens it: in Brian's own campaign one Canadian artillery corps
  * stormed Buffalo and Pittsburgh and took Washington by itself).
  */
+/**
+ * A corps' name with its country's word in front, as the battle card, the ticket and the battle report give every
+ * corps on them (the UI director's words for b357, item 8): "Canadian XII Engineer Corps" against "American XII
+ * Engineer Corps", always, so the form never flickers. A name that already says a country before any bracket
+ * ("1st Canadian Division", "French Army B: ...") is left as it is. The army tray keeps the player's own names bare.
+ */
+export function corpsNamed(g: Game, nat: string, name: string): string {
+  const adj = g.nations[nat]?.adj;
+  if (!adj) return name;
+  const head = name.split('(')[0];
+  for (const n of Object.values(g.nations)) if (n.adj && new RegExp(`(^|[^A-Za-z])${n.adj}([^A-Za-z]|$)`).test(head)) return name;
+  return `${adj} ${name}`;
+}
+
 export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
 /** The sentence wherever guns are sent forward alone (ruling 146). */
 export const GUNS_ALONE = 'Guns cannot take ground alone. Send infantry or tanks in with them.';
@@ -1906,6 +1950,81 @@ export function capture(g: Game, r: Region, nat: string): void {
   checkCollapse(g, old, nat);
   // The grand campaign: a fallen country whose capital its conqueror's enemies now hold comes back into the war.
   retaken(g, r, nat);
+  // A third country's corps at peace with the new holder goes home (ruling b341(b), the grand campaign).
+  if (g.flags.open === 1) goHome(g, r);
+}
+
+/**
+ * The corps of a third country standing on ground that is not its own, at peace with `who`, by nation (rulings b341
+ * and b343): they take no part in a fight there, and go home if the province changes hands.
+ */
+export function standersAt(g: Game, r: Region, who: string): [string, Corps[]][] {
+  const by = new Map<string, Corps[]>();
+  for (const c of r.units) {
+    if (c.dead || c.kind === 'fort' || c.nat === r.ctrl || c.nat === who || allied(g, c.nat, who) || atWar(g, c.nat, who)) continue;
+    (by.get(c.nat) ?? by.set(c.nat, []).get(c.nat)!).push(c);
+  }
+  return [...by];
+}
+
+/** "A" or "An" before a nation's adjective. */
+const anA = (adj: string): string => (/^[AEIO]|^U(?![rkgn])/.test(adj) ? 'An' : 'A');
+
+/**
+ * The one sentence the cards and the hover box read for a third country's corps at peace with the player, one for
+ * each nation (the UI director's words, log b343). The grand campaign only, where the rule stands.
+ */
+export function standersLine(g: Game, r: Region, who: string): string[] {
+  if (g.flags.open !== 1) return [];
+  return standersAt(g, r, who).map(([nat, cs]) => {
+    const adj = g.nations[nat].adj;
+    return cs.length === 1
+      ? `${anA(adj)} ${adj} corps stands at ${r.name} too, at peace with you: it takes no part in the fight, and goes home if the province changes hands.`
+      : `${cs.length} ${adj} corps stand at ${r.name} too, at peace with you: they take no part in the fight, and go home if the province changes hands.`;
+  });
+}
+
+/**
+ * Ground that has changed hands: every corps on it of a country at peace with the new holder, and not its ally, goes
+ * home to its own nearest ground, its month spent, with one plain line of news told to the player whoever took it
+ * (rulings b341(b) and b343). A corps whose country holds no ground with room stays where it is.
+ */
+function goHome(g: Game, r: Region): void {
+  const by = new Map<string, Corps[]>();
+  for (const c of r.units) {
+    if (c.dead || c.kind === 'fort' || c.nat === r.ctrl || allied(g, c.nat, r.ctrl) || atWar(g, c.nat, r.ctrl)) continue;
+    (by.get(c.nat) ?? by.set(c.nat, []).get(c.nat)!).push(c);
+  }
+  for (const [nat, cs] of by) {
+    let went = 0;
+    for (const c of cs) {
+      const to = ownNearest(g, c);
+      if (!to) continue;
+      place(g, c, to);
+      c.ap = 0;
+      went++;
+    }
+    if (!went) continue;
+    const adj = g.nations[nat].adj;
+    headline(g, 'info', went === 1 ? `The ${adj} corps at ${r.name} goes home: the province has changed hands.` : `The ${went} ${adj} corps at ${r.name} go home: the province has changed hands.`, g.human ?? nat, r.id);
+  }
+}
+
+/** A corps' own nearest ground with room for it: by land where there is a way, else the nearest across the sea. */
+function ownNearest(g: Game, c: Corps): Region | null {
+  const mine = (r: Region): boolean => r.id !== c.reg && r.ctrl === c.nat && hasRoom(g, r, c);
+  const seen = new Uint8Array(g.regions.length);
+  const q = [c.reg];
+  seen[c.reg] = 1;
+  for (let i = 0; i < q.length; i++) {
+    const r = g.regions[q[i]];
+    if (mine(r)) return r;
+    for (const j of r.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
+  }
+  const from = g.regions[c.reg];
+  let best: Region | null = null, bd = Infinity;
+  for (const r of g.regions) if (mine(r)) { const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2; if (d < bd) { bd = d; best = r; } }
+  return best;
 }
 
 /**
@@ -2512,6 +2631,26 @@ export function evacuate(g: Game, c: Corps): boolean {
     headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id, { arm: 'land', lost: c.nat });
   }
   return true;
+}
+
+/**
+ * Why a corps cannot be lifted off by sea from where it stands, in the tests evacuate() makes and in their order;
+ * null when it can. Words only: the page shows the order off with this sentence instead of lit and silent.
+ */
+export function whyNotEvacuate(g: Game, c: Corps): string | null {
+  const r = g.regions[c.reg];
+  const N = g.nations[c.nat];
+  if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
+  if (!r.port) return `${r.name} has no port to lift an army from.`;
+  if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
+  if (N.capital < 0) return `${N.name} has no home left to sail for.`;
+  if (!seaOpenAt(g, c.nat, r)) {
+    // Every sea at this port is closed to the troopships: name the one nearest to opening, in the landing's own sentence (ruling 207).
+    const gap = (z: number): number => opensAt(g, z, c.nat) - seaSide(g, z, c.nat, false).total;
+    const z = [...r.seas].sort((a, b) => gap(a) - gap(b))[0];
+    return z === undefined ? `${r.name} has no sea to sail from.` : closedLine(g, z, c.nat);
+  }
+  return null;
 }
 
 // ---- The start of a nation's month ---------------------------------------------------

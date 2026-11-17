@@ -566,6 +566,15 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 					(*Row)->TryGetStringField(TEXT("what"), Left.What);
 					(*Row)->TryGetBoolField(TEXT("red"), Left.bRed);
 					(*Row)->TryGetStringField(TEXT("line"), Left.Line);
+					(*Row)->TryGetNumberField(TEXT("from"), Left.From);
+					const TArray<TSharedPtr<FJsonValue>>* Help = nullptr;
+					if ((*Row)->TryGetArrayField(TEXT("help"), Help))
+					{
+						for (const TSharedPtr<FJsonValue>& Id : *Help)
+						{
+							Left.HelpCorps.Add(FMath::RoundToInt32(Id->AsNumber()));
+						}
+					}
 				}
 			}
 		}

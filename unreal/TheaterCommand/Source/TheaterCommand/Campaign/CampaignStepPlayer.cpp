@@ -120,8 +120,12 @@ namespace
 		return Out;
 	}
 
-	/** True where a press in the middle of the button would reach it: nothing lies over it. */
-	bool Reachable(const FFoundButton& Button)
+	/**
+	 * True where a press in the middle of the button would reach it: nothing lies over it. Where something does, Over
+	 * says what a press there would reach instead: the widget's kind, where in the code it was made, and its words, so
+	 * that a replay names the layer and nobody has to guess it (v8425 part C, steps 25 and 31).
+	 */
+	bool Reachable(const FFoundButton& Button, FString* Over = nullptr)
 	{
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (!Window.IsValid() || !Button.Widget.IsValid())
@@ -132,7 +136,32 @@ namespace
 		const FVector2D Middle = Place.LocalToAbsolute(Place.GetLocalSize() * 0.5);
 		const TArray<TSharedRef<SWindow>> Windows = { Window.ToSharedRef() };
 		const FWidgetPath Under = FSlateApplication::Get().LocateWindowUnderMouse(Middle, Windows, false, 0);
-		return Under.IsValid() && Under.ContainsWidget(Button.Widget.Get());
+		if (Under.IsValid() && Under.ContainsWidget(Button.Widget.Get()))
+		{
+			return true;
+		}
+		if (Over)
+		{
+			if (!Under.IsValid() || Under.Widgets.Num() == 0)
+			{
+				*Over = TEXT("nothing in the window takes a press there");
+			}
+			else
+			{
+				// The topmost widget at that point, and the two it sits in: enough to find the layer in the code.
+				TArray<FString> Said;
+				for (int32 Index = Under.Widgets.Num() - 1; Index >= FMath::Max(0, Under.Widgets.Num() - 3); --Index)
+				{
+					const TSharedRef<SWidget> Each = Under.Widgets[Index].Widget;
+					FString Words;
+					Lettering(Each, Words);
+					Said.Add(FString::Printf(TEXT("%s at %s%s"), *Each->GetTypeAsString(), *Each->GetReadableLocation(),
+						Words.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (\"%s\")"), *Words.Left(60))));
+				}
+				*Over = FString::Join(Said, TEXT(", in "));
+			}
+		}
+		return false;
 	}
 }
 
@@ -254,10 +283,11 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 		}
 		return false;
 	}
-	if (!Reachable(Button))
+	FString Over;
+	if (!Reachable(Button, &Over))
 	{
 		bError = true;
-		Note = TEXT("the button is on the screen but something lies over it: a press would not reach it");
+		Note = TEXT("the button is on the screen but something lies over it: a press would not reach it") + (Over.IsEmpty() ? FString() : TEXT(". At its middle: ") + Over);
 		return false;
 	}
 	StaticCastSharedPtr<SButton>(Button.Widget)->SimulateClick();
