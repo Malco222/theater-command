@@ -642,7 +642,8 @@ export class AirSim implements BattleSim<AirUnit> {
     const B = this.before;
     const mine0 = B ? what((s, k) => B[s][k], me) || 'none' : '';
     const lines = [
-      ...(bombers0 > 0 ? [`${out.dropped} of ${bombers0} bombers dropped their bombs on ${this.place.name}${out.jettisoned ? `, and ${out.jettisoned} jettisoned theirs` : ''}.`] : []),
+      // Whose bombers (the UI director, 18:50Z): his own, or the raiders' by their adjective when he defends.
+      ...(bombers0 > 0 ? [`${out.dropped} of ${me === 'att' ? 'your ' : ''}${bombers0} ${me === 'att' ? '' : `${this.ticket.att.adj} `}bombers dropped their bombs on ${this.place.name}${out.jettisoned ? `, and ${out.jettisoned} jettisoned theirs` : ''}.`] : []),
       `The ${sky ? `fight for the sky over ${this.place.name}` : 'raid'} cost you ${what(count, me) || 'nothing'}, and the ${them} lost ${what(count, foe) || 'none'}.`,
       // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
       ...(B ? [`Before you handed it to the staff, you had lost ${mine0}${mine0.includes(' and ') ? ',' : ''} and the ${them} ${what((s, k) => B[s][k], foe) || 'none'}.`] : []),

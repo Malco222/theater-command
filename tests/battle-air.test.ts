@@ -151,10 +151,22 @@ describe('what the player decides', () => {
     const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
     runOut(s);
     const L = s.over!.lines;
-    expect(L[0]).toMatch(/^\d+ of \d+ bombers dropped their bombs on Alsace/);
+    expect(L[0]).toMatch(/^\d+ of your \d+ bombers dropped their bombs on Alsace/);
     expect(L[1]).toMatch(/^The raid cost you .+, and the French lost .+\.$/);
     expect(L.some((l) => l.startsWith('Before you handed') || l.startsWith('The staff settled'))).toBe(false);
     expect(L.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
+  });
+
+  it('when he defends, the card names the raiders\' bombers and his own losses first', () => {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    const t = raidTargets(g, 'bomb', 'GER').find((x) => planRaid(g, 'bomb', x.id, undefined, 'GER').place === 'Alsace')!;
+    const { ticket } = airTicket(g, 'bomb', t.id, undefined, 'GER');
+    expect(ticket!.def.human).toBe(true);
+    const s = airBattle(ticket!); s.ai.att = true; s.ai.def = true;
+    runOut(s);
+    expect(s.over!.lines[0]).toMatch(/^\d+ of \d+ German bombers dropped their bombs on Alsace/);
+    expect(s.over!.lines[1]).toMatch(/^The raid cost you .+, and the Germans lost .+\.$/);
   });
 
   it('names a people from its adjective', () => {
