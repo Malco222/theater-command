@@ -8453,12 +8453,18 @@ function onClick(e: MouseEvent): void {
       if (!a || a.nat !== g.human) break;
       const posture = t.dataset.v as Posture;
       const at = g.regions[a.reg].name;
-      const told = g.regions[a.reg].units.filter((c) => c.nat === a.nat && orderStance(g, c, posture)).length;
+      // The whole army in the tray takes the order: an ally's corps that marches with it too, as the tray lists it (armyOf).
+      const field = g.regions[a.reg].units.filter((c) => armyOf(c) === a.nat && c.kind !== 'fort');
+      const told = field.filter((c) => orderStance(g, c, posture)).length;
       if (told) ui.msg = posture === 'back'
         ? `The army at ${at} will give ground if the enemy attacks with the odds to carry the position.`
         : posture === 'dig'
           ? `The army at ${at} is digging in. Leave it where it is this month and it fights from fieldworks from the next.`
           : autoDig() ? `The army at ${at} will stand and fight where it is. Left there for the month, it digs in.` : `The army at ${at} will stand and fight where it is.`;
+      // A press that changes nothing still answers (ruling 204(d)).
+      else ui.msg = field.length && field.every((c) => c.leave !== undefined)
+        ? `The army at ${at} is at home with its fame and takes no orders until it is back.`
+        : `The army at ${at} takes no orders this month.`;
       refresh(); break;
     }
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
