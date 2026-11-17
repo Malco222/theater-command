@@ -8,9 +8,17 @@
 // place: a town on the shore keeps a foot of ground (the shore is drawn round it). A border that lay on dry land
 // and now lies wholly under a lake is struck (design director, 17 November): the two no longer touch, and the tool
 // counts the steps of the way round by land.
+//
+// Every shore is made smooth (tools/lake-shore.mjs: no arm under 2 units, no corner under 30 degrees), and the
+// eleven lakes the chart was handed over with are redrawn from the same survey (REDRAWN_LAKES): where the new shore
+// reaches past the old, the water is cut out of the provinces and the land as for a new lake; where the old shore
+// reached past the new, the ground is given back to the land and shared among the provinces beside it, each cell of
+// it to the province nearest. No border is struck for the eleven (the design director): one the new water would
+// cover whole is reported and left.
 import polygonClipping from 'polygon-clipping';
-import { MORE_LAKES } from '../data/campaign/more-lakes.mjs';
+import { MORE_LAKES, REDRAWN_LAKES } from '../data/campaign/more-lakes.mjs';
 import { OLD_LAKE_WATER } from '../data/campaign/detail.mjs';
+import { smoothShore } from './lake-shore.mjs';
 
 const ringArea = (ring) => { let a = 0; for (let k = 0; k < ring.length; k++) { const [x1, y1] = ring[k], [x2, y2] = ring[(k + 1) % ring.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; };
 const polyArea = (poly) => ringArea(poly[0]) - poly.slice(1).reduce((t, h) => t + ringArea(h), 0);
@@ -37,6 +45,121 @@ export function cutLakes({ out, core, proj, warn }) {
   const key = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
   const touched = new Map();
   let cutArea = 0;
+  const snap = (multi) => multi.map((poly) => poly.map((ring) => ring.map(([x, y]) => [r1(x), r1(y)])));
+  // (Where the clipper stalls on edges that fall just so, the second shape is nudged by a hundredth of a unit and
+  // the answer set back on the grid of a tenth.)
+  const nudge = (multi, dx, dy) => multi.map((poly) => poly.map((ring) => ring.map(([x, y]) => [x + dx, y + dy])));
+  const clip = (op, a, b) => {
+    for (const [dx, dy] of [[0, 0], [0.013, 0.007], [-0.011, 0.017], [0.019, -0.013]]) { try { return snap(polygonClipping[op](a, dx || dy ? nudge(b, dx, dy) : b)); } catch (e) { if (dx === 0.019) throw e; } }
+    return [];
+  };
+  const largest = (multi) => [...multi].sort((a, b) => polyArea(b.map((r) => r.slice(0, -1))) - polyArea(a.map((r) => r.slice(0, -1)))).slice(0, 1);
+  const redrawn = [], unredrawn = [], partedOld = [];
+  // ---- The eleven handed over, redrawn ----
+  for (const [name, shore] of REDRAWN_LAKES) {
+    const L = lakes.find((l) => l.name === name);
+    if (!L) { warn(`! no lake called ${name} to redraw`); continue; }
+    const ring = shore.map(([lat, lon]) => proj([lon, lat]));
+    // (The clipper can stall on a shore whose points fall just so: the shore is then thinned to another grain.)
+    const tries = [0.3, 0.35, 0.25, 0.4];
+    for (const [t, tol] of tries.entries()) {
+    let lake = largest(smoothShore([[[...ring, ring[0]]]], 1, { tol }));
+    if (!lake.length) { unredrawn.push(`${name} (nothing left once smooth)`); break; }
+    const oldRing = L.outline, old = [[[...oldRing, oldRing[0]]]];
+    const ob = boxOf(oldRing), nb0 = boxOf(lake[0][0]), box = [Math.min(ob[0], nb0[0]), Math.min(ob[1], nb0[1]), Math.max(ob[2], nb0[2]), Math.max(ob[3], nb0[3])];
+    const near = out.regions.filter((r) => r.polys.some((poly) => boxesMeet(boxOf(poly[0]), box, FOOT)));
+    const feet = [];
+    for (const r of near) if (inRing(lake[0][0], r.x, r.y) || toRing(lake[0][0], r.x, r.y) < SHORE) { lake = snap(polygonClipping.difference(lake, [disc(r.x, r.y, FOOT)])); feet.push(r.name); }
+    lake = largest(lake);
+    // All of it is worked out first and written only if every step goes through.
+    let step = 'the new water';
+    try {
+      const add = snap(polygonClipping.difference(lake, old)), give = snap(polygonClipping.difference(old, lake));
+      const polys = new Map(near.map((r) => [r.id, r.polys.map((p) => p.map((q) => [...q, q[0]]))]));
+      // The water that is new: out of every province it lies on.
+      for (const r of near) {
+        step = `cutting ${r.name}`;
+        const after = clip('difference', polys.get(r.id), add);
+        if (!after.some((poly) => inRing(poly[0].slice(0, -1), r.x, r.y))) throw new Error(`${r.name} would lose its chief place`);
+        polys.set(r.id, after);
+      }
+      // The ground given back: each cell of a fifth of a unit to the province whose ground is nearest, the shares
+      // cut out of the ground exactly.
+      const H = 0.2;
+      for (const piece of give) {
+        const pr = piece[0].slice(0, -1), pb = boxOf(pr);
+        const gap = (r) => Math.min(...r.polys.filter((poly) => boxesMeet(boxOf(poly[0]), pb, 12)).flatMap((poly) => [...poly[0].map(([x, y]) => toRing(pr, x, y)), ...pr.map(([x, y]) => toRing(poly[0], x, y))]), Infinity);
+        const gaps = near.map((r) => [r, gap(r)]).sort((a, b) => a[1] - b[1]);
+        let cand = gaps.filter(([, d]) => d < 3).map(([r]) => r);
+        if (!cand.length && gaps.length && gaps[0][1] < 12) cand = [gaps[0][0]];
+        if (!cand.length) throw new Error(`ground given back beside no province (${Math.round(polyArea(piece.map((q) => q.slice(0, -1))))} square units)`);
+        let owners;
+        if (cand.length === 1) owners = new Map([[cand[0].id, [piece]]]);
+        else {
+          const segs = cand.map((r) => r.polys.flatMap((poly) => poly[0].map((p, i) => [p, poly[0][(i + 1) % poly[0].length]])).filter(([a, b]) => boxesMeet(boxOf([a, b]), pb, 3)));
+          const x0 = Math.floor(pb[0] / H) * H - H, y0 = Math.floor(pb[1] / H) * H - H;
+          const nx = Math.ceil((pb[2] - x0) / H) + 2, ny = Math.ceil((pb[3] - y0) / H) + 2;
+          const who = new Int16Array(nx * ny);
+          for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+            const x = x0 + (i + 0.5) * H, y = y0 + (j + 0.5) * H;
+            let best = 0, bd = Infinity;
+            segs.forEach((ss, k) => { for (const [[ax, ay], [bx, by]] of ss) { const L2 = (bx - ax) ** 2 + (by - ay) ** 2, t = L2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / L2)) : 0, d = Math.hypot(ax + t * (bx - ax) - x, ay + t * (by - ay) - y); if (d < bd) { bd = d; best = k; } } });
+            who[j * nx + i] = best;
+          }
+          owners = new Map();
+          cand.forEach((r, k) => {
+            const boxes = [];
+            for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+              if (who[j * nx + i] !== k) continue;
+              let e = i; while (e + 1 < nx && who[j * nx + e + 1] === k) e++;
+              boxes.push([[[i, j], [e + 1, j], [e + 1, j + 1], [i, j + 1], [i, j]]]);
+              i = e;
+            }
+            if (!boxes.length) return;
+            let level = boxes;
+            while (level.length > 1) { const next = []; for (let q = 0; q < level.length; q += 8) next.push(polygonClipping.union(...level.slice(q, q + 8))); level = next; }
+            const region = snap(level[0].map((poly) => poly.map((rg) => rg.map(([i, j]) => [x0 + i * H, y0 + j * H]))));
+            step = `the share of ${r.name}`;
+            const share = clip('intersection', [piece], region);
+            if (share.length) owners.set(r.id, share);
+          });
+        }
+        for (const [id, share] of owners) { step = `giving ground to ${near.find((x) => x.id === id).name}`; polys.set(id, clip('union', polys.get(id), share)); }
+      }
+      // The land: the old hole filled, the new water cut.
+      const landNear = out.land.map((poly, i) => [poly, i]).filter(([poly]) => boxesMeet(boxOf(poly[0]), box, FOOT));
+      step = 'the land';
+      let land = snap(polygonClipping.union(...landNear.map(([poly]) => closed(poly)), old));
+      land = open(polygonClipping.difference(land, lake));
+      // Write it.
+      for (const r of near) {
+        const after = open(polys.get(r.id));
+        if (!after.some((poly) => inRing(poly[0], r.x, r.y) && !poly.slice(1).some((h) => inRing(h, r.x, r.y)))) throw new Error(`${r.name} would lose its chief place`);
+        r._next = after;
+      }
+      // (A border the new water covers whole is reported, not struck.)
+      for (const r of near) for (const j of r.nb) {
+        if (j < r.id) continue;
+        const o = near.find((x) => x.id === j);
+        if (!o) continue;
+        const pts = r.polys.flatMap((p) => p[0]).filter(([x, y]) => o.polys.some((q) => toRing(q[0], x, y) < 0.35));
+        if (pts.length >= 2 && pts.every(([x, y]) => inRing(lake[0][0], x, y))) partedOld.push(`${r.name} - ${o.name} (${name})`);
+      }
+      for (const r of near) { r.polys = r._next; delete r._next; }
+      const drop = new Set(landNear.map(([, i]) => i));
+      out.land = [...out.land.filter((_, i) => !drop.has(i)), ...land];
+      const outline = open(lake)[0][0];
+      Object.assign(L, { outline, x: r1(outline.reduce((t, p) => t + p[0], 0) / outline.length), y: r1(outline.reduce((t, p) => t + p[1], 0) / outline.length) });
+      for (const f of feet) shores.push(`${f} (${name})`);
+      redrawn.push(`${name} ${Math.round(ringArea(oldRing))} to ${Math.round(ringArea(outline))} (${oldRing.length} to ${outline.length} points; ${Math.round(add.reduce((u, p) => u + polyArea(p.map((q) => q.slice(0, -1))), 0))} new water, ${Math.round(give.reduce((u, p) => u + polyArea(p.map((q) => q.slice(0, -1))), 0))} given back)`);
+      break;
+    } catch (e) {
+      for (const r of near) delete r._next;
+      if (t < tries.length - 1) continue;
+      unredrawn.push(`${name} (${step}: ${e.message})`);
+    }
+    }
+  }
   for (const [name, water, level, shore] of MORE_LAKES) {
     if (names.has(name)) { warn(`! two lakes are called ${name}`); continue; }
     names.add(name);
@@ -46,6 +169,7 @@ export function cutLakes({ out, core, proj, warn }) {
     if (core.regions.some((r) => r.polys.some((poly) => boxesMeet(boxOf(poly[0]), box) && ring.some(([x, y]) => inRing(poly[0], x, y))))) { warn(`! ${name} lies on the map of Europe: not cut`); continue; }
     const near = out.regions.filter((r) => r.polys.some((poly) => boxesMeet(boxOf(poly[0]), box, FOOT)));
     if (water === 'pan') {
+      try { lake = largest(smoothShore(lake, 1)); } catch (e) { warn(`! ${name}: could not make the shore smooth: ${e.message}`); }
       const outline = open(lake)[0][0];
       const on = near.filter((r) => r.polys.some((poly) => outline.some(([x, y]) => inRing(poly[0], x, y))));
       lakes.push({ name, level, x: r1(outline.reduce((t, p) => t + p[0], 0) / outline.length), y: r1(outline.reduce((t, p) => t + p[1], 0) / outline.length), outline, water });
@@ -61,6 +185,12 @@ export function cutLakes({ out, core, proj, warn }) {
     }
     lake = lake.sort((a, b) => polyArea(open([b])[0] ?? [[]]) - polyArea(open([a])[0] ?? [[]])).slice(0, 1);
     if (!lake.length) { warn(`! nothing is left of ${name}`); continue; }
+    // The shore made smooth (and the shore drawn again round a chief place the smoothing brought near the water).
+    try {
+      lake = largest(smoothShore(lake, 1));
+      for (const r of near) if (inRing(lake[0][0].slice(0, -1), r.x, r.y) || toRing(lake[0][0].slice(0, -1), r.x, r.y) < SHORE - 1) lake = largest(snap(polygonClipping.difference(lake, [disc(r.x, r.y, FOOT)])));
+    } catch (e) { warn(`! ${name}: could not make the shore smooth: ${e.message}`); }
+    if (!lake.length) { warn(`! nothing is left of ${name} once smooth`); continue; }
     const size = polyArea(open(lake)[0]);
     let taken = 0;
     const from = [];
@@ -115,6 +245,9 @@ export function cutLakes({ out, core, proj, warn }) {
   if (shores.length) notes.push(`the shore is drawn round ${shores.length} chief places: ${shores.join(', ')}`);
   if (thinned.length) notes.push(`provinces that lost over a third of their ground, or are left under 700 square units: ${thinned.join('; ')}`);
   if (struck.length) notes.push(`borders struck, the whole of them under a lake: ${struck.join('; ')}`);
+  if (redrawn.length) notes.push(`the eleven lakes handed over, redrawn from the survey (${redrawn.length}): ${redrawn.join('; ')}`);
+  if (unredrawn.length) notes.push(`! lakes handed over left as they were: ${unredrawn.join('; ')}`);
+  if (partedOld.length) notes.push(`! borders a redrawn lake covers whole (left as borders, for the design director): ${partedOld.join('; ')}`);
   if (offLand.length) notes.push(`! lakes that lie mostly off the charted ground: ${offLand.join('; ')}`);
   if (drowned.length) notes.push(`! provinces a lake would have drowned (left as they were): ${drowned.join('; ')}`);
   return { notes, lines };

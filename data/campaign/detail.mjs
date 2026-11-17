@@ -345,6 +345,18 @@ export const MORE_LAKE_LIST = [
 
 /** The water of the lakes the chart was handed over with (fresh where not named). */
 export const OLD_LAKE_WATER = { 'Aral Sea': 'salt' };
+/**
+ * The eleven lakes the chart was handed over with, redrawn from the same survey and at the same grain as the sixty
+ * (the art director, 17 November: Michigan wants its Green Bay, Huron its Georgian Bay, Superior its Keweenaw,
+ * Winnipeg is not a teardrop): where the survey has the lake, its name there, and the name on the chart. The Aral
+ * Sea is at its old shore, before the rivers were taken off it in the 1960s.
+ */
+export const OLD_LAKE_SURVEY = [
+  ['lakes', 'Lake Superior', 'Lake Superior'], ['lakes', 'Lake Michigan', 'Lake Michigan'], ['lakes', 'Lake Huron', 'Lake Huron'],
+  ['lakes', 'Lake Erie', 'Lake Erie'], ['lakes', 'Lake Ontario', 'Lake Ontario'], ['lakes', 'Lake Winnipeg', 'Lake Winnipeg'],
+  ['lakes', 'Lake Baikal', 'Lake Baikal'], ['historic', 'Aral Sea', 'Aral Sea'], ['lakes', 'Lake Victoria', 'Lake Victoria'],
+  ['lakes', 'Lake Tanganyika', 'Lake Tanganyika'], ['lakes', 'Lake Malawi', 'Lake Nyasa'],
+];
 
 // ---- Ground laid by ruling -----------------------------------------------------------------------------------
 // Ground the design director has ruled, by province name, on the chart with the cities only. It stands over the

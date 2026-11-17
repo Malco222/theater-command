@@ -6,7 +6,7 @@
 //
 // The survey's files are not kept in the repository: they are downloaded into a folder of their own and read here.
 import fs from 'node:fs';
-import { MORE_LAKE_LIST, LAKE_HAND } from '../data/campaign/detail.mjs';
+import { MORE_LAKE_LIST, LAKE_HAND, OLD_LAKE_SURVEY } from '../data/campaign/detail.mjs';
 
 const [lakesFile, historicFile, playasFile] = process.argv.slice(2).filter((v) => !v.startsWith('--'));
 if (!lakesFile) { console.error('usage: node tools/survey-lakes.mjs <lakes.geojson> <historic.geojson> <playas.geojson>'); process.exit(1); }
@@ -60,6 +60,18 @@ for (const [where, surveyName, name, water, level] of MORE_LAKE_LIST) {
   while (shore.length > 160) { tol *= 1.3; shore = thin(ring, tol); }
   out.push({ name, water, level, shore, area: Math.round(areaOf(ring)), kept: Math.round(areaOf(shore)) });
 }
+// The eleven the chart was handed over with, from the same survey at the same grain.
+const redrawn = [];
+for (const [where, surveyName, name] of OLD_LAKE_SURVEY) {
+  const found = files[where].filter((ft) => ft.geometry && fold(ft.properties.name) === fold(surveyName));
+  if (!found.length) { notes.push(`! ${name}: no ${surveyName} among the survey's ${where}`); continue; }
+  const rings = found.flatMap((ft) => (ft.geometry.type === 'Polygon' ? [ft.geometry.coordinates] : ft.geometry.coordinates).map((poly) => poly[0]));
+  let ring = rings.sort((a, b) => areaOf(b) - areaOf(a))[0];
+  if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ring = ring.slice(0, -1);
+  let tol = 1, shore = thin(ring, tol);
+  while (shore.length > 160) { tol *= 1.3; shore = thin(ring, tol); }
+  redrawn.push({ name, shore, area: Math.round(areaOf(ring)), kept: Math.round(areaOf(shore)) });
+}
 const q = (v) => JSON.stringify(v);
 fs.writeFileSync(new URL('../data/campaign/more-lakes.mjs', import.meta.url), `// Written by tools/survey-lakes.mjs from the lakes of the Natural Earth survey (public domain, naturalearthdata.com)
 // and the list MORE_LAKE_LIST in detail.mjs. Not to be changed by hand: change the list and run the tool.
@@ -68,7 +80,13 @@ fs.writeFileSync(new URL('../data/campaign/more-lakes.mjs', import.meta.url), `/
 export const MORE_LAKES = [
 ${out.map((l) => `  [${q(l.name)}, ${q(l.water)}, ${l.level}, ${q(l.shore.map(([lon, lat]) => [Math.round(lat * 1000) / 1000, Math.round(lon * 1000) / 1000]))}],`).join('\n')}
 ];
+
+/** The eleven lakes the chart was handed over with, redrawn from the survey: name, shore as [lat, lon] points. */
+export const REDRAWN_LAKES = [
+${redrawn.map((l) => `  [${q(l.name)}, ${q(l.shore.map(([lon, lat]) => [Math.round(lat * 1000) / 1000, Math.round(lon * 1000) / 1000]))}],`).join('\n')}
+];
 `);
 console.log(`${out.length} lakes written`);
 if (notes.length) console.log(notes.join('\n'));
+if (process.argv.includes('--list')) for (const l of redrawn) console.log(`  ${l.name.padEnd(20)} redrawn ${String(l.area).padStart(5)} square units, ${String(l.shore.length).padStart(3)} points (${l.kept} as drawn)`);
 if (process.argv.includes('--list')) for (const l of out) console.log(`  ${l.name.padEnd(20)} ${l.water.padEnd(5)} ${String(l.level).padStart(5)} m  ${String(l.area).padStart(5)} square units, ${String(l.shore.length).padStart(3)} points (${l.kept} as drawn${l.hand ? ', by hand' : ''})`);
