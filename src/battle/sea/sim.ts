@@ -448,7 +448,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // A piece whose last ship went out of the fight burning has left the field; one whose last ship sank is gone.
       u.state = u.extra.sunk >= u.extra.ships0 || !(u.extra.burnt as number | undefined) ? 'gone' : 'withdrawn';
       u.str = u.state === 'gone' ? 0 : u.str;
-      this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.state === 'gone' ? `${u.name}: lost.` : `${u.name}: out of the fight.` });
+      // A lone ship's line has just been said; a piece of several gets one line for the last of them.
+      const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} of ${u.extra.fleet}`;
+      this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
     }
   }
 

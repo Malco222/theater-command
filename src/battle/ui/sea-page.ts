@@ -213,7 +213,8 @@ function updateTray(force = false): void {
     set('str', u.str, u.str < 0.35 ? 'is-low' : u.str < 0.65 ? 'is-mid' : '');
     set('mor', u.mor, 'is-rest');
     const st = el.querySelector<HTMLElement>('.ustate')!;
-    const doing = live(u) ? ACT_WORD[u.act] ?? '' : '';
+    // Once the action is over nothing is under way: the card says so (the design director, b356, b368).
+    const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) ? ACT_WORD[u.act] ?? '' : '';
     const afloat = u.extra.ships0 > 1 && u.extra.ships < u.extra.ships0 ? ` · ${u.extra.ships} of ${u.extra.ships0} afloat` : '';
     st.innerHTML = `<b>${STATE_WORD[u.state]}</b>${doing ? ` · ${doing}` : ''}${afloat}`;
     st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
@@ -469,6 +470,7 @@ function showAfter(): void {
   const sim = S.sim!, r = sim.over!;
   S.screen = 'after';
   guard();
+  updateTray(true);
   const t = sim.ticket, k = t.reckoning;
   let rep: SeaReport | null = null, headline = '';
   if (S.from) {
@@ -481,7 +483,6 @@ function showAfter(): void {
   }
   const won = rep ? rep.won === (S.scene.me === 'att') : r.winner === S.scene.me;
   const level = rep ? rep.level : r.level;
-  const lo = k.odds * k.dice[0], hi = k.odds * k.dice[1];
   const x = r.extra as unknown as SeaLosses;
   const burnt = (side: Side): number => t.place.fleets.filter((f) => f.side === side).reduce((n, f) => { const b = x.burnt[f.id]; return n + b.bb + b.cv + b.ca + b.dd; }, 0);
   const homeLine = (side: Side): string => { const n = burnt(side); return n ? `${n} ${n === 1 ? 'ship' : 'ships'} of the ${t[side].adj} fleet came home burning.` : ''; };
@@ -495,7 +496,7 @@ function showAfter(): void {
     ${headline ? `<p class="told"><b>${esc(headline)}</b></p>` : ''}
     <h3 class="tc-label">On the water</h3><ul class="flines">${[...r.lines, homeLine('att'), homeLine('def')].filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
     <h3 class="tc-label">Against the staff's reckoning</h3>
-    <p class="dice">${esc(reckoned(won, S.scene.me === 'att' ? chanceOf(t) : 1 - chanceOf(t)))} ${rep ? 'The campaign books the action at' : 'The campaign would have booked it at'} <b>${r.R.toFixed(2)}</b> to 1; at these odds anything from ${lo.toFixed(2)} to ${hi.toFixed(2)} could have come of it.${rep ? '' : ' A practice action hands nothing back.'}</p>
+    <p class="dice">${esc(reckoned(won, S.scene.me === 'att' ? chanceOf(t) : 1 - chanceOf(t)))}${rep ? '' : ' A practice action hands nothing back.'}</p>
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
   </div>`;
