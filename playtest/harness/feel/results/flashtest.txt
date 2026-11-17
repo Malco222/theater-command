@@ -1,0 +1,3 @@
+no flash:   251 pictures, middle 60 a second, slow ones 15 a second, worst 150ms; fx nodes 0, animations 1
+two flashes: 133 pictures, middle 10 a second, slow ones 6 a second, worst 233ms; fx nodes 2, animations 3
+cleared:    238 pictures, middle 60 a second, slow ones 15 a second, worst 150ms; fx nodes 0, animations 1

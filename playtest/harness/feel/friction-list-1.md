@@ -92,7 +92,10 @@ wants a contents list of one-line topics first, or the manual only moves from th
 page presses was 244 to 272 ms, and picking up an army 344 to 400 ms, because every press redraws the whole side
 page. Under 100 ms reads as instant. (A cloud machine; his Mac will be quicker, by my guess two or three times.)
 (b) Moving the map near Warsaw ran at 60 pictures a second in September 1939 and 9 in December, four months into
-the war. The cause is being traced.
+the war. **Traced (13:05Z):** the province flash. Provinces that changed hands at the month's end stay in `ui.flash`
+for the month, and every redraw of the map writes their flash again and restarts its 2.2 s fade (main.ts line 1329,
+style.css line 83). Loaded fresh, the same game moves at 60; with two provinces set to flash, 10; cleared, 60 again
+(`/mnt/project-files/playtest/harness/feel/flashtest.cjs`). Ruled a critical fix (ruling 206).
 
 **9. A fleet's orders: 3 presses, no card, one line each.** The model for the rest. Nothing to mend.
 
