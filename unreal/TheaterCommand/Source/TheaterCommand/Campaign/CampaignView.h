@@ -579,6 +579,7 @@ struct FApproachRow
 	FString How; // its river and ground in a word
 	FString Says; // enemy ground on the way: what the march does there
 	TArray<int32> Road; // the provinces marched through, the approach itself last
+	TArray<int32> Going; // (the code checker, 17 November) the corps of the hand that can reach it this month: they alone go
 };
 
 /** The march up and the attack planned as one order: the game's pick first, then up to three more ways. */

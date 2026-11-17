@@ -1831,6 +1831,17 @@ FString FCampaignSession::GarrisonWhy(int32 RegionId)
 	return Why;
 }
 
+FString FCampaignSession::WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FString Why;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("lead"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("why"), Why);
+	}
+	return Why;
+}
+
 FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId)
 {
 	FApproachPlan Plan;
@@ -1873,6 +1884,14 @@ FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int3
 				for (const TSharedPtr<FJsonValue>& Value : *Road)
 				{
 					Way.Road.Add(FMath::RoundToInt32(Value->AsNumber()));
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Going = nullptr;
+			if (Row->TryGetArrayField(TEXT("going"), Going))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Going)
+				{
+					Way.Going.Add(FMath::RoundToInt32(Value->AsNumber()));
 				}
 			}
 		}

@@ -11810,8 +11810,8 @@ namespace
 			// (release 1) Point at the corps' card for the bigger card of the corps, laid out above the tray. One nobody
 			// has identified keeps its plain line.
 			const TSharedRef<SButton> Whole = SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
-				.IsFocusable(false).IsEnabled(Card.bCanOrder || Card.bLook)
-				.ToolTipText(Card.bUnknown ? FText::FromString(Tip) : FText::GetEmpty())
+				.IsFocusable(false).IsEnabled((Card.bCanOrder || Card.bLook) && Card.Apart.IsEmpty())
+				.ToolTipText(Card.bUnknown ? FText::FromString(Tip) : !Card.Apart.IsEmpty() ? FText::FromString(Card.Apart) : FText::GetEmpty())
 				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
 				.OnClicked_Lambda([this, Id = Card.CorpsId]()
 				{
