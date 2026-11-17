@@ -184,6 +184,9 @@ export function tearUp(g: Game, nat: string, region: number): boolean {
 export function wreckChance(g: Game, taken: Region, by: string): number {
   const W = RAILWAYS.wreck;
   const near = taken.nb.some((j) => g.regions[j].units.some((u) => !u.dead && atWar(g, u.nat, by)));
+  // The town guard tears up no railway (ruling 211(g)): the track is torn up by troops as they fall back, and
+  // where the loser has no corps next door nobody is there to do it ('unguarded' is 0).
+  if (!near && W.unguarded <= 0) return 0;
   let p = near ? W.chance : W.unguarded;
   // Fast troops are on the junctions before the demolition parties have finished.
   if (taken.units.some((u) => !u.dead && allied(g, u.nat, by) && KIND[u.kind].mobile)) p += W.fastCaptor;

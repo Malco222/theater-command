@@ -27,7 +27,7 @@ import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guar
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf, headline,
+  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, limitAttackers, moveCorps as moveTo, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -1088,7 +1088,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const sfx = slot ? ':o' : '';
   const ready = quay.units
     .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
-    .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+    // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
+    .sort((a, b) => (gunsRule(g) ? Number(fights(b)) - Number(fights(a)) : 0) || atkPower(g, b) - atkPower(g, a) || a.id - b.id);
   if (sea.second) {
     const ashore = lodgment(g, nat, slot);
     if (ashore?.short && ashore.ports.length) {
@@ -1127,6 +1128,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // (Tanks do not go ashore alone against a gunned shore either: infantry from the quay takes the last tank corps'
   // place in the boats, and with none there the wave is not made.)
   const mixed = (r: Region, w: Corps[]): Corps[] | null => {
+    if (gunsRule(g) && !w.some(fights)) return null;
     if (!hostileUnits(g, r, nat).length) return w;
     const sent = notTanksAlone(g, w, ready, r);
     return !sent || sent === w ? sent : [...w.slice(0, -1), sent[sent.length - 1]];
@@ -1430,12 +1432,21 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
 
 const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
 
+/** A corps that may go onto this enemy-held ground: guns and engineers follow a fighting corps there, they never lead (ruling 211(a), the grand campaign). */
+const mayEnter = (g: Game, c: Corps, to: Region): boolean => !gunsRule(g) || fights(c) || gunsMayFollow(g, c, to);
+
 /**
  * Tanks are not sent alone at a gunned line (ruling 152(g), the grand campaign). Where the pick is tanks with no men
  * on foot and the defence's anti-tank strength is 'gunned' or more, the strongest infantry to hand goes in with them;
  * at 'never' or more with no infantry to send, the attack is not made. Gives the force to send, or null.
  */
 export function notTanksAlone(g: Game, pick: Corps[], pool: Corps[], target: Region): Corps[] | null {
+  // (And guns never go forward alone, ruling 211(a): a pick with no fighting corps in it takes the strongest one to
+  // hand, and with none to hand the attack is not made.)
+  if (gunsRule(g) && pick.length && !pick.some(fights)) {
+    const lead = pool.filter((c) => fights(c) && !pick.includes(c)).sort((a, b) => atkPower(g, b) - atkPower(g, a))[0];
+    return lead ? notTanksAlone(g, [...pick, lead], pool, target) : null;
+  }
   if (g.flags.open !== 1 || !pick.some((c) => c.kind === 'arm') || pick.some((c) => isFoot(c))) return pick;
   const at = assess(g, pick, target).faced?.antiTank;
   if (!at) return pick;
@@ -1597,7 +1608,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
         const value = target.vp * 2 + (target.cap ? 8 : 0) + pull[j];
         if (!hostileUnits(g, target, nat).length) {
           const movers = avail
-            .filter((c) => c.ap >= Math.min(moveCost(g, c, target), 4))
+            .filter((c) => c.ap >= Math.min(moveCost(g, c, target), 4) && mayEnter(g, c, target))
             .sort((a, b) => KIND[a.kind].move - KIND[b.kind].move || b.ap - a.ap);
           if (!movers.length || value < 2.5) continue;
           if (!axis.has(target.name)) movers.sort((a, b) => (KIND[a.kind].mobile ? 1 : 0) - (KIND[b.kind].mobile ? 1 : 0) || b.ap - a.ap);
@@ -1692,7 +1703,7 @@ function localAttacks(g: Game, nat: string): void {
       const value = target.vp + (target.cap ? 4 : 0);
       if (!hostileUnits(g, target, nat).length) {
         // Nobody there: one corps walks in, if it leaves somebody behind where it stood.
-        const mover = avail.filter((c) => c.ap >= Math.min(moveCost(g, c, target), 4) && friendlyUnits(g, g.regions[c.reg], nat).length > 1).sort((a, b) => b.ap - a.ap)[0];
+        const mover = avail.filter((c) => c.ap >= Math.min(moveCost(g, c, target), 4) && mayEnter(g, c, target) && friendlyUnits(g, g.regions[c.reg], nat).length > 1).sort((a, b) => b.ap - a.ap)[0];
         if (mover && (!best || 5 + value > best.score)) best = { score: 5 + value, target, corps: [mover], battle: false };
         continue;
       }
@@ -2202,7 +2213,7 @@ function evacuations(g: Game, nat: string): void {
     if (hostileUnits(g, goal, nat).length) {
       if (assess(g, force, goal).odds < 1) return;
       if (!resolveBattle(g, force, goal).taken) return;
-    } else if (!moveCorps(g, force[0], goal)) return;
+    } else if (!moveCorps(g, force.find((c) => mayEnter(g, c, goal!)) ?? force[0], goal)) return;
     for (const c of trapped) {
       if (c.dead) continue;
       if (c.reg !== goal.id && g.regions[c.reg].nb.includes(goal.id)) moveCorps(g, c, goal);

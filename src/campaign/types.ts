@@ -647,6 +647,11 @@ export interface Headline {
   desk?: string;
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
+  /**
+   * A title of its own over a line of news that is no warning ('Britain stands by Canada', 'Britain stays out of
+   * Canada's war': ruling 211(b)). An interface heads the news with it.
+   */
+  head?: string;
   /** For a warning: the country the news is about, where that is not the player's own (display only: a band flies its flag). */
   about?: string;
   /**
