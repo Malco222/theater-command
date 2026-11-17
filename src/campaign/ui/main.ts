@@ -5,6 +5,7 @@
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
+import { gunsAlone, homeAlarms } from '../danger';
 import { monthCardHtml } from './monthview';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
@@ -110,6 +111,8 @@ const ui = {
   land: false,
   /** The sea being looked at, when no region is. */
   sea: -1,
+  /** The alarm of his home ground the tray's red row last pressed went to (ruling 211(c)): each press goes on to the next. */
+  alarmAt: -1,
   /** The fleet being given orders under the Navy tab. */
   fleet: -1,
   /** The crossing whose reckoning is open under the Navy tab: the beach, or -1. */
@@ -2495,7 +2498,7 @@ function drawPane(): void {
 
 // ---- What wants the player's attention this month --------------------------------------------
 
-interface Alert { kind: string; text: string; /** Regions to visit in turn, for an alert about places. */ regs?: number[]; tab?: string }
+interface Alert { kind: string; text: string; /** Regions to visit in turn, for an alert about places. */ regs?: number[]; tab?: string; /** The row as written, where it is more than plain words (the red alarm). */ html?: string }
 
 function alertList(): Alert[] {
   const me = g.human;
@@ -2568,6 +2571,18 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
+  // His own guns left alone round an enemy's town (ruling 211(a)): red while infantry or tanks of his can reach them this month.
+  for (const a of gunsAlone(g, me)) out.unshift({ kind: a.red ? 'gunsalone' : 'gunsleft', text: a.line, regs: [a.region] });
+  // The alarm, first in the tray (ruling 211(c); words, section 1): an enemy army on his home ground, what it can reach
+  // next month, and the nearest help. The row speaks of the one nearest his capital; each press goes on to the next.
+  const alarms = homeAlarms(g, me);
+  if (alarms.length) {
+    const k = Math.max(0, ui.alarmAt) % alarms.length, a = alarms[k];
+    out.unshift({
+      kind: 'home', text: a.lines.filter(Boolean).join(' '), regs: [a.region],
+      html: `<span class="sign">⚠</span><b>${esc(a.lines[0])}</b>${a.lines[1] ? ` ${esc(a.lines[1])}` : ''} ${esc(a.lines[2])}${alarms.length > 1 ? ` <span class="of">${k + 1} of ${alarms.length}</span>` : ''}`,
+    });
+  }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
   const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
@@ -2647,12 +2662,41 @@ function replaceCard(data: Record<string, string | undefined>): string {
     <footer><button class="btn go" data-act="close">Keep it</button><button class="btn" data-act="start" data-sure="1" ${again}>Start the new one</button></footer>`;
 }
 
-const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}">${esc(a.text)}</button>`).join('');
+const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(a.text)}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
+
+/**
+ * The red alarm's press (ruling 211(c); words, section 1): it picks up the nearest army that can come and centres the
+ * town, and the paper says the cure in one line. Where no army can come it centres the town. Each press goes on to
+ * the next alarm.
+ */
+function followHomeAlarm(): void {
+  const all = homeAlarms(g, g.human);
+  if (!all.length) return;
+  const k = (ui.alarmAt + 1) % all.length;
+  ui.alarmAt = k;
+  const a = all[k];
+  ui.rail = ui.ship = ui.land = ui.rebase = false;
+  if (a.help) {
+    selectRegion(a.help.region);
+    const go = g.corps.filter((c) => a.help!.corps.includes(c.id) && canOrder(g, c));
+    if (go.length) ui.picked = new Set(go.map((c) => c.id));
+    ui.msg = a.hand;
+  } else {
+    selectRegion(a.region);
+    ui.msg = '';
+  }
+  refresh();
+  const svg = $('#map');
+  const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
+  const w = Math.min(ui.view.w, 700);
+  glide({ x: g.regions[a.region].x - w / 2, y: g.regions[a.region].y - (w * tall) / 2, w });
+}
 
 /** Goes where an alert points: the next place on its list, or the tab that deals with it. */
 function followAlert(kind: string): void {
   const a = alertList().find((x) => x.kind === kind);
   if (!a) return;
+  if (kind === 'home') { followHomeAlarm(); return; }
   if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
