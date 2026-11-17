@@ -57,9 +57,21 @@ export type SeaPlayed = Map<string, { meeting: SeaMeeting; fought: SeaFought }>;
  */
 export function closeWith(g: Game, played: SeaPlayed, close: (g: Game) => void): void {
   const before = seaField.fought;
-  seaField.fought = (m) => {
-    const p = played.get(meetingKey(m));
-    return p && sameFleets(p.meeting.mine, m.mine) && sameFleets(p.meeting.met, m.met) ? p.fought : undefined;
-  };
+  seaField.fought = playedHook(played);
   try { close(g); } finally { seaField.fought = before; }
+}
+
+/**
+ * The seam's answer from what the player fought: an action is booked from the field once, when the close reaches it
+ * with the same fleets in it, and every other action rolls the dice. A screen that cannot wrap the close (the 3D
+ * game's month end) may leave this set as navy.ts seaField.fought for the whole session: with nothing played, it
+ * answers nothing.
+ */
+export function playedHook(played: SeaPlayed): (m: SeaMeeting) => SeaFought | undefined {
+  return (m) => {
+    const k = meetingKey(m), p = played.get(k);
+    if (!p) return undefined;
+    played.delete(k);
+    return sameFleets(p.meeting.mine, m.mine) && sameFleets(p.meeting.met, m.met) ? p.fought : undefined;
+  };
 }

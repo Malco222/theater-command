@@ -164,7 +164,7 @@ describe('the orders of the first slice', () => {
   it('one press hands the rest of the action to the dice, at the ratio then standing', () => {
     const sim = battle(11, { odds: 1.3 });
     run(sim, 300);
-    expect(sim.command({ do: 'sea:dice' } as never, 'att')).toBe(true);
+    expect(sim.command({ do: 'dice' }, 'att')).toBe(true);
     const r = sim.over!;
     expect(r).not.toBeNull();
     expect((r.extra as unknown as SeaLosses).toDice).toBe(true);
@@ -255,5 +255,34 @@ describe("the rules' own scale", () => {
   it('ships are listed as the rules list them', () => {
     expect(shipWords({ bb: 1, cv: 0, ca: 2, dd: 4 })).toBe('1 battleship, 2 cruisers, 4 destroyers');
     expect(shipWords({ bb: 0, cv: 0, ca: 0, dd: 0 })).toBe('no ships');
+  });
+});
+
+describe('what the 3D game and the sound read', () => {
+  it('each piece shows one figure a ship afloat, its way, and what it is doing; events say where and what sounds', () => {
+    const sim = battle(4, { human: null });
+    const seen = new Set<string>(), cues = new Set<string>();
+    let placed = true;
+    while (!sim.over) {
+      sim.step();
+      for (const u of sim.units) {
+        seen.add(u.act);
+        expect(u.figures).toBe(u.extra.ships);
+        if (u.act === 'fight') expect(u.engaged).toBeDefined();
+      }
+      for (const e of sim.view().events) {
+        if (e.cue) cues.add(e.cue);
+        if (e.unit !== undefined && (e.x === undefined || e.y === undefined)) placed = false;
+      }
+    }
+    expect(placed).toBe(true);
+    for (const a of ['march', 'fight']) expect(seen.has(a), a).toBe(true);
+    expect(seen.has('down')).toBe(sim.units.some((u) => u.state === 'gone'));
+    for (const c of ['ship_guns', 'ship_bell']) expect(cues.has(c), c).toBe(true);
+    expect(cues.has('ship_sinking')).toBe(sim.units.some((u) => u.extra.sunk > 0));
+    // A battleship's box is one hull; four destroyers in line ahead, three lengths apart.
+    const bb = piece(sim, 'att', 'bb'), dd = sim.units.find((u) => u.extra.cls === 'dd' && u.extra.ships0 === 4)!;
+    expect(bb.d).toBe(SEA.classes.bb.len);
+    expect(dd.d).toBe(SEA.classes.dd.len * 10);
   });
 });

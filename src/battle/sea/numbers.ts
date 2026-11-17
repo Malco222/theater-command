@@ -5,7 +5,7 @@ import seaData from '../../../data/battle/sea.json';
 import navyData from '../../../data/campaign/navy.json';
 import type { SeaClass } from './types';
 
-interface ClassOnField { punch: number; speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; standoff?: number }
+interface ClassOnField { punch: number; speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; beam: number; standoff?: number }
 
 export const SEA = seaData as unknown as {
   field: { size: number; edge: number; limit: number };
