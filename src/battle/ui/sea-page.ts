@@ -70,7 +70,6 @@ interface State {
   /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
   tag: { text: string; until: number } | null;
   /** The warnings at three quarters of the way to breaking off: ours stands while it holds, theirs is said once. */
-  warned: Record<'me' | 'them', boolean>;
   last: number;
   trayAt: number;
   /** The tray's page: the first chip it shows, how many it shows, and the choice it last turned to. */
@@ -83,7 +82,7 @@ const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, tag: null, warned: { me: false, them: false }, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -181,7 +180,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false; S.handing = false; S.closing = true; S.tag = null; S.warned = { me: false, them: false };
+  S.asking = false; S.handing = false; S.closing = true; S.tag = null;
   S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   guard();
@@ -610,18 +609,13 @@ function frame(): void {
   S.last = t;
   S.scene.now = t;
   const sim = S.sim;
-  // Until the fleets meet, time runs fast on its own, then drops back to the speed the player set (ruling 226, 1).
-  S.clock.advance(sim, S.closing ? dt * APPROACH : dt);
-  if (S.closing && (sim.over || gunsMeet(sim))) {
+  // Until the fleets meet, the core clock runs fast on its own, then drops back to the speed the player set (ruling 226, 1).
+  S.clock.rush = S.closing ? APPROACH : 1;
+  S.clock.advance(sim, dt);
+  if (S.closing && (sim.over || sim.contactTime !== null)) {
     S.closing = false;
+    S.clock.rush = 1;
     if (!sim.over) S.tag = { text: `The fleets meet · Running ×${S.clock.speed}`, until: t + 2.5 };
-  }
-  // Theirs at three quarters of the way to breaking off: one dispatch (ruling 226, 3).
-  const them: Side = S.scene.me === 'att' ? 'def' : 'att';
-  if (!S.warned.them && !sim.over && sim.nearBreak(them) >= 0.75 && sim.nearBreak(them) < 1) {
-    S.warned.them = true;
-    S.dispatch = { t: sim.t, what: 'sea:warn', text: `The ${sim.ticket[them].adj} fleet is near breaking off.`, unit: -1 };
-    S.dispatchAge = 0;
   }
   const v = sim.view(S.scene.me);
   takeEvents(S.scene, sim, v.events, t);
@@ -631,7 +625,8 @@ function frame(): void {
     S.dispatch = m > 0 ? { t: sim.t, what: 'contact', text: `The fleets are closing: in range in about ${m === 1 ? 'a minute' : `${m} minutes`}.`, unit: -1 } : null;
     S.dispatchAge = 0;
   }
-  for (const e of v.events) if (e.text) { S.dispatch = e; S.dispatchAge = 0; }
+  // Our own fleet near breaking off is said on the standing warning above the field, not as a dispatch too.
+  for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
   drawSea(ctx, sim, S.scene);
@@ -643,17 +638,6 @@ function frame(): void {
 /** How much faster time runs until the fleets meet: the long approach, about three battle minutes, passes in about
  *  twenty seconds at ×1. The approach itself stays as it is, since it is part of the fleets' balance (parity). */
 const APPROACH = 8;
-
-/** Whether the guns of either side have an enemy in reach yet. */
-function gunsMeet(sim: SeaSim): boolean {
-  const us = sim.units.filter(live);
-  for (const a of us) {
-    if (a.extra.cls === 'cv') continue;
-    const reach = SEA.classes[a.extra.cls as SeaClass].reach;
-    for (const b of us) if (b.side !== a.side && Math.hypot(a.x - b.x, a.y - b.y) <= reach) return true;
-  }
-  return false;
-}
 
 /** Sets the clock, and as it starts from stopped says so for a moment: "RUNNING ×2" (ruling 226, 8). */
 function setClock(to: Speed | 'toggle'): void {

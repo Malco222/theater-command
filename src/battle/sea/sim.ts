@@ -58,7 +58,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   readonly luck: number;
   private broken: Side | null = null;
   private brokeAt = 0;
-  private contact = false;
+  /** Battle time the guns first reached an enemy, null before it (ruling 226(1): the screens run fast until then). */
+  private contactAt: number | null = null;
+  /** Each fleet has been said to be near breaking off (ruling 226(3)): once a side. */
+  private warned: Record<Side, boolean> = { att: false, def: false };
   private readonly lastHit = new Map<number, number>();
   private readonly look = new Map<number, number>();
   /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
@@ -439,7 +442,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const range = d <= C.best ? 1 : SEA.fire.far + (1 - SEA.fire.far) * (C.reach - d) / (C.reach - C.best);
     const arc = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(u.face, bearing(u.x, u.y, foe.x, foe.y))));
     const nerve = u.state === 'wavering' ? SEA.nerve.wavering : u.state === 'routing' || this.orders.get(u.id)?.kind === 'leave' ? 0.5 : 1;
-    if (!this.contact) { this.contact = true; this.say({ what: 'contact', unit: u.id, side: u.side, text: 'The fleets are in range of each other.' }); }
+    if (this.contactAt === null) { this.contactAt = this.t; this.say({ what: 'contact', unit: u.id, side: u.side, text: 'The fleets are in range of each other.' }); }
     u.engaged = foe.id;
     const w = SEA.fire.rate * C.punch * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
     this.dealt[u.id] += w;
@@ -568,6 +571,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
       }
     }
     if (!this.broken) for (const side of ['att', 'def'] as Side[]) if (this.lostShare(side) >= this.breakAt[side]) { this.breakSide(side, false); break; }
+    if (!this.broken) for (const side of ['att', 'def'] as Side[]) {
+      if (this.warned[side] || this.nearBreak(side) < 0.75) continue;
+      this.warned[side] = true;
+      this.say({ what: 'nearBreak', side, text: this.ticket[side].human ? 'Your fleet is near breaking off: pull back the worn, or hand it to the staff.' : `The ${this.adj(side)} fleet is near breaking off.` });
+    }
     if (this.broken && this.t - this.brokeAt >= SEA.side.pursuit) { this.finish(other(this.broken), 'withdrew'); return; }
     if (this.t >= this.ticket.limit) this.finish(this.leader(), 'time');
   }
@@ -669,8 +677,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
       zones: this.zones.map((z) => ({ ...z })),
       ai: { ...this.ai },
       over: this.over,
+      breaking: { att: this.nearBreak('att'), def: this.nearBreak('def') },
+      contact: this.contactAt,
     };
   }
+
+  /** Battle time the guns first reached an enemy, null before it. */
+  get contactTime(): number | null { return this.contactAt; }
 }
 
 const TAU = Math.PI * 2;
