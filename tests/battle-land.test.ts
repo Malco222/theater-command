@@ -192,6 +192,26 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: near.id }, 'att')).toBe(true);
   };
 
+  it('"what you had won stays won" only when the field moved his way by five points or more (the design director, 20:51)', () => {
+    let said = 0, quiet = 0;
+    for (const ground of GROUNDS7) {
+      for (const s of [1, 2, 3]) {
+        const b = new LandBattle(sampleTicket(ground, 1.2, { seed: s * 7919 + 13 }));
+        const st0 = b.standing(), share0 = st0.att / (st0.att + st0.def);
+        b.ai.def = true;
+        plainAttack(b);
+        for (let i = 0; i < 20000 && !b.over && (b.contactAt === null || b.t < b.contactAt + 20 * s); i++) b.step();
+        if (b.over) continue;
+        const st = b.standing(), gain = st.att / (st.att + st.def) - share0;
+        b.toDice();
+        const line = b.over!.lines[0];
+        expect(line.includes('what you had won stays won')).toBe(gain >= 0.05);
+        if (gain >= 0.05) said++; else quiet++;
+      }
+    }
+    expect(said + quiet).toBeGreaterThan(10);
+  });
+
   it('a close battle lasts minutes from the first contact, and never breaks an army most of which has not fought (mark 2)', () => {
     const fights: number[] = [];
     for (const ground of GROUNDS7) {
