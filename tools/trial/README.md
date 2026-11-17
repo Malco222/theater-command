@@ -117,6 +117,12 @@ The printouts for the globe's eight are in `results/grow/` (a year four ways for
 Iran run on to 18 and 24 months); `results/grow/three-factories/` is South Africa on the chart before its factories
 went from 3 to 2. The report is section 7 of the globe's paper.
 
+**The year run again under rulings 213 and 214** (section 8 of the paper): `node tools/trial/bake-213.mjs`, build, and the same
+grow runs. Printouts in `results/grow-214/` (38 runs), the eight seats' year test with the levers on in
+`results/year-214/`, and Iran with its oil paid at a fifth and at nothing in `results/grow-214/iran-oil/`
+(`bake-213.mjs --oil IRN=0.2`: a question for the director's watch, not a ruling; bake again without it after).
+`node tools/trial/build-books.mjs && node dist/trial/books.mjs SAF IRN UK USA` prints the first day's books line by line.
+
 `watch` plays with nobody at the controls and prints, for each country, the months in which something changed
 (wars, alignment, provinces, corps, news that names it): the computer's path when nobody leads it.
 
@@ -288,6 +294,12 @@ Each was met while building the trial. Lines are those of this branch.
     is about half again as strong after a year (Iran 4.6 divisions to 6.8, and 9.0 after two), where the record says
     six of them did not grow. The data's lever is a `pool` and `class` row in `manpower.json`, which `manpower.ts`
     reads for any country (lines 56 and 67), not only the great powers. Filed with the same report.
+
+24. **The land factor moves trade, and two great powers' first day with it.** An agreement's worth follows what each
+    partner's provinces pay (`wealthOf`, `trade.ts:36`), so the factor of ruling 214 makes the sixteen countries
+    poorer partners. On the first day Britain goes from 7,301 to 7,287 and the United States from 1,465 to 1,412,
+    through trade alone (Germany, Italy, France and the Soviet Union do not move); Nepal gains an agreement (206 to
+    225). Ruling 213(a) says no great power's total moves: `wealthOf` read before the factor would hold it.
 
 ## Not verified
 

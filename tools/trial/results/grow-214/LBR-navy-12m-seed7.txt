@@ -1,0 +1,8 @@
+=== grow LBR, seed 7, 12 months, aim navy; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 1, divisions 1 on paper and 0.2 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 2.6 divisions; income 159.3 a month
+    nothing could be bought in time
+    never on offer: ship:dd: Needs a shipyard of level 1 in one of your home ports.
+    never on offer: ship:ss: Needs a shipyard of level 1 in one of your home ports.
+    never on offer: ship:tp: Needs a shipyard of level 1 in one of your home ports.
+  September 1940: corps 1, divisions 1 on paper and 0.3 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 2.6 divisions; treasury 2027.5; spent 0; still on order: nothing
+GROWN LBR navy seed 7 to September 1940: divisions 1 -> 1 on paper (0.2 -> 0.3 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 0; invariants broken 0; standing

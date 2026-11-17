@@ -211,10 +211,11 @@ describe.runIf(merged)('the seats on the map (the globe\'s stage)', () => {
     const g = grand();
     const ger = income(g, 'GER');
     const army = (id: string): number => g.corps.filter((c) => c.nat === id && !c.dead).reduce((s, c) => s + c.divs * c.str, 0);
-    // South Africa, a dominion at war with gold and three factories, earns a fifth of what Germany does; no other
-    // seat earns a tenth, and five of the eight earn less than a twentieth.
+    // South Africa, a dominion at war with gold and two factories, earns under a fifth of what Germany does (about
+    // an eighth once ruling 214's land factor is in); no other seat earns a tenth, and the five poorest earn less
+    // than a twentieth, with or without the factor (with it, Saudi Arabia joins them).
     for (const id of EIGHT) expect(income(g, id) / ger, id).toBeLessThan(id === 'SAF' ? 0.25 : 0.1);
-    expect(EIGHT.filter((id) => income(g, id) / ger < 0.05)).toEqual(['IRQ', 'AFG', 'YEM', 'NEP', 'LBR']);
+    for (const id of ['IRQ', 'AFG', 'YEM', 'NEP', 'LBR']) expect(income(g, id) / ger, id).toBeLessThan(0.05);
     // Iran's nine thin divisions are the largest army of the eight: a sixteenth of Germany's. The rest are under a fortieth.
     for (const id of EIGHT) expect(army(id) / army('GER'), id).toBeLessThan(id === 'IRN' ? 0.07 : 0.03);
   });

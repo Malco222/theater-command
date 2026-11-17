@@ -1,0 +1,10 @@
+=== grow SAF, seed 7, 24 months, aim air; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 2, divisions 2 on paper and 0.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 2 (1 in its best province); men in the pool for 2.4 divisions; income 600.2 a month
+    October 1939: Airfields (level 1) for 1000, due January 1940
+    January 1940: Airfields (level 2) for 1500, due April 1940
+    May 1940: Airfields (level 3) for 2200, due August 1940
+    never on offer: air:ftr: No works in the country build these: its aircraft come from abroad.
+    never on offer: air:bmr: No works in the country build these: its aircraft come from abroad.
+  September 1941: corps 2, divisions 2 on paper and 1.7 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 2 (1 in its best province); men left in the pool for 2.4 divisions; treasury 9461.1; spent 4700; still on order: nothing
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+GROWN SAF air seed 7 to September 1941: divisions 2 -> 2 on paper (0.8 -> 1.7 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 2 -> 2; orders 3; invariants broken 0; standing

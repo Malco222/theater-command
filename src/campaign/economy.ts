@@ -124,7 +124,9 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const land = BUDGET.land[r.terrain] * k * f214;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * f214 : 0;
-  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
+  // TRIAL: a question for the director's watch on Iran, off unless bake-213.mjs --oil set it: the oilfield's pay at a share, with the ground.
+  const o214 = (trial213 as unknown as { oilFactor?: Record<string, number> }).oilFactor?.[r.owner] ?? 1;
+  const oil = r.oil ? BUDGET.oil * k * o214 * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {

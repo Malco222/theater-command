@@ -1,0 +1,73 @@
+=== IRN, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Iran (IRN), September 1939; part of the world: the Middle East; government: authoritarian; stands: independent; quality 0.55, air 1, resilience 0.4, sea lift 0
+  capital: Tehran (province 960, held by IRN)
+  provinces: holds 23, owns 23; at home 23, colonies 0; ports 4; factories 1; victory points 8; oilfields 1
+  seas it stands on: Persian Gulf, Arabian Sea
+  neighbours by land: SOV, TUR, IRQ, UK, AFG
+  army: 7 corps, 9 divisions on paper, 4.6 at strength
+    Tehran divisions and the Imperial Guard [inf] 2 div at 60% in Tehran
+    Azerbaijan division (Tabriz) [inf] 1 div at 50% in Iran
+    5th and 12th Divisions (Kurdistan and Kermanshah) [inf] 2 div at 50% in Kermanshah
+    Khuzestan division (the oil fields) [inf] 1 div at 50% in Ahwaz
+    Gilan division (the Caspian) [inf] 1 div at 50% in Resht
+    Khorasan division (Meshed) [inf] 1 div at 50% in Meshed
+    Fars division (Shiraz) [inf] 1 div at 40% in Shiraz
+  fleets: Iranian Fleet under Gholamali Bayandor at Abadan (2 dd) in Persian Gulf
+  air groups: none
+  books (as the interface shows them, x100): income 305.7 a month, upkeep 10, net 295.7, treasury 0
+  at war with: none; follows: nobody; friends: IRQ, AFG, TUR
+  abilities: The Saadabad Pact; The oil of Khuzestan
+  paths: axis (open); allies (open); alone (now); found (open)
+  League founders it could ask (4, all of the Middle East unless said): AFG (willing), SAU (willing), YEM (willing), IRQ; of another part of the world: none
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 8; barred for another reason 12
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: The treasury cannot cover it.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: No works in the country build these: its aircraft come from abroad.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: No works in the country build these: its aircraft come from abroad.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The treasury cannot cover it.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: Tehran has no harbour.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+    with Abadan picked: ship:tp    Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    with Abadan picked: work:yard  Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
+  first month reached in 4 s
+--- month by month (the line is the day the player is up)
+  ways out of the country on September 1939 (sea lift 0, seaSupply false):
+    Tehran divisions and the Imperial Guard in Tehran: marches to 19 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Azerbaijan division (Tabriz) in Iran: marches to 11 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    5th and 12th Divisions (Kurdistan and Kermanshah) in Kermanshah: marches to 16 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Khuzestan division (the oil fields) in Ahwaz: marches to 21 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Gilan division (the Caspian) in Resht: marches to 14 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Khorasan division (Meshed) in Meshed: marches to 16 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Fars division (Shiraz) in Shiraz: marches to 20 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    by land in the end, over its own and its allies' ground from Tehran: 23 provinces (IRN 23); furthest Abadan, 4 provinces off; on the map of Europe 2 (nearest Iran, 2 off)
+      frontiers that road comes to: SOV at Krasnovodsk, 2 off; IRQ at Basra, 3 off; TUR at Van, 3 off; AFG at Herat, 3 off; UK at Kalat, 4 off
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 240.5; at 295.4 a month that is 2 month(s) away
+  September 1939  alive  provinces  23  corps  7 (4.7 divs)  treasury   240.5  net  295.4/month  independent  at war with: none  [0 s]
+  October 1939    alive  provinces  23  corps  7 (4.9 divs)  treasury     479  net  295.1/month  independent  at war with: none  [3 s]
+  November 1939   alive  provinces  23  corps  7 (5 divs)  treasury   715.6  net  294.8/month  independent  at war with: none  [2 s]
+  December 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Tehran; treasury 950.1 -> 150.1; orders in hand 1
+  December 1939   alive  provinces  23  corps  7 (5.2 divs)  treasury   150.1  net  294.5/month  independent  at war with: none  [2 s]
+  January 1940    alive  provinces  23  corps  7 (5.3 divs)  treasury   382.3  net    294/month  independent  at war with: none  [2 s]
+  February 1940   alive  provinces  23  corps  7 (5.5 divs)  treasury   612.3  net  288.7/month  independent  at war with: none  [2 s]
+  March 1940      alive  provinces  23  corps  7 (5.7 divs)  treasury     835  net  288.3/month  independent  at war with: none  [4 s]
+  April 1940      alive  provinces  23  corps  7 (5.8 divs)  treasury  1055.5  net    288/month  independent  at war with: none  [3 s]
+  May 1940        alive  provinces  23  corps  7 (6 divs)  treasury  1273.5  net  287.6/month  independent  at war with: none  [4 s]
+  June 1940       alive  provinces  23  corps  7 (6.2 divs)  treasury  1488.7  net  286.9/month  independent  at war with: none  [4 s]
+  July 1940       alive  provinces  23  corps  7 (6.4 divs)  treasury  1701.4  net  286.5/month  independent  at war with: none  [5 s]
+  August 1940     alive  provinces  23  corps  7 (6.6 divs)  treasury  1911.4  net  286.1/month  independent  at war with: none  [5 s]
+  September 1940  alive  provinces  23  corps  7 (6.8 divs)  treasury  2118.8  net  285.7/month  independent  at war with: none  (end)
+    [note] saved at February 1940: 462 KB
+VERDICT IRN seed 7: PASS: started yes; order given (December 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 42 s
