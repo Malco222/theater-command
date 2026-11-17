@@ -1,0 +1,46 @@
+step	verb	target	verdict	presses	click to picture ms	work ms	long work ms	longest work ms	card words	card px	card buttons	side page words	side page px	side page window px	tray words	pressed button px below the edge	card buttons below the edge	words shown	more
+1	press	United States	DID	1	32	9	0	0	842	2548	51	307	882	882	0	0	9		
+2	press	1942	DID	1	24	7	0	0	793	2426	51	307	882	882	0	0	6		
+3	press	Supreme command	DID	1	24	5	0	0	776	2408	51	307	882	882	0	0	1		
+4	press	BEGIN THE CAMPAIGN	DID	1	2000	1748	3499	1758	0	0	0	3572	6375	826	0	0	0		
+5	watch	6	READ	0	0	0	618	181	119	515	1	3587	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	a card opened 0.7s into the watch: DISPATCHES · BEFORE YOUR FIRST MONTH As January 1942 opens G
+6	press	GIVE ORDERS	DID	1	240	54	127	127	0	0	0	3587	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+7	press	Your war cabinet	DID	1	240	90	128	128	202	650	8	3587	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+8	press	MINISTERS	DID	1	64	5	0	0	392	1083	15	3587	6441	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+9	press	The organiser	DID	1	48	4	0	0	401	1068	15	3587	6441	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+10	press	YES, APPOINT HIM	DID	1	248	117	129	129	483	1166	15	3578	6410	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+11	close		DID	1	264	70	70	70	0	0	0	3578	6410	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+12	select-province	New York	DID	1	504	199	299	299	0	0	0	742	3029	826	78	0	0	Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes t	
+13	press	Appoint a general	DID	1	120	2	0	0	79	388	3	742	3029	826	78	1098	0	Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes t	
+14	close		DID	1	288	89	88	88	0	0	0	742	3029	826	78	0	0	Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes t	
+15	press	Ship by sea	DID	1	336	100	158	158	0	0	0	853	3758	826	78	0	0	Sea transport: click any blue port, or pick one from the list beside the map. It takes the whole month.	
+16	select-province	Wales	DID	1	368	140	218	218	0	0	0	436	1733	826	47	0	0	One corps has sailed to Wales. The voyage is its whole month.	
+17	open-page	Air	DID	1	352	127	223	223	0	0	0	1908	7587	826	0	0	0	Click an airfield on the map, or one of your air groups in the list. Plan a raid from its target.	
+18	select-unit	I Bomber Command	DID	1	288	81	132	132	0	0	0	2001	7915	826	0	252	0	The rings show how far the I Bomber Command reaches. Give it standing orders, plan a raid with it, or move it.	
+19	press	MOVE TO ANOTHER AIRFIELD	DID	1	288	85	137	137	0	0	0	2197	8724	826	0	0	0	A new airfield for the I Bomber Command: click a blue province. Aircraft can be based only where there is an airfield.	
+20	press	Wales	DID	1	272	79	126	126	0	0	0	2040	8155	826	0	291	0	I Bomber Command is shipped across the ocean to the airfield at Wales.	
+21	open-page	Spies	DID	1	304	125	188	188	0	0	0	108	826	826	0	0	0	The secret service: recruit agents, send them abroad and give each its work. An agent is at work a month after it sets o	
+22	press	RECRUIT AN AGENT	DID	1	280	89	132	132	0	0	0	127	826	826	0	0	0	Agent Halberd is recruited. Training takes a month: orders can be given from February 1942.	
+23	open-page	Staff	DID	1	400	209	261	261	0	0	0	329	1288	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+24	press	Open it	DID	1	320	114	169	169	0	0	0	459	1957	826	0	0	0	Research: open the technology tree and put each free team to work. A technology takes months, and what it gives lasts fo	
+25	close		DID	1	32	0	0	0	0	0	0	459	1957	826	0	0	0	Research: open the technology tree and put each free team to work. A technology takes months, and what it gives lasts fo	
+26	open-page	Region	DID	1	312	119	162	162	0	0	0	3578	6410	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+27	end-month		DID	2	720	490	3302	508	0	0	0	3584	6449	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	month over in 0.4s; giving orders again after 4.8s and 2 presses; screens: 0.4s no card, end button "" off >> 3.7s card "news" DISPATCHES · THE MONTH IN ONE LOOK January 1942 TO (200 words, 915px) >> 4.8s no card, end button "END MONTH ▸ENTER"
+28	open-page	Air	DID	1	304	112	164	164	0	0	0	2002	7997	826	0	0	0	The rings show how far the I Bomber Command reaches. Give it standing orders, plan a raid with it, or move it.	
+29	select-unit	I Bomber Command	DID	0	0	0	0	0	0	0	0	2002	7997	826	0	476	0	The rings show how far the I Bomber Command reaches. Give it standing orders, plan a raid with it, or move it.	
+30	press	PLAN A RAID WITH IT	DID	1	400	201	249	249	0	0	0	2069	8206	826	0	0	0	The rings show how far the I Bomber Command reaches. Give it standing orders, plan a raid with it, or move it.	
+31	press	BOMB FACTORIES AND RAILWAYS	DID	1	296	119	162	162	0	0	0	2225	8853	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+32	press	Ruhr	MISSING	0	0	0	0	0	0	0	0	2225	8853	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+33	press	FLY THE RAID BY DAY	MISSING	0	0	0	0	0	0	0	0	2225	8853	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+34	close		DID	1	48	0	0	0	0	0	0	2225	8853	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+35	open-page	Region	DID	1	312	108	151	151	0	0	0	3584	6449	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+36	select-province	Wales	DID	1	424	162	263	263	0	0	0	484	1982	826	61	0	0	Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes t	
+37	order-province	Cotentin	SAID WHY	1	296	62	129	129	0	0	0	484	1982	826	61	0	0	Cotentin is out of reach for the army you have picked up this month.	
+38	press	Invade by sea	SAID WHY	1	472	135	274	274	0	0	0	484	1982	826	61	548	0	Landing from the sea: click a red coast to see the odds.	
+39	select-province	Cotentin	SAID WHY	1	440	128	269	269	0	0	0	484	1982	826	61	0	0	No sea lane to that coast is open: it is too far, or the enemy holds the sea between.	
+40	press	LAND THE TROOPS	MISSING	0	0	0	0	0	0	0	0	484	1982	826	61	0	0	Landing from the sea: click a red coast to see the odds.	
+41	close		DID	1	304	102	102	102	0	0	0	3584	6449	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+42	end-month		DID	2	896	567	3647	640	0	0	0	3584	6410	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	month over in 0.4s; giving orders again after 4.9s and 2 presses; screens: 0.4s no card, end button "" off >> 3.8s card "news" DISPATCHES · THE MONTH IN ONE LOOK February 1942 G (91 words, 433px) >> 4.9s no card, end button "END MONTH ▸ENTER"
+43	end-month		DID	2	840	534	3205	554	0	0	0	3594	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	month over in 0.4s; giving orders again after 4.6s and 2 presses; screens: 0.4s no card, end button "" off >> 3.3s card "news" DISPATCHES · THE MONTH IN ONE LOOK March 1942 GIVE (105 words, 473px) >> 4.5s no card, end button "END MONTH ▸ENTER"
+44	pan-zoom	Cotentin near	READ	0	200	0	13988	161	0	0	0	3594	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	near: 280 pictures; middle 15 a second, slow ones 9 a second, the worst took 183ms
+45	pan-zoom	Cotentin far	READ	0	128	0	13466	171	0	0	0	3594	6441	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	far: 254 pictures; middle 20 a second, slow ones 9 a second, the worst took 167ms

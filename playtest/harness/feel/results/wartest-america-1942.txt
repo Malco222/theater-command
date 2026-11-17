@@ -1,0 +1,9 @@
+as loaded:        195 pictures, middle 15 a second, slow ones 9 a second, worst 133ms; fx nodes 13, animations 17
+all paused        : 222 pictures, middle 30 a second, slow ones 10 a second, worst 150ms
+freeme rings off  : 201 pictures, middle 20 a second, slow ones 9 a second, worst 133ms
+siege rings off   : 173 pictures, middle 9 a second, slow ones 5 a second, worst 233ms
+armour flicker off: 195 pictures, middle 20 a second, slow ones 10 a second, worst 183ms
+rings off, flicker on: 265 pictures, middle 60 a second, slow ones 12 a second, worst 100ms
+fx and sieges hidden: 252 pictures, middle 60 a second, slow ones 12 a second, worst 100ms
+as loaded again   : 193 pictures, middle 20 a second, slow ones 10 a second, worst 117ms
+.pzfire, .pzflag { pointer-events: none; }

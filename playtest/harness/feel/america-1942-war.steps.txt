@@ -1,0 +1,45 @@
+press	United States
+press	1942
+press	Supreme command
+press	BEGIN THE CAMPAIGN
+watch	6
+press	GIVE ORDERS
+press	Your war cabinet
+press	MINISTERS
+press	The organiser
+press	YES, APPOINT HIM
+close
+select-province	New York
+press	Appoint a general
+close
+press	Ship by sea
+select-province	Wales
+open-page	Air
+select-unit	I Bomber Command
+press	MOVE TO ANOTHER AIRFIELD
+press	Wales
+open-page	Spies
+press	RECRUIT AN AGENT
+open-page	Staff
+press	Open it
+close
+open-page	Region
+end-month
+open-page	Air
+select-unit	I Bomber Command
+press	PLAN A RAID WITH IT
+press	BOMB FACTORIES AND RAILWAYS
+press	Ruhr
+press	FLY THE RAID BY DAY
+close
+open-page	Region
+select-province	Wales
+order-province	Cotentin
+press	Invade by sea
+select-province	Cotentin
+press	LAND THE TROOPS
+close
+end-month
+end-month
+pan-zoom	Cotentin near
+pan-zoom	Cotentin far

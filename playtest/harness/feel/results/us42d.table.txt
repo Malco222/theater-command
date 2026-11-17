@@ -1,0 +1,46 @@
+     # verb             target           verdict             prs    c2p   work     lt  ltmax     cW    cPx     cB     pW    pPx   pWin     tW  below   cBel
+     1 press            United States    DID                   1     32      9      0      0    842   2548     51    307    882    882      0      0      9
+     2 press            1942             DID                   1     24      7      0      0    793   2426     51    307    882    882      0      0      6
+     3 press            Supreme command  DID                   1     24      5      0      0    776   2408     51    307    882    882      0      0      1
+     4 press            BEGIN THE CAMPAI DID                   1   2000   1748   3499   1758      0      0      0   3572   6375    826      0      0      0
+     5 watch            6                READ                  0      0      0    618    181    119    515      1   3587   6441    826      0      0      0
+     6 press            GIVE ORDERS      DID                   1    240     54    127    127      0      0      0   3587   6441    826      0      0      0
+     7 press            Your war cabinet DID                   1    240     90    128    128    202    650      8   3587   6441    826      0      0      0
+     8 press            MINISTERS        DID                   1     64      5      0      0    392   1083     15   3587   6441    826      0      0      2
+     9 press            The organiser    DID                   1     48      4      0      0    401   1068     15   3587   6441    826      0      0      2
+    10 press            YES, APPOINT HIM DID                   1    248    117    129    129    483   1166     15   3578   6410    826      0      0      2
+    11 close                             DID                   1    264     70     70     70      0      0      0   3578   6410    826      0      0      0
+    12 select-province  New York         DID                   1    504    199    299    299      0      0      0    742   3029    826     78      0      0
+    13 press            Appoint a genera DID                   1    120      2      0      0     79    388      3    742   3029    826     78   1098      0
+    14 close                             DID                   1    288     89     88     88      0      0      0    742   3029    826     78      0      0
+    15 press            Ship by sea      DID                   1    336    100    158    158      0      0      0    853   3758    826     78      0      0
+    16 select-province  Wales            DID                   1    368    140    218    218      0      0      0    436   1733    826     47      0      0
+    17 open-page        Air              DID                   1    352    127    223    223      0      0      0   1908   7587    826      0      0      0
+    18 select-unit      I Bomber Command DID                   1    288     81    132    132      0      0      0   2001   7915    826      0    252      0
+    19 press            MOVE TO ANOTHER  DID                   1    288     85    137    137      0      0      0   2197   8724    826      0      0      0
+    20 press            Wales            DID                   1    272     79    126    126      0      0      0   2040   8155    826      0    291      0
+    21 open-page        Spies            DID                   1    304    125    188    188      0      0      0    108    826    826      0      0      0
+    22 press            RECRUIT AN AGENT DID                   1    280     89    132    132      0      0      0    127    826    826      0      0      0
+    23 open-page        Staff            DID                   1    400    209    261    261      0      0      0    329   1288    826      0      0      0
+    24 press            Open it          DID                   1    320    114    169    169      0      0      0    459   1957    826      0      0      0
+    25 close                             DID                   1     32      0      0      0      0      0      0    459   1957    826      0      0      0
+    26 open-page        Region           DID                   1    312    119    162    162      0      0      0   3578   6410    826      0      0      0
+    27 end-month                         DID                   2    720    490   3302    508      0      0      0   3584   6449    826      0      0      0
+    28 open-page        Air              DID                   1    304    112    164    164      0      0      0   2002   7997    826      0      0      0
+    29 select-unit      I Bomber Command DID                   0      0      0      0      0      0      0      0   2002   7997    826      0    476      0
+    30 press            PLAN A RAID WITH DID                   1    400    201    249    249      0      0      0   2069   8206    826      0      0      0
+    31 press            BOMB FACTORIES A DID                   1    296    119    162    162      0      0      0   2225   8853    826      0      0      0
+    32 press            Ruhr             MISSING               0      0      0      0      0      0      0      0   2225   8853    826      0      0      0
+    33 press            FLY THE RAID BY  MISSING               0      0      0      0      0      0      0      0   2225   8853    826      0      0      0
+    34 close                             DID                   1     48      0      0      0      0      0      0   2225   8853    826      0      0      0
+    35 open-page        Region           DID                   1    312    108    151    151      0      0      0   3584   6449    826      0      0      0
+    36 select-province  Wales            DID                   1    424    162    263    263      0      0      0    484   1982    826     61      0      0
+    37 order-province   Cotentin         SAID WHY              1    296     62    129    129      0      0      0    484   1982    826     61      0      0
+    38 press            Invade by sea    SAID WHY              1    472    135    274    274      0      0      0    484   1982    826     61    548      0
+    39 select-province  Cotentin         SAID WHY              1    440    128    269    269      0      0      0    484   1982    826     61      0      0
+    40 press            LAND THE TROOPS  MISSING               0      0      0      0      0      0      0      0    484   1982    826     61      0      0
+    41 close                             DID                   1    304    102    102    102      0      0      0   3584   6449    826      0      0      0
+    42 end-month                         DID                   2    896    567   3647    640      0      0      0   3584   6410    826      0      0      0
+    43 end-month                         DID                   2    840    534   3205    554      0      0      0   3594   6441    826      0      0      0
+    44 pan-zoom         Cotentin near    READ                  0    200      0  13988    161      0      0      0   3594   6441    826      0      0      0
+    45 pan-zoom         Cotentin far     READ                  0    128      0  13466    171      0      0      0   3594   6441    826      0      0      0
