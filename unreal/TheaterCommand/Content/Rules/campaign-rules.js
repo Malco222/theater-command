@@ -31585,6 +31585,36 @@
       return [];
     }
   };
+  var leadCalls = {
+    whyNot: rulesByName["whyNotLead"],
+    order: rulesByName["marchOrder"],
+    leftAlone: rulesByName["gunsLeftAlone"]
+  };
+  var leadWhy = (g2, corps, to) => {
+    try {
+      return leadCalls.whyNot?.(g2, corps, to) ?? "";
+    } catch {
+      return "";
+    }
+  };
+  var inMarchOrder = (g2, corps) => {
+    try {
+      return leadCalls.order ? leadCalls.order(g2, corps) : corps;
+    } catch {
+      return corps;
+    }
+  };
+  var leftAloneAt = (g2, region) => {
+    try {
+      return leadCalls.leftAlone?.(g2, region) ?? "";
+    } catch {
+      return "";
+    }
+  };
+  function leadOf(ids2, to) {
+    const s = game();
+    return { why: s.regions[to] ? leadWhy(s, corpsById(s, ids2), to) : "" };
+  }
   var seaCalls = {
     crossings: rulesByName["crossings"],
     plan: rulesByName["orderCrossingPlan"],
@@ -31949,19 +31979,21 @@
         others = [];
       }
       if (!others.length || moved.length) return;
-      const other2 = others[0], from = c.reg, key6 = `${c.id}:${to}:${s.turn}`;
+      const other2 = others[0], from2 = c.reg, key6 = `${c.id}:${to}:${s.turn}`;
       if (swapAsked === key6) {
         swapAsked = "";
         if (orderSwap(s, c, other2)) {
-          moved.push({ id: c.id, path: [to] }, { id: other2.id, path: [from] });
+          moved.push({ id: c.id, path: [to] }, { id: other2.id, path: [from2] });
           note4 = `${c.name} and ${other2.name} have changed places.`;
         }
       } else {
         swapAsked = key6;
-        note4 = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other2.name}, which comes back to ${s.regions[from].name}.`;
+        note4 = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other2.name}, which comes back to ${s.regions[from2].name}.`;
       }
     };
-    for (const c of corpsById(s, ids2)) {
+    const sent = inMarchOrder(s, corpsById(s, ids2));
+    const from = new Set(sent.map((c) => c.reg));
+    for (const c of sent) {
       const m = reach2(s, c);
       const end = m.get(to);
       if (to === c.reg || end?.attack) continue;
@@ -31992,6 +32024,10 @@
       const { who, many } = whoOf(kept, army, armyIds), place2 = s.regions[to].name;
       const said = setOff ? `${leading(who)} ${many ? "are" : "is"} on the march to ${place2}: ${inMonths2(keptMonths)} more, going on as each month opens. Any other order ends the march.` : `${leading(who)} will march to ${place2} from next month, ${inMonths2(keptMonths)}. Any other order ends the march.`;
       note4 = note4 ? `${said} ${note4}` : said;
+    }
+    for (const r of from) {
+      const alone = r !== to && moved.length ? leftAloneAt(s, r) : "";
+      if (alone) note4 = note4 ? `${note4} ${alone}` : alone;
     }
     return { moved, note: note4, view: view2() };
   }
@@ -32092,6 +32128,8 @@
         ids2 = best.corps.map((c) => c.id);
       }
     }
+    const alone = leadWhy(s, wouldAttack(s, ids2, to), to);
+    if (alone) return { region: to, refused: alone };
     const corps = attackers(s, ids2, to);
     const foeThere = !!s.human && s.regions[to].units.some((u) => !u.dead && atWar(s, s.human, u.nat));
     const refused = foeThere ? whyNotAttack(s, s.regions[to]) : "";
@@ -32786,10 +32824,13 @@
       text: h.kind === "letter" ? `“${h.text}”${h.by ? `  ${h.by}` : ""}` : h.text,
       nat: h.nat ?? null,
       turn: h.turn,
-      week: h.week
+      week: h.week,
+      // (Rules 84.2.5; ruling 211(b).) A line of news with a title of its own: "Britain stands by Canada".
+      head: h.head ?? ""
     }));
     const weight3 = { fall: 0, war: 1, goal: 2, honour: 3, event: 4, letter: 5 };
-    const first2 = headlines.filter((h) => h.kind in weight3).sort((a, b) => weight3[a.kind] - weight3[b.kind]);
+    const rank2 = (h) => h.head ? 1.5 : weight3[h.kind];
+    const first2 = headlines.filter((h) => h.kind in weight3 || !!h.head).sort((a, b) => rank2(a) - rank2(b));
     const events = (first2.length ? first2 : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
     const said = (nat) => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === "fall" || h.kind === "event" || h.kind === "war"))?.text ?? "";
     const announce = [];
@@ -32844,7 +32885,8 @@
     const touches = (h) => !!s.human && (h.nat === s.human || !!myName && h.text.includes(myName));
     const wars = headlines.filter((x) => x.kind === "war");
     const always = reel.length > 0 || wars.some(touches);
-    for (const h of [...wars.filter(touches), ...wars.filter((x) => !touches(x))].slice(0, 2)) reel.push({ nat: h.nat ?? "", title: "WAR IS DECLARED", text: short(h.text), region: capitalOf2(h.nat) });
+    for (const h of [...wars.filter(touches), ...wars.filter((x) => !touches(x))].slice(0, 2)) reel.push({ nat: h.nat ?? "", title: h.head ? h.head.toUpperCase() : "WAR IS DECLARED", text: short(h.text), region: capitalOf2(h.nat) });
+    for (const h of headlines.filter((x) => !!x.head && x.kind !== "war" && x.kind !== "fall" && touches(x)).slice(0, 1)) reel.push({ nat: h.nat ?? "", title: h.head.toUpperCase(), text: short(h.text), region: capitalOf2(h.nat) });
     const fights = steps.filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0)).sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
     const heavy = fights.some((x) => x.mine && (x.taken?.length ?? 0) > 0) || fights.reduce((n, x) => n + (x.taken?.length ?? 0), 0) >= 4;
     const big = always || (heavy || wars.length > 0) && s.turn - lastReel >= 3;
@@ -33655,10 +33697,13 @@ ${next.text}` : ""}` : next ? next.also : "";
     const blocOf = (b) => b === "axis" ? "the Axis" : "the Allies";
     const The = upFirst2(theName2(s, on));
     const trade = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
-    const divs = fieldArmy(s, on).toLocaleString("en-US");
+    const divsOf = (n2) => `${Math.round(n2).toLocaleString("en-US")} division${Math.round(n2) === 1 ? "" : "s"}`;
+    const divs = divsOf(fieldArmy(s, on));
     const lines = [];
-    lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} divisions fight for them.` : `${The} and its ${divs} divisions are at war with you from today.`);
-    if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf5(f.league.map((x) => theName2(s, x)))} ${f.league.length === 1 ? "goes" : "go"} to war with you the same day, with ${f.league.reduce((sum2, id) => sum2 + fieldArmy(s, id), 0).toLocaleString("en-US")} divisions between them.`);
+    lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} ${Math.round(fieldArmy(s, on)) === 1 ? "fights" : "fight"} for them.` : `${The} and its ${divs} are at war with you from today.`);
+    if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf5(f.league.map((x) => theName2(s, x)))} ${f.league.length === 1 ? "goes" : "go"} to war with you the same day, with ${divsOf(f.league.reduce((sum2, id) => sum2 + fieldArmy(s, id), 0))} between them.`);
+    const patron = f.patronSays;
+    if (patron) lines.push(`${patron[0]} ${patron[1]}`);
     if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
     if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
     else if (f.ready === "war") lines.push("No surprise: it is already at war with your side and its army is ready.");
@@ -36102,6 +36147,7 @@ ${standing5}`,
     garrisonWhy,
     sallyLook,
     sally: sally2,
-    endMonth
+    endMonth,
+    lead: leadOf
   };
 })();

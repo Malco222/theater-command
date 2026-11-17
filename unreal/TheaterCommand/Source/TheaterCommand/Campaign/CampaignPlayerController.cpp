@@ -4479,6 +4479,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				else if (const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString(); !Alone.IsEmpty())
+				{
+					// (Rules 84.2.5; ruling 211(a).) Guns sent forward alone: the refusal on the pointer's paper slip, in ink.
+					Line += TEXT("\n") + Alone;
+				}
 				else if (!bByRail && !bBySea && RailBeyond.Contains(TipRegion))
 				{
 					// (The railway brief, section 8.) A province it can ride to: the rules' one line, in the lit railway's
@@ -6467,6 +6472,17 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		Notify(TEXT("War cannot be declared on them this month."));
 		return;
 	}
+	if (!bByRail && !bBySea)
+	{
+		// (Rules 84.2.5; ruling 211(a).) Guns and engineers never go forward alone: no attack, no storm, no march onto
+		// enemy-held ground without a fighting corps. The rules' sentence answers the press, and nothing is ordered.
+		const FString Alone = Session->WhyNotLead(PickedCorps, RegionId);
+		if (!Alone.IsEmpty())
+		{
+			Notify(Alone, 7.0);
+			return;
+		}
+	}
 	if (!Target && !bByRail && !bBySea && !bHandSpent && OpenApproach(RegionId, false))
 	{
 		// (The design director, 17 November.) An enemy army that is not next door, with ground beside it in this
@@ -7292,8 +7308,15 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.OurTag = View.Human;
 	FaceOff.TheirTag = TheirTag;
 	const FString OurGeneral = SeniorGeneral(Preview.Attackers), TheirGeneral = SeniorGeneral(Preview.Defenders);
-	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? FString(TEXT("No general named")) : OurGeneral);
-	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? FString(TEXT("No general named")) : TheirGeneral);
+	// (Ruled by the design director at 16:52 UTC on 17 November.) Where no general is named, the large line carries the
+	// force's own name, as the map's flag and the province panel give it ("American army", "Mexican army"). A named
+	// general takes the line back.
+	auto ForceName = [](const FCampaignNation* Nation, const FString& Tag)
+	{
+		return FString::Printf(TEXT("%s army"), Nation && !Nation->Adjective.IsEmpty() ? *Nation->Adjective : *Tag);
+	};
+	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? ForceName(Ours, View.Human) : OurGeneral);
+	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? ForceName(Theirs, TheirTag) : TheirGeneral);
 	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
 	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
 	FaceOff.OurRoster = RosterOf(Preview.Attackers, false);
@@ -7694,9 +7717,18 @@ void ACampaignPlayerController::SendOnlyPicked()
 		return;
 	}
 	const int32 RegionId = FaceOff.Region;
+	const TArray<int32> Everyone = PickedCorps, PickedFirst = PickedBeforeMass;
+	const double CardSince = FaceOffSince;
 	PickedCorps = PickedBeforeMass;
 	PickedBeforeMass.Reset();
 	OpenFaceOff(RegionId);
+	if (FaceOffSince == CardSince)
+	{
+		// (Rules 84.2.5.) The rules refused the corps picked (guns alone, ruling 211(a)) and said why: the card still shows
+		// everyone going in, and the hand goes back to match it.
+		PickedCorps = Everyone;
+		PickedBeforeMass = PickedFirst;
+	}
 }
 
 void ACampaignPlayerController::ConfirmAttack()

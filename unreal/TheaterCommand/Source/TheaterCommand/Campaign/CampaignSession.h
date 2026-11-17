@@ -123,6 +123,8 @@ public:
 	FApproachPlan PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId);
 	/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; empty where he has none there. */
 	FString GarrisonWhy(int32 RegionId);
+	/** (Rules 84.2.5; ruling 211(a).) Why these corps cannot go forward onto that ground by themselves ("Guns cannot take ground alone. ..."), in the rules' own sentence; empty where they can, and before that version. */
+	FString WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId);
 	bool OrderGate(int32 GateId, bool bShut, FString& OutNote);
 	/** (Rules 84.2.) The warning where the corps in hand are the last to hold a gate's province: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
 	FString GateLeft(const TArray<int32>& CorpsIds);
