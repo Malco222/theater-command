@@ -143,7 +143,7 @@ function showChooser(): void {
   app.innerHTML = `<div class="choose tc sea">
     <header class="chead"><div><div class="tc-label">Fleet actions · first slice</div><h1 class="tc-title-1">Choose an action to fight</h1></div></header>
     <div class="cbody">
-      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser sails alone, and destroyers sail in fours. The two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea, and you can hand the rest to the staff at any moment: what you have won stays won.</p></section>
+      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser sails alone, and destroyers sail in fours. The two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea, and you can hand the rest to the staff at any moment, and every ship already sunk stays sunk.</p></section>
       <h2 class="tc-label shead">${facts(['From the campaign', ...(t ? [esc(t.date)] : [])])}</h2>
       <div class="offers">${t ? `<button class="tc-card is-press offer" data-from="1">
         <span class="otop"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data"><b>${odds(t.reckoning.odds)}</b> to 1</span></span>
