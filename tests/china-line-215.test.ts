@@ -12,13 +12,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import china from '../data/campaign/china-line.json';
-import { allied, createGame, removeCorps } from '../src/campaign/game';
+import { ringJudgement } from '../src/campaign/ai';
+import { addCorps, allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { inLine, lineBinds, lineLeaves, lineShut, lines, type Line } from '../src/campaign/line';
 import { decide, prospect, startOpen, type Op } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { whyNotLand } from '../src/campaign/navy';
-import type { Game } from '../src/campaign/types';
+import { fieldCtrl } from '../src/campaign/siege';
+import type { Corps, Game, Region } from '../src/campaign/types';
 
 const OPEN = openData as unknown as { ops: Record<string, Op[]>; temper: Record<string, unknown>; impatience: { after: number[] } };
 const H = HISTORY as unknown as { dates: Record<string, Record<string, number>>; theatre: Record<string, string>; lines?: Line[] };
@@ -198,6 +200,67 @@ describe('215(c): the record\'s line', () => {
     const mine = grand(2, 'FRA', 1);
     const fr = mine.corps.filter((c) => c.nat === 'FRA' && c.kind !== 'fort').slice(0, 1);
     expect(whyNotLand(mine, fr, at(mine, 'Warsaw')) ?? '').not.toMatch(/record's line/);
+  });
+
+  it('binds a break-out from a pocket: a ringed staff neither walks into nor attacks floor ground the invader holds (216(f))', () => {
+    // Germany's own ground made the invaded country, Poland the invader holding the one way home by a lasting span: a
+    // German corps ringed there is bound as China's would be, and stays where it is until the floor's month.
+    const put = (g: Game, nat: string, r: Region, divs: number): Corps => { const c = addCorps(g, nat, `Test Corps ${g.nextCorps}`, 'inf', divs, r.id, {}); c.ap = c.apMax; return c; };
+    const empty = (g: Game, r: Region): void => { for (const c of [...r.units]) removeCorps(g, c); };
+    const fromBerlin = (g: Game, lost: Set<number>): Int16Array => {
+      const d = new Int16Array(g.regions.length).fill(-1);
+      const q = [g.nations.GER.capital];
+      d[q[0]] = 0;
+      for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) {
+        if (d[j] >= 0 || lost.has(j) || fieldCtrl(g, g.regions[j]) !== 'GER') continue;
+        d[j] = d[q[i]] + 1; q.push(j);
+      }
+      return d;
+    };
+    /** A German province ringed by Poland, one province of the ring joining ground Germany holds (ring-71's test). */
+    const ringed = (door: 'empty' | 'held'): { g: Game; at: Region; door: Region; inside: Corps[] } => {
+      const g = grand(3, null, 1);
+      if (!atWar(g, 'GER', 'POL')) declareWar(g, 'GER', 'POL');
+      for (const at of g.regions) {
+        if (at.owner !== 'GER' || at.ctrl !== 'GER' || at.cap || !at.nb.every((j) => ['GER', 'POL'].includes(g.regions[j].ctrl) && !g.regions[j].cap)) continue;
+        const lost = new Set(at.nb);
+        const d = fromBerlin(g, lost);
+        if (d[at.id] >= 0) continue;
+        const k = at.nb.find((j) => g.regions[j].owner === 'GER' && g.regions[j].nb.some((x) => d[x] >= 0));
+        if (k === undefined) continue;
+        for (const j of lost) { empty(g, g.regions[j]); g.regions[j].ctrl = 'POL'; }
+        g.supplyDirty = true;
+        empty(g, at);
+        for (const j of lost) for (const x of g.regions[j].nb) if (x !== at.id && !lost.has(x) && g.regions[x].ctrl === 'GER') empty(g, g.regions[x]);
+        for (const j of at.nb) if (j !== k) for (let n = 0; n < 2; n++) put(g, 'POL', g.regions[j], 4);
+        if (door === 'held') put(g, 'POL', g.regions[k], 1);
+        return { g, at, door: g.regions[k], inside: [put(g, 'GER', at, 4), put(g, 'GER', at, 4)] };
+      }
+      throw new Error('no province fits');
+    };
+    const bound = (g: Game, at: Region): void => {
+      if (!('lines' in kept)) kept.lines = H.lines;
+      const spans = Object.fromEntries(at.nb.map((j) => [g.regions[j].name, [{ from: 1, to: 20, kind: 'lasting' }]]));
+      H.lines = [{ id: 'ring215', theatre: 'ring215', land: 'GER', taker: 'POL', until: 20, floor: { until: 12, kinds: ['lasting'] }, spans }];
+    };
+    // Without a line the ringed corps attack the door where Poland stands weakest, and walk through it where it is empty.
+    const free = ringed('held');
+    ringJudgement(free.g, 'GER');
+    expect(free.g.reports.filter((b) => b.attNat === 'GER' && b.region === free.door.id).length).toBe(1);
+    const walk = ringed('empty');
+    ringJudgement(walk.g, 'GER');
+    expect(fieldCtrl(walk.g, walk.door)).toBe('GER');
+    // With the ring Poland's by a lasting span, before the floor's month neither happens.
+    const held = ringed('held');
+    bound(held.g, held.at);
+    ringJudgement(held.g, 'GER');
+    expect(held.g.reports.filter((b) => b.attNat === 'GER' && held.at.nb.includes(b.region)).length).toBe(0);
+    expect(held.inside.every((c) => c.reg === held.at.id)).toBe(true);
+    const shut = ringed('empty');
+    bound(shut.g, shut.at);
+    ringJudgement(shut.g, 'GER');
+    expect(fieldCtrl(shut.g, shut.door)).toBe('POL');
+    expect(shut.inside.every((c) => c.reg === shut.at.id)).toBe(true);
   });
 
   it('is a floor for the invaded country\'s computer staff: what the invader holds by a lasting span stays his before the floor\'s month, raid ground does not', () => {

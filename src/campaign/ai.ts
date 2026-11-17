@@ -770,7 +770,7 @@ function breakOut(g: Game, nat: string): void {
       // the ringed corps from inside and whoever of the army stands next to it outside.
       let best: { x: Region; pool: Corps[]; odds: number } | null = null;
       for (const x of nexts) {
-        if (tried.has(x.id) || !hostileUnits(g, x, nat).length) continue;
+        if (tried.has(x.id) || !hostileUnits(g, x, nat).length || lineShut(g, nat, x)) continue;
         const near = x.nb.map((j) => g.regions[j]).filter((y) => friendly(y) && !aside(g, y, nat)).flatMap((y) => y.units.filter(field)).filter((c) => !blocked(g, c, x) && c.org >= 0.35 && (home[c.reg] < 0 || !spared(g, c))); // (a worn corps outside the ring, one its staff rests, is not thrown in)
         const pool = limitAttackers(g, near, x);
         if (!pool.length) continue;
