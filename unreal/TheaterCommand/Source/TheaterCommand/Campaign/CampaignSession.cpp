@@ -1886,6 +1886,14 @@ FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int3
 					Way.Road.Add(FMath::RoundToInt32(Value->AsNumber()));
 				}
 			}
+			const TArray<TSharedPtr<FJsonValue>>* Going = nullptr;
+			if (Row->TryGetArrayField(TEXT("going"), Going))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Going)
+				{
+					Way.Going.Add(FMath::RoundToInt32(Value->AsNumber()));
+				}
+			}
 		}
 	}
 	Plan.bOk = Plan.bOk && Plan.Rows.Num() > 0;

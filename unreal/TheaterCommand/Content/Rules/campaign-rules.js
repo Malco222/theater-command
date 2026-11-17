@@ -31991,7 +31991,12 @@
         note4 = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other2.name}, which comes back to ${s.regions[from2].name}.`;
       }
     };
-    const sent = inMarchOrder(s, corpsById(s, ids2));
+    const order2 = inMarchOrder(s, corpsById(s, ids2));
+    const gets = (c) => {
+      const e = reach2(s, c).get(to);
+      return !!e && !e.attack && to !== c.reg;
+    };
+    const sent = [...order2.filter(gets), ...order2.filter((c) => !gets(c))];
     const from = new Set(sent.map((c) => c.reg));
     for (const c of sent) {
       const m = reach2(s, c);
@@ -32269,17 +32274,20 @@
         });
         if (!going.length) continue;
         const enemy = !allied(s, me, r.ctrl);
-        let meets = "";
+        let meets = "", meetsLine = "";
         if (enemy) {
           try {
-            meets = marchOutlook(s, going.map((x) => x.c), j)?.meets ?? "";
+            const o = marchOutlook(s, going.map((x) => x.c), j);
+            meets = o?.meets ?? "";
+            meetsLine = o?.line ?? "";
           } catch {
             meets = "";
+            meetsLine = "";
           }
           if (meets === "guard") continue;
         }
         const cost = Math.min(...going.map(({ m }) => m.get(j).cost));
-        const stops = enemy && meets !== "open";
+        const stops = enemy && meets !== "open" && meets !== "gates";
         const lefts = going.map(({ c, m }) => ({ c, left: stops ? 0 : Math.max(0, c.ap - m.get(j).cost) }));
         if (going.every(({ c }) => blocked(s, c, target, j))) continue;
         const left = Math.max(0, ...lefts.map((x) => x.left));
@@ -32297,11 +32305,11 @@
         const arrive3 = attack2 ? `${left} move${left === 1 ? "" : "s"} left on arrival: you can attack this month` : left > 0 ? `${left} move${left === 1 ? "" : "s"} left on arrival, but the way in from there is barred to this army this month` : "No move left on arrival: the attack waits for next month";
         const riverWords = river ? `across the ${river.replace(/^the /i, "")}${down ? ", bridges down" : ""}` : "no river";
         const how = `${riverWords} · ${r.terrain}`;
-        const says = !enemy ? "" : meets === "open" ? `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.` : `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.`;
+        const says = !enemy ? "" : meetsLine || (stops ? `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.` : `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.`);
         const first2 = going.slice().sort((a, b) => a.m.get(j).cost - b.m.get(j).cost)[0];
         const road = [];
         for (let at = j; at !== first2.c.reg && at >= 0 && road.length < 32; at = first2.m.get(at)?.prev ?? -1) road.unshift(at);
-        rows.push({ id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy, arrive: arrive3, how, says, road });
+        rows.push({ id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy, arrive: arrive3, how, says, road, going: going.map(({ c }) => c.id) });
       }
       rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || (a.enemy ? 1 : 0) - (b.enemy ? 1 : 0) || a.id - b.id);
       if (rows.length) return { ok: true, name: target.name, rows: rows.slice(0, 4), none: "" };

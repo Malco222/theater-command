@@ -80,6 +80,10 @@ struct FTrayCard
 	bool bDigging = false; // (Version 84) digging, with no works to show yet
 	int32 Experience = 0; // 0 to 100
 	TArray<FHonourRibbon> Honours;
+	// (The code checker, 17 November.) A corps of the town's garrison while the army in the field is in hand: it cannot
+	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
+	bool bInTown = false;
+	FString Apart;
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -1227,6 +1231,9 @@ private:
 	TArray<TPair<int32, FBox2D>> GateMarks;
 	int32 StagedGate = INDEX_NONE;
 	int32 HoverGate = INDEX_NONE;
+	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked
+	// while the button is held, so the click is judged on this, and on the padlock still being under the pointer as it is let go.
+	int32 PressGate = INDEX_NONE;
 	FText GateTip, GateTipMarked;
 	int32 GateUnder(const FVector2D& Pointer) const;
 	FVector2D StagedPointer = FVector2D::ZeroVector;

@@ -1645,8 +1645,12 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
       note = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
     }
   };
-  // (Rules 84.2.5) the fighting corps first: guns and engineers follow them onto enemy-held ground
-  const sent = inMarchOrder(s, corpsById(s, ids));
+  // (Rules 84.2.5) the fighting corps first: guns and engineers follow them onto enemy-held ground. (The code checker, 17
+  // November) and those that can get there this month before those that cannot, so that a corps kept for a later
+  // month never offers a swap, or takes a place, ahead of one that arrives.
+  const order = inMarchOrder(s, corpsById(s, ids));
+  const gets = (c: Corps): boolean => { const e = reach(s, c).get(to); return !!e && !e.attack && to !== c.reg; };
+  const sent = [...order.filter(gets), ...order.filter((c) => !gets(c))];
   const from = new Set(sent.map((c) => c.reg));
   for (const c of sent) {
     const m = reach(s, c);
@@ -1961,7 +1965,7 @@ const noArmy = <T extends { label: string; value: string }>(lines: T[]): T[] => 
 function approach(ids: number[], to: number) {
   const s = game();
   const target = s.regions[to];
-  type Row = { id: number; name: string; cost: number; left: number; attack: boolean; river: string; riverWords: string; down: boolean; ground: string; enemy: boolean; arrive: string; how: string; says: string; road: number[] };
+  type Row = { id: number; name: string; cost: number; left: number; attack: boolean; river: string; riverWords: string; down: boolean; ground: string; enemy: boolean; arrive: string; how: string; says: string; road: number[]; going: number[] };
   const out = { ok: false, name: target?.name ?? '', rows: [] as Row[], none: '' };
   const me = s.human;
   try {
@@ -1976,14 +1980,16 @@ function approach(ids: number[], to: number) {
       const going = reaches.filter(({ m }) => { const e = m.get(j); return !!e && !e.attack; });
       if (!going.length) continue;
       const enemy = !allied(s, me, r.ctrl);
-      let meets = '';
+      let meets = '', meetsLine = '';
       if (enemy) {
-        try { meets = marchOutlook(s, going.map((x) => x.c), j)?.meets ?? ''; } catch { meets = ''; }
+        try { const o = marchOutlook(s, going.map((x) => x.c), j); meets = o?.meets ?? ''; meetsLine = o?.line ?? ''; } catch { meets = ''; meetsLine = ''; }
         if (meets === 'guard') continue; // (its guard fights for the town: that march has a card of its own)
       }
       const cost = Math.min(...going.map(({ m }) => m.get(j)!.cost));
       // What is left on arrival, corps by corps. An army that comes up to a town the enemy holds spends the rest of its month closing round it (game.ts, moveCorps).
-      const stops = enemy && meets !== 'open';
+      // (The code checker, 17 November.) A town that opens its gates is taken on the way, as an empty one is; one whose
+      // holders the reports do not know is reckoned as held, and the rules' own line says the army finds out.
+      const stops = enemy && meets !== 'open' && meets !== 'gates';
       const lefts = going.map(({ c, m }) => ({ c, left: stops ? 0 : Math.max(0, c.ap - m.get(j)!.cost) }));
       if (going.every(({ c }) => blocked(s, c, target, j))) continue; // (nothing in hand could ever go in from there)
       const left = Math.max(0, ...lefts.map((x) => x.left));
@@ -1998,12 +2004,14 @@ function approach(ids: number[], to: number) {
       // (its river in words; the ground goes by its key, and each game prints its own label for it: "open country")
       const riverWords = river ? `across the ${river.replace(/^the /i, '')}${down ? ', bridges down' : ''}` : 'no river';
       const how = `${riverWords} \u00B7 ${r.terrain}`;
-      const says = !enemy ? '' : meets === 'open' ? `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.` : `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.`;
+      // (What the march meets there, in the rules' own line where they give one: the town open, its gates opened, held, or not known.)
+      const says = !enemy ? '' : meetsLine || (stops ? `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.` : `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.`);
       // The road there, as the first corps that can go would march it.
       const first = going.slice().sort((a, b) => a.m.get(j)!.cost - b.m.get(j)!.cost)[0];
       const road: number[] = [];
       for (let at = j; at !== first.c.reg && at >= 0 && road.length < 32; at = first.m.get(at)?.prev ?? -1) road.unshift(at);
-      rows.push({ id: j, name: r.name, cost, left, attack, river, riverWords, down, ground: r.terrain, enemy, arrive, how, says, road });
+      // (The code checker, 17 November.) The corps of the hand that can reach it this month: they alone are sent by this row.
+      rows.push({ id: j, name: r.name, cost, left, attack, river, riverWords, down, ground: r.terrain, enemy, arrive, how, says, road, going: going.map(({ c }) => c.id) });
     }
     rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || (a.enemy ? 1 : 0) - (b.enemy ? 1 : 0) || a.id - b.id);
     if (rows.length) return { ok: true, name: target.name, rows: rows.slice(0, 4), none: '' };

@@ -627,7 +627,6 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth, History))
 	{
 		bFreshCampaign = true;
-		bNightTold = false;
 		EnterCampaign();
 		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
@@ -741,6 +740,11 @@ void ACampaignPlayerController::EnterCampaign()
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
+	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
+	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
+	LastReel.Reset();
+	LastReelDate.Reset();
+	bNightTold = false;
 	RefreshOrders();
 	SelectRegion(INDEX_NONE);
 	DispatchText.Reset();
@@ -4006,6 +4010,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bLeftHeld = true;
 		bDragging = false;
 		PressPosition = Mouse;
+		PressGate = HoverGate; // (latched now: while the button is held the hover says no padlock)
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
 		bAgentHeld = false;
@@ -4120,10 +4125,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.34f), false);
 				LastClickRegion = INDEX_NONE;
 			}
-			else if (HoverGate != INDEX_NONE && ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE)
+			else if (PressGate != INDEX_NONE && (GateUnder(Mouse) == PressGate || StagedGate == PressGate) && ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE)
 			{
-				// (Ruling 178(d).) The padlock is a door, for the holder alone.
-				OpenGateBox(HoverGate);
+				// (Ruling 178(d).) The padlock is a door, for the holder alone. (The code checker, 17 November: judged on the
+				// padlock pressed, still under the pointer as the button is let go, since the hover is blank while it is held.)
+				OpenGateBox(PressGate);
 			}
 			else
 			{
@@ -4134,6 +4140,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		bLeftHeld = false;
 		bDragging = false;
+		PressGate = INDEX_NONE;
 		HeldPiece.Reset();
 	}
 
@@ -4387,12 +4394,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
+				// (Rules 84.2.5; ruling 211(a); the code checker, 17 November.) Guns and engineers sent forward alone: the
+				// refusal is asked as OrderTo asks it, after the question of war and before anything else is promised.
+				const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString();
 				if (const FReachRegion* There = FindReach(TipRegion))
 				{
 					if (There->IsWar())
 					{
 						const FCampaignNation* Theirs = Map->GetData().FindNation(There->War);
 						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *Theirs->Name : *There->War);
+					}
+					else if (!Alone.IsEmpty())
+					{
+						Line += TEXT("\n") + Alone;
 					}
 					else if (There->bAttack)
 					{
@@ -4479,10 +4493,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
-				else if (const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString(); !Alone.IsEmpty())
+				else if (!Alone.IsEmpty())
 				{
 					// (Rules 84.2.5; ruling 211(a).) Guns sent forward alone: the refusal on the pointer's paper slip, in ink.
 					Line += TEXT("\n") + Alone;
+				}
+				else if (const FApproachPlan Road = (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
+				{
+					// (The code checker, 17 November.) One test for the tip and the order: the march-up card is promised only
+					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order).
+					Line += TEXT("\nAn army attacks from the province next door. Right-click: plan the march up and the attack. You are shown the road first.");
 				}
 				else if (!bByRail && !bBySea && RailBeyond.Contains(TipRegion))
 				{
@@ -4535,9 +4555,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 				else
 				{
-					// (an enemy army seen there: a right-click plans the march up and the attack, and shows it first)
-					const FString Why = (!bByRail && !bBySea) ? WhyNoAttackOn(TipRegion) : FString();
-					Line += TEXT("\n") + (Why.IsEmpty() ? FString(TEXT("Out of this army's reach this month.")) : FString(TEXT("An army attacks from the province next door. Right-click: plan the march up and the attack. You are shown the road first.")));
+					// (The code checker, 17 November.) What a right-click here would say, as OrderTo says it: the rules'
+					// sentence naming the nearest ground beside the enemy, or why no attack goes in, or that it is out of reach.
+					const FString Why = (!bByRail && !bBySea) ? (Road.None.IsEmpty() ? WhyNoAttackOn(TipRegion) : Road.None) : FString();
+					Line += TEXT("\n") + (Why.IsEmpty() ? FString(TEXT("Out of this army's reach this month.")) : Why);
 				}
 			}
 			if (FleetInHand != INDEX_NONE)
@@ -5605,20 +5626,13 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 		Piece->ReturnToRest();
 		OrderTo(RegionId);
 	}
-	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE && bOnTable && !bByRail && !bBySea && FarMonths.Contains(RegionId))
-	{
-		// (Ruling 87.) Set down on friendly ground out of this month's reach: the march is kept, as a right-click keeps it.
-		Piece->ReturnToRest();
-		OrderTo(RegionId);
-	}
 	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE)
 	{
-		// Set down on a country at peace with the player: does he mean war?
+		// (The code checker, 17 November.) Set down anywhere out of this month's reach, the flag goes back and the drop
+		// is answered as a right-click there is: a kept march (ruling 87), the train, the march up to a far enemy and
+		// its attack, the question of war on a country at peace, or the rules' reason why not. One test for both.
 		Piece->ReturnToRest();
-		if (!OfferWar(RegionId))
-		{
-			Notify(bHandSpent ? TEXT("No moves left this month. Friendly ground is where a march can be kept for next month.") : TEXT("They cannot get there this month. Lightened ground is where they can go."));
-		}
+		OrderTo(RegionId);
 	}
 	// Whatever is left of the army where it started goes back to its place.
 	if (HeldPiece.IsValid())
@@ -5761,6 +5775,14 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 	{
 		return;
 	}
+	if (const FTrayCard* Card = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& C) { return C.CorpsId == CorpsId; }))
+	{
+		if (!Card->Apart.IsEmpty())
+		{
+			Notify(Card->Apart, 7.0); // (the garrison is not slipped into the field army's hand: the code checker, 17 November)
+			return;
+		}
+	}
 	if (PickedCorps.Contains(CorpsId))
 	{
 		PickedCorps.Remove(CorpsId);
@@ -5889,6 +5911,7 @@ void ACampaignPlayerController::RefreshOrders()
 		}
 		Card.bCanOrder = Unit.bCanOrder;
 		Card.NoOrders = Unit.NoOrders;
+		Card.bInTown = Unit.bInTown;
 		Card.bPicked = PickedCorps.Contains(Unit.Id);
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
@@ -5919,6 +5942,23 @@ void ACampaignPlayerController::RefreshOrders()
 		ArmyRegion = INDEX_NONE;
 		Map->SetReach(Reach);
 		return;
+	}
+	// (The code checker, 17 November.) With the army in the field in hand, the town's garrison cannot be clicked in among
+	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why.
+	if (Tray.Cards.ContainsByPredicate([](const FTrayCard& C) { return C.bPicked && !C.bInTown; }))
+	{
+		FString Why;
+		for (FTrayCard& Card : Tray.Cards)
+		{
+			if (Card.bInTown && !Card.bPicked && Card.bCanOrder)
+			{
+				if (Why.IsEmpty())
+				{
+					Why = Session->GarrisonWhy(ArmyRegion);
+				}
+				Card.Apart = Why.IsEmpty() ? FString(TEXT("The town's garrison takes no marching orders until it takes the field.")) : Why;
+			}
+		}
 	}
 
 	const FString Adjective = Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : View.Human;
@@ -6218,12 +6258,62 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 	const FApproachRow Way = Asked.Ways[Asked.Way];
 	const int32 Enemy = Asked.ApproachTo;
 	RouteTarget = -3;
+	// (The code checker, 17 November.) Only the corps that can reach that province this month are sent by its row: the
+	// rest of the hand stays where it is, and is given no march to a later month.
+	if (Way.Going.Num() > 0)
+	{
+		PickedCorps.RemoveAll([&Way](int32 Id) { return !Way.Going.Contains(Id); });
+		if (PickedCorps.Num() == 0)
+		{
+			PickedCorps = Way.Going;
+		}
+	}
+	TMap<int32, int32> StoodAt;
+	for (const FViewCorps& Unit : Session->GetView().Corps)
+	{
+		if (PickedCorps.Contains(Unit.Id))
+		{
+			StoodAt.Add(Unit.Id, Unit.Region);
+		}
+	}
 	// The march, as a right-click on the approach would give it (the same order, the same words where it says any).
 	RefreshOrders();
 	OrderTo(Way.Region);
-	if (ArmyRegion != Way.Region || FaceOff.bVisible || WarPrompt.bVisible)
+	if (FaceOff.bVisible || WarPrompt.bVisible)
 	{
-		return; // (the march did not get there, or it has a question of its own to ask first)
+		return; // (it has a question of its own to ask first)
+	}
+	{
+		// Where the corps set off and none of them got there, the paper says where the army stands. (Where none set off,
+		// the order has already said why.)
+		FString StoppedAt;
+		bool bArrived = false, bWent = false;
+		for (const FViewCorps& Unit : Session->GetView().Corps)
+		{
+			const int32* From = StoodAt.Find(Unit.Id);
+			if (!From || Unit.Region == *From)
+			{
+				continue;
+			}
+			bWent = true;
+			bArrived = bArrived || Unit.Region == Way.Region;
+			if (StoppedAt.IsEmpty() && Map->GetData().Regions.IsValidIndex(Unit.Region))
+			{
+				StoppedAt = Map->GetData().Regions[Unit.Region].Name;
+			}
+		}
+		if (!bArrived)
+		{
+			if (bWent)
+			{
+				Notify(FString::Printf(TEXT("The march did not reach %s this month: the army stands at %s."), *Way.Name, *StoppedAt), 9.0);
+			}
+			return;
+		}
+	}
+	if (ArmyRegion != Way.Region)
+	{
+		return;
 	}
 	const FReachRegion* There = FindReach(Enemy);
 	if (There && There->bAttack)
