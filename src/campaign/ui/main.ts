@@ -3409,7 +3409,7 @@ function softenParts(target: Region, chosen: Corps[]): { html: string; can: stri
   const now = done ? attackOutlook(g, chosen, target) : null;
   const was = done ? ((ui.modal?.probeWas as { words: string; chance: number } | null | undefined) ?? null) : null;
   const truth = was && now && was.words !== chanceWords(now)
-    ? ` Before the probe the staff could only give this attack ${was.words}; with the defenders named it is ${chanceWords(now)}.${now.chance < was.chance - 0.005 ? ' The attack is no worse than it was: the guess has become the truth.' : ''}` : '';
+    ? ` Before the probe the staff could only give this attack ${was.words}; with the defenders named ${chanceEndOf(now) ? endSaid(chanceEndOf(now)!, true) : `it is ${chanceWords(now)}`}.${now.chance < was.chance - 0.005 ? ' The attack is no worse than it was: the guess has become the truth.' : ''}` : '';
   const earned = done ? (done.wear > 0 ? `their fieldworks are ${mo(done.wear)} the worse.` : s.works > 0 ? 'nothing off their fieldworks: it had not the weight.' : 'nothing off the ground: they are not dug in.') : '';
   const found = done ? `<small class="softdone">${esc(done.name)} has probed this line. It cost ${num(done.lost)} men.<br><b>What the staff knows now:</b> it found ${esc(listOf(done.found))}.${esc(truth)}<br><b>What the probe earned:</b> ${esc(earned)}</small>` : '';
   const head = s.works > 0 ? `The defenders stand in fieldworks of ${mo(s.works)}${s.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.';
@@ -3530,13 +3530,13 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
   // The verdict is the rules' own line (verdictOf), so that the 3D table prints the same words.
   const say = verdictOf(look, sure === 'Victory' ? 'storm' : 'sortie');
   if (!look.exact) {
-    return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
+    return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceSaid(look.chanceLo, look.chanceHi, what)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>${under}
       <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scout ? scoutButton(scout) : ''}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   }
-  return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
+  return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · ${chanceSaid(p, p, what)}</span></div>
     <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
     <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>${under}
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
@@ -3546,8 +3546,8 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
 function balanceOnly(look: Outlook, mineColor: string, foeColor: string, what: string): string {
   const at = (odds: number): number => (100 * odds) / (1 + odds);
   const say = verdictOf(look, 'storm');
-  const sub = look.exact ? `Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(look.chance)}% chance ${what}`
-    : `Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}`;
+  const sub = look.exact ? `Odds ${look.odds.toFixed(2)} to 1 · ${chanceSaid(look.chance, look.chance, what)}`
+    : `Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceSaid(look.chanceLo, look.chanceHi, what)}`;
   return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">${sub}</span></div>
     <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div>${look.exact ? '' : `<span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span>`}<span class="need" style="left:${at(look.even).toFixed(1)}%" title="An even chance"></span></div></div>`;
 }
@@ -5603,7 +5603,7 @@ function landingCard(): string {
     if (fightTone === 'loss') darkSay = `Called off: ${lowerFirst(fight)}. To ${air ? 'drop' : 'land'} all the same, give the order again and click ${air ? 'DROP THE TROOPS' : 'LAND THE TROOPS'}.`;
     const fightBody = a
       ? `<div class="oddsbar"><i style="width:${Math.round((a.A / (a.A + a.D)) * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
-        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`
+        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · ${chanceSaid(p, p, `to take ${esc(target.name)}`)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`
       : `<div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
     // The worst leads and the next one down is the line under it. A fight that is itself all but lost keeps the headline.
     const lead = hopeless ? null : warns[0] ?? null;
@@ -6983,6 +6983,22 @@ function priceLine(r: BattleReport): string {
 }
 /** A chance as a whole percentage that never rounds a near thing up to a sure one, or a faint hope down to none. */
 const oddsPct = (p: number): number => (p >= 0.9995 ? 100 : p <= 0.0005 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100))));
+/**
+ * The ends of the scale in words, as the field battles' cards and questions speak (the UI director's 84.3 check):
+ * never "about 100%" or "about 0%". `named` where the line has already named the staff ("The staff's estimate: ...").
+ */
+const chanceEnd = (lo: number, hi = lo): 'sure' | 'none' | null => {
+  const a = oddsPct(lo), b = oddsPct(hi);
+  return a === 100 && b === 100 ? 'sure' : a === 0 && b === 0 ? 'none' : null;
+};
+const chanceEndOf = (look: Outlook): 'sure' | 'none' | null => (look.wide ? null : chanceEnd(look.chanceLo, look.chanceHi));
+const endSaid = (end: 'sure' | 'none', named: boolean): string => `${named ? 'they' : 'your staff'} ${end === 'sure' ? 'are sure of it' : 'give it no chance'}`;
+/** "about 60% chance to take Pomorze", "40 to 70% chance of storming it", or at the ends "your staff are sure of it". */
+const chanceSaid = (lo: number, hi: number, what: string, named = false): string => {
+  const end = chanceEnd(lo, hi);
+  if (end) return endSaid(end, named);
+  return `${oddsPct(lo) === oddsPct(hi) ? `about ${oddsPct(lo)}%` : `${oddsPct(lo)} to ${oddsPct(hi)}%`} chance ${what}`;
+};
 /** The lines of a Battle Ticket that matter most: on a narrow screen the ticket opens folded to these, with a button for the rest. */
 const TICKET_KEY = new Set(['Forces', 'Troops', 'Dug in', 'Supply', 'Earlier attacks', 'Weight of attack', 'Who pays']);
 // ---- What you bring and what you face (the design director's rulings 146, 149 and 152; the grand campaign) ----
@@ -7279,7 +7295,7 @@ function attackCard(): string {
   const openNote = m.picked && look && !extra && chosen.length > mine.length
     ? `<div class="note massnote opennote"><span><b>The staff has brought in every corps the roads will carry.</b> ${chosen.length} corps go in at ${look.odds.toFixed(2)} to 1${mineLook ? `, where the ${mine.length === 1 ? 'corps' : `${mine.length} corps`} you picked ${mine.length === 1 ? 'reads' : 'read'} ${mineLook.odds.toFixed(2)} to 1` : ''}. Click a corps to hold it back.</span><button class="btn small" data-act="atkmine" title="Send only the corps that were picked when the attack was ordered.">Only the corps I picked</button></div>` : '';
   const massNote = openNote ? openNote : massed && (!look || massed.odds > look.odds * 1.02)
-    ? `<div class="note massnote"><span><b>${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach.</b> Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${look ? `go from ${look.odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chanceWords(massed)} to take ${esc(target.name)}.</span><button class="btn small go" data-act="atkall" title="Pick every corps in reach. The staff sends the strongest the roads will carry, and any guns behind them.">Send everyone who can reach</button></div>` : '';
+    ? `<div class="note massnote"><span><b>${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach.</b> Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${look ? `go from ${look.odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chanceEndOf(massed) ? endSaid(chanceEndOf(massed)!, false) : `${chanceWords(massed)} to take ${esc(target.name)}`}.</span><button class="btn small go" data-act="atkall" title="Pick every corps in reach. The staff sends the strongest the roads will carry, and any guns behind them.">Send everyone who can reach</button></div>` : '';
   const foes = a ? a.defenders : hostileUnits(g, target, me);
   // What is known of the defence: everything, or the staff's estimate of it.
   const sure = allKnown(foes);
@@ -7305,7 +7321,7 @@ function attackCard(): string {
     const at = (odds: number): number => (100 * odds) / (1 + odds);
     const p = look.chance;
     const say = verdictOf(look);
-    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
+    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceEndOf(look) ? endSaid(chanceEndOf(look)!, true) : `${chanceWords(look)} chance to take ${esc(target.name)}`}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="${esc(`The balance lies somewhere in this band. ${look.note}${look.wide ? ` ${look.narrow}` : ''}`)}"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       </div>
       ${costBlock(look)}`;
@@ -7315,7 +7331,7 @@ function attackCard(): string {
     const p = chanceOn(a.odds, a.dice);
     const share = a.A / (a.A + a.D);
     const say = verdictAt(p);
-    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}</span></div>
+    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · ${chanceSaid(p, p, `to take ${esc(target.name)}`)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       </div>
       ${look ? costBlock(look) : ''}`;

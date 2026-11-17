@@ -329,7 +329,11 @@ export interface HomeAlarm {
   raise: number;
   /** The row's three sentences: the enemy and where, what it can reach next month ('' where nothing), the help. */
   lines: [string, string, string];
-  /** What the paper says once a press has picked up the help: "The army round Vancouver is in hand. Right-click Pittsburgh to send it."; '' where none can come. */
+  /**
+   * What the paper says once a press has picked up the help, '' where none can come: "The army at Chicago is in hand.
+   * Right-click Pittsburgh to send it.", "Right-click Cleveland to send it on towards Pittsburgh." where the road
+   * passes through his own ground first, or "It can march into Buffalo next month." where it already stands beside it.
+   */
   hand: string;
 }
 
@@ -442,6 +446,19 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
 }
 
 /**
+ * The paper's line once the help is in hand (the Playtester's and the UI director's 84.3 checks). The right-click goes
+ * to the town itself where the help can reach it; to the province of his on the way, named as on the way; and where
+ * the help already stands beside the town with no moves left, the line says when it can go in. A lone corps is in
+ * hand by its name alone: "First Army is in hand", not "First Army at New York".
+ */
+function handLine(g: Game, help: NonNullable<HomeAlarm['help']>, r: Region, empty: boolean): string {
+  const held = help.name.startsWith('the army ') ? `The${help.name.slice(3)}` : g.corps.find((c) => c.id === help.corps[0])?.name ?? help.name;
+  if (help.to === r.id) return `${held} is in hand. Right-click ${r.name} to ${empty ? 'march in' : 'send it'}.`;
+  if (help.to === help.region) return `${held} is in hand. It can ${empty ? 'march into' : 'strike at'} ${r.name} next month.`;
+  return `${held} is in hand. Right-click ${g.regions[help.to].name} to send it on towards ${r.name}.`;
+}
+
+/**
  * The alarms of a nation's home ground (its own provinces, not those overseas): every province of it where an enemy
  * army stands, nearest the capital first; then every province of it still in enemy hands with no troops of theirs in
  * it, nearest the capital first (b385: such a row stands until the ground is his again, and names the cure). Empty
@@ -506,9 +523,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const s3 = !help ? `No army of yours can come. A new corps takes ${monthsWord(raise)}.`
       : help.months === 0 ? `Nearest help: ${help.name}, in reach this month.`
       : `Nearest help: ${help.name}, ${monthsWord(help.months)} by ${help.rail ? 'rail' : 'road'}.`;
-    // (A lone corps is in hand by its name alone: "First Army is in hand", not "First Army at New York".)
-    const held1 = help ? (help.name.startsWith('the army ') ? `The${help.name.slice(3)}` : g.corps.find((c) => c.id === help.corps[0])?.name ?? help.name) : '';
-    const hand = help ? `${held1} is in hand. Right-click ${g.regions[help.to].name} to send it.` : '';
+    const hand = help ? handLine(g, help, r, false) : '';
     out.push({ case: kase, region: r.id, by, reach: reachIds, help, raise, lines: [s1, s2, s3], hand });
   }
   out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
@@ -525,8 +540,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const s3 = !help ? `No army of yours can reach it. A new corps takes ${monthsWord(raise)}.`
       : help.months === 0 ? `${who} can march in and take it back this month.`
       : `${who} can march in and take it back in ${monthsWord(help.months)}, by ${help.rail ? 'rail' : 'road'}.`;
-    const held1 = help ? (help.name.startsWith('the army ') ? `The${help.name.slice(3)}` : g.corps.find((c) => c.id === help.corps[0])?.name ?? help.name) : '';
-    const hand = help ? `${held1} is in hand. Right-click ${g.regions[help.to].name} to ${help.to === r.id ? 'march in' : 'send it'}.` : '';
+    const hand = help ? handLine(g, help, r, true) : '';
     out.push({ case: 'empty', region: r.id, by: r.ctrl, reach: [], help, raise, lines: [s1, '', s3], hand });
   }
   return out;
