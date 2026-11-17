@@ -692,6 +692,24 @@ public:
 	/** (For the photographer only.) Gives a province anti-aircraft guns, or flies a reconnaissance flight over it, and lays the table out again. */
 	void StageGuns(int32 RegionId, int32 Level);
 	FString StageRecon(int32 RegionId);
+	/** (For the photographer only.) Sets an agent of his at work in a province ("road": still on his way; or a mission's id), or marks one caught there, and lays the table out again. */
+	void StageAgent(int32 RegionId, const FString& Mission);
+	void StageCaught(int32 RegionId);
+
+	// ---- (Rulings 153, 163 and 169.) The agent in hand: picked up like an army, sent with a right-click or by dragging him.
+	bool HasAgentInHand() const { return AgentInHand != INDEX_NONE; }
+	/** The agent in hand as the rules describe him, for his card; null when none is. */
+	const FViewAgent* GetAgentInHand() const;
+	/** The foot of his card: how he is sent, or the rules' own reason why he cannot be just now. */
+	FString GetAgentHint() const;
+	bool PickUpAgent(int32 AgentId);
+	/** Takes in hand the agent standing in a province (the photographer's way in). */
+	bool PickUpAgentIn(int32 RegionId);
+	void PutDownAgent();
+	/** Sends the agent in hand to a province: a month on the road. Where the rules refuse, their reason is said and he stays in hand. */
+	void SendAgentTo(int32 RegionId);
+	/** Gives the agent in hand his work where he stands, by the rules' own order. */
+	void SetAgentWork(const FString& Act);
 	/** The army in hand is told to stand this month, or the order is taken back: it leaves the round until the next month. */
 	void StandThisMonth();
 	bool IsStandingThisMonth() const;
@@ -1042,6 +1060,8 @@ private:
 	void SpeakAdviser();
 	int32 ProvinceTab = 0;
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
+	int32 AgentInHand = INDEX_NONE; // (ruling 153) the agent picked up, by his id
+	bool bAgentHeld = false, bAgentWasInHand = false; // the left button went down on an agent's piece; and he was in hand already, so a plain click puts him down
 	FString FleetNext = TEXT("patrol");
 	mutable FVector2D SeaAskedAt = FVector2D(-1.0e6, -1.0e6); // where the rules were last asked which sea lies under the pointer
 	mutable int32 SeaAsked = INDEX_NONE;

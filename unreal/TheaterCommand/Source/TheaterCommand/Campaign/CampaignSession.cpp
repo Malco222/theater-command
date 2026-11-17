@@ -724,6 +724,94 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		}
 	}
 	{
+		// (Rulings 153 and 159.) His agents and what each one's card says; and where one was caught this month.
+		const TArray<TSharedPtr<FJsonValue>> *AgentsTold = nullptr, *MarksTold = nullptr;
+		if (Object->TryGetArrayField(TEXT("agents"), AgentsTold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *AgentsTold)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FViewAgent& Agent = Out.Agents.AddDefaulted_GetRef();
+				Entry->TryGetNumberField(TEXT("id"), Agent.Id);
+				Entry->TryGetNumberField(TEXT("region"), Agent.Region);
+				Entry->TryGetStringField(TEXT("name"), Agent.Name);
+				Entry->TryGetStringField(TEXT("rank"), Agent.Rank);
+				Entry->TryGetStringField(TEXT("toward"), Agent.Toward);
+				Entry->TryGetNumberField(TEXT("skill"), Agent.Skill);
+				Entry->TryGetNumberField(TEXT("ranks"), Agent.Ranks);
+				Entry->TryGetNumberField(TEXT("xp"), Agent.Xp);
+				Entry->TryGetNumberField(TEXT("next"), Agent.Next);
+				Entry->TryGetStringField(TEXT("where"), Agent.Where);
+				Entry->TryGetStringField(TEXT("host"), Agent.Host);
+				Entry->TryGetStringField(TEXT("hostName"), Agent.HostName);
+				Entry->TryGetBoolField(TEXT("abroad"), Agent.bAbroad);
+				Entry->TryGetBoolField(TEXT("atWork"), Agent.bAtWork);
+				Entry->TryGetNumberField(TEXT("wait"), Agent.Wait);
+				Entry->TryGetNumberField(TEXT("caught"), Agent.Caught);
+				Entry->TryGetNumberField(TEXT("rest"), Agent.Rest);
+				Entry->TryGetStringField(TEXT("mission"), Agent.Mission);
+				Entry->TryGetStringField(TEXT("doing"), Agent.Doing);
+				Entry->TryGetStringField(TEXT("stuck"), Agent.Stuck);
+				Entry->TryGetStringField(TEXT("home"), Agent.Home);
+				Entry->TryGetStringField(TEXT("will"), Agent.Will);
+				const TArray<TSharedPtr<FJsonValue>> *WorkTold = nullptr, *SeesTold = nullptr;
+				if (Entry->TryGetArrayField(TEXT("work"), WorkTold))
+				{
+					for (const TSharedPtr<FJsonValue>& Each : *WorkTold)
+					{
+						const TSharedPtr<FJsonObject> Row = Each->AsObject();
+						if (Row.IsValid())
+						{
+							FAgentWork& Work = Agent.Work.AddDefaulted_GetRef();
+							Row->TryGetStringField(TEXT("id"), Work.Id);
+							Row->TryGetStringField(TEXT("label"), Work.Label);
+							Row->TryGetStringField(TEXT("text"), Work.Text);
+							Row->TryGetStringField(TEXT("why"), Work.Why);
+							Row->TryGetStringField(TEXT("act"), Work.Act);
+							Row->TryGetBoolField(TEXT("ok"), Work.bOk);
+							Row->TryGetBoolField(TEXT("now"), Work.bNow);
+							Row->TryGetNumberField(TEXT("caught"), Work.Caught);
+							Row->TryGetNumberField(TEXT("success"), Work.Success);
+						}
+					}
+				}
+				if (Entry->TryGetArrayField(TEXT("sees"), SeesTold))
+				{
+					for (const TSharedPtr<FJsonValue>& Each : *SeesTold)
+					{
+						const TSharedPtr<FJsonObject> Row = Each->AsObject();
+						if (Row.IsValid())
+						{
+							FAgentSight& Sight = Agent.Sees.AddDefaulted_GetRef();
+							Row->TryGetNumberField(TEXT("region"), Sight.Region);
+							Row->TryGetStringField(TEXT("name"), Sight.Name);
+							Row->TryGetStringField(TEXT("nat"), Sight.Nation);
+							Row->TryGetNumberField(TEXT("corps"), Sight.Corps);
+							Row->TryGetNumberField(TEXT("divs"), Sight.Divisions);
+						}
+					}
+				}
+			}
+		}
+		if (Object->TryGetArrayField(TEXT("agentMarks"), MarksTold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *MarksTold)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (Entry.IsValid())
+				{
+					FAgentMark& Mark = Out.AgentMarks.AddDefaulted_GetRef();
+					Entry->TryGetNumberField(TEXT("region"), Mark.Region);
+					Entry->TryGetStringField(TEXT("text"), Mark.Text);
+				}
+			}
+		}
+	}
+	{
 		const TArray<TSharedPtr<FJsonValue>>* CutsTold = nullptr;
 		if (Object->TryGetArrayField(TEXT("cuts"), CutsTold))
 		{
@@ -1350,6 +1438,38 @@ void FCampaignSession::StageGuns(int32 RegionId, int32 Level)
 	{
 		TakeView(Object);
 	}
+}
+
+int32 FCampaignSession::StageAgent(int32 RegionId, const FString& Mission)
+{
+	int32 Id = INDEX_NONE;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stageAgent"), FString::Printf(TEXT("[%d,%s]"), RegionId, *JsonQuote(Mission)), Object))
+	{
+		Object->TryGetNumberField(TEXT("id"), Id);
+		TakeView(Object);
+	}
+	return Id;
+}
+
+void FCampaignSession::StageCaught(int32 RegionId)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("stageCaught"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		TakeView(Object);
+	}
+}
+
+FString FCampaignSession::WhyNotSendAgent(int32 AgentId, int32 RegionId)
+{
+	FString Why;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("agentWhy"), FString::Printf(TEXT("[%d,%d]"), AgentId, RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("why"), Why);
+	}
+	return Why;
 }
 
 FString FCampaignSession::StageRecon(int32 RegionId)

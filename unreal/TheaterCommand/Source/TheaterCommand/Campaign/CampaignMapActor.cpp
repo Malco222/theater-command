@@ -18,6 +18,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -128,6 +129,7 @@ ACampaignMapActor::ACampaignMapActor()
 	FireGlowMesh = MakeMesh(TEXT("FireGlow"), false);
 	GunLineMesh = MakeMesh(TEXT("GunLines"), true);
 	CutLampMesh = MakeMesh(TEXT("CutLamps"), false);
+	WatchMesh = MakeMesh(TEXT("WatchEdge"), false);
 	RailLightMesh = MakeMesh(TEXT("RailLight"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
@@ -3766,7 +3768,8 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	{
 		return;
 	}
-	if ((CutLamps.Num() == 0 && RailLight.Dots.Num() == 0 && RailLight.Tracks.Num() == 0 && HoveredRegion == INDEX_NONE) || !CutLampInk)
+	const bool bAgentSigns = AgentStands.Num() > 0 && !bAgentFigures && bPiecesShown; // (from high up each agent is a sign)
+	if ((CutLamps.Num() == 0 && RailLight.Dots.Num() == 0 && RailLight.Tracks.Num() == 0 && HoveredRegion == INDEX_NONE && !bAgentSigns) || !CutLampInk)
 	{
 		if (CutLampMesh->GetNumSections() > 0)
 		{
@@ -3909,7 +3912,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	const double PerPixel = ViewWide > 0 ? ViewWide / 1600.0 : 1.0; // (the screen's own points to a pixel of the 1600 view)
 	// What may cover a dot, as boxes on the screen: every army's piece with its flag, and every town's plate.
 	TArray<FBox2D> Covers;
-	if (Viewer && Viewer->PlayerCameraManager && (RailLight.Dots.Num() > 0 || RailLight.Tracks.Num() > 0 || (!bReachShown && HoveredRegion != INDEX_NONE)))
+	if (Viewer && Viewer->PlayerCameraManager && (RailLight.Dots.Num() > 0 || RailLight.Tracks.Num() > 0 || (!bReachShown && HoveredRegion != INDEX_NONE) || bAgentSigns))
 	{
 		for (const TObjectPtr<AArmyPiece>& Piece : Pieces)
 		{
@@ -4186,6 +4189,84 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 				{
 					Arc(PipAt, 1.05 * Pixel, 2.3 * Pixel, 0.0, 2.0 * PI, Inked(Dim, Strength), Inked(Dim, Strength));
 				}
+			}
+		}
+	}
+	// (Ruling 153; the art director's agent-piece brief, section 5.) From high up an agent is a sign and never a figure:
+	// a disc 18 px across on the desk's dark ground with a brass rim, and in it, in the kit's hand, a brimmed hat over a
+	// pair of shoulders. The mark of one caught: a dashed faint rim, no ground, the sign faint. It is never drawn over
+	// a flag or a plate: it moves aside.
+	if (!bAgentFigures && bPiecesShown)
+	{
+		const FLinearColor DeskInk(FColor(31, 26, 20)), BrassInk(FColor(224, 184, 114));
+		for (FAgentStand& Stand : AgentStands)
+		{
+			const double Disc = 9.0 * Pixel;
+			FVector Middle = Stand.Rest + FVector(0.0, 0.0, 1.2 * U) + Up * Disc;
+			auto Hidden = [&](const FVector& Point)
+			{
+				FVector2D Screen;
+				if (!Viewer || !Viewer->ProjectWorldLocationToScreen(Point, Screen, false))
+				{
+					return false;
+				}
+				const double Margin = 10.0 * PerPixel;
+				for (const FBox2D& Box : Covers)
+				{
+					if (Screen.X > Box.Min.X - Margin && Screen.X < Box.Max.X + Margin && Screen.Y > Box.Min.Y - Margin && Screen.Y < Box.Max.Y + Margin)
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			if (Hidden(Middle))
+			{
+				for (const FVector& Aside : { Right * 26.0, Right * -26.0, Up * -26.0, Up * 26.0, Right * 52.0, Right * -52.0 })
+				{
+					if (!Hidden(Middle + Aside * Pixel))
+					{
+						Middle += Aside * Pixel;
+						break;
+					}
+				}
+			}
+			Stand.SignAt = Middle;
+			Stand.SignRadius = Disc;
+			const float Strength = Stand.bMark ? 0.5f : 1.0f;
+			if (Stand.bMark)
+			{
+				for (int32 Dash = 0; Dash < 8; ++Dash)
+				{
+					const double From = (Dash + 0.14) * 2.0 * PI / 8.0, To = (Dash + 0.74) * 2.0 * PI / 8.0;
+					Arc(Nearer(Middle, 1.0), Disc - 1.5 * Pixel, Disc, From, To, Inked(BrassInk, Strength), Inked(BrassInk, Strength));
+				}
+			}
+			else
+			{
+				Arc(Middle, 0.0, Disc, 0.0, 2.0 * PI, Inked(BrassInk, 1.0f), Inked(BrassInk, 1.0f));
+				Arc(Nearer(Middle, 1.0), 0.0, Disc - 1.5 * Pixel, 0.0, 2.0 * PI, Inked(DeskInk, 0.97f), Inked(DeskInk, 0.97f));
+			}
+			// The sign, 13 px, from the kit's own drawing on a square of 24: the hat's crown, its brim, the shoulders.
+			const FColor HatInk = Inked(BrassInk, Strength);
+			const FVector Sheet = Nearer(Middle, 2.0);
+			const double Step = 13.0 / 24.0 * Pixel;
+			auto On = [&](double X, double Y) { return Sheet + Right * ((X - 12.0) * Step) + Up * ((12.5 - Y) * Step); };
+			auto Stroke = [&](const FVector& From, const FVector& To) { Bar(From, To, 0.7 * Pixel, HatInk); };
+			Stroke(On(8.0, 9.5), On(9.0, 4.5));
+			Stroke(On(9.0, 4.5), On(15.0, 4.5));
+			Stroke(On(15.0, 4.5), On(16.0, 9.5));
+			Stroke(On(3.5, 9.8), On(20.5, 9.8));
+			FVector Last = On(5.0, 20.5);
+			for (int32 Bend = 1; Bend <= 12; ++Bend)
+			{
+				// (two soft curves: up from the left shoulder to the neck, and down to the right)
+				const double T = (Bend <= 6 ? Bend : Bend - 6) / 6.0;
+				const FVector2D P0 = Bend <= 6 ? FVector2D(5.0, 20.5) : FVector2D(12.0, 14.0), C = Bend <= 6 ? FVector2D(5.0, 14.0) : FVector2D(19.0, 14.0), P1 = Bend <= 6 ? FVector2D(12.0, 14.0) : FVector2D(19.0, 20.5);
+				const FVector2D At = P0 * FMath::Square(1.0 - T) + C * (2.0 * T * (1.0 - T)) + P1 * FMath::Square(T);
+				const FVector Next = On(At.X, At.Y);
+				Stroke(Last, Next);
+				Last = Next;
 			}
 		}
 	}
@@ -8045,7 +8126,7 @@ AArmyPiece* ACampaignMapActor::FindPieceOfCorps(int32 CorpsId) const
 	return nullptr;
 }
 
-AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& Direction) const
+AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance) const
 {
 	AArmyPiece* Best = nullptr;
 	double Nearest = TNumericLimits<double>::Max();
@@ -8084,6 +8165,10 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 				Best = Owner;
 			}
 		}
+	}
+	if (OutDistance)
+	{
+		*OutDistance = Nearest;
 	}
 	return Best;
 }
@@ -12560,6 +12645,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
+	UpdateAgents(CameraDistance, CameraYaw); // (before the signs: from high up each agent is one of them)
 	UpdateCutLamps(CameraDistance);
 	UpdateRailLight(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
@@ -12988,6 +13074,649 @@ void ACampaignMapActor::SetSelectedRegion(int32 RegionId)
 	}
 }
 
+
+// ---------------------------------------------------------------------------- the agents' pieces (ruling 153)
+
+namespace
+{
+	/**
+	 * How tall an agent's piece stands on the table, from the foot of its base to the crown of its hat. The art
+	 * director's brief: 40 pixels from where he plays, on a base 20 across, so that he is easy to click and is never
+	 * taken for an army. Her drawing looks down on him from 40 degrees; the game's eye looks down more steeply, and
+	 * what stands upright is seen shorter: at her base's width he was 22 pixels tall. He is made larger, to stand 30
+	 * pixels tall on a base 29 across: three times an infantryman, a third of a corps' base. ("-TheaterAgentHigh=78"
+	 * tries another.)
+	 */
+	double AgentHigh()
+	{
+		static float High = -1.0f;
+		if (High < 0.0f)
+		{
+			High = 78.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentHigh="), High);
+		}
+		return High;
+	}
+}
+
+FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) const
+{
+	// (The brief, section 4.) On open ground in the province where he works, about a third of the way from the town
+	// toward the province's edge. Never on the town's roofs, an army's base, the airfield or a cut's board: he moves
+	// round to the nearest clear ground, as a ring's weapons do.
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	const double Town = TownRadius(RegionId);
+	TArray<TPair<FVector2D, double>, TInlineAllocator<8>> Keep;
+	bool bArmyHere = false;
+	for (const AArmyPiece* Piece : Pieces)
+	{
+		if (Piece && Piece->IsArmy() && Piece->GetRegionId() == RegionId)
+		{
+			Keep.Emplace(WorldToMap(Piece->GetRestLocation()), 9.0);
+			bArmyHere = true;
+		}
+	}
+	if (!bArmyHere)
+	{
+		Keep.Emplace(WorldToMap(ArmySpot(RegionId, 0)), 9.0); // (where an army would stand, if one comes)
+	}
+	if (const FVector2D* Field = AirfieldSpots.Find(RegionId))
+	{
+		Keep.Emplace(*Field, 6.5);
+	}
+	Keep.Emplace(CutSpot(RegionId), 3.0);
+	auto Bearing = [](double Degrees) { const double Rad = FMath::DegreesToRadians(Degrees); return FVector2D(FMath::Sin(Rad), -FMath::Cos(Rad)); }; // (east of north)
+	// Beside the town first, east of it or west, where neither its roofs nor its name plate (which hangs toward the
+	// eye) cover him; then round it by other bearings.
+	FVector2D BestSpot = Region.Centroid;
+	double BestScore = -1.0e9;
+	int32 Tried = 0;
+	for (const double Degrees : { 100.0, 260.0, 70.0, 290.0, 130.0, 230.0, 40.0, 320.0, 160.0, 200.0, 10.0, 180.0 })
+	{
+		++Tried;
+		const FVector2D Way = Bearing(Degrees);
+		// How far the province runs that way from its town.
+		double Edge = Town;
+		while (Edge < 60.0)
+		{
+			const FVector2D Next = Region.Center + Way * (Edge + 1.0);
+			if (Data.FindRegionAt(Next.X, Next.Y) != RegionId || GroundAt(Next.X, Next.Y) <= 0.0f)
+			{
+				break;
+			}
+			Edge += 1.0;
+		}
+		if (Edge - Town < 1.5)
+		{
+			continue; // (no room that way at all)
+		}
+		const FVector2D Across(-Way.Y, Way.X);
+		// (two agents in one province stand side by side, 24 pixels apart; where the province is narrow that way he
+		// stands halfway between the last house and the border)
+		const double Out = Edge - Town >= 4.0 ? FMath::Max((Edge - Town) / 3.0, 2.4) : 0.5 * (Edge - Town);
+		const FVector2D Spot = Region.Center + Way * (Town + Out) + Across * (3.5 * (Slot - 0.5 * (Count - 1)));
+		if (Data.FindRegionAt(Spot.X, Spot.Y) != RegionId || GroundAt(Spot.X, Spot.Y) <= 0.0f)
+		{
+			continue;
+		}
+		double Room = 1.0e9;
+		for (const TPair<FVector2D, double>& Thing : Keep)
+		{
+			Room = FMath::Min(Room, FVector2D::Distance(Spot, Thing.Key) - Thing.Value);
+		}
+		// (a clear place before any that is not; a roomy way before a narrow one; then the order they are tried in)
+		const double Score = (Room >= 0.0 ? 1000.0 : 20.0 * Room) - (Edge - Town >= 4.0 ? 0.0 : 300.0) - 10.0 * Tried;
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			BestSpot = Spot;
+		}
+	}
+	if (BestScore < -1.0e8)
+	{
+		// A city that fills its province: the open ground farthest from everything he must stand clear of.
+		for (double Y = Region.Bounds.Min.Y; Y <= Region.Bounds.Max.Y; Y += 1.5)
+		{
+			for (double X = Region.Bounds.Min.X; X <= Region.Bounds.Max.X; X += 1.5)
+			{
+				if (Data.FindRegionAt(X, Y) != RegionId || GroundAt(X, Y) <= 0.0f)
+				{
+					continue;
+				}
+				double Room = FVector2D::Distance(FVector2D(X, Y), Region.Center) - Town;
+				for (const TPair<FVector2D, double>& Thing : Keep)
+				{
+					Room = FMath::Min(Room, FVector2D::Distance(FVector2D(X, Y), Thing.Key) - Thing.Value);
+				}
+				if (Room > BestScore)
+				{
+					BestScore = Room;
+					BestSpot = FVector2D(X, Y) + FVector2D(3.5 * (Slot - 0.5 * (Count - 1)), 0.0);
+				}
+			}
+		}
+	}
+	return BestSpot;
+}
+
+void ACampaignMapActor::ShowAgents(const FCampaignView& View)
+{
+	if (!GetWorld() || !Data.IsLoaded() || HasParade())
+	{
+		return;
+	}
+	auto ArmiesIn = [this](int32 RegionId)
+	{
+		int32 Standing = 0;
+		for (const AArmyPiece* Piece : Pieces)
+		{
+			Standing += Piece && Piece->GetRegionId() == RegionId ? 1 : 0;
+		}
+		return Standing;
+	};
+	// (an agent's place depends on the armies that stand on his ground: he is stood afresh when they come or go)
+	FString Told;
+	for (const FViewAgent& Agent : View.Agents)
+	{
+		Told += FString::Printf(TEXT("%d@%d/%d;"), Agent.Id, Agent.Region, ArmiesIn(Agent.Region));
+	}
+	for (const FAgentMark& Mark : View.AgentMarks)
+	{
+		Told += FString::Printf(TEXT("x@%d/%d;"), Mark.Region, ArmiesIn(Mark.Region));
+	}
+	if (Told == AgentSignature)
+	{
+		return;
+	}
+	AgentSignature = Told;
+	for (USceneComponent* Part : AgentParts)
+	{
+		if (Part)
+		{
+			Part->DestroyComponent();
+		}
+	}
+	AgentParts.Reset();
+	AgentStands.Reset();
+	TMap<int32, int32> CountIn, SlotIn;
+	for (const FViewAgent& Agent : View.Agents)
+	{
+		++CountIn.FindOrAdd(Agent.Region);
+	}
+	for (const FAgentMark& Mark : View.AgentMarks)
+	{
+		++CountIn.FindOrAdd(Mark.Region);
+	}
+	const double High = AgentHigh();
+	// The lantern's panes: a material that glows by itself, lit for his own agent; dark on the mark of one caught.
+	UMaterialInterface* PanesLit = GetSolidMaterial(FLinearColor(FColor(255, 222, 140)), 0.4f, 0.0f, 3.0f);
+	UMaterialInterface* PanesOut = GetSolidMaterial(FLinearColor(FColor(30, 27, 25)), 0.5f, 0.0f);
+	UMaterialInterface* RingGlow = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f);
+	auto StandOne = [&](int32 Id, int32 RegionId, bool bMark)
+	{
+		if (!Data.Regions.IsValidIndex(RegionId))
+		{
+			return;
+		}
+		FAgentStand& Made = AgentStands.AddDefaulted_GetRef();
+		Made.Id = Id;
+		Made.Region = RegionId;
+		Made.bMark = bMark;
+		const FVector2D Spot = AgentSpot(RegionId, SlotIn.FindOrAdd(RegionId)++, CountIn[RegionId]);
+		Made.Rest = SurfacePoint(Spot.X, Spot.Y, 0.02);
+		USceneComponent* Holder = NewObject<USceneComponent>(this);
+		Holder->SetupAttachment(Root);
+		Holder->RegisterComponent();
+		Holder->SetWorldLocationAndRotation(Made.Rest, FRotator(0.0f, LastPieceYaw, 0.0f));
+		AgentParts.Add(Holder);
+		Made.Holder = Holder;
+		// The art director's own sculpt, read from Content/Models: the figure on his base with his lantern's frame, and
+		// the lantern's panes as a section of their own.
+		FMiniatureMesh Figure, Panes;
+		const FVector Foot(0.0, 0.0, 0.05 * High); // (the sculpt's base runs a twentieth of his height under its own top)
+		Figure.Sculpted(bMark ? TEXT("AgentMark") : TEXT("Agent"), TEXT("own"), Foot, High, 0.0);
+		Panes.Sculpted(bMark ? TEXT("AgentMarkLamp") : TEXT("AgentLamp"), TEXT("own"), Foot, High, 0.0);
+		UProceduralMeshComponent* Body = NewObject<UProceduralMeshComponent>(this);
+		Body->SetupAttachment(Holder);
+		Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Body->RegisterComponent();
+		AgentParts.Add(Body);
+		Made.Body = Body;
+		if (Figure.Triangles.Num() > 0)
+		{
+			Body->CreateMeshSection(0, Figure.Vertices, Figure.Triangles, Figure.Normals, TArray<FVector2D>(), Figure.Colors, TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(0, GetPieceMaterial());
+		}
+		if (Panes.Triangles.Num() > 0)
+		{
+			Body->CreateMeshSection(1, Panes.Vertices, Panes.Triangles, Panes.Normals, TArray<FVector2D>(), Panes.Colors, TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(1, bMark ? PanesOut : PanesLit);
+		}
+		if (bMark)
+		{
+			return;
+		}
+		// In the hand, and under the pointer: a second brass ring lit on the base, inside its rim.
+		{
+			TArray<FVector> Points, Facing;
+			TArray<int32> Faces;
+			const int32 Sides = 40;
+			const double Inner = 0.186 * High, Outer = 0.224 * High, Level = Foot.Z + 0.003 * High;
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const double Angle = 2.0 * PI * Side / Sides;
+				Points.Add(FVector(FMath::Cos(Angle) * Inner, FMath::Sin(Angle) * Inner, Level));
+				Points.Add(FVector(FMath::Cos(Angle) * Outer, FMath::Sin(Angle) * Outer, Level));
+				Facing.Add(FVector::UpVector);
+				Facing.Add(FVector::UpVector);
+			}
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const int32 A0 = 2 * Side, B0 = A0 + 1, A1 = 2 * ((Side + 1) % Sides), B1 = A1 + 1;
+				Faces.Append({ A0, A1, B0, B0, A1, B1, A0, B0, A1, B0, B1, A1 }); // (both ways round: it is seen from above whichever the engine takes for its face)
+			}
+			Body->CreateMeshSection(2, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(2, RingGlow);
+			Body->SetMeshSectionVisible(2, false);
+		}
+		// The lantern's own light: a small warm lamp that lights his coat, his base and a pool of ground about as wide
+		// as he is tall. It burns by night only, throws no shadows and never flickers. (The brief leaves a real light
+		// to the build where it is cheap: there are never more than a handful of agents.)
+		UPointLightComponent* Lamp = NewObject<UPointLightComponent>(this);
+		Lamp->SetMobility(EComponentMobility::Movable);
+		Lamp->SetupAttachment(Holder);
+		Lamp->SetCastShadows(false);
+		Lamp->IntensityUnits = ELightUnits::Candelas;
+		Lamp->bUseInverseSquaredFalloff = true;
+		Lamp->SetLightColor(FLinearColor(FColor(255, 222, 140)));
+		Lamp->SetSpecularScale(0.1f);
+		Lamp->SetSourceRadius(1.0f);
+		Lamp->SetAttenuationRadius(static_cast<float>(High * 1.25));
+		// (the lantern hangs in his left hand: toward the eye and to its right, a third of the way up him)
+		Lamp->SetRelativeLocation(FVector(-0.19, 0.3, 0.05 + 0.3) * High);
+		Lamp->SetIntensity(0.0f);
+		Lamp->RegisterComponent();
+		Lamp->SetVisibility(false);
+		AgentParts.Add(Lamp);
+		Made.Lamp = Lamp;
+	};
+	for (const FViewAgent& Agent : View.Agents)
+	{
+		StandOne(Agent.Id, Agent.Region, false);
+	}
+	for (const FAgentMark& Mark : View.AgentMarks)
+	{
+		StandOne(INDEX_NONE, Mark.Region, true);
+	}
+	if (AgentInHand != INDEX_NONE && !AgentStands.ContainsByPredicate([this](const FAgentStand& Each) { return !Each.bMark && Each.Id == AgentInHand; }))
+	{
+		AgentInHand = INDEX_NONE;
+	}
+	UE_LOG(LogTheater, Log, TEXT("Agents on the map: %d, and %d marks where one was caught"), View.Agents.Num(), View.AgentMarks.Num());
+}
+
+void ACampaignMapActor::SetAgentInHand(int32 AgentId)
+{
+	if (AgentId != AgentInHand)
+	{
+		for (FAgentStand& Stand : AgentStands)
+		{
+			Stand.bCarried = false;
+		}
+		AgentInHand = AgentId;
+	}
+}
+
+void ACampaignMapActor::CarryAgent(const FVector& GroundPoint)
+{
+	for (FAgentStand& Stand : AgentStands)
+	{
+		if (!Stand.bMark && Stand.Id == AgentInHand)
+		{
+			Stand.bCarried = true;
+			Stand.CarriedAt = GroundPoint;
+		}
+	}
+}
+
+void ACampaignMapActor::ReturnAgent()
+{
+	for (FAgentStand& Stand : AgentStands)
+	{
+		Stand.bCarried = false;
+	}
+}
+
+bool ACampaignMapActor::GetAgentSpot(int32 Index, FVector2D& OutSpot) const
+{
+	if (!AgentStands.IsValidIndex(Index))
+	{
+		return false;
+	}
+	OutSpot = WorldToMap(AgentStands[Index].Rest);
+	return true;
+}
+
+int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance) const
+{
+	int32 Found = INDEX_NONE;
+	double Nearest = TNumericLimits<double>::Max();
+	if (bPiecesShown)
+	{
+		const FVector End = Origin + Direction * 200000.0;
+		const double High = AgentHigh();
+		for (const FAgentStand& Stand : AgentStands)
+		{
+			if (Stand.bMark || !Stand.Holder)
+			{
+				continue;
+			}
+			FVector OnRay, OnPart;
+			if (bAgentFigures)
+			{
+				// (the figure and his base: a little wider than he is, so that he is easy to take hold of)
+				const FVector Foot = Stand.Holder->GetComponentLocation();
+				FMath::SegmentDistToSegmentSafe(Origin, End, Foot, Foot + FVector(0.0, 0.0, High), OnRay, OnPart);
+				if (FVector::DistSquared(OnRay, OnPart) > FMath::Square(0.3 * High))
+				{
+					continue;
+				}
+			}
+			else
+			{
+				if (Stand.SignRadius <= 0.0)
+				{
+					continue;
+				}
+				FMath::SegmentDistToSegmentSafe(Origin, End, Stand.SignAt, Stand.SignAt, OnRay, OnPart);
+				if (FVector::DistSquared(OnRay, OnPart) > FMath::Square(1.3 * Stand.SignRadius))
+				{
+					continue;
+				}
+			}
+			const double Distance = FVector::Dist(Origin, OnRay);
+			if (Distance < Nearest)
+			{
+				Nearest = Distance;
+				Found = Stand.Id;
+			}
+		}
+	}
+	if (OutDistance)
+	{
+		*OutDistance = Nearest;
+	}
+	return Found;
+}
+
+void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
+{
+	if (AgentStands.Num() > 0)
+	{
+		const float Delta = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
+		// Figures from where he plays; from high up a sign for each, drawn with the table's other signs.
+		bAgentFigures = bAgentFigures ? CameraDistance < 9400.0f : CameraDistance < 8600.0f;
+		const double Pixel = 0.00037 * CameraDistance;
+		const float Dusk = FMath::Clamp(NightNow, 0.0f, 1.0f);
+		// ("-TheaterAgentLamp=0.7" tries another strength for the lantern, in candelas.)
+		static float Candelas = -1.0f;
+		if (Candelas < 0.0f)
+		{
+			Candelas = 0.7f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentLamp="), Candelas);
+		}
+		const bool bShown = bPiecesShown && bAgentFigures;
+		const bool bShadows = CameraDistance < 7000.0f;
+		// ("-TheaterAgentFacing=0" holds every agent's piece facing one way on the table, whatever the eye does: for
+		// pictures of him from all round. In play he turns to face the eye, as the armies' pieces do.)
+		static float HeldFacing = -1000.0f;
+		static bool bFacingAsked = false;
+		if (!bFacingAsked)
+		{
+			bFacingAsked = true;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentFacing="), HeldFacing);
+		}
+		if (HeldFacing > -999.0f)
+		{
+			CameraYaw = HeldFacing;
+		}
+		for (FAgentStand& Stand : AgentStands)
+		{
+			if (!Stand.Holder || !Stand.Body)
+			{
+				continue;
+			}
+			const bool bHeld = !Stand.bMark && Stand.Id == AgentInHand;
+			// (In the hand he is lifted thirteen pixels, and his shadow stays on the ground. He rises and settles in a sixth of a second.)
+			Stand.Lift = FMath::Clamp(Stand.Lift + (bHeld ? Delta : -Delta) / 0.16f, 0.0f, 1.0f);
+			const double Raised = 13.0 * Pixel * Stand.Lift * (2.0 - Stand.Lift);
+			Stand.Holder->SetWorldLocationAndRotation((bHeld && Stand.bCarried ? Stand.CarriedAt : Stand.Rest) + FVector(0.0, 0.0, Raised), FRotator(0.0f, CameraYaw, 0.0f));
+			if (Stand.Body->IsVisible() != bShown)
+			{
+				Stand.Body->SetVisibility(bShown);
+			}
+			if (Stand.Body->CastShadow != bShadows)
+			{
+				Stand.Body->SetCastShadow(bShadows);
+			}
+			const bool bRing = !Stand.bMark && (bHeld || Stand.Id == AgentHovered);
+			if (bRing != Stand.bRing)
+			{
+				Stand.bRing = bRing;
+				Stand.Body->SetMeshSectionVisible(2, bRing);
+			}
+			if (Stand.Lamp)
+			{
+				// (the lantern's pool on the ground waits until he is down)
+				const bool bBurns = bShown && Dusk > 0.03f && Stand.Lift < 0.5f;
+				if (Stand.Lamp->IsVisible() != bBurns)
+				{
+					Stand.Lamp->SetVisibility(bBurns);
+				}
+				if (bBurns)
+				{
+					Stand.Lamp->SetIntensity(Candelas * Dusk);
+				}
+			}
+		}
+	}
+	DrawWatchEdge(CameraDistance);
+}
+
+void ACampaignMapActor::SetWatchEdge(int32 RegionId)
+{
+	if (RegionId != WatchRegion)
+	{
+		const bool bChanged = (RegionId == INDEX_NONE) != (WatchRegion == INDEX_NONE);
+		WatchRegion = RegionId;
+		WatchDrawnAt = -1.0f; // (drawn afresh at the next look)
+		if (bChanged)
+		{
+			RebuildHighlight(); // (the pale wash of the province pointed at gives way to the edge, and comes back after it)
+		}
+	}
+}
+
+void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
+{
+	if (!WatchMesh)
+	{
+		return;
+	}
+	if (!Data.Regions.IsValidIndex(WatchRegion))
+	{
+		if (WatchMesh->GetNumSections() > 0)
+		{
+			WatchMesh->ClearAllMeshSections();
+		}
+		return;
+	}
+	// (its line is two pixels wide from any height: it is drawn again when the eye has risen or come down by a twelfth)
+	if (WatchDrawnAt > 0.0f && FMath::Abs(CameraDistance - WatchDrawnAt) < 0.085f * WatchDrawnAt)
+	{
+		return;
+	}
+	WatchDrawnAt = CameraDistance;
+	WatchMesh->ClearAllMeshSections();
+	if (!WatchInk && HighlightMaterial)
+	{
+		WatchInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		WatchInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	}
+	UMaterialInterface* Ink = WatchInk ? static_cast<UMaterialInterface*>(WatchInk) : static_cast<UMaterialInterface*>(HighlightMaterial);
+	// (Ruling 163; the art director's brief, section 4.3.) An agent may go anywhere, so no reach is lit. The province
+	// under the pointer and its one ring are edged as the ground he would watch from there: one edge round the whole,
+	// drawn as one shape with its corners eased, a two-pixel line of the lantern's colour at three quarters strength
+	// with a soft band of the same inside it, 30% at the line and gone 25 pixels in; the province he would stand in a
+	// shade warmer than its ring, with a faint edge of its own. Borders shared inside the ring are not drawn. It is a
+	// sign and not light on the ground: the same by night, and the haze stays under it until he is put down.
+	TSet<int32> Watched;
+	Watched.Add(WatchRegion);
+	for (const int32 Next : Data.Regions[WatchRegion].Neighbors)
+	{
+		if (Data.Regions.IsValidIndex(Next))
+		{
+			Watched.Add(Next);
+		}
+	}
+	const FLinearColor Lantern(FColor(255, 222, 140));
+	auto Inked = [&Lantern](float Alpha)
+	{
+		FLinearColor Out = Lantern;
+		Out.A = Alpha;
+		return Out.ToFColor(false);
+	};
+	{
+		FCampaignMeshBuffers Wash;
+		for (const int32 Each : Watched)
+		{
+			AppendRegionFill(Wash, Each, FLinearColor(Lantern.R, Lantern.G, Lantern.B, Each == WatchRegion ? 0.09f : 0.04f));
+		}
+		Wash.Commit(WatchMesh, 0, Ink);
+	}
+	const double Pixel = 0.00037 * CameraDistance / UnitScale; // (a pixel of the 1600 view, in the map's own measure)
+	const double HalfLine = 1.0 * Pixel, Band = 25.0 * Pixel, Ease = 7.0 * Pixel;
+	const FColor LineInk = Inked(0.75f), BandNear = Inked(0.3f), BandFar = Inked(0.0f);
+	FCampaignMeshBuffers Edge;
+	for (const int32 Each : Watched)
+	{
+		for (const TArray<FVector2D>& Ring : Data.Regions[Each].Polygons)
+		{
+			const int32 Count = Ring.Num();
+			if (Count < 3)
+			{
+				continue;
+			}
+			double Area = 0.0;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				Area += Ring[K].X * Ring[(K + 1) % Count].Y - Ring[(K + 1) % Count].X * Ring[K].Y;
+			}
+			const double Hand = Area > 0.0 ? 1.0 : -1.0; // (which side of each stretch the province lies on)
+			// Each stretch of the outline, in pieces of a unit and a half; a piece is edge where the ground just beyond it is not watched.
+			TArray<FVector2D> Inward;
+			TArray<double> Long;
+			TArray<TArray<bool>> Open;
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const FVector2D A = Ring[K], B = Ring[(K + 1) % Count];
+				const double Length = FVector2D::Distance(A, B);
+				const FVector2D Along = Length > 1.0e-6 ? (B - A) / Length : FVector2D(1.0, 0.0);
+				Inward.Add(FVector2D(-Along.Y, Along.X) * Hand);
+				Long.Add(Length);
+				TArray<bool>& OpenHere = Open.AddDefaulted_GetRef();
+				const int32 Parts = FMath::Max(1, FMath::CeilToInt32(Length / 1.5));
+				for (int32 Part = 0; Part < Parts; ++Part)
+				{
+					const FVector2D Beyond = A + (B - A) * ((Part + 0.5) / Parts) - Inward.Last() * 0.4;
+					OpenHere.Add(Length > 0.05 && !Watched.Contains(Data.FindRegionAt(Beyond.X, Beyond.Y)));
+				}
+			}
+			// The line as a run of points, each stretch cut short at a corner both of whose stretches are edge, with a short
+			// piece across the corner: so the corners are eased.
+			TArray<FVector2D> Line;
+			TArray<bool> Drawn; // (whether the piece from this point to the next is edge)
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const int32 Before = (K + Count - 1) % Count, After = (K + 1) % Count;
+				const FVector2D A = Ring[K], B = Ring[After];
+				const bool bEaseHere = Open[Before].Last() && Open[K][0], bEaseThere = Open[K].Last() && Open[After][0];
+				const double CutHere = bEaseHere ? FMath::Min3(Ease, 0.3 * Long[Before], 0.3 * Long[K]) : 0.0;
+				const double CutThere = bEaseThere ? FMath::Min3(Ease, 0.3 * Long[K], 0.3 * Long[After]) : 0.0;
+				const FVector2D Along = Long[K] > 1.0e-6 ? (B - A) / Long[K] : FVector2D(1.0, 0.0);
+				const int32 Parts = Open[K].Num();
+				for (int32 Part = 0; Part < Parts; ++Part)
+				{
+					Line.Add(Part == 0 ? A + Along * CutHere : A + (B - A) * (static_cast<double>(Part) / Parts));
+					Drawn.Add(Open[K][Part]);
+				}
+				if (bEaseThere && CutThere > 1.0e-6)
+				{
+					Line.Add(B - Along * CutThere);
+					Drawn.Add(true); // (the short piece across the corner)
+				}
+			}
+			const int32 Points = Line.Num();
+			// Which way the ground lies from each point: between its two pieces, so that the band runs on round a corner unbroken.
+			TArray<FVector2D> Lean;
+			for (int32 K = 0; K < Points; ++K)
+			{
+				auto Side = [&](int32 From)
+				{
+					const FVector2D Step = Line[(From + 1) % Points] - Line[From];
+					return (FVector2D(-Step.Y, Step.X) * Hand).GetSafeNormal();
+				};
+				const int32 Before = (K + Points - 1) % Points;
+				const FVector2D One = Side(Before), Two = Side(K);
+				FVector2D Mid = Drawn[Before] && Drawn[K] ? (One + Two).GetSafeNormal() : Drawn[K] ? Two : One;
+				if (Mid.IsNearlyZero())
+				{
+					Mid = Two;
+				}
+				Lean.Add(Mid / FMath::Max(FVector2D::DotProduct(Mid, Two), 0.5));
+			}
+			for (int32 K = 0; K < Points; ++K)
+			{
+				if (!Drawn[K])
+				{
+					continue;
+				}
+				const int32 After = (K + 1) % Points;
+				auto Lay = [&](const FVector2D& Point, const FColor& Colour, double Lifted)
+				{
+					return Edge.AddVertex(SurfacePointOver(Point.X, Point.Y, Lifted), FVector::UpVector, Colour);
+				};
+				// (the soft band inside the line)
+				{
+					const int32 A0 = Lay(Line[K] + Lean[K] * HalfLine, BandNear, 0.2), A1 = Lay(Line[K] + Lean[K] * (HalfLine + Band), BandFar, 0.2);
+					const int32 B0 = Lay(Line[After] + Lean[After] * HalfLine, BandNear, 0.2), B1 = Lay(Line[After] + Lean[After] * (HalfLine + Band), BandFar, 0.2);
+					Edge.AddTriangleFacingUp(A0, A1, B0);
+					Edge.AddTriangleFacingUp(A1, B0, B1);
+				}
+				// (the line itself)
+				{
+					const int32 A0 = Lay(Line[K] - Lean[K] * HalfLine, LineInk, 0.26), A1 = Lay(Line[K] + Lean[K] * HalfLine, LineInk, 0.26);
+					const int32 B0 = Lay(Line[After] - Lean[After] * HalfLine, LineInk, 0.26), B1 = Lay(Line[After] + Lean[After] * HalfLine, LineInk, 0.26);
+					Edge.AddTriangleFacingUp(A0, A1, B0);
+					Edge.AddTriangleFacingUp(A1, B0, B1);
+				}
+			}
+		}
+	}
+	Edge.Commit(WatchMesh, 1, Ink);
+	{
+		// The province he would stand in: a faint edge of its own, one pixel at 30%.
+		FCampaignMeshBuffers Own;
+		for (const TArray<FVector2D>& Ring : Data.Regions[WatchRegion].Polygons)
+		{
+			AppendRibbon(Own, Ring, 0.5 * Pixel, 0.22, Inked(0.3f), true);
+		}
+		Own.Commit(WatchMesh, 2, Ink);
+	}
+	WatchMesh->SetCastShadow(false);
+	WatchMesh->SetTranslucentSortPriority(1); // (over the ground's washes; under the table's signs)
+}
+
 void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 {
 	if (RegionId != HoveredRegion)
@@ -13010,7 +13739,8 @@ void ACampaignMapActor::RebuildHighlight()
 		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
 		AddRegionOverlay(SelectedRegion, FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), 0);
 	}
-	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion)
+	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
+	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
 	{
 		AddRegionOverlay(HoveredRegion, FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), 2);
 	}

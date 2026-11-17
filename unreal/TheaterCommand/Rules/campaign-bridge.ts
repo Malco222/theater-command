@@ -80,7 +80,7 @@ import { guardSays } from '../../../src/campaign/guard';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
-import { cutSays, cutsKnown } from '../../../src/campaign/intel';
+import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/intel';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
@@ -236,6 +236,80 @@ function prizeLine(s: Game, region: number): string {
 }
 
 /** The picture of the war the game draws. */
+/**
+ * (Rulings 153, 159, 163 and 169.) The player's agents as pieces on the map, each with what its card says: where it
+ * is, what it is doing, the chance it is caught this month, the armies it has in sight, and the work it can be given
+ * there with the odds and the reason for any it cannot. Every sentence is the rules' own. `stuck` is the rules' reason
+ * why it cannot be sent anywhere now (in training, on the road, not his month), or empty. `marks` are the places where
+ * one of his agents was caught this month: the secret war is settled as his month opens, so the note carries this month.
+ */
+function agentsOnMap(s: Game, up: boolean) {
+  type Work = { id: string; label: string; text: string; why: string; ok: boolean; now: boolean; caught: number; success: number; act: string };
+  type Seen = { region: number; name: string; nat: string; corps: number; divs: number };
+  type Piece = { id: number; name: string; rank: string; skill: number; ranks: number; xp: number; next: number; toward: string; region: number; where: string; host: string; hostName: string;
+    abroad: boolean; atWork: boolean; wait: number; mission: string; doing: string; caught: number; rest: number; stuck: string; home: string; will: string; work: Work[]; sees: Seen[] };
+  const none = { agents: [] as Piece[], agentMarks: [] as { region: number; text: string }[] };
+  try {
+    const room = secretService(s);
+    if (!room) return none;
+    const live = up && !onEve(s);
+    const pct100 = (x: number) => Math.round(x * 100);
+    const home = room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.` : 'No enemy service is working against you at home.';
+    return {
+      agents: room.agents.map((a): Piece => ({
+        id: a.id, name: a.name, rank: a.rank, skill: a.skill, ranks: SERVICE.agents.ranks.length, xp: a.xp, next: a.next ?? 0, toward: a.next !== null ? SERVICE.agents.ranks[a.skill] ?? '' : '',
+        region: a.reg, where: a.where, host: a.host, hostName: s.nations[a.host]?.name ?? a.host,
+        abroad: a.abroad, atWork: a.atWork, wait: a.wait, mission: a.mission, doing: a.doing, caught: pct100(a.caught), rest: a.rest,
+        stuck: !live || !a.atWork ? whyNotSendAgent(s, a.id, a.reg) ?? '' : '',
+        home: a.abroad ? '' : home,
+        // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
+        will: a.missions.find((m) => m.id === a.mission)?.text ?? '',
+        work: a.missions.map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
+        sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? '', nat: x.nat, corps: x.corps, divs: Math.round(x.divs) })),
+      })),
+      agentMarks: room.notes.filter((n) => n.what === 'caught' && n.turn === s.turn).map((n) => ({ region: n.reg, text: n.text })),
+    };
+  } catch { return none; }
+}
+
+/** (Ruling 163.) Why the player's agent cannot be sent to this province, in the rules' words; empty where he can go. */
+function agentWhy(id: number, region: number) {
+  try { return { why: whyNotSendAgent(game(), id, region) ?? '' }; } catch { return { why: '' }; }
+}
+
+/**
+ * (For the photographer only: no start has an agent, and the piece needs its pictures.) Recruits an agent by the
+ * rules' own order and sets him at work in a province at once, watching abroad or on guard at home; with `mission`
+ * his work there is set by the rules' own order where they allow it. Where the treasury cannot pay, he is written
+ * straight into the service's list.
+ */
+function stageAgent(region: number, mission: string) {
+  const s = game();
+  const r = s.regions[region];
+  if (!r || !s.human) return { ok: false, id: -1, view: view() };
+  let a = orderRecruitAgent(s);
+  if (!a) {
+    a = { id: s.intel.next++, nat: s.human, name: ['Halberd', 'Chalice', 'Lantern', 'Anvil'][s.intel.agents.length % 4], xp: 0, reg: region, ready: s.turn, mission: 'watch', born: s.turn - 2 };
+    s.intel.agents.push(a);
+  }
+  a.reg = region;
+  a.ready = mission === 'road' ? s.turn + 1 : s.turn;
+  a.months = 1;
+  a.mission = allied(s, r.ctrl, s.human) ? 'guard' : 'watch';
+  if (mission && mission !== 'road') orderAgentMission(s, a.id, mission as Parameters<typeof orderAgentMission>[2]);
+  return { ok: true, id: a.id, view: view() };
+}
+
+/** (For the photographer only.) Writes into the service's file that an agent of his was caught in a province this month, in the rules' own sentence, for a picture of the mark left there. */
+function stageCaught(region: number) {
+  const s = game();
+  const r = s.regions[region];
+  if (!r || !s.human) return { ok: false, view: view() };
+  const host = s.nations[r.ctrl];
+  s.intel.notes.push({ turn: s.turn, agent: 'Halberd', nat: s.human, reg: region, what: 'caught', text: `Agent Halberd is caught at ${r.name} by ${host?.adj ?? 'enemy'} counter-intelligence. Nothing more is heard.`, good: false });
+  return { ok: true, view: view() };
+}
+
 function view() {
   const s = game();
   const up = humanUp(s);
@@ -331,6 +405,8 @@ function view() {
     unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
     // (Ruling 154.) Ground he only glimpses (the rules' sight 1): the haze stays over it, and an army there is a flag and no more.
     glimpsed: s.human ? s.regions.filter((r) => seen[r.id] === 1).map((r) => r.id) : [],
+    // (Rulings 153 and 159.) His agents, each a piece on the map that he alone sees, with everything its card says; and where one of his was caught this month.
+    ...agentsOnMap(s, up),
     // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
     weather: (() => {
       const w = weatherNow(s);
@@ -4968,4 +5044,4 @@ function raidsFlown(turn?: number) {
 
 (globalThis as Record<string, unknown>).TC = {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, endMonth };

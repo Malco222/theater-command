@@ -113,7 +113,24 @@ public:
 	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
 
 	/** The piece a line from Origin along Direction passes through, nearest first. */
-	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction) const;
+	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr) const;
+
+	// ---- (Ruling 153.) The player's agents, standing on the map as pieces that he alone sees.
+	/** Stands his agents in their provinces, and a mark where one was caught this month. Remade only when they change. Call it after ShowArmies: an agent stands clear of the armies' bases. */
+	void ShowAgents(const FCampaignView& View);
+	/** The agent whose piece (from high up, whose sign) a line from the eye passes through: his id, and how far along the line. INDEX_NONE if none. */
+	int32 AgentAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr) const;
+	/** The agent in hand, by his id (INDEX_NONE: none): his piece is lifted a little off the table and a brass ring is lit on its base. */
+	void SetAgentInHand(int32 AgentId);
+	/** The agent the pointer rests on: the ring on his base lights, to say he can be picked up. */
+	void SetAgentHovered(int32 AgentId) { AgentHovered = AgentId; }
+	/** Carries the agent in hand over this point of the table; and sets him back where he stands. */
+	void CarryAgent(const FVector& GroundPoint);
+	void ReturnAgent();
+	/** (Ruling 163.) With an agent in hand: the province under the pointer and its one ring are edged as the ground he would watch from there. INDEX_NONE takes the edge away. */
+	void SetWatchEdge(int32 RegionId);
+	/** Where the Nth of the agents' pieces stands on the table, in the map's own measure: for the photographer's eye. */
+	bool GetAgentSpot(int32 Index, FVector2D& OutSpot) const;
 
 	/** The piece that holds this corps, if it is on the table. */
 	AArmyPiece* FindPieceOfCorps(int32 CorpsId) const;
@@ -631,6 +648,39 @@ private:
 	 */
 	void UpdateSearchlights(float CameraDistance);
 	void UpdateCutLamps(float CameraDistance);
+
+	/** (Ruling 153.) One agent's piece on the table, or the mark left for a month where one was caught: the base alone, with the lantern set down on it and out. */
+	struct FAgentStand
+	{
+		int32 Id = INDEX_NONE, Region = INDEX_NONE;
+		bool bMark = false;
+		FVector Rest = FVector::ZeroVector; // where it stands on the table
+		FVector CarriedAt = FVector::ZeroVector; // in the hand and carried: the point of the table it hangs over
+		bool bCarried = false, bRing = false;
+		float Lift = 0.0f; // how far it has risen into the hand, 0 to 1
+		FVector SignAt = FVector::ZeroVector; // from high up: the middle of its sign on the table, and the sign's radius there
+		double SignRadius = 0.0;
+		USceneComponent* Holder = nullptr;
+		UProceduralMeshComponent* Body = nullptr;
+		class UPointLightComponent* Lamp = nullptr;
+	};
+	TArray<FAgentStand> AgentStands;
+	/** What the stands above are made of, kept here from the collector. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USceneComponent>> AgentParts;
+	FString AgentSignature;
+	int32 AgentInHand = INDEX_NONE, AgentHovered = INDEX_NONE;
+	bool bAgentFigures = true; // figures from where he plays; from high up a sign for each
+	FVector2D AgentSpot(int32 RegionId, int32 Slot, int32 Count) const;
+	void UpdateAgents(float CameraDistance, float CameraYaw);
+	/** (Ruling 163.) The edge round the ground an agent in hand would watch. A sign, not a light: its own ink, which the night does not touch. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WatchMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WatchInk;
+	int32 WatchRegion = INDEX_NONE;
+	float WatchDrawnAt = -1.0f; // the eye's distance the edge was last drawn for: its line is two pixels wide from any height
+	void DrawWatchEdge(float CameraDistance);
 	/**
 	 * (The art director's round 38.) Where a cut province's lamp, board and post stand: on the longest stretch of its
 	 * own track, halfway between the town's last house and the border, clear of where its army stands.

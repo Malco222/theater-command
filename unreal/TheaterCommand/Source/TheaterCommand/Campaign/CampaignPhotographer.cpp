@@ -1203,6 +1203,57 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			}
 		}
 	}
+	// ("-TheaterAgentAt=Paris;Saxony;Brussels:books;Champagne:road" sets an agent of the player's at work in each of
+	// those provinces before the first picture: watching abroad or on guard at home, or at the work named, or still on
+	// the road there. "-TheaterAgentCaught=Lille" leaves the mark of one caught there this month. No start has an agent.)
+	{
+		static bool bAgentsStaged = false;
+		FString AgentsAsked, CaughtAsked;
+		if (!bAgentsStaged && Controller->GetSession())
+		{
+			bAgentsStaged = true;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentAt="), AgentsAsked, false))
+			{
+				TArray<FString> AgentPlaces;
+				AgentsAsked.ParseIntoArray(AgentPlaces, TEXT(";"));
+				for (const FString& AgentPlace : AgentPlaces)
+				{
+					FString AgentWhere = AgentPlace, AgentWork;
+					AgentPlace.Split(TEXT(":"), &AgentWhere, &AgentWork);
+					if (const int32* AgentRegion = Table->GetData().RegionByName.Find(AgentWhere))
+					{
+						Controller->StageAgent(*AgentRegion, AgentWork);
+					}
+				}
+			}
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentCaught="), CaughtAsked, false))
+			{
+				TArray<FString> CaughtPlaces;
+				CaughtAsked.ParseIntoArray(CaughtPlaces, TEXT(";"));
+				for (const FString& CaughtPlace : CaughtPlaces)
+				{
+					if (const int32* CaughtRegion = Table->GetData().RegionByName.Find(CaughtPlace))
+					{
+						Controller->StageCaught(*CaughtRegion);
+					}
+				}
+			}
+		}
+	}
+	if (Shot.Region.StartsWith(TEXT("@agent")))
+	{
+		// "@agent0" is the first of the agents' pieces on the table (after them come the marks of those caught): the
+		// eye goes to where it stands. (Here, and not with the other places: the agents are stood just above.)
+		FVector2D AgentStands;
+		if (Table->GetAgentSpot(FCString::Atoi(*Shot.Region.Mid(6)), AgentStands))
+		{
+			Eye->GoTo(Table->MapToWorld(AgentStands.X, AgentStands.Y), Shot.Zoom, true);
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Photographer: no such agent stands on the table"));
+		}
+	}
 	// ("-TheaterGunsAt=Polish Silesia:2;Krakow:1" gives those places anti-aircraft guns of that level before the first
 	// picture: for the raid card's defences, since no start has a place with guns.)
 	{
@@ -1317,6 +1368,22 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			const bool bHeld = Controller->HoldArmyIn(*Army);
 			Controller->CarryHeldOver(*Over);
 			UE_LOG(LogTheater, Display, TEXT("Photographer: flag in %s %s, carried over %s"), *Shot.Army, bHeld ? TEXT("taken in hand") : TEXT("NOT taken"), *Shot.Carry);
+		}
+	}
+	{
+		// ("-TheaterAgentHand=Paris" takes the agent standing there in hand for every picture: his card is shown, and
+		// with "-TheaterHover=Champagne" the ground he would watch from there is edged.)
+		static FString AgentHand;
+		static bool bAgentHandAsked = false;
+		if (!bAgentHandAsked)
+		{
+			bAgentHandAsked = true;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentHand="), AgentHand, false);
+		}
+		if (const int32* HandRegion = AgentHand.IsEmpty() ? nullptr : Data.RegionByName.Find(AgentHand))
+		{
+			const bool bAgentTaken = Controller->PickUpAgentIn(*HandRegion);
+			UE_LOG(LogTheater, Display, TEXT("Photographer: the agent at %s %s"), *AgentHand, bAgentTaken ? TEXT("is taken in hand") : TEXT("could NOT be taken in hand"));
 		}
 	}
 	if (const int32* Click = Data.RegionByName.Find(Shot.Click))

@@ -2543,6 +2543,130 @@ void ACampaignPlayerController::StageCut(int32 RegionId, const FString& Cause, c
 	}
 }
 
+void ACampaignPlayerController::StageAgent(int32 RegionId, const FString& Mission)
+{
+	if (FCampaignSession* Session = GetSession())
+	{
+		Session->StageAgent(RegionId, Mission);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+}
+
+void ACampaignPlayerController::StageCaught(int32 RegionId)
+{
+	if (FCampaignSession* Session = GetSession())
+	{
+		Session->StageCaught(RegionId);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+}
+
+const FViewAgent* ACampaignPlayerController::GetAgentInHand() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && AgentInHand != INDEX_NONE ? Session->GetView().Agents.FindByPredicate([this](const FViewAgent& Each) { return Each.Id == AgentInHand; }) : nullptr;
+}
+
+FString ACampaignPlayerController::GetAgentHint() const
+{
+	const FViewAgent* Agent = GetAgentInHand();
+	if (!Agent)
+	{
+		return FString();
+	}
+	// (Ruling 169(a).) How he is sent, in the army card's own words with his time added; while he cannot be sent, the
+	// rules' own reason stands there instead.
+	return !Agent->Stuck.IsEmpty() ? Agent->Stuck : FString(TEXT("Right-click where the agent should go, or drag him there: a month on the road. Esc puts him down."));
+}
+
+bool ACampaignPlayerController::PickUpAgent(int32 AgentId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || !Session->GetView().Agents.ContainsByPredicate([AgentId](const FViewAgent& Each) { return Each.Id == AgentId; }))
+	{
+		return false;
+	}
+	// Whatever else was in hand is put down, and no territory is being looked at: the card is his.
+	PutDownArmy();
+	PutDownFleet();
+	StopLooking();
+	SelectRegion(INDEX_NONE);
+	RegionPanel.bVisible = false;
+	RegionPanel.Revision = ++PanelRevision;
+	AgentInHand = AgentId;
+	Map->SetAgentInHand(AgentId);
+	return true;
+}
+
+bool ACampaignPlayerController::PickUpAgentIn(int32 RegionId)
+{
+	const FCampaignSession* Session = GetSession();
+	const FViewAgent* There = Session ? Session->GetView().Agents.FindByPredicate([RegionId](const FViewAgent& Each) { return Each.Region == RegionId; }) : nullptr;
+	return There && PickUpAgent(There->Id);
+}
+
+void ACampaignPlayerController::PutDownAgent()
+{
+	if (AgentInHand == INDEX_NONE)
+	{
+		return;
+	}
+	AgentInHand = INDEX_NONE;
+	bAgentHeld = false;
+	if (Map.IsValid())
+	{
+		Map->SetAgentInHand(INDEX_NONE);
+		Map->SetWatchEdge(INDEX_NONE);
+	}
+}
+
+void ACampaignPlayerController::SendAgentTo(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || AgentInHand == INDEX_NONE || !Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		return;
+	}
+	Map->ReturnAgent();
+	// (Ruling 163: an agent may go anywhere but his own province and a dormant country's ground. Where the rules
+	// refuse, the reason is theirs, and he stays in hand.)
+	const FString Refused = Session->WhyNotSendAgent(AgentInHand, RegionId);
+	if (!Refused.IsEmpty())
+	{
+		Notify(Refused, 6.0);
+		return;
+	}
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("spy:send:%d"), AgentInHand), RegionId, Note))
+	{
+		PutDownAgent();
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+}
+
+void ACampaignPlayerController::SetAgentWork(const FString& Act)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || AgentInHand == INDEX_NONE || Act.IsEmpty())
+	{
+		return;
+	}
+	FString Note;
+	if (Session->Act(Act, INDEX_NONE, Note))
+	{
+		ShowWar(Session->GetView(), TArray<FCorpsMove>()); // (his work changes what he sees, and so what the map shows)
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+}
+
 void ACampaignPlayerController::StandThisMonth()
 {
 	FCampaignSession* Session = GetSession();
@@ -3437,6 +3561,10 @@ void ACampaignPlayerController::Escape()
 	{
 		CloseFaceOff();
 	}
+	else if (AgentInHand != INDEX_NONE)
+	{
+		PutDownAgent(); // (ruling 169: Esc puts him down)
+	}
 	else if (ArmyRegion != INDEX_NONE)
 	{
 		PutDownArmy();
@@ -3676,11 +3804,24 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	bPointerOnWater = bOnTable && PointedRegion == INDEX_NONE;
 	PointedField = bOnTable ? Map->AirfieldNear(PointerMap) : INDEX_NONE;
 	AArmyPiece* PointedPiece = nullptr;
+	int32 PointedAgent = INDEX_NONE;
 	{
 		FVector RayOrigin, RayDirection;
 		if (bHaveMouse && !bScripted && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
 		{
-			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
+			double PieceFar = 0.0, AgentFar = 0.0;
+			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection, &PieceFar);
+			// (Ruling 153.) An agent's piece: a small thing among large ones. Where the line from the eye passes through
+			// him he is what is pointed at, unless an army's piece stands nearer the eye.
+			PointedAgent = Map->AgentAtRay(RayOrigin, RayDirection, &AgentFar);
+			if (PointedAgent != INDEX_NONE && PointedPiece && PieceFar < AgentFar)
+			{
+				PointedAgent = INDEX_NONE;
+			}
+			else if (PointedAgent != INDEX_NONE)
+			{
+				PointedPiece = nullptr;
+			}
 		}
 	}
 
@@ -3731,7 +3872,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && !bBusy && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
+		if (!bTurning && !bBusy && AgentInHand != INDEX_NONE)
+		{
+			// (Ruling 169.) The agent in hand is sent with a right-click, as an army is. An agent may go anywhere:
+			// where the rules refuse, their reason is said.
+			if (PointedRegion != INDEX_NONE)
+			{
+				SendAgentTo(PointedRegion);
+			}
+		}
+		else if (!bTurning && !bBusy && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
 		{
 			OrderTo(PointedRegion);
 		}
@@ -3777,7 +3927,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		PressPosition = Mouse;
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
-		if (!bBusy)
+		bAgentHeld = false;
+		if (!bBusy && PointedAgent != INDEX_NONE)
+		{
+			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
+			bAgentWasInHand = AgentInHand == PointedAgent;
+			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
+		}
+		else if (!bBusy)
 		{
 			const bool bAlreadyInHand = PointedPiece && ArmyRegion != INDEX_NONE && RingedPiece.Get() == PointedPiece;
 			bHeldWasInHand = Hold(PointedPiece) && bAlreadyInHand;
@@ -3808,6 +3965,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Eye->Pan(Push * 0.8, DeltaTime);
 			}
 		}
+		else if (bDragging && bAgentHeld && AgentInHand != INDEX_NONE)
+		{
+			// (Ruling 169: he can be dragged like a flag.) The agent hangs over the pointer, and the table slides along
+			// when the hand comes to the edge of the view.
+			if (bOnTable)
+			{
+				Map->CarryAgent(PointerWorld);
+			}
+			if (ViewWidth > 0 && ViewHeight > 0)
+			{
+				const double Margin = 0.045 * ViewHeight;
+				FVector2D Push = FVector2D::ZeroVector;
+				if (Mouse.X < Margin) Push.X -= 1.0;
+				if (Mouse.X > ViewWidth - Margin) Push.X += 1.0;
+				if (Mouse.Y < Margin) Push.Y += 1.0;
+				if (Mouse.Y > ViewHeight - Margin) Push.Y -= 1.0;
+				Eye->Pan(Push * 0.8, DeltaTime);
+			}
+		}
 		else if (bDragging && ViewWidth > 0)
 		{
 			// How much table one pixel covers at the point being looked at.
@@ -3821,7 +3997,24 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bLeftHeld && !IsInputKeyDown(EKeys::LeftMouseButton))
 	{
-		if (HeldPiece.IsValid())
+		if (bAgentHeld)
+		{
+			if (bDragging && AgentInHand != INDEX_NONE)
+			{
+				// Let go over a province: he is sent there. Let go over the sea, or off the table: he goes back where he stood.
+				Map->ReturnAgent();
+				if (bOnTable && PointedRegion != INDEX_NONE)
+				{
+					SendAgentTo(PointedRegion);
+				}
+			}
+			else if (bAgentWasInHand)
+			{
+				PutDownAgent(); // (a plain click on the agent already in hand puts him down again)
+			}
+			bAgentHeld = false;
+		}
+		else if (HeldPiece.IsValid())
 		{
 			if (bDragging)
 			{
@@ -3875,6 +4068,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// The pointer itself says what a right-click would do with what is in hand: cross-hairs over ground or a coast
 	// that would be attacked, a barred circle over what is out of reach this month.
 	EMouseCursor::Type Pointer = HeldPiece.IsValid() && bDragging ? EMouseCursor::GrabHandClosed : (Offered ? EMouseCursor::GrabHand : EMouseCursor::Default);
+	// (Ruling 153.) An agent the pointer rests on shows that he can be picked up; one being carried is in a closed hand.
+	Map->SetAgentHovered(bBusy ? INDEX_NONE : PointedAgent);
+	if (bAgentHeld && bDragging)
+	{
+		Pointer = EMouseCursor::GrabHandClosed;
+	}
+	else if (!bBusy && PointedAgent != INDEX_NONE)
+	{
+		Pointer = EMouseCursor::GrabHand;
+	}
+	// (Ruling 163.) With an agent in hand no reach is lit: the province under the pointer and its one ring are edged as
+	// the ground he would watch from there.
+	Map->SetWatchEdge(AgentInHand == INDEX_NONE || bBusy ? INDEX_NONE : StagedHover != INDEX_NONE ? StagedHover : (bScripted || bPointerOverPanel || !bOnTable) ? INDEX_NONE : PointedRegion);
 	if (Pointer == EMouseCursor::Default && !bBusy && !bScripted && !bTurning && !bPointerOverPanel && bOnTable)
 	{
 		if (ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE && PointedRegion != ArmyRegion)
@@ -3974,7 +4180,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
 	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
 	const int32 TipField = (TipRegion == INDEX_NONE || bStagedTip) ? INDEX_NONE : PointedField;
-	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0);
+	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
 	{
 		HoverTipRegion = TipRegion;
@@ -4210,6 +4416,21 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				{
 					Line += FString::Printf(TEXT("\nRight-click: %s makes this its home port, and lies in harbour for the month."), *Held->Name);
 				}
+			}
+			// (Ruling 159.) Where one of his agents was caught this month, the mark left there says so, in the rules' sentence.
+			for (const FAgentMark& Mark : View.AgentMarks)
+			{
+				if (Mark.Region == TipRegion)
+				{
+					Line += TEXT("\n") + Mark.Text;
+				}
+			}
+			// (Rulings 163 and 169.) With an agent in hand: what a right-click does here; or, where the rules refuse the
+			// journey, their own reason.
+			if (AgentInHand != INDEX_NONE)
+			{
+				const FString Refused = Session->WhyNotSendAgent(AgentInHand, TipRegion);
+				Line += TEXT("\n") + (Refused.IsEmpty() ? FString(TEXT("Right-click: the agent goes here, a month on the road.")) : Refused);
 			}
 			HoverTip = FText::FromString(Line);
 			HoverTipMarked = FText::FromString(TipMarked);
@@ -4604,6 +4825,7 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 	SelectRegion(INDEX_NONE);
 	RegionPanel.bVisible = false;
 	RegionPanel.Revision = ++PanelRevision;
+	PutDownAgent(); // (a fleet in hand: the agent is let go)
 	FleetInHand = FleetId;
 	AdviserSaw(3);
 	FleetNext = Fleet->Stance == TEXT("raid") ? TEXT("raid") : Fleet->Stance == TEXT("hunt") ? TEXT("hunt") : TEXT("patrol");
@@ -4870,6 +5092,7 @@ void ACampaignPlayerController::FleetToHarbour()
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
 	StopLooking();
+	PutDownAgent(); // (a click anywhere else lets the agent in hand go, and looks at what was clicked)
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
 	if (Piece && !Piece->IsArmy() && Piece->GetForceId() != INDEX_NONE)
 	{
@@ -5223,6 +5446,7 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 		return false;
 	}
 	const bool bNewInHand = ArmyRegion != RegionId;
+	PutDownAgent(); // (an army in hand: the agent is let go)
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
@@ -6018,6 +6242,11 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->SetHolders(View.RegionHolder, View.League, View.RegionOwner, View.SiegePaint);
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
+		Map->ShowAgents(View); // (ruling 153: after the armies, whose bases an agent stands clear of)
+		if (AgentInHand != INDEX_NONE && !GetAgentInHand())
+		{
+			PutDownAgent(); // (caught, or retired, while in hand)
+		}
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowCuts(View.Cuts);
 		Map->ShowCivic(View.Civic);

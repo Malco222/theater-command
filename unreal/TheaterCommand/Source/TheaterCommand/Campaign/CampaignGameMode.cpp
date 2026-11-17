@@ -177,6 +177,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->SetInkAllowed(false); // (the table laid out as the campaign stands: nothing seeps in)
 		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
+		Table->ShowAgents(Session->GetView()); // (ruling 153: his agents, in a campaign taken up again)
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
 		Table->ShowCuts(Session->GetView().Cuts);
 		Table->ShowWorksGoing(Session->GetView().Going);

@@ -598,6 +598,49 @@ struct FViewCut
 	FString Head, Line, Short; // the rules' words: "Railway cut"; its sentence; "railway cut (bombed, September 1939)"
 };
 
+/** (Rulings 153 and 169.) One piece of work an agent can be given where he stands, with its odds in whole percents and the rules' reason where he cannot. */
+struct FAgentWork
+{
+	FString Id, Label, Text, Why, Act;
+	bool bOk = false, bNow = false;
+	int32 Caught = 0, Success = -1; // (Success is under nothing for work that is not tried once: watching, reading, guarding)
+};
+
+/** An army one of his agents has in sight: where, whose, and how strong. */
+struct FAgentSight
+{
+	int32 Region = INDEX_NONE;
+	FString Name, Nation;
+	int32 Corps = 0, Divisions = 0;
+};
+
+/**
+ * (Rulings 153, 163 and 169.) One of the player's agents: a piece on the map that he alone sees, and everything its
+ * card says. Every sentence is the rules' own.
+ */
+struct FViewAgent
+{
+	int32 Id = INDEX_NONE, Region = INDEX_NONE;
+	FString Name, Rank, Toward; // "Halberd"; "Agent"; the rank he works toward, or empty at the top
+	int32 Skill = 1, Ranks = 3, Xp = 0, Next = 0;
+	FString Where, Host, HostName; // the province; the country that holds it, by its tag and by its name
+	bool bAbroad = false, bAtWork = false;
+	int32 Wait = 0, Caught = 0, Rest = 0; // months until he is at work; the chance he is caught this month, in percent; months he must lie low
+	FString Mission, Doing; // what he is doing, by its id and in the rules' words
+	FString Stuck; // the rules' reason why he cannot be sent anywhere now; empty when he can
+	FString Home; // for an agent at home: the threat he guards against, in a sentence
+	FString Will; // what the work he does (or will take up) is, in the rules' words
+	TArray<FAgentWork> Work;
+	TArray<FAgentSight> Sees;
+};
+
+/** (Ruling 159.) Where one of his agents was caught this month: a mark stands there until the month turns, with the rules' sentence on the pointer. */
+struct FAgentMark
+{
+	int32 Region = INDEX_NONE;
+	FString Text;
+};
+
 /**
  * (Rulings 88, 101 and 102.) The round of armies as the rules count it, the same in both builds: Bright on NEXT
  * ARMY's disc (untouched armies at the front, and armies raised this month with no order), Quiet for the rear, Front
@@ -756,6 +799,8 @@ struct FCampaignView
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut, as far as the player knows
 	TArray<FViewCut> Cuts; // (rulings 113 and 114) the same, with how each is known and the rules' words for it
+	TArray<FViewAgent> Agents; // (ruling 153) his agents: pieces on the map
+	TArray<FAgentMark> AgentMarks; // (ruling 159) where one of his was caught this month
 	TArray<FViewFleet> Fleets;
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	FViewRound Round; // (rulings 88, 101, 102) the round of armies

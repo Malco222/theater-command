@@ -29472,6 +29472,79 @@
     const z = prize(s, region);
     return z && (z.income > 0 || z.incomeNow > 0 || z.vp > 0 || z.factories > 0 || z.oil > 0 || z.capitalOf || z.frees) ? z.line : "";
   }
+  function agentsOnMap(s, up) {
+    const none3 = { agents: [], agentMarks: [] };
+    try {
+      const room2 = secretService(s);
+      if (!room2) return none3;
+      const live = up && !onEve(s);
+      const pct100 = (x) => Math.round(x * 100);
+      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct9(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home.";
+      return {
+        agents: room2.agents.map((a) => ({
+          id: a.id,
+          name: a.name,
+          rank: a.rank,
+          skill: a.skill,
+          ranks: INTEL.agents.ranks.length,
+          xp: a.xp,
+          next: a.next ?? 0,
+          toward: a.next !== null ? INTEL.agents.ranks[a.skill] ?? "" : "",
+          region: a.reg,
+          where: a.where,
+          host: a.host,
+          hostName: s.nations[a.host]?.name ?? a.host,
+          abroad: a.abroad,
+          atWork: a.atWork,
+          wait: a.wait,
+          mission: a.mission,
+          doing: a.doing,
+          caught: pct100(a.caught),
+          rest: a.rest,
+          stuck: !live || !a.atWork ? whyNotSendAgent(s, a.id, a.reg) ?? "" : "",
+          home: a.abroad ? "" : home,
+          // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
+          will: a.missions.find((m) => m.id === a.mission)?.text ?? "",
+          work: a.missions.map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
+          sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? "", nat: x.nat, corps: x.corps, divs: Math.round(x.divs) }))
+        })),
+        agentMarks: room2.notes.filter((n) => n.what === "caught" && n.turn === s.turn).map((n) => ({ region: n.reg, text: n.text }))
+      };
+    } catch {
+      return none3;
+    }
+  }
+  function agentWhy(id, region) {
+    try {
+      return { why: whyNotSendAgent(game(), id, region) ?? "" };
+    } catch {
+      return { why: "" };
+    }
+  }
+  function stageAgent(region, mission) {
+    const s = game();
+    const r = s.regions[region];
+    if (!r || !s.human) return { ok: false, id: -1, view: view2() };
+    let a = orderRecruitAgent(s);
+    if (!a) {
+      a = { id: s.intel.next++, nat: s.human, name: ["Halberd", "Chalice", "Lantern", "Anvil"][s.intel.agents.length % 4], xp: 0, reg: region, ready: s.turn, mission: "watch", born: s.turn - 2 };
+      s.intel.agents.push(a);
+    }
+    a.reg = region;
+    a.ready = mission === "road" ? s.turn + 1 : s.turn;
+    a.months = 1;
+    a.mission = allied(s, r.ctrl, s.human) ? "guard" : "watch";
+    if (mission && mission !== "road") orderAgentMission(s, a.id, mission);
+    return { ok: true, id: a.id, view: view2() };
+  }
+  function stageCaught(region) {
+    const s = game();
+    const r = s.regions[region];
+    if (!r || !s.human) return { ok: false, view: view2() };
+    const host = s.nations[r.ctrl];
+    s.intel.notes.push({ turn: s.turn, agent: "Halberd", nat: s.human, reg: region, what: "caught", text: `Agent Halberd is caught at ${r.name} by ${host?.adj ?? "enemy"} counter-intelligence. Nothing more is heard.`, good: false });
+    return { ok: true, view: view2() };
+  }
   function view2() {
     const s = game();
     const up = humanUp(s);
@@ -29583,6 +29656,8 @@
       unseen: s.human ? s.regions.filter((r) => seen2[r.id] === 0).map((r) => r.id) : [],
       // (Ruling 154.) Ground he only glimpses (the rules' sight 1): the haze stays over it, and an army there is a flag and no more.
       glimpsed: s.human ? s.regions.filter((r) => seen2[r.id] === 1).map((r) => r.id) : [],
+      // (Rulings 153 and 159.) His agents, each a piece on the map that he alone sees, with everything its card says; and where one of his was caught this month.
+      ...agentsOnMap(s, up),
       // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
       weather: (() => {
         const w = weather(s);
@@ -34369,6 +34444,9 @@ ${standing5}`,
     stageGuns,
     stageCut,
     stageRecon,
+    stageAgent,
+    stageCaught,
+    agentWhy,
     move,
     previewAttack: preview,
     attack,

@@ -82,6 +82,12 @@ public:
 	void StageCut(int32 RegionId, const FString& Cause, const FString& How);
 	/** (For the photographer only.) Flies a reconnaissance flight over a province; what the flight reported, or empty. */
 	FString StageRecon(int32 RegionId);
+	/** (For the photographer only.) Sets an agent of the player's at work in a province at once ("road": still on his way there; or a mission's id). His id. */
+	int32 StageAgent(int32 RegionId, const FString& Mission);
+	/** (For the photographer only.) Writes down that an agent of his was caught in a province this month. */
+	void StageCaught(int32 RegionId);
+	/** (Ruling 163.) Why the player's agent cannot be sent to this province, in the rules' words; empty where he can go. */
+	FString WhyNotSendAgent(int32 AgentId, int32 RegionId);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */

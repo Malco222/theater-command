@@ -1408,6 +1408,541 @@ namespace
 		int32 Over = 0; // the button under the pointer: 1 the strip's, 2 the staff's, 3 the stud that closes
 	};
 
+	/** The agent's picture for his card's well: the art director's studio picture of her own sculpt (Content/UI/agent-well.png). Read once; null if it is not there. */
+	const FSlateBrush* AgentWellBrush()
+	{
+		static TSharedPtr<FSlateBrush> Kept;
+		static bool bAsked = false;
+		if (!bAsked)
+		{
+			bAsked = true;
+			if (UTexture2D* Texture = FImageUtils::ImportFileAsTexture2D(FPaths::ProjectContentDir() / TEXT("UI") / TEXT("agent-well.png")))
+			{
+				Texture->AddToRoot();
+				Kept = MakeShared<FSlateBrush>();
+				Kept->SetResourceObject(Texture);
+				Kept->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+				Kept->DrawAs = ESlateBrushDrawType::Image;
+			}
+		}
+		return Kept.Get();
+	}
+
+	/**
+	 * (Rulings 153 and 169; the UI director's sheet 19.) The card of the agent in hand, in the army card's seat, 699 by
+	 * 327. The three first answers lead: where he is, what he is doing, what it risks. Then what he sees, as figures in
+	 * columns, and the work he can be set there with its odds: the lamp marks the work in force, and a row is pressed
+	 * to change it. Work that is refused stays on the list under a lock, with the rules' one sentence saying why. While
+	 * he cannot be given orders the card says so once, in the rules' words. Every sentence on it is the rules' own.
+	 */
+	class SAgentCard : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SAgentCard) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Player)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Player = Args._Player;
+		}
+
+		static constexpr double CardW = 699.0, CardH = 327.0;
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(CardW, CardH); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
+			if (!Agent)
+			{
+				return LayerId;
+			}
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			// (The sheet's sizes are in pixels of the 1600 by 1000 frame; a face here is asked for in points, which are a third larger.)
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			const FLinearColor Desk900(FColor::FromHex(TEXT("1D1610"))), Desk800(FColor::FromHex(TEXT("2A2118"))), Desk700(FColor::FromHex(TEXT("3A2E22"))), Brass700(FColor::FromHex(TEXT("7A6038")));
+			const FLinearColor Amber(FColor::FromHex(TEXT("E0A13C"))), Dim(FColor::FromHex(TEXT("8F8573")));
+			auto Fill = [&](double X, double Y, double W, double H, const FLinearColor& Ink, int32 Layer)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+			};
+			auto Picture = [&](const FSlateBrush* Brush, double X, double Y, double W, double H, int32 Layer)
+			{
+				if (Brush)
+				{
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), Brush, ESlateDrawEffect::None, FLinearColor::White);
+				}
+			};
+			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(700.0, 40.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+			};
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			auto WriteRight = [&](const FString& Words, double Right, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+			{
+				Write(Words, Right - Wide(Words, Face), Y, Face, Ink, Layer);
+			};
+			// A sentence set in lines no wider than its room, broken at whole words: where the next line would begin.
+			auto Set = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, double Room, double Lead, int32 Layer)
+			{
+				TArray<FString> Each;
+				Words.ParseIntoArray(Each, TEXT(" "));
+				FString Line;
+				for (const FString& Word : Each)
+				{
+					const FString Longer = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+					if (!Line.IsEmpty() && Wide(Longer, Face) > Room)
+					{
+						Write(Line, X, Y, Face, Ink, Layer);
+						Y += Lead;
+						Line = Word;
+					}
+					else
+					{
+						Line = Longer;
+					}
+				}
+				if (!Line.IsEmpty())
+				{
+					Write(Line, X, Y, Face, Ink, Layer);
+					Y += Lead;
+				}
+				return Y;
+			};
+			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
+			{
+				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
+			};
+			auto Edge = [&](double X, double Y, double W, double H, const FLinearColor& Ink, float Thick, int32 Layer)
+			{
+				Stroke({ FVector2D(X, Y), FVector2D(X + W, Y), FVector2D(X + W, Y + H), FVector2D(X, Y + H), FVector2D(X, Y) }, Ink, Thick, Layer);
+			};
+			auto Round = [&](double X, double Y, double R, const FLinearColor& Ink, float Thick, int32 Layer)
+			{
+				TArray<FVector2D> Points;
+				for (int32 K = 0; K <= 20; ++K)
+				{
+					const double Angle = K * UE_DOUBLE_TWO_PI / 20.0;
+					Points.Add(FVector2D(X + FMath::Cos(Angle) * R, Y + FMath::Sin(Angle) * R));
+				}
+				Stroke(Points, Ink, Thick, Layer);
+			};
+			auto Disc = [&](double X, double Y, double R, const FLinearColor& Ink, int32 Layer)
+			{
+				Round(X, Y, R * 0.5, Ink, static_cast<float>(R), Layer);
+			};
+			// The small signs of the fact strip and the list: a pin, the agent's hat, a warning, a tick, an hourglass, a padlock.
+			auto Sign = [&](int32 What, double X, double Y, const FLinearColor& Ink, int32 Layer)
+			{
+				auto P = [X, Y](double DX, double DY) { return FVector2D(X + DX, Y + DY); };
+				const float Pen = 1.4f;
+				if (What == 0)
+				{
+					Round(X, Y - 1.6, 3.6, Ink, Pen, Layer);
+					Stroke({ P(-3.0, 0.6), P(0.0, 6.0), P(3.0, 0.6) }, Ink, Pen, Layer);
+					Disc(X, Y - 1.6, 1.2, Ink, Layer);
+				}
+				else if (What == 1)
+				{
+					Stroke({ P(-2.6, -1.6), P(-1.9, -5.4), P(1.9, -5.4), P(2.6, -1.6) }, Ink, Pen, Layer);
+					Stroke({ P(-5.6, -1.4), P(5.6, -1.4) }, Ink, Pen, Layer);
+					Stroke({ P(-4.6, 5.6), P(-4.0, 2.6), P(-2.0, 1.4), P(2.0, 1.4), P(4.0, 2.6), P(4.6, 5.6) }, Ink, Pen, Layer);
+				}
+				else if (What == 2)
+				{
+					Stroke({ P(0.0, -5.6), P(6.0, 5.0), P(-6.0, 5.0), P(0.0, -5.6) }, Ink, Pen, Layer);
+					Stroke({ P(0.0, -1.6), P(0.0, 1.8) }, Ink, Pen, Layer);
+					Disc(X, Y + 3.4, 0.8, Ink, Layer);
+				}
+				else if (What == 3)
+				{
+					Stroke({ P(-5.0, 0.2), P(-1.6, 3.8), P(5.2, -4.2) }, Ink, Pen * 1.2f, Layer);
+				}
+				else if (What == 4)
+				{
+					Stroke({ P(-3.8, -5.0), P(3.8, -5.0), P(-3.8, 5.0), P(3.8, 5.0), P(-3.8, -5.0) }, Ink, Pen, Layer);
+				}
+				else
+				{
+					Stroke({ P(-3.6, -0.4), P(3.6, -0.4), P(3.6, 4.6), P(-3.6, 4.6), P(-3.6, -0.4) }, Ink, Pen, Layer);
+					Stroke({ P(-2.4, -0.4), P(-2.4, -2.8), P(-1.2, -4.4), P(1.2, -4.4), P(2.4, -2.8), P(2.4, -0.4) }, Ink, Pen, Layer);
+				}
+			};
+			const FSlateFontInfo Head10 = Typed(Px(11.0f), true, 80), Small10 = Typed(Px(11.0f)), Typed12 = Typed(Px(12.0f)), Bold12 = Typed(Px(12.0f), true), Bold13 = Typed(Px(13.0f), true);
+			const FSlateFontInfo Name25 = Serif(TEXT("Regular"), Px(25.0f)), Row14 = Serif(TEXT("Bold"), Px(14.0f)), Body13 = Serif(TEXT("Regular"), Px(13.0f)), Body15 = Serif(TEXT("Regular"), Px(15.0f)), Hint14 = Serif(TEXT("Italic"), Px(14.0f));
+
+			// ---- The panel: solid, edged, with its four clamps.
+			Fill(0.0, 0.0, CardW, CardH, Desk900, 0);
+			Edge(0.5, 0.5, CardW - 1.0, CardH - 1.0, Brass700, 1.0f, 1);
+			for (const FVector2D& Corner : { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) })
+			{
+				const double CX = 5.0 + Corner.X * (CardW - 10.0), CY = 5.0 + Corner.Y * (CardH - 10.0);
+				const double DX = Corner.X > 0.5 ? -13.0 : 13.0, DY = Corner.Y > 0.5 ? -13.0 : 13.0;
+				Stroke({ FVector2D(CX + DX, CY), FVector2D(CX, CY), FVector2D(CX, CY + DY) }, Brass, 2.0f, 2);
+			}
+
+			// ---- The name row: the flag of the country he serves, his name, his rank on a plate with its pips, and the door to the room.
+			const FString Mine = Player->GetSession() ? Player->GetSession()->GetView().Human : FString();
+			Picture(FlagOf(Mine), 18.0, 14.0, 40.0, 27.0, 2);
+			const FString Title = TEXT("Agent ") + Agent->Name;
+			Write(Title, 70.0, 9.0, Name25, Cream, 2);
+			double Along = 70.0 + Wide(Title, Name25) + 14.0;
+			{
+				const FString Rank = Agent->Rank.ToUpper();
+				const double Plate = Wide(Rank, Head10) + 14.0;
+				Edge(Along + 0.5, 19.5, Plate, 17.0, Brass, 1.0f, 2);
+				Write(Rank, Along + 7.0, 22.0, Head10, BrightBrass, 2);
+				Along += Plate + 12.0;
+				for (int32 Pip = 0; Pip < FMath::Clamp(Agent->Ranks, 1, 5); ++Pip)
+				{
+					if (Pip < Agent->Skill)
+					{
+						Disc(Along + 4.0 + 11.0 * Pip, 28.0, 3.8, BrightBrass, 2);
+					}
+					else
+					{
+						Round(Along + 4.0 + 11.0 * Pip, 28.0, 3.4, Dim, 1.2f, 2);
+					}
+				}
+			}
+			{
+				const FBox2D Door = DoorBox();
+				Fill(Door.Min.X, Door.Min.Y, Door.GetSize().X, Door.GetSize().Y, Desk800, 2);
+				Edge(Door.Min.X + 0.5, Door.Min.Y + 0.5, Door.GetSize().X - 1.0, Door.GetSize().Y - 1.0, Over == -2 ? BrightBrass : Brass700, 1.0f, 3);
+				const FString Says = TEXT("OPEN THE SECRET SERVICE");
+				Write(Says, Door.GetCenter().X - Wide(Says, Head10) * 0.5, Door.Min.Y + 8.0, Head10, Over == -2 ? BrightBrass : Cream, 3);
+			}
+
+			// ---- The fact strip: where he is, what he is doing, what it risks.
+			Edge(18.5, 50.5, 662.0, 29.0, Brass700, 1.0f, 2);
+			{
+				double X = 34.0;
+				Sign(0, X, 65.0, Brass, 2);
+				X += 14.0;
+				Write(Agent->Where, X, 58.0, Bold12, Cream, 2);
+				X += Wide(Agent->Where, Bold12);
+				const FString Whose = TEXT("  ·  ") + Agent->HostName;
+				Write(Whose, X, 58.0, Typed12, Muted, 2);
+				X += Wide(Whose, Typed12) + 14.0;
+				Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0) }, Brass700, 1.0f, 2);
+				X += 16.0;
+				// (What he is doing, in the rules' own sentence: its first words lead, the rest follows quietly.)
+				FString Lead = Agent->Doing, Rest;
+				if (!Agent->Doing.Split(TEXT(": "), &Lead, &Rest))
+				{
+					if (Agent->Doing.Split(TEXT(" at "), &Lead, &Rest))
+					{
+						Rest = TEXT("at ") + Rest;
+					}
+				}
+				Sign(Agent->bAtWork ? 1 : 4, X, 65.0, Brass, 2);
+				X += 14.0;
+				Write(Lead, X, 58.0, Bold12, Cream, 2);
+				X += Wide(Lead, Bold12);
+				if (!Rest.IsEmpty())
+				{
+					const FString After = TEXT("  ·  ") + Rest;
+					Write(After, X, 58.0, Typed12, Muted, 2);
+					X += Wide(After, Typed12);
+				}
+				if (Agent->bAtWork)
+				{
+					// (Ruling 169: a chance of 10% or more that he is caught is amber wherever it stands on the card.)
+					X += 14.0;
+					Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0) }, Brass700, 1.0f, 2);
+					X += 16.0;
+					if (Agent->bAbroad)
+					{
+						const FLinearColor Risk = Agent->Caught >= 10 ? Amber : Cream;
+						Sign(2, X, 65.0, Agent->Caught >= 10 ? Amber : Brass, 2);
+						X += 14.0;
+						const FString Chance = FString::Printf(TEXT("%d%%"), Agent->Caught);
+						Write(Chance, X, 58.0, Bold12, Risk, 2);
+						Write(TEXT(" caught a month"), X + Wide(Chance, Bold12), 58.0, Typed12, Muted, 2);
+					}
+					else
+					{
+						Sign(3, X, 65.0, Brass, 2);
+						X += 14.0;
+						Write(TEXT("No risk"), X, 58.0, Bold12, Cream, 2);
+						Write(TEXT(" at home"), X + Wide(TEXT("No risk"), Bold12), 58.0, Typed12, Muted, 2);
+					}
+				}
+			}
+
+			// ---- His picture, in its well; under it, his experience toward the next rank.
+			Fill(18.0, 88.0, 100.0, 124.0, Desk800, 2);
+			Picture(AgentWellBrush(), 18.0, 88.0, 100.0, 124.0, 3);
+			Edge(18.5, 88.5, 99.0, 123.0, Brass700, 1.0f, 4);
+			if (!Agent->Toward.IsEmpty())
+			{
+				Write(FString::Printf(TEXT("%d of %d toward"), Agent->Xp, Agent->Next), 18.0, 216.0, Small10, Muted, 2);
+				Write(Agent->Toward, 18.0, 229.0, Small10, Muted, 2);
+			}
+			else
+			{
+				Write(Agent->Rank, 18.0, 216.0, Small10, Muted, 2);
+			}
+
+			if (!Agent->bAtWork)
+			{
+				// ---- On the road, or in training: one sentence, and what he will do when he is at work.
+				double Y = Set(Agent->Doing + TEXT("."), 132.0, 90.0, Body15, Cream, 540.0, 22.0, 2);
+				Set(Agent->Will, 132.0, Y + 6.0, Body13, Muted, 540.0, 18.0, 2);
+			}
+			else
+			{
+				// ---- What he sees (abroad), or the threat he guards against (at home).
+				if (Agent->bAbroad)
+				{
+					Write(TEXT("IN SIGHT"), 132.0, 90.0, Head10, Brass, 2);
+					WriteRight(TEXT("CORPS"), 286.0, 90.0, Small10, Muted, 2);
+					WriteRight(TEXT("DIVISIONS"), 358.0, 90.0, Small10, Muted, 2);
+					const int32 Shown = Agent->Sees.Num() > 5 ? 4 : Agent->Sees.Num();
+					for (int32 Row = 0; Row < Shown; ++Row)
+					{
+						const FAgentSight& Seen = Agent->Sees[Row];
+						const double Y = 106.0 + 26.0 * Row;
+						Picture(FlagOf(Seen.Nation), 134.0, Y + 8.0, 15.0, 10.0, 2);
+						Write(Seen.Name, 156.0, Y + 4.0, Row14, Cream, 2);
+						WriteRight(FString::FromInt(Seen.Corps), 286.0, Y + 6.0, Bold13, Cream, 2);
+						WriteRight(FString::FromInt(Seen.Divisions), 358.0, Y + 6.0, Bold13, Cream, 2);
+						Fill(132.0, Y + 25.0, 226.0, 1.0, Desk700, 2);
+					}
+					if (Agent->Sees.Num() > Shown)
+					{
+						Write(FString::Printf(TEXT("and %d more armies"), Agent->Sees.Num() - Shown), 156.0, 106.0 + 26.0 * Shown + 5.0, Body13, Muted, 2);
+					}
+					if (Agent->Sees.Num() == 0)
+					{
+						Write(TEXT("No army is in sight."), 132.0, 110.0, Serif(TEXT("Italic"), Px(13.0f)), Muted, 2);
+					}
+				}
+				else
+				{
+					Write(TEXT("SABOTEURS AT HOME"), 132.0, 90.0, Head10, Brass, 2);
+					Set(Agent->Home, 132.0, 108.0, Body13, Muted, 226.0, 17.0, 2);
+				}
+
+				// ---- The work he can be set where he stands, with its odds. The lamp marks the work in force.
+				Write(TEXT("WORK AT ") + Agent->Where.ToUpper(), 372.0, 90.0, Head10, Brass, 2);
+				if (Agent->bAbroad)
+				{
+					WriteRight(TEXT("COMES OFF"), 612.0, 90.0, Small10, Muted, 2);
+				}
+				WriteRight(TEXT("CAUGHT"), 681.0, 90.0, Small10, Muted, 2);
+				const FString Cause = CommonCause(*Agent);
+				for (int32 Row = 0; Row < FMath::Min(Agent->Work.Num(), 6); ++Row)
+				{
+					const FAgentWork& Work = Agent->Work[Row];
+					const FBox2D Box = RowBox(Row);
+					const double Y = Box.Min.Y, Middle = Y + 13.0;
+					const bool bLocked = !Work.bNow && !Work.Why.IsEmpty();
+					const bool bPointed = Over == Row && Work.bOk;
+					if (bPointed)
+					{
+						Fill(Box.Min.X, Y, Box.GetSize().X, 25.0, Desk800, 1);
+					}
+					if (Work.bNow)
+					{
+						Round(382.0, Middle, 6.0, Brass, 1.2f, 2);
+						Disc(382.0, Middle, 3.6, BrightBrass, 3);
+					}
+					else if (bLocked)
+					{
+						Sign(5, 382.0, Middle, Dim, 2);
+					}
+					else
+					{
+						Round(382.0, Middle, 4.0, bPointed ? BrightBrass : Muted, 1.3f, 2);
+					}
+					Write(Work.Label, 396.0, Y + 4.0, Row14, Work.bNow ? BrightBrass : bLocked ? Dim : bPointed ? BrightBrass : Cream, 2);
+					if (bLocked && Work.Why != Cause)
+					{
+						// (a row with a cause of its own carries it in the figures' place)
+						Set(Work.Why, 396.0 + Wide(Work.Label, Row14) + 12.0, Y + 7.0, Small10, Muted, 285.0 - Wide(Work.Label, Row14) - 12.0, 12.0, 2);
+					}
+					else if (!bLocked)
+					{
+						if (Work.Success >= 0)
+						{
+							WriteRight(FString::Printf(TEXT("%d%%"), Work.Success), 612.0, Y + 6.0, Bold13, Cream, 2);
+						}
+						else if (Agent->bAbroad)
+						{
+							WriteRight(TEXT("·"), 606.0, Y + 6.0, Bold13, Muted, 2);
+						}
+						if (!Agent->bAbroad)
+						{
+							WriteRight(TEXT("no risk"), 681.0, Y + 7.0, Typed12, Muted, 2);
+						}
+						else if (Work.Success >= 0)
+						{
+							WriteRight(FString::Printf(TEXT("%d%%"), Work.Caught), 681.0, Y + 6.0, Bold13, Work.Caught >= 10 ? Amber : Cream, 2);
+						}
+						else
+						{
+							// (work that goes on month after month: the chance each month)
+							const FString Each = TEXT(" a month");
+							WriteRight(Each, 681.0, Y + 8.0, Small10, Muted, 2);
+							WriteRight(FString::Printf(TEXT("%d%%"), Work.Caught), 681.0 - Wide(Each, Small10), Y + 6.0, Bold13, Work.Caught >= 10 ? Amber : Cream, 2);
+						}
+					}
+					Fill(372.0, Y + 25.0, 309.0, 1.0, Desk700, 2);
+				}
+				{
+					// One cause, one sentence under the list; and at home, what standing guard is.
+					const double Under = 106.0 + 26.0 * FMath::Min(Agent->Work.Num(), 6) + 8.0;
+					if (!Cause.IsEmpty())
+					{
+						Set(Cause, 372.0, Under, Body13, Cream, 309.0, 17.0, 2);
+					}
+					else if (!Agent->bAbroad)
+					{
+						Set(Agent->Will, 372.0, Under, Body13, Muted, 309.0, 17.0, 2);
+					}
+				}
+			}
+
+			// ---- The foot: how he is sent; or, while he cannot be, the rules' own reason.
+			Write(Player->GetAgentHint(), 18.0, 298.0, Hint14, Muted, 2);
+			return LayerId + 6;
+		}
+
+		virtual FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			const int32 Before = Over;
+			Over = At(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
+			if (Over != Before)
+			{
+				// (the long sentence for each piece of work stays off the card: it comes up on the pointer)
+				const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
+				FString Says;
+				if (Agent && Agent->Work.IsValidIndex(Over))
+				{
+					const FAgentWork& Work = Agent->Work[Over];
+					Says = Work.Text;
+					if (!Work.Why.IsEmpty() && !Work.bNow)
+					{
+						Says += TEXT(" ") + Work.Why;
+					}
+				}
+				else if (Over == -2)
+				{
+					Says = TEXT("Your agents, and recruiting more.");
+				}
+				SetToolTipText(FText::FromString(Says));
+			}
+			return FReply::Handled();
+		}
+
+		virtual void OnMouseLeave(const FPointerEvent& Event) override
+		{
+			Over = -1;
+			SetToolTipText(FText::GetEmpty());
+		}
+
+		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (!Player.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+			{
+				return FReply::Handled();
+			}
+			const int32 Pressed = At(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
+			const FViewAgent* Agent = Player->GetAgentInHand();
+			if (Pressed == -2)
+			{
+				Player->OpenPage(TEXT("spies"));
+			}
+			else if (Agent && Agent->Work.IsValidIndex(Pressed) && Agent->Work[Pressed].bOk)
+			{
+				const FString Act = Agent->Work[Pressed].Act; // (kept: the order lays the view out afresh)
+				Player->SetAgentWork(Act);
+			}
+			return FReply::Handled();
+		}
+
+	private:
+		static FBox2D DoorBox() { return FBox2D(FVector2D(508.0, 14.0), FVector2D(681.0, 42.0)); }
+		static FBox2D RowBox(int32 Row) { return FBox2D(FVector2D(372.0, 106.0 + 26.0 * Row), FVector2D(681.0, 132.0 + 26.0 * Row)); }
+
+		/** What the pointer is on: a row of work by its place, -2 the door to the room, -1 nothing. */
+		int32 At(const FVector2D& Here) const
+		{
+			if (DoorBox().IsInside(Here))
+			{
+				return -2;
+			}
+			const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
+			if (Agent && Agent->bAtWork)
+			{
+				for (int32 Row = 0; Row < FMath::Min(Agent->Work.Num(), 6); ++Row)
+				{
+					if (RowBox(Row).IsInside(Here))
+					{
+						return Row;
+					}
+				}
+			}
+			return -1;
+		}
+
+		/** The reason most of the refused work shares, in the rules' sentence: it is said once, under the list. */
+		static FString CommonCause(const FViewAgent& Agent)
+		{
+			FString Most;
+			int32 MostCount = 0;
+			for (const FAgentWork& Work : Agent.Work)
+			{
+				if (Work.bNow || Work.Why.IsEmpty())
+				{
+					continue;
+				}
+				int32 Count = 0;
+				for (const FAgentWork& Other : Agent.Work)
+				{
+					Count += !Other.bNow && Other.Why == Work.Why ? 1 : 0;
+				}
+				if (Count > MostCount)
+				{
+					MostCount = Count;
+					Most = Work.Why;
+				}
+			}
+			return Most;
+		}
+
+		const FSlateBrush* FlagOf(const FString& Tag) const
+		{
+			if (Tag.IsEmpty())
+			{
+				return nullptr;
+			}
+			if (const TSharedPtr<FSlateBrush>* Found = Flags.Find(Tag))
+			{
+				return Found->Get();
+			}
+			ACampaignMapActor* Table = Player.IsValid() ? Player->GetMap() : nullptr;
+			UTexture2D* Cloth = Table ? Table->GetFlagTexture(Tag) : nullptr;
+			if (!Cloth)
+			{
+				return nullptr; // (not ready yet: asked again at the next look)
+			}
+			TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Cloth);
+			Brush->ImageSize = FVector2D(96.0f, 64.0f);
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+			Flags.Add(Tag, Brush);
+			return Brush.Get();
+		}
+
+		TWeakObjectPtr<ACampaignPlayerController> Player;
+		mutable TMap<FString, TSharedPtr<FSlateBrush>> Flags;
+		int32 Over = -1;
+	};
+
 	/**
 	 * The art director's sign for a kind of unit on order (Content/CityOrders/order-<key>.png): white on a clear
 	 * ground, to be tinted. Read once for the life of the game; null for a key she has not drawn.
@@ -2903,6 +3438,15 @@ namespace
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(12.0f, 0.0f, 0.0f, 0.0f)
 							[
 								MarchSlip()
+							]
+							// (Rulings 153 and 169.) The agent in hand: his card, in the army card's seat.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+							[
+								SNew(SBox).WidthOverride(699.0f).HeightOverride(327.0f)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasAgentInHand() && Controller->GetAgentInHand() ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									SNew(SAgentCard).Player(Controller)
+								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 							[
