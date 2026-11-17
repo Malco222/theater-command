@@ -700,6 +700,20 @@ export function frontage(r: Region): number {
  * which brings ruling 146's second fix forward and widens it: in Brian's own campaign one Canadian artillery corps
  * stormed Buffalo and Pittsburgh and took Washington by itself).
  */
+/**
+ * A corps' name with its country's word in front, as the battle card, the ticket and the battle report give every
+ * corps on them (the UI director's words for b357, item 8): "Canadian XII Engineer Corps" against "American XII
+ * Engineer Corps", always, so the form never flickers. A name that already says a country before any bracket
+ * ("1st Canadian Division", "French Army B: ...") is left as it is. The army tray keeps the player's own names bare.
+ */
+export function corpsNamed(g: Game, nat: string, name: string): string {
+  const adj = g.nations[nat]?.adj;
+  if (!adj) return name;
+  const head = name.split('(')[0];
+  for (const n of Object.values(g.nations)) if (n.adj && new RegExp(`(^|[^A-Za-z])${n.adj}([^A-Za-z]|$)`).test(head)) return name;
+  return `${adj} ${name}`;
+}
+
 export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
 /** The sentence wherever guns are sent forward alone (ruling 146). */
 export const GUNS_ALONE = 'Guns cannot take ground alone. Send infantry or tanks in with them.';

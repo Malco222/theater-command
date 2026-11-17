@@ -91,7 +91,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -6933,9 +6933,10 @@ function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string
   const el = opts.act ? 'button' : 'div';
   const gen = generalOf(g, c);
   const where = opts.from ? ` · ${esc(g.regions[c.reg].name)}` : gen ? ` · ${esc(surname(gen.name))}` : '';
-  return `<${el} class="ucard${opts.act ? (opts.on ? ' pick' : ' out') : ''}" ${opts.act ? `data-act="atkpick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''} · ${num(men(c))} men${opts.from ? ` · from ${esc(g.regions[c.reg].name)}, ${c.ap} move${c.ap === 1 ? '' : 's'} left` : ''}">
-    <span class="utop">${icon(c)}${gen ? `<span class="lvl" title="${esc(gen.name)}, level ${gen.level} general">${gen.level}</span>` : ''}</span><b>${esc(c.name)}</b>
-    <span class="um">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${where}</span>
+  const named = corpsNamed(g, c.nat, c.name);
+  return `<${el} class="ucard${opts.act ? (opts.on ? ' pick' : ' out') : ''}" ${opts.act ? `data-act="atkpick" data-id="${c.id}"` : ''} title="${esc(named)}${gen ? ` · ${esc(gen.name)}` : ''} · ${num(men(c))} men${opts.from ? ` · from ${esc(g.regions[c.reg].name)}, ${c.ap} move${c.ap === 1 ? '' : 's'} left` : ''}">
+    <span class="utop">${icon(c)}${gen ? `<span class="lvl" title="${esc(gen.name)}, level ${gen.level} general">${gen.level}</span>` : ''}</span><b>${esc(named)}</b>
+    <span class="um">${c.joint ? `${chip(c.nat)} ` : ''}${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${where}</span>
     <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
     <span class="meter" title="Rest ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${c.mor !== undefined ? `<span class="meter" title="Morale ${Math.round(c.mor * 100)}%: ${esc(moodOf(g, c).moraleWord.toLowerCase())}"><i class="mor${c.mor < 0.4 ? ' low' : ''}" style="width:${Math.round(c.mor * 100)}%"></i></span>` : ''}${opts.note ? `<span class="tags"><span class="tag bad">${esc(opts.note)}</span></span>` : ''}</${el}>`;
 }
@@ -6947,8 +6948,9 @@ function fateCard(u: BattleReport['attackers'][number], won: boolean): string {
   const left = u.men > 0 ? Math.max(0, 1 - u.lost / u.men) : 0;
   const gone = u.fate === 'surrendered' || u.fate === 'destroyed';
   const fate = u.fate === '' && !won ? 'fell back' : FATE[u.fate];
-  return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(u.name)} · ${num(u.men)} men, lost ${num(u.lost)}">
-    <span class="utop"><svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[u.nat].color}"/>${symbol(u.kind, 24, 15)}</svg></span><b>${esc(u.name)}</b>
+  const named = corpsNamed(g, u.nat, u.name);
+  return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(named)} · ${num(u.men)} men, lost ${num(u.lost)}">
+    <span class="utop"><svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[u.nat].color}"/>${symbol(u.kind, 24, 15)}</svg></span><b>${esc(named)}</b>
     <span class="um">${u.divs} ${KIND[u.kind].label.toLowerCase()} div${u.divs > 1 ? 's' : ''} · lost ${num(u.lost)}</span>
     <span class="meter" title="${Math.round(left * 100)}% of its men left"><i class="${left < 0.5 ? 'low' : ''}" style="width:${Math.round(left * 100)}%"></i></span>
     <span class="tags"><span class="tag ${gone || u.fate === 'retreated' ? 'bad' : u.fate === 'advanced' ? 'good' : ''}">${fate}</span></span></div>`;
@@ -7192,9 +7194,10 @@ function prizeStrip(target: Region): string {
 function corpsChip(c: Corps, opts: { act?: boolean; on?: boolean; note?: string } = {}): string {
   const gen = generalOf(g, c);
   const el = opts.act ? 'button' : 'span';
-  const title = `${c.name}${gen ? ` · ${gen.name}` : ''} · ${c.divs} ${KIND[c.kind].label.toLowerCase()} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men · strength ${Math.round(c.str * 100)}%, rest ${Math.round(c.org * 100)}%${c.mor !== undefined ? `, morale ${Math.round(c.mor * 100)}%` : ''}${opts.act ? ` · at ${g.regions[c.reg].name}, ${c.ap} move${c.ap === 1 ? '' : 's'} left · ${opts.on ? 'press to hold it back' : 'press to send it in'}` : ''}`;
+  const named = corpsNamed(g, c.nat, c.name);
+  const title = `${named}${gen ? ` · ${gen.name}` : ''} · ${c.divs} ${KIND[c.kind].label.toLowerCase()} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men · strength ${Math.round(c.str * 100)}%, rest ${Math.round(c.org * 100)}%${c.mor !== undefined ? `, morale ${Math.round(c.mor * 100)}%` : ''}${opts.act ? ` · at ${g.regions[c.reg].name}, ${c.ap} move${c.ap === 1 ? '' : 's'} left · ${opts.on ? 'press to hold it back' : 'press to send it in'}` : ''}`;
   const word = opts.note ? `<small>${esc(opts.note)}</small>` : opts.act && !opts.on ? '<small class="held">held back</small>' : '';
-  return `<${el} class="uchip${opts.act ? (opts.on ? ' pick' : ' out') : ''}" ${opts.act ? `data-act="atkpick" data-id="${c.id}" aria-pressed="${opts.on ? 'true' : 'false'}"` : ''} title="${esc(title)}">${icon(c)}<b>${esc(c.name)}</b>${c.joint ? chip(c.nat) : ''}${word}</${el}>`;
+  return `<${el} class="uchip${opts.act ? (opts.on ? ' pick' : ' out') : ''}" ${opts.act ? `data-act="atkpick" data-id="${c.id}" aria-pressed="${opts.on ? 'true' : 'false'}"` : ''} title="${esc(title)}">${icon(c)}<b>${esc(named)}</b>${c.joint ? chip(c.nat) : ''}${word}</${el}>`;
 }
 
 /** The defenders as chips: each corps the staff has by name, and the rest counted as not identified. */
@@ -7205,7 +7208,7 @@ function foeChips(foes: Corps[]): string {
     if (kn(c) === 'exact') { out.push(corpsChip(c)); continue; }
     const card = corpsKnownAs(g, c);
     if (!card) { blind[c.nat] = (blind[c.nat] ?? 0) + 1; continue; }
-    out.push(`<span class="uchip stale" title="${esc(c.name)} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''} · strength ${pctBand(card.strLo, card.strHi)}, from a report ${card.age} month${card.age > 1 ? 's' : ''} old">${icon(c)}<b>${esc(c.name)}</b><small class="held">${esc(reportAge(card.age))}</small></span>`);
+    out.push(`<span class="uchip stale" title="${esc(corpsNamed(g, c.nat, c.name))} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''} · strength ${pctBand(card.strLo, card.strHi)}, from a report ${card.age} month${card.age > 1 ? 's' : ''} old">${icon(c)}<b>${esc(corpsNamed(g, c.nat, c.name))}</b><small class="held">${esc(reportAge(card.age))}</small></span>`);
   }
   for (const nat of Object.keys(blind)) out.push(`<span class="uchip unknown" title="${blind[nat] === 1 ? 'A corps that has' : 'Corps that have'} not been identified: kind and strength are not known. ${HOW_TO_KNOW}">${unknownIcon(nat)}<b>${blind[nat] === 1 ? '' : `${blind[nat]} `}${esc(g.nations[nat].adj)} corps, not identified</b></span>`);
   return out.join('');
