@@ -58,7 +58,7 @@
     ["MEX", "Northern military zones", "inf", 1, "Monterrey", { "xp": 0.05, "str": 0.5 }],
     ["MEX", "Gulf military zones", "inf", 1, "Veracruz", { "xp": 0.05, "str": 0.5 }],
     ["CUB", "Cuban Army", "inf", 1, "Havana", { "xp": 0.05, "str": 0.5, "hold": 1 }],
-    ["USA", "Panama Canal Department", "fort", 1, "Canal Zone", { "hold": 1 }],
+    ["USA", "Panama Canal Department", "inf", 1, "Canal Zone", { "hold": 1 }],
     ["BRA", "1st Military Region (Rio de Janeiro)", "inf", 2, "Rio de Janeiro", { "xp": 0.05, "str": 0.5, "hold": 1 }],
     ["BRA", "2nd Military Region (Sao Paulo)", "inf", 1, "Sao Paulo", { "xp": 0.05, "str": 0.5 }],
     ["BRA", "3rd Military Region (Rio Grande do Sul)", "inf", 2, "Rio Grande do Sul", { "xp": 0.05, "str": 0.5 }],

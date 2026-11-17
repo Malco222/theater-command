@@ -2,13 +2,16 @@
 // the desert has one road and no water, and an army there is only as strong as the port behind it.
 import { describe, expect, it } from 'vitest';
 import {
-  DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar,
-  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase,
+  DEFENCE, DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar, digsLate, endPhase,
+  fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksOf, worksShare,
 } from '../src/campaign/game';
-import { theatrePhases } from '../src/campaign/ai';
+import { runAI, theatrePhases } from '../src/campaign/ai';
 import { canRaise, orderCorps } from '../src/campaign/economy';
 import { closedTo, convoyWar, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { startOpen } from '../src/campaign/staff';
+import { SUPPORT } from '../src/campaign/support';
+import { hasTech } from '../src/campaign/tech';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 /** September 1939 with Italy already in the war, which is what most of these rules need. */
@@ -269,6 +272,185 @@ describe('open desert', () => {
     expect(tanks.D / marching.D).toBeCloseTo(DESERT.open, 6);
   });
 
+  it('a dug-in box is not driven round: the cut falls only on men on foot who have not dug in', () => {
+    const { g, armour, foot, target } = frontier();
+    const camps = corps(g, 'Sidi Barrani camps');
+    const open = assess(g, [armour], target);
+    camps.dug = true;
+    const boxed = assess(g, [armour], target), marching = assess(g, [foot], target);
+    expect(open.lines.some((l) => l.label === 'Open desert')).toBe(true);
+    expect(boxed.lines.some((l) => l.label === 'Open desert')).toBe(false);
+    // Against tanks the box is worth what it is worth against men on foot, and the card no longer says both
+    // that the defenders are dug in and that they have no works to anchor on.
+    expect(boxed.D).toBeCloseTo(marching.D, 6);
+    expect(boxed.D).toBeGreaterThan(open.D);
+  });
+
+  /** The first month of a year of the war (September 1939 is month 1). */
+  const january = (year: number): number => 5 + 12 * (year - 1940);
+  const give = (g: Game, nat: string, id: string): void => { if (!hasTech(g, nat, id)) g.nations[nat].tech!.done.push(id); };
+  /** The grand campaign: Italian infantry at Sidi Barrani with the Anti-tank guns technology, and a British tank corps in front of it. */
+  function camp(year: number): { g: Game; target: Region; camps: Corps; armour: Corps } {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    g.turn = january(year);
+    const target = g.byName['Sidi Barrani'];
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true;
+    give(g, 'ITA', SUPPORT.tech.antiTank);
+    const armour = addCorps(g, 'UK', 'Desert armour', 'arm', 2, 'Mersa Matruh', {});
+    return { g, target, camps, armour };
+  }
+
+  it('in the grand campaign the cut fades as the works are finished: a box is months of digging', () => {
+    // (1943: the guns of the day make a box of it. Ruling 170, below.)
+    const { g, target, camps, armour } = camp(1943);
+    // The cut as the battle ticket prints it, in hundredths: 100 when the ticket has no such row.
+    const cut = (): number => {
+      const row = assess(g, [armour], target).lines.find((l) => l.label === 'Open desert');
+      return row ? Number(/(\d+)%/.exec(row.effect ?? '')![1]) : 100;
+    };
+    const due = (months: number): number => Math.round(100 * (DESERT.open + (1 - DESERT.open) * worksShare(months)));
+    expect(cut()).toBe(Math.round(100 * DESERT.open));
+    const got: number[] = [];
+    for (const months of [1, 2, 3]) { camps.dug = true; camps.dugFor = months; got.push(cut()); }
+    expect(got).toEqual([due(1), due(2), 100]);
+    expect(got[0]).toBeGreaterThan(Math.round(100 * DESERT.open));
+    expect(got[0]).toBeLessThan(got[1]);
+    // While the works are unfinished the card says so, and never 'no works to anchor on' of men who are dug in.
+    camps.dugFor = 1;
+    const line = assess(g, [armour], target).lines.find((l) => l.label === 'Open desert')!;
+    expect(line.value).toContain('whose works are not finished');
+    expect(line.value).not.toContain('no works to anchor on');
+  });
+
+  it('a desert box is its guns: dug-in men with too few anti-tank guns are still driven round (ruling 170)', () => {
+    expect(DESERT.box).toBeCloseTo(2 / 3, 5);
+    const full = Math.round(100 * DESERT.open);
+    const read = (g: Game, att: Corps[], target: Region): { cut: number; row?: string; strength: number } => {
+      const a = assess(g, att, target);
+      const row = a.lines.find((l) => l.label === 'Open desert');
+      return { cut: row ? Number(/(\d+)%/.exec(row.effect ?? '')![1]) : 100, row: row?.value, strength: a.faced!.antiTank!.strength };
+    };
+    // The camps of the winter of 1940, finished works, Italy with the Anti-tank guns technology: the infantry's own
+    // guns take three tenths of the tanks' edge. The men are dug in and their works count as works do everywhere,
+    // but the position is driven round: the cut in full, and the card says why.
+    const w40 = camp(1940);
+    w40.g.turn = january(1941) - 1;
+    w40.camps.dug = true; w40.camps.dugFor = 3;
+    const dec = read(w40.g, [w40.armour], w40.target);
+    expect(dec.strength).toBeCloseTo(0.3, 6);
+    expect(dec.cut).toBe(full);
+    expect(dec.row).toBe('Dug in, but with too few anti-tank guns the position can be driven round');
+    expect(assess(w40.g, [w40.armour], w40.target).lines.find((l) => l.label === 'Open desert')!.effect).toBe(`Foot infantry defends at ${full}% against tanks and lorries`);
+    expect(assess(w40.g, [w40.armour], w40.target).lines.some((l) => l.label === 'Dug in')).toBe(true);
+    // 1941: the guns of the day behind finished works take a half, and more from tanks a design behind their day.
+    // Still under two thirds: no box, whatever Italy has researched.
+    const w41 = camp(1941);
+    w41.camps.dug = true; w41.camps.dugFor = 3;
+    const y41 = read(w41.g, [w41.armour], w41.target);
+    expect(y41.strength).toBeCloseTo(0.58, 6);
+    expect(y41.cut).toBe(full);
+    // Lorried infantry with no tanks reads the same guns with no armour to count: a half, and the camps are driven round by it too.
+    const lorried = addCorps(w41.g, 'UK', 'Desert lorries', 'mot', 2, 'Mersa Matruh', {});
+    const mot = read(w41.g, [lorried], w41.target);
+    expect(mot.strength).toBeCloseTo(0.5, 6);
+    expect(mot.cut).toBe(full);
+    // Three divisions of guns in the line beside them (Halfaya) make the box: no cut, and no such row.
+    const guns = addCorps(w41.g, 'ITA', 'Halfaya guns', 'art', 3, 'Sidi Barrani', {});
+    guns.supplied = true; guns.dug = true; guns.dugFor = 3;
+    const halfaya = read(w41.g, [w41.armour], w41.target);
+    expect(halfaya.strength).toBeGreaterThanOrEqual(DESERT.box);
+    expect(halfaya.cut).toBe(100);
+    // A finished box of 1942 is one by its infantry's own guns, and against men on foot nothing here was ever cut.
+    const w42 = camp(1942);
+    w42.camps.dug = true; w42.camps.dugFor = 3;
+    const gazala = read(w42.g, [w42.armour], w42.target);
+    expect(gazala.strength).toBeGreaterThanOrEqual(0.7 - 1e-9);
+    expect(gazala.cut).toBe(100);
+    // While its works are rising the box of 1942 is only as good as its guns that month.
+    w42.camps.dugFor = 1;
+    const rising = read(w42.g, [w42.armour], w42.target);
+    if (rising.strength < DESERT.box) expect(rising.cut).toBe(full);
+    else expect(rising.cut).toBe(Math.round(100 * (DESERT.open + (1 - DESERT.open) * worksShare(1))));
+  });
+
+  it('in the grand campaign the open desert digs a month slow: half after two whole months, three quarters after three, finished after four', () => {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    expect(DESERT.digLate).toBe(1);
+    const target = g.byName['Sidi Barrani'];
+    expect(target.terrain).toBe(DESERT.terrain);
+    expect(target.fort).toBeFalsy();
+    expect(digsLate(target)).toBe(true);
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true; camps.ap = camps.apMax;
+    // The first whole month shows no works: rock under a thin layer of sand.
+    endPhase(g, 'ITA');
+    expect(camps.dug).toBeFalsy();
+    expect(camps.dugFor).toBeUndefined();
+    expect(camps.digging).toBe(1);
+    expect(worksOf(camps)).toBe(0);
+    const shares: number[] = [];
+    for (let m = 2; m <= 5; m++) { endPhase(g, 'ITA'); shares.push(worksShare(worksOf(camps))); }
+    expect(shares).toEqual([0.5, 0.75, 1, 1]);
+    expect(camps.dug).toBe(true);
+    expect(camps.digging).toBeUndefined();
+    // A month's digging begun is lost with a march, like the works themselves.
+    const column = addCorps(g, 'ITA', 'Desert column', 'inf', 2, 'Sidi Barrani', {});
+    column.supplied = true; column.ap = column.apMax;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBe(1);
+    column.ap = 0;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBeUndefined();
+    expect(column.dug).toBeFalsy();
+    // A month under attack is half a month's digging there as anywhere: it only comes later.
+    column.ap = column.apMax; column.pressed = true;
+    endPhase(g, 'ITA');
+    expect(column.digging).toBe(DEFENCE.wear.regrow);
+    endPhase(g, 'ITA');
+    expect(column.dug).toBe(true);
+    expect(column.dugFor).toBeCloseTo(DEFENCE.wear.regrow, 6);
+    // Where the map has a fort the works come at the usual pace (the historian's rider): Tobruk's posts, ditch and wire were there before the war.
+    const tobruk = g.byName['Tobruk'];
+    expect(tobruk.terrain).toBe(DESERT.terrain);
+    expect(tobruk.fort).toBeTruthy();
+    expect(digsLate(tobruk)).toBe(false);
+    const garrison = addCorps(g, 'ITA', 'Tobruk line', 'inf', 2, 'Tobruk', {});
+    garrison.supplied = true; garrison.ap = garrison.apMax;
+    // And outside the desert nothing has changed.
+    const rome = g.byName['Rome'];
+    expect(digsLate(rome)).toBe(false);
+    const guard = addCorps(g, 'ITA', 'Rome guard', 'inf', 2, 'Rome', {});
+    guard.supplied = true; guard.ap = guard.apMax;
+    endPhase(g, 'ITA');
+    for (const c of [garrison, guard]) { expect(c.dug).toBe(true); expect(c.dugFor).toBe(1); expect(c.digging).toBeUndefined(); }
+    // A month's digging begun, and the works, come back from a save as they were.
+    const late = addCorps(g, 'ITA', 'Late column', 'inf', 2, 'Sidi Barrani', {});
+    late.supplied = true; late.ap = late.apMax;
+    endPhase(g, 'ITA');
+    const saved = loadGame(saveGame(g))!;
+    expect(saved.corps.find((c) => c.name === 'Sidi Barrani camps')).toMatchObject({ dug: true, dugFor: camps.dugFor });
+    expect(saved.corps.find((c) => c.name === 'Late column')!.digging).toBe(1);
+  });
+
+  it('a history campaign digs as it always did: dug in is dug in, in the desert too', () => {
+    const g = desertWar();
+    const target = g.byName['Sidi Barrani'];
+    for (const c of [...target.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    const camps = addCorps(g, 'ITA', 'Sidi Barrani camps', 'inf', 2, 'Sidi Barrani', {});
+    camps.supplied = true; camps.ap = camps.apMax;
+    endPhase(g, 'ITA');
+    expect(camps.digging).toBeUndefined();
+    expect(g.corps.some((c) => c.digging !== undefined)).toBe(false);
+  });
+
   it('does not apply inside a fortress, or to troops with their own wheels', () => {
     const { g, armour, target } = frontier();
     expect(assess(g, [armour], g.byName['Tobruk']).lines.some((l) => l.label === 'Open desert')).toBe(false);
@@ -383,5 +565,73 @@ describe('the Libya convoys', () => {
     const g = createGame(1, null);
     convoyWar(g, 'ITA');
     expect(g.convoys.libya).toBeUndefined();
+  });
+});
+
+describe("the Eighth Army's guns (the design director's ruling 171)", () => {
+  const guns = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'UK' && c.kind === 'art' && !c.dead && c.name.startsWith('Royal Artillery'));
+  const JULY_42 = 35, SEPTEMBER_42 = 37;
+
+  it('two artillery corps arrive in Egypt in the grand campaign, in July and September 1942, for a computer and for a player', () => {
+    for (const human of [null, 'UK']) {
+      const g = startOpen(createGame(1, human));
+      declareWar(g, 'ITA', 'UK');
+      g.turn = JULY_42 - 1;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(0);
+      g.turn = JULY_42;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(1);
+      g.turn = SEPTEMBER_42 - 1;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(1);
+      g.turn = SEPTEMBER_42;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(2);
+      // They land in Egypt, at Alexandria or the nearest ground with room, each two divisions of guns.
+      for (const c of guns(g)) {
+        expect(c.divs).toBe(2);
+        expect(g.regions[c.reg].ctrl).toBe('UK');
+        expect(g.regions[c.reg].overseas).toBeTruthy();
+      }
+    }
+  });
+
+  it('wait for the war with Italy, and are no part of the campaigns of history', () => {
+    const peace = startOpen(createGame(1, null));
+    peace.turn = JULY_42;
+    startPhase(peace, 'UK');
+    expect(guns(peace)).toHaveLength(0);
+    const history = createGame(1, null);
+    declareWar(history, 'ITA', 'UK');
+    for (const t of [JULY_42, SEPTEMBER_42]) { history.turn = t; startPhase(history, 'UK'); }
+    expect(guns(history)).toHaveLength(0);
+  });
+
+  it('the desert staff brings its guns up to the works, and a full sector makes room for them', () => {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 29;
+    const front = g.byName['Mersa Matruh'], rear = g.byName['El Alamein'], target = g.byName['Sidi Barrani'];
+    for (const r of [front, rear, target]) for (const c of [...r.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    capture(g, front, 'UK');
+    capture(g, rear, 'UK');
+    // A line three corps cannot break: Italian infantry in finished works with armour beside it.
+    for (const [name, kind] of [['Camp A', 'inf'], ['Camp B', 'inf'], ['Camp C', 'inf'], ['Lorried', 'mot'], ['Armour', 'arm']] as const) {
+      const c = addCorps(g, 'ITA', name, kind, 3, 'Sidi Barrani', {});
+      c.dug = true;
+      c.dugFor = 12;
+    }
+    // The sector opposite stands full, and the guns are a march behind it.
+    const tanks = [addCorps(g, 'UK', 'Tanks A', 'arm', 2, 'Mersa Matruh', {}), addCorps(g, 'UK', 'Tanks B', 'arm', 2, 'Mersa Matruh', {})];
+    const foot = [addCorps(g, 'UK', 'Foot A', 'inf', 3, 'Mersa Matruh', { xp: 0.5 }), addCorps(g, 'UK', 'Foot B', 'inf', 3, 'Mersa Matruh', { xp: 0.3 }), addCorps(g, 'UK', 'Foot C', 'inf', 2, 'Mersa Matruh', {})];
+    const gun = addCorps(g, 'UK', 'Royal Artillery, Eighth Army', 'art', 2, 'El Alamein', {});
+    computeSupply(g);
+    runAI(g, 'UK');
+    // The guns stand in the sector now, and the weakest infantry corps has stepped back to where they stood.
+    expect(gun.reg).toBe(front.id);
+    expect(foot[2].reg).toBe(rear.id);
+    for (const c of [...tanks, foot[0], foot[1]]) expect(c.reg).toBe(front.id);
   });
 });

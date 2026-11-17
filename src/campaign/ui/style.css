@@ -51,6 +51,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mapwrap { position: relative; min-width: 0; min-height: 0; background: var(--sea); overflow: hidden; }
 svg#map { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none; }
 svg#map.drag { cursor: grabbing; }
+/* The sheet over the map for whatever turns or flickers (ruling 206): the same box and the same view as the map, and no press lands on it. */
+.mapfx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; user-select: none; }
 .land { fill: #d9d3c2; stroke: var(--sea-line); stroke-width: .6; }
 .reg { stroke: rgba(42, 45, 47, .38); stroke-width: .5; stroke-linejoin: round; }
 .reg:hover { filter: brightness(1.07); }
@@ -184,6 +186,7 @@ button.tgen:hover { border-color: var(--ink-3); }
 .tgen .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
 .seal { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-family: var(--head); font-weight: 700; font-size: 17px; color: #f4eeda; border: 2px solid var(--brass); text-shadow: 0 1px 1px rgba(0, 0, 0, .7); }
 .seal.none { border-color: var(--line); opacity: .7; }
+.seal.guard { border: 0; background: none; }
 .ttally { display: grid; grid-template-columns: auto auto; gap: 0 6px; align-content: center; align-items: baseline; flex: 0 0 auto; padding: 0 2px; }
 .ttally b { font-family: var(--head); font-size: 19px; text-align: right; }
 .ttally small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
@@ -375,6 +378,15 @@ button.corps:hover { border-color: var(--ink-3); }
 .rcard .cost { grid-column: 3; grid-row: 1 / span 2; font-size: 17px; }
 .acts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 2px; }
 .empty { color: var(--ink-3); font-size: 13px; padding: 6px 0; }
+.noorders { display: block; grid-column: 1 / -1; font-size: 11.5px; line-height: 1.3; color: var(--ink-2); white-space: normal; text-align: left; }
+.ucard.corpsbox .utop, .ucard.corpsbox .noorders { min-width: 0; }
+/* A long name takes a second line sooner than be cut ("Panama Canal Department"). */
+.ucard.corpsbox .utop b { overflow: hidden; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ucard.corpsbox.shipbox .utop b, .wingmini .utop b { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.nolock { flex: none; display: inline-flex; align-items: center; color: var(--ink-3); cursor: help; }
+.guardonly { display: grid; gap: 2px; padding: 6px 0; font-size: 13px; }
+.guardonly b { color: var(--ink); font-weight: 700; }
+.guardonly small { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
 
 .evcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .evcard { background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--side, var(--brass)); border-radius: 4px; padding: 9px 11px; display: grid; gap: 5px; align-content: start; justify-items: start; }
@@ -493,6 +505,12 @@ table.ticket td.fx { color: #e9c987; }
 .fmid .vsmark { font-size: 22px; font-weight: 700; letter-spacing: .06em; color: var(--brass); }
 .fmid small { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .balance { margin: 4px 0 2px; }
+/* The order that risks nothing, under the storm's forecast: its own heading, the made-ready forecast on the same scale, one sentence. */
+.waitblock { margin: 12px 0 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+h3.blockhead { margin: 10px 0 6px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.waitblock h3.blockhead { margin-top: 0; }
+.waitblock h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3, var(--ink-2)); margin-left: 6px; }
+.waitblock p { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-2); }
 .balance .bhead { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; margin-bottom: 6px; }
 .balance .bhead .verdict { font-size: 24px; }
 .balance .bhead .sub { font-size: 12.5px; color: var(--ink-2); }
@@ -1361,6 +1379,11 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .ucard.unknown .utop b { color: var(--ink-2); }
 .ucard.corpsbox.unknown .chits, .ucard.corpsbox.stale .chits { opacity: .9; }
 .tcount.fogline { color: var(--ink-3); font-style: italic; }
+.tcount.wingbare { white-space: normal; overflow: visible; color: var(--ink-2); line-height: 1.25; max-width: 250px; }
+.inksign { flex: none; fill: currentColor; vertical-align: -2px; margin-right: 5px; }
+.inksign.warn { vertical-align: -1.5px; margin-right: 4px; }
+.fleet .meta + .meta.wingat { color: var(--ink); }
+.corps .nm .tag { display: inline-block; white-space: nowrap; vertical-align: 1px; }
 .balance .doubt { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; background: repeating-linear-gradient(115deg, rgba(244, 238, 218, .5) 0 3px, rgba(244, 238, 218, .12) 3px 7px); box-shadow: 0 0 0 1px rgba(244, 238, 218, .65); pointer-events: none; }
 
 .btn.scoutnow { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 2px; }
@@ -1525,6 +1548,7 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .sgfact.hurt b { color: #f0b3a5; }
 .sglines { display: grid; gap: 3px; }
 .sglines p { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.sglines p.sgonly { color: var(--ink); }
 .sgrow { display: flex; align-items: center; gap: 8px; padding: 5px 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
 .sgrow .grow { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .sgrow b { font-size: 13px; color: var(--ink); }
@@ -2187,6 +2211,18 @@ kbd { font-family: 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Cour
 svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark .gfar { display: inline; }
 .gatemark .gplate { fill: #261f1a; fill-opacity: .96; stroke: #120e0b; stroke-width: 1.5; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .5)); }
 .gatemark:hover .gplate { stroke: #b6924e; }
+#gates .gatemark.mine { cursor: pointer; }
+.gatemark.ordered .gplate { stroke: #8a3b2c; }
+.gatemark.ordered:hover .gplate { stroke: #b6924e; }
+.card header.gatehead { display: flex; align-items: center; gap: 14px; }
+.card header.gatehead .gflag { flex: none; border-radius: 2px; }
+.card header.gatehead .grow { flex: 1; min-width: 0; }
+.card header.gatehead h2 { font-size: 28px; line-height: 1.12; }
+.card header.gatehead .gstate { flex: none; margin-right: 34px; padding: 3px 9px 2px; border: 1px solid var(--line); border-radius: 3px; font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
+.gatetab .gr { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.gatetab .gr small { grid-column: 2; }
+.gatetab .gr b { font-weight: 700; }
+.gatetab td { vertical-align: middle; }
 .gatemark .gfl { fill: none; stroke: rgba(10, 12, 14, .6); stroke-width: .8; }
 .gatemark .gname { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 13px; fill: #f2e8d5; }
 
@@ -2315,3 +2351,19 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .mc-banner.spent .k { background: rgb(236, 231, 216); color: rgb(132, 38, 26); padding: 3px 8px 3px 10px; border-radius: 2px; }
 /* The LAST MONTH plate sits under the label, which it used to cover. */
 .mc-photo.stake .mc-stamp.plate { top: 46px; }
+
+/* ---- What you bring and what you face (rulings 146, 149, 152): a sign and a sentence a line ---- */
+.wsign { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--brass); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.facepart { margin: 10px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.facepart h3 { margin: 0 0 5px; }
+.facehead { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.facehead .tc-signline { font-size: 14px; }
+.scoutrow { margin: 8px 0 2px; }
+.tc-signline { display: flex; align-items: flex-start; gap: 8px; font-family: Georgia, 'PT Serif', 'Times New Roman', serif; font-size: 15px; line-height: 22px; color: var(--ink); }
+.tc-signline .wsign { margin-top: 3px; }
+.tc-signline.is-unknown { font-style: italic; color: var(--ink-3); }
+.tc-signline.is-unknown .wsign { stroke: var(--ink-3); }
+.paidline { margin: 6px 0 2px; }
+.tc-carry { display: flex; align-items: center; height: 20px; }
+.tc-carry > span { display: flex; min-width: 16px; align-items: center; gap: 4px; padding: 0 7px; border-left: 1px solid var(--line); font: 700 12px/1 ui-monospace, 'Courier New', monospace; color: var(--ink); }
+.tc-carry > span:first-child { border-left: 0; padding-left: 0; }

@@ -191,7 +191,9 @@ describe('the wider world', () => {
   it('raises no more armies to stand on the quay once a computer\'s homeland across the ocean has enough', () => {
     const g = wide();
     const cap = WORLD.idle.USA;
-    const home = (): number => g.corps.filter((c) => c.nat === 'USA' && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && beyondEurope(c.reg)).length;
+    // The army at home: a corps in an overseas possession is its garrison (the Canal's division, Version 84.2), and is not counted.
+    const home = (): number => g.corps.filter((c) => c.nat === 'USA' && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && beyondEurope(c.reg) && !g.regions[c.reg].overseas).length;
+    expect(g.corps.some((c) => c.nat === 'USA' && !c.dead && c.kind === 'inf' && g.regions[c.reg].overseas)).toBe(true);
     expect(home()).toBeLessThan(cap);
     expect(armyIdle(g, 'USA')).toBe(false);
     // Corps on order count as if they had formed.

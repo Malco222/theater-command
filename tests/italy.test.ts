@@ -190,8 +190,14 @@ describe('an army formed out of one already overseas', () => {
     const first = rows.findIndex((row) => row[2] === '6th Army');
     expect(first).toBeGreaterThan(0);
     // Saved games remember expeditions by their place on the list: the new rows come last, in one block.
-    for (let i = first; i < rows.length; i++) expect(rows[i][0]).toBeGreaterThanOrEqual(JULY_43);
+    // Rows marked 'open' are the grand campaign's own arrivals (Version 84, the Eighth Army's guns of 1942): they were
+    // added later still, so they stand at the very end of the list, after every row any older save knows of.
+    const own = rows.findIndex((row) => row[6]?.open);
+    const last = own < 0 ? rows.length : own;
+    expect(last).toBeGreaterThan(first);
+    for (let i = first; i < last; i++) expect(rows[i][0]).toBeGreaterThanOrEqual(JULY_43);
     for (let i = 0; i < first; i++) expect(rows[i][0]).toBeLessThan(JULY_43);
+    for (let i = 0; i < rows.length; i++) expect(!!rows[i][6]?.open).toBe(i >= last);
   });
 
   it('the Eighth Army gathers at Malta in July: six divisions under Montgomery and Leese, taken out of the army in Africa', () => {

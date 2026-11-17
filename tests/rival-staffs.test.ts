@@ -588,7 +588,9 @@ describe('a war with every staff at work', () => {
     }
     expect(named.size).toBeGreaterThan(0);
     expect(ended).toBeGreaterThan(0);
-    expect(live).toBeGreaterThan(named.size);
+    // (An effort lasts its months unless its place falls at once or a general offensive takes it over: since the
+    // support weapons came in, this war's one effort, in the desert, is over the month it is named.)
+    expect(live).toBeGreaterThanOrEqual(named.size);
     for (const [k, v] of Object.entries(g.flags)) if (k.startsWith('st:eff') || k.startsWith('capOut:')) expect(typeof v).toBe('number');
     // Every staff at war is shown, and with nobody at the table their plans are open.
     for (const v of rivalStaffs(g)) expect(v.source).toBe('ally');

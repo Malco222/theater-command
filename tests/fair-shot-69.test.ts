@@ -248,9 +248,18 @@ describe('the coast watch', () => {
     };
     // A one-division garrison that never leaves its town: the staff sends a real corps to stand beside it.
     const thin = set(false);
+    const watched = (): boolean => thin.r.units.some((u) => u.nat === 'GER' && !u.hold && u.kind !== 'fort' && u.divs >= 2);
     runAI(thin.g, 'GER');
+    // (While the trains are bringing the army back from Poland the corps comes as far as the line runs, and is in
+    // the harbour the month after.)
+    if (!watched()) {
+      expect(thin.r.nb.some((j) => thin.g.regions[j].units.some((u) => u.nat === 'GER' && !u.hold && u.kind === 'inf' && u.divs >= 2))).toBe(true);
+      for (const c of thin.g.corps) c.ap = c.apMax;
+      thin.g.turn++;
+      runAI(thin.g, 'GER');
+    }
     expect(thin.first.reg).toBe(thin.r.id);
-    expect(thin.r.units.some((u) => u.nat === 'GER' && !u.hold && u.kind !== 'fort' && u.divs >= 2)).toBe(true);
+    expect(watched()).toBe(true);
     // A corps of three divisions already in the harbour is the watch, and is not marched off to the front.
     const held = set(true);
     runAI(held.g, 'GER');

@@ -30,12 +30,13 @@ import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
+import { beyondEurope } from './world';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
 interface Chain { nat: string; from: number; name: string; by: string; ground: number }
-interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean }
+interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean; home?: boolean }
 export interface AirOrder { fleet: string; base?: string[]; mission: AirMission; region?: string; sea?: string }
 export interface AirPlan { nat: string; from: number; to: number; name: string; against: string; orders: AirOrder[] }
 interface Reserve { ftr: number; bmr: number; pilots: number }
@@ -106,6 +107,9 @@ export const carrierRules = (g: Game): boolean => g.flags.carriers === 1;
 /** True for a carrier wing: an air group that flies from a fleet's carriers, goes where they go, and has no airfield. */
 export const afloat = (f: { ship?: number }): boolean => f.ship !== undefined;
 
+/** True for a carrier wing wherever it is, aboard or ordered ashore: its aircraft are built for the deck and its crews trained against ships. */
+export const deckBred = (f: { ship?: number; ashore?: number }): boolean => f.ship !== undefined || f.ashore !== undefined;
+
 /** The fleet a carrier wing sails with, or null for a group on land (or a wing whose fleet is gone). */
 export const carrierOf = (g: Game, f: { ship?: number }): Fleet | null => (f.ship === undefined ? null : g.fleets.find((x) => x.id === f.ship) ?? null);
 
@@ -144,10 +148,12 @@ const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 const planes = (n: number, one: string): string => `${n.toLocaleString('en-US')} ${one}${n === 1 ? '' : 's'}`;
 
 export const airFleetsOf = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat);
+/** True for a group of a command that guards its own country (air.json 'home'): it does not follow the army across an ocean. */
+export const homeCommand = (f: { nat: string; name: string; parent?: string }): boolean => !!AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.home;
 /** How far one fleet reaches: its nation's ranges, unless the fleet has long-range fighters of its own ('ftrRange' on its row in air.json). */
-const reach = (f: { nat: string; name: string; parent?: string; ship?: number }): NatSpec => {
-  // Carrier aircraft are built for the deck, not for range.
-  if (f.ship !== undefined) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
+const reach = (f: { nat: string; name: string; parent?: string; ship?: number; ashore?: number }): NatSpec => {
+  // Carrier aircraft are built for the deck, not for range: ashore as aboard.
+  if (deckBred(f)) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
   const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.ftrRange;
   return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
 };
@@ -388,6 +394,25 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
 }
 
 /**
+ * The air commands history bases beyond the old chart (America's: ruling 133(b)) stand on their fields from the
+ * first day of a grand campaign: the wider world is attached after the air forces of Europe are set up, so they
+ * are raised here. A campaign saved before they were listed has them raised as its month finds them, at the
+ * strength history gives them by then. Done once. The commands history forms later form in their month (airUpkeep).
+ */
+export function openWorldAir(g: Game): void {
+  if (g.flags.worldair === 1) return;
+  g.flags.worldair = 1;
+  for (const r of AIR.fleets) {
+    const base = g.byName[r.base];
+    if (!base || !beyondEurope(base) || (r.from ?? 1) > 1 || r.scripted || base.ctrl !== r.nat || !g.nations[r.nat]?.alive) continue;
+    if (g.airFleets.some((f) => f.nat === r.nat && (f.parent ?? f.name) === r.name)) continue;
+    const f = addAir(g, r);
+    // An air war already open (a saved campaign): the command's ground has its air base, and it stands as air groups.
+    if (f && airWar(g)) { if (fieldClass(g, base.id) < AIRWAR.fields.seed.base) g.flags[`af:${base.id}`] = AIRWAR.fields.seed.base; splitFleet(g, f); }
+  }
+}
+
+/**
  * The grand campaign opens its air war. Airfields are placed where the war begins with them: an air base wherever
  * history bases an air fleet and at every capital, an airfield in every city, a landing ground in every town.
  * Every air fleet becomes air groups of one kind. Done once; a grand campaign saved before the air war is brought in on loading.
@@ -429,7 +454,36 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): stri
   return null;
 }
 
-export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotBase(g, f, r) === null);
+/** True when a field lies across an ocean from a land group's base: the group can get there only by sea (world.json 'overseas'). */
+export const overOcean = (f: AirFleet, r: Region): boolean => f.ship === undefined && beyondEurope(f.base) !== beyondEurope(r);
+
+export const SHIP_AIR_TIP = 'A group crosses an ocean by sea: one group a month, to a friendly airfield with room for all of it. Settling in costs it some readiness.';
+export const SHIP_AIR_ONE = 'One air group a month crosses an ocean by sea, and one has gone this month.';
+export const SHIP_AIR_ROOM = 'The airfields there have no room for the whole group, and a group that comes by sea is not put down on a crowded field.';
+
+/**
+ * Why a land air group cannot be shipped across an ocean to a region's airfields, or null if it can (ruling 133(b)).
+ * What a computer country's staff does for the groups that follow its army (ai.ts `follow`) is the player's order
+ * too: one group of a nation crosses in a month, however far, to a friendly airfield with room for all of it.
+ */
+export function whyNotShipAir(g: Game, f: AirFleet, r: Region): string | null {
+  const no = whyNotBase(g, f, r, true);
+  if (no) return no;
+  if (g.flags[`fy:air:${f.nat}`] === g.turn) return SHIP_AIR_ONE;
+  return fieldRoom(g, r.id, f) ? null : SHIP_AIR_ROOM;
+}
+
+/** Why a group cannot move to a region's airfields, by air or (across an ocean) by sea; null if it can. */
+export const whyNotMoveAir = (g: Game, f: AirFleet, r: Region): string | null => (overOcean(f, r) ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r));
+
+/** Ships a land air group across an ocean to a friendly airfield with room for it: the nation's one such sailing of the month. */
+export function shipAir(g: Game, f: AirFleet, r: Region): boolean {
+  if (!overOcean(f, r) || whyNotShipAir(g, f, r) || !rebaseAir(g, f, r, true)) return false;
+  g.flags[`fy:air:${f.nat}`] = g.turn;
+  return true;
+}
+
+export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotMoveAir(g, f, r) === null);
 
 /**
  * Whether a nation's fighters could fight for the sky over a region: from the airfields they are on now ('now'), or
@@ -707,7 +761,7 @@ export interface AirAssess {
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 const noShips = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 /** What one of a group's bombers is worth against ships: carrier crews are trained for it, land bombers mostly are not. */
-const navalSkill = (f: AirFleet): number => (f.ship !== undefined ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
+const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
 
 /**
  * What a strike on ships should do, before the dice: the hits to expect, the ships of each class they should sink,
@@ -865,7 +919,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
     else out.lines.push({ label: 'Fighter cover', value: 'None', effect: 'Nothing breaks up the strike' });
     if (out.B > 0) {
-      const land = out.att.filter((a) => a.bmr > 0 && a.f.ship === undefined), deckB = out.att.filter((a) => a.bmr > 0 && a.f.ship !== undefined);
+      const land = out.att.filter((a) => a.bmr > 0 && !deckBred(a.f)), deckB = out.att.filter((a) => a.bmr > 0 && deckBred(a.f));
       out.lines.push({ label: 'Crews', value: deckB.length && land.length ? 'Carrier crews and land bombers' : deckB.length ? 'Carrier crews, trained to hit ships' : 'Land bombers', effect: land.length ? `A land bomber counts ${pc(navalSkill(land[0].f))} of a carrier aircraft against ships${deckB.length ? `: the strike as a whole counts ${pc(out.naval)}` : ''}` : undefined });
     }
     if (out.again < 1) out.lines.push({ label: 'Already struck', value: 'The fleet has been struck this month', effect: `It is scattered and warned: this strike counts ${pc(out.again)}` });

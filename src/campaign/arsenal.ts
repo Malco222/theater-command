@@ -112,7 +112,7 @@ export function stationSite(g: Game, nat: string, want = -1): number {
  * The air fleet a wing stationed here would join, if one of the nation's is based here. In the air war a wing joins
  * an air group of its own kind that has room for it, and otherwise founds a new group.
  */
-const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined
+const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined && f.ashore === undefined
   && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
@@ -378,7 +378,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
       tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
-      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && (!war || x.kind === wing)));
+      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
       if (f) tell(`${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`);
     }
     if (!f) {

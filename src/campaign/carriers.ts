@@ -17,14 +17,14 @@
 import { byHand } from './depth';
 import { Rng, hashString } from '../core/rng';
 import {
-  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fly, forecastAir, homeOf, kmToSea,
-  shipsInPort, whyNotMission,
+  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fieldRoom, fly, forecastAir, homeOf, isOffensive,
+  kmToSea, shipsInPort, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips } from './navy';
 import { RES, needOf } from './resources';
-import type { AirFleet, AirMission, Fleet, Game, Ships } from './types';
+import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 
 type WingKind = 'ftr' | 'bmr';
 const KINDS: WingKind[] = ['ftr', 'bmr'];
@@ -112,10 +112,13 @@ export function syncWings(g: Game): void {
     g.airFleets.splice(g.airFleets.indexOf(w), 1);
   }
   for (const c of g.fleets) {
-    if (c.ships.cv <= 0 || !g.nations[c.nat]?.alive) continue;
+    if (c.ships.cv <= 0 || !g.nations[c.nat]?.alive) { if (c.bare) delete c.bare; continue; }
     const size = wingSize(c.nat);
     for (const kind of KINDS) {
-      const est = c.ships.cv * size[kind];
+      // Deck room whose wing was ordered ashore stands empty: no new wing is raised for it (ruling 175(b)).
+      const full = c.ships.cv * size[kind];
+      if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
+      const est = full - bareOf(c, kind);
       let w = wingOf(g, c.id, kind);
       if (!w) { if (est > 0) { w = newWing(g, c, kind); w.est[kind] = w[kind] = est; } continue; }
       const was = w.est[kind];
@@ -131,6 +134,7 @@ export function syncWings(g: Game): void {
       w.base = portOf(g, c);
       w.name = wingName(c, kind);
     }
+    trimBare(c);
   }
 }
 
@@ -141,9 +145,20 @@ export function syncWings(g: Game): void {
  */
 export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had: number): void {
   if (!carrierRules(g) || carriers <= 0 || had <= 0) return;
-  const share = Math.min(1, carriers / had);
   const size = wingSize(from.nat);
   for (const kind of KINDS) {
+    // Decks whose wing is ashore stay with the first fleet as far as it keeps carriers to hold them: the carriers
+    // sent are those with aircraft aboard first. With no wing ashore the share is the carriers that went, as ever.
+    const bare = bareOf(from, kind);
+    const decks = size[kind] > 0 ? bare / size[kind] : 0;
+    const goBare = Math.max(0, decks - Math.max(0, had - carriers));
+    if (goBare > 0) {
+      const n = Math.min(bare, Math.round(goBare * size[kind]));
+      from.bare![kind] -= n;
+      (to.bare ??= { ftr: 0, bmr: 0 })[kind] += n;
+    }
+    const loaded = had - decks;
+    const share = carriers >= had || loaded <= 0 ? 1 : Math.min(1, Math.max(0, carriers - goBare) / loaded);
     const a = wingOf(g, from.id, kind);
     if (!a) continue;
     const n = share >= 1 ? a[kind] : Math.round(a[kind] * share);
@@ -154,19 +169,189 @@ export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had
     a[kind] -= n;
     if (a.flew !== undefined && (b.flew ?? -1) < a.flew) b.flew = a.flew;
     if (a.scouted !== undefined && (b.scouted ?? -1) < a.scouted) b.scouted = a.scouted;
-    b.est[kind] = to.ships.cv * size[kind];
-    a.est[kind] = from.ships.cv * size[kind];
+    b.est[kind] = Math.max(0, to.ships.cv * size[kind] - bareOf(to, kind));
+    a.est[kind] = Math.max(0, from.ships.cv * size[kind] - bareOf(from, kind));
     if (share >= 1) g.airFleets.splice(g.airFleets.indexOf(a), 1);
   }
+  trimBare(from);
+  trimBare(to);
+  // Every carrier went (one fleet joined another): its wings ashore are now the second fleet's.
+  if (carriers >= had) for (const f of g.airFleets) if (f.ashore === from.id) f.ashore = to.id;
   syncWings(g);
 }
 
-/** How full a fleet's decks are: 1 with every aircraft aboard, 0 with none. A fleet without wings counts as full. */
+/**
+ * How full a fleet's decks are: 1 with every aircraft aboard, 0 with none. A fleet without wings counts as full,
+ * but decks whose wing was ordered ashore count as the empty decks they are.
+ */
 export function wingShare(g: Game, c: Fleet): number {
   if (!carrierRules(g) || c.ships.cv <= 0) return 1;
-  let have = 0, est = 0;
+  let have = 0, est = bareOf(c, 'ftr') + bareOf(c, 'bmr');
   for (const w of g.airFleets) if (w.ship === c.id) { have += w.ftr + w.bmr; est += w.est.ftr + w.est.bmr; }
   return est > 0 ? Math.min(1, have / est) : 1;
+}
+
+// ---- Wings ashore (ruling 175(b)) -------------------------------------------------------------------------
+//
+// A carrier's wing can be ordered ashore to a friendly airfield with room when its fleet lies in that field's
+// harbour, or in the sea off it. Ashore it is an air group like any other, with its own aircraft, pilots and
+// fitness, and a carrier wing's reach. The same order sends it back aboard a fleet of its nation that has deck
+// room standing empty there. While a wing is ashore its carriers fight as empty carriers. The move costs what a
+// move between airfields costs. It is the player's order only: no staff gives it.
+
+const kindOfWing = (w: AirFleet): WingKind => (w.kind === 'bmr' ? 'bmr' : 'ftr');
+/** What sending a wing ashore costs, said by the order before it is given. */
+export const PRICE_ASHORE = 'While it is ashore its carriers fight as empty carriers. The move costs it some readiness for a month.';
+/** Deck room of one kind standing empty in a fleet because its wing was ordered ashore, in aircraft. */
+export const bareOf = (c: Fleet, kind: WingKind): number => c.bare?.[kind] ?? 0;
+function trimBare(c: Fleet): void { if (c.bare && c.bare.ftr <= 0 && c.bare.bmr <= 0) delete c.bare; }
+/** True where an airfield's province is where the fleet is: the harbour it lies in, or a coast of the sea it is in. */
+const offShore = (g: Game, c: Fleet, region: number): boolean => (atSea(c) ? !!g.seas[c.zone]?.coast.includes(region) : c.base >= 0 && c.base === region);
+/** The provinces a fleet's wing could reach the shore in from where the fleet is. */
+export const shoresOf = (g: Game, c: Fleet): number[] => (atSea(c) ? g.seas[c.zone]?.coast ?? [] : c.base >= 0 ? [c.base] : []);
+
+/** Why this wing cannot fly ashore to this airfield now, or null if it can. */
+export function whyNotAshore(g: Game, w: AirFleet, r: Region): string | null {
+  if (w.ashore !== undefined) return 'It is already ashore.';
+  const c = carrierRules(g) ? carrierOf(g, w) : null;
+  if (!c) return 'Only a carrier wing aboard its fleet can be sent ashore.';
+  const kind = kindOfWing(w);
+  if (w[kind] <= 0) return 'It has no aircraft to send ashore.';
+  if (w.flew === g.turn) return 'It flew its strike this month: it is back aboard next month.';
+  if (w.moved === g.turn) return 'It has already changed base this month.';
+  if (!offShore(g, c, r.id)) {
+    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: its wing can fly ashore only to an airfield on that sea.`
+      : c.base >= 0 ? `The ${c.name} lies at ${c.port}: from harbour its wing can fly ashore only to the airfield there.`
+      : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
+  }
+  // The airfield itself, as for any group that moves: friendly, built, not wrecked, not taken this month.
+  const land = { ...w, ship: undefined, base: -1, moved: 0 } as AirFleet;
+  const no = whyNotBase(g, land, r, true);
+  if (no) return no;
+  if (!fieldRoom(g, r.id, land)) return `The airfield at ${r.name} has no room for it.`;
+  return null;
+}
+
+/** Why this wing cannot be sent ashore anywhere now, in one sentence, or null if there is somewhere it can go. */
+export function whyNoShore(g: Game, w: AirFleet): string | null {
+  const c = carrierRules(g) ? carrierOf(g, w) : null;
+  if (!c) return 'Only a carrier wing aboard its fleet can be sent ashore.';
+  const ids = shoresOf(g, c);
+  let first: string | null = null;
+  for (const id of ids) {
+    const no = whyNotAshore(g, w, g.regions[id]);
+    if (!no) return null;
+    // A sentence about the wing itself (no aircraft, flown, moved) is the answer wherever it looks.
+    if (/^It /.test(no)) return no;
+    if (allied(g, w.nat, g.regions[id].ctrl)) first ??= no;
+  }
+  if (first) return first;
+  return atSea(c) ? `No friendly airfield lies on the ${g.seas[c.zone].name}, where the ${c.name} is.`
+    : c.base >= 0 ? whyNotAshore(g, w, g.regions[c.base]) : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
+}
+
+/** Sends a wing ashore to an airfield. Returns false, and changes nothing, where whyNotAshore() says no. */
+export function flyAshore(g: Game, w: AirFleet, r: Region): boolean {
+  if (whyNotAshore(g, w, r)) return false;
+  const c = carrierOf(g, w)!, kind = kindOfWing(w);
+  (c.bare ??= { ftr: 0, bmr: 0 })[kind] += w.est[kind];
+  delete w.ship;
+  w.ashore = c.id;
+  w.base = r.id;
+  w.moved = g.turn;
+  w.ready = Math.max(AIR.ready.floor, w.ready - AIR.ready.move);
+  if (isOffensive(w.mission) && whyNotMission(g, w, w.mission, w.target)) { w.mission = 'support'; w.target = -1; }
+  return true;
+}
+
+/** Why this wing ashore cannot go back aboard this fleet now, or null if it can. */
+export function whyNotAboard(g: Game, f: AirFleet, c: Fleet): string | null {
+  if (!carrierRules(g) || f.ashore === undefined || f.ship !== undefined) return 'Only a carrier wing ashore can be sent aboard.';
+  if (c.nat !== f.nat) return 'It goes aboard only the carriers of its own navy.';
+  const kind = kindOfWing(f);
+  if (c.ships.cv <= 0) return `The ${c.name} has no carriers.`;
+  if (bareOf(c, kind) <= 0) return `The decks of the ${c.name} are full: there is no room aboard for it.`;
+  if (f.flew === g.turn) return 'It flew its raid this month: it is back at its airfield next month.';
+  if (f.moved === g.turn) return 'It has already changed base this month.';
+  if (!offShore(g, c, f.base)) {
+    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: the wing must be at an airfield on that sea to fly out to it.`
+      : `The ${c.name} lies at ${c.port}: the wing must be at the airfield there to go aboard.`;
+  }
+  return null;
+}
+
+/** A fleet a wing ashore could go back aboard: where it lies, the deck room standing empty for this kind of aircraft, and why not now (or null). */
+export interface DeckOption { fleet: number; name: string; where: string; room: number; why: string | null }
+
+/** The fleets of its nation with deck room standing empty for this wing: those it can board now first. */
+export function decksFor(g: Game, f: AirFleet): DeckOption[] {
+  if (!carrierRules(g) || f.ashore === undefined) return [];
+  const kind = kindOfWing(f);
+  return g.fleets.filter((c) => c.nat === f.nat && c.ships.cv > 0 && bareOf(c, kind) > 0)
+    .map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? `in the ${g.seas[c.zone].name}` : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g, f, c) }))
+    .sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (a.fleet === f.ashore ? 0 : 1) - (b.fleet === f.ashore ? 0 : 1) || a.fleet - b.fleet);
+}
+
+/** Why this wing ashore cannot go aboard any fleet now, in one sentence, or null if there is one it can board. */
+export function whyNoDeck(g: Game, f: AirFleet): string | null {
+  const all = decksFor(g, f);
+  if (!all.length) return 'No carrier of its navy has deck room standing empty for it.';
+  return all[0].why;
+}
+
+/** Sends a wing ashore back aboard a fleet. Returns false, and changes nothing, where whyNotAboard() says no. */
+export function flyAboard(g: Game, f: AirFleet, c: Fleet): boolean {
+  if (whyNotAboard(g, f, c)) return false;
+  const kind = kindOfWing(f);
+  const take = Math.min(bareOf(c, kind), f.est[kind]);
+  // More aircraft than the deck room left for them (a carrier was lost meanwhile): the rest stay ashore in the reserve.
+  const over = Math.max(0, f[kind] - take);
+  if (over > 0) { const p = airPool(g, f.nat); f[kind] -= over; if (kind === 'ftr') { p.ftr += over; p.pilots += over; } else p.bmr += over; }
+  c.bare![kind] -= take;
+  trimBare(c);
+  const ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
+  const b = wingOf(g, c.id, kind);
+  if (b) {
+    // The fleet has raised a wing of this kind for a new carrier meanwhile: the two are one wing again.
+    const n = f[kind], both = b[kind] + n;
+    b.ready = both > 0 ? (b.ready * b[kind] + ready * n) / both : b.ready;
+    b[kind] += n;
+    b.est[kind] += take;
+    b.lost.ftr += f.lost.ftr;
+    b.lost.bmr += f.lost.bmr;
+    if (f.flew !== undefined && (b.flew ?? -1) < f.flew) b.flew = f.flew;
+    if (f.scouted !== undefined && (b.scouted ?? -1) < f.scouted) b.scouted = f.scouted;
+    b.moved = g.turn;
+    g.airFleets.splice(g.airFleets.indexOf(f), 1);
+    return true;
+  }
+  f.ship = c.id;
+  delete f.ashore;
+  f.base = portOf(g, c);
+  f.name = wingName(c, kind);
+  f.est = { ftr: 0, bmr: 0 };
+  f.est[kind] = take;
+  f.moved = g.turn;
+  f.ready = ready;
+  if (isOffensive(f.mission) && whyNotMission(g, f, f.mission, f.target)) { f.mission = 'support'; f.target = -1; }
+  return true;
+}
+
+/** A fleet's wings that are ashore: where each is. Empty where none is. */
+export const wingsAshore = (g: Game, fleet: number): AirFleet[] => g.airFleets.filter((f) => f.ashore === fleet);
+
+/** The line a fleet's card carries while deck room stands empty for wings ordered ashore, or '' where none is. */
+export function bareLine(g: Game, c: Fleet): string {
+  if (!carrierRules(g) || c.ships.cv <= 0 || bareOf(c, 'ftr') + bareOf(c, 'bmr') <= 0) return '';
+  const all = wingsOf(g, c.id).every((w) => w.est.ftr + w.est.bmr <= 0);
+  return all ? `Its wings are ashore: its carriers fight as empty carriers.` : `Part of its wings are ashore: its carriers fight at ${Math.round(deckWorth(g, c) * 100)}% of their worth until they are back aboard.`;
+}
+
+/** The same in few words, for where the card has one short line (the fleet's tray). */
+export function bareBrief(g: Game, c: Fleet): string {
+  if (!bareLine(g, c)) return '';
+  if (wingsOf(g, c.id).every((w) => w.est.ftr + w.est.bmr <= 0)) return 'Its wings are ashore: its carriers fight empty.';
+  return `${wingsAshore(g, c.id).length > 1 ? 'Wings are' : 'A wing is'} ashore: its carriers fight at ${Math.round(deckWorth(g, c) * 100)}%.`;
 }
 
 /** What a fleet's carriers are worth beside carriers with full wings: in a fleet action, with a convoy, hunting submarines. */
@@ -205,6 +390,10 @@ export interface WingCard {
   lost: number;
   /** How it is made up again, in a sentence: only in harbour. */
   note: string;
+  /** Where it is, in a line: "Aboard the Atlantic Squadron". */
+  where: string;
+  /** Why it cannot be sent ashore anywhere now, or null where it can (ruling 175(b)). */
+  whyNotAshore: string | null;
 }
 
 /** The wings of one fleet as cards. Empty for a fleet without carriers, and outside the grand campaign. */
@@ -217,12 +406,13 @@ export function wingCards(g: Game, c: Fleet): WingCard[] {
     const away = w.flew === g.turn;
     const doing = away ? 'Flew its strike this month: back aboard next month'
       : w.mission === 'rest' ? 'Stood down to rest and refit'
-      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `On patrol over ${c.port}`)
+      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `In harbour at ${c.port}: on patrol over its fleet`)
       : 'Ranged on deck, ready for a strike';
     const short = est - n;
     return {
       id: w.id, fleet: c.id, kind, name: w.name, label: kind === 'ftr' ? 'Carrier fighters' : 'Strike aircraft', brief: kind === 'ftr' ? 'Fleet cover · escort' : 'Ships · harbours · coast',
       aircraft: n, est, ready: w.ready, doing, flew: away, range: kind === 'ftr' ? R.ftr : R.bmr, lost: w.lost[kind],
+      where: `Aboard the ${c.name}`, whyNotAshore: whyNoShore(g, w),
       note: short <= 0 ? 'At full strength.' : atSea(c) ? `${plural(short, 'aircraft', 'aircraft')} short. No replacements reach a deck at sea: bring the fleet into harbour.` : `${plural(short, 'aircraft', 'aircraft')} short: made up from the reserve while the fleet lies in harbour.`,
     };
   });

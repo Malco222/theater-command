@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import { landingWatch } from '../src/campaign/ai';
 import { STRENGTH } from '../src/campaign/ashore';
-import { AIR, km, whyNotBase } from '../src/campaign/air';
+import { AIR, homeCommand, km, whyNotBase } from '../src/campaign/air';
 import { addCorps, allied, atWar, capture, createGame, removeCorps } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { NAVY, coastReport, crossingRisk, fleetsOf, seaPath } from '../src/campaign/navy';
@@ -40,8 +40,10 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 7: America's staff makes a landing of its own in this war (in seed 3 it joins a British front at Nantes and needs none).
-  const g = wide(7);
+  // Seed 8: America's staff makes landings of its own in this war, on Sardinia in January 1943 and at Marseille in June 1944
+  // (in seed 3 it joins a British front at Nantes and needs none). Seed 7 until Version 84, whose rules of what an attack
+  // brings and faces moved every war.
+  const g = wide(8);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
@@ -270,8 +272,13 @@ describe('the fleet and the air groups follow the army', () => {
     expect(allied(g, 'USA', g.regions[f.base].ctrl)).toBe(true);
     for (const w of g.airFleets.filter((a) => a.ship === f.id)) expect(w.base).toBe(f.base);
     expect(g.headlines.some((h) => /^The Atlantic Squadron crosses the ocean to /.test(h.text))).toBe(true);
-    // No land-based group of a country that ships its army is left at home beyond the figure.
-    expect(g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
+    // No land-based group raised for the war overseas is left at home beyond the figure. The home commands (Version
+    // 84.2: the First Air Force and the rest) guard their own country and never cross.
+    const land = g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined);
+    expect(land.filter((a) => !homeCommand(a) && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
+    expect(land.filter((a) => !homeCommand(a) && !beyondEurope(a.base)).length).toBeGreaterThanOrEqual(4);
+    expect(land.filter((a) => homeCommand(a)).length).toBeGreaterThanOrEqual(5);
+    expect(land.filter((a) => homeCommand(a)).every((a) => beyondEurope(a.base))).toBe(true);
   });
 
   it('an air group on an airfield at home is shipped across, however far, to a field of its side\'s near the army', () => {

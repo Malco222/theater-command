@@ -10,7 +10,7 @@ import { byHand } from './depth';
 import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
-import { deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, type WingCard } from './carriers';
+import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
 import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
@@ -73,6 +73,14 @@ export interface FleetCard {
   /** The aircraft its carriers bring, as cards (fighters first), and how full its decks are, 0..1. Empty and 1 for a fleet without carriers. */
   wings: WingCard[];
   decks: number;
+  /** The aircraft aboard, and the aircraft its decks hold: "0 of 78 aboard" while its wings are ashore. Both 0 for a fleet without carriers. */
+  aboard: number;
+  deckRoom: number;
+  /** Its wings ordered ashore (ruling 175(b)): each one's group id, name, where it is and its aircraft. And the line the card carries while deck room stands empty for them, or ''. */
+  ashore: { id: number; name: string; kind: 'ftr' | 'bmr'; label: string; at: string; aircraft: number }[];
+  bare: string;
+  /** The same line in few words, for a card with one short line. */
+  bareBrief: string;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -111,6 +119,8 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     },
     shelled: f.shelled === g.turn,
     wings: wingCards(g, f), decks: wingShare(g, f),
+    aboard: wingCards(g, f).reduce((s, w) => s + w.aircraft, 0), deckRoom: wingCards(g, f).reduce((s, w) => s + w.est, 0) + bareOf(f, 'ftr') + bareOf(f, 'bmr'),
+    ashore: wingsAshore(g, f.id).map((w) => ({ id: w.id, name: w.name, kind: w.kind === 'bmr' ? 'bmr' as const : 'ftr' as const, label: w.kind === 'bmr' ? 'Strike aircraft' : 'Carrier fighters', at: g.regions[w.base].name, aircraft: w.ftr + w.bmr })), bare: bareLine(g, f), bareBrief: bareBrief(g, f),
   };
 }
 
