@@ -1936,6 +1936,81 @@ export function capture(g: Game, r: Region, nat: string): void {
   checkCollapse(g, old, nat);
   // The grand campaign: a fallen country whose capital its conqueror's enemies now hold comes back into the war.
   retaken(g, r, nat);
+  // A third country's corps at peace with the new holder goes home (ruling b341(b), the grand campaign).
+  if (g.flags.open === 1) goHome(g, r);
+}
+
+/**
+ * The corps of a third country standing on ground that is not its own, at peace with `who`, by nation (rulings b341
+ * and b343): they take no part in a fight there, and go home if the province changes hands.
+ */
+export function standersAt(g: Game, r: Region, who: string): [string, Corps[]][] {
+  const by = new Map<string, Corps[]>();
+  for (const c of r.units) {
+    if (c.dead || c.kind === 'fort' || c.nat === r.ctrl || c.nat === who || allied(g, c.nat, who) || atWar(g, c.nat, who)) continue;
+    (by.get(c.nat) ?? by.set(c.nat, []).get(c.nat)!).push(c);
+  }
+  return [...by];
+}
+
+/** "A" or "An" before a nation's adjective. */
+const anA = (adj: string): string => (/^[AEIO]|^U(?![rkgn])/.test(adj) ? 'An' : 'A');
+
+/**
+ * The one sentence the cards and the hover box read for a third country's corps at peace with the player, one for
+ * each nation (the UI director's words, log b343). The grand campaign only, where the rule stands.
+ */
+export function standersLine(g: Game, r: Region, who: string): string[] {
+  if (g.flags.open !== 1) return [];
+  return standersAt(g, r, who).map(([nat, cs]) => {
+    const adj = g.nations[nat].adj;
+    return cs.length === 1
+      ? `${anA(adj)} ${adj} corps stands at ${r.name} too, at peace with you: it takes no part in the fight, and goes home if the province changes hands.`
+      : `${cs.length} ${adj} corps stand at ${r.name} too, at peace with you: they take no part in the fight, and go home if the province changes hands.`;
+  });
+}
+
+/**
+ * Ground that has changed hands: every corps on it of a country at peace with the new holder, and not its ally, goes
+ * home to its own nearest ground, its month spent, with one plain line of news told to the player whoever took it
+ * (rulings b341(b) and b343). A corps whose country holds no ground with room stays where it is.
+ */
+function goHome(g: Game, r: Region): void {
+  const by = new Map<string, Corps[]>();
+  for (const c of r.units) {
+    if (c.dead || c.kind === 'fort' || c.nat === r.ctrl || allied(g, c.nat, r.ctrl) || atWar(g, c.nat, r.ctrl)) continue;
+    (by.get(c.nat) ?? by.set(c.nat, []).get(c.nat)!).push(c);
+  }
+  for (const [nat, cs] of by) {
+    let went = 0;
+    for (const c of cs) {
+      const to = ownNearest(g, c);
+      if (!to) continue;
+      place(g, c, to);
+      c.ap = 0;
+      went++;
+    }
+    if (!went) continue;
+    const adj = g.nations[nat].adj;
+    headline(g, 'info', went === 1 ? `The ${adj} corps at ${r.name} goes home: the province has changed hands.` : `The ${went} ${adj} corps at ${r.name} go home: the province has changed hands.`, g.human ?? nat, r.id);
+  }
+}
+
+/** A corps' own nearest ground with room for it: by land where there is a way, else the nearest across the sea. */
+function ownNearest(g: Game, c: Corps): Region | null {
+  const mine = (r: Region): boolean => r.id !== c.reg && r.ctrl === c.nat && hasRoom(g, r, c);
+  const seen = new Uint8Array(g.regions.length);
+  const q = [c.reg];
+  seen[c.reg] = 1;
+  for (let i = 0; i < q.length; i++) {
+    const r = g.regions[q[i]];
+    if (mine(r)) return r;
+    for (const j of r.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
+  }
+  const from = g.regions[c.reg];
+  let best: Region | null = null, bd = Infinity;
+  for (const r of g.regions) if (mine(r)) { const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2; if (d < bd) { bd = d; best = r; } }
+  return best;
 }
 
 /**

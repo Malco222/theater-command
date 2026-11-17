@@ -13,7 +13,7 @@ import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
-  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather, whyNotEvacuate,
+  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, standersAt, standersLine, weather, whyNotEvacuate,
 } from '../game';
 import {
   EVE_NO_RAID, beginEve, beginHuman, canOrder, candidates, current, declarable, gunsLeftAlone, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
@@ -3501,6 +3501,12 @@ function balanceOnly(look: Outlook, mineColor: string, foeColor: string, what: s
 }
 
 /** The card that plans an assault on a town, or a garrison's sortie against the army round it: the two sides face to face, the odds, and what follows either way. */
+/** A third country's corps standing there at peace with him: the rules' one sentence on the card (rulings b341(a) and b343). */
+function peaceNote(r: Region): string {
+  const ls = g.human ? standersLine(g, r, g.human) : [];
+  return ls.length ? `<div class="note peace" style="margin-top:10px">${ls.map(esc).join(' ')}</div>` : '';
+}
+
 function siegeCard(): string {
   const m = ui.modal!;
   const r = g.regions[m.target];
@@ -3549,7 +3555,7 @@ function siegeCard(): string {
   // The first block is headed by its button's words, so the two forecasts can be told apart at a glance.
   const firstHead = marching ? 'Send them in · a hasty assault as you arrive' : `Send them in · ${hasty ? 'a hasty assault' : 'the assault, made ready'}`;
   return `${shut}
-    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
+    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}${out ? '' : peaceNote(r)}
       ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r, second ? { head: firstHead, second } : {})}${note}</div>
     <footer>${marching
       ? `<button class="btn" data-act="close" title="Nothing is spent and nobody marches.">Call it off</button><button class="btn${stormLit ? ' go' : ''}" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">Send them in</button><button class="btn${stormLit ? '' : ' go'}" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month. The storm is yours to order next month from the siege, made ready.">Lay siege first</button>`
@@ -7272,7 +7278,7 @@ function attackCard(): string {
   const dark = said?.tone === 'loss';
   const calloff = dark ? ` data-say="${esc(`Called off: ${lowerFirst(said!.word)}. To attack all the same, give the order again and click SEND THEM IN.`)}"` : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The attack · ${date(g.turn)}</div><h2>The attack on ${esc(target.name)}</h2></header>
-    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
+    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
     <footer>${whyOff(off)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button><button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
 }
 
@@ -7612,6 +7618,8 @@ function invadeCard(on: string, target: number): string {
   const friendRows = motherRow + f.friends.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
+  // A third country's corps on that ground, at peace with him (rulings b341(a) and b343).
+  if (r) for (const l of standersLine(g, r, me)) what.push(esc(l));
   what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${divsOf(fieldArmy(g, on))} fight${Math.round(fieldArmy(g, on)) === 1 ? 's' : ''} for them.` : `<b>${The}</b> and its ${divsOf(fieldArmy(g, on))} are at war with you from today.`);
   if (f.league.length) what.push(`<b>The League stands by it.</b> ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${esc(listOf(f.league.map(natName)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${divsOf(f.league.reduce((sum, id) => sum + fieldArmy(g, id), 0))} between them.`);
   if (f.patronSays) what.push(`<b>${esc(f.patronSays[0])}</b> ${esc(f.patronSays[1])}`);
@@ -9666,8 +9674,15 @@ function wireMap(): void {
     const r = g.regions[Number(el.dataset.id)];
     const armies = new Map<string, Corps[]>();
     for (const c of r.units) (armies.get(armyOf(c)) ?? armies.set(armyOf(c), []).get(armyOf(c))!).push(c);
+    // The enemy's army is named first (ruling b341(c)), and a third country's corps at peace with him is the rules'
+    // one sentence, the card's own (b343).
+    const me = g.human, foeFirst = (nat: string): number => (me && atWar(g, me, nat) ? 0 : 1);
+    const peaceLines = me ? standersLine(g, r, me) : [];
+    const peaceOf = new Map(me ? standersAt(g, r, me).map(([nat], i) => [nat, peaceLines[i]] as const).filter(([, l]) => !!l) : []);
     // The fog of war: an army glimpsed is a count, and one unseen is not spoken of.
-    const here = [...armies].map(([nat, cs]) => {
+    const here = [...armies].sort((a, b) => foeFirst(a[0]) - foeFirst(b[0])).map(([nat, cs]) => {
+      const peace = peaceOf.get(nat);
+      if (peace) return inFull(r, nat) || seen[r.id] === 1 ? `<br><span class="tippeace">${esc(peace)}</span>` : '';
       if (!inFull(r, nat)) return seen[r.id] === 1 ? `<br>${esc(g.nations[nat].adj)} troops: ${cs.length} corps, strength unknown` : '';
       if (!friendOf(nat) && !allKnown(cs)) {
         const idd = cs.filter((c) => kn(c) !== 'none').length;
