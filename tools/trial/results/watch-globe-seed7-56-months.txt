@@ -1,0 +1,36 @@
+=== watch, seed 7, 56 months; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json; countries: SAF IRN IRQ SAU AFG YEM NEP LBR
+--- SAF (South Africa)
+  September 1939: allies; provinces 24; corps 2; at war with GER
+  July 1940: at war with GER,ITA; news: South Africa is at war with Italy, beside United Kingdom.
+  June 1942: corps 2 -> 3
+  August 1943: at war with GER
+  May 1944        alive  provinces  24  corps  3 (5 divs)  treasury    9600  net 1241.1/month  allies  at war with: GER  (end)
+--- IRN (Iran)
+  September 1939: independent; provinces 23; corps 7; at war with none
+  May 1944        alive  provinces  23  corps  7 (9 divs)  treasury    4800  net  583.9/month  independent  at war with: none  (end)
+--- IRQ (Iraq)
+  September 1939: leaning_allies; provinces 4; corps 3; at war with none
+  December 1942: now allies; at war with GER; news: Iraq declares war on the Axis and takes its place among the Allies. | Iraq declares war on Germany.
+  September 1943: corps 3 -> 4
+  May 1944        alive  provinces   4  corps  4 (7 divs)  treasury  7331.5  net  506.2/month  allies  at war with: GER  (end)
+--- SAU (Saudi Arabia)
+  September 1939: independent; provinces 10; corps 3; at war with none
+  May 1944        alive  provinces  10  corps  3 (3 divs)  treasury    4800  net  386.3/month  independent  at war with: none  (end)
+--- AFG (Afghanistan)
+  September 1939: independent; provinces 7; corps 3; at war with none
+  May 1944        alive  provinces   7  corps  3 (4 divs)  treasury    4800  net  227.4/month  independent  at war with: none  (end)
+--- YEM (Yemen)
+  September 1939: independent; provinces 2; corps 1; at war with none
+  May 1944        alive  provinces   2  corps  1 (1 divs)  treasury    4800  net  157.1/month  independent  at war with: none  (end)
+--- NEP (Nepal)
+  September 1939: allies; provinces 1; corps 1; at war with GER
+  July 1940: at war with GER,ITA; news: Nepal is at war with Italy, beside United Kingdom.
+  August 1943: at war with GER
+  May 1944        alive  provinces   1  corps  1 (1 divs)  treasury    9600  net  302.6/month  allies  at war with: GER  (end)
+--- LBR (Liberia)
+  September 1939: independent; provinces 2; corps 1; at war with none
+  December 1943: now allies; at war with GER; news: Liberia declares war on Germany. Its rubber and its airfield on the ferry route across Africa have served the Allies for two years already. | Liberia declares war on Germany.
+  May 1944        alive  provinces   2  corps  1 (1 divs)  treasury  5050.3  net  291.8/month  allies  at war with: GER  (end)
+    [October 1939 after the month] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
+    [April 1941 after the month] [note] Norway fights on with its capital Oslo in GER hands
+VERDICT watch seed 7: PASS: months played 56; invariants broken 0; fallen among the watched: none; 120 s
