@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { atWar, computeSupply, createGame, openTheatres } from './game';
+import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
@@ -162,6 +162,9 @@ export function loadGame(text: string): Game | null {
   restoreWorks(g);
   // A save from an older build may lack fields added since; the fresh game fills them in.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
+  // The distances to each capital are counted from the capitals the save brings (the fresh game counted them from the
+  // first day's): Vichy's, set at the armistice, is the one that moves.
+  for (const n of Object.values(g.nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
   // A save from before research: the design teams are taken to have kept to history's schedule so far.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) {
     const lab = g.nations[id]?.lab;
