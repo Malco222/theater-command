@@ -30,6 +30,7 @@ import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
+import { settleFought, type FoughtAir } from './airfought';
 import { beyondEurope } from './world';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
 
@@ -986,7 +987,7 @@ function tradeHurt(g: Game, nat: string, target: number, through: number): Recor
  * Flies one air campaign and files its report. `salt` gives a raid planned and flown at once (the grand campaign's
  * air war) dice of its own, so that two raids on one target in a month do not fall out alike.
  */
-export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = ''): AirReport | null {
+export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir): AirReport | null {
   const a = assessAir(g, fleets, m, target);
   if (a.why) return null;
   const C = AIR.combat, I = intensity(m);
@@ -994,7 +995,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // The sea fought over: the one struck, or the one the fleet struck is in.
   const zone = m === 'fleet' ? a.ships[0].zone : target;
   const rng = airRng(g, `${m}:${target}:${nat}${salt}`);
-  const luck = (): number => rng.range(1 - C.luck, 1 + C.luck);
+  // A raid fought out as an air battle (airfought.ts) is paid at even luck, inside the dice's run; otherwise the dice roll.
+  const luck = (): number => (battle ? 1 : rng.range(1 - C.luck, 1 + C.luck));
   const before = (f: AirFleet): AirSide => {
     const side: AirSide = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
     if (f.ship !== undefined) { const p = groupAt(g, f); side.at = [p.x, p.y]; }
@@ -1010,18 +1012,23 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const dLoss = C.fighters * I * clash * 2 * share * luck();
   const eLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare * luck();
   const bLoss = a.B * Math.min(mostBomberLoss(g), a.bomberLoss * luck());
+  const fix = battle ? settleFought(battle, { foe: dLoss, ftr: eLoss, bmr: bLoss }, {
+    def: a.def.map((x) => ({ f: x.f, share: a.D > 0 ? (x.f.ftr * x.w) / a.D : 0 })),
+    esc: a.att.filter((x) => x.ftr > 0).map((x) => ({ f: x.f, share: a.E > 0 ? x.ftr / a.E : 0 })),
+    bmr: a.att.filter((x) => x.bmr > 0).map((x) => ({ f: x.f, share: a.B > 0 ? x.bmr / a.B : 0 })),
+  }, a.B) : null;
   // Pilots who come down over their own ground mostly fly again; over the enemy's, or the sea, few do.
   const saved = (home: boolean): number => (sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away);
   const down = (f: AirFleet, side: AirSide, n: number, home: boolean): void => {
-    const k = Math.min(f.ftr, rng.roll(Math.max(0, n)));
+    const k = Math.min(f.ftr, fix ? fix.ftr(f) : rng.roll(Math.max(0, n)));
     if (!k) return;
     const p = airPool(g, f.nat);
-    const back = rng.roll(k * saved(home));
+    const back = fix ? fix.back(f, k) : rng.roll(k * saved(home));
     f.ftr -= k; f.lost.ftr += k; side.lostFtr += k;
     p.lostFtr += k; p.pilots += back; p.lostPilots += k - back;
   };
   const bomber = (f: AirFleet, side: AirSide, n: number): void => {
-    const k = Math.min(f.bmr, rng.roll(Math.max(0, n)));
+    const k = Math.min(f.bmr, fix ? fix.bmr(f) : rng.roll(Math.max(0, n)));
     f.bmr -= k; f.lost.bmr += k; side.lostBmr += k;
     airPool(g, f.nat).lostBmr += k;
   };
@@ -1031,7 +1038,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
+  const through = (fix ? fix.through(Math.max(0, a.B - lostB)) : Math.max(0, a.B - lostB)) * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
