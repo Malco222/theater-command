@@ -11,7 +11,7 @@ import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, Game } from '../src/campaign/types';
 import { runOut } from '../src/battle/core/clock';
 import { SKY } from '../src/battle/air/book';
-import { AirSim, airBattle } from '../src/battle/air/sim';
+import { AirSim, airBattle, peopleOf } from '../src/battle/air/sim';
 import { airHandBack, airTicket, foughtAir } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
@@ -139,12 +139,27 @@ describe('what the player decides', () => {
     expect(s.over).not.toBeNull();
     for (const u of s.units) expect(u.n0 - u.n).toBeGreaterThanOrEqual(sofar.get(u.id)!);
     expect(s.over!.lines[0]).toContain('The staff settled the rest of the raid on Alsace');
-    // The after card splits the bill (the design director, 18:39Z): what was fought before the press, then the staff's part.
-    const before = s.over!.lines.find((l) => l.startsWith('Before you handed it over:'));
-    expect(before).toBeTruthy();
-    expect(s.over!.lines.some((l) => l.startsWith('The staff settled the rest:'))).toBe(true);
-    expect(s.over!.lines.indexOf(before!)).toBeLessThan(s.over!.lines.findIndex((l) => l.startsWith('The staff settled the rest:')));
+    // One bill, the one the campaign books, then the part of it that came before the press (the UI director, 18:45Z).
+    expect(s.over!.lines.filter((l) => l.startsWith('The raid cost you'))).toHaveLength(1);
+    expect(s.over!.lines[s.over!.lines.length - 1]).toMatch(/^Before you handed it to the staff, you had lost .+ and the French .+\.$/);
+    expect(s.over!.lines.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
     expect(s.outcome().dropped).toBeGreaterThan(0);
+  });
+
+  it('fought to the end, the after card has the one bill, the player\'s own side first', () => {
+    const { ticket } = raid('GER', 'bomb', 'Alsace');
+    const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
+    runOut(s);
+    const L = s.over!.lines;
+    expect(L[0]).toMatch(/^\d+ of \d+ bombers dropped their bombs on Alsace/);
+    expect(L[1]).toMatch(/^The raid cost you .+, and the French lost .+\.$/);
+    expect(L.some((l) => l.startsWith('Before you handed') || l.startsWith('The staff settled'))).toBe(false);
+    expect(L.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
+  });
+
+  it('names a people from its adjective', () => {
+    expect(['French', 'German', 'British', 'Swiss', 'Soviet', 'Japanese', 'Iraqi', 'Luxembourg'].map(peopleOf))
+      .toEqual(['French', 'Germans', 'British', 'Swiss', 'Soviets', 'Japanese', 'Iraqis', 'Luxembourgers']);
   });
 
   it('handed to the staff at first contact, the raid still costs about what the card forecast', () => {

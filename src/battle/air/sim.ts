@@ -629,18 +629,23 @@ export class AirSim implements BattleSim<AirUnit> {
       : lost.def > lost.att ? 'att' : 'def';
     const R = fieldRatio(winner, lost);
     const count = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
-    const losses = (n: (s: Side, k: 'ftr' | 'bmr') => number): string => {
-      const attLine = `${this.ticket.att.adj} losses: ${n('att', 'ftr')} fighters${bombers0 ? `, ${n('att', 'bmr')} bombers` : ''}.`;
-      const defLine = `${this.ticket.def.adj} losses: ${n('def', 'ftr')} fighters.`;
-      // The player's own side first, whichever side he is (the UI director, 18:28Z).
-      return (this.ticket.def.human && !this.ticket.att.human ? [defLine, attLine] : [attLine, defLine]).join(' ');
+    // The after card in the UI director's words (18:45Z): one bill, the one the campaign books, the player's own side
+    // first; handed to the staff partway, one line more says which part of it came before the press (the design
+    // director, 18:39Z). A kind at 0 is left out, and a side that lost nothing lost none.
+    const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
+    const foe = other(me), them = peopleOf(this.ticket[foe].adj);
+    const what = (n: (s: Side, k: 'ftr' | 'bmr') => number, s: Side): string => {
+      const f = n(s, 'ftr'), b = n(s, 'bmr');
+      return [f ? `${f} ${f === 1 ? 'fighter' : 'fighters'}` : '', b ? `${b} ${b === 1 ? 'bomber' : 'bombers'}` : ''].filter(Boolean).join(' and ');
     };
+    const sky = this.place.mission === 'superiority';
     const B = this.before;
+    const mine0 = B ? what((s, k) => B[s][k], me) || 'none' : '';
     const lines = [
-      bombers0 > 0 ? `${out.dropped} of ${bombers0} bombers dropped on ${this.place.name}${out.jettisoned ? `; ${out.jettisoned} jettisoned their bombs` : ''}.` : `The fight for the sky over ${this.place.name}.`,
-      // Handed to the staff partway (the design director, 18:39Z): say which losses were fought and which the staff
-      // settled, so the card never reads against the campaign's bill.
-      ...(B ? [`Before you handed it over: ${losses((s, k) => B[s][k])}`, `The staff settled the rest: ${losses((s, k) => count(s, k) - B[s][k])}`] : [losses(count)]),
+      ...(bombers0 > 0 ? [`${out.dropped} of ${bombers0} bombers dropped their bombs on ${this.place.name}${out.jettisoned ? `, and ${out.jettisoned} jettisoned theirs` : ''}.`] : []),
+      `The ${sky ? `fight for the sky over ${this.place.name}` : 'raid'} cost you ${what(count, me) || 'nothing'}, and the ${them} lost ${what(count, foe) || 'none'}.`,
+      // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
+      ...(B ? [`Before you handed it to the staff, you had lost ${mine0}${mine0.includes(' and ') ? ',' : ''} and the ${them} ${what((s, k) => B[s][k], foe) || 'none'}.`] : []),
     ];
     this.over = {
       winner, how, seconds: this.t, lost,
@@ -653,10 +658,17 @@ export class AirSim implements BattleSim<AirUnit> {
       }),
       extra: { air: out },
     };
-    if (this.toStaff) this.over.lines.unshift(`The staff settled the rest of the raid on ${this.place.name} from where it stood: what you had won stays won.`);
+    if (this.toStaff) this.over.lines.unshift(`The staff settled the rest of the ${this.place.mission === 'superiority' ? 'fight for the sky over' : 'raid on'} ${this.place.name} from where it stood: what you had won stays won.`);
     this.say('end', null, this.over.lines.join(' '));
   }
 }
 
 /** A battle from a ticket. */
 export const airBattle = (t: FieldTicket<AirPlace>): AirSim => new AirSim(t);
+
+/** A nation's people as the after card names them, from the adjective the cards use: the French, the Germans, the Swiss. */
+export function peopleOf(adj: string): string {
+  const odd: Record<string, string> = { Luxembourg: 'Luxembourgers', Northern: 'Northern side', Southern: 'Southern side' };
+  if (odd[adj]) return odd[adj];
+  return /(ish|ch|ese|ss)$/.test(adj) ? adj : `${adj}s`;
+}
