@@ -89,7 +89,14 @@ export class LandBattle implements BattleSim<LandUnit> {
         const t = this.unit(c.target);
         const us = mine(c.units);
         if (!t || t.side === by || !live(t) || !us.length) return false;
-        for (const u of us) this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id });
+        // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
+        // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
+        const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+        const axis = bearing(cx, cy, t.x, t.y);
+        const [rx, ry] = ahead(axis + Math.PI / 2);
+        const across = [...us].sort((a, b) => (a.x - cx) * rx + (a.y - cy) * ry - ((b.x - cx) * rx + (b.y - cy) * ry));
+        const step = across.reduce((s, u) => s + u.w, 0) / across.length + 30;
+        across.forEach((u, i) => this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, ...(us.length > 1 ? { lane: (i - (us.length - 1) / 2) * step, axis } : {}) }));
         return true;
       }
       case 'hold': {
@@ -185,8 +192,40 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve);
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
+    this.spread();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     this.judge();
+  }
+
+  /**
+   * Nobody stands in anybody else: where two blocks' ground overlaps they are eased apart along the shallower way, a
+   * few metres a second, onto ground they can stand on. Blocks side by side in a line, or one behind the other, are
+   * left alone; enemies keep a few metres between their fronts. For the screens and the models as much as for the
+   * fight: two divisions never share one patch of ground.
+   */
+  private spread(): void {
+    const us = this.units.filter((u) => fighting(u) && u.kind !== 'fort');
+    const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
+      const nx = clamp(u.x + ux * push, 5, this.field.w - 5), ny = clamp(u.y + uy * push, 5, this.field.h - 5);
+      if (LAND.pace[MOTION[u.kind]][groundAt(this.field, nx, ny)] > 0) { u.x = nx; u.y = ny; }
+    };
+    for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
+      const a = us[i], b = us[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      if (Math.abs(dx) > 300 || Math.abs(dy) > 300) continue;
+      // In a's own frame: across its front, and along its depth. b's box as it lies in that frame.
+      const [fx, fy] = ahead(a.face), [rx, ry] = ahead(a.face + Math.PI / 2);
+      const lat = dx * rx + dy * ry, dep = dx * fx + dy * fy;
+      const c = Math.abs(Math.cos(b.face - a.face)), s = Math.abs(Math.sin(b.face - a.face));
+      const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
+      const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
+      if (pl <= 0 || pd <= 0) continue;
+      const along = pl < pd;
+      const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
+      const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
+      const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
+      go(a, -ux, -uy, push); go(b, ux, uy, push);
+    }
   }
 
   /** Who this block strikes: its ordered target if in reach, else the enemy in reach most in front of it. */
@@ -291,7 +330,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       else {
         // Close until it is well in reach, then stand and fight.
         const want = LAND.reach[k] * (k === 'art' ? 0.85 : 0.6);
-        if (this.gap(u, t) > want) { u.path = this.route(u, t.x, t.y); to = u.path[0]; } else { u.path = []; to = null; }
+        if (this.gap(u, t) > want) {
+          const [ax, ay] = this.lanePoint(u, t, want);
+          u.path = this.route(u, ax, ay); to = u.path[0];
+        } else { u.path = []; to = null; }
       }
     } else if (u.order && u.path.length) {
       // A block on the march stops when an enemy is on top of it, unless it is running or pulling out.
@@ -366,6 +408,22 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
   }
 
+  /**
+   * Where a block in a lane makes for: in front of its target as the attack came on, out to the side by its lane, and
+   * for a lane wider than the target's front, forward round its flank. With no lane, or once it stands at that point and
+   * is still out of reach, straight at the target.
+   */
+  private lanePoint(u: LandUnit, t: LandUnit, want: number): [number, number] {
+    const o = u.order!;
+    if (o.lane === undefined || o.axis === undefined) return [t.x, t.y];
+    const [fx, fy] = ahead(o.axis), [rx, ry] = ahead(o.axis + Math.PI / 2);
+    const lim = t.w / 2 + u.w / 2;
+    const off = Math.min(Math.abs(o.lane), lim) * Math.sign(o.lane);
+    const back = Math.max(0, want * 0.8 + t.d / 2 + u.d / 2 - Math.max(0, Math.abs(o.lane) - lim));
+    const p: [number, number] = [t.x + rx * off - fx * back, t.y + ry * off - fy * back];
+    return dist(u.x, u.y, p[0], p[1]) < 12 ? [t.x, t.y] : p;
+  }
+
   private turnTo(u: LandUnit, want: number): void {
     const r = LAND.turn[u.kind] * DT;
     const d = turn(u.face, want);
@@ -438,7 +496,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         : how === 'withdrew' ? `The ${winner === 'att' ? D : A} army withdrew from the field.`
           : how === 'time' ? `The ${D} line held until the day was done.`
             : how === 'destroyed' ? `The ${winner === 'att' ? D : A} army was driven from the field.`
-              : 'The battle was handed back to the dice.',
+              : `The staff settled the rest of the attack on ${this.ticket.place.town ?? this.ticket.place.name} from where it stood: what you had won stays won.`,
       `The ${A} attack lost about ${Math.round(lost.att * 100)}% of its strength, the ${D} defence about ${Math.round(lost.def * 100)}%.`,
     ];
     this.over = {
@@ -450,7 +508,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.say({ what: 'end', text: lines[0] });
   }
 
-  /** Finish it for me (ruling 217(4)): the rest is rolled on the dice, at the ratio then standing. */
+  /** Hand it to the staff (ruling 217(4), the button named in b348): the rest is rolled on the dice, at the ratio then standing. */
   toDice(): void {
     if (this.over) return;
     const k = this.ticket.reckoning;
@@ -459,7 +517,6 @@ export class LandBattle implements BattleSim<LandUnit> {
     const share = { att: st.att / (this.power.att / tot), def: st.def / (this.power.def / tot) };
     const R = diceNow(k.odds, k.dice, share, this.rng.next());
     this.finish(R >= RATIO.carry ? 'att' : 'def', 'objective', R);
-    this.over!.lines[0] = 'The rest of the battle was left to the dice.';
   }
 
   view(as?: Side): BattleView<LandUnit> {

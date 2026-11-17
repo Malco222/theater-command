@@ -1,0 +1,55 @@
+/* Theater Command — generated from tokens.json */
+:root, [data-theme="lamp"] {
+  --desk-950: #0e0b08;
+  --desk-900: #17120d;
+  --desk-800: #211a13;
+  --desk-700: #2d241a;
+  --desk-600: #3d3125;
+  --line: #4b3d2d;
+  --track: #5d4c37;
+  --brass-700: #8a6b3b;
+  --brass-500: #b08d57;
+  --brass-300: #e0b872;
+  --brass-100: #f4dea8;
+  --on-brass: #1e1608;
+  --paper-100: #ede6d6;
+  --paper-200: #e2d7bc;
+  --paper-300: #cdbf9c;
+  --ink-900: #2a2118;
+  --ink-600: #5c5040;
+  --text-muted: #a89f8d;
+  --text-faint: #8f8573;
+  --alarm: #e08a6a;
+  --alarm-deep: #8c2f22;
+  --gain: #9cc08a;
+  --gain-deep: #3f6b36;
+  --steel: #8fb0c8;
+  --steel-deep: #2f5068;
+  --amber: #f0a63a;
+  --shadow-panel: 0 14px 36px rgba(0,0,0,0.58), 0 2px 6px rgba(0,0,0,0.5);
+  --shadow-plate: 0 2px 0 #5a4420, 0 3px 6px rgba(0,0,0,0.45);
+  --shadow-lit: 0 0 0 1px #e0b872, 0 0 18px rgba(224,184,114,0.38);
+  --shadow-well: inset 0 0 0 1px rgba(0,0,0,0.45), inset 0 10px 24px rgba(0,0,0,0.35);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-paper: 2px;
+  --radius-plate: 4px;
+  --radius-pill: 999px;
+  --control-lg: 44px;
+  --control-md: 36px;
+  --control-sm: 28px;
+  --card-sm: 640px;
+  --card-md: 960px;
+  --card-lg: 1240px;
+  --card-full: 1572px;
+  --key-guard: 500ms;
+  --font-serif: "PT Serif", Georgia, "Times New Roman", serif;
+  --font-typed: "Courier Prime", "Courier New", ui-monospace, monospace;
+}

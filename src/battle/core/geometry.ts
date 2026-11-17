@@ -8,7 +8,8 @@ export const bearing = (x0: number, y0: number, x1: number, y1: number): number 
 /** The smallest turn from a to b, -PI..PI. */
 export const turn = (a: number, b: number): number => { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
 
-export const dist = (ax: number, ay: number, bx: number, by: number): number => Math.hypot(bx - ax, by - ay);
+/** Metres between two points. (A plain square root: Math.hypot was the sims' single biggest cost, the sea thread found.) */
+export const dist = (ax: number, ay: number, bx: number, by: number): number => { const dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); };
 
 /** Which side of a unit facing 'face' at (x, y) a blow from (fx, fy) lands on. */
 export type Aspect = 'front' | 'flank' | 'rear';

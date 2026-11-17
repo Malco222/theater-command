@@ -42,6 +42,9 @@ export const LAND = {
   } as Record<Motion, Record<Ground, number>>,
   /** Tanks are blind in close country and in the streets: what they strike and what they take there. */
   tanksClose: { punch: 0.6, take: 1.3, ground: ['woods', 'buildings'] as Ground[] },
+  /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
+  spread: 4,
+  apart: 10,
   /** Mountain troops on rough ground and rock keep this much more of their pace. */
   mountainFoot: 1.6,
   /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
@@ -51,7 +54,7 @@ export const LAND = {
    * damage (it knows the ground, it is set, the attacker is out in the open). Set by the fairness table so that two
    * computer generals carry the ground about as often as the dice would (ruling 217(3)).
    */
-  hold: { take: { plains: 0.4, forest: 0.4, hills: 0.4, mountain: 0.4, marsh: 0.5, urban: 0.4, desert: 0.5 } as Record<string, number>, within: 300 },
+  hold: { take: { plains: 0.4, forest: 0.4, hills: 0.4, mountain: 0.5, marsh: 0.5, urban: 0.4, desert: 0.4 } as Record<string, number>, within: 300 },
   /** Dug in: the damage taken while it stays within this many metres of where it began. */
   dug: { take: 0.65, keep: 30 },
   nerve: {

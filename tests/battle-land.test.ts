@@ -62,12 +62,23 @@ describe('orders and the end', () => {
     const b = new LandBattle(sampleTicket('plains', 1.2, { humanAtt: true }));
     b.ai.def = false;
     const u = b.units.find((x) => x.side === 'att' && x.kind === 'inf')!;
-    expect(b.command({ do: 'move', units: [u.id], x: u.x + 200, y: u.y }, 'att')).toBe(true);
+    expect(b.command({ do: 'move', units: [u.id], x: u.x, y: u.y + 200 }, 'att')).toBe(true);
     let marched = false;
     for (let i = 0; i < 600; i++) { b.step(); if (u.act === 'march') marched = true; }
     expect(marched).toBe(true);
-    expect(Math.abs(u.x - (u.home[0] + 200))).toBeLessThan(10);
+    expect(Math.abs(u.y - (u.home[1] + 200))).toBeLessThan(10);
     expect(u.order).toBeNull();
+  });
+  it('two blocks sent to one spot do not end up standing in each other', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.2, { humanAtt: true }));
+    b.ai.def = false;
+    const [u, v] = b.units.filter((x) => x.side === 'att' && x.kind === 'inf');
+    b.command({ do: 'move', units: [u.id], x: 1500, y: 700 }, 'att');
+    b.command({ do: 'move', units: [v.id], x: 1500, y: 700 }, 'att');
+    for (let i = 0; i < 1500; i++) b.step();
+    // Side by side or one behind the other, but not on top of each other.
+    const lat = Math.abs(u.x - v.x), dep = Math.abs(u.y - v.y);
+    expect(lat >= (u.w + v.w) / 2 - 2 || dep >= (u.d + v.d) / 2 - 2).toBe(true);
   });
   it('a player cannot order the other side\'s blocks', () => {
     const b = new LandBattle(sampleTicket('plains', 1.2, { humanAtt: true }));

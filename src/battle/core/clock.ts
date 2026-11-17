@@ -41,7 +41,7 @@ export class Clock {
   }
 }
 
-/** Runs a sim to its end with no screen at all (tests, the calibration tool, and "finish it for me"). */
+/** Runs a sim to its end with no screen at all (tests and the calibration tool). */
 export function runOut(sim: BattleSim, most = 1e6): void {
   for (let i = 0; i < most && !sim.over; i++) sim.step();
 }
