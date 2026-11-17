@@ -175,6 +175,8 @@ export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had
   }
   trimBare(from);
   trimBare(to);
+  // Every carrier went (one fleet joined another): its wings ashore are now the second fleet's.
+  if (carriers >= had) for (const f of g.airFleets) if (f.ashore === from.id) f.ashore = to.id;
   syncWings(g);
 }
 
@@ -397,7 +399,7 @@ export function wingCards(g: Game, c: Fleet): WingCard[] {
     const away = w.flew === g.turn;
     const doing = away ? 'Flew its strike this month: back aboard next month'
       : w.mission === 'rest' ? 'Stood down to rest and refit'
-      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `On patrol over ${c.port}`)
+      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `Aboard in harbour at ${c.port}: on patrol over its fleet`)
       : 'Ranged on deck, ready for a strike';
     const short = est - n;
     return {

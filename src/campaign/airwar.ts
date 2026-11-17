@@ -195,7 +195,7 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
-    : deck ? 'On patrol over its fleet: meets any raid on the ships in its sea' : 'On patrol: meets any raid within its reach';
+    : deck ? (fleet && !atSea(fleet) ? `Aboard in harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
     id: f.id, nat: f.nat, name: f.name, command: f.parent && f.parent !== f.name ? f.parent : '', kind,
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
@@ -240,8 +240,11 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const hidden = field.groups < 0;
   const rows = hidden ? [] : g.airFleets.filter((f) => f.base === region && !afloat(f) && flying(f)).map((f) => groupRow(g, f, viewer));
   const used = rows.reduce((s, x) => s + x.aircraft, 0);
-  const note = `${field.word}: it serves ${num(field.holds)} aircraft${hidden ? '. What flies from here is not known: scout it from the air, or put an agent on watch'
-    : `, and ${used > 0 ? `${num(used)} are based here` : 'none are based here'}${field.crowded ? `. It is crowded: only ${pct(field.holds / used)} of each group can fly` : ''}`}.`;
+  // Carriers lying in the harbour here keep their aircraft aboard: said, so that nobody looks for them on the field (ruling 176(b)).
+  const inPort = hidden ? [] : g.fleets.filter((c) => c.base === region && !atSea(c) && c.ships.cv > 0 && viewer !== null && allied(g, c.nat, viewer) && g.airFleets.some((w) => w.ship === c.id && w.ftr + w.bmr > 0));
+  const aboard = inPort.length ? ` The aircraft of the ${inPort.length === 1 ? inPort[0].name : inPort.map((c) => c.name).join(' and the ')}, in harbour here, are aboard ${inPort.length === 1 ? 'its' : 'their'} carriers.` : '';
+  const note = `${field.word}: it has room for ${num(field.holds)} aircraft${hidden ? '. What flies from here is not known: scout it from the air, or put an agent on watch'
+    : `, and ${used > 0 ? `${num(used)} are based here` : 'none are based here'}${field.crowded ? `. It is crowded: only ${pct(field.holds / used)} of each group can fly` : ''}`}.${aboard}`;
   return { region, name: r.name, field, note, build, hidden, rows };
 }
 

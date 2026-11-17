@@ -869,6 +869,18 @@ export function townSiege(g: Game, region: number): SiegeView | null {
   return { ...v, lines: [`No army holds ${v.town}: only its town guard, about ${menWord(guardMen(g, r))} men.${foe ? ' An army you march in goes at the town as it arrives.' : ''}`, ...v.lines] };
 }
 
+/** The forces line of a province whose town no army holds (ruling 175(c), as the UI director placed it): a head, the
+ *  guard's strength, and for an enemy's town what a march in meets. Null where an army is in the town or the country
+ *  round it, where somebody stands at its gates, where the town has no guard, and where the fog hides who is inside. */
+export interface GuardOnly { town: string; men: number; head: string; strength: string; march: string }
+export function guardOnly(g: Game, region: number): GuardOnly | null {
+  const v = townSiege(g, region), r = g.regions[region];
+  if (!v || !r || v.inside !== 0 || v.guard <= 0 || v.by || r.units.some((c) => !c.dead)) return null;
+  const men = guardMen(g, r);
+  const foe = g.human !== null && atWar(g, g.human, r.ctrl);
+  return { town: v.town, men, head: 'Held by its town guard only', strength: `About ${menWord(men)} men, and no army.`, march: foe ? 'An army you march in goes at the town as it arrives.' : '' };
+}
+
 /** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
 export function siegesInSight(g: Game): SiegeView[] {
   const all = siegesNow(g);

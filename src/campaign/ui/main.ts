@@ -19,7 +19,7 @@ import {
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
-  fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
+  fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -64,7 +64,7 @@ import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
-import type { FleetSeen, WingCard } from '../carriers';
+import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
@@ -503,7 +503,8 @@ function airBaseMarks(): string {
   let out = airWar(g) ? airfieldMarks() : '';
   for (const f of g.airFleets) {
     if (!isOffensive(f.mission) || f.ftr + f.bmr <= 0) continue;
-    const b = g.regions[f.base];
+    // A wing aboard flies from where its fleet is, not from its home port.
+    const b = f.ship !== undefined ? groupAt(g, f) : g.regions[f.base];
     const t = f.mission === 'strike' ? g.seas[f.target] : g.regions[f.target];
     if (!t) continue;
     const ty = f.mission === 'strike' ? t.y + 9 : t.y;
@@ -514,7 +515,8 @@ function airBaseMarks(): string {
   const hidden = new Set(airWar(g) && g.human ? airfieldsSeen(g).filter((a) => a.groups < 0).map((a) => a.region) : []);
   const groups = new Map<string, AirFleet[]>();
   for (const f of g.airFleets) {
-    if (f.ftr + f.bmr <= 0 || hidden.has(f.base)) continue;
+    // A wing aboard is at no airfield: it is never drawn at one (ruling 176(b)).
+    if (f.ftr + f.bmr <= 0 || f.ship !== undefined || hidden.has(f.base)) continue;
     const key = `${f.base}:${f.nat}`;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
   }
@@ -533,13 +535,30 @@ function airBaseMarks(): string {
   return out;
 }
 
+/** Sends the picked wing ashore back aboard a fleet, and says what came of it. */
+function boardWing(f: AirFleet, fleet: number): void {
+  const c = g.fleets.find((x) => x.id === fleet);
+  const name = f.name;
+  if (c && orderAboard(g, f.id, fleet)) {
+    ui.airMode = ''; ui.field = -1;
+    // Where the fleet had raised a wing of this kind meanwhile, the two are one wing again.
+    if (!g.airFleets.some((x) => x.id === f.id)) ui.air = g.airFleets.find((x) => x.ship === fleet && x.kind === f.kind)?.id ?? -1;
+    ui.msg = `The ${name} is back aboard the ${c.name}.`;
+    queueSave();
+  } else ui.msg = c ? `${name} cannot go aboard the ${c.name}. ${whyNotAboard(g, f, c) ?? ''}` : 'That fleet is gone.';
+}
+
+/** Where the picked group could be based this month: for a wing aboard, the airfields it could fly ashore to (ruling 175(b)). */
+const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : airBases(g, f));
+const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== undefined ? whyNotAshore(g, f, r) : whyNotBase(g, f, r));
+
 /** The reach of the picked air fleet, and where its next order could send it. */
 function airMarks(f: AirFleet): string {
   const b = g.regions[f.base];
   const R = airRange(f);
   const u = AIR.kmPerUnit;
   let out = '';
-  if (ui.airMode === 'base') for (const r of airBases(g, f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+  if (ui.airMode === 'base') for (const r of basesFor(f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
   else if (ui.airMode === 'strike') for (const z of airTargets(g, f, 'strike')) out += `<circle class="mk sea${f.mission === 'strike' && f.target === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
   else if (ui.airMode && ui.airMode !== 'scout' && ui.airMode !== 'search') for (const id of airTargets(g, f, ui.airMode)) out += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
   if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${b.x}" cy="${b.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
@@ -2051,6 +2070,7 @@ function wingCardHtml(card: FleetCard, w: WingCard): string {
   return `<button class="ucard wingmini" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}. ${w.doing}. Reach ${num(w.range)} km. ${w.note}${w.lost > 0 ? ` ${num(w.lost)} lost since the war began.` : ''}`)}">
     <span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span>
     <span class="um">${w.aircraft <= 0 ? 'No aircraft aboard' : esc(w.brief)}</span>
+    <span class="um wingat">${esc(w.where)}</span>
     <span class="tags">${tags}</span></button>`;
 }
 
@@ -2072,17 +2092,17 @@ function drawFleetTray(f: Fleet): void {
     ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
     : '';
   const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>
-    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.wings.length ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.wings.reduce((t, w) => t + w.aircraft, 0))} of ${num(card.wings.reduce((t, w) => t + w.est, 0))}`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span></div>`;
+    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare">${esc(card.bare)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
     ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
-  const wingCol = card.wings.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}</div>` : '';
+  const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop"><b>${esc(w.name)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
 }
@@ -2638,7 +2658,7 @@ function provinceSlots(r: Region): string {
   const queued = me ? g.nations[me].queue.filter((b) => b.what === 'fort' && b.region === r.id).length : 0;
   const state = `${lv ? `Level ${lv}` : 'No works'}${queued ? `, level ${lv + queued} building` : ''}`;
   const sea = r.port ? 'A port: troops and supplies can come and go by sea' : r.seas.length ? 'A coast with no port' : 'Inland';
-  const wings = g.airFleets.filter((f) => f.base === r.id && f.ftr + f.bmr > 0);
+  const wings = g.airFleets.filter((f) => f.base === r.id && f.ship === undefined && f.ftr + f.bmr > 0);
   const flying = wings.length ? `${wings.length} air fleet${wings.length > 1 ? 's' : ''}, ${num(wings.reduce((t, f) => t + f.ftr + f.bmr, 0))} aircraft` : 'No air fleet based here';
   const plane = slotIcon(`<path d="${PLANE}"/>`, '-10.5 -9.5 21 19.5');
   if (!budgeted(g)) {
@@ -3128,6 +3148,16 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
 }
 
+/** A forecast as its bar alone, on the same scale as the card's first: the verdict, the odds and the chance, with no ticket under it. */
+function balanceOnly(look: Outlook, mineColor: string, foeColor: string, what: string): string {
+  const at = (odds: number): number => (100 * odds) / (1 + odds);
+  const say = verdictOf(look, 'storm');
+  const sub = look.exact ? `Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(look.chance)}% chance ${what}`
+    : `Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}`;
+  return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">${sub}</span></div>
+    <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div>${look.exact ? '' : `<span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span>`}<span class="need" style="left:${at(look.even).toFixed(1)}%" title="An even chance"></span></div></div>`;
+}
+
 /** The card that plans an assault on a town, or a garrison's sortie against the army round it: the two sides face to face, the odds, and what follows either way. */
 function siegeCard(): string {
   const m = ui.modal!;
@@ -3164,22 +3194,20 @@ function siegeCard(): string {
   const choice = !out && !marching ? stormChoice(g, r.id) : null;
   const note = out
     ? '<div class="note" style="margin-top:14px"><b>What follows.</b> Win, and the army round the town is driven off and the siege is raised. Lose, and the garrison goes back inside the weaker for it. One sortie a month from each town.</div>'
-    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}${marching ? marchChoice(m.meet as MarchOutlook) : ''}${choice?.ifWait ? ` <b>Keep up the siege:</b> ${esc(choice.ifWait)}` : ''}</div>`;
+    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}${marching ? ` <b>Only its town guard holds ${esc(v.town)}: about ${num((m.meet as MarchOutlook).guardMen)} men, and no army.</b>` : ''}</div>`;
+  // The second block is the order that risks nothing, headed by its words: the same storm made ready as a forecast on
+  // the same scale where there is one, and otherwise the rules' sentence on what waiting brings (ruling 183).
+  const made = marching ? (m.meet as MarchOutlook).prepared : choice?.prepared ?? null;
+  const waits = marching ? (m.meet as MarchOutlook).ifSiege : choice?.ifWait ?? '';
+  const second = (marching || choice) && (made || waits)
+    ? `<div class="waitblock"><h3>${marching ? 'Lay siege first' : 'Keep up the siege'}${made ? ' <small>the same storm next month, made ready</small>' : ''}</h3>${made ? balanceOnly(made, g.nations[me].color, g.nations[foeNat].color, `to carry ${esc(v.town)}`) : ''}<p>${esc(made && marching ? waits : made ? 'Nothing is risked this month, if nothing else changes.' : waits)}</p></div>` : '';
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
-      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${note}</div>
+      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${second}${note}</div>
     <footer>${marching
       ? `<button class="btn" data-act="close" title="Nothing is spent and nobody marches.">Call it off</button><button class="btn${stormLit ? ' go' : ''}" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">Send them in</button><button class="btn${stormLit ? '' : ' go'}" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month. The storm is yours to order next month from the siege, made ready.">Lay siege first</button>`
       : out ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">Stay inside</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">Sally out</button>`
       : `<button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn${choice?.favours === 'siege' ? '' : ' go'}" data-act="dosiege" title="Settle it at once from the Battle Ticket">Send them in</button><button class="btn${choice?.favours === 'siege' ? ' go' : ''}" data-act="close" title="Nothing is spent. The siege goes on.${choice?.ifWait ? ` ${esc(choice.ifWait)}` : ''}">Keep up the siege</button>`}</footer>`;
-}
-
-/** The choice a march on a guarded town comes to: the assault as the army arrives, or the same assault next month made ready. */
-function marchChoice(meet: MarchOutlook): string {
-  const now = meet.outlook, later = meet.prepared;
-  if (!now || !later) return '';
-  const say = (o: Outlook): string => `${o.odds.toFixed(2)} to 1, about ${oddsPct(o.chance)}% to carry it`;
-  return ` <b>Only its town guard holds ${esc(meet.town)}: about ${num(meet.guardMen)} men, and no army.</b> Send them in and they storm as they arrive: ${say(now)}. ${esc(meet.ifStorm)} Or lay siege first: ${say(later)} next month. ${esc(meet.ifSiege)}`;
 }
 
 function regionPane(): string {
@@ -3200,7 +3228,7 @@ function regionPane(): string {
   if (me && g.nations[me].alive && allied(g, me, r.ctrl)) tags.push(g.supply[me]?.[r.id] ? '<span class="tag good">In your supply net</span>' : '<span class="tag bad">No supply line to here</span>');
   const sky = skyOver(g, r.id);
   if (sky) tags.push(`<span class="tag ${me && allied(g, me, sky) ? 'good' : 'bad'}">The ${g.nations[sky].adj} air force holds the sky here</span>`);
-  const based = g.airFleets.filter((f) => f.base === r.id && f.ftr + f.bmr > 0);
+  const based = g.airFleets.filter((f) => f.base === r.id && f.ship === undefined && f.ftr + f.bmr > 0);
   const mineHere = r.units.filter((c) => canOrder(g, c));
   let acts = '';
   const picked = pickedCorps();
@@ -3219,7 +3247,7 @@ function regionPane(): string {
   // The fog of war: what the player's side cannot see is not listed, and what it only glimpses is a count.
   const inView = r.units.filter((c) => inFull(r, c.nat));
   const veiled = r.units.length - inView.length;
-  const units = (inView.length ? knownRows(r, [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1))) : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : '<div class="empty">No armies here.</div>') + fogNote(r);
+  const units = (inView.length ? knownRows(r, [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1))) : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : guardLine(r)) + fogNote(r);
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${leftWorksNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
@@ -4282,6 +4310,12 @@ function agentMarks(): string {
 }
 
 /** What the fog of war hides in a province, said in the province panel. */
+/** The forces line of a province with no army in it: where its town has a guard, the guard is named with its strength. */
+function guardLine(r: Region): string {
+  const o = guardOnly(g, r.id);
+  if (!o) return '<div class="empty">No armies here.</div>';
+  return `<div class="guardonly"><b>${esc(o.head)}</b><small>${esc(o.strength)}${o.march ? ` ${esc(o.march)}` : ''}</small></div>`;
+}
 function fogNote(r: Region): string {
   if (!fogOn(g) || seen[r.id] >= 2) return '';
   if (seen[r.id] === 0) return `<div class="note fogged"><b>Unseen ground.</b> ${esc(r.name)} is too far from your lines for anything to be known of what stands here. An agent sent to the province would report every army in it and around it.</div>`;
@@ -5350,6 +5384,7 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   return `<${el} class="corps fleet grp${canOrder && ui.air === x.id ? ' pick' : ''}" ${canOrder ? `data-act="airfleet" data-id="${x.id}"` : ''}>
     ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''}${x.ship >= 0 && whose ? ` · aboard the ${esc(x.baseName)}` : ''} · reach ${num(x.range)} km</span>
+    ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${esc(x.where)}${x.ashore >= 0 ? ` <span class="tag">Carrier wing</span>${x.fleetName ? ` of the ${esc(x.fleetName)}` : ''}` : ''}</span>` : ''}
     <span class="meta">${esc(x.doing)}</span>
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
@@ -5362,17 +5397,24 @@ function groupOrders(x: GroupRow): string {
   const moved = f.moved === g.turn;
   const peace = !g.nations[x.nat].atWar.length;
   const deck = x.ship >= 0;
+  // A carrier wing's own order: ashore from its fleet, or back aboard (ruling 175(b)).
+  const mv = humanUp(g) ? x.wingMove : null;
+  // The fleets a wing ashore can board now: with one, the button gives the order; with several, they are listed.
+  const decks = mv?.order === 'aboard' ? airGroupDecks(g, x.id).filter((d) => !d.why) : [];
   const acts = `<div class="acts"><button class="btn small go${ui.raid && ui.lead === x.id ? ' on' : ''}" data-act="raidmenu" data-id="${x.id}" ${x.flew || peace ? 'disabled' : ''} title="${x.flew ? 'It has flown its raid this month.' : peace ? 'The nation is at peace.' : 'Pick the kind of raid and its target. You see the chance of success and the losses to expect, then choose who else flies it.'}">${deck ? 'Plan a strike with it' : 'Plan a raid with it'}</button>
     <button class="btn small${ui.airMode === 'scout' ? ' on' : ''}" data-act="scoutmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft photograph one province: every army there and beside it is identified, corps by corps, with its strength, its rest and its morale. The report is exact this month and goes stale after. It keeps its patrol.'}">Scout from the air</button>
     ${carrierRules(g) ? `<button class="btn small${ui.airMode === 'search' ? ' on' : ''}" data-act="searchmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month. Enemy ships there may be reported, or identified: a fleet has to be found before it can be struck. It keeps its patrol.'}">Search a sea</button>` : ''}
-    ${deck ? `<button class="btn small" data-act="fleetgo" data-id="${x.ship}" title="Its aircraft go where its fleet goes: pick the fleet up to move them.">Go to its fleet</button>` : `<button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to another airfield. Settling in costs readiness.'}">Move to another airfield</button>`}</div>`;
+    ${deck ? `<button class="btn small" data-act="fleetgo" data-id="${x.ship}" title="Its aircraft go where its fleet goes: pick the fleet up to move them.">Go to its fleet</button>` : `<button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to another airfield. Settling in costs readiness.'}">Move to another airfield</button>`}
+    ${mv && (mv.order === 'ashore' || decks.length <= 1) ? `<button class="btn small${mv.order === 'ashore' && ui.airMode === 'base' ? ' on' : ''}" data-act="${mv.order === 'ashore' ? 'airbase' : 'wingaboard'}" ${mv.why ? 'disabled' : ''} title="${esc(mv.why ?? mv.price)}">${mv.order === 'ashore' ? 'Fly ashore' : 'Back aboard'}</button>` : ''}</div>
+    ${mv ? `<p class="sub wingprice">${mv.why ? `${LOCK} ${esc(mv.why)}` : esc(mv.price)}</p>` : ''}
+    ${decks.length > 1 ? `<p class="sub" style="margin:8px 0 6px">Back aboard: pick the fleet.</p>${decks.map((d) => `<button class="pickrow" data-act="deckpick" data-id="${d.fleet}"><span class="grow"><b>${esc(d.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(capital(d.where))} · deck room for ${num(d.room)}</span></span></button>`).join('')}` : ''}`;
   let body = '';
   if (ui.airMode === 'search') {
     const ss = searchOptionsFor(g, x.id).slice(0, 8);
     body = `<p class="sub" style="margin:8px 0 6px">Click a ringed sea on the map, or pick one here. A search adds to what your ships and coastal aircraft already see there. It is this group's one reconnaissance flight of the month.</p>${ss.map((o) => `<button class="pickrow" data-act="searchpick" data-zone="${o.zone}"><span class="grow"><b>${esc(o.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${o.km > 0 ? `${num(o.km)} km · ` : ''}${esc(o.word)}${o.reported ? ` · ${o.reported} force${o.reported === 1 ? '' : 's'} reported, not identified` : ''}</span></span>${o.searched ? '<span class="tag">Searched this month</span>' : ''}</button>`).join('') || '<div class="empty">No sea is in its reach.</div>'}`;
   } else if (ui.airMode === 'base') {
     const bases = airGroupBases(g, x.id).filter((b) => !b.why).slice(0, 8);
-    body = `<p class="sub" style="margin:8px 0 6px">Click a blue province on the map, or pick one of the nearest airfields. Settling in costs ${pctOf(AIR.ready.move)} readiness. Where there is no airfield, an engineer corps can lay one out in a month.</p>${bases.map((b) => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`).join('') || '<div class="empty">No other airfield is in reach.</div>'}`;
+    body = `<p class="sub" style="margin:8px 0 6px">${deck ? `Click a blue province on the map, or pick the airfield it flies ashore to: the one of the harbour its fleet lies in, or a friendly one on the sea it is in. The move costs ${pctOf(AIR.ready.move)} readiness.` : `Click a blue province on the map, or pick one of the nearest airfields. Settling in costs ${pctOf(AIR.ready.move)} readiness. Where there is no airfield, an engineer corps can lay one out in a month.`}</p>${bases.map((b) => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`).join('') || `<div class="empty">${deck ? 'No friendly airfield is in reach of its fleet.' : 'No other airfield is in reach.'}</div>`}`;
   } else if (ui.airMode === 'scout') {
     const ts = raidTargetsFor(g, 'recon', x.id).slice(0, 8);
     body = `<p class="sub" style="margin:8px 0 6px">Click a marked province on the map, or pick one of the nearest. ${AIRWAR_RECON} aircraft go; fighters on patrol there may bring some down.</p>${ts.map((t) => `<button class="pickrow" data-act="scoutpick" data-id="${t.id}"><span class="grow"><b>${esc(t.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(t.km)} km · ${esc(t.what)}</span></span></button>`).join('') || '<div class="empty">Nothing in its reach is hidden from you.</div>'}`;
@@ -7987,7 +8029,7 @@ function onClick(e: MouseEvent): void {
     case 'basepick': {
       const f = myAir();
       if (!f) break;
-      const why = whyNotBase(g, f, g.regions[id]);
+      const why = whyNotBaseFor(f, g.regions[id]);
       if (why) ui.msg = `${f.name} cannot move to ${g.regions[id].name}. ${why}`;
       else { orderAirBase(g, f.id, id); ui.airMode = ''; ui.field = id; }
       refresh(); break;
@@ -8001,6 +8043,19 @@ function onClick(e: MouseEvent): void {
       refresh(); break;
     }
     case 'airbase': ui.airMode = ui.airMode === 'base' ? '' : 'base'; ui.raid = ''; ui.lead = -1; refresh(); break;
+    case 'wingaboard': {
+      // Back aboard: with one fleet to go to the order is given at once, with several the list opens.
+      const f = myAir();
+      if (!f) break;
+      const decks = airGroupDecks(g, f.id).filter((d) => !d.why);
+      if (decks.length === 1) boardWing(f, decks[0].fleet);
+      refresh(); break;
+    }
+    case 'deckpick': {
+      const f = myAir();
+      if (f) boardWing(f, id);
+      refresh(); break;
+    }
     case 'airtarget': {
       const f = myAir();
       if (f && ui.airMode && ui.airMode !== 'base') openModal({ kind: 'airplan', fleet: f.id, mission: ui.airMode, target: Number(t.dataset.target) });
@@ -8396,7 +8451,7 @@ function onRegion(id: number): void {
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'base') {
-      const why = whyNotBase(g, af, r);
+      const why = whyNotBaseFor(af, r);
       if (why) ui.msg = `${af.name} cannot move to ${r.name}. ${why}`;
       else { orderAirBase(g, af.id, id); ui.airMode = ''; if (airWar(g)) ui.field = id; }
     } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
