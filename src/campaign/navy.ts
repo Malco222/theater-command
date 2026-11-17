@@ -1141,13 +1141,15 @@ export function whyNotEscort(g: Game, f: Fleet, lane: string): string | null {
   if (!rt) return 'There is no such lane.';
   const to = g.nations[rt.to];
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
-  if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} feeds ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
+  // (A lane may be named in the plural: "the Arctic convoys" feed, "the Atlantic lane" feeds.)
+  const many = /s$/.test(rt.name);
+  if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} ${many ? 'feed' : 'feeds'} ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
   if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `Not under attack: nobody is at war over ${rt.name}.`;
   const stop = laneStopped(g, lane);
   if (stop) return `Nothing sails on ${rt.name} now. ${stop.why}`.trim();
   if (escortWorth(f.ships) <= 0) return `The ${f.name} has nothing that can guard a convoy: escorts are destroyers, carriers and cruisers.`;
   const reach = fleetReach(g, f);
-  if (!rt.zones.some((z) => reach.includes(z))) return `${cap(rt.name)} is out of reach of the ${f.name} from ${f.port}.`;
+  if (!rt.zones.some((z) => reach.includes(z))) return `${cap(rt.name)} ${many ? 'are' : 'is'} out of reach of the ${f.name} from ${f.port}.`;
   return null;
 }
 
