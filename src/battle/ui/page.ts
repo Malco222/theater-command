@@ -255,7 +255,7 @@ function groups(b: LandBattle): string {
       return `<button class="urow" data-unit="${u.id}" title="${esc(u.name)}"><span class="rname">${esc(label)}</span><span class="rstate"></span><i class="rbar"><b></b></i></button>`;
     }).join('');
     return `<div class="tc-card ugroup" data-item data-w="${w + 8}" data-corps="${c}" style="width:${w}px">
-      <button class="ghead" data-corps="${c}" title="${esc(name)}, ${count}: pick up the whole corps"><b>${esc(name)}</b></button>
+      <button class="ghead" data-corps="${c}" title="${esc(name)}, ${count}: click to pick up the whole corps."><b>${esc(name)}</b></button>
       <div class="grows" style="grid-template-columns:repeat(${cols}, 1fr)">${rows}</div></div>`;
   }).join('');
 }
@@ -268,7 +268,7 @@ function card(u: LandUnit, color: string): string {
     <span class="ustate tc-data"></span></button>`;
 }
 
-const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Routing', gone: 'Fled the field', withdrawn: 'Withdrawn' };
+const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Routing', gone: 'Fled', withdrawn: 'Withdrawn' };
 
 /** The card says the order, not the walk, the moment it is given, paused or not (the UI director's words for ruling 226(8)). */
 function doingWord(u: LandUnit): string {
@@ -286,27 +286,27 @@ function doingWord(u: LandUnit): string {
  * own, "7 more ▸", and the first then reads "◂ 7 more". Tab, and picking one up on the field, bring its card into view.
  * A big battle's tray pages its corps' groups the same way, counted in corps.
  */
-const MORE_W = 112 + 8;
+const MORE_W = 112 + 8, MORE_CORPS_W = 156 + 8;
 
 /** The tray's items (cards, or corps' groups), their widths, and the room they have. */
-function trayItems(): { tray: HTMLElement; items: HTMLElement[]; ws: number[]; room: number } | null {
+function trayItems(): { tray: HTMLElement; items: HTMLElement[]; ws: number[]; room: number; more: number } | null {
   const tray = document.getElementById('tray');
   if (!tray) return null;
   const items = [...tray.querySelectorAll<HTMLElement>('[data-item]')];
-  return { tray, items, ws: items.map((i) => Number(i.dataset.w)), room: tray.clientWidth - 24 + 8 };
+  return { tray, items, ws: items.map((i) => Number(i.dataset.w)), room: tray.clientWidth - 24 + 8, more: tray.classList.contains('is-grouped') ? MORE_CORPS_W : MORE_W };
 }
 
 /** The first item past a page that starts at 'from': whole items only, with room kept for the "more" places it needs. */
-function pageEnd(ws: number[], room: number, from: number): number {
-  let used = from > 0 ? MORE_W : 0, k = from;
-  while (k < ws.length && (k === from || used + ws[k] + (k + 1 < ws.length ? MORE_W : 0) <= room)) { used += ws[k]; k++; }
+function pageEnd(ws: number[], room: number, from: number, more = MORE_W): number {
+  let used = from > 0 ? more : 0, k = from;
+  while (k < ws.length && (k === from || used + ws[k] + (k + 1 < ws.length ? more : 0) <= room)) { used += ws[k]; k++; }
   return k;
 }
 
 function pageTray(): void {
   const t = trayItems();
   if (!t) return;
-  const { tray, items, ws, room } = t;
+  const { tray, items, ws, room, more } = t;
   const back = tray.querySelector<HTMLElement>('[data-page="-1"]')!, fwd = tray.querySelector<HTMLElement>('[data-page="1"]')!;
   if (ws.reduce((a, w) => a + w, 0) <= room) {
     S.trayFrom = 0; back.hidden = true; fwd.hidden = true;
@@ -315,9 +315,9 @@ function pageTray(): void {
   }
   // The last page ends with the last item: never a page with room to spare at the end.
   let from = Math.max(0, Math.min(S.trayFrom, items.length - 1));
-  while (from > 0 && pageEnd(ws, room, from - 1) >= items.length) from--;
+  while (from > 0 && pageEnd(ws, room, from - 1, more) >= items.length) from--;
   S.trayFrom = from;
-  const to = pageEnd(ws, room, from);
+  const to = pageEnd(ws, room, from, more);
   items.forEach((c, i) => { c.hidden = i < from || i >= to; });
   back.hidden = from === 0; fwd.hidden = to >= items.length;
   const what = (n: number): string => (tray.classList.contains('is-grouped') ? `${n} more corps` : `${n} more`);
@@ -327,9 +327,9 @@ function pageTray(): void {
 }
 
 /** The page before one that starts at 'from': it ends where this one begins. */
-function pageBefore(ws: number[], room: number, from: number): number {
+function pageBefore(ws: number[], room: number, from: number, more = MORE_W): number {
   let f = Math.max(0, from - 1);
-  while (f > 0 && pageEnd(ws, room, f - 1) >= from) f--;
+  while (f > 0 && pageEnd(ws, room, f - 1, more) >= from) f--;
   return f;
 }
 
@@ -340,7 +340,7 @@ function showCard(id: number): void {
   const i = t.items.findIndex((c) => Number(c.dataset.unit) === id || !!c.querySelector(`[data-unit="${id}"]`));
   if (i < 0 || !t.items[i].hidden) return;
   let f = i;
-  while (f > 0 && pageEnd(t.ws, t.room, f - 1) > i) f--;
+  while (f > 0 && pageEnd(t.ws, t.room, f - 1, t.more) > i) f--;
   S.trayFrom = f;
   pageTray();
 }
@@ -358,10 +358,14 @@ function updateTray(force = false): void {
     el.classList.toggle('is-off', gone);
     if (el.classList.contains('urow')) {
       // A row: its strength, or its state in words where it is not steady; only Routing in red.
-      const word = u.fellBack ? 'Falling back' : u.state === 'steady' ? '' : u.state === 'gone' ? 'Fled' : STATE_WORD[u.state];
+      const word = u.fellBack ? 'Falling back' : u.state === 'steady' ? '' : STATE_WORD[u.state];
       const rs = el.querySelector<HTMLElement>('.rstate')!;
       rs.textContent = word;
-      rs.className = `rstate${u.state === 'routing' && !u.fellBack ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
+      // One colour for one word: Falling back is muted wherever it stands (the UI director, 3b).
+      rs.className = `rstate${u.fellBack ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
+      // Its hover carries what the small battle's card says (the UI director, 3b): "16th Infantry · Strength 92 · attacking".
+      const doingR = u.fellBack ? '' : b.over ? (live(u) ? 'battle over' : '') : live(u) ? doingWord(u) : '';
+      el.title = [el.querySelector('.rname')!.textContent, `Strength ${Math.round(u.str * 100)}`, word, doingR].filter(Boolean).join(' · ');
       const k = u.str / Math.max(1e-6, u.str0);
       const bar = el.querySelector<HTMLElement>('.rbar b')!;
       bar.style.width = `${Math.round(Math.max(0, Math.min(1, u.str)) * 100)}%`;
@@ -382,7 +386,7 @@ function updateTray(force = false): void {
     // Carried off by its army's break, a block that still stood reads Falling back, not Routing (the design director).
     const doing = u.fellBack ? '' : b.over ? (live(u) ? 'battle over' : '') : live(u) ? doingWord(u) : '';
     st.innerHTML = `<b>${u.fellBack ? 'Falling back' : STATE_WORD[u.state]}</b>${doing ? ` · ${doing}` : ''}`;
-    st.className = `ustate tc-data${u.state === 'routing' && !u.fellBack ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
+    st.className = `ustate tc-data${u.fellBack ? ' muted' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
   // A corps' header is lit while every block of it that can take orders is in hand.
   for (const h of document.querySelectorAll<HTMLElement>('#tray .ghead')) {
@@ -585,7 +589,7 @@ function wireBattle(): void {
     const more = (e.target as HTMLElement).closest<HTMLElement>('[data-page]');
     if (more) {
       const t = trayItems()!;
-      S.trayFrom = more.dataset.page === '1' ? Number(tray.querySelector<HTMLElement>('[data-page="1"]')!.dataset.to ?? 0) : pageBefore(t.ws, t.room, S.trayFrom);
+      S.trayFrom = more.dataset.page === '1' ? Number(tray.querySelector<HTMLElement>('[data-page="1"]')!.dataset.to ?? 0) : pageBefore(t.ws, t.room, S.trayFrom, t.more);
       pageTray(); return;
     }
     // A corps' header picks up the whole corps (b388); Shift adds it to what is in hand.
