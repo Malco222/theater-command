@@ -3463,7 +3463,9 @@ void ACampaignPlayerController::ShowCorpsModel(int32 CorpsId)
 	{
 		Title = Card->Kind.ToString();
 	}
-	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Card->Name.ToString(), *Title));
+	// (The UI director, check 19.) The arm stands on its own line under the name, with no dot: a dot at a fold
+	// began the line ("· Infantry").
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s\n%s"), *Card->Name.ToString(), *Title));
 }
 
 void ACampaignPlayerController::DismissAnnouncement()
@@ -5106,7 +5108,7 @@ void ACampaignPlayerController::ShowShipModel(const FString& Model, const FText&
 		return;
 	}
 	Map->SetShowpiece(Model);
-	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Tray.Title.ToString(), *Name.ToString()));
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s\n%s"), *Tray.Title.ToString(), *Name.ToString())); // (check 19: the ship's own line, no dot)
 }
 
 void ACampaignPlayerController::OrderFleetTo(int32 Zone)
@@ -7048,28 +7050,44 @@ namespace
 		return FText::AsNumber(Number).ToString();
 	}
 
-	/** The corps of one side of a battle, a line each. After the battle the line says what it cost and what became of them. */
-	FString ListUnits(const TArray<FBattleUnit>& Units, bool bAfter)
+	/**
+	 * The corps of one side of a battle: each one's name, and its figures, which never fold. After the battle the
+	 * figures say what it cost and what became of them. (The UI director, check 19: the card sets the two on one line
+	 * where they fit, and the name over its figures where they do not; the dot stands only between facts on one line.)
+	 */
+	TArray<FRosterLine> RosterOf(const TArray<FBattleUnit>& Units, bool bAfter)
 	{
-		TArray<FString> Lines;
+		TArray<FRosterLine> Roster;
 		for (const FBattleUnit& Unit : Units)
 		{
+			FRosterLine& Row = Roster.AddDefaulted_GetRef();
+			Row.Name = Unit.Name;
 			// A corps not identified has no arm and no numbers to give.
-			FString Line = Unit.Kind.IsEmpty() ? Unit.Name : FString::Printf(TEXT("%s \u00B7 %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
-				Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s"));
+			TArray<FString> Facts;
+			if (!Unit.Kind.IsEmpty())
+			{
+				Facts.Add(FString::Printf(TEXT("%s, %d division%s"), *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s")));
+			}
 			if (bAfter)
 			{
-				Line += FString::Printf(TEXT(" \u00B7 lost %s"), *Thousands(Unit.Lost));
-				if (!Unit.Fate.IsEmpty())
-				{
-					Line += FString::Printf(TEXT(", %s"), *Unit.Fate);
-				}
+				Facts.Add(Unit.Fate.IsEmpty() ? FString::Printf(TEXT("lost %s"), *Thousands(Unit.Lost)) : FString::Printf(TEXT("lost %s, %s"), *Thousands(Unit.Lost), *Unit.Fate));
 			}
 			else if (Unit.Men > 0)
 			{
-				Line += FString::Printf(TEXT(" \u00B7 %s men"), *Thousands(Unit.Men));
+				Facts.Add(FString::Printf(TEXT("%s men"), *Thousands(Unit.Men)));
 			}
-			Lines.Add(CampaignText::Phrases(Line)); // (it folds only after a separator dot, never inside a phrase)
+			Row.Figures = FString::Join(Facts, TEXT(" \u00B7 "));
+		}
+		return Roster;
+	}
+
+	/** The same corps as plain text, a line each, for anything that reads the card as words. */
+	FString ListUnits(const TArray<FRosterLine>& Roster)
+	{
+		TArray<FString> Lines;
+		for (const FRosterLine& Row : Roster)
+		{
+			Lines.Add(Row.Figures.IsEmpty() ? Row.Name : Row.Name + TEXT(" \u00B7 ") + Row.Figures);
 		}
 		return FString::Join(Lines, TEXT("\n"));
 	}
@@ -7213,8 +7231,10 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? FString(TEXT("No general named")) : TheirGeneral);
 	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
 	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
-	FaceOff.OurUnits = FText::FromString(ListUnits(Preview.Attackers, false));
-	FaceOff.TheirUnits = FText::FromString(ListUnits(Preview.Defenders, false));
+	FaceOff.OurRoster = RosterOf(Preview.Attackers, false);
+	FaceOff.TheirRoster = RosterOf(Preview.Defenders, false);
+	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
 	FaceOff.Prize = FText::FromString(Preview.Prize);
 	if (Preview.bExact)
@@ -7422,6 +7442,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 	FaceOff.TheirGeneral = FText::FromString(Preview.GuardName.IsEmpty() ? FString::Printf(TEXT("Town guard of %s"), *Town) : Preview.GuardName);
 	FaceOff.TheirStrength = FText::FromString(Preview.GuardLine);
 	FaceOff.TheirUnits = FText::FromString(Preview.GuardWho);
+	FaceOff.TheirRoster.Reset(); // (the guard is said in a sentence, not listed corps by corps)
 	// Block 1 is SEND THEM IN's forecast (the card's own bar and odds), with its heading and its sentence.
 	FaceOff.NowLabel = FText::FromString(Preview.NowLabel.IsEmpty() ? FString(TEXT("SEND THEM IN")) : Preview.NowLabel);
 	FaceOff.NowSays = FText::FromString(Preview.NowSays);
@@ -7692,8 +7713,10 @@ void ACampaignPlayerController::ResolveAttack()
 			? FString::Printf(TEXT("The odds on the day were %.1f to 1 in your favour"), Result.Odds)
 			: FString::Printf(TEXT("The odds on the day were %.1f to 1 against you"), 1.0f / FMath::Max(Result.Odds, 0.01f)));
 	}
-	FaceOff.OurUnits = FText::FromString(ListUnits(Result.Attackers, true));
-	FaceOff.TheirUnits = FText::FromString(ListUnits(Result.Defenders, true));
+	FaceOff.OurRoster = RosterOf(Result.Attackers, true);
+	FaceOff.TheirRoster = RosterOf(Result.Defenders, true);
+	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 
 	// Show the result on the table: ground repainted if it changed hands, and the corps that followed up carried in.
 	ShowWar(Session->GetView(), Result.Moved);

@@ -326,6 +326,17 @@ struct FWarPrompt
 	FText WaysHead;
 };
 
+/**
+ * (The UI director, check 19.) One corps on a side of the battle card: its name, and its figures ("infantry, 2
+ * divisions · 14,599 men", after the battle "infantry, 2 divisions · lost 1,240, fell back"). The card sets the two on
+ * one line where every corps of the side fits its column, and on two lines each where any does not.
+ */
+struct FRosterLine
+{
+	FString Name;
+	FString Figures; // empty for a corps not identified
+};
+
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
 struct FFaceOff
 {
@@ -343,8 +354,9 @@ struct FFaceOff
 	FText TheirGeneral;
 	FText OurStrength;
 	FText TheirStrength;
-	FText OurUnits;
+	FText OurUnits; // the corps a line each, as plain text; where a roster is empty (a town's guard) the card shows this sentence instead
 	FText TheirUnits;
+	TArray<FRosterLine> OurRoster, TheirRoster; // (check 19) the corps as the card sets them
 	float Balance = 0.5f; // the attackers' share of the strength on the field
 	FText OddsLine;
 	FText Prize; // what taking the place is worth
