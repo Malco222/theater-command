@@ -318,7 +318,7 @@ function grow(me: string, seed: number, months: number, aim: string): boolean {
   const end = months + 1;   // the run ends on the day the player is up in turn months + 1
   const units = (o: any): number => Number(/^(\d+)/.exec(o.size)?.[1] ?? 1);
   const home = (): number => { const cap = n.capital >= 0 ? g.regions[n.capital] : null; const quay = g.regions.find((r) => r.owner === me && r.ctrl === me && r.port && !r.overseas); return aim === 'navy' && quay ? quay.id : cap ? cap.id : -1; };
-  const wanted = (o: any): boolean => (aim === 'army' ? o.group === 'army' : aim === 'air' ? o.group === 'air' || o.key === 'work:field' : aim === 'works' ? false : o.group === 'navy' || o.key === 'work:yard');
+  const wanted = (o: any): boolean => (aim === 'army' ? o.group === 'army' : aim === 'air' ? o.group === 'air' || o.key === 'work:field' : aim === 'works' || aim === 'none' ? false : o.group === 'navy' || o.key === 'work:yard');
   // Where a factory goes: the home city with the most industry that still has room (an aircraft industry is one province with two).
   const cities = (): number[] => g.regions.filter((r) => r.owner === me && r.ctrl === me && !r.overseas && isCity(r)).sort((a, b) => b.fac - a.fac || b.vp - a.vp || a.id - b.id).map((r) => r.id);
   const factory = (): any => { for (const id of cities()) { const o = offers(g, me, id).find((x) => x.key === 'work:factory'); if (o && (!o.why || o.poor)) return o; } return null; };

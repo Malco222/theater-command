@@ -24,7 +24,9 @@ const out = {
 };
 if (!off) {
   out.landFactor = read('/mnt/project-files/map-tables/land-factor-214.json').landFactor;
-  for (const [nat, row] of Object.entries(read('/mnt/project-files/historian/manpower-213.json').rows)) { out.pool[nat] = row.pool; out.class[nat] = row.class; }
+  // Every block of rows in the file: 'rows' (16:48Z) and those added later, such as 'rows_17_15' (Iran, Iraq, Saudi Arabia, Nepal).
+  const men = read('/mnt/project-files/historian/manpower-213.json');
+  for (const key of Object.keys(men).filter((k) => k.startsWith('rows'))) for (const [nat, row] of Object.entries(men[key])) if (row && typeof row === 'object' && typeof row.pool === 'number') { out.pool[nat] = row.pool; out.class[nat] = row.class; }
   const air = read('/mnt/project-files/historian/aircraft-works-213.json');
   // The historian's form of 17:03Z: the month each works opens for fighters and for bombers (null: never); it then
   // stays open while the country stands. The first form gave [from, to] and is still read.

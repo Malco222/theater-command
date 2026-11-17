@@ -1,0 +1,6 @@
+=== grow IRQ, seed 7, 20 months, aim none; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 3, divisions 4 on paper and 1.9 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 0.9 divisions; income 250.4 a month
+    nothing could be bought in time
+  May 1941: corps 3, divisions 4 on paper and 3 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 0 divisions; treasury 4708.8; spent 0; still on order: nothing
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+GROWN IRQ none seed 7 to May 1941: divisions 4 -> 4 on paper (1.9 -> 3 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 0; invariants broken 0; standing

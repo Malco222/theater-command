@@ -123,6 +123,11 @@ grow runs. Printouts in `results/grow-214/` (38 runs), the eight seats' year tes
 (`bake-213.mjs --oil IRN=0.2`: a question for the director's watch, not a ruling; bake again without it after).
 `node tools/trial/build-books.mjs && node dist/trial/books.mjs SAF IRN UK USA` prints the first day's books line by line.
 
+**The last run, on the historian's pool rows for Iran, Iraq, Saudi Arabia and Nepal** (`rows_17_15`, accepted 17:21Z;
+section 9 of the paper): `results/grow-216/` (aim `none` is a player who passes), the four seats' year test in
+`results/year-216/`, and South Africa with the factory bound to September 1941 and 1942 in `results/grow-215/`.
+The refusal for want of men rounds the monthly class to thousands, so a class of 0.017 reads "0 come of age each month".
+
 `watch` plays with nobody at the controls and prints, for each country, the months in which something changed
 (wars, alignment, provinces, corps, news that names it): the computer's path when nobody leads it.
 

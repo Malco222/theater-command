@@ -1,0 +1,5 @@
+=== grow NEP, seed 7, 12 months, aim none; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 1, divisions 1 on paper and 0.5 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 0.3 divisions; income 206 a month
+    nothing could be bought in time
+  September 1940: corps 1, divisions 1 on paper and 0.7 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 0.1 divisions; treasury 2553.1; spent 0; still on order: nothing
+GROWN NEP none seed 7 to September 1940: divisions 1 -> 1 on paper (0.5 -> 0.7 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 0; invariants broken 0; standing

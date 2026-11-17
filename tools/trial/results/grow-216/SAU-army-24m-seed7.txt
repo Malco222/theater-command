@@ -1,0 +1,13 @@
+=== grow SAU, seed 7, 24 months, aim army; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 3, divisions 3 on paper and 1 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 0.2 divisions; income 224.9 a month
+    nothing could be bought in time
+    never on offer: corps:mtn: The reserve has not the men: this takes 30,000 and 0 are left. 0 come of age each month.
+    never on offer: corps:inf: The reserve has not the men: this takes 45,000 and 0 are left. 0 come of age each month.
+    never on offer: corps:mot: Needs the technology Motorised infantry. Open Research to begin it.
+    never on offer: corps:art: Needs a home province with 1 factory. Build factories in a city first.
+    never on offer: corps:arm: Needs the technology Tank arm. Open Research to begin it.
+    never on offer: corps:eng: The reserve has not the men: this takes 15,000 and 0 are left. 0 come of age each month.
+    never on offer: para: Needs the technology Airborne forces. Open Research to begin it.
+  September 1941: corps 3, divisions 3 on paper and 1.3 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 0 divisions; treasury 5444; spent 0; still on order: nothing
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+GROWN SAU army seed 7 to September 1941: divisions 3 -> 3 on paper (1 -> 1.3 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 0; invariants broken 0; standing
