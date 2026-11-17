@@ -1,0 +1,480 @@
+{
+ "_about": "Ruling 215 (the design director, 17 November 2026, 17:01Z, with the riders of 17:08Z) on the Pacific planner's paper 19, what stopped Japan in China: the data, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it: the mark would close the book in China on the first day of a war with no China. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (tools/trial/seats.mjs: objects by key, lists appended), so the rig can take this file as it stands. (a) the dated choice: Japan's offensive of 1944 (history.json dates, theatre, theatres, bookIf; open.json ops.JAP), with 'wait', which by the book keeps its front from any general offensive until it goes (staff.ts, decide). (f) the mark that closes the book in China if China has fallen. (c) the record's line (history.json 'lines', read by src/campaign/line.ts): the historian's spans for every Chinese province Japan held (/mnt/project-files/historian/china-line-record.json, 'line'; the 'what' and 'confidence' of each span are left there), the floor widened by the rider of 17:08Z to the 1944 offensive's ground while Japan holds it. open.json temper.JAP is ruling 202(l)'s row, which 215(b) keeps beside the staff's line.",
+ "_japan": "(e) Japan's nation row (world.json, the planner's and the historian's at step 13): quality 1.0, air 60, resilience 0.95. Not laid here: on the rig a row under a nation's code replaces the whole row.",
+ "history": {
+  "dates": {
+   "JAP": {
+    "ichigo": 56
+   }
+  },
+  "theatre": {
+   "JAP:ichigo": "china"
+  },
+  "theatres": {
+   "china": {
+    "name": "China",
+    "after": []
+   }
+  },
+  "bookIf": {
+   "JAP:ichigo": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ]
+  },
+  "marks": [
+   {
+    "theatre": "china",
+    "until": 72,
+    "if": [
+     "alive:CHN"
+    ],
+    "why": "China has fallen"
+   }
+  ],
+  "lines": [
+   {
+    "id": "china",
+    "theatre": "china",
+    "land": "CHN",
+    "taker": "JAP",
+    "until": 72,
+    "floor": {
+     "until": 69,
+     "kinds": [
+      "day one",
+      "lasting",
+      "ichigo"
+     ]
+    },
+    "spans": {
+     "Peiping": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tientsin": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tangshan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Paoting": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shihkiachwang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kalgan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Silingol": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Suiyuan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Paotow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tatung": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Taiyuan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Linfen": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tsinan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tsingtao": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Chefoo": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kaifeng": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hsuchow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Haichow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Pengpu": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Nanking": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Wuhu": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shanghai": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hangchow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Anking": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kiukiang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hankow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Sinyang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Nanchang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Canton": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Amoy": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Swatow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hainan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Ichang": [
+      {
+       "from": 10,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Ningpo": [
+      {
+       "from": 20,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Nanning": [
+      {
+       "from": 3,
+       "to": 14,
+       "kind": "raid"
+      },
+      {
+       "from": 63,
+       "to": 69,
+       "kind": "ichigo"
+      }
+     ],
+     "Lungchow": [
+      {
+       "from": 4,
+       "to": 15,
+       "kind": "raid"
+      },
+      {
+       "from": 64,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Wuyuan": [
+      {
+       "from": 6,
+       "to": 7,
+       "kind": "raid"
+      }
+     ],
+     "Siangyang": [
+      {
+       "from": 10,
+       "to": 10,
+       "kind": "raid"
+      },
+      {
+       "from": 67,
+       "to": 68,
+       "kind": "raid"
+      }
+     ],
+     "Foochow": [
+      {
+       "from": 20,
+       "to": 25,
+       "kind": "raid"
+      },
+      {
+       "from": 62,
+       "to": 69,
+       "kind": "ichigo"
+      }
+     ],
+     "Wenchow": [
+      {
+       "from": 20,
+       "to": 21,
+       "kind": "raid"
+      },
+      {
+       "from": 35,
+       "to": 36,
+       "kind": "raid"
+      },
+      {
+       "from": 61,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Changsha": [
+      {
+       "from": 25,
+       "to": 26,
+       "kind": "raid"
+      },
+      {
+       "from": 58,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Chuchow": [
+      {
+       "from": 34,
+       "to": 36,
+       "kind": "raid"
+      }
+     ],
+     "Changteh": [
+      {
+       "from": 52,
+       "to": 52,
+       "kind": "raid"
+      }
+     ],
+     "Loyang": [
+      {
+       "from": 57,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Hengyang": [
+      {
+       "from": 60,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Lingling": [
+      {
+       "from": 61,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Kweilin": [
+      {
+       "from": 63,
+       "to": 71,
+       "kind": "ichigo"
+      }
+     ],
+     "Liuchow": [
+      {
+       "from": 63,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Tushan": [
+      {
+       "from": 64,
+       "to": 64,
+       "kind": "ichigo"
+      }
+     ],
+     "Kukong": [
+      {
+       "from": 65,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Kanchow": [
+      {
+       "from": 66,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "open": {
+  "ops": {
+   "JAP": [
+    {
+     "id": "ichigo",
+     "name": "The 1944 offensive in China",
+     "if": [
+      "war:JAP,CHN",
+      "alive:CHN"
+     ],
+     "from": 56,
+     "to": 66,
+     "ratio": 0.8,
+     "prep": 2,
+     "chance": 0.3,
+     "season": [
+      4,
+      5,
+      6
+     ],
+     "push": 8,
+     "wait": true
+    }
+   ]
+  },
+  "temper": {
+   "JAP": {
+    "attackAt": 1.2,
+    "persist": 0.9,
+    "minOdds": 1.3
+   }
+  }
+ }
+}
