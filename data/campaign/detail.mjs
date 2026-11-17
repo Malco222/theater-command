@@ -37,7 +37,6 @@ export const SURVEY_FIX = [
   ['Damqogkanbab', 29.3, 84.5, 'Tsangpo', 3],
   ['Brahmaputra', 29.3, 92, 'Tsangpo', 1.5],
   ['Dihang', 29.2, 95, 'Tsangpo', 2],
-  ['Hudi', 33, 118.3, 'Huai', 2.5],
   ['Sanggan', 39.7, 114, 'Yongding', 3],
   ['Nanpan', 25.5, 105.5, 'Hongshui', 3],
   ['Esil', 52, 70, 'Ishim', 5],
@@ -100,8 +99,35 @@ export const RIVER_ALIASES = {
  * A river that had left its bed in September 1939: its real course is followed down to the place given, and from
  * there the course handed over runs on. (The Yellow River's dykes were cut at Huayuankow in June 1938, and until
  * 1947 it ran south-east into the Hwai; the survey draws the bed of today, past Tsinan.)
+ * (The Brahmaputra ends in the Ganges at Goalundo: the survey gives its name to the Padma below, down to the Meghna.)
  */
-export const RIVER_LEAVE = { 'Yellow River': [34.9, 113.7] };
+export const RIVER_LEAVE = { 'Yellow River': [34.9, 113.7], Brahmaputra: [23.84, 89.78] };
+/**
+ * The foot of a river handed over, where neither the survey nor the course handed over is its course of 1939:
+ * places by hand ([lat, lon]) and reaches of the survey's lines ([the survey's name, lat, lon]: that line, followed
+ * from where the course stands to the place named).
+ *
+ * The Yellow River (the historian, 17 November 2026): from the breach at Huayuankow in June 1938 until it was
+ * closed in March 1947 the river ran south-east across Honan down the Chialu and the Ying, past Chowkiakow and
+ * Fuyang, into the Hwai at Chengyangkwan; with the Hwai past Pengpu into Hungtse Lake; and from the lake south
+ * through Kaoyu Lake and the Grand Canal to the Yangtze at Sanchiangying. The old mouth in north Kiangsu had been
+ * dry since 1855. (The survey calls the Ying 'Quan' above Taiho, and the Hwai below Chengyangkwan 'Hudi'.)
+ */
+export const RIVER_FOOT = {
+  'Yellow River': [[34.72, 114.02], [34.41, 114.19], [34.06, 114.39], [33.78, 114.52], ['Quan', 33.2, 115.6], ['Ying', 32.5, 116.5], ['Hudi', 32.4, 119.6]],
+};
+/**
+ * Rivers the survey does not have, drawn by hand from the atlas: name, how great, into what, the course from head
+ * to foot. The Karun is a river (the invasion of Persia in August 1941 crossed it at Ahwaz and Khorramshahr; the
+ * design director, 17 November 2026); the others are streams.
+ */
+export const RIVER_HAND = [
+  ['Karun', 'middle', 'Shatt al-Arab', [[32.3, 50.15], [31.95, 50.45], [31.6, 50.47], [31.75, 50.2], [31.8, 50.09], [31.95, 49.85], [32.05, 49.6], [32.03, 49.4], [32.15, 49.15], [32.27, 48.93], [32.2, 48.82], [32.05, 48.85], [31.65, 48.88], [31.48, 48.87], [31.32, 48.68], [31.0, 48.55], [30.74, 48.42], [30.55, 48.3], [30.43, 48.18]]],
+  ['Kabul River', 'small', 'Indus', [[34.45, 68.4], [34.5, 68.8], [34.53, 69.17], [34.59, 69.76], [34.5, 70.1], [34.43, 70.45], [34.3, 70.8], [34.22, 71.03], [34.16, 71.4], [34.05, 71.7], [34.0, 71.98], [33.9, 72.23]]],
+  ['Min (Szechwan)', 'small', 'Yangtze', [[32.64, 103.6], [32.1, 103.75], [31.68, 103.85], [31.48, 103.58], [31.0, 103.62], [30.72, 103.75], [30.42, 103.82], [30.05, 103.85], [29.75, 103.8], [29.57, 103.76], [29.21, 103.95], [28.95, 104.3], [28.77, 104.63]]],
+  ['Murrumbidgee', 'small', 'Lachlan', [[-35.6, 148.6], [-36.0, 149.0], [-35.6, 149.1], [-35.3, 148.95], [-35.0, 148.8], [-35.0, 148.5], [-35.07, 148.1], [-35.1, 147.37], [-34.95, 146.95], [-34.75, 146.55], [-34.6, 145.9], [-34.5, 144.85], [-34.47, 144.3], [-34.4, 143.95]]],
+  ['Taedong', 'small', 'Yellow Sea', [[40.3, 127.1], [40.0, 126.7], [39.75, 126.3], [39.42, 125.93], [39.2, 125.85], [39.02, 125.75], [38.85, 125.65], [38.75, 125.63], [38.72, 125.38], [38.68, 125.2]]],
+];
 
 /** Rivers of the chart that are one reach of a longer river: the real course is cut to the reach as handed over. */
 export const RIVER_TRIM = ['St Lawrence', 'Middle Volga', 'Lower Volga', 'Upper Nile', 'White Nile', 'Blue Nile', 'Shatt al-Arab', 'Paraguay', 'Parana'];
@@ -139,7 +165,7 @@ export const RIVER_PICK = [
   ['Saguenay', 49.5, -72], ['St.-Maurice', 47.3, -73.3],
   ['Lerma', 19.7, -101.2], ['Yaqui', 29.2, -110], ['Panuco', 20.8, -99], ['Motagua', 15.3, -89.6], ['Lempa', 14, -89], ['Ula', 15, -87.8],
   ['Cauca', 6, -75.6], ['Limay', -40, -69.6], ['Courantyne', 4.5, -57.4], ['Maroni', 4.4, -54.1],
-  ['Fen', 37.2, 111.4], ['Luan', 40.6, 118], ['Min', 27, 118.3], ['Bei', 24.2, 112.6], ['Fuchun', 30, 119], ['Yongding', 39.7, 115.5],
+  ['Fen', 37.2, 111.4], ['Huai', 32.4, 115], ['Luan', 40.6, 118], ['Min', 27, 118.3], ['Bei', 24.2, 112.6], ['Fuchun', 30, 119], ['Yongding', 39.7, 115.5],
   ['Kerulen', 48.7, 113], ['Nakdong', 36, 129], ['Namhan', 37.5, 128], ['Tone', 36.3, 140], ['Ishikari', 43.4, 142.2],
   ['Belaya', 54.8, 55.7],
   ['Mun', 14.8, 103.7], ['Cagayan', 17.2, 121.5], ['Pahang', 4, 103], ['Kaladan', 22, 93.2], ['Balak', 24.5, 92.5], ['Masi', -2.9, 103.8],
@@ -152,6 +178,8 @@ export const RIVER_GREAT = [
   'Mississippi', 'Missouri', 'St Lawrence', 'Mackenzie', 'Yukon', 'Amazon', 'Rio Negro', 'Madeira', 'Parana', 'Orinoco',
   'Yangtze', 'Yellow River', 'Amur', 'Mekong', 'Irrawaddy', 'Ganges', 'Brahmaputra', 'Indus', 'Lena', 'Ob', 'Yenisei',
   'Middle Volga', 'Lower Volga', 'Upper Nile', 'White Nile', 'Niger', 'Congo', 'Zambezi',
+  // (For the look alone, the art director: great and middle are the same in the rules.)
+  'Ohio', 'Columbia', 'Irtysh',
 ];
 
 /**
@@ -182,7 +210,7 @@ export const RIVER_RIVERS = [
   // Soviet Asia
   'Zeya', 'Selenga', 'Belaya', 'Tom',
   // India, Persia and Afghanistan
-  'Chenab', 'Kistna', 'Narbada', 'Helmand',
+  'Chenab', 'Kistna', 'Godavari', 'Narbada', 'Helmand',
   // Australia
   'Darling', 'Lachlan',
   // Africa: the Juba, the Webi Shebeli, the Awash and the Omo of the East African campaign of 1941, the Atbara
@@ -202,18 +230,156 @@ export const RIVER_INTO = {
   Mackenzie: 'Beaufort Sea', Lena: 'Laptev Sea', Yenisei: 'Kara Sea', Ob: 'Kara Sea', Kolyma: 'East Siberian Sea',
   Indigirka: 'East Siberian Sea', Kamchatka: 'Bering Sea', Ottawa: 'St Lawrence', 'St John': 'Bay of Fundy',
   Saguenay: 'St Lawrence', Hamilton: 'Labrador Sea', Panuco: 'Gulf of Mexico', Yaqui: 'Gulf of California',
-  Chixoy: 'Usumacinta', Xingu: 'Amazon', Apure: 'Orinoco', Hungshui: 'West River', Hwai: 'Hungtse Lake', Tatu: 'Yangtze',
+  Chixoy: 'Usumacinta', Xingu: 'Amazon', Apure: 'Orinoco', Hungshui: 'West River', Hwai: 'Yellow River', Surma: 'Ganges', Tatu: 'Yangtze',
   Nonni: 'Sungari', Yungting: 'Yellow Sea', Hailar: 'Argun', Yu: 'West River', 'Han (Korea)': 'Yellow Sea', Yalu: 'Yellow Sea',
   Mekong: 'South China Sea', Godavari: 'Bay of Bengal', Cuando: 'Zambezi', Ogowe: 'Gulf of Guinea', Tshuapa: 'Congo',
   Baoule: 'Bani', Semliki: 'Lake Albert', 'Webi Shebeli': 'the Shebeli Swamps',
 };
 
 /** Rivers that run dry for part of the year: drawn as a broken line. */
-export const RIVER_SEASONAL = ['Barwon', 'Gila', 'Fitzroy', 'Ord', 'Victoria', 'Mitchell', 'Desaguadero', 'Atrek', 'Hari Rud', 'Konche', 'Shara Muren', 'Webi Shebeli'];
+export const RIVER_SEASONAL = ['Barwon', 'Gila', 'Fitzroy', 'Ord', 'Victoria', 'Mitchell', 'Desaguadero', 'Atrek', 'Hari Rud', 'Konche', 'Shara Muren', 'Webi Shebeli', 'Atbara', 'Darling', 'Lachlan', 'Limpopo', 'Tarim'];
 
-/** A river the survey draws against the stream, where nothing on the chart shows it. */
-export const RIVER_FLIP = ['Waikato'];
+/**
+ * A river the survey draws against the stream, where nothing on the chart shows it; and rivers handed over foot
+ * first (the Nile's three reaches from the north, the Yalu from its mouth), which are turned to run from the head.
+ */
+export const RIVER_FLIP = ['Waikato', 'Hailar', 'Yalu', 'Upper Nile', 'White Nile', 'Blue Nile'];
 
 /** New crossings struck and added by hand on the chart with the cities: ['Province', 'Province', 'River']. */
 export const MORE_RIVER_CUT = [];
-export const MORE_RIVER_ADD = [];
+export const MORE_RIVER_ADD = [
+  // The Karun lies between Ahwaz and Abadan (the island stands between it, the Shatt and the Bahmanshir): Ahwaz
+  // stands on its bank, so the test does not see it. The Indian troops of August 1941 crossed it at Khorramshahr.
+  ['Ahwaz', 'Abadan', 'Karun'],
+];
+
+// ---- Lakes -----------------------------------------------------------------------------------------------------------
+
+/**
+ * The lakes cut out of the chart with the cities, beside the eleven it was handed over with: where the survey has
+ * the lake ('lakes' its lakes of today, 'historic' a lake at its old shore, 'playas' its dry pans), the survey's
+ * name, the name on the chart (an atlas of 1939's), its water ('fresh', 'salt', or 'pan' for a salt pan that
+ * seldom holds water) and the height of its surface above the sea in metres. No reservoir later than 1939 is here.
+ * Lake Chad and Lop Nor are at their old shores: Chad has shrunk to a tenth since, and Lop Nor held water from
+ * 1921 until the 1960s.
+ */
+/**
+ * Shores laid by hand, as [lat, lon] points, in place of the survey's: the survey draws these lakes as they are
+ * today, after sixty years of dykes and silt. Both are at the summer shore of an atlas of the 1930s (the design
+ * director, the art director and the historian, 17 November): Tungting about 4,700 square km (4,700 surveyed in
+ * 1932, 4,350 in 1949; today's survey shows 720), from Yochow and the Siang's mouth round by Yuankiang and Hanshou
+ * to the delta of Nanhsien; Poyang about 4,700 (5,000 at high water in the 1940s; the survey shows 2,050), from the
+ * neck at Hukow to Poyang town, Yukan and the Kan's delta below Nanchang.
+ */
+export const LAKE_HAND = {
+  'Tungting Lake': [[29.42, 113.06], [29.34, 113.04], [29.2, 113.02], [29.03, 112.98], [28.87, 112.93], [28.77, 112.8], [28.72, 112.55], [28.74, 112.3], [28.81, 112.1], [28.9, 111.98], [29.05, 111.96], [29.2, 112.04], [29.28, 112.2], [29.2, 112.38], [29.08, 112.54], [29.07, 112.72], [29.2, 112.83], [29.36, 112.87], [29.46, 112.96]],
+  'Poyang Lake': [[29.74, 116.21], [29.55, 116.21], [29.38, 116.22], [29.26, 116.3], [29.2, 116.5], [29.11, 116.67], [28.95, 116.7], [28.78, 116.62], [28.66, 116.46], [28.55, 116.3], [28.58, 116.14], [28.7, 116.06], [28.95, 116.03], [29.15, 115.99], [29.3, 116.03], [29.45, 116.05], [29.6, 116.1], [29.72, 116.14]],
+};
+export const MORE_LAKE_LIST = [
+  // North America
+  ['lakes', 'Great Bear Lake', 'Great Bear Lake', 'fresh', 156],
+  ['lakes', 'Great Slave Lake', 'Great Slave Lake', 'fresh', 156],
+  ['lakes', 'Lake Athabasca', 'Lake Athabasca', 'fresh', 213],
+  ['lakes', 'Reindeer Lake', 'Reindeer Lake', 'fresh', 337],
+  ['lakes', 'Dubawnt Lake', 'Dubawnt Lake', 'fresh', 236],
+  ['lakes', 'Lake Winnipegosis', 'Lake Winnipegosis', 'fresh', 254],
+  ['lakes', 'Lake Manitoba', 'Lake Manitoba', 'fresh', 248],
+  ['lakes', 'Lake Nipigon', 'Lake Nipigon', 'fresh', 260],
+  ['lakes', 'Lake of the Woods', 'Lake of the Woods', 'fresh', 323],
+  ['lakes', 'Iliamna Lake', 'Iliamna Lake', 'fresh', 14],
+  ['lakes', 'Great Salt Lake', 'Great Salt Lake', 'salt', 1280],
+  ['lakes', 'Lake Champlain', 'Lake Champlain', 'fresh', 29],
+  ['lakes', 'Lake Okeechobee', 'Lake Okeechobee', 'fresh', 4],
+  ['lakes', 'Lago de Chapala', 'Lake Chapala', 'fresh', 1524],
+  ['lakes', 'Lago de Nicaragua', 'Lake Nicaragua', 'fresh', 32],
+  // South America
+  ['lakes', 'Lago Titicaca', 'Lake Titicaca', 'fresh', 3812],
+  ['lakes', 'Lago Poopo', 'Lake Poopo', 'salt', 3686],
+  ['playas', 'Salar de Uyuni', 'Salar de Uyuni', 'pan', 3656],
+  ['lakes', 'Mar Chiquita', 'Mar Chiquita', 'salt', 71],
+  ['lakes', 'Lagoa Mirim', 'Lagoa Mirim', 'fresh', 1],
+  // Africa
+  ['historic', 'Lake Chad', 'Lake Chad', 'fresh', 282],
+  ['lakes', 'Lake Turkana', 'Lake Rudolf', 'salt', 375],
+  ['lakes', 'Lake Albert', 'Lake Albert', 'fresh', 619],
+  ['lakes', 'Lake Edward', 'Lake Edward', 'fresh', 912],
+  ['lakes', 'Lake Kivu', 'Lake Kivu', 'fresh', 1460],
+  ['lakes', 'Lake Kyoga', 'Lake Kyoga', 'fresh', 1033],
+  ['lakes', 'Lake Tana', 'Lake Tana', 'fresh', 1788],
+  ['lakes', 'Lac Moeru', 'Lake Mweru', 'fresh', 917],
+  ['lakes', 'Lake Bangweulu', 'Lake Bangweulu', 'fresh', 1140],
+  ['lakes', 'Lake Rukwa', 'Lake Rukwa', 'salt', 800],
+  ['lakes', 'Lac Mai-Ndombe', 'Lake Leopold II', 'fresh', 300],
+  ['playas', 'Etosha Pan', 'Etosha Pan', 'pan', 1080],
+  ['playas', 'Makgadikgadi Pans', 'Makarikari Pan', 'pan', 900],
+  // Asia
+  ['lakes', 'Lake Balkhash', 'Lake Balkhash', 'salt', 341],
+  ['lakes', 'Issyk-Kul', 'Issyk Kul', 'salt', 1607],
+  ['lakes', 'Alakol', 'Ala Kul', 'salt', 347],
+  ['lakes', 'Tengiz Koli', 'Lake Tengiz', 'salt', 304],
+  ['lakes', 'Lake Chany', 'Lake Chany', 'salt', 106],
+  ['lakes', 'Lake Khanka', 'Lake Khanka', 'fresh', 69],
+  ['lakes', 'Hulun Nuur', 'Dalai Nor', 'fresh', 545],
+  ['lakes', 'Uvs Nuur', 'Ubsa Nor', 'salt', 759],
+  ['lakes', 'Khovsgol Nuur', 'Kosogol', 'fresh', 1645],
+  ['lakes', 'Qinghai Hu', 'Koko Nor', 'salt', 3195],
+  ['lakes', 'Nam Co', 'Tengri Nor', 'salt', 4718],
+  ['lakes', 'Bosten Hu', 'Bagrash Kol', 'fresh', 1048],
+  ['historic', 'Lop Nur', 'Lop Nor', 'salt', 780],
+  ['playas', 'Hamun-e Saberi', 'Hamun Lake', 'fresh', 475],
+  ['lakes', 'Tai Hu', 'Tai Lake', 'fresh', 3],
+  ['lakes', 'Hongze Hu', 'Hungtse Lake', 'fresh', 12],
+  ['lakes', 'Poyang Hu', 'Poyang Lake', 'fresh', 16],
+  ['lakes', 'Dongting Hu', 'Tungting Lake', 'fresh', 33],
+  ['lakes', 'Tonle Sap', 'Tonle Sap', 'fresh', 5],
+  ['lakes', 'Danau Toba', 'Lake Toba', 'fresh', 905],
+  ['lakes', 'Biwa Ko', 'Lake Biwa', 'fresh', 85],
+  // Australia and New Zealand
+  ['lakes', 'Lake Eyre North', 'Lake Eyre', 'pan', -12],
+  ['lakes', 'Lake Torrens', 'Lake Torrens', 'pan', 30],
+  ['lakes', 'Lake Gairdner', 'Lake Gairdner', 'pan', 121],
+  ['lakes', 'Lake Frome', 'Lake Frome', 'pan', 1],
+  ['lakes', 'Lake Mackay', 'Lake Mackay', 'pan', 355],
+  ['lakes', 'Lake Taupo', 'Lake Taupo', 'fresh', 356],
+];
+
+/** The water of the lakes the chart was handed over with (fresh where not named). */
+export const OLD_LAKE_WATER = { 'Aral Sea': 'salt' };
+/**
+ * The eleven lakes the chart was handed over with, redrawn from the same survey and at the same grain as the sixty
+ * (the art director, 17 November: Michigan wants its Green Bay, Huron its Georgian Bay, Superior its Keweenaw,
+ * Winnipeg is not a teardrop): where the survey has the lake, its name there, and the name on the chart. The Aral
+ * Sea is at its old shore, before the rivers were taken off it in the 1960s.
+ */
+export const OLD_LAKE_SURVEY = [
+  ['lakes', 'Lake Superior', 'Lake Superior'], ['lakes', 'Lake Michigan', 'Lake Michigan'], ['lakes', 'Lake Huron', 'Lake Huron'],
+  ['lakes', 'Lake Erie', 'Lake Erie'], ['lakes', 'Lake Ontario', 'Lake Ontario'], ['lakes', 'Lake Winnipeg', 'Lake Winnipeg'],
+  ['lakes', 'Lake Baikal', 'Lake Baikal'], ['historic', 'Aral Sea', 'Aral Sea'], ['lakes', 'Lake Victoria', 'Lake Victoria'],
+  ['lakes', 'Lake Tanganyika', 'Lake Tanganyika'], ['lakes', 'Lake Malawi', 'Lake Nyasa'],
+];
+
+// ---- Ground laid by ruling -----------------------------------------------------------------------------------
+// Ground the design director has ruled, by province name, on the chart with the cities only. It stands over the
+// seed and over the clerk's tables until their rows say the same (carve-cities.mjs counts what it changed).
+const ground = (g, names) => Object.fromEntries(names.split(', ').map((n) => [n, g]));
+export const RULED_GROUND = {
+  // Ruling 212 (17 November): the true deserts outside Africa, where most of the ground is sand, gravel or salt even
+  // if the chief place is an oasis. Arid steppe and dry hills stay what they are. The builder's reading less Tennant
+  // Creek (grassland east of the town: 47% of its ground), and the historian's 23
+  // (/mnt/project-files/historian/deserts-212-review.md). Left as they are: Nevada, Monclova, Nogales, Changtang,
+  // Gartok, Leh, and the deserts the map of Europe already carries.
+  ...ground('desert', 'Etsin Gol, Hami, Turfan, Anhsi, Khotan, Charkhlik, Tsaidam, Gobi, Sain Shand'),
+  ...ground('desert', 'Krasnovodsk, Kizyl-Arvat, Khiva, Nukus, Aralsk, Kzyl-Orda, Fort Shevchenko, Balkhash, Dzhezkazgan'),
+  ...ground('desert', 'Yazd, Zahedan, Birjand, Kandahar, Riyadh, Buraida, Hail, Tabuk, Medina, Yanbu, Dhahran, Rub al Khali, Kuwait, Doha, Sharjah, Seiyun'),
+  ...ground('desert', 'Bikaner, Jodhpur, Bahawalpur, Pasni'),
+  ...ground('desert', 'Kalgoorlie, Nullarbor, Oodnadatta, Alice Springs, Marble Bar, Meekatharra, Marree'),
+  ...ground('desert', 'Yuma, Las Vegas, Arica, Tacna, Chuquicamata, Chimbote, Chiclayo'),
+  ...ground('desert', 'Kashgar, Yarkand, Aksu, Yumen, Ningsia, Merv, Chardzhou, Bukhara, Jeddah, Hodeida, Aden, Mukalla, Mirpur Khas'),
+  ...ground('desert', 'Tucson, El Paso, Guaymas, Sonora, Torreon, Baja California, Southern Baja, Antofagasta, Tarapaca, Atacama'),
+  // Two towns of part 4 were cut out of a province the ruling names, and hold most of the desert it was named for:
+  // Girishk the Dasht-i-Margo and the Registan (out of Kandahar), Hofuf the sands round the Hasa oasis (out of
+  // Dhahran). The builder's reading, for the director and the historian to strike.
+  ...ground('desert', 'Girishk, Hofuf'),
+  // Ruling 215 (17 November), on the historian's word: the Loushan pass on the road from Kweiyang to Chungking.
+  Tsunyi: 'mountain',
+};

@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import { GROUND } from '../data/campaign/rails.mjs';
 import { WORLD_RIVER_CUT, WORLD_RIVER_ADD } from '../data/campaign/world.mjs';
 import { FAR_RIVER_CUT, FAR_RIVER_ADD } from '../data/campaign/far.mjs';
-import { CITY_RIVER_CUT, CITY_RIVER_ADD, CITY_NO_RAIL, CITY_RAIL_LINES, CITY_RAIL_CUT } from '../data/campaign/cities.mjs';
+import { CITY_RIVER_CUT, CITY_RIVER_ADD, CITY_NO_RAIL, CITY_RAIL_LINES, CITY_RAIL_CUT, CITY_RAIL_RELAID } from '../data/campaign/cities.mjs';
 import { moreRivers } from './more-rivers-net.mjs';
 
 const read = (name) => JSON.parse(fs.readFileSync(new URL(`../src/generated/${name}.json`, import.meta.url), 'utf8'));
@@ -94,12 +94,18 @@ if (stale.length) console.log(`named crossings a city now lies between: ${stale.
 if (process.argv.includes('--list')) for (const [a, b, k] of found.values()) if (isPiece(a) || isPiece(b)) console.log(`  ${rivers[k].name}: ${at.get(a).name} - ${at.get(b).name}`);
 
 // The rivers of the survey: the real courses, the rivers and streams the chart did not have, and their crossings.
-const more = moreRivers({ map, all, at, byName, nb, handed: rivers, found, struck, key, beside });
+const more = moreRivers({ map, all, at, byName, nb, handed: rivers, found, struck, key, beside, land: [...map.land, ...read('campaign-map').land] });
 const crossings = [...found.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
 fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.meta.url), JSON.stringify({ rivers: more.rivers, crossings }));
 {
   const cls = (c) => more.rivers.filter((r) => r.class === c).length;
-  console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
+  console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried - more.gone.length} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
+  const pts = more.rivers.reduce((t, r) => t + r.pts.length, 0);
+  console.log(`  ${pts} points in the courses; ${more.cutBack.length} courses cut back to the shore${more.cutBack.length ? ` (the furthest: ${[...more.cutBack].sort((p, q) => q.by - p.by).slice(0, 8).map((c) => `${c.name} ${c.by}`).join(', ')})` : ''}`);
+  if (more.runOn.length) console.log(`  ${more.runOn.length} courses run on to the shore the survey ends them short of: ${[...more.runOn].sort((p, q) => q.by - p.by).map((c) => `${c.name} ${c.by}`).join(', ')}`);
+  if (more.gone.length) console.log(`crossings handed over on a reach where the river did not run in 1939, struck (${more.gone.length}): ${more.gone.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far} from its course)`).join(', ')}`);
+  if (more.toMouth.length) console.log(`crossings moved from open water to their river's mouth (${more.toMouth.length}): ${more.toMouth.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  if (more.adrift.length) console.log(`crossings on an arm of the sea or a lake beyond their river as drawn (${more.adrift.length}): ${more.adrift.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   if (more.off.length) console.log(`crossings handed over whose river's real course runs over 25 units away (${more.off.length}): ${more.off.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   // The new crossings, countable by country and by river: for the rules' measure.
   const byCountry = {}, byRiver = {};
@@ -123,7 +129,15 @@ const cost = (a, b) => { const t = beside(a, b); return Math.hypot(a.x - t.x, a.
 const lines = new Set();
 let through = 0;
 const reroute = [];
+// Lines handed over whose course is laid by hand (or that the historian struck) are not carried from piece to piece.
+const relaid = new Set();
+for (const [a, b] of CITY_RAIL_RELAID) {
+  const p = byName.get(a), q = byName.get(b);
+  if (!p || !q || !beforeRails.links.some(([i, j]) => key(i, j) === key(p.id, q.id))) { console.warn('bad relaid line', a, b); continue; }
+  relaid.add(key(p.id, q.id));
+}
 for (const [a, b] of beforeRails.links) {
+  if (relaid.has(key(a, b))) continue;
   if (touches(a, b)) { lines.add(key(a, b)); continue; }
   // The two no longer touch: a city lies between them. The line runs by the easiest way through their pieces.
   const pieces = new Set(all.filter((r) => r.id === a || r.id === b || r.of === a || r.of === b).filter((r) => !noRail.has(r.name)).map((r) => r.id));
@@ -206,7 +220,10 @@ const links = [...lines].map((k) => k.split(':').map(Number)).map(([a, b]) => [a
 fs.writeFileSync(new URL('../src/generated/world-cities-rails.json', import.meta.url), JSON.stringify({ links }) + '\n');
 const on = onNet();
 const wasOn = new Set(beforeRails.links.flatMap(([a, b]) => [a, b]));
-const dropped = [...wasOn].filter((id) => !on.has(id)).map((id) => at.get(id).name);
+const byHand = new Set(CITY_RAIL_RELAID.flat());
+const offNow = [...wasOn].filter((id) => !on.has(id)).map((id) => at.get(id).name);
+const dropped = offNow.filter((n) => !byHand.has(n));
 console.log(`rails: ${links.length} lines (${beforeRails.links.length} as handed over, ${through} of them now running through a city), ${joinedUp.length} cities joined to the net; cities off it: ${map.regions.filter((r) => r.of !== undefined && !on.has(r.id)).map((r) => r.name).join(', ') || 'none'}`);
+if (relaid.size) console.log(`lines handed over that are laid by hand or struck: ${CITY_RAIL_RELAID.map(([a, b]) => `${a} - ${b}`).join(', ')}${offNow.some((n) => byHand.has(n)) ? `; off the net with them: ${offNow.filter((n) => byHand.has(n)).join(', ')}` : ''}`);
 if (dropped.length) console.log(`! provinces that were on the net and are off it: ${dropped.join(', ')}`);
 if (process.argv.includes('--list')) { console.log(`through a city: ${reroute.join('; ')}`); console.log(`joined: ${joinedUp.join('; ')}`); }

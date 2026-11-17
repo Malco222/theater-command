@@ -8,9 +8,13 @@
 //    river makes a crossing wherever it runs between the chief places of two provinces that touch, near the middle
 //    of the road between them, as the rivers of Europe do. A small one is a stream: it is drawn, and it is no
 //    obstacle.
-//  - No crossing handed over is struck or moved to another river. A border that had one keeps it.
+//  - No crossing handed over is struck or moved to another river: a border that had one keeps it. But on a reach
+//    where the river did not run in 1939 (RIVER_FOOT: the Yellow River below Hungtse Lake, where the course handed
+//    over ran on to a mouth dry since 1855) there is no river to cross, and the crossing goes with the reach.
+//  - A course is drawn on dry land: its head and its foot are cut back to the shore of the sea or the lake they
+//    lie in.
 import { REAL_COURSES, MORE_RIVERS } from '../data/campaign/more-rivers.mjs';
-import { MORE_RIVER_CUT, MORE_RIVER_ADD } from '../data/campaign/detail.mjs';
+import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT } from '../data/campaign/detail.mjs';
 
 const K = Math.cos((50 * Math.PI) / 180) * 40;
 const NEAR = 0.28;
@@ -42,10 +46,11 @@ function nearestOn(pts, x, y) {
  * @param o.handed   the rivers handed over ({ name, pts, ll })
  * @param o.found    the crossings carried on so far, by key(a, b): added to here
  * @param o.struck   borders whose crossing the lists strike
+ * @param o.land     the land of the chart and of the map of Europe (polygons with their holes)
  */
-export function moreRivers({ map, all, at, byName, nb, handed, found, struck, key, beside }) {
+export function moreRivers({ map, all, at, byName, nb, handed, found, struck, key, beside, land }) {
   const ROUND = map.frame.x1 - map.frame.x0;
-  const r1 = (v) => Math.round(v * 10) / 10;
+  const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 1000) / 1000;
   const x0 = map.frame.x0;
   // A course on the chart: the first point where the chart has it, the rest running on from it without a leap
   // (a river that crosses the chart's edge runs off the sheet, as the Yukon handed over does).
@@ -57,9 +62,12 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
       if (prev === null) { while (x < x0) x += ROUND; while (x >= x0 + ROUND) x -= ROUND; }
       else { while (x - prev > ROUND / 2) x -= ROUND; while (prev - x > ROUND / 2) x += ROUND; }
       prev = x;
-      out.push([r1(x), r1((71.4 - lat) * 40)]);
+      out.push([x, (71.4 - lat) * 40]);
     }
-    return out;
+    // (And it lies on the turn of the chart that holds most of it.)
+    const inside = (w) => out.filter(([x]) => x + w >= x0 && x + w < x0 + ROUND).length;
+    const w = [0, ROUND, -ROUND].sort((p, q) => inside(q) - inside(p))[0];
+    return out.map(([x, y]) => [r2(x + w), r2(y)]);
   };
   const rivers = handed.map((rv, k) => {
     const [name, cls, into, ll, more] = REAL_COURSES[k];
@@ -92,9 +100,10 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
 
   // The crossings carried on: each set on the real course of its river, where the road between the two meets it
   // or the course runs near; left where it was handed over otherwise.
-  const off = [];
+  const off = [], gone = [];
+  const relaid = new Set(Object.keys(RIVER_FOOT));
   let moved = 0;
-  for (const [k, c] of found) {
+  for (const [k, c] of [...found]) {
     const rv = rivers[c[2]];
     if (!rv.real) continue;
     const a = at.get(c[0]), b = beside(a, at.get(c[1]));
@@ -102,6 +111,7 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     if (hits.length) { found.set(k, [c[0], c[1], c[2], r1(hits[0][0]), r1(hits[0][1])]); moved++; continue; }
     let best = { d: Infinity };
     for (const w of [0, ROUND, -ROUND]) { const n = nearestOn(rv.pts, c[3] - w, c[4]); if (n.d < best.d) best = { d: n.d, p: [n.p[0] + w, n.p[1]] }; }
+    if (best.d > 25 && relaid.has(rv.name)) { found.delete(k); gone.push({ a: a.name, b: at.get(c[1]).name, river: rv.name, far: Math.round(best.d) }); continue; }
     if (best.d <= 40) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); moved++; }
     if (best.d > 25) off.push({ a: a.name, b: at.get(c[1]).name, river: rv.name, far: Math.round(best.d) });
   }
@@ -136,6 +146,75 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
   }
   for (const [k, c] of found) if (!before.has(k)) fresh.push(c);
   fresh.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  // The shore: a course's head and foot are cut back to where the land ends (the sea's coast, a lake's shore). A
+  // river that runs into a lake of the chart ends where it first meets it, and one that the survey ends a little
+  // short of its sea or its lake runs on to the shore.
+  const boxOf = (ring) => { let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const [x, y] of ring) { if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > d) d = y; } return [a, b, c, d]; };
+  const boxes = land.map((poly) => boxOf(poly[0]));
+  const lakes = (map.lakes ?? []).filter((l) => l.outline).map((l) => ({ name: l.name, ring: l.outline, box: boxOf(l.outline) }));
+  const inRing = (ring, x, y) => { let inside = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, yi] = ring[i], [xj, yj] = ring[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside; } return inside; };
+  const inLake = (l, [x, y]) => [0, ROUND, -ROUND].some((w) => x + w >= l.box[0] && x + w <= l.box[1] && y >= l.box[2] && y <= l.box[3] && inRing(l.ring, x + w, y));
+  const dry = ([x, y]) => {
+    if (lakes.some((l) => inLake(l, [x, y]))) return false;
+    for (const w of [0, ROUND, -ROUND]) for (let i = 0; i < land.length; i++) {
+      const [a, b, c, d] = boxes[i], X = x + w;
+      if (X < a || X > b || y < c || y > d) continue;
+      if (inRing(land[i][0], X, y) && !land[i].slice(1).some((h) => inRing(h, X, y))) return true;
+    }
+    return false;
+  };
+  const llOf = ([x, y]) => { let lon = x / K - 11; while (lon > 180) lon -= 360; while (lon < -180) lon += 360; return [Math.round((71.4 - y / 40) * 10000) / 10000, Math.round(lon * 10000) / 10000]; };
+  // (Where a line leaves the land between a dry point and a wet one.)
+  const shore = (a, b) => { let lo = 0, hi = 1; for (let n = 0; n < 14; n++) { const m = (lo + hi) / 2; if (dry([a[0] + (b[0] - a[0]) * m, a[1] + (b[1] - a[1]) * m])) lo = m; else hi = m; } const m = (lo + hi) / 2; return [r2(a[0] + (b[0] - a[0]) * m), r2(a[1] + (b[1] - a[1]) * m)]; };
+  const run = (pts, a, b) => { let t = 0; for (let i = a; i < b; i++) t += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); return t; };
+  // (The nearest point of a shore: a lake's own, or for a sea the coast of the land, which is not a lake's shore.)
+  const onRing = (ring, x, y, best, ok) => { for (let i = 0; i < ring.length; i++) { const n = nearestOn([ring[i], ring[(i + 1) % ring.length]], x, y); if (n.d < best.d && (!ok || ok(n.p))) best = { d: n.d, p: n.p }; } return best; };
+  const byLake = (p) => lakes.some((l) => p[0] >= l.box[0] - 1.5 && p[0] <= l.box[1] + 1.5 && p[1] >= l.box[2] - 1.5 && p[1] <= l.box[3] + 1.5 && nearestOn([...l.ring, l.ring[0]], p[0], p[1]).d < 1.5);
+  const REACH = 45;
+  const waterOf = (name, [x, y]) => {
+    let best = { d: REACH };
+    const lake = lakes.find((l) => l.name === name);
+    if (lake) { for (const w of [0, ROUND, -ROUND]) { const n = onRing(lake.ring, x + w, y, { d: best.d }); if (n.p) best = { d: n.d, p: [n.p[0] - w, n.p[1]] }; } return best.p ? best : null; }
+    if (!map.seas.zones.some((z) => z.name === name)) return null;
+    for (const w of [0, ROUND, -ROUND]) for (let i = 0; i < land.length; i++) {
+      const [a, b, c, d] = boxes[i], X = x + w;
+      if (X < a - best.d || X > b + best.d || y < c - best.d || y > d + best.d) continue;
+      for (const ring of land[i]) { const n = onRing(ring, X, y, { d: best.d }, (p) => !byLake(p)); if (n.p) best = { d: n.d, p: [n.p[0] - w, n.p[1]] }; }
+    }
+    return best.p ? best : null;
+  };
+  const cutBack = [], runOn = [];
+  for (const r of rivers) {
+    // Into a lake of the chart: no further than where the course first meets it.
+    const lake = lakes.find((l) => l.name === r.into);
+    if (lake) { const at = r.pts.findIndex((p, i) => i > 0 && inLake(lake, p)); if (at > 0 && at < r.pts.length - 1) { r.pts = r.pts.slice(0, at + 1); r.ll = r.ll.slice(0, at + 1); } }
+    let a = 0, b = r.pts.length - 1;
+    while (b > 0 && !dry(r.pts[b])) b--;
+    while (a < b && !dry(r.pts[a])) a++;
+    if (a >= b) continue; // (not on the chart's land at all: left as it is)
+    const lost = run(r.pts, b, r.pts.length - 1) + run(r.pts, 0, a);
+    if (lost) {
+      const head = a > 0 ? [shore(r.pts[a], r.pts[a - 1])] : [], foot = b < r.pts.length - 1 ? [shore(r.pts[b], r.pts[b + 1])] : [];
+      r.ll = [...head.map(llOf), ...r.ll.slice(a, b + 1), ...foot.map(llOf)];
+      r.pts = [...head, ...r.pts.slice(a, b + 1), ...foot];
+      cutBack.push({ name: r.name, by: Math.round(lost) });
+    }
+    if (b < r.pts.length - 1 || !r.into) continue;
+    const to = waterOf(r.into, r.pts[r.pts.length - 1]);
+    if (to && to.d > 0.5) { const p = [r2(to.p[0]), r2(to.p[1])]; r.pts.push(p); r.ll.push(llOf(p)); runOn.push({ name: r.name, by: Math.round(to.d) }); }
+  }
+  // A crossing stands on its river as drawn. Where the course was cut back from under it: a crossing left out on
+  // open water goes to the river's mouth; one in a narrow arm of the sea or a lake between its two provinces (the
+  // St Lawrence below Montreal) stays where the road meets the water.
+  const adrift = [], toMouth = [];
+  const byLand = ([x, y], r) => dry([x, y]) || [0, 1, 2, 3, 4, 5, 6, 7].some((n) => dry([x + r * Math.cos((n * Math.PI) / 4), y + r * Math.sin((n * Math.PI) / 4)]));
+  for (const [k, c] of found) {
+    let best = { d: Infinity };
+    for (const w of [0, ROUND, -ROUND]) { const n = nearestOn(rivers[c[2]].pts, c[3] - w, c[4]); if (n.d < best.d) best = { d: n.d, p: [n.p[0] + w, n.p[1]] }; }
+    if (best.d <= 3) continue;
+    const row = { a: at.get(c[0]).name, b: at.get(c[1]).name, river: rivers[c[2]].name, far: Math.round(best.d) };
+    if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); } else adrift.push(row);
+  }
   for (const r of rivers) { delete r.box; delete r.real; }
-  return { rivers, fresh, moved, off };
+  return { rivers, fresh, moved, off, gone, cutBack, runOn, adrift, toMouth };
 }
