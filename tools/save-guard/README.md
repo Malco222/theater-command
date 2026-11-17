@@ -27,12 +27,16 @@ follows them.
 - ruling 211(b), where the tree has it (`standsBy`): a war on a dominion that Britain has not answered yet gets
   its one roll as the first month ends, one line of news, the answer the campaign's seed gives, what Brian was
   told (`*.expect.json`), and no second roll after;
+- ruling 211(c), where the tree has it (`homeAlarms`, Version 84.2.6): every red row reads whole and its press
+  picks up a live army of his, each month; in the save as loaded the first one names the army `alarm.army` says
+  (December 1940: the army round Vancouver);
 - lines to watch: towns in `hold` changing hands, "United States" without its "the" (ruling 211(f)), a fleet of
   his gone.
 
 **The page** (`savepage.cjs`): the start screen's "Continue your campaign" opens it; his fleets are fleets; two
 presses of END THE MONTH each bring up the month's card, whole; the card's band carries Britain's answer; the
-browser keeps the campaign as played on; no error from the page.
+browser keeps the campaign as played on; no error from the page. Where the tree has the red row, it is first in the
+tray as the save opens, and a real press on it picks up the army round Vancouver and says the cure on the paper.
 
 ## The saves
 
