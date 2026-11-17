@@ -2194,8 +2194,9 @@ export const CITY_RAIL_LINES = [
   ['Tientsin', 'Tangshan', 'Chinchow'],
   // Round the five great cities cut on Brian's word: the International-Great Northern from Austin by San Marcos to
   // San Antonio (beside the Southern Pacific's Sunset Route from Houston); Shreveport to Dallas is the Texas and
-  // Pacific, Toledo to Columbus the Hocking Valley.
-  ['Austin', 'San Antonio'],
+  // Pacific, Toledo to Columbus the Hocking Valley. The Cincinnati Southern into Kentucky by Lexington, kept by name
+  // since Louisville's urban ground changed which way the net runs.
+  ['Austin', 'San Antonio'], ['Cincinnati', 'Kentucky'],
   // Colombia (the historian): the Northern line from Bogota to Barbosa (Tunja), the Girardot and Tolima-Huila lines to
   // Neiva (1937), and the Caldas line from Manizales to the Pacific line (Cali). Bogota's system and the Pacific's
   // met only over the Quindio (1949); Medellin's line ran to the Magdalena at Puerto Berrio, Santander's from Puerto
