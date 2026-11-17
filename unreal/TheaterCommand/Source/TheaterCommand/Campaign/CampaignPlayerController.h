@@ -614,6 +614,13 @@ public:
 	FString GetToDoText(int32 Index) const;
 	FString GetToDoTip(int32 Index) const;
 	void PressToDo(int32 Index);
+	/** (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the row shown first in the tray, or none; how many
+	 * there are and which of them is shown (from 1), for its "1 of 3"; and a press on it, which puts the nearest help in
+	 * hand, centres the town and goes on to the next. */
+	const FHomeAlarm* GetAlarm() const;
+	int32 GetAlarmCount() const;
+	int32 GetAlarmPlace() const;
+	void PressAlarm();
 	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
 	FText GetHoverTip() const { return HoverTip; }
 	/**
@@ -1234,6 +1241,7 @@ private:
 	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked
 	// while the button is held, so the click is judged on this, and on the padlock still being under the pointer as it is let go.
 	int32 PressGate = INDEX_NONE;
+	int32 AlarmShown = 0; // (rules 84.2.6) which of the alarm's rows the tray shows: each press goes on to the next
 	FText GateTip, GateTipMarked;
 	int32 GateUnder(const FVector2D& Pointer) const;
 	FVector2D StagedPointer = FVector2D::ZeroVector;

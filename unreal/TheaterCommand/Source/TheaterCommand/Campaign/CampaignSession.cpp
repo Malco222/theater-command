@@ -478,6 +478,25 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		// (Rules 84.2.6; ruling 211(c).) The alarm that names the cure, as the rules read it.
+		const TArray<TSharedPtr<FJsonValue>>* Alarms = nullptr;
+		if (Object->TryGetArrayField(TEXT("alarms"), Alarms))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Alarms)
+			{
+				const TSharedPtr<FJsonObject>* Raised = nullptr;
+				if (Value->TryGetObject(Raised))
+				{
+					FHomeAlarm& Alarm = Out.Alarms.AddDefaulted_GetRef();
+					(*Raised)->TryGetStringField(TEXT("case"), Alarm.Case);
+					(*Raised)->TryGetNumberField(TEXT("region"), Alarm.Region);
+					(*Raised)->TryGetStringField(TEXT("by"), Alarm.By);
+					(*Raised)->TryGetStringArrayField(TEXT("lines"), Alarm.Lines);
+					(*Raised)->TryGetNumberField(TEXT("help"), Alarm.HelpRegion);
+					(*Raised)->TryGetStringField(TEXT("hand"), Alarm.Hand);
+				}
+			}
+		}
 	}
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Civic = nullptr;

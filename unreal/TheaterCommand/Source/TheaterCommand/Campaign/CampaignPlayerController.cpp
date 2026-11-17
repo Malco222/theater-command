@@ -745,6 +745,7 @@ void ACampaignPlayerController::EnterCampaign()
 	LastReel.Reset();
 	LastReelDate.Reset();
 	bNightTold = false;
+	AlarmShown = 0;
 	RefreshOrders();
 	SelectRegion(INDEX_NONE);
 	DispatchText.Reset();
@@ -1134,6 +1135,20 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		Action.ParseIntoArray(Parts, TEXT(":"));
 		const int32 Number = Parts.Num() >= 3 ? FCString::Atoi(*Parts[2]) : INDEX_NONE;
 		ClosePage();
+		if (Parts.Num() >= 3 && Parts[1] == TEXT("alarm"))
+		{
+			// (Rules 84.2.6; the words of ruling 211, section 2.) SHOW ON MAP on the month card's warning does what a press
+			// on the alarm's row does: the nearest help in hand and the town centred. Without an alarm it shows the place.
+			const TArray<FHomeAlarm>& Raised = Session->GetView().Alarms;
+			const int32 Which = Raised.IndexOfByPredicate([Number](const FHomeAlarm& Each) { return Each.Region == Number; });
+			AlarmShown = Which != INDEX_NONE ? Which : 0;
+			if (GetAlarm())
+			{
+				PressAlarm();
+				return;
+			}
+			Parts[1] = TEXT("region");
+		}
 		ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 		if (Parts.Num() >= 3 && Parts[1] == TEXT("fleet") && Map.IsValid())
 		{
@@ -2003,6 +2018,57 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 	else if (Screen == TEXT("arsenal"))
 	{
 		OpenArsenal();
+	}
+}
+
+const FHomeAlarm* ACampaignPlayerController::GetAlarm() const
+{
+	const FCampaignSession* Session = GetSession();
+	const bool bShown = Session && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible && Session->GetView().Alarms.Num() > 0;
+	return bShown ? &Session->GetView().Alarms[AlarmShown % Session->GetView().Alarms.Num()] : nullptr;
+}
+
+int32 ACampaignPlayerController::GetAlarmCount() const
+{
+	return GetAlarm() ? GetSession()->GetView().Alarms.Num() : 0;
+}
+
+int32 ACampaignPlayerController::GetAlarmPlace() const
+{
+	const int32 Count = GetAlarmCount();
+	return Count > 0 ? AlarmShown % Count + 1 : 0;
+}
+
+void ACampaignPlayerController::PressAlarm()
+{
+	FCampaignSession* Session = GetSession();
+	const FHomeAlarm* Shown = GetAlarm();
+	if (!Session || !Map.IsValid() || !Shown || FaceOff.bVisible || WarPrompt.bVisible)
+	{
+		return;
+	}
+	// (a copy: putting an army in hand reads the view again)
+	const FHomeAlarm Alarm = *Shown;
+	const int32 Count = Session->GetView().Alarms.Num();
+	AlarmShown = Count > 0 ? (AlarmShown % Count + 1) % Count : 0; // (several at once: each press goes on to the next)
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	// (The words of ruling 211, section 1.) A press picks up that army, and the paper says the cure in one line, in the
+	// rules' words. Where no army can come a press centres the town, and nothing more. No new mark is drawn on the map.
+	if (Alarm.HelpRegion != INDEX_NONE && PickUpArmyIn(Alarm.HelpRegion))
+	{
+		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+		if (!Alarm.Hand.IsEmpty())
+		{
+			Notify(Alarm.Hand, 9.0);
+		}
+	}
+	if (Map->GetData().Regions.IsValidIndex(Alarm.Region))
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			const FVector2D At = Map->GetData().Regions[Alarm.Region].Center;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+		}
 	}
 }
 

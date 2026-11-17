@@ -44,6 +44,7 @@ import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/camp
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
 import * as everyRule from '../../../src/campaign/turn';
+import * as dangerRules from '../../../src/campaign/danger';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -566,6 +567,8 @@ function view() {
     free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
     alerts: alertsOf(s),
     todo: todoOf(s),
+    // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
+    alarms: alarmsOf(s),
     // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
     // (release 1) What each arm is, for the bigger unit card.
@@ -1233,6 +1236,30 @@ const leftAloneAt = (g: Game, region: number): string => { try { return leadCall
 function leadOf(ids: number[], to: number) {
   const s = game();
   return { why: s.regions[to] ? leadWhy(s, corpsById(s, ids), to) : '' };
+}
+
+// ---- The alarm that names the cure (Rules 84.2.6; ruling 211(c); the UI director's sheet 35) -------------------------
+// One rules reading that both games draw: homeAlarms(g, nat) in danger.ts, nearest his capital first, each with the
+// row's three sentences (the second left out where nothing of his is in reach) and where the nearest help stands. Read
+// by name, so the 3D game shows nothing until the rules that have it are bundled.
+interface HomeAlarmRule { case: string; region: number; by: string; reach: number[]; help: { region: number; months: number; rail: boolean } | null; raise: number; lines: string[]; hand?: string }
+const alarmRule = ((dangerRules as unknown as Record<string, unknown>)['homeAlarms'] ?? rulesByName['homeAlarms']) as ((g: Game, nat: string) => HomeAlarmRule[]) | undefined;
+function alarmsOf(s: Game) {
+  if (!alarmRule || !s.human || !humanUp(s)) return [];
+  let all: HomeAlarmRule[] = [];
+  try { all = alarmRule(s, s.human) ?? []; } catch { return []; }
+  return all.map((a) => {
+    const lines = (a.lines ?? []).filter((t) => !!t);
+    const place = s.regions[a.region]?.name ?? '';
+    // The paper's line after a press (the words of ruling 211, section 1): the rules' own where they give one; else the
+    // passed sentence, naming the army exactly as the row's help sentence names it.
+    let hand = a.hand ?? '';
+    if (!hand && a.help && place) {
+      const named = /^Nearest help: (.+?), (?:in reach this month|\d+ months? by \w+)\.$/.exec(lines[lines.length - 1] ?? '');
+      if (named) hand = `${named[1][0].toUpperCase()}${named[1].slice(1)} is in hand. Right-click ${place} to send it.`;
+    }
+    return { case: a.case, region: a.region, by: a.by, lines, help: a.help ? a.help.region : -1, hand };
+  });
 }
 
 // ---- Crossing a defended sea (Version 72) ---------------------------------------------------------

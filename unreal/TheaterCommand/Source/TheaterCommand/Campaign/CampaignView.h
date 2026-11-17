@@ -743,6 +743,20 @@ struct FViewDesk
 	FString Tip;
 };
 
+/**
+ * (Rules 84.2.6; ruling 211(c); the UI director's sheet 35.) The alarm that names the cure: an enemy army on his home
+ * ground, or a home town of his fallen or besieged. The row's sentences are the rules' own, in order, the first bold.
+ */
+struct FHomeAlarm
+{
+	FString Case; // stands, taken, storm or stores
+	int32 Region = INDEX_NONE; // where the enemy stands: the town a press centres
+	FString By; // the enemy nation's tag
+	TArray<FString> Lines; // the enemy and where; what it can reach next month (left out where nothing is); the help
+	int32 HelpRegion = INDEX_NONE; // where the nearest army of his that can come stands: a press puts it in hand
+	FString Hand; // and the paper's line then: "The army round Vancouver is in hand. Right-click Pittsburgh to send it."
+};
+
 struct FCampaignView
 {
 	FString Rules; // "stand-in" until the real rules are bundled in
@@ -794,6 +808,7 @@ struct FCampaignView
 	// deals with it ("generals", "research", "arsenal") and a word of explanation.
 	struct FToDo { FString Screen; FString Text; FString Tip; };
 	TArray<FToDo> ToDo;
+	TArray<FHomeAlarm> Alarms; // (rules 84.2.6) the alarm's rows, nearest his capital first; empty until the rules have it
 	// The towns' own buildings, four numbers each: region, line (0 market, 1 farm, 2 school, 3 camp, 4 hospital,
 	// 5 hall), the level that stands, and 1 while the next is going up.
 	TArray<int32> Civic;

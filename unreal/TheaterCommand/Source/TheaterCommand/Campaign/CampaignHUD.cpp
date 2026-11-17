@@ -324,6 +324,11 @@ namespace
 			case 8: // a chevron, pointing on
 				Line({ { 0.36, 0.2 }, { 0.66, 0.5 }, { 0.36, 0.8 } });
 				break;
+			case 10: // (rules 84.2.6, sheet 35) the warning sign: a triangle, and the mark inside it
+				Line({ { 0.5, 0.1 }, { 0.93, 0.86 }, { 0.07, 0.86 }, { 0.5, 0.1 } });
+				Line({ { 0.5, 0.36 }, { 0.5, 0.6 } });
+				Line({ { 0.5, 0.7 }, { 0.5, 0.75 } });
+				break;
 			default: // a clock's dial: the long hand at twelve, the short one at the hour
 			{
 				Ring(0.5, 0.5, 0.45);
@@ -3587,6 +3592,18 @@ namespace
 				NoButton = FButtonStyle();
 				NoButton.SetNormal(FSlateNoResource()).SetHovered(FSlateNoResource()).SetPressed(FSlateNoResource()).SetDisabled(FSlateNoResource());
 				NoButton.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				{
+					// (Rules 84.2.6; the UI director's sheet 35.) A block as wide as the tray's rows, not a pill.
+					const FLinearColor AlarmGround(FColor::FromHex(TEXT("1D0F0C"))), AlarmLit(FColor::FromHex(TEXT("2A1611")));
+					AlarmStyle = FButtonStyle();
+					AlarmStyle.SetNormal(FSlateRoundedBoxBrush(AlarmGround, 2.0f, Alarm, 1.0f));
+					AlarmStyle.SetHovered(FSlateRoundedBoxBrush(AlarmLit, 2.0f, Alarm, 1.0f));
+					AlarmStyle.SetPressed(FSlateRoundedBoxBrush(AlarmLit, 2.0f, Alarm, 1.5f));
+					AlarmStyle.SetDisabled(FSlateRoundedBoxBrush(AlarmGround, 2.0f, Alarm, 1.0f));
+					AlarmStyle.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+					AlarmEdgeBrush = FSlateRoundedBoxBrush(Alarm, FVector4(2.0f, 0.0f, 0.0f, 2.0f));
+					AlarmCountBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, FLinearColor(FColor::FromHex(TEXT("E2D7BC"))).CopyWithNewOpacity(0.6f), 1.0f);
+				}
 				RearChipBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2E241A"))).CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("6F5D38"))), 1.0f);
 				RearRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 8.0f, FLinearColor::White, 1.2f);
 				// (rulings 86 and 87: the marks inside the pointer's box)
@@ -4101,6 +4118,11 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, -2.0f, 0.0f, 10.0f)
 						[
 							Chip(NextArmyPill())
+						]
+						// (Rules 84.2.6; sheet 35.) The alarm that names the cure, first in the tray, above every other row.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeAlarm()
 						]
 						// And the rest of it: a general with no command, a design team with no work, nothing on order.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -7833,11 +7855,12 @@ namespace
 			auto Heading = [this](const FString& Words) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(FText::FromString(Words)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(BrightBrass); };
 			auto Go = [this](const FString& Act) { return [this, Act]() { if (Controller.IsValid() && !Act.IsEmpty()) { Controller->PressPage(Act); } return FReply::Handled(); }; };
 			auto Flag = [this](const FString& Tag, float Wide, float High) -> TSharedRef<SWidget> { return SNew(SBox).WidthOverride(Wide).HeightOverride(High)[SNew(SImage).Image(FlagBrush(Tag))]; };
-			auto ShowOnMap = [this, &Go](int32 Region) -> TSharedRef<SWidget>
+			auto ShowOnMap = [this, &Go](int32 Region, bool bAlarm = false) -> TSharedRef<SWidget>
 			{
+				// (Rules 84.2.6; the words of ruling 211, section 2: on the warning it does what a press on the alarm's row does.)
 				return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 8.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("Shows the place on the map.")))
-					.OnClicked_Lambda(Go(FString::Printf(TEXT("goto:region:%d"), Region)))
+					.OnClicked_Lambda(Go(FString::Printf(TEXT("goto:%s:%d"), bAlarm ? TEXT("alarm") : TEXT("region"), Region)))
 					[
 						SNew(STextBlock).Text(FText::FromString(TEXT("SHOW ON MAP"))).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Cream)
 					];
@@ -7944,7 +7967,7 @@ namespace
 				}
 				if (Band.Region >= 0)
 				{
-					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region)];
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region, bWarning)];
 				}
 				// (A second line that must be read whole is printed in full under the headline: the band is as tall as
 				// it needs. Rulings 133(a) and 167: it may run to three lines, and it is never cut.)
@@ -10782,6 +10805,74 @@ namespace
 			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Lots];
 		}
 
+		/**
+		 * (Rules 84.2.6; ruling 211(c); the UI director's sheet 35.) The alarm that names the cure: first in the tray, above
+		 * every other row, the month an enemy army stands on his home ground or a home town of his falls or is besieged. Its
+		 * sentences are the rules' own, in order, the first bold; where there are several it ends with a small boxed "1 of
+		 * 3". It is the one thing in the tray allowed to stand three lines tall. A press puts the nearest help in hand and
+		 * centres the town.
+		 */
+		TSharedRef<SWidget> MakeAlarm()
+		{
+			// (the sheet's sizes are pixels of the 1600 by 1000 frame; a face is asked for in points, a third larger)
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			const FLinearColor Paper100(FColor::FromHex(TEXT("EDE6D6"))), Paper200(FColor::FromHex(TEXT("E2D7BC")));
+			auto SentenceAt = [this](int32 Index) -> FString
+			{
+				const FHomeAlarm* Raised = Controller.IsValid() ? Controller->GetAlarm() : nullptr;
+				return Raised && Raised->Lines.IsValidIndex(Index) ? Raised->Lines[Index] : FString();
+			};
+			return Chip(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f)).WidthOverride(320.0f)
+				.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetAlarm() ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SButton).ButtonStyle(&AlarmStyle).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->PressAlarm(); } return FReply::Handled(); })
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(5.0f)[SNew(SBorder).BorderImage(&AlarmEdgeBrush)]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(10.0f, 10.0f, 8.0f, 0.0f)
+						[
+							SNew(SLineIcon).Kind(10).Size(18.0f).Ink(Alarm).Weight(1.6f)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 8.0f, 12.0f, 9.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Bold"), Px(15.0f))).ColorAndOpacity(Paper100).AutoWrapText(true).LineHeightPercentage(1.1f)
+								.Text_Lambda([SentenceAt]() { return FText::FromString(SentenceAt(0)); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Regular"), Px(13.0f))).ColorAndOpacity(Paper200).AutoWrapText(true).LineHeightPercentage(1.15f)
+								.Text_Lambda([this]()
+								{
+									const FHomeAlarm* Raised = Controller.IsValid() ? Controller->GetAlarm() : nullptr;
+									TArray<FString> Rest;
+									for (int32 Index = 1; Raised && Index < Raised->Lines.Num(); ++Index)
+									{
+										Rest.Add(Raised->Lines[Index]);
+									}
+									return FText::FromString(FString::Join(Rest, TEXT(" ")));
+								})
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder).BorderImage(&AlarmCountBrush).Padding(FMargin(5.0f, 1.0f))
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetAlarmCount() > 1 ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									SNew(STextBlock).Font(Typed(7.5f, true)).ColorAndOpacity(Paper200)
+									.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(FString::Printf(TEXT("%d of %d"), Controller->GetAlarmPlace(), Controller->GetAlarmCount())) : FText::GetEmpty(); })
+								]
+							]
+						]
+					]
+				]);
+		}
+
 		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
@@ -11999,6 +12090,8 @@ namespace
 		FSlateBrush SlipBrush, SlipBarBrush; // (ruling 87) the slip on the army's card
 		FButtonStyle SlipButton;
 		FButtonStyle NoButton; // (ruling 101) a button that is only what it holds: the quiet chip
+		FButtonStyle AlarmStyle; // (rules 84.2.6, sheet 35) the alarm's red row: a block on #1d0f0c with a 1px edge in the alarm's red
+		FSlateBrush AlarmEdgeBrush, AlarmCountBrush; // and its 5px left edge, and the small box round its "1 of 3"
 		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;
