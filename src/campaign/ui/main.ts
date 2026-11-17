@@ -91,7 +91,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, forceWords, hasRoom, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -1541,6 +1541,21 @@ function readSave(): string | null {
 const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
 /** Divisions as the cards of a face-off count them: every division on the roll, whatever its strength, as the corps cards beneath do. */
 const rollDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs, 0);
+
+/**
+ * Why ground beside the army in hand is out of reach this month, where the reason is its moves (the Playtester's
+ * 84.2.6 find: Buffalo, empty, next to an army that had marched): "Buffalo takes 2 moves to enter: your corps have 1
+ * left this month." Null where some corps of it is not beside the place, or has the moves.
+ */
+function shortOfMoves(id: number): string | null {
+  const cs = pickedCorps(), to = g.regions[id];
+  if (!cs.length || !cs.every((c) => g.regions[c.reg].nb.includes(id))) return null;
+  const need = Math.min(...cs.map((c) => moveCost(g, c, to)));
+  const left = Math.max(...cs.map((c) => Math.floor(c.ap)));
+  if (left >= need) return null;
+  const who = cs.length === 1 ? `${cs[0].name} has` : 'your corps have';
+  return `${to.name} takes ${need} move${need === 1 ? '' : 's'} to enter: ${who} ${left > 0 ? left : 'none'} left this month.`;
+}
 
 function pickedCorps(): Corps[] {
   if (!humanUp(g)) return [];
@@ -9069,7 +9084,7 @@ function wireMap(): void {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
     if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? shortOfMoves(id) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
   });
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
