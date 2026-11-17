@@ -37,7 +37,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, patronOf, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
@@ -337,8 +337,8 @@ export const newsName = (n: Nation): string => (n.id === 'UK' ? 'Britain' : n.na
  * The mother country that may go to war with `a` for making war on `b`, or null (ruling 211(b) as Brian changed
  * it on 17 November 2026; the grand campaign's wider world). Britain may stand by Canada, Australia, New Zealand
  * and South Africa, one way only, when a country at peace with her makes war on one of them while the two stand
- * in the same alliance: she answers six times in ten and stays out four (world.json, 'dominions'), in every year,
- * at every stop of the dial and at every difficulty. A war a dominion starts is not hers, and war with any other
+ * in the same alliance: she answers as far as her own war in Europe allows (ruling 222, patronPress: eight, six, four
+ * or two times in ten; world.json, 'dominions'), at every stop of the dial and at every difficulty. A war a dominion starts is not hers, and war with any other
  * member of an alliance is war with that member alone. Not in World Domination, where a dominion follows nobody
  * either.
  */
@@ -351,11 +351,41 @@ export function standsByWhom(g: Game, a: string, b: string): string | null {
 }
 
 /**
- * Whether the mother country `p` answers for the war `a` made on her dominion `b` in the month `war`: the one roll
- * of that declaration. It is made from the campaign's seed, the month and the countries, so it moves no other
- * dice, both games agree on it, and the same month loaded again gives the same answer.
+ * How hard a mother country's own war in Europe presses her (ruling 222, Brian's ask of 17 November 2026: "it depends
+ * on how they are doing with the war in europe"), the step her answer for a dominion is rolled at. Counting from the
+ * bottom, the first that holds: 4, she is in danger at home, with an enemy army on her home ground or a third of her
+ * will to fight gone; 3, she is at war with a great power of Europe and France is not fighting beside her (`fallen`
+ * when France has fallen); 2, she is at war there with France fighting beside her, a France freed and back in the
+ * war as much as one that never fell; 1, she is at war with no great power of Europe, as when all her European
+ * enemies have fallen or made peace. `answers` is the share of that step (world.json, 'dominions').
  */
-export const dominionAnswers = (g: Game, p: string, a: string, b: string, war: number): boolean => hashString(`dominion:${g.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < answersOf(p);
+export interface PatronPress { step: 1 | 2 | 3 | 4; answers: number; fallen: boolean }
+
+export function patronPress(g: Game, p: string): PatronPress {
+  const P = g.nations[p], { europe, beside, willGone } = pressData(p);
+  const at = (step: PatronPress['step'], fallen = false): PatronPress => ({ step, answers: answersOf(p, step), fallen });
+  if (!P?.alive) return at(1);
+  const foe = (u: Corps): boolean => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, p);
+  // (In the field, or inside a town of hers it has taken, as the home alarm reads it.)
+  const invaded = g.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || (!allied(g, p, r.ctrl) && (r.garr ?? []).some(foe))));
+  if (invaded || (P.resilience > 0 && collapseScore(g, p) >= willGone * P.resilience)) return at(4);
+  const enemies = europe.filter((e) => e !== p && g.nations[e]?.alive && atWar(g, p, e));
+  if (!enemies.length) return at(1);
+  const F = beside ? g.nations[beside] : undefined;
+  if (F?.alive && !F.dormant && F.atWar.some((e) => enemies.includes(e))) return at(2);
+  return at(3, !F?.alive);
+}
+
+/**
+ * Whether the mother country `p` answers for the war `a` made on her dominion `b` in the month `war`: the one roll
+ * of that declaration, at the step her war in Europe stands at that day (patronPress). It is made from the
+ * campaign's seed, the month and the countries, so it moves no other dice, both games agree on it, and the same
+ * month loaded again gives the same answer. A war made in an earlier month than this one (a campaign saved before
+ * the roll was kept, rolled as a month ends) is rolled at the one share the rule had before ruling 222, six in ten:
+ * the state of Europe the day it was made is not kept, and a roll already made stands.
+ */
+export const dominionAnswers = (g: Game, p: string, a: string, b: string, war: number): boolean =>
+  hashString(`dominion:${g.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < (war < g.turn ? answersOf(p) : patronPress(g, p).answers);
 
 /**
  * The mother country answers, or does not, for the war `a` made on her dominion `b` (standsByWhom): one roll for

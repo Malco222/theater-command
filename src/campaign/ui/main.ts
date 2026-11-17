@@ -63,7 +63,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
-import { WORLD, answersOf, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
+import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -6231,10 +6231,9 @@ const hasTraits = (nat: string): boolean => traitsOf(nat).length > 0 || !!eliteO
 function traitList(nat: string, full = false): string {
   const u = eliteOf(nat);
   const row = (name: string, text: string, rule: string, star = false): string => `<li${star ? ' class="unit"' : ''}><b>${star ? '<i>★</i> ' : ''}${esc(name)}</b>${full && text ? `<span>${esc(text)}</span>` : ''}${rule ? `<em>${esc(rule)}</em>` : ''}</li>`;
-  // A dominion (ruling 211(b) as Brian changed it; the UI director's words (f)): war on it brings its patron in so many times in ten.
-  const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null, odds = patron ? Math.round(answersOf(patron) * 10) : 0;
-  const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times', 'every time'];
-  const dom = patron && odds > 0 && g.nations[patron] ? row('Dominion', '', `War on it brings ${newsName(g.nations[patron])} in ${odds >= 10 ? 'every time' : `${TIMES[odds]} in ten`}, the same month.`) : '';
+  // A dominion (ruling 222, the UI director's words): war on it may bring its mother country in, as far as her own war in Europe allows.
+  const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
+  const dom = patron && g.nations[patron] ? row('Dominion', '', `War on it may bring ${newsName(g.nations[patron])} in, as far as its war in Europe allows.`) : '';
   return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
 }
 

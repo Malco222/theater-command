@@ -238,7 +238,8 @@ describe('Britain may stand by its dominions: six times in ten (Version 84.2.5, 
     const f = warForecast(g, 'USA', 'CAN');
     expect(f.patron).toBe('UK');
     expect(f.answers).toBe(0.6);
-    expect(f.patronSays).toEqual(['Britain may stand by it.', 'Canada is a dominion: six times in ten Britain declares war on you the same month, and four times in ten it stays out of this war.']);
+    // Ruling 222: the odds as her war in Europe stands that day, with the reason (tests/britain-222.test.ts has the four).
+    expect(f.patronSays).toEqual(['Britain may stand by it.', 'Six times in ten Britain declares war on you the same month, and four times in ten it stays out of this war: Britain is at war in Europe, with France still fighting beside it.']);
     const m = warForecast(g, 'USA', 'MEX');
     expect([m.patron, m.answers, m.patronSays]).toEqual([null, 0, null]);
   });

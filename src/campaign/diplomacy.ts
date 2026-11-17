@@ -8,7 +8,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, newsName, relocate, removeCorps, standsByWhom, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -18,7 +18,7 @@ import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin, stopDef } from './history';
 import worldData from '../../data/campaign/world.json';
-import { answersOf, warWorkMonth, worldMonth } from './world';
+import { pressData, warWorkMonth, worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -353,8 +353,9 @@ export interface WarForecast {
   league: string[];
   /**
    * The mother country that may stand by it, when it is a dominion of hers (ruling 211(b)), or null. `answers` is
-   * the share of the time she goes to war with the declarer the same month (0.6; one roll when the war is
-   * declared), and `patronSays` the card's two sentences, the first set bold as the League's is.
+   * the share of the time she goes to war with the declarer the same month as her war in Europe stands today
+   * (ruling 222: 0.8, 0.6, 0.4 or 0.2; one roll when the war is declared), and `patronSays` the card's two
+   * sentences, the first set bold as the League's is.
    */
   patron: string | null;
   answers: number;
@@ -364,11 +365,19 @@ export interface WarForecast {
 const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times'];
 /**
  * The declare card's two sentences where a mother country may answer for the country declared on (the UI
- * director's words, passed on 17 November 2026): the odds in plain words, never a promise.
+ * director's words for ruling 222, 17 November 2026): the odds as her war in Europe stands today, in plain words,
+ * and the reason in one short clause after them; never a promise.
  */
 export function patronSays(g: Game, patron: string, on: string): [string, string] {
-  const P = newsName(g.nations[patron]), k = Math.min(9, Math.max(1, Math.round(answersOf(patron) * 10)));
-  return [`${P} may stand by it.`, `${g.nations[on].name} is a dominion: ${TIMES[k]} in ten ${P} declares war on you the same month, and ${TIMES[10 - k]} in ten it stays out of this war.`];
+  const P = newsName(g.nations[patron]), press = patronPress(g, patron);
+  const k = Math.min(9, Math.max(1, Math.round(press.answers * 10)));
+  const ally = pressData(patron).beside, F = ally && g.nations[ally] ? newsName(g.nations[ally]) : 'France';
+  const why = press.step === 4 ? `${P} must look to its own shores`
+    : press.step === 3 ? (press.fallen ? `${F} has fallen, and ${P} fights on in Europe` : ally && atWar(g, ally, patron) ? `${P} is at war in Europe, with ${F} among its enemies` : `${P} is at war in Europe, and ${F} stays out of it`)
+    : press.step === 2 ? `${P} is at war in Europe, with ${F} still fighting beside it`
+    : `${P} has no war in Europe to hold it back`;
+  const times = TIMES[k][0].toUpperCase() + TIMES[k].slice(1);
+  return [`${P} may stand by it.`, `${times} in ten ${P} declares war on you the same month, and ${TIMES[10 - k]} in ten it stays out of this war: ${why}.`];
 }
 
 export function warForecast(g: Game, by: string, on: string): WarForecast {
@@ -387,7 +396,7 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
     league: standsWith(g, by, on),
     patron,
-    answers: patron ? answersOf(patron) : 0,
+    answers: patron ? patronPress(g, patron).answers : 0,
     patronSays: patron ? patronSays(g, patron, on) : null,
   };
 }
