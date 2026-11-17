@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -3113,16 +3113,16 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
   const need = at(look.even).toFixed(1);
   const takes = look.even.toFixed(look.even === 1.2 ? 1 : 2);
   const p = look.chance;
+  // The verdict is the rules' own line (verdictOf), so that the 3D table prints the same words.
+  const say = verdictOf(look, sure === 'Victory' ? 'storm' : 'sortie');
   if (!look.exact) {
-    const word = look.chanceLo >= 0.95 ? `${sure} looks certain` : look.chanceHi <= 0 ? 'This looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
-    return `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
+    return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
       <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scout ? scoutButton(scout) : ''}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   }
-  const word = p >= 0.95 ? `${sure} is all but certain` : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : 'This will fail';
-  return `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
+  return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
     <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
     <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
@@ -3158,15 +3158,20 @@ function siegeCard(): string {
     under: out ? '' : `<small class="fhelp">Behind the walls of ${esc(v.town)}: ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, with ${Math.round(v.broken * 100)}% of the works broken down` : ''}.</small>`,
   };
   const hasty = !out && look.lines.some((l) => l.label === 'A hasty assault');
+  // The march's card lights the order its own forecast favours: the storm where the verdict reads that the odds favour you, else the siege (ruling 180).
+  const stormLit = marching && (m.meet as MarchOutlook).favours === 'storm';
+  // The storm from a siege is the same choice (ruling 182): the storm now, or keeping up the siege, lit by the verdict.
+  const choice = !out && !marching ? stormChoice(g, r.id) : null;
   const note = out
     ? '<div class="note" style="margin-top:14px"><b>What follows.</b> Win, and the army round the town is driven off and the siege is raised. Lose, and the garrison goes back inside the weaker for it. One sortie a month from each town.</div>'
-    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}${marching ? marchChoice(m.meet as MarchOutlook) : ''}</div>`;
+    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}${marching ? marchChoice(m.meet as MarchOutlook) : ''}${choice?.ifWait ? ` <b>Keep up the siege:</b> ${esc(choice.ifWait)}` : ''}</div>`;
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
       ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${note}</div>
     <footer>${marching
-      ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent and nobody marches.">Stay where you are</button><button class="btn" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month, and next month the assault goes in made ready.">March in and lay siege</button><button class="btn go" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">March in and storm</button>`
-      : `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">${out ? 'Stay inside' : 'Keep up the siege'}</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">${out ? 'Sally out' : 'Storm the town'}</button>`}</footer>`;
+      ? `<button class="btn" data-act="close" title="Nothing is spent and nobody marches.">Call it off</button><button class="btn${stormLit ? ' go' : ''}" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">Send them in</button><button class="btn${stormLit ? '' : ' go'}" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month. The storm is yours to order next month from the siege, made ready.">Lay siege first</button>`
+      : out ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">Stay inside</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">Sally out</button>`
+      : `<button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn${choice?.favours === 'siege' ? '' : ' go'}" data-act="dosiege" title="Settle it at once from the Battle Ticket">Send them in</button><button class="btn${choice?.favours === 'siege' ? ' go' : ''}" data-act="close" title="Nothing is spent. The siege goes on.${choice?.ifWait ? ` ${esc(choice.ifWait)}` : ''}">Keep up the siege</button>`}</footer>`;
 }
 
 /** The choice a march on a guarded town comes to: the assault as the army arrives, or the same assault next month made ready. */
@@ -3174,7 +3179,7 @@ function marchChoice(meet: MarchOutlook): string {
   const now = meet.outlook, later = meet.prepared;
   if (!now || !later) return '';
   const say = (o: Outlook): string => `${o.odds.toFixed(2)} to 1, about ${oddsPct(o.chance)}% to carry it`;
-  return ` <b>Only its town guard holds ${esc(meet.town)}: about ${num(meet.guardMen)} men, and no army.</b> Storm as you arrive: ${say(now)}. Or march in, lay the siege and storm next month made ready: ${say(later)}, if nothing else changes.`;
+  return ` <b>Only its town guard holds ${esc(meet.town)}: about ${num(meet.guardMen)} men, and no army.</b> Send them in and they storm as they arrive: ${say(now)}. ${esc(meet.ifStorm)} Or lay siege first: ${say(later)} next month. ${esc(meet.ifSiege)}`;
 }
 
 function regionPane(): string {
@@ -5106,8 +5111,8 @@ function landingCard(): string {
     if (h && h.contested) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, on a contested sea', text: `The force can land and the ${sea} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
     const p = a ? chanceOn(a.odds, a.dice) : 1;
     const hopeless = !!a && p < 0.3;
-    const fight = !a ? 'The coast is undefended' : p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
-    const fightTone = !a || p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss';
+    const fight = !a ? 'The coast is undefended' : p >= 0.95 ? 'Victory is all but certain' : p >= FAVOURED ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
+    const fightTone = !a || p >= FAVOURED ? 'win' : p >= 0.3 ? '' : 'loss';
     const fightBody = a
       ? `<div class="oddsbar"><i style="width:${Math.round((a.A / (a.A + a.D)) * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
         <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`
@@ -5471,7 +5476,7 @@ function airWarPane(me: string): string {
 /** Any air group as a row for a list, whoever it belongs to. */
 const myGroupRow = (f: AirFleet): GroupRow => (f.ship !== undefined ? groupRow(g, f) : airfieldAt(g, f.base)?.rows.find((x) => x.id === f.id) ?? {
   id: f.id, nat: f.nat, name: f.name, command: '', kind: f.bmr <= 0 ? 'ftr' : f.ftr <= 0 ? 'bmr' : 'mixed', ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
-  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
+  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, port: -1, ashore: f.ashore ?? -1, fleetName: '', where: `At ${g.regions[f.base].name}`, wingMove: null, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
 });
 
 /** The art director's signs for a raid by day and a raid by night: a sun and a moon, one filled path each in a 24 by 16 box. */
@@ -6574,8 +6579,8 @@ function attackCard(): string {
     // The defence is partly a guess: the odds are a band, and the bar shows where in it the truth may lie.
     const at = (odds: number): number => (100 * odds) / (1 + odds);
     const p = look.chance;
-    const word = look.chanceLo >= 0.95 ? 'Victory looks certain' : look.chanceHi <= 0 ? 'This attack looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
-    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
+    const say = verdictOf(look);
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="${esc(`The balance lies somewhere in this band. ${look.note}${look.wide ? ` ${look.narrow}` : ''}`)}"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
       ${costBlock(look)}
@@ -6584,8 +6589,8 @@ function attackCard(): string {
   } else if (a) {
     const p = chanceOn(a.odds, a.dice);
     const share = a.A / (a.A + a.D);
-    const word = p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : 'This attack will fail';
-    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}</span></div>
+    const say = verdictAt(p);
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ' against prepared positions' : ''}</span><span>Theirs</span></div></div>
       ${look ? costBlock(look) : ''}

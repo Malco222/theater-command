@@ -106,6 +106,9 @@ export const carrierRules = (g: Game): boolean => g.flags.carriers === 1;
 /** True for a carrier wing: an air group that flies from a fleet's carriers, goes where they go, and has no airfield. */
 export const afloat = (f: { ship?: number }): boolean => f.ship !== undefined;
 
+/** True for a carrier wing wherever it is, aboard or ordered ashore: its aircraft are built for the deck and its crews trained against ships. */
+export const deckBred = (f: { ship?: number; ashore?: number }): boolean => f.ship !== undefined || f.ashore !== undefined;
+
 /** The fleet a carrier wing sails with, or null for a group on land (or a wing whose fleet is gone). */
 export const carrierOf = (g: Game, f: { ship?: number }): Fleet | null => (f.ship === undefined ? null : g.fleets.find((x) => x.id === f.ship) ?? null);
 
@@ -145,9 +148,9 @@ const planes = (n: number, one: string): string => `${n.toLocaleString('en-US')}
 
 export const airFleetsOf = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat);
 /** How far one fleet reaches: its nation's ranges, unless the fleet has long-range fighters of its own ('ftrRange' on its row in air.json). */
-const reach = (f: { nat: string; name: string; parent?: string; ship?: number }): NatSpec => {
-  // Carrier aircraft are built for the deck, not for range.
-  if (f.ship !== undefined) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
+const reach = (f: { nat: string; name: string; parent?: string; ship?: number; ashore?: number }): NatSpec => {
+  // Carrier aircraft are built for the deck, not for range: ashore as aboard.
+  if (deckBred(f)) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
   const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.ftrRange;
   return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
 };
@@ -707,7 +710,7 @@ export interface AirAssess {
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 const noShips = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 /** What one of a group's bombers is worth against ships: carrier crews are trained for it, land bombers mostly are not. */
-const navalSkill = (f: AirFleet): number => (f.ship !== undefined ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
+const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
 
 /**
  * What a strike on ships should do, before the dice: the hits to expect, the ships of each class they should sink,
@@ -865,7 +868,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
     else out.lines.push({ label: 'Fighter cover', value: 'None', effect: 'Nothing breaks up the strike' });
     if (out.B > 0) {
-      const land = out.att.filter((a) => a.bmr > 0 && a.f.ship === undefined), deckB = out.att.filter((a) => a.bmr > 0 && a.f.ship !== undefined);
+      const land = out.att.filter((a) => a.bmr > 0 && !deckBred(a.f)), deckB = out.att.filter((a) => a.bmr > 0 && deckBred(a.f));
       out.lines.push({ label: 'Crews', value: deckB.length && land.length ? 'Carrier crews and land bombers' : deckB.length ? 'Carrier crews, trained to hit ships' : 'Land bombers', effect: land.length ? `A land bomber counts ${pc(navalSkill(land[0].f))} of a carrier aircraft against ships${deckB.length ? `: the strike as a whole counts ${pc(out.naval)}` : ''}` : undefined });
     }
     if (out.again < 1) out.lines.push({ label: 'Already struck', value: 'The fleet has been struck this month', effect: `It is scattered and warned: this strike counts ${pc(out.again)}` });

@@ -3,10 +3,10 @@
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
-import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
-  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
+  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
 import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
@@ -972,6 +972,42 @@ export interface MarchOutlook {
   outlook: Outlook | null;
   /** The same assault made ready: as it would stand next month, with the army round the town and nothing else changed. Null otherwise. */
   prepared: Outlook | null;
+  /** Which of the two orders the card lights where the guard fights: the storm on arrival when its forecast is favoured, else the siege (ruling 180). */
+  favours: 'storm' | 'siege' | null;
+  /** Where the guard fights, the sentence that stands under each order's forecast: what a failed storm costs, and what laying siege first comes to. '' otherwise. */
+  ifStorm: string;
+  ifSiege: string;
+}
+/** The chance from which a forecast's verdict reads "The odds favour you". The cards print their verdicts from this figure, and whatever a verdict lights moves with it (ruling 180). */
+export const FAVOURED = 0.6;
+/**
+ * The staff's verdict on a forecast, in the words every card prints: one function, so that the browser's cards and
+ * the 3D table's never differ. `band` is the verdict as a key, `word` the line, and `tone` how it is coloured
+ * ('win', '' or 'loss'). `of` is what is forecast: an attack in the field, the storm of a town, or a garrison's
+ * sortie. Where the defence is not fully known the verdict is the staff's, of the band.
+ */
+export interface Verdict { band: 'certain' | 'favoured' | 'even' | 'long' | 'none'; word: string; tone: 'win' | '' | 'loss' }
+export function verdictOf(look: Outlook, of: 'attack' | 'storm' | 'sortie' = 'attack'): Verdict {
+  if (look.exact) return verdictAt(look.chance, of);
+  const p = look.chance;
+  const tone = p >= FAVOURED ? 'win' : p >= 0.3 ? '' : 'loss';
+  if (look.chanceLo >= 0.95) return { band: 'certain', word: `${of === 'sortie' ? 'Breaking out' : 'Victory'} looks certain`, tone };
+  if (look.chanceHi <= 0) return { band: 'none', word: `${of === 'attack' ? 'This attack' : 'This'} looks hopeless`, tone };
+  if (p >= FAVOURED) return { band: 'favoured', word: 'The staff thinks the odds favour you', tone };
+  return p >= 0.3 ? { band: 'even', word: 'The staff cannot call it', tone } : { band: 'long', word: 'The staff thinks it a long shot', tone };
+}
+/** The verdict on a chance that is known exactly (every defender identified). */
+export function verdictAt(p: number, of: 'attack' | 'storm' | 'sortie' = 'attack'): Verdict {
+  const tone = p >= FAVOURED ? 'win' : p >= 0.3 ? '' : 'loss';
+  if (p >= 0.95) return { band: 'certain', word: `${of === 'sortie' ? 'Breaking out' : 'Victory'} is all but certain`, tone };
+  if (p >= FAVOURED) return { band: 'favoured', word: 'The odds favour you', tone };
+  if (p >= 0.3) return { band: 'even', word: 'It could go either way', tone };
+  return p > 0 ? { band: 'long', word: 'A long shot', tone } : { band: 'none', word: `${of === 'attack' ? 'This attack' : 'This'} will fail`, tone };
+}
+/** True where a forecast's verdict reads "The odds favour you" or better, as its card prints it. */
+export function favoured(look: Outlook): boolean {
+  const b = verdictOf(look).band;
+  return b === 'certain' || b === 'favoured';
 }
 
 const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -992,7 +1028,7 @@ export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook 
   if (!able.length) return null;
   const v = townSiege(g, to);
   if (!v) return null;
-  const base = { region: to, town: v.town, size: v.size, sizeWord: v.sizeWord, guard: v.guard, guardMen: guardMen(g, r), going: able.map((c) => c.id), outlook: null, prepared: null };
+  const base = { region: to, town: v.town, size: v.size, sizeWord: v.sizeWord, guard: v.guard, guardMen: guardMen(g, r), going: able.map((c) => c.id), outlook: null, prepared: null, favours: null, ifStorm: '', ifSiege: '' };
   const guardWords = `its town guard, about ${menWord(base.guardMen)} men`;
   if (v.inside < 0) return { ...base, meets: 'unknown', line: `Your reports do not say what holds ${v.town}${v.guard > 0 ? ` beside ${guardWords}` : ''}. Your army marches up to it and finds out.` };
   if (v.inside > 0) return { ...base, meets: 'garrison', line: `${v.inside === 1 ? 'A corps holds' : `${v.inside} corps hold`} ${v.town}: your army closes round it and the siege begins.` };
@@ -1009,10 +1045,48 @@ export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook 
   // Made ready: the same army round the same town, with the month it came up behind it.
   h.flags[`siege:${to}`] = h.turn - 1;
   const prepared = stormOutlook(h, to);
-  return { ...base, going: there, meets: 'guard', outlook, prepared, line: `Only ${guardWords}, holds ${v.town}, and it will fight: your army goes at the town as it arrives.` };
+  return {
+    ...base, going: there, meets: 'guard', outlook, prepared, favours: outlook && favoured(outlook) ? 'storm' : 'siege',
+    ifStorm: IF_STORM,
+    ifSiege: 'Nothing is risked this month. The storm is then yours to order from the siege: next month it goes in made ready, if nothing else changes.',
+    line: `Only ${guardWords}, holds ${v.town}, and it will fight: your army goes at the town as it arrives.` };
 }
 
 /** What an order to take a place came to. */
+/**
+ * The storm of a town an army already stands round, as the choice its card puts (ruling 182): the storm now with
+ * its forecast, or keeping up the siege. `hasty` is true where the army only came up this month; `prepared` is then
+ * the same storm as it would stand next month made ready, with nothing else changed (asked of a copy of the game:
+ * nothing is changed here). `favours` is the order the card lights, by the verdict of the storm's own forecast.
+ * `ifStorm` and `ifWait` are the sentences that stand under the two orders; `ifWait` is '' where the rules have
+ * nothing to say of waiting. Null where no storm can be ordered (whyNotStormTown says why).
+ */
+export interface StormChoice {
+  region: number;
+  outlook: Outlook;
+  hasty: boolean;
+  prepared: Outlook | null;
+  favours: 'storm' | 'siege';
+  ifStorm: string;
+  ifWait: string;
+}
+const IF_STORM = 'If the storm fails, your corps pay more dearly than they would in the open, and the town guard is thinned too.';
+const carryWord = (o: Outlook): string => `${o.exact ? '' : 'about '}${o.odds.toFixed(2)} to 1, about ${Math.min(99, Math.max(1, Math.round(o.chance * 100)))}% to carry it`;
+export function stormChoice(g: Game, region: number): StormChoice | null {
+  const outlook = stormOutlook(g, region);
+  if (!outlook) return null;
+  const hasty = g.flags[`siege:${region}`] === g.turn && outlook.lines.some((l) => l.label === 'A hasty assault');
+  let prepared: Outlook | null = null;
+  if (hasty) {
+    const h = loadGame(saveGame(g));
+    if (h) { h.flags[`siege:${region}`] = h.turn - 1; prepared = stormOutlook(h, region); }
+  }
+  const v = townSiege(g, region);
+  // Made ready, the wait is a better storm. Otherwise it is what the siege itself is doing: the stores, the ring, the sea.
+  const ifWait = prepared ? `Made ready, a month later: ${carryWord(prepared)}, if nothing else changes.` : v && v.by ? v.lines[v.guard > 0 ? 2 : 1] ?? '' : '';
+  return { region, outlook, hasty, prepared, favours: favoured(outlook) ? 'storm' : 'siege', ifStorm: IF_STORM, ifWait };
+}
+
 export interface TakeResult {
   /** How many of the corps marched. */
   moved: number;
@@ -1363,10 +1437,24 @@ export function orderAir(g: Game, id: number, mission: AirMission, target = -1):
   return !!f && setMission(g, f, mission, target);
 }
 
-/** Moves one of the player's air fleets to airfields in another friendly region. */
+/**
+ * Moves one of the player's air fleets to airfields in another friendly region. For a carrier wing aboard its
+ * fleet this is the order to fly ashore (ruling 175(b)): to the airfield of the harbour its fleet lies in, or one on
+ * the sea it is in. airGroupBases() lists where; a wing's GroupRow.wingMove says why not when it cannot.
+ */
 export function orderAirBase(g: Game, id: number, region: number): boolean {
-  const f = myAir(g, id);
-  return !!f && rebaseAir(g, f, g.regions[region]);
+  const f = myAir(g, id), r = g.regions[region];
+  if (!f || !r) return false;
+  return f.ship !== undefined ? flyAshore(g, f, r) : rebaseAir(g, f, r);
+}
+
+/** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */
+export const airGroupDecks = (g: Game, id: number): DeckOption[] => groupDecks(g, id, g.human);
+
+/** Sends one of the player's carrier wings ashore back aboard a fleet of his navy that has deck room standing empty for it there. */
+export function orderAboard(g: Game, id: number, fleet: number): boolean {
+  const f = myAir(g, id), c = g.fleets.find((x) => x.id === fleet);
+  return !!f && !!c && flyAboard(g, f, c);
 }
 
 /** Where one of the player's air fleets could be sent on a mission, and where it could be based. */

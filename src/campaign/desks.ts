@@ -92,7 +92,7 @@ const orderWords = (g: Game, b: Build): string =>
 export function boughtAir(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number>; forming: Record<Wing, number> } {
   const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
   for (const f of airFleetsOf(g, nat)) {
-    if (f.ship !== undefined) continue;
+    if (f.ship !== undefined || f.ashore !== undefined) continue;
     for (const w of ['ftr', 'bmr'] as Wing[]) { const x = f.extra?.[w] ?? 0; over[w] += x; base[w] += Math.max(0, f.est[w] - x); }
   }
   for (const b of g.nations[nat].queue) if (b.what === 'air' && (b.item === 'ftr' || b.item === 'bmr')) { forming[b.item] += 1; over[b.item] += b.count ?? ARSENAL.air[b.item].count; }

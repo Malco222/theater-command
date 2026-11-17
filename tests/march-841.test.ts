@@ -10,7 +10,8 @@ import { saveGame } from '../src/campaign/save';
 import { SIEGE, besieged, garrison, garrisonOf, guardMen, guardOf, investedOn, townHeld } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { townSize } from '../src/campaign/towns';
-import { beginHuman, humanUp, marchOutlook, orderMove, orderStorm, orderTake, reach, stepAI, stormOutlook, townSiege } from '../src/campaign/turn';
+import { fogOn } from '../src/campaign/intel';
+import { FAVOURED, beginHuman, favoured, humanUp, marchOutlook, orderMove, orderStorm, orderTake, reach, stepAI, stormChoice, stormOutlook, townSiege, verdictAt, verdictOf, whyNotStormTown } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 function playing(human = 'GER', seed = 3): Game {
@@ -156,5 +157,68 @@ describe('marching in is the attack', () => {
     // The assault the storm card would show is still there to be ordered the old way.
     orderMove(g, germansBy(g, town)[0], town.id);
     expect(orderStorm(g, town.id)).not.toBeNull();
+  });
+
+  it('the card lights the order its own forecast favours, and says what each order comes to (rulings 180, 182)', () => {
+    const { g, town, ger } = city();
+    // With fog on, the province next to your own troops is in full view: the march has its card.
+    expect(fogOn(g, 'GER')).toBe(true);
+    const m = marchOutlook(g, ger.slice(0, 3), town.id)!;
+    expect(m.meets).toBe('guard');
+    expect(m.favours).toBe(favoured(m.outlook!) ? 'storm' : 'siege');
+    expect(m.ifStorm).toMatch(/^If the storm fails, your corps pay more dearly/);
+    expect(m.ifSiege).toMatch(/^Nothing is risked this month\. The storm is then yours to order from the siege/);
+    // A lone corps against a city's guard is not favoured: the siege is lit. (Whatever the figure, the light is the verdict's.)
+    const one = marchOutlook(g, ger.slice(0, 1), town.id)!;
+    expect(one.favours).toBe(verdictOf(one.outlook!, 'storm').band === 'certain' || verdictOf(one.outlook!, 'storm').band === 'favoured' ? 'storm' : 'siege');
+    // Laying siege first changes nothing by itself: the storm is the player's to order from the siege, and until
+    // he does the town stands. On arrival the same choice is put, with the made-ready forecast beside the wait.
+    expect(orderTake(g, ger.slice(0, 3), town.id, false).stands).toBe('guard');
+    expect(whyNotStormTown(g, town.id)).toBeNull();
+    // (Any forecast first brings the supply map up to date after the march, as it always has: that is not an order.)
+    stormOutlook(g, town.id);
+    const before = saveGame(g);
+    const c = stormChoice(g, town.id)!;
+    expect(saveGame(g)).toBe(before);
+    expect(c.hasty).toBe(true);
+    expect(c.outlook).toEqual(stormOutlook(g, town.id));
+    expect(c.outlook.odds).toBeCloseTo(m.outlook!.odds, 9);
+    expect(c.prepared!.odds).toBeCloseTo(m.prepared!.odds, 9);
+    expect(c.favours).toBe(m.favours);
+    expect(c.ifWait).toMatch(/^Made ready, a month later: [\d.]+ to 1, about \d+% to carry it, if nothing else changes\.$/);
+    expect(besieged(g, town)).toBe(true);
+    expect(town.ctrl).toBe('POL');
+    // Next month the storm is no longer hasty: the wait is then what the siege is doing, in the siege's own sentence.
+    g.flags[`siege:${town.id}`] = g.turn - 1;
+    const later = stormChoice(g, town.id)!;
+    expect(later.hasty).toBe(false);
+    expect(later.prepared).toBeNull();
+    expect(later.outlook.odds).toBeCloseTo(c.prepared!.odds, 9);
+    expect(townSiege(g, town.id)!.lines).toContain(later.ifWait);
+    // No storm to order, no choice.
+    expect(stormChoice(g, g.byName['Berlin'].id)).toBeNull();
+  });
+
+  it('the verdict is one line of the rules, the same for every card', () => {
+    expect(FAVOURED).toBe(0.6);
+    expect(verdictAt(0.97)).toEqual({ band: 'certain', word: 'Victory is all but certain', tone: 'win' });
+    expect(verdictAt(0.97, 'sortie').word).toBe('Breaking out is all but certain');
+    expect(verdictAt(0.6)).toEqual({ band: 'favoured', word: 'The odds favour you', tone: 'win' });
+    expect(verdictAt(0.59)).toEqual({ band: 'even', word: 'It could go either way', tone: '' });
+    expect(verdictAt(0.29)).toEqual({ band: 'long', word: 'A long shot', tone: 'loss' });
+    expect(verdictAt(0)).toEqual({ band: 'none', word: 'This attack will fail', tone: 'loss' });
+    expect(verdictAt(0, 'storm').word).toBe('This will fail');
+    const { g, town, ger } = city();
+    const look = marchOutlook(g, ger.slice(0, 3), town.id)!.outlook!;
+    // Where the defence is partly a guess the verdict is the staff's, of the band.
+    const band = { ...look, exact: false, chance: 0.7, chanceLo: 0.5, chanceHi: 0.9 };
+    expect(verdictOf(band).word).toBe('The staff thinks the odds favour you');
+    expect(favoured(band)).toBe(true);
+    expect(verdictOf({ ...band, chance: 0.4, chanceLo: 0.2, chanceHi: 0.6 }).word).toBe('The staff cannot call it');
+    expect(verdictOf({ ...band, chance: 0.1, chanceLo: 0, chanceHi: 0.2 }).word).toBe('The staff thinks it a long shot');
+    expect(verdictOf({ ...band, chance: 0.98, chanceLo: 0.96, chanceHi: 1 }, 'storm').word).toBe('Victory looks certain');
+    expect(verdictOf({ ...band, chance: 0, chanceLo: 0, chanceHi: 0 }).word).toBe('This attack looks hopeless');
+    expect(favoured({ ...band, chance: 0, chanceLo: 0, chanceHi: 0 })).toBe(false);
+    expect(verdictOf({ ...look, exact: true, chance: 0.61 }).band).toBe('favoured');
   });
 });

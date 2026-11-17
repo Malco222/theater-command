@@ -548,6 +548,12 @@ export interface Fleet extends Storied {
   seen?: Record<string, number>;
   /** The month it was last struck from the air, how many times that month (a fleet struck once is scattered and warned), and the sea it was in (-1 in harbour). */
   struck?: [number, number, number?];
+  /**
+   * Deck room standing empty because a wing was ordered ashore, in aircraft of each kind (the grand campaign; the
+   * player's order only). No new wing is raised for it, and the fleet's carriers fight as empty carriers for that
+   * share of their decks until the wing comes back aboard.
+   */
+  bare?: { ftr: number; bmr: number };
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -900,6 +906,11 @@ export interface AirFleet extends Storied {
   escorts?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
+  /**
+   * A carrier wing ordered ashore: the id of the fleet whose decks it left. It is based on an airfield like any air
+   * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
+   */
+  ashore?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
