@@ -125,8 +125,14 @@ export interface CardRow {
   /** The sign in the disc: a key of the order signs ('inf', 'arm', 'art', 'hull', 'cv', 'ss', 'bmr', 'ftr', 'eng', 'para', 'star'), or '' for none. */
   sign: string;
   place: string;
-  /** One word, or '': WON, LOST, HELD, HIT, MISSED, SUNK, BLOCKED. The row's edge and its tag share the tone. */
+  /** One word, or '': WON, LOST, HELD, BESIEGED, HIT, MISSED, SUNK, BLOCKED. The row's edge and its tag share the tone. */
   tag: string;
+  /**
+   * The word that goes with the tag and the other side's name in words, beside its flag, so that the row reads whole
+   * with no picture (the UI director's words for ruling 211, section 5): "Monterrey WON from Mexico", "Guadalajara
+   * LOST to Mexico", "Seattle HELD against Canada", "Pittsburgh BESIEGED by Canada", "Toronto WON against Canada".
+   */
+  join?: { word: string; name: string };
   tone: CardTone;
   /** The flag on the left and the flag after "against". */
   ours: string | null;
@@ -550,8 +556,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.follows = `${row.line} ${worth(!att) || (att ? 'The front moves forward.' : 'The front falls back.')}`;
       if (!att && corps) row.facts[0] = { n: plural(corps, 'corps', 'corps'), label: 'fought outside' };
     } else if (r.siege) {
-      row.tag = att ? 'WON' : 'HELD'; row.tone = att ? 'good' : 'warn';
-      row.line = att ? 'The field is won. The town is besieged.' : shut.men > 0 ? 'The town is besieged and holds.' : 'The field is lost. The town holds out.';
+      // (His town besieged and holding: BESIEGED, amber, "Pittsburgh BESIEGED by Canada. Canadian troops close round the town.")
+      row.tag = att ? 'WON' : 'BESIEGED'; row.tone = att ? 'good' : 'warn';
+      row.line = att ? 'The field is won. The town is besieged.' : shut.men > 0 ? `${g.nations[r.attNat]?.adj ?? 'Enemy'} troops close round the town.` : 'The field is lost. The town holds out.';
       row.head = att ? `${place} is under siege` : `${place} is besieged`;
       row.follows = att ? 'The province falls only when the town is taken.' : shut.men > 0 ? shutWords(place, oursLost, shut) : 'The province is yours for as long as the town holds.';
       // The words are true to what they count: the corps that lost the field outside did not hold the line, and the
@@ -598,6 +605,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     }
     // His own capital besieged and holding: the sentence under the picture says what hangs on it (ruling 133(a), point 4).
     if (reg && reg.id === N?.capital && mine(reg.ctrl) && besieged(g, reg) && row.follows && !row.follows.includes(CAPITAL_BESIEGED)) row.follows = `${row.follows} ${CAPITAL_BESIEGED}`;
+    // The word after the tag: by for a siege on him, from and to where no battle was fought, against for a battle.
+    if (row.theirs && g.nations[row.theirs]) row.join = { word: row.tag === 'BESIEGED' ? 'by' : r.yielded ? (att ? 'from' : 'to') : 'against', name: theName(g.nations[row.theirs]) };
     ranked.push({ row, sub: GROUND_FIGHTING, weight: ourMen, place: reg?.cap ? 'capital' : size, ...(r.siege ? { laid: { region: r.region, ours: oursLost, theirs: theirsLost, first: row.facts[0] } } : {}) });
   }
 
@@ -621,7 +630,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.place = ids.length === 1 ? g.regions[ids[0]].name : `The ${other?.adj ?? 'open'} front`;
       row.tag = gain ? 'WON' : 'LOST'; row.tone = gain ? 'good' : 'bad';
       row.ours = me; row.theirs = other ? nat : null;
-      row.line = ids.length === 1 ? (gain ? 'Occupied without a battle.' : 'Lost without a battle.') : gain ? `${count(ids.length)} provinces occupied without a battle.` : `${count(ids.length)} provinces lost without a battle.`;
+      // ("Lost without a battle." after LOST says lost twice: both ways the line is "No battle was fought.", and the count is the figure.)
+      row.line = 'No battle was fought.';
+      if (other) row.join = { word: gain ? 'from' : 'to', name: theName(other) };
       row.figures = [{ n: String(ids.length), label: ids.length === 1 ? 'province' : 'provinces' }];
       row.region = best;
       row.kind = 'GROUND';
@@ -656,6 +667,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.report = { type: 'sea', id: r.id };
     row.ours = me; row.theirs = them[0]?.nat ?? null;
     row.tag = good ? 'WON' : 'LOST'; row.tone = good ? 'good' : 'bad';
+    if (row.theirs && g.nations[row.theirs]) row.join = { word: 'against', name: theName(g.nations[row.theirs]) };
     row.line = good ? `${cap(the(ourFleet))} beat ${the(theirFleet)}.` : `${cap(the(theirFleet))} beat ${the(ourFleet)}.`;
     row.figures = good && shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : shipCount(ourSunk) ? [{ n: String(shipCount(ourSunk)), label: `${classWord(ourSunk)} lost` }] : shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : [];
     row.kind = 'FLEET ACTION';
@@ -1108,7 +1120,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const taken = card.home.reduce((n, x) => n + goodLines(x), 0) + card.research.reduce((n, t) => n + linesAt(`Research complete: ${t}.`, FOOT_ROOM.home), 0);
   // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
   // the town held, the staff speaks of the battle there and not of its loss.
-  const held = new Set(ranked.filter((x) => x.row.tag === 'HELD').map((x) => x.row.place));
+  const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
   const said: { text: string; full: string; hs: Headline[] }[] = [];
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();

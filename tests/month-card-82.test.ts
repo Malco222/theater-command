@@ -125,7 +125,9 @@ describe('the order of the rows (ruling 64)', () => {
     // A land battle carries two figures, ours first; the front's row carries its count.
     expect(rows[2].figures).toEqual([{ n: '9,000', label: 'lost' }, { n: '20,000', label: 'theirs' }]);
     expect(rows[3].figures).toEqual([{ n: '2', label: 'provinces' }]);
-    expect(rows[3].line).toBe('Two provinces occupied without a battle.');
+    // (Version 84.2.6: "WON from ..." and the count as the figure; the line is "No battle was fought.")
+    expect(rows[3].line).toBe('No battle was fought.');
+    expect(rows[3].figures[0].n).toBe('2');
     // Each battle row opens its battle report, and shows its place on the map.
     expect(rows[2].report).toEqual({ type: 'land', id: g.reports[g.reports.length - 3].id });
     expect(rows[2].region).toBe(a.id);
@@ -229,7 +231,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ place: a.name, tag: 'LOST', tone: 'bad', head: `The ring closes at ${a.name}`, follows: '5 German corps are cut off from all supply.', line: 'The ring closes: 5 corps are cut off.' });
     expect(card.lead!.figures).toEqual([{ n: '151,638', label: 'men cut off' }]);
-    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`LOST ${b.name}`, `HELD ${townName(capital)}`, `HELD ${townName(city)}`, `LOST ${c.name}`]);
+    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`LOST ${b.name}`, `BESIEGED ${townName(capital)}`, `BESIEGED ${townName(city)}`, `LOST ${c.name}`]);
   });
 
   it('Britain, June 1940: the army cut off leads, the city held sits below, and the fleet action lost comes after the ground', () => {
@@ -242,7 +244,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     ringAt(g, a, 4, '128,417');
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ place: a.name, tag: 'LOST' });
-    expect(card.rows.map((r) => `${r.tag} ${r.arm}`)).toEqual(['HELD land', 'LOST sea']);
+    expect(card.rows.map((r) => `${r.tag} ${r.arm}`)).toEqual(['BESIEGED land', 'LOST sea']);
   });
 
   it('a capital is never below a lesser place of the same stamp, whatever the lesser place cost', () => {
@@ -905,11 +907,11 @@ describe("the foot boxes give a line whole where the box has room (the art direc
     const g = game();
     const mark = monthMark(g, ME);
     const city = germanCity(g);
-    // The field is lost and the town holds: the row is stamped HELD.
+    // The field is lost and the town holds: the row is stamped BESIEGED (HELD before Version 84.2.6).
     land(g, city, { attNat: 'POL', defNat: ME, attackers: [unit('POL')], defenders: [unit(ME)], taken: true, siege: true } as never);
     news(g, { kind: 'info', text: `Your staff on the loss of ${city.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight stronger.`, nat: ME });
     const card = monthCard(g, mark, ME);
-    const held = [card.lead, ...card.rows].some((r) => r?.place === city.name && r.tag === 'HELD');
+    const held = [card.lead, ...card.rows].some((r) => r?.place === city.name && (r.tag === 'HELD' || r.tag === 'BESIEGED'));
     expect(card.also).toEqual([`Your staff on the ${held ? 'battle at' : 'loss of'} ${city.name}: the line was dug in and it still broke.`]);
   });
   it('marches: a halt comes first, and armies that arrive at one place are one line', () => {

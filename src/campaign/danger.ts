@@ -445,6 +445,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   const n = g.nations[nat];
   if (!n?.alive || !n.atWar.length) return [];
   const raise = specOf(g, 'inf')?.months ?? 5;
+  const myIndex = g.order.indexOf(nat);
   const cap = n.capital;
   const dist = g.capDist?.[nat];
   const far = (id: number): number => (dist ? dist[id] : 0);
@@ -462,10 +463,11 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const w = new Map<string, number>();
     for (const u of foes) w.set(armyOf(u), (w.get(armyOf(u)) ?? 0) + u.divs * u.str);
     const by = [...w.keys()].sort((a, b) => w.get(b)! - w.get(a)! || (a < b ? -1 : 1))[0];
-    // Fell this month: since he last ended a month for certain (the design director, 17:22Z: "has taken" only for a
-    // town that fell since then). A town stormed as his own month opened fell this month too; one that fell the month
-    // before, when he had seen it, "stands".
-    const taken = !held && r.since === g.turn;
+    // Fell since he last ended a month (the design director's ruling b340, by the order of play): this month, before
+    // his turn or as it opened; or last month in a turn after his own (Buffalo, stormed in Canada's November after his
+    // November had ended). The turn it fell in is kept as it falls; a save from before has the holder's place in the order.
+    const fellIn = g.flags[`fellP:${r.id}`] ?? g.order.indexOf(r.ctrl);
+    const taken = !held && (r.since === g.turn || (r.since === g.turn - 1 && fellIn > myIndex));
     const ring = held && besieged(g, r);
     const kase: HomeAlarm['case'] = !held ? (taken ? 'taken' : 'stands') : ring ? (whyNotStorm(g, r, by) === null ? 'storm' : 'stores') : 'stands';
     // His towns it can reach next month: his own ground beside it, held by his side; none for guns alone.

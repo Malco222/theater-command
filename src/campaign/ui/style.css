@@ -2383,3 +2383,5 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .alert.home .of { color: #e6a593; font-size: 11px; white-space: nowrap; }
 .alert.gunsalone { border-right-color: var(--red); }
 .alerts.inpane .alert.home, .alerts.inpane .alert.gunsalone { border-left-color: var(--red); }
+/* Version 84.2.6: the other side's name in words beside its flag on a fronts row ("WON from Mexico"). */
+.mc-cn { font-size: 12px; color: var(--mc-dim); margin-left: 4px; white-space: nowrap; }

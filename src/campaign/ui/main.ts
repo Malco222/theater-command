@@ -63,7 +63,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
-import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
+import { WORLD, answersOf, beyondEurope, lakesOf, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -91,7 +91,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, forceWords, hasRoom, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -2538,6 +2538,9 @@ function alertList(): Alert[] {
     if (shutIn.length) out.push({ kind: 'besieged', text: shutIn.length === 1 ? `${shutIn[0].town} is under siege` : `${shutIn.length} of your towns are under siege`, regs: shutIn.map((v) => v.region) });
     const round = sg.filter((v) => atWar(g, me, v.holder) && !whyNotStormTown(g, v.region));
     if (round.length) out.push({ kind: 'siege', text: round.length === 1 ? `Your army stands round ${round[0].town}: storm it or sit it out` : `Your armies stand round ${round.length} towns`, regs: round.map((v) => v.region) });
+    // His siege where only guns are left round the town (ruling 211(a); words, section 4): red while infantry or tanks
+    // of his can reach them this month, plain where none can.
+    for (const a of gunsAlone(g, me)) out.push({ kind: a.red ? 'gunsalone' : 'gunsleft', text: a.line, regs: [a.region] });
   }
   // Coasts of the player's shelled from the sea since his last month.
   const shelled = ui.shoreFrom < 0 ? [] : [...new Set(g.shoreReports.slice(ui.shoreFrom).filter((r) => atWar(g, r.nat, me) && (r.defNat === me || g.regions[r.region].ctrl === me || g.regions[r.region].units.some((c) => c.nat === me))).map((r) => r.region))];
@@ -2571,8 +2574,6 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
-  // His own guns left alone round an enemy's town (ruling 211(a)): red while infantry or tanks of his can reach them this month.
-  for (const a of gunsAlone(g, me)) out.unshift({ kind: a.red ? 'gunsalone' : 'gunsleft', text: a.line, regs: [a.region] });
   // The alarm, first in the tray (ruling 211(c); words, section 1): an enemy army on his home ground, what it can reach
   // next month, and the nearest help. The row speaks of the one nearest his capital; each press goes on to the next.
   const alarms = homeAlarms(g, me);
@@ -6213,7 +6214,11 @@ const hasTraits = (nat: string): boolean => traitsOf(nat).length > 0 || !!eliteO
 function traitList(nat: string, full = false): string {
   const u = eliteOf(nat);
   const row = (name: string, text: string, rule: string, star = false): string => `<li${star ? ' class="unit"' : ''}><b>${star ? '<i>★</i> ' : ''}${esc(name)}</b>${full && text ? `<span>${esc(text)}</span>` : ''}${rule ? `<em>${esc(rule)}</em>` : ''}</li>`;
-  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}</ul>`;
+  // A dominion (ruling 211(b) as Brian changed it; the UI director's words (f)): war on it brings its patron in so many times in ten.
+  const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null, odds = patron ? Math.round(answersOf(patron) * 10) : 0;
+  const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times', 'every time'];
+  const dom = patron && odds > 0 && g.nations[patron] ? row('Dominion', '', `War on it brings ${newsName(g.nations[patron])} in ${odds >= 10 ? 'every time' : `${TIMES[odds]} in ten`}, the same month.`) : '';
+  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
 }
 
 /** What a country does best, with every other country's abilities a click away. */
@@ -8834,10 +8839,12 @@ function keepMarches(id: number, held: Corps[]): boolean {
   if (!kept && go.every((p) => p.c.reg !== id)) return false;
   slipDone();
   ui.unread += g.headlines.length - h;
-  const place = g.regions[id].name, who = go.length === 1 ? lead.name : `${go.length} corps`;
+  // (One voice, 84.2.6: the army is named as every other line names it, "The American army", "2 corps of the
+  // American army", a lone corps by its name.)
+  const place = g.regions[id].name, force = forceWords(g, go.map((p) => p.c)), who = upFirst(force.who);
   ui.msg = !kept ? '' : spent
     ? `${who} will march to ${place} from next month, ${aboutMonths(months)}. Any other order ends the march.`
-    : `${who} ${go.length === 1 ? 'is' : 'are'} on the march to ${place}: ${aboutMonths(months)} more, going on as each month opens. Any other order ends the march.`;
+    : `${who} ${force.many ? 'are' : 'is'} on the march to ${place}: ${aboutMonths(months)} more, going on as each month opens. Any other order ends the march.`;
   // The army goes with its leading corps: where that has marched to this month, the corps that came with it stay in hand.
   const moved = lead.reg !== from;
   if (moved) { ui.sel = lead.reg; ui.picked = new Set(go.filter((p) => p.c.reg === lead.reg).map((p) => p.c.id)); ui.tab = 'region'; }

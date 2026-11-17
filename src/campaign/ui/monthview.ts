@@ -56,7 +56,8 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const row = (r: CardRow): string => {
     const pic = r.picture ? `<i class="tpic k-${r.picture}"></i>` : `<span class="mc-nopic">${r.cls === 2 ? fl(r.ours, 34) : ''}</span>`;
     const disc = r.cls === 2 ? '' : `<span class="mc-disc">${monthSign(r.sign || 'star', r.sign === 'star' || !r.sign ? 16 : 15, PALE)}</span>`;
-    const flags = r.cls === 2 ? fl(r.theirs, 30) : versus(r, 30);
+    // (The word that goes with the tag, the other side's flag and its name: "WON from [flag] Mexico".)
+    const flags = r.cls === 2 ? fl(r.theirs, 30) : r.join && r.theirs ? `<i class="mc-ag">${esc(r.join.word)}</i>${fl(r.theirs, 30)}<span class="mc-cn">${esc(r.join.name)}</span>` : versus(r, 30);
     return `<div class="mc-row ${toneClass(r.tone)}${r.cls === 2 ? ' red' : ''}${r.report ? ' opens' : ''}"${act(r)}>${pic}${disc || '<span></span>'}
       <div class="mc-rtx"><div class="r1"><b class="pl${r.place.length > 16 ? ' long' : ''}">${esc(r.place)}</b>${r.tag ? `<span class="mc-chip">${esc(r.tag)}</span>` : ''}<span class="vs">${flags}</span></div><div class="r2" title="${esc(r.line)}">${esc(r.line)}</div></div>
       <div class="mc-nums">${nums(r.figures)}</div>${pin(r)}</div>`;
