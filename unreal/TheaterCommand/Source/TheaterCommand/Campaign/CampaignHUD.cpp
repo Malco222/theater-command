@@ -1540,6 +1540,376 @@ namespace
 		FLinearColor Ink = FLinearColor::White;
 	};
 
+	/** A space, or the space that holds two words together (CampaignText::Phrases sets those inside a phrase). */
+	bool IsGap(TCHAR Char)
+	{
+		return Char == TEXT(' ') || Char == static_cast<TCHAR>(0x00A0);
+	}
+
+	/** Words with the spaces at either end taken off, the held ones too. */
+	FString TrimGaps(const FString& Words)
+	{
+		int32 First = 0, Last = Words.Len();
+		while (First < Last && IsGap(Words[First]))
+		{
+			++First;
+		}
+		while (Last > First && IsGap(Words[Last - 1]))
+		{
+			--Last;
+		}
+		return Words.Mid(First, Last - First);
+	}
+
+	/**
+	 * (The UI director, check 19: no word is cut at an edge, and no line begins or ends with a dot.) A phrase set to a
+	 * measure: where it is wider it folds at its spaces, and with bBracket a name folds before its bracket first
+	 * ("Third Army" over "(2nd Division and 1st Cavalry Division)"). A word is never cut: one wider than the measure
+	 * stands alone on its line.
+	 */
+	void FoldWords(const FString& Phrase, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, bool bBracket = false)
+	{
+		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		TArray<FString> Pieces;
+		int32 Bracket = INDEX_NONE;
+		if (bBracket && Wide(Phrase) > Room && Phrase.FindChar(TEXT('('), Bracket) && Bracket > 0)
+		{
+			Pieces.Add(TrimGaps(Phrase.Left(Bracket)));
+			Pieces.Add(TrimGaps(Phrase.Mid(Bracket)));
+		}
+		else
+		{
+			Pieces.Add(Phrase);
+		}
+		for (const FString& Piece : Pieces)
+		{
+			if (Piece.IsEmpty())
+			{
+				continue;
+			}
+			if (Wide(Piece) <= Room)
+			{
+				Out.Add(Piece);
+				continue;
+			}
+			// (its words, parted at every space, the held ones too)
+			TArray<FString> Words;
+			FString Word;
+			for (int32 At = 0; At < Piece.Len(); ++At)
+			{
+				if (IsGap(Piece[At]))
+				{
+					if (!Word.IsEmpty())
+					{
+						Words.Add(Word);
+						Word.Reset();
+					}
+				}
+				else
+				{
+					Word.AppendChar(Piece[At]);
+				}
+			}
+			if (!Word.IsEmpty())
+			{
+				Words.Add(Word);
+			}
+			FString Line;
+			for (const FString& Each : Words)
+			{
+				const FString Longer = Line.IsEmpty() ? Each : Line + TEXT(" ") + Each;
+				if (!Line.IsEmpty() && Wide(Longer) > Room)
+				{
+					Out.Add(Line);
+					Line = Each;
+				}
+				else
+				{
+					Line = Longer;
+				}
+			}
+			if (!Line.IsEmpty())
+			{
+				Out.Add(Line);
+			}
+		}
+	}
+
+	/**
+	 * (Check 19.) A line of phrases parted by dots ("Odds of 1.5 to 1 in your favour  ·  about 62% to take Mexico
+	 * City"), folded to a measure. A fold falls where a dot stands, and the dot goes with it: the fold parts the two
+	 * facts already, so no line begins or ends with a dot. A phrase wider than the measure on its own folds at a space.
+	 * A line break in the text stays one.
+	 */
+	void FoldPhrases(const FString& Text, const FSlateFontInfo& Face, double Room, TArray<FString>& Out)
+	{
+		TArray<FString> Paragraphs;
+		Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		if (Room < 24.0)
+		{
+			Out.Append(Paragraphs); // (not laid out yet: nothing to fold to)
+			return;
+		}
+		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		const TCHAR Dot = static_cast<TCHAR>(0x00B7);
+		for (const FString& Paragraph : Paragraphs)
+		{
+			// The phrases, and the dots between them with their spaces, as written.
+			TArray<FString> Phrases, Seps;
+			int32 Start = 0;
+			for (int32 At = 0; At < Paragraph.Len(); ++At)
+			{
+				if (Paragraph[At] != Dot)
+				{
+					continue;
+				}
+				int32 Left = At, Right = At + 1;
+				while (Left > Start && IsGap(Paragraph[Left - 1]))
+				{
+					--Left;
+				}
+				while (Right < Paragraph.Len() && IsGap(Paragraph[Right]))
+				{
+					++Right;
+				}
+				Phrases.Add(TrimGaps(Paragraph.Mid(Start, Left - Start)));
+				Seps.Add(Paragraph.Mid(Left, Right - Left));
+				Start = Right;
+				At = Right - 1;
+			}
+			Phrases.Add(TrimGaps(Paragraph.Mid(Start)));
+			FString Line;
+			for (int32 Index = 0; Index < Phrases.Num(); ++Index)
+			{
+				const FString& Phrase = Phrases[Index];
+				if (Phrase.IsEmpty())
+				{
+					continue;
+				}
+				if (!Line.IsEmpty())
+				{
+					const FString Longer = Line + Seps[Index - 1] + Phrase;
+					if (Wide(Longer) <= Room)
+					{
+						Line = Longer;
+						continue;
+					}
+					Out.Add(Line); // (the fold falls at the dot, and the dot goes with it)
+					Line.Reset();
+				}
+				TArray<FString> Folded;
+				FoldWords(Phrase, Face, Room, Folded);
+				for (int32 K = 0; K + 1 < Folded.Num(); ++K)
+				{
+					Out.Add(Folded[K]);
+				}
+				if (Folded.Num() > 0)
+				{
+					Line = Folded.Last();
+				}
+			}
+			Out.Add(Line); // (an empty paragraph stays an empty line)
+		}
+	}
+
+	/**
+	 * (Check 19.) A line of phrases parted by dots, drawn folded to its own width by FoldPhrases: in place of a text
+	 * block that wraps by itself, whose folds left the dot hanging at a line's end. Its slot must give it the whole
+	 * width it may take (HAlign_Fill); it is set left, centred or right within it.
+	 */
+	class SPhraseText : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SPhraseText) : _Ink(FLinearColor::White), _Justify(ETextJustify::Left), _LineHigh(0.0f), _Guess(600.0f) {}
+			SLATE_ATTRIBUTE(FText, Text)
+			SLATE_ARGUMENT(FSlateFontInfo, Face)
+			SLATE_ARGUMENT(FLinearColor, Ink)
+			SLATE_ARGUMENT(ETextJustify::Type, Justify)
+			SLATE_ARGUMENT(float, LineHigh) // the step from one line to the next; 0 for the face's own
+			SLATE_ARGUMENT(float, Guess) // the width it folds to before it is first drawn
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Text = Args._Text;
+			Face = Args._Face;
+			Ink = Args._Ink;
+			Justify = Args._Justify;
+			LineHigh = Args._LineHigh;
+			Room = FMath::Max(static_cast<double>(Args._Guess), 24.0);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			TArray<FString> Lines;
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			double Widest = 0.0;
+			for (const FString& Line : Lines)
+			{
+				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Line, Face).X));
+			}
+			return FVector2D(FMath::Min(Widest, Room), Lines.Num() * Step());
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			// (the width it is given is the width it folds to from now on)
+			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
+			TArray<FString> Lines;
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const double High = Step();
+			const FLinearColor Shown = Style.GetColorAndOpacityTint() * Ink;
+			double Y = 0.0;
+			for (const FString& Line : Lines)
+			{
+				const double Wide = static_cast<double>(Measure->Measure(Line, Face).X);
+				const double X = Justify == ETextJustify::Center ? 0.5 * (Room - Wide) : Justify == ETextJustify::Right ? Room - Wide : 0.0;
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, High), FSlateLayoutTransform(FVector2D(FMath::Max(X, 0.0), Y))), Line, Face, ESlateDrawEffect::None, Shown);
+				Y += High;
+			}
+			return LayerId;
+		}
+
+	private:
+		double Step() const
+		{
+			return LineHigh > 0.0f ? static_cast<double>(LineHigh) : static_cast<double>(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->GetMaxCharacterHeight(Face));
+		}
+
+		TAttribute<FText> Text;
+		FSlateFontInfo Face;
+		FLinearColor Ink = FLinearColor::White;
+		ETextJustify::Type Justify = ETextJustify::Left;
+		float LineHigh = 0.0f;
+		mutable double Room = 600.0;
+	};
+
+	/**
+	 * (The UI director, check 19; the art director's review of 16:40 UTC, 17 November.) One side's corps on the battle
+	 * card, in the roster's two forms. Where every corps of the side fits its column on one line, each stands as on the
+	 * kit: "XIX Corps · armoured, 2 divisions · 30,000 men". Where any does not, every corps of that side takes two
+	 * lines: the name alone in the lighter paper (folded before its bracket, else at a space, where it is wider than
+	 * the column) and under it the figures in the darker, which never fold, with no dot between the two, and 5 between
+	 * one corps and the next. The right side is set to the right. Typed 12 on 17, the sheet's pixels.
+	 */
+	class SRosterBlock : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SRosterBlock) : _bOurs(true) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Player)
+			SLATE_ARGUMENT(bool, bOurs)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Player = Args._Player;
+			bOurs = Args._bOurs;
+		}
+
+		static constexpr double LineHigh = 17.0, Between = 5.0;
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			TArray<FRow> Rows;
+			const double High = Lay(Room, Rows);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			double Widest = 0.0;
+			for (const FRow& Row : Rows)
+			{
+				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Row.Words, Type()).X));
+			}
+			return FVector2D(FMath::Min(Widest, Room), High);
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
+			TArray<FRow> Rows;
+			Lay(Room, Rows);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const FLinearColor Paper300(FColor::FromHex(TEXT("CDBF9C")));
+			const FSlateFontInfo Face = Type();
+			for (const FRow& Row : Rows)
+			{
+				const double Wide = static_cast<double>(Measure->Measure(Row.Words, Face).X);
+				const double X = bOurs ? 0.0 : FMath::Max(Room - Wide, 0.0);
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, LineHigh), FSlateLayoutTransform(FVector2D(X, Row.Y))), Row.Words, Face,
+					ESlateDrawEffect::None, Style.GetColorAndOpacityTint() * (Row.bFigures ? Paper300 : Cream));
+			}
+			return LayerId;
+		}
+
+	private:
+		struct FRow
+		{
+			FString Words;
+			bool bFigures = false; // the line of figures under a name, in the darker paper
+			double Y = 0.0;
+		};
+
+		static FSlateFontInfo Type() { return Typed(9.0f); } // (typed 12: the sheet's pixels are three quarters of a point)
+
+		/** The rows at a width, top to bottom; returns the height they take. */
+		double Lay(double Width, TArray<FRow>& Rows) const
+		{
+			if (!Player.IsValid())
+			{
+				return 0.0;
+			}
+			const FFaceOff& Face = Player->GetFaceOff();
+			const TArray<FRosterLine>& Roster = bOurs ? Face.OurRoster : Face.TheirRoster;
+			const FSlateFontInfo With = Type();
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Whole = [](const FRosterLine& Corps) { return Corps.Figures.IsEmpty() ? Corps.Name : Corps.Name + TEXT(" \u00B7 ") + Corps.Figures; };
+			// One form for the whole side: one line a corps only where every corps fits.
+			bool bOneLine = true;
+			for (const FRosterLine& Corps : Roster)
+			{
+				bOneLine = bOneLine && static_cast<double>(Measure->Measure(Whole(Corps), With).X) <= Width;
+			}
+			auto Add = [&Rows](const FString& Words, bool bFigures, double Y)
+			{
+				FRow& Row = Rows.AddDefaulted_GetRef();
+				Row.Words = Words;
+				Row.bFigures = bFigures;
+				Row.Y = Y;
+			};
+			double Y = 0.0;
+			for (int32 Index = 0; Index < Roster.Num(); ++Index)
+			{
+				const FRosterLine& Corps = Roster[Index];
+				if (bOneLine)
+				{
+					Add(Whole(Corps), false, Y);
+					Y += LineHigh;
+					continue;
+				}
+				Y += Index > 0 ? Between : 0.0;
+				TArray<FString> Name;
+				FoldWords(Corps.Name, With, Width, Name, true);
+				for (const FString& Line : Name)
+				{
+					Add(Line, false, Y);
+					Y += LineHigh;
+				}
+				if (!Corps.Figures.IsEmpty())
+				{
+					Add(Corps.Figures, true, Y); // (the figures never fold: forty letters at most)
+					Y += LineHigh;
+				}
+			}
+			return Y;
+		}
+
+		TWeakObjectPtr<ACampaignPlayerController> Player;
+		bool bOurs = true;
+		mutable double Room = 370.0;
+	};
+
 	/**
 	 * (Rules version 84; rulings 149(d), 164(f) and 174.) WHAT YOU FACE, on the battle card just above the odds: a
 	 * sign and a sentence for each thing the defence will do to what he brings, four at most, facts and never a
@@ -3315,9 +3685,17 @@ namespace
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurStrength : F->TheirStrength) : FText::GetEmpty(); })
 					]
+					// (Check 19.) The corps, in the roster's two forms; the slot gives it the column's whole width.
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 10.0f, 0.0f, 0.0f)
+					[
+						SNew(SRosterBlock).Player(Controller).bOurs(bOurs)
+						.Visibility_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F && (bOurs ? F->OurRoster : F->TheirRoster).Num() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					]
+					// A town's guard, said in a sentence where the corps would be listed.
 					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 10.0f, 0.0f, 0.0f)
 					[
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).Justification(Justify).LineHeightPercentage(1.25f).AutoWrapText(true)
+						.Visibility_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F && (bOurs ? F->OurRoster : F->TheirRoster).Num() == 0 && !(bOurs ? F->OurUnits : F->TheirUnits).IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurUnits : F->TheirUnits) : FText::GetEmpty(); })
 					];
 			};
@@ -3882,7 +4260,8 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+										// (check 19: it folds where a dot stands, and the dot goes)
+										SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(340.0f)
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Details : FText::GetEmpty(); })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
@@ -4178,7 +4557,8 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+										// (check 19: a long place's name folds the line at its dot, and the dot goes)
+										SNew(SPhraseText).Face(Font(TEXT("Bold"), 13)).Ink(Cream).Justify(ETextJustify::Center).Guess(840.0f)
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->OddsLine : FText::GetEmpty(); })
 									]
 									// (Rules 84.1.) The first forecast's sentence, opening with the game's own verdict.
@@ -4225,7 +4605,7 @@ namespace
 										]
 										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
 										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+											SNew(SPhraseText).Face(Font(TEXT("Bold"), 13)).Ink(Cream).Justify(ETextJustify::Center).Guess(840.0f)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->LaterOdds.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterOdds : FText::GetEmpty(); })
 										]
@@ -6108,7 +6488,7 @@ namespace
 										+ SVerticalBox::Slot().AutoHeight()
 										[
 											SNew(STextBlock).Text(FText::FromString(Name.Replace(TEXT(" corps"), TEXT("")))).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Option.bEnabled ? Cream : Muted)
-											.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+											.AutoWrapText(true) // (no order is cut mid-word: a long name takes a second line)
 										]
 										+ SVerticalBox::Slot().AutoHeight()
 										[
@@ -6153,13 +6533,16 @@ namespace
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
+										// (Ruling of 17:16 UTC, 17 November: no order row is cut mid-word. The name and the reason
+										// wrap, and the row grows to hold them: "It goes into the town as its garrison: it fig..." was cut.)
 										SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Option.bEnabled ? Cream : Faint)
-										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										.AutoWrapText(true)
 									]
-									+ SVerticalBox::Slot().AutoHeight()
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Option.bEnabled ? Muted : Faint)
-										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										// (its facts are parted by dots, "2 divisions · costs 1,200 · ready in 3 months": check 19,
+										// a fold falls at a dot and the dot goes)
+										SNew(SPhraseText).Face(Font(TEXT("Regular"), 9)).Ink(Option.bEnabled ? Muted : Faint).Guess(340.0f)
 										.Text(FText::FromString(Option.bEnabled || Option.Why.IsEmpty() ? Option.Detail : Option.Why))
 									]
 								]
@@ -6990,7 +7373,8 @@ namespace
 					]
 					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted)
+						// (no order row is cut mid-word, and a fold falls at a dot and the dot goes: check 19)
+						SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(360.0f)
 						.Text_Lambda([Way]()
 						{
 							const FApproachRow* Row = Way();
@@ -7795,7 +8179,8 @@ namespace
 					TSharedRef<SHorizontalBox> Under = SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Card.Foot))
+							// (no line is cut mid-word: where it must be cut, it is cut after a whole word)
+							SNew(SWordLine).Words(Card.Foot).Face(Font(TEXT("Regular"), 11)).Ink(Muted).ToolTipText(FText::FromString(Card.Foot))
 						];
 					if (bMore)
 					{
@@ -8138,11 +8523,11 @@ namespace
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(Seat.Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(bCan ? Cream : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Seat.Name).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint) // (cut after a whole word where it must be)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Where).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint)
 					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
@@ -8279,7 +8664,7 @@ namespace
 				}
 				Whose->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Under).Face(Font(TEXT("Regular"), 11)).Ink(Cream) // (cut after a whole word where it must be)
 				];
 				Print->AddSlot().VAlign(VAlign_Bottom)
 				[
@@ -8431,7 +8816,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(9.0f, 0.0f, 0.0f, 5.0f)
 							[
-								SNew(STextBlock).Text(FText::FromString(Way.Verdict)).Font(Serif(TEXT("Bold"), 11)).ColorAndOpacity(Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+								SNew(SWordLine).Words(Way.Verdict).Face(Serif(TEXT("Bold"), 11)).Ink(Cream) // (cut after a whole word where it must be)
 							]
 						];
 						Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[RaidMeter(Way.Success, BrightBrass, 4.0f)];
@@ -8491,7 +8876,7 @@ namespace
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 2.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(Way.Hits[K].Value)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bDim ? Faint : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										SNew(SWordLine).Words(Way.Hits[K].Value).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted) // (cut after a whole word where it must be)
 									]
 								];
 							}
@@ -10301,7 +10686,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).AutoWrapText(true) // (no order is cut mid-word)
 									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
@@ -10376,7 +10761,7 @@ namespace
 								SNew(SHorizontalBox)
 								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 								[
-									SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bFree ? Muted : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bFree ? Muted : Cream).AutoWrapText(true) // (no name is cut mid-word)
 									.Text(FText::FromString(bFree ? FString(TEXT("Free plot")) : Plot.Level > 0 ? Plot.Label : Plot.Name))
 								]
 								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Pips]
