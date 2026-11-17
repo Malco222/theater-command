@@ -1,0 +1,9 @@
+# Version 84.2.3, case 5 by a click: the garrison of Tampico picked, then a click on the enemy next door.
+load	out/click/brel1.save.txt
+select-province	Tampico
+press	INTO THE TOWN: THIRD ARMY (2ND DIVISION AND 1ST CAVALRY DIVISION)
+order-province	Monterrey
+close
+key	Escape
+select-province	Tampico
+select-province	Guadalajara

@@ -1,0 +1,19 @@
+# Version 84.2.3: a second sortie in the same month (Poland), and case 5, all inside a town with the enemy next door (the player's save a month on: Third Army inside Tampico, Fourth Army marched away).
+load	out/click/d8423.save.txt
+select-province	Bialystok
+order-province	Bialystok
+press	SALLY OUT
+close
+select-province	Bialystok
+order-province	Bialystok
+close
+load	out/click/brel1.save.txt
+select-province	Tampico
+press	INTO THE TOWN: THIRD ARMY (2ND DIVISION AND 1ST CAVALRY DIVISION)
+order-province	Monterrey
+select-province	Tampico
+point-province	Guadalajara
+order-province	Guadalajara
+close
+select-province	Tampico
+select-province	Guadalajara

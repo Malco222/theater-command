@@ -1,0 +1,7 @@
+# Does a plain click move an army in hand? The Tampico armies with four moves, in the player's save a month on.
+load	out/click/brel1.save.txt
+select-province	Tampico
+order-province	Monterrey
+select-province	Chihuahua
+select-province	Monterrey
+select-province	Tampico

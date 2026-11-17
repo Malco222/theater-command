@@ -1,0 +1,15 @@
+# Version 84.2.3, case 2 (the sortie): Poland, September 1939 after the first blow; Army Modlin is inside Mlawa with a German army round the town.
+load	out/click/d8423.save.txt
+snapshot	sep
+select-province	Mlawa
+point-province	Mlawa
+select-province	Mlawa
+close
+restore	sep
+select-province	Mlawa
+order-province	Mlawa
+close
+restore	sep
+select-province	Bialystok
+order-province	Bialystok
+press-each	card

@@ -1,0 +1,28 @@
+# Version 84.2.3, case 6 (the eve of war) as Poland in September 1939, and the staging of case 2: corps put inside their towns, the month ended.
+press	Poland
+press	1939 The war begins
+press	Supreme command
+press	BEGIN THE CAMPAIGN
+watch	4
+close
+# case 6: the eve of war, a German army next door at Elbing
+select-province	Pomorze
+point-province	Elbing
+order-province	Elbing	says-why
+close
+select-province	Pomorze
+select-province	Elbing
+close
+select-province	Lodz
+press	INTO THE TOWN: ARMY LODZ	does
+select-province	Mlawa
+press	INTO THE TOWN: ARMY MODLIN	does
+select-province	Bialystok
+press	INTO THE TOWN: NAREW GROUP	does
+select-province	Danzig Corridor
+press	INTO THE TOWN: CORRIDOR GROUP	does
+select-province	Przemysl
+press	INTO THE TOWN: ARMY KARPATY	does
+select-province	Pomorze
+press	INTO THE TOWN: ARMY POMORZE	does
+end-month

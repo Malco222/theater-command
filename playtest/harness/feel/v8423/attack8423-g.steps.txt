@@ -1,0 +1,13 @@
+# Version 84.2.3, case 5: all inside a town, the enemy next door (the player's save a month on: Third Army inside Tampico, Fourth Army marched away to Monterrey and put down).
+load	out/click/brel1.save.txt
+select-province	Tampico
+press	INTO THE TOWN: THIRD ARMY (2ND DIVISION AND 1ST CAVALRY DIVISION)
+order-province	Monterrey
+close
+key	Escape
+select-province	Tampico
+point-province	Guadalajara
+order-province	Guadalajara
+close
+select-province	Guadalajara
+close

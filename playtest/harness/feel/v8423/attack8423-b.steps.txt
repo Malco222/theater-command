@@ -1,0 +1,30 @@
+# Version 84.2.3, cases 1, 4, 5 (and 2 if the enemy comes round) on the player's own save a month on (January 1941): Third and Fourth Army at Tampico, a Mexican army in the hills of Guadalajara next door.
+load	out/click/brel1.save.txt
+snapshot	jan
+# case 1: one move left (staged by setting the moves to 1), an enemy army next door on ground a march could not afford
+set-moves	Tampico 1
+select-province	Tampico
+point-province	Guadalajara
+order-province	Guadalajara	card
+close
+# case 4: no move left
+restore	jan
+set-moves	Tampico 0
+select-province	Tampico
+point-province	Guadalajara
+order-province	Guadalajara	says-why
+select-province	Tampico
+select-province	Guadalajara
+# case 5: all inside the town, the enemy next door
+restore	jan
+select-province	Tampico
+press	INTO THE TOWN: THIRD ARMY (2ND DIVISION AND 1ST CAVALRY DIVISION)	does
+press	INTO THE TOWN: FOURTH ARMY (3RD DIVISION)	does
+select-province	Tampico
+point-province	Guadalajara
+order-province	Guadalajara	says-why
+select-province	Tampico
+select-province	Guadalajara
+# case 2, if the enemy comes round the town: end the month with both corps inside
+end-month
+select-province	Tampico
