@@ -510,6 +510,29 @@ private:
 		FBox2D HoldersChanged = FBox2D(ForceInit); // (speed: tc.Speed.HoldersLock) ground that changed hands while it was being modelled, painted again before it is dressed
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
+	/**
+	 * (Speed: tc.Speed.FogAside.) The staff's paper over ground beyond the map, laid on another thread when the haze
+	 * moves: the world's picture and each dressed fine sheet's, for the haze as it was asked for, then put on the table
+	 * one picture a frame.
+	 */
+	struct FFogAside
+	{
+		int32 For = 0; // (FogAsked when it was begun)
+		TArray<bool> Hidden;
+		bool bAnyHidden = false;
+		TArray<FColor> World;
+		TArray<TPair<TSharedPtr<FFineSheet, ESPMode::ThreadSafe>, TArray<FColor>>> Sheets;
+	};
+	TSharedPtr<FFogAside, ESPMode::ThreadSafe> FogAside;
+	TFuture<void> FogAsideBuilding;
+	int32 FogAsked = 0; // (how often the haze beyond has moved)
+	int32 FogLaying = INDEX_NONE; // (the next of its pictures to put on the table: 0 the world's, then its sheets; none while it is being laid)
+	void LaunchFogAside();
+	void UpdateFogAside();
+	/** Which provinces beyond the map are under the haze, as HazeSet stands now. */
+	void HiddenBeyond(TArray<bool>& OutHidden, bool& bOutAny) const;
+	/** One picture of the staff's paper beyond the map (on any thread). */
+	static void LayFog(const TArray<bool>& Hidden, bool bAnyHidden, const FCampaignGround& Painted, const FCampaignTerrain& Shape, TArray<FColor>& OutPixels);
 	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> FineKeep;
