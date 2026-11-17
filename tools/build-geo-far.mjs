@@ -103,15 +103,22 @@ let land = [];
 // one row to a province, by name. Once a province has a row, the row is the source for its owner, ground, victory
 // points, factories and the flags port, col, cap, depot, oil and fort. The seed's own values stand until then, and
 // 'islet' is always the seed's: how large an island is drawn is the map's business.
-// cities-parents.csv is read apart: its rows say what a province of the far side is worth once cities have been cut
-// out of it, on the chart with the cities only. The chart as handed over never reads it.
+// cities-parents.csv is read apart: its rows say what a province is worth once cities have been cut out of it, on
+// the chart with the cities only. The chart as handed over never reads it.
+// The chart as handed over (world-next.json) stands byte for byte, so the tables it was built from stand too
+// (islands-draft.csv, pacific.csv, globe.csv here). What the clerk has changed in them since is kept beside them, in
+// tables/now/, and is laid over the chart with the cities only. --tables=folder copies the cities' two tables in
+// fresh, and the three older ones into tables/now/.
 const tables = new Map();
 const parentRows = new Map();
+const nowRows = new Map();
 {
   const dir = new URL('../data/campaign/tables/', import.meta.url);
+  const now = new URL('now/', dir);
   if (arg('tables')) {
-    fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv', 'cities.csv', 'cities-parents.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
+    fs.mkdirSync(now, { recursive: true });
+    for (const f of ['cities.csv', 'cities-parents.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
+    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, now)); }
   }
   const parse = (text) => {
     const rows = [[]];
@@ -135,6 +142,18 @@ const parentRows = new Map();
       const into = f === 'cities-parents.csv' ? parentRows : tables;
       if (into.has(r.name)) warn(`! the tables have two rows for ${r.name}`);
       into.set(r.name, r);
+    }
+  }
+  // Only a row that reads differently now is kept: the columns the chart reads, no others.
+  const READ = ['owner', 'ground', 'vp', 'factories', 'feeds_troops', 'colony', 'capital', 'depot', 'oil', 'works', 'works_face'];
+  if (fs.existsSync(now)) for (const f of fs.readdirSync(now).filter((x) => x.endsWith('.csv')).sort()) {
+    const rows = parse(fs.readFileSync(new URL(f, now), 'utf8'));
+    const head = rows.shift().map((h) => h.trim());
+    for (const row of rows) {
+      const r = Object.fromEntries(head.map((h, i) => [h, (row[i] ?? '').trim()]));
+      const was = tables.get(r.name);
+      if (!was) warn(`! ${r.name} has a row in tables/now/${f} and none in the tables the chart was built from`);
+      else if (READ.some((k) => (was[k] ?? '') !== (r[k] ?? ''))) nowRows.set(r.name, r);
     }
   }
 }
@@ -934,4 +953,4 @@ if (arg('csv')) {
 // ---- The thicker chart ---------------------------------------------------------------------------------------
 
 // The cities cut out of the provinces round them (carve-cities.mjs): written beside this chart, which stays as it is.
-carveCities({ core, today, regions, first, tables, parentRows, fromTable, tabledSoFar: () => tabled, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet });
+carveCities({ core, today, regions, first, tables, parentRows, nowRows, fromTable, tabledSoFar: () => tabled, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet });
