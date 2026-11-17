@@ -1435,6 +1435,21 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * 1.35f, Moon));
 	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
 	LandScalar(TEXT("HazeFloor"), HazeFloor);
+	{
+		// How far the haze has travelled east, in the table's units: the game's clock times its pace. It starts again
+		// after 284,000 units, where both layers of wisp have turned a whole number of times, so nothing is seen.
+		// ("-TheaterHazeDrift=7.3" tries another pace, in units a second; "-TheaterHazeTravel=30" holds the haze where
+		// it stands after that many units, to measure a picture against another.)
+		static float HazeDrift = -1.0f, HazeHeld = -1.0f;
+		if (HazeDrift < 0.0f)
+		{
+			HazeDrift = 7.3f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeDrift="), HazeDrift);
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeTravel="), HazeHeld);
+		}
+		const double Clock = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		LandScalar(TEXT("HazeTravel"), HazeHeld >= 0.0f ? HazeHeld : static_cast<float>(FMath::Fmod(Clock * HazeDrift, 284000.0)));
+	}
 	LandVector(TEXT("HazeCast"), FMath::Lerp(HazeCastDay, HazeCastNight, Moon));
 	LandScalar(TEXT("HazeWisps"), HazeWisps);
 	LandVector(TEXT("HazeColour"), FMath::Lerp(HazeDay, HazeNight, Moon));

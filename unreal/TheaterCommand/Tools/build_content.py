@@ -1018,15 +1018,18 @@ def build_land():
     # about 5 px a second, the fine riding on the broad: at two paces the veil stirred in place and did not travel.
     # Its run from pocket to wisp is drawn in, so that it reads as haze and not as cloud, which is the weather's sign:
     # a floor of haze lies over the pockets ("HazeFloor"), and the wisps rise out of it more gently.
+    # (How far the haze has travelled east, in the table's own units: the game says, from its own clock
+    # ("HazeTravel"), so that the pace can be set and held by measure.)
+    travelled = scalar(m, "HazeTravel", 0.0, -200, -3050)
+
     def wisps(long, deep, speed, x, y):
         """The slow unevenness of the waves' picture, read long (east and west) and low, and drifting eastward."""
         east = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y, r=False, g=True, b=False, a=False)
         north = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y + 120, r=True, g=False, b=False, a=False)
-        drift = node(m, unreal.MaterialExpressionPanner, x + 500, y, speed_x=-speed / long, speed_y=0.0)
-        connect(pair(m, times(m, east, 1.0 / long, x + 180, y), times(m, north, 1.0 / deep, x + 180, y + 120), x + 340, y), "", drift, "Coordinate")
-        return (picture(m, "Waves", drift, x + 700, y, numbers=True), "A")
+        upwind = plus(m, east, times(m, travelled, -speed, x + 60, y - 100), x + 120, y)
+        return (picture(m, "Waves", pair(m, times(m, upwind, 1.0 / long, x + 180, y), times(m, north, 1.0 / deep, x + 180, y + 120), x + 340, y), x + 700, y, numbers=True), "A")
 
-    veil = plus(m, times(m, wisps(4000.0, 830.0, 7.3, 0, -2700), 0.68, 1000, -2700), times(m, wisps(1420.0, 312.0, 7.3, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
+    veil = plus(m, times(m, wisps(4000.0, 830.0, 1.0, 0, -2700), 0.68, 1000, -2700), times(m, wisps(1420.0, 312.0, 1.0, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
     wisp = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, veil, -0.34, 1350, -2900), 2.6, 1500, -2900), 1650, -2900)
     wisp = lerp(m, scalar(m, "HazeFloor", 0.55, 1650, -3300), 1.0, wisp, 1720, -3250)
     wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.72, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
