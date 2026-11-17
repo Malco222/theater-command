@@ -1,6 +1,7 @@
 #include "Campaign/TheaterSpeed.h"
 
 #include "TheaterCommand.h"
+#include "CoreGlobals.h" // (IsInGameThread)
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
@@ -11,6 +12,7 @@
 #include "SceneView.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ScopeRWLock.h" // (FRWLock)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ProceduralMeshComponent.h"
@@ -46,9 +48,14 @@ namespace
 	TAutoConsoleVariable<int32> CVarStillMeshes(
 		TEXT("tc.Speed.StillMeshes"), 1,
 		TEXT("1 draws the hand-built models that are made once and left alone (the ground, towns, trees, the lines on the map) through Unreal's kept drawing orders; 0 makes their drawing orders again every frame, as before."));
+	TAutoConsoleVariable<int32> CVarHoldersLock(
+		TEXT("tc.Speed.HoldersLock"), 1,
+		TEXT("1 lets ground change hands without waiting for the world's fine sheets still being modelled (a sheet in the making has the change painted in before it is shown); 0 waits for them, as before."));
 	TAutoConsoleVariable<int32> CVarFineAside(
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
+
+	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
 	bool bLogging = false;
 	uint64 SlateBegan = 0; // (when Slate's tick began this frame, while logging)
@@ -274,6 +281,47 @@ namespace TheaterSpeed
 	{
 		// (read where a mesh's proxy is made, which may be off the game thread)
 		return CVarStillMeshes.GetValueOnAnyThread() != 0;
+	}
+
+	bool HoldersLock()
+	{
+		return CVarHoldersLock.GetValueOnGameThread() != 0;
+	}
+
+	FHoldersRead::FHoldersRead()
+		: bHeld(!IsInGameThread())
+	{
+		if (bHeld)
+		{
+			HoldersGuard.ReadLock();
+		}
+	}
+
+	void FHoldersRead::Release()
+	{
+		if (bHeld)
+		{
+			HoldersGuard.ReadUnlock();
+			bHeld = false;
+		}
+	}
+
+	FHoldersChange::FHoldersChange(bool bNeeded)
+		: bHeld(bNeeded)
+	{
+		if (bHeld)
+		{
+			HoldersGuard.WriteLock();
+		}
+	}
+
+	void FHoldersChange::Release()
+	{
+		if (bHeld)
+		{
+			HoldersGuard.WriteUnlock();
+			bHeld = false;
+		}
 	}
 
 	FEye::FEye(const APlayerController* InPlayer)

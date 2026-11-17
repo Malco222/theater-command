@@ -2804,6 +2804,14 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		}
 		if (!Sheet.bDressed)
 		{
+			if (Sheet.HoldersChanged.bIsValid)
+			{
+				// (Speed: tc.Speed.HoldersLock. Ground changed hands while it was being modelled, which did not wait for
+				// it: that ground is painted again first, as it would have been had the sheet been up already.)
+				const FBox2D Changed = Sheet.HoldersChanged;
+				Sheet.HoldersChanged = FBox2D(ForceInit);
+				RepaintBeyond(Changed, &Sheet);
+			}
 			DressFineSheet(Sheet);
 		}
 		else if (!Sheet.bStanding)
@@ -9332,7 +9340,7 @@ void ACampaignMapActor::LaySieges()
 	}
 }
 
-void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed)
+void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed, FFineSheet* Only)
 {
 	THEATER_SPEED_SCOPE(RepaintBeyond);
 	if (!Data.bWorld || !Changed.bIsValid || Data.Regions.Num() <= Data.FirstBeyond)
@@ -9384,6 +9392,12 @@ void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed)
 			}
 		}
 	};
+	if (Only)
+	{
+		// (Speed: tc.Speed.HoldersLock. A sheet that was being modelled when this ground changed hands, now that it is.)
+		Again(Only->Paint, Only->Shape, Only->bDressed ? Only->TintPicture : nullptr, Only->bDressed ? Only->ReliefPicture : nullptr, Only->bDressed ? Only->OccupiedPicture : nullptr);
+		return;
+	}
 	Again(WorldPaint, WorldTerrain, WorldTintPicture, WorldReliefPicture, WorldOccupiedPicture);
 	for (const auto& Pair : FineSheets)
 	{
@@ -9542,11 +9556,15 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 			Turned.Add(Tag);
 		}
 	}
+	TArray<FFineSheet*> InTheMaking; // (speed: tc.Speed.HoldersLock) sheets being modelled as this ground changes hands
 	if (Data.bWorld)
 	{
 		// (A fine sheet of the world is modelled and painted on another thread, and reads whose each province is as it
 		// goes. Before any of that is changed, a sheet still in the making is waited for: under a second, and only in
 		// a month when ground does change hands.)
+		// (Speed, 17 November 2026: tc.Speed.HoldersLock. Up to two seconds on the press in America, where the sheets
+		// are made as the eye comes near. Now its reads are kept apart from the change by a lock held for a moment, and
+		// the sheet has the ground that changed painted again when it is done, before it is shown: nothing waits.)
 		bool bWrites = Turned.Num() > 0;
 		for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num() && !bWrites; ++i)
 		{
@@ -9556,15 +9574,26 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 		if (bWrites)
 		{
+			THEATER_SPEED_SCOPE(HoldersWait);
+			const bool bLock = TheaterSpeed::HoldersLock();
 			for (const auto& Pair : FineSheets)
 			{
 				if (!Pair.Value->bBuilt && Pair.Value->Building.IsValid())
 				{
-					Pair.Value->Building.Wait();
+					if (bLock)
+					{
+						InTheMaking.Add(Pair.Value.Get());
+					}
+					else
+					{
+						Pair.Value->Building.Wait();
+					}
 				}
 			}
 		}
 	}
+	// (speed: tc.Speed.HoldersLock) held while whose each province is changes, where a sheet's thread may be reading it
+	TheaterSpeed::FHoldersChange Changing(InTheMaking.Num() > 0);
 	if (Turned.Num() > 0)
 	{
 		Data.League = Members;
@@ -9608,6 +9637,11 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		{
 			Changed += Data.Regions[i].Bounds;
 		}
+	}
+	Changing.Release();
+	for (FFineSheet* Sheet : InTheMaking)
+	{
+		Sheet->HoldersChanged += Changed; // (painted again when it is done: see UpdateFineSheets)
 	}
 
 	// The sieges: the besieger's colour on the field. A siege newly laid comes in from the frontier; one that has

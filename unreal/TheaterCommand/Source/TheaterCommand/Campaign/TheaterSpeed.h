@@ -35,6 +35,11 @@ class APlayerController;
  *                         tiles, the towns, the trees, the world's lines and works, the pieces' flags and turf) are
  *                         drawn through Unreal's kept drawing orders (UTheaterStillMesh). 0: their drawing orders are
  *                         made again every frame, for every pass and every shadow, as before.
+ *   tc.Speed.HoldersLock  1 (default): ground changing hands no longer waits for the world's fine sheets that are still
+ *                         being modelled on other threads (up to two seconds on the press, in America). Their few reads
+ *                         of whose each province is are kept apart from the change by a lock held for a moment, and a
+ *                         sheet that was in the making has the ground that changed painted again before it is shown.
+ *                         0: the change waits for every sheet in the making to be finished, as before.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -61,6 +66,39 @@ namespace TheaterSpeed
 	bool OneEye();
 	bool FineAside();
 	bool StillMeshes(); // (on any thread)
+	bool HoldersLock();
+
+	/**
+	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed
+	 * only on the game thread, in ACampaignMapActor::SetHolders, and read on the threads that model the world's fine
+	 * sheets as well. A reader stands an FHoldersRead while it reads them (its tables of who holds what, a moment's
+	 * work, not the painting that follows); the change stands an FHoldersChange while it writes them. On the game
+	 * thread a reader takes nothing, as nothing can change them there while it reads.
+	 */
+	struct FHoldersRead
+	{
+		FHoldersRead();
+		~FHoldersRead() { Release(); }
+		/** Done reading, before the end of the block. */
+		void Release();
+		FHoldersRead(const FHoldersRead&) = delete;
+		FHoldersRead& operator=(const FHoldersRead&) = delete;
+
+	private:
+		bool bHeld = false;
+	};
+	struct FHoldersChange
+	{
+		/** Only where some sheet is being modelled: otherwise there is nobody to keep out. */
+		explicit FHoldersChange(bool bNeeded);
+		~FHoldersChange() { Release(); }
+		void Release();
+		FHoldersChange(const FHoldersChange&) = delete;
+		FHoldersChange& operator=(const FHoldersChange&) = delete;
+
+	private:
+		bool bHeld = false;
+	};
 
 	/**
 	 * The eye's view, worked out once and then used for as many points as are wanted: the same answer, to the bit, as
