@@ -585,6 +585,7 @@ function mount(): void {
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
           <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g><g id="ghost"></g>
         </svg>
+        <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
@@ -950,6 +951,21 @@ let lampSpots = new Map<number, { x: number; y: number }>();
 function sizeLamps(): void {
   const s = (lampUnits() / 3.4).toFixed(3);
   for (const m of document.querySelectorAll<SVGGElement>('#rails .raillamp')) m.setAttribute('transform', `translate(${m.dataset.x} ${m.dataset.y}) scale(${s})`);
+}
+/**
+ * The provinces that have just changed hands flash once (ruling 206). The list is kept for the month, and every
+ * redraw used to write the flash afresh and start it again: now a redraw inside its 2.2 seconds carries the fade on
+ * from where it stood, and after them nothing is drawn. The paths are taken off the map when the fade is over.
+ */
+const FLASH_MS = 2200;
+let flashFor: number[] | null = null, flashAt = 0, flashTimer = 0;
+function flashPaths(): string {
+  if (ui.flash !== flashFor) { flashFor = ui.flash; flashAt = performance.now(); }
+  const age = performance.now() - flashAt;
+  if (!ui.flash.length || age >= FLASH_MS) return '';
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => { for (const el of document.querySelectorAll('#fx .flash')) el.remove(); }, FLASH_MS - age + 80);
+  return ui.flash.map((id) => `<path class="flash" style="animation-delay:-${Math.round(age)}ms" d="${pathOf(g.regions[id].polys)}"/>`).join('');
 }
 /** The map's width on the screen as applyView last measured it. (Asking the page for it in the middle of a redraw makes the page lay itself out again, some 70 ms each time.) */
 let mapPixels = 0;
@@ -1326,10 +1342,13 @@ function refresh(): void {
   ($('#legfree') as HTMLElement).hidden = !freeable;
   // Sieges (the grand campaign): the country round a besieged town in the besieger's colour, the town ringed, a shield on a garrison.
   const sg = siegeMarks();
-  $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('') + skies + freeable + sg.under;
-  $('#sieges').innerHTML = sg.over + placeMarks();
-  // The cabinet's directive is drawn over the armies, so a flag beside the town cannot hide it.
-  $('#orders').innerHTML = directiveMark();
+  const pm = placeMarks();
+  $('#fx').innerHTML = flashPaths() + skies + sg.under;
+  $('#sieges').innerHTML = sg.over + pm.still;
+  // Whatever turns or flickers stands on a sheet of its own over the map (ruling 206): a mark that moves on the
+  // map's own drawing makes the whole map redraw for every picture, ten a second where sixty are wanted. The
+  // cabinet's directive is among them, and so stands over the armies, where a flag beside the town cannot hide it.
+  $('#mapfx').innerHTML = freeable + sg.turning + pm.moving + directiveMark();
 
   // Where the picked corps can go.
   let marks = '';
@@ -2950,20 +2969,20 @@ function dirLine(r: Region): string {
   return `<button class="dirline${d.left <= 2 ? ' late' : ''}" data-act="cabinet" title="Open the cabinet room"><i class="dseal">${d.left}</i><span class="grow"><b>${d.from === g.human ? 'The war cabinet directs' : `${esc(d.by)} asks`}: ${esc(d.title)}</b><small>${d.left === 1 ? 'This is the last month' : `${d.left} months left`}, to the end of ${date(d.due)}. ${esc(d.progress)}</small></span></button>`;
 }
 
-function placeMarks(): string {
+function placeMarks(): { still: string; moving: string } {
   const leg = $('#legprize') as HTMLElement;
   const marks = prizesOnMap(g);
-  let out = '', flames = 0;
+  let out = '', fire = '', flames = 0;
   const list = marks.length ? towns(g) : [];
   for (const m of marks) {
     const t = list[m.region];
     // The airfield alone is not worth a pennant: nearly every province has one.
     const worth = m.seized.filter((k) => k !== 'airfield');
     if (m.by && worth.length) out += `<g class="pzflag" transform="translate(${t.x + 11.5} ${t.y + 6})"><path class="pole" d="M0 4.6V-4.8"/><path d="M0 -4.8L6.2 -2.9 0 -1Z" fill="${g.nations[m.by].color}"/></g>`;
-    if (m.burning.length) { flames++; out += `<g class="pzfire" transform="translate(${t.x - 10.5} ${t.y - 8.5})"><path class="o" d="${FLAME}"/><path class="i" d="M0 4.3C-1.7 4.3-2.3 3-2 1.9-1.6.8-.5.3 0-1.2 1.1.2 2.2 1 2.1 2.4 2 3.5 1.2 4.3 0 4.3Z"/></g>`; }
+    if (m.burning.length) { flames++; fire += `<g class="pzfire" transform="translate(${t.x - 10.5} ${t.y - 8.5})"><path class="o" d="${FLAME}"/><path class="i" d="M0 4.3C-1.7 4.3-2.3 3-2 1.9-1.6.8-.5.3 0-1.2 1.1.2 2.2 1 2.1 2.4 2 3.5 1.2 4.3 0 4.3Z"/></g>`; }
   }
   leg.hidden = !flames;
-  return out;
+  return { still: out, moving: fire };
 }
 const FLAME = 'M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z';
 
@@ -2999,18 +3018,19 @@ const ringIcon = (color: string, px = 22): string => `<svg class="sgicon" width=
  * town keeps a disc in its holder's colour and is ringed by the siege lines, and a town with troops inside carries
  * a shield with their number. `under` goes beneath the towns, `over` above them.
  */
-function siegeMarks(): { under: string; over: string } {
+function siegeMarks(): { under: string; over: string; turning: string } {
   const leg = $('#legsiege') as HTMLElement;
   leg.hidden = true;
-  if (!siegeRules(g)) return { under: '', over: '' };
+  if (!siegeRules(g)) return { under: '', over: '', turning: '' };
   const list = towns(g);
-  let under = '', over = '';
+  let under = '', over = '', turning = '';
   const sg = siegesInSight(g).filter((v) => v.by !== null);
   for (const v of sg) {
     const r = g.regions[v.region], t = list[v.region];
     const by = g.nations[v.by!].color;
     under += `<path class="sieged" d="${pathOf(r.polys)}" fill="${by}"/><circle class="sgdisc" cx="${t.x}" cy="${t.y}" r="7.6" fill="${g.nations[v.holder].color}"/>`;
-    over += `<g transform="translate(${t.x} ${t.y})"><circle class="sgo" r="10.4"/><circle class="sgi" r="10.4" stroke="${by}"/></g>`;
+    over += `<circle class="sgo" cx="${t.x}" cy="${t.y}" r="10.4"/>`;
+    turning += `<circle class="sgi" cx="${t.x}" cy="${t.y}" r="10.4" stroke="${by}"/>`;
   }
   for (const r of g.regions) {
     if (!r.garr || !r.garr.length) continue;
@@ -3020,7 +3040,7 @@ function siegeMarks(): { under: string; over: string } {
     over += `<g class="garrb" transform="translate(${t.x + 9.5} ${t.y - 9})"><path d="${SHIELD}" fill="${g.nations[r.ctrl].color}"/><text y="2.5">${v.inside}</text></g>`;
   }
   leg.hidden = !sg.length;
-  return { under, over };
+  return { under, over, turning };
 }
 
 /** On the army tray: the siege this army is laying, with the assault one click away; or the town it could go into. */
@@ -8750,7 +8770,9 @@ function applyView(): void {
   v.x = Math.max(g.x0 - 200, Math.min(g.x0 + g.width + 200 - v.w, v.x));
   // The map ends in the Sahara: there is nothing to scroll to below it.
   v.y = Math.max(-200, Math.min(g.height - h, v.y));
-  svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
+  const box = `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`;
+  svg.setAttribute('viewBox', box);
+  $('#mapfx').setAttribute('viewBox', box);
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
   // The gate marks: with the name close up, the flag and the lamp at the height he plays at, the lamp alone from far up.
