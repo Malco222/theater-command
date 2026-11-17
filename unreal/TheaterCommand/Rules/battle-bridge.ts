@@ -106,8 +106,8 @@ function unitOut(u: UnitBase): Record<string, unknown> {
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
     loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : loops?.[u.act] ?? '',
-    // A land block's name for a card ("11th Infantry"), beside its full name.
-    ...(land.short ? { short: land.short } : {}),
+    // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
+    ...(land.short ? { short: land.short, parent: land.parent } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
