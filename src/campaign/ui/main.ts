@@ -95,6 +95,7 @@ import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, r
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
+import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsBegun, lessonsDrawn } from './firsthour';
 
 let g: Game;
 /** The month after the last one the historical plans cover: February 1945, when the Bulge has been closed. */
@@ -1588,6 +1589,8 @@ function refresh(): void {
   } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   drawResult();
   hoverWhy(document.body);
+  // FIRST COMMAND's staff note, its pointer and the GUIDE button, over the page as drawn.
+  lessonsDrawn();
   queueSave();
 }
 
@@ -6137,6 +6140,7 @@ function airReportCard(r: AirReport): string {
 // ---- Modals -------------------------------------------------------------------------------
 
 function openModal(m: typeof ui.modal): void {
+  cardChanging(ui.modal, m);
   ui.modal = m;
   cardDrawn(m);
   const veil = $('#veil');
@@ -6154,6 +6158,7 @@ function openModal(m: typeof ui.modal): void {
   card.classList.toggle('ask', m.kind === 'askend' || m.kind === 'replace');
   card.classList.toggle('month', m.kind === 'news' && !!m.card);
   if (m.kind === 'start') card.innerHTML = startCard();
+  else if (m.kind === 'guide') card.innerHTML = guideCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
     if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -6282,6 +6287,7 @@ function openModal(m: typeof ui.modal): void {
   card.scrollTop = 0;
   fitMonth();
   dressCard(card);
+  lessonCard(card, m);
 }
 
 /** What every card gets once it is drawn: the key caps at its foot, the hovers of its off buttons, and the shadow over a body that scrolls. */
@@ -8298,7 +8304,7 @@ function onClick(e: MouseEvent): void {
     case 'start':
       // Nothing replaces a saved campaign without asking (ruling 130(a)): the game keeps one, and a slip on the front door must not cost him a war.
       if (t.dataset.sure !== '1' && peekSave(readSave() ?? '')) { openModal({ kind: 'replace', data: { ...t.dataset }, back: { kind: 'start' } }); break; }
-      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); break;
+      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); lessonsBegun(t.dataset.first === '1'); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
     case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': case 'gchist': {
       if (act === 'gchist') ui.gcHist = Number(t.dataset.stop) || HIST_FREE; else if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
@@ -9904,6 +9910,11 @@ function wireMap(): void {
 // ---- Start --------------------------------------------------------------------------------
 
 g = createGame(1939, null);
+initFirstHour({
+  game: () => g, ui, held: heldCorps, esc, openModal, refresh,
+  tucked: (tab) => !!commandOf(g)?.desks.some((d) => d.tab === tab && d.staff),
+  busy: () => !!passing || !!working || !!tour,
+});
 mount();
 drawStatic();
 applyView();

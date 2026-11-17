@@ -1,0 +1,570 @@
+// FIRST COMMAND in the browser game: the staff's note, its slip beside a card, the pointer, the DONE stamp, a tip,
+// the Guide's list of the ten lessons, and the door's button. The lessons, their words and the tests of their deeds
+// are the shared rules' (../lessons, data/campaign/lessons.json); the look is the art director's
+// (art-director/first-hour/first-hour-look-brief.md) in the UI kit's parts. Display only: a note never moves a piece,
+// takes a key or locks the screen. Deeds are read off the game as the page is drawn (a battle fought, a raid flown,
+// an order placed, a corps moved, the month turned), or reported by the page where only it can see them (the month
+// card put down, a line of it followed).
+import {
+  BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson,
+  doneCount, firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, pickupPlace, putAway, readNotebook, showAgain, siegeOf,
+  waitingCount, type Deed, type Lesson, type Moment, type Notebook,
+} from '../lessons';
+import { markFor, monthCard } from '../monthcard';
+import { railReach } from '../game';
+import { cutThroughGuns } from '../rails';
+import { humanUp, onEve, reach } from '../turn';
+import type { Corps, Game } from '../types';
+
+/** What the page lends the notes. */
+export interface Page {
+  game(): Game;
+  ui: { sel: number; picked: Set<number>; tab: string; modal: null | { kind: string; [k: string]: any }; mark: any; lastCard: any; live: boolean; menu: string };
+  /** The corps the player has in hand. */
+  held(): Corps[];
+  /** True while a desk's tab is tucked away because the staff runs it. */
+  tucked(tab: string): boolean;
+  /** True while the other nations move, or anything else keeps the player's hands off the map. */
+  busy(): boolean;
+  openModal(m: { kind: string; [k: string]: any } | null): void;
+  refresh(): void;
+  esc(s: string): string;
+}
+
+const STORE = 'tc-lessons';
+const STAMP_MS = 2000;
+let page: Page;
+let book: Notebook = readNotebook(null);
+/** The note just stamped DONE: it stays until `until`, or until a click sends it. */
+let stamped: { id: string; until: number } | null = null;
+/** The tip on screen, and the month it came in: it goes when he acts or the month ends. */
+let tip: { id: string; turn: number; acts: number } | null = null;
+/** The note last drawn, so that a new one slides in and an old one does not. */
+let lastDrawn = '';
+/** Lesson 1 lies on the month card that is open. */
+let laid = false;
+/** What the game looked like at the last drawing, to read the player's deeds against. */
+let snap: Snap | null = null;
+interface Snap {
+  g: Game; turn: number; up: boolean; reports: number; air: number; queue: Set<number>;
+  /** The corps in hand, where each stood, and where each could march this month. */
+  hand: { id: number; reg: number; reach: Set<number>; rail: Set<number> }[];
+  kept: Set<string>; siege: boolean; cuts: number;
+}
+
+function save(): void {
+  try { localStorage.setItem(STORE, JSON.stringify(book)); } catch { /* the notebook lasts as long as the page */ }
+}
+function load(): void {
+  try { book = readNotebook(JSON.parse(localStorage.getItem(STORE) ?? 'null')); } catch { book = readNotebook(null); }
+}
+
+const $ = (s: string): HTMLElement | null => document.querySelector(s) as HTMLElement | null;
+const cardOpen = (): boolean => !!page.ui.modal && document.getElementById('veil')?.classList.contains('open') === true;
+const monthCardOpen = (): boolean => cardOpen() && page.ui.modal?.kind === 'news' && !!page.ui.modal.card;
+const moment = (): Moment => ({ card: monthCardOpen(), inHand: page.ui.tab === 'region' ? page.held().map((c) => c.id) : [] });
+/** The notes stand aside on the front door, while the other nations move, and when nobody is at the controls. */
+const quiet = (): boolean => {
+  const g = page.game();
+  return !page.ui.live || !g.human || page.busy() || page.ui.modal?.kind === 'start' || page.ui.modal?.kind === 'replace' || page.ui.modal?.kind === 'guide';
+};
+
+export function initFirstHour(p: Page): void {
+  page = p;
+  load();
+  // (Capture: the notes' own buttons are theirs alone, and a line of the month card is read before the page acts on it.)
+  document.addEventListener('click', onClick, true);
+  addEventListener('resize', () => placeSlip());
+  requestAnimationFrame(follow);
+}
+
+/** The notebook, for the Guide and for checks. */
+export const notebook = (): Notebook => book;
+
+// ---- Deeds -----------------------------------------------------------------------------------------------------
+
+/** A deed the page saw: stamped on its lesson, if it earns one. */
+export function lessonDone(does: Deed, m: Moment = moment()): void {
+  const g = page.game();
+  // (The note on the desk is the one last drawn: by the time a deed is read off the game its moment may have passed,
+  // as a march's has once the army is put down.)
+  const was = lastDrawn || (currentLesson(g, book, m)?.id ?? '');
+  const got = lessonDeed(g, book, does, m);
+  if (!got.length) return;
+  save();
+  // The note on screen takes the stamp; a lesson done while it was put away is ticked in the Guide and says nothing.
+  const shown = got.find((l) => l.id === was) ?? (got[0].id === 'month' ? got[0] : null);
+  if (shown && shown.id !== 'month') {
+    stamped = { id: shown.id, until: performance.now() + STAMP_MS };
+    setTimeout(() => { if (stamped && performance.now() >= stamped.until - 5) { stamped = null; redraw(); } }, STAMP_MS + 20);
+  }
+}
+
+/** Reads the deeds off the game since the last drawing. Called as the page is drawn. */
+function readDeeds(): void {
+  const g = page.game();
+  const me = g.human;
+  const s = snap;
+  const up = !!me && humanUp(g) && !onEve(g);
+  if (s && s.g === g && me && lessonsOn(g, book)) {
+    if (s.up && g.turn > s.turn) {
+      // The month turned: a siege standing as it was handed over earns lesson 7; then the month's end.
+      if (s.siege) lessonDone('siege', {});
+      lessonDone('end', {});
+      if (tip && tip.turn < g.turn) tip = null;
+    } else if (up && g.turn === s.turn) {
+      const fought = g.reports.slice(s.reports).filter((r) => r.attNat === me);
+      if (fought.some((r) => r.town)) lessonDone('siege', {});
+      if (fought.length) lessonDone('attack', {});
+      if (g.airReports.slice(s.air).some((r) => r.attNat === me && BOMBING.includes(r.mission))) lessonDone('raid', {});
+      if ((g.nations[me]?.queue ?? []).some((b) => !s.queue.has(b.id))) lessonDone('order', {});
+      // A corps that was in hand has moved: by a kept march, or to ground it could march to, a march; to ground
+      // only a train reaches, by rail.
+      const kept = Object.keys(g.flags).filter((k) => k.startsWith('march:') && !s.kept.has(k));
+      const keptIds = new Set(kept.map((k) => Number(k.slice(6))));
+      let march = kept.length > 0, rail = false, moved = false;
+      for (const h of s.hand) {
+        const c = g.corps.find((x) => x.id === h.id);
+        if (!c || c.dead || c.reg === h.reg) continue;
+        moved = true;
+        if (!keptIds.has(c.id) && !h.reach.has(c.reg) && h.rail.has(c.reg)) rail = true; else march = true;
+      }
+      // (Any order he gives puts away a tip that came before it.)
+      if (tip && (fought.length || moved || kept.length || g.airReports.length > s.air || (g.nations[me]?.queue.length ?? 0) !== s.queue.size)) tip.acts++;
+      if (!fought.length) {
+        if (kept.length) tipDue('kept');
+        if (march) lessonDone('march', {});
+        if (rail) lessonDone('rail', {});
+      }
+    }
+    // A line of his cut for the first time.
+    if (cutsOf(g) > (s.cuts ?? 0)) tipDue('cut');
+  }
+  if (up && page.ui.tab === 'region' && page.held().length && lessonsOn(g, book)) lessonDone('pick');
+  const hand = up && page.ui.tab === 'region' ? page.held().map((c) => ({ id: c.id, reg: c.reg, reach: new Set([...reach(g, c)].filter(([id, x]) => id !== c.reg && !x.attack).map(([id]) => id)), rail: railReach(g, c) })) : [];
+  snap = {
+    g, turn: g.turn, up, reports: g.reports.length, air: g.airReports.length, queue: new Set((me ? g.nations[me]?.queue ?? [] : []).map((b) => b.id)),
+    hand, kept: new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:'))), siege: up && siegeOf(g) !== null, cuts: cutsOf(g),
+  };
+}
+/** How many of the player's provinces have their railway cut by bombers where no guns stood: the moment of the tip that says so. */
+const cutsOf = (g: Game): number => (g.human ? g.regions.filter((r) => r.ctrl === g.human && cutThroughGuns(g, r.id) === 0).length : 0);
+
+/** A tip is shown once, the first time its moment comes, and never while a lesson waits on the same thing. */
+function tipDue(id: string): void {
+  const g = page.game();
+  if (book.tips.includes(id) || !lessonsOn(g, book) || !TIPS.some((t) => t.id === id)) return;
+  if (id === 'kept' && !isDone(book, 'march')) return;
+  book.tips.push(id);
+  save();
+  tip = { id, turn: g.turn, acts: -1 };
+}
+
+// ---- The month card --------------------------------------------------------------------------------------------
+
+/** A campaign has begun from the door. FIRST COMMAND marks its campaign; a war from its first month lays out the first card for lesson 1. */
+export function lessonsBegun(first: boolean): void {
+  const g = page.game();
+  if (first) {
+    g.flags.firstCommand = 1;
+    if (allDone(book)) lessonsAgain(book);
+    book.on = true;
+    save();
+  }
+  stamped = null; tip = null; snap = null; laid = false; lastDrawn = '';
+  // (A war played from its first month has no card until its second: lesson 1 needs one, so the first card is
+  // opened as his first month comes up, headed "As September 1939 opens", as a campaign taken over later opens with its own.)
+  opening = g.turn === 1 && lessonsOn(g, book) && !isDone(book, 'month');
+  redraw();
+  if (opening) openFirstCard();
+}
+/** The first month's card is owed to lesson 1. */
+let opening = false;
+function openFirstCard(): void {
+  const g = page.game();
+  if (!opening || !lessonsOn(g, book) || isDone(book, 'month') || g.turn !== 1) { opening = false; return; }
+  if (quiet() || page.ui.modal || !g.human || !humanUp(g) || onEve(g)) return;
+  opening = false;
+  setTimeout(() => {
+    if (quiet() || page.ui.modal || !g.human || !humanUp(g) || page.game() !== g) { opening = true; return; }
+    const card = monthCard(g, page.ui.mark ?? markFor(g), g.human, { opening: true });
+    page.ui.lastCard = card;
+    page.openModal({ kind: 'news', from: g.headlines.length, reports: g.reports.length, sea: g.seaReports.length, air: g.airReports.length, card });
+  }, 0);
+}
+
+/** Called as a card is about to change: lesson 1 is done when the card it lay on is put down. */
+export function cardChanging(was: Page['ui']['modal'], next: Page['ui']['modal']): void {
+  // (A card put down: the slip goes back to the panel once the page has done with it.)
+  if (was && !next) setTimeout(() => { if (!page.ui.modal) redraw(); }, 0);
+  if (!laid || !was || was.kind !== 'news' || !was.card || (next && next.kind === 'news' && next.card === was.card)) return;
+  laid = false;
+  lessonDone('card', { card: true });
+}
+
+/** Called once a card is drawn: the door's button, lesson 1 laid on the first month's card, a slip in the margin. */
+export function cardDrawn(card: HTMLElement, m: NonNullable<Page['ui']['modal']>): void {
+  if (m.kind === 'start') { doorButton(card); return; }
+  const g = page.game();
+  laid = false;
+  if (m.kind === 'news' && m.card && !quiet()) {
+    const l = currentLesson(g, book, { card: true });
+    if (l?.id === 'month') {
+      const w = lessonWords(g, l, 'browser');
+      card.querySelector('.mc-head')?.insertAdjacentHTML('afterend', `<div class="tc-note tc-paper tc-note--laid fh-laid" data-lesson="month"><div class="tc-note__head"><span class="tc-label">Staff note</span><span class="tc-micro">${l.n} of ${LESSONS.length}</span></div><h4>${page.esc(w.head)}</h4><p>${page.esc(w.text)}</p></div>`);
+      laid = true;
+    }
+  }
+  redraw();
+}
+
+// ---- Drawing ---------------------------------------------------------------------------------------------------
+
+/** After the page is drawn: the deeds since the last drawing, the GUIDE button, the note and the pointer. */
+export function lessonsDrawn(): void {
+  if (!page) return;
+  readDeeds();
+  guideButton();
+  redraw();
+  if (opening) openFirstCard();
+}
+
+/** What stands on the desk now: a stamped note, a tip, the lesson due, or the closing note. */
+function onDesk(): { kind: 'lesson' | 'tip' | 'closing'; lesson?: Lesson; id: string } | null {
+  const g = page.game();
+  if (quiet() || !lessonsOn(g, book) || opening) return null;
+  if (stamped) { const l = LESSONS.find((x) => x.id === stamped!.id); if (l) return { kind: 'lesson', lesson: l, id: l.id }; }
+  if (tip && tip.acts < 1 && tip.turn === g.turn) return { kind: 'tip', id: tip.id };
+  tip = null;
+  const l = currentLesson(g, book, moment());
+  // (Lesson 1 lies on the card itself and nowhere else.)
+  if (l && l.id !== 'month') return { kind: 'lesson', lesson: l, id: l.id };
+  if (!l && closingOwed(g, book)) return { kind: 'closing', id: CLOSING.id };
+  return null;
+}
+
+const TICK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.4l3.2 3.1L13 4.6"/></svg>';
+
+function noteHtml(d: NonNullable<ReturnType<typeof onDesk>>, slip: boolean): string {
+  const g = page.game(), esc = page.esc;
+  const cls = `tc-note tc-paper fh-note${slip ? ' tc-note--slip' : ''}`;
+  if (d.kind === 'tip') {
+    const t = TIPS.find((x) => x.id === d.id)!;
+    return `<div class="${cls} tc-note--tip" data-note="${d.id}"><div class="tc-note__head"><span class="fh-tiptag">Tip</span><span class="tc-micro"></span><button class="tc-btn--quiet fh-quiet" data-act="fhtipoff" aria-label="Put the tip away">Close</button></div><p>${esc(t.text)}</p></div>`;
+  }
+  if (d.kind === 'closing') {
+    return `<div class="${cls}" data-note="${CLOSING.id}"><div class="tc-note__head"><span class="tc-label">Staff note</span><span class="tc-micro"></span><button class="tc-btn--quiet fh-quiet" data-act="fhclose">Close</button></div><h4>${esc(CLOSING.head)}</h4><p>${esc(closingWords())}</p></div>`;
+  }
+  const l = d.lesson!;
+  const w = lessonWords(g, l, 'browser', page.tucked('build') ? ' under STAFF' : '');
+  const done = stamped?.id === l.id;
+  return `<div class="${cls}${done ? ' is-done' : ''}" data-note="${l.id}"${done ? ' data-act="fhsend" title="Click to put it away now"' : ''}><div class="tc-note__head"><span class="tc-label">Staff note</span><span class="tc-micro">${l.n} of ${LESSONS.length}</span>${done ? '' : '<button class="tc-btn--quiet fh-quiet" data-act="fhlater" title="Put this note away. It waits in the GUIDE.">Later</button>'}</div><h4>${esc(w.head)}</h4><p>${esc(w.text)}</p>${w.deed ? `<div class="tc-deed"><i>${done ? TICK : ''}</i><span>${esc(w.deed)}</span></div>` : ''}${done ? '<span class="tc-stamp tc-stamp--won tc-stamp--sm fh-stamp">Done</span>' : ''}</div>`;
+}
+const closingWords = (): string => lessonWords(page.game(), { ...LESSONS[0], text: CLOSING.text, deed: '' }, 'browser').text;
+
+/** Draws the note in the panel, or as the slip beside an open card, and its pointer. */
+function redraw(): void {
+  if (!page) return;
+  document.querySelectorAll('.fh-note').forEach((e) => e.remove());
+  const d = onDesk();
+  const slipOn = cardOpen();
+  if (d && !slipOn) {
+    const pane = $('#pane');
+    if (pane) {
+      pane.insertAdjacentHTML('afterbegin', noteHtml(d, false));
+      arrive(pane.firstElementChild as HTMLElement, d.id);
+    }
+  } else if (d && slipOn) {
+    const veil = document.getElementById('veil');
+    if (veil) {
+      veil.insertAdjacentHTML('beforeend', noteHtml(d, true));
+      const el = veil.lastElementChild as HTMLElement;
+      el.classList.add('fh-slip');
+      arrive(el, d.id);
+      placeSlip();
+    }
+  }
+  if (!d) lastDrawn = '';
+  aim(d);
+}
+/** A note slides in the first time it is drawn, and stays still after. */
+function arrive(el: HTMLElement, id: string): void {
+  if (lastDrawn === id) return;
+  el.classList.add('fh-in');
+  lastDrawn = id;
+  // (A new note in a panel scrolled down: the panel goes back to its top, where the note is.)
+  const pane = el.parentElement;
+  if (pane?.id === 'pane' && pane.scrollTop > 0) pane.scrollTop = 0;
+}
+/** The slip stands in the card's left margin, never on the card: where the margin is too narrow, there is none. */
+function placeSlip(): void {
+  const el = document.querySelector<HTMLElement>('#veil > .fh-slip');
+  const card = document.getElementById('card');
+  if (!el || !card) return;
+  const r = card.getBoundingClientRect();
+  const room = r.left - 14;
+  el.style.display = room < 112 ? 'none' : '';
+  el.style.width = `${Math.min(148, room)}px`;
+  el.style.top = `${Math.max(14, r.top)}px`;
+}
+
+// ---- The pointer -----------------------------------------------------------------------------------------------
+
+/** Where the pointer stands: a thing on the page (by its element) or on the map (by its box on the screen). */
+let aimAt: { el: Element; map: boolean; spot?: DOMPoint } | null = null;
+
+/**
+ * A point inside a province's lit ground that shows on the screen and takes a click: its middle where it can, else
+ * the nearest point to it that is not hidden. Returned on the screen and in the map's own measure.
+ */
+function openSpot(path: SVGGeometryElement): { x: number; y: number; user: DOMPoint } | null {
+  const r = path.getBoundingClientRect();
+  const ctm = path.getScreenCTM();
+  if (!r.width || !ctm) return null;
+  const inv = ctm.inverse();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const tries: [number, number][] = [];
+  for (let j = 1; j < 8; j++) for (let i = 1; i < 8; i++) tries.push([r.left + (r.width * i) / 8, r.top + (r.height * j) / 8]);
+  tries.sort((a, b) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(b[0] - cx, b[1] - cy));
+  for (const [x, y] of tries) {
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+    const user = new DOMPoint(x, y).matrixTransform(inv);
+    if (!path.isPointInFill(user)) continue;
+    if (!document.elementFromPoint(x, y)?.closest('#map')) continue;
+    return { x, y, user };
+  }
+  return null;
+}
+let lastBox = '';
+
+/** The one thing the note points at, for the lesson on the desk and where the player stands now. */
+function target(d: ReturnType<typeof onDesk>): typeof aimAt {
+  const q = (s: string): Element | null => document.querySelector(s);
+  const vis = (e: Element | null): Element | null => (e && (e as HTMLElement).getClientRects().length ? e : null);
+  const g = page.game();
+  if (laid) return pick(q('#card .mc-fly'));
+  if (!d || d.kind !== 'lesson' || stamped) return null;
+  const id = d.lesson!.id, open = cardOpen(), kind = page.ui.modal?.kind;
+  // (Of the lit ground, the province nearest the army in hand, at a point of it he can see and click: not off the
+  // map's edge, nor under the army's card or a tray.)
+  const ground = (cls: string): typeof aimAt => {
+    const from = document.querySelector(`#units .army.chosen[data-nat="${g.human}"]`)?.getBoundingClientRect();
+    const at: [number, number] | null = from ? [from.left + from.width / 2, from.top + from.height / 2] : null;
+    let best: typeof aimAt = null, bestD = Infinity;
+    for (const e of document.querySelectorAll<SVGGeometryElement>(`#marks path.mk.${cls}`)) {
+      const spot = openSpot(e);
+      if (!spot) continue;
+      const d = at ? Math.hypot(spot.x - at[0], spot.y - at[1]) : 0;
+      if (d < bestD) { best = { el: e, map: true, spot: spot.user }; bestD = d; }
+    }
+    return best;
+  };
+  const flag = (reg: number): typeof aimAt => { const e = vis(q(`#units .army[data-reg="${reg}"][data-nat="${g.human}"]`)); return e ? { el: e, map: true } : null; };
+  const tab = (t: string): Element | null => vis(q(`#tabs [data-tab="${t}"]`));
+  if (open) {
+    if (id === 'card' && kind === 'news') return pick(q('#card .mc-go:not(.none)'));
+    if (id === 'attack' && kind === 'attack') return pick(q('#card footer [data-act="attack"]'));
+    if (id === 'city' && kind === 'siege') return pick(q('#card footer [data-act="dosiege"], #card footer [data-act="dotake"]'));
+    if (id === 'raid' && kind === 'raid') return pick(q('#card footer .btn.go[data-act="doraid"], #card footer [data-act="doraid"]'));
+    return null;
+  }
+  const inHand = page.ui.tab === 'region' && page.held().length > 0;
+  switch (id) {
+    case 'pickup': return flag(pickupPlace(g));
+    case 'march': return ground('move');
+    case 'attack': {
+      if (inHand) { const e = ground('hit'); if (e) return e; }
+      const me = g.human!;
+      const at = page.held()[0]?.reg ?? -1;
+      const beside = g.regions.find((r) => r.units.some((c) => c.nat === me && c.ap > 0 && !c.dead) && r.nb.some((k) => g.regions[k].units.some((u) => g.nations[me].atWar.includes(u.nat))));
+      return flag(beside?.id ?? at);
+    }
+    case 'end': return pick(vis(q('#alerts .nextarmy')) ?? q('#barbtns [data-act="end"]'));
+    case 'city': {
+      const s = siegeOf(g);
+      const storm = vis(q('#pane [data-act="storm"]'));
+      return storm ? pick(storm) : s ? flag(s.region) : null;
+    }
+    case 'rail': return ground('railfar');
+    case 'raid': {
+      if (page.tucked('air')) return page.ui.tab === 'staff' ? pick(q('#pane [data-act="desk"][data-desk="air"][data-on="0"]')) : pick(tab('staff'));
+      if (page.ui.tab !== 'air') return pick(tab('air'));
+      // The planner: PLAN A RAID, then the bombing raid, then a target.
+      return pick(vis(q('#pane .planner [data-act="raidtarget"]')) ?? vis(q('#pane .planner [data-act="raidkind"][data-kind="bomb"]:not([disabled]):not(.on)')) ?? vis(q('#pane .btn.go[data-act="raidmenu"][data-id="-1"]:not([disabled])')));
+    }
+    case 'build': {
+      if (page.ui.tab === 'build') return pick(vis(q('#pane button[data-act="arsenal"]:not([disabled])')));
+      if (page.tucked('build')) return page.ui.tab === 'staff' ? pick(q('#pane .desk [data-act="tab"][data-tab="build"]')) : pick(tab('staff'));
+      return pick(tab('build'));
+    }
+  }
+  return null;
+}
+const pick = (e: Element | null): typeof aimAt => (e && (e as HTMLElement).getClientRects().length ? { el: e, map: false } : null);
+
+/** The thing last pointed at, by its words: it is brought into view once, the first time, and never again. */
+let shown = '';
+function aim(d: ReturnType<typeof onDesk>): void {
+  aimAt = target(d);
+  lastBox = '';
+  document.body.classList.toggle('has-pointer', !!aimAt);
+  if (!aimAt) { hidePointer(); shown = ''; return; }
+  // A button below the fold of the panel or a card is scrolled up to where he can see it.
+  const key = `${d?.id ?? ''}:${aimAt.el.outerHTML.slice(0, 120)}`;
+  if (!aimAt.map && key !== shown) {
+    shown = key;
+    const box = aimAt.el.closest('#pane, #card');
+    if (box) {
+      const r = aimAt.el.getBoundingClientRect(), b = box.getBoundingClientRect();
+      if (r.top < b.top || r.bottom > b.bottom) (aimAt.el as HTMLElement).scrollIntoView({ block: 'center' });
+    }
+  }
+  drawPointer();
+}
+function hidePointer(): void {
+  const p = document.getElementById('fhpointer');
+  if (p) p.style.display = 'none';
+  document.getElementById('fhground')?.remove();
+}
+
+/** Each frame: the pointer follows its thing as the page scrolls and the map moves. */
+function follow(): void {
+  if (aimAt) {
+    if (!aimAt.el.isConnected) aim(onDesk());
+    else drawPointer();
+  }
+  requestAnimationFrame(follow);
+}
+
+function drawPointer(): void {
+  if (!aimAt) return;
+  const r = aimAt.el.getBoundingClientRect();
+  if (!r.width && !r.height) { hidePointer(); return; }
+  const box = `${aimAt.map ? 'm' : 'p'}${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+  if (box === lastBox) return;
+  lastBox = box;
+  if (aimAt.map) { mapPointer(r, aimAt.spot); const p = document.getElementById('fhpointer'); if (p) p.style.display = 'none'; return; }
+  document.getElementById('fhground')?.remove();
+  let p = document.getElementById('fhpointer');
+  if (!p) { p = document.createElement('div'); p.id = 'fhpointer'; p.innerHTML = '<div class="tc-pointer"></div>'; document.body.appendChild(p); }
+  p.style.display = '';
+  p.style.left = `${r.left}px`; p.style.top = `${r.top}px`; p.style.width = `${r.width}px`; p.style.height = `${r.height}px`;
+  p.firstElementChild!.classList.toggle('tc-pointer--lg', r.width >= 60 && r.height >= 60);
+}
+
+/**
+ * On the map the pointer is drawn on the ground, under every piece, flag and plate (the art director's brief,
+ * section 3): four brass clamps in the map's own layers, just under the pieces, 6 px clear of the thing.
+ * A province is pointed at by a frame 44 px square at its middle.
+ */
+function mapPointer(r: DOMRect, spot?: DOMPoint): void {
+  const svg = document.getElementById('map') as unknown as SVGSVGElement | null;
+  const units = document.getElementById('units');
+  const ctm = svg?.getScreenCTM();
+  if (!svg || !units || !ctm) return;
+  const inv = ctm.inverse();
+  const px = 1 / ctm.a;
+  let x0 = r.left - 6, y0 = r.top - 6, x1 = r.right + 6, y1 = r.bottom + 6;
+  if (spot) { const c = spot.matrixTransform(ctm); x0 = c.x - 22; x1 = c.x + 22; y0 = c.y - 22; y1 = c.y + 22; }
+  const a = new DOMPoint(x0, y0).matrixTransform(inv), b = new DOMPoint(x1, y1).matrixTransform(inv);
+  const arm = ((x1 - x0) < 60 ? 12 : 16) * px;
+  const d = `M${a.x} ${a.y + arm}V${a.y}H${a.x + arm}M${b.x - arm} ${a.y}H${b.x}V${a.y + arm}M${b.x} ${b.y - arm}V${b.y}H${b.x - arm}M${a.x + arm} ${b.y}H${a.x}V${b.y - arm}`;
+  let gEl: Element | null = document.getElementById('fhground');
+  if (!gEl) { gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g'); gEl.id = 'fhground'; units.parentNode!.insertBefore(gEl, units); }
+  gEl.innerHTML = `<g class="fh-breathe"><path class="fh-case" d="${d}" stroke-width="${(6 * px).toFixed(3)}"/><path class="fh-arm" d="${d}" stroke-width="${(3 * px).toFixed(3)}"/></g>`;
+}
+
+// ---- The Guide -------------------------------------------------------------------------------------------------
+
+/** GUIDE on the top bar, with the count of notes put away on its corner. */
+function guideButton(): void {
+  const bar = document.getElementById('barbtns');
+  const g = page.game();
+  if (!bar || !g.human || !page.ui.live) return;
+  const n = waitingCount(book);
+  const btn = `<button class="btn fh-guide" data-act="fhguide" title="The ten lessons of FIRST COMMAND: done, waiting and to come, and how a month works.">Guide${n ? `<span class="tc-count fh-count">${n}</span>` : ''}</button>`;
+  const last = bar.querySelector('[data-act="new"]');
+  if (last) last.insertAdjacentHTML('beforebegin', btn); else bar.insertAdjacentHTML('beforeend', btn);
+}
+
+const WORD = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+/** The Guide's first page: the ten lessons, each done, waiting or to come, and the setting. */
+export function guideCard(): string {
+  const g = page.game(), esc = page.esc;
+  const first = firstCommand(g);
+  const cur = lessonsOn(g, book) ? currentLesson(g, book, moment())?.id ?? '' : '';
+  const waiting = LESSONS.filter((l) => !isDone(book, l.id) && (book.later.includes(l.id) || l.id === cur));
+  const done = doneCount(book);
+  const state = `${done ? `${WORD[done]} done.` : 'None done yet.'}${waiting.length ? ` ${waiting.length === 1 ? 'One is' : `${WORD[waiting.length]} are`} waiting for you.` : ''}`;
+  let lit = false;
+  const row = (l: Lesson): string => {
+    if (isDone(book, l.id)) return `<div class="tc-step is-done"><i>${TICK}</i><b>${esc(l.head)}</b><button class="tc-btn--quiet fh-quietdark" data-act="fhagain" data-lesson="${l.id}">Show me again</button></div>`;
+    if (waiting.includes(l)) {
+      const glow = !lit; lit = true;
+      return `<button class="tc-step is-now${glow ? ' is-lit' : ''}" data-act="fhback" data-lesson="${l.id}"><i>${l.n}</i><b>${esc(l.head)}</b><u>Waiting for you</u></button>`;
+    }
+    return `<div class="tc-step is-later"><i>${l.n}</i><b>${esc(l.head)}</b><u>when its moment comes</u></div>`;
+  };
+  const groups = LESSON_GROUPS.map((gr, k) => {
+    const to = LESSON_GROUPS[k + 1]?.from ?? LESSONS.length;
+    return `<div class="fh-group"><div class="fh-glabel">${esc(first ? gr.label : gr.plain)}</div>${LESSONS.slice(gr.from, to).map(row).join('')}</div>`;
+  }).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The Guide${first ? ' · First command' : ''}</div><h2>The ten lessons</h2></header>
+    <div class="body fh-guidebody"><p class="fh-state">${esc(state)}</p>${groups}
+      <div class="fh-setting"><span>${esc(LESSON_SETTING)}</span><span class="fh-seg" role="group" aria-label="${esc(LESSON_SETTING)}"><button class="${book.on ? 'on' : ''}" data-act="fhset" data-on="1" aria-pressed="${book.on}">On</button><button class="${book.on ? '' : 'on'}" data-act="fhset" data-on="0" aria-pressed="${!book.on}">Off</button></span></div>
+      <p class="fh-rules"><button class="link" data-act="fhrules">How a month works ›</button> <small>The typed page of rules, on the Region page when no province is picked.</small></p></div>
+    <footer><button class="btn go" data-act="close">Back to the war</button></footer>`;
+}
+
+// ---- The door --------------------------------------------------------------------------------------------------
+
+/** FIRST COMMAND on the door's title band, above CONTINUE YOUR CAMPAIGN, lit until the ten lessons are done (ruling 141). */
+function doorButton(card: HTMLElement): void {
+  const head = card.querySelector('header');
+  if (!head || head.querySelector('.fh-door') || page.ui.menu === 'scenarios') return;
+  const done = allDone(book);
+  const c = FIRST_COMMAND;
+  head.classList.add('fh-band');
+  head.insertAdjacentHTML('beforeend', `<button class="btn fh-door${done ? '' : ' is-lit'}" data-act="start" data-first="1" data-nat="${c.nat}" data-from="${c.from}" data-view="grand" data-level="${c.level}" data-depth="${c.depth}" title="Germany, September 1939, at Cadet and Field command: your staff runs every desk but the armies, and ten staff notes teach the war as you play it."><b>${page.esc(LESSON_DOOR.label)}</b><span>${page.esc(done ? LESSON_DOOR.again : LESSON_DOOR.fresh)}</span></button>`);
+}
+
+// ---- Clicks ----------------------------------------------------------------------------------------------------
+
+function onClick(e: MouseEvent): void {
+  const t = (e.target as HTMLElement | null)?.closest?.('[data-act]') as HTMLElement | null;
+  if (!t || !page) return;
+  const act = t.dataset.act!;
+  // A line of the month card followed to its place: lesson 6's deed (the page then goes there as it always does).
+  if ((act === 'showmap' || act === 'showsea' || act === 'homealarm') && t.closest('#card .mc')) { lessonDone('line', { card: true }); return; }
+  if (!act.startsWith('fh')) return;
+  e.stopPropagation();
+  e.preventDefault();
+  const id = t.dataset.lesson ?? '';
+  switch (act) {
+    case 'fhlater': { const d = onDesk(); if (d?.lesson) { putAway(book, d.lesson.id); save(); } page.refresh(); break; }
+    case 'fhsend': stamped = null; redraw(); break;
+    case 'fhtipoff': tip = null; redraw(); break;
+    case 'fhclose': if (!book.done.includes(CLOSING.id)) book.done.push(CLOSING.id); save(); redraw(); break;
+    case 'fhguide': page.openModal({ kind: 'guide' }); break;
+    case 'fhback': bringBack(book, id); save(); page.openModal(null); page.refresh(); break;
+    case 'fhagain': showAgain(book, id); save(); redrawGuide(); break;
+    case 'fhset': book.on = t.dataset.on === '1'; save(); redrawGuide(); break;
+    case 'fhrules': {
+      page.openModal(null);
+      page.ui.sel = -1; page.ui.picked.clear(); page.ui.tab = 'region';
+      page.refresh();
+      const h = [...document.querySelectorAll('#pane h3')].find((x) => x.textContent === 'How a month works');
+      h?.scrollIntoView({ block: 'start' });
+      break;
+    }
+  }
+}
+function redrawGuide(): void {
+  if (page.ui.modal?.kind !== 'guide') { page.refresh(); return; }
+  const card = document.getElementById('card');
+  const at = card?.scrollTop ?? 0;
+  page.openModal({ kind: 'guide' });
+  if (card) card.scrollTop = at;
+  page.refresh();
+}
