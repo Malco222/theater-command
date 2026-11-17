@@ -9662,13 +9662,13 @@ void ACampaignMapActor::FogBeyond()
 	{
 		return; // (nothing beyond the map is hidden, and nothing was)
 	}
+	++FogAsked; // (counted either way: a haze laid in the frame outdates one being laid aside, which is then not put on the table)
 	if (WorldFogPicture && TheaterSpeed::FogAside())
 	{
 		// (Speed, 17 November 2026: tc.Speed.FogAside. The world's picture of the haze, 1544 by 851, and each fine
 		// sheet's, were laid and softened here, in the frame of the press: most of ShowShroud's 131 ms on the march to
 		// Cleveland. They are now laid on another thread and put on the table one a frame after, the same pixels a
 		// frame or three later. The map's own haze already comes and goes over half a second.)
-		++FogAsked;
 		if (!FogAsideBuilding.IsValid())
 		{
 			LaunchFogAside();
@@ -9734,7 +9734,17 @@ void ACampaignMapActor::UpdateFogAside()
 	}
 	if (FogAside->For != FogAsked)
 	{
-		LaunchFogAside(); // (the haze has moved again since: laid again for it as it is now)
+		if (TheaterSpeed::FogAside())
+		{
+			LaunchFogAside(); // (the haze has moved again since: laid again for it as it is now)
+		}
+		else
+		{
+			// (the switch was turned off since, and the haze was laid in the frame: this one is older, and dropped)
+			FogAside.Reset();
+			FogAsideBuilding = TFuture<void>();
+			FogLaying = INDEX_NONE;
+		}
 		return;
 	}
 	// One picture a frame, the world's first.

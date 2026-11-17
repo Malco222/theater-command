@@ -107,9 +107,10 @@ public:
 	/**
 	 * The whole-world map: is fine ground the view wants still being modelled? It is built on another thread, two
 	 * sheets at a time, and until it stands the coarse sheet shows in its place, with no lesser river, lake or
-	 * clearing on it. (A picture of the world waits for it.)
+	 * clearing on it. (A picture of the world waits for it, and for the haze beyond the map while it is being laid
+	 * on another thread, tc.Speed.FogAside.)
 	 */
-	bool AreFineSheetsComing() const { return bFineSheetsComing; }
+	bool AreFineSheetsComing() const { return bFineSheetsComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
