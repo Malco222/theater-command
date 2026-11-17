@@ -818,6 +818,7 @@ private:
 	};
 	TArray<FTrain> Trains;
 	double NextTrain = 0.0;
+	bool bTrainShadowsCast = true; // ("tc.Speed.TrainShadows", for measuring only)
 	void UpdateTrains(const FVector& CameraFocus, float CameraDistance);
 	/** (Ruling 125.) Makes a train up for the province it sets out from: a flak wagon at its tail where guns guard the line, a second behind the tender at level 3. */
 	void MakeUpTrain(FTrain& Train, int32 FromRegion) const;
@@ -992,6 +993,10 @@ private:
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
 	bool bSmokeMade = false;
+	int32 SmokeRoom = 0; // (Speed: "tc.Speed.SmokeTrim") how many puffs the mesh on the graphics chip has room for
+	int32 SmokeRoomSpare = 0; // frames running that less room would have done
+	TArray<FVector> SmokeSentVertices; // (the puffs in use, and the two corners that keep the bounds: see UpdateSmoke)
+	TArray<FColor> SmokeSentColours;
 	// Flak (Brian picked "hanging smoke" on 16 November 2026, after the solid bursts: "its solid", "and looks like a
 	// ball"). A burst is soft see-through smoke drawn with the smoke's own puffs, never a mesh or a ball. It is born
 	// at a place and stays there, drifting slowly downwind, while the bombers fly on and leave a greying wake.
@@ -1214,6 +1219,22 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownFarMesh;
 	int32 TownsFarShown = -1; // 1 while the far towns are the ones drawn, 0 the near, -1 not yet said
+	/**
+	 * (Speed, 17 November 2026; "tc.Speed.TownSquares".) The same towns cut into squares of country, near form and far
+	 * form, a mesh to each square. One mesh the size of the world is drawn whole every frame wherever the eye is, and
+	 * drawn whole again into every part of the shadows that changes; a square out of view is not drawn at all. While
+	 * the towns stand in squares, TownMesh and TownFarMesh are left empty.
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownSquares;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownFarSquares;
+	int32 TownsCut = -1; // 1 while the towns stand in squares, 0 in one piece, -1 not built yet
+	int32 TownShadowsCast = -1; // ("tc.Speed.TownShadows", for measuring only) 1 while the near towns throw shadows
+	/** Shows the near towns (and their windows' panes) or the far ones, in whichever pieces they stand. */
+	void ShowTownForm(bool bFar);
+	/** (for measuring only) Whether the near towns throw shadows. */
+	void SetTownShadows(bool bCast);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;

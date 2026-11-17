@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Campaign/CampaignText.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignSounds.h"
@@ -1584,6 +1585,7 @@ float ACampaignPlayerController::GetMoonlight() const
 
 void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetMapLetters);
 	Out.Reset();
 	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 	if (!Map.IsValid() || !GetSession() || !Eye || Opening.bVisible || Newsreel.bOn)
@@ -1691,6 +1693,7 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 
 void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetColoursOnScreen);
 	Out.Reset();
 	if (!Map.IsValid() || !PlayerCameraManager || Opening.bVisible || Newsreel.bOn)
 	{
@@ -1716,6 +1719,7 @@ void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 
 void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetTownPlates);
 	Out.Reset();
 	const FCampaignSession* Session = GetSession();
 	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
@@ -3797,6 +3801,8 @@ bool ACampaignPlayerController::RayOnTable(const FVector& Origin, const FVector&
 
 void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
+	TheaterSpeed::NoteFrame(DeltaTime, GetWorld()); // ("-TheaterSpeedLog": what the frame costs)
+	THEATER_SPEED_SCOPE(PlayerTick);
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
 	// (Ruling 64.) The month's card, once nothing else has the screen.
@@ -4371,6 +4377,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
 	{
+		THEATER_SPEED_SCOPE(HoverTip);
 		HoverTipRegion = TipRegion;
 		HoverTipField = TipField;
 		HoverTipHand = TipHand;
@@ -4835,6 +4842,7 @@ bool ACampaignPlayerController::CanPickUp(const AArmyPiece* Piece) const
 
 bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 {
+	THEATER_SPEED_SCOPE(HoldArmy);
 	if (!CanPickUp(Piece))
 	{
 		return false;
@@ -5350,6 +5358,7 @@ void ACampaignPlayerController::FleetToHarbour()
 
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(ClickOnTable);
 	StopLooking();
 	PutDownAgent(); // (a click anywhere else lets the agent in hand go, and looks at what was clicked)
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
@@ -5738,6 +5747,7 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 
 void ACampaignPlayerController::SelectRegion(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(SelectRegion);
 	if (!Map.IsValid())
 	{
 		return;
@@ -5896,6 +5906,7 @@ const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
 
 void ACampaignPlayerController::RefreshOrders()
 {
+	THEATER_SPEED_SCOPE(RefreshOrders);
 	FCampaignSession* Session = GetSession();
 	++Tray.Revision;
 	Tray.bVisible = false;
@@ -6212,6 +6223,7 @@ void ACampaignPlayerController::RefreshOrders()
 
 void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(ShowRouteTo);
 	if (RegionId == RouteTarget || !Map.IsValid())
 	{
 		return;
@@ -6887,6 +6899,7 @@ bool ACampaignPlayerController::IsTableBusy() const
 
 void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOnTheTable)
 {
+	THEATER_SPEED_SCOPE(RightClickOn);
 	if (AgentInHand != INDEX_NONE)
 	{
 		// (Ruling 169.) The agent in hand is sent with a right-click, as an army is. An agent may go anywhere:
@@ -8681,6 +8694,7 @@ void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
 
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(RefreshRegionPanel);
 	RegionPanel = FRegionPanelInfo();
 	RegionPanel.Revision = ++PanelRevision;
 	{
