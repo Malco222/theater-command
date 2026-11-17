@@ -1,0 +1,67 @@
+=== AFG, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+Afghanistan (AFG), September 1939; part of the world: the Middle East; government: authoritarian; stands: independent; quality 0.4, air 1, resilience 0.7, sea lift 0
+  capital: Kabul (province 994, held by AFG)
+  provinces: holds 12, owns 12; at home 12, colonies 0; ports 0; factories 0; victory points 1; oilfields 0
+  seas it stands on: none (landlocked)
+  neighbours by land: UK, IRN, SOV, CHN
+  army: 3 corps, 4 divisions on paper, 1.8 at strength
+    Central Corps and the Royal Guard (Kabul) [inf] 2 div at 50% in Kabul
+    Southern Province divisions (Kandahar) [inf] 1 div at 40% in Kandahar
+    Northern divisions (Mazar-i-Sharif) [inf] 1 div at 40% in Mazar-i-Sharif
+  fleets: none
+  air groups: none
+  books (as the interface shows them, x100): income 199.5 a month, upkeep 3.6, net 195.9, treasury 0
+  at war with: none; follows: nobody; friends: IRN, IRQ, TUR
+  abilities: The passes and the tribes; The Saadabad Pact
+  paths: axis (open); allies (open); alone (now); found (open)
+  League founders it could ask (4, all of the Middle East unless said): IRN (willing), SAU (willing), YEM (willing), IRQ; of another part of the world: none
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 5; barred for another reason 15
+    corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
+    corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The reserve has not the men: this takes 45,000 and 35,000 are left. 0 come of age each month.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: Needs a home province with 1 factory. Build factories in a city first.
+    corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
+    corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
+    para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
+    air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: No works in the country build these: its aircraft come from abroad.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: No works in the country build these: its aircraft come from abroad.
+    ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    ship:ca        Cruiser (1 cruiser) cost 1200, 14 months  NO: Needs a shipyard of level 2 in one of your home ports.
+    ship:cv        Aircraft carrier (1 carrier) cost 3600, 22 months  NO: Needs the technology Carrier aviation. Open Research to begin it.
+    ship:bb        Battleship (1 battleship) cost 4000, 26 months  NO: Needs a shipyard of level 3 in one of your home ports.
+    work:factory   Factory (one factory) cost 3000, 8 months  NO: The country's industry can grow no further: 0 factories is the most it can keep at work.
+    work:yard      Shipyard (level 1) cost 2000, 8 months  NO: Kabul has no harbour.
+    work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
+    work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
+    work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+  first month reached in 2 s
+--- month by month (the line is the day the player is up)
+  ways out of the country on September 1939 (sea lift 0, seaSupply false):
+    Central Corps and the Royal Guard (Kabul) in Kabul: marches to 11 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Southern Province divisions (Kandahar) in Kandahar: marches to 7 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    Northern divisions (Mazar-i-Sharif) in Mazar-i-Sharif: marches to 11 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    by land in the end, over its own and its allies' ground from Kabul: 12 provinces (AFG 12); furthest Girishk, 3 provinces off; on the map of Europe 0
+      frontiers that road comes to: SOV at Merv, 2 off; UK at Peshawar, 2 off; CHN at Yarkand, 3 off; IRN at Birjand, 3 off
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 174.3; at 195.8 a month that is 4 month(s) away
+  September 1939  alive  provinces  12  corps  3 (1.9 divs)  treasury   174.3  net  195.8/month  independent  at war with: none  [0 s]
+  October 1939    alive  provinces  12  corps  3 (1.9 divs)  treasury   347.9  net  195.7/month  independent  at war with: none  [2 s]
+  November 1939   alive  provinces  12  corps  3 (2 divs)  treasury   520.7  net  195.6/month  independent  at war with: none  [2 s]
+  December 1939   alive  provinces  12  corps  3 (2 divs)  treasury   692.7  net  195.5/month  independent  at war with: none  [2 s]
+  January 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Kabul; treasury 863.8 -> 63.8; orders in hand 1
+  January 1940    alive  provinces  12  corps  3 (2.1 divs)  treasury    63.8  net  195.3/month  independent  at war with: none  [1 s]
+  February 1940   alive  provinces  12  corps  3 (2.1 divs)  treasury   234.1  net  195.2/month  independent  at war with: none  [2 s]
+  March 1940      alive  provinces  12  corps  3 (2.2 divs)  treasury   403.5  net  190.1/month  independent  at war with: none  [3 s]
+  April 1940      alive  provinces  12  corps  3 (2.3 divs)  treasury   567.1  net    190/month  independent  at war with: none  [3 s]
+  May 1940        alive  provinces  12  corps  3 (2.3 divs)  treasury   729.7  net  189.8/month  independent  at war with: none  [3 s]
+  June 1940       alive  provinces  12  corps  3 (2.4 divs)  treasury   891.3  net  189.7/month  independent  at war with: none  [4 s]
+  July 1940       alive  provinces  12  corps  3 (2.5 divs)  treasury    1052  net  189.5/month  independent  at war with: none  [4 s]
+  August 1940     alive  provinces  12  corps  3 (2.6 divs)  treasury  1211.6  net  189.4/month  independent  at war with: none  [4 s]
+  September 1940  alive  provinces  12  corps  3 (2.6 divs)  treasury  1370.2  net  189.2/month  independent  at war with: none  (end)
+    [October 1939 after JAP] [note] crowd: 8 JAP corps stand in Tokyo (5 divisions)
+    [December 1939 after JAP] [note] crowd: 14 JAP corps stand in Tokyo (9 divisions)
+    [April 1940 after JAP] [note] China fights on with its capital Chungking in JAP hands
+    [July 1940 after JAP] [note] crowd: 18 JAP corps stand in Tokyo (14 divisions)
+    [note] saved at February 1940: 589 KB
+VERDICT AFG seed 7: PASS: started yes; order given (January 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 34 s

@@ -1,0 +1,10 @@
+=== grow AFG, seed 7, 24 months, aim none; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 3, divisions 4 on paper and 1.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 2.3 divisions; income 199.5 a month
+    nothing could be bought in time
+  September 1941: corps 3, divisions 4 on paper and 3.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 0.5 divisions; treasury 3984; spent 0; still on order: nothing
+    [October 1939 after JAP] [note] crowd: 8 JAP corps stand in Tokyo (5 divisions)
+    [December 1939 after JAP] [note] crowd: 14 JAP corps stand in Tokyo (9 divisions)
+    [April 1940 after JAP] [note] China fights on with its capital Chungking in JAP hands
+    [July 1940 after JAP] [note] crowd: 18 JAP corps stand in Tokyo (14 divisions)
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+GROWN AFG none seed 7 to September 1941: divisions 4 -> 4 on paper (1.8 -> 3.8 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 0; invariants broken 0; standing
