@@ -1,14 +1,14 @@
 {
  "carried": 305,
- "fresh": 178,
+ "fresh": 179,
  "byCountry": {
   "UK": 38,
-  "CHN": 25,
+  "CHN": 26,
   "BRA": 21,
   "USA": 19,
-  "SOV": 17,
+  "SOV": 18,
   "CAN": 13,
-  "BEL": 12,
+  "BEL": 11,
   "COL": 10,
   "ITA": 10,
   "PER": 9,
@@ -52,7 +52,6 @@
   "Angara": 2,
   "Awash": 2,
   "Chulym": 2,
-  "Congo": 2,
   "East River": 2,
   "Godavari": 2,
   "Hudson": 2,
@@ -88,6 +87,7 @@
   "Benue": 1,
   "Blue Nile": 1,
   "Chao Phraya": 1,
+  "Congo": 1,
   "Han": 1,
   "Helmand": 1,
   "Indus": 1,
@@ -114,11 +114,13 @@
   "Sittang": 1,
   "South Saskatchewan": 1,
   "Tana": 1,
+  "Tobol": 1,
   "Ural": 1,
   "Ussuri": 1,
   "White Nile": 1,
   "Yenisei": 1,
   "Yukon": 1,
+  "Yungting": 1,
   "Zeya": 1
  },
  "crossings": [
@@ -137,6 +139,14 @@
    "USA",
    "Mississippi",
    "great"
+  ],
+  [
+   "Kansas",
+   "USA",
+   "Dodge City",
+   "USA",
+   "Arkansas",
+   "middle"
   ],
   [
    "Dakotas",
@@ -595,6 +605,14 @@
    "middle"
   ],
   [
+   "Peiping",
+   "CHN",
+   "Tientsin",
+   "CHN",
+   "Yungting",
+   "middle"
+  ],
+  [
    "Swatow",
    "CHN",
    "Kanchow",
@@ -880,6 +898,14 @@
    "Omsk",
    "SOV",
    "Ishim",
+   "middle"
+  ],
+  [
+   "Kurgan",
+   "SOV",
+   "Kustanay",
+   "SOV",
+   "Tobol",
    "middle"
   ],
   [
@@ -1243,14 +1269,6 @@
    "middle"
   ],
   [
-   "Stanleyville",
-   "BEL",
-   "Kindu",
-   "BEL",
-   "Congo",
-   "great"
-  ],
-  [
    "Luluabourg",
    "BEL",
    "Kikwit",
@@ -1336,14 +1354,6 @@
    "Burlington",
    "USA",
    "Hudson",
-   "middle"
-  ],
-  [
-   "Dodge City",
-   "USA",
-   "Pueblo",
-   "USA",
-   "Arkansas",
    "middle"
   ],
   [

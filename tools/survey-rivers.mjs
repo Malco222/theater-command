@@ -296,29 +296,52 @@ function thin(ll, tol) {
   }
   return ll.filter((_, i) => keep[i]);
 }
-/** A sharp turn is cut across, so that a river bends and does not break. */
-function ease(ll, most = 32, rounds = 3) {
-  for (let n = 0; n < rounds; n++) {
-    const out = [ll[0]];
-    let cut = 0;
-    for (let i = 1; i + 1 < ll.length; i++) {
-      const a = uv(ll[i - 1]), b = uv(ll[i]), c = uv(ll[i + 1]);
-      const t = Math.abs(((Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0])) * 180) / Math.PI + 540) % 360 - 180;
-      const la = Math.hypot(b[0] - a[0], b[1] - a[1]), lc = Math.hypot(c[0] - b[0], c[1] - b[1]);
-      if (Math.abs(t) > most && Math.min(la, lc) > 0.6) {
-        const f = 0.28;
-        out.push([ll[i][0] + (ll[i - 1][0] - ll[i][0]) * f, ll[i][1] + (ll[i - 1][1] - ll[i][1]) * f], [ll[i][0] + (ll[i + 1][0] - ll[i][0]) * f, ll[i][1] + (ll[i + 1][1] - ll[i][1]) * f]);
-        cut++;
-      } else out.push(ll[i]);
+/**
+ * A sharp turn is cut across, so that a river bends and does not break: the corner is cut the same distance back
+ * on both sides, which halves the turn, until no turn is over 'most' degrees. Points that crowd one another are
+ * dropped first.
+ */
+function ease(ll, most = 27, rounds = 12) {
+  const turnAt = (i) => {
+    const a = uv(ll[i - 1]), b = uv(ll[i]), c = uv(ll[i + 1]);
+    return { t: Math.abs(Math.abs(((Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0])) * 180) / Math.PI + 540) % 360 - 180), la: Math.hypot(b[0] - a[0], b[1] - a[1]), lc: Math.hypot(c[0] - b[0], c[1] - b[1]) };
+  };
+  const near = [ll[0]];
+  for (let i = 1; i + 1 < ll.length; i++) { const a = uv(near[near.length - 1]), b = uv(ll[i]), z = uv(ll[ll.length - 1]); if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 0.5 && Math.hypot(b[0] - z[0], b[1] - z[1]) >= 0.5) near.push(ll[i]); }
+  near.push(ll[ll.length - 1]);
+  ll = near;
+  for (let pass = 0; pass < 3; pass++) {
+    // A hairpin too tight to round (a sharp turn with a short reach beside it), or a course that doubles back on
+    // itself where two of the survey's lines meet, loses its tip.
+    for (let again = true; again; ) {
+      again = false;
+      for (let i = 1; i + 1 < ll.length; i++) { const { t, la, lc } = turnAt(i); if (t > 150 || (t > 60 && Math.min(la, lc) < 1)) { ll.splice(i, 1); again = true; i--; } }
     }
-    out.push(ll[ll.length - 1]);
-    ll = out;
-    if (!cut) break;
+    for (let n = 0; n < rounds; n++) {
+      const out = [ll[0]];
+      let cut = 0;
+      for (let i = 1; i + 1 < ll.length; i++) {
+        const { t, la, lc } = turnAt(i);
+        if (t > most && la > 0 && lc > 0) {
+          const d = Math.min(la, lc) * 0.4, fa = d / la, fc = d / lc;
+          out.push([ll[i][0] + (ll[i - 1][0] - ll[i][0]) * fa, ll[i][1] + (ll[i - 1][1] - ll[i][1]) * fa], [ll[i][0] + (ll[i + 1][0] - ll[i][0]) * fc, ll[i][1] + (ll[i + 1][1] - ll[i][1]) * fc]);
+          cut++;
+        } else out.push(ll[i]);
+      }
+      out.push(ll[ll.length - 1]);
+      ll = out;
+      if (!cut) break;
+    }
+    // (Two points that the cutting left on one spot are one point.)
+    ll = ll.filter((p, i) => i === 0 || i === ll.length - 1 || Math.hypot(uv(p)[0] - uv(ll[i - 1])[0], uv(p)[1] - uv(ll[i - 1])[1]) > 0.03);
   }
   return ll;
 }
 const TOL = 1.2;
-const draw = (ll) => ease(thin(ll, TOL));
+// (A course is drawn to the top of the chart and no further: the Lena's delta lies beyond it.)
+const TOP = 71.4;
+const onChart = (ll) => { let a = 0, b = ll.length; while (a < b - 2 && ll[a][1] > TOP) a++; while (b > a + 2 && ll[b - 1][1] > TOP) b--; return ll.slice(a, b); };
+const draw = (ll) => onChart(ease(thin(ll, TOL)));
 
 // The survey's lakes (ne_10m_lakes.geojson, a second path), for a river that ends in one: the lakes that were
 // there in 1939 (a reservoir only if its dam was built by then).
@@ -389,7 +412,7 @@ function into(r) {
   if (RIVER_INTO[r.name]) {
     // Named by the lists: where that is a river whose course lies near, the foot is still set on its line.
     const o = all.find((o) => o !== r && o.name === RIVER_INTO[r.name]);
-    if (o && nearest(r.p[r.p.length - 1], o.p).d < 40) r.joins = o;
+    if (o && nearest(r.p[r.p.length - 1], o.p).d < 25) r.joins = o;
     return RIVER_INTO[r.name];
   }
   if (f && f.kind === 0) { r.joins = f.o; return f.o.name; }
@@ -422,9 +445,15 @@ for (const r of all) {
     const p = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(p[0] - foot[0], p[1] - foot[1]);
     if (!best || d < best.d) best = { d, p };
   }
-  if (best && best.d < 40) { const at = [best.p[0] / K, -best.p[1] / 40]; if (best.d < 1.5) r.drawn[r.drawn.length - 1] = at; else r.drawn.push(at); }
+  if (best && best.d < 40) {
+    const at = [best.p[0] / K, -best.p[1] / 40], n = r.drawn.length;
+    // (The foot is moved there if it is close, or if running on to it would break the course's last bend.)
+    const a = uv(r.drawn[n - 2]), b = uv(r.drawn[n - 1]);
+    const t = Math.abs(Math.abs(((Math.atan2(best.p[1] - b[1], best.p[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0])) * 180) / Math.PI + 540) % 360 - 180);
+    if (best.d < 1.5 || (t > 35 && best.d < 6)) r.drawn[n - 1] = at; else r.drawn.push(at);
+  }
 }
-const written = (r) => r.drawn.map(([lon, lat]) => [Math.round(lat * 1000) / 1000, Math.round(lon * 1000) / 1000]);
+const written = (r) => r.drawn.map(([lon, lat]) => [Math.round(lat * 10000) / 10000, Math.round(lon * 10000) / 10000]);
 
 // ---- Written out ---------------------------------------------------------------------------------------------------------
 

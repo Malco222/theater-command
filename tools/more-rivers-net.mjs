@@ -45,7 +45,7 @@ function nearestOn(pts, x, y) {
  */
 export function moreRivers({ map, all, at, byName, nb, handed, found, struck, key, beside }) {
   const ROUND = map.frame.x1 - map.frame.x0;
-  const r1 = (v) => Math.round(v * 10) / 10;
+  const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 1000) / 1000;
   const x0 = map.frame.x0;
   // A course on the chart: the first point where the chart has it, the rest running on from it without a leap
   // (a river that crosses the chart's edge runs off the sheet, as the Yukon handed over does).
@@ -57,9 +57,12 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
       if (prev === null) { while (x < x0) x += ROUND; while (x >= x0 + ROUND) x -= ROUND; }
       else { while (x - prev > ROUND / 2) x -= ROUND; while (prev - x > ROUND / 2) x += ROUND; }
       prev = x;
-      out.push([r1(x), r1((71.4 - lat) * 40)]);
+      out.push([x, (71.4 - lat) * 40]);
     }
-    return out;
+    // (And it lies on the turn of the chart that holds most of it.)
+    const inside = (w) => out.filter(([x]) => x + w >= x0 && x + w < x0 + ROUND).length;
+    const w = [0, ROUND, -ROUND].sort((p, q) => inside(q) - inside(p))[0];
+    return out.map(([x, y]) => [r2(x + w), r2(y)]);
   };
   const rivers = handed.map((rv, k) => {
     const [name, cls, into, ll, more] = REAL_COURSES[k];
