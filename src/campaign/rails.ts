@@ -22,7 +22,7 @@ import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { downBetween } from './rivers';
-import { EASTERN, allied, atWar, headline, inDesert } from './game';
+import { allied, atWar, headline, inDesert, lineOwner } from './game';
 import { besieged } from './siege';
 import { junctionOpenTo, worksBurnt } from './prizes';
 
@@ -280,7 +280,7 @@ export function railheadAt(g: Game, nat: string, region: number): Railhead {
   if (!groundRules(g)) return AT_HOME;
   const r = g.regions[region];
   if (inDesert(r)) return AT_HOME;
-  if (EASTERN.deepOwners.includes(r.owner) && !EASTERN.deepOwners.includes(nat)) return AT_HOME;
+  if (lineOwner(g, r.owner) && !lineOwner(g, nat)) return AT_HOME;
   const road = railheads(g, nat)?.[region] ?? 0;
   if (road <= 0) return AT_HOME;
   for (const [far, attack, defence] of RAILWAYS.railhead) if (road <= far) return { road, attack, defence };

@@ -374,6 +374,14 @@ function campaignMoves(g: Game, nat: string): void {
   if (n.alive) overseas(g, nat);
 }
 
+/**
+ * A phase's 'release': the held corps standing on the ground it names lose their hold and go in with the rest. A
+ * garrison row marked to stay keeps it (ruling 221, H): an offensive does not empty the bases behind it.
+ */
+export function release(g: Game, nat: string, names: string[]): void {
+  for (const c of g.corps) if (c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && names.includes(g.regions[c.reg].name)) c.hold = false;
+}
+
 /** Runs a nation's corps in each overseas theatre by that theatre's plan. */
 function overseas(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -388,7 +396,7 @@ function overseas(g: Game, nat: string): void {
     if (ph?.declare) for (const e of ph.declare) declareWar(g, nat, e);
     if (!n.alive || !n.atWar.length) return;
     if (ph?.landings) landings(g, nat, ph, ids[k]);
-    if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
+    if (ph?.release) release(g, nat, ph.release);
     const rest = g.corps.filter((c) => c.nat === nat && !c.hold && !ids[k].has(c.reg));
     for (const c of rest) c.hold = true;
     scope = ids[k];
@@ -473,7 +481,7 @@ function mainCampaign(g: Game, nat: string): void {
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   if (ph?.landings) landings(g, nat, ph);
   if (open) { descent(g, nat); ferry(g, nat); }
-  if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
+  if (ph?.release) release(g, nat, ph.release);
   const posture = ph?.posture ?? 'defend';
   entrusted = handedOver(g, nat, ph);
   given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));

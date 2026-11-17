@@ -40,7 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
-  corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
+  corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number; stay?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
   warWork: Record<string, number>;

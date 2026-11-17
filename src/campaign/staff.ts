@@ -33,7 +33,7 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, lineOwners, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -261,6 +261,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   }
 
   const wx = weather(g);
+  const long = lineOwners(g);
   const out: Front[] = [];
   for (const [comp, f] of found) {
     // Works only stop an attack that comes from the country they were built against: the best way in is what counts.
@@ -308,7 +309,23 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     let atk = 0, fixed = 0;
     // Deep in Russia in the bad months an army that has not learned the country attacks at a fraction of its strength.
     const deep = edge.filter((id) => EASTERN.deepOwners.includes(g.regions[id].owner)).length * 2 >= edge.length;
-    const season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    let season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    // Ruling 221 (S): where the long line runs on ground the Russian winter does not reach, a staff reckons it as it
+    // reckons the winter: the strength its corps would have one province past the line they hold, averaged along the edge.
+    if (EASTERN.lineReckon && !long.includes(nat)) {
+      const reach = g.reach[nat];
+      const far = edge.filter((id) => long.includes(g.regions[id].owner) && !EASTERN.deepOwners.includes(g.regions[id].owner));
+      if (reach && far.length) {
+        let sum = 0;
+        for (const id of far) {
+          let best = Infinity;
+          for (const j of g.regions[id].nb) if (f.ours.has(j)) best = Math.min(best, reach[j]);
+          const len = (best === Infinity ? 0 : best) + EASTERN.stepFresh;
+          sum += (EASTERN.bands.find(([max]) => len <= max) ?? EASTERN.bands[EASTERN.bands.length - 1])[1];
+        }
+        season *= sum / far.length;
+      }
+    }
     for (const c of g.corps) {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];

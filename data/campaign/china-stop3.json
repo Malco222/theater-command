@@ -1,0 +1,23 @@
+{
+ "_about": "Ruling 221 (the design director, 17 November 2026, 18:39Z) on the Pacific planner's paper 20, what Szechwan costs Japan when history is loose: the data that turns on its five switches, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (objects by key, lists appended), so the rig can take this file as it stands. H: a setup row marked 'stay' keeps its hold when a general offensive's release frees the ground it stands on, at every stop; the mark goes on paper 17's eight Japanese garrison rows, listed in '_stay' as [nation, row name, province] (they are the Pacific seat builder's rows, so the mark is laid on them, not here). L: China's ground takes the long supply line as the Soviet Union's does (east.json 'lineOwners'), counted from Japan's frontier and from the harbours it holds, with none of the Russian winter, at the stops without the book ('lineStops'). S: a computer staff reckons that line in its sums of strength as it reckons the winter ('lineReckon'). F: troops lifted off the coast of a country their own is fighting are landed at the nearest harbour their country holds on that ground, not taken home ('nearRefuge'), at every stop and for a player's army too; it reaches every country's refuge, so history's hashes and the grand wars were run with it on. R: China among the staffs that will not be ringed and that rest worn corps (rivals.json 'ring.staffs' and 'relief.staffs'), at every stop.",
+ "east": {
+  "lineOwners": ["CHN"],
+  "lineStops": [3, 4, 5],
+  "lineReckon": true,
+  "nearRefuge": true
+ },
+ "rivals": {
+  "ring": { "staffs": ["CHN"] },
+  "relief": { "staffs": ["CHN"] }
+ },
+ "_stay": [
+  ["JAP", "North China Area Army reserve (27th Division)", "Peiping"],
+  ["JAP", "Mongolia Garrison Army (26th Division)", "Tatung"],
+  ["JAP", "Tsingtao garrison (independent mixed brigades)", "Tsingtao"],
+  ["JAP", "13th Army (15th Division, Nanking)", "Nanking"],
+  ["JAP", "Shanghai garrison (independent mixed brigades)", "Shanghai"],
+  ["JAP", "21st Army detachment (Swatow)", "Swatow"],
+  ["JAP", "Amoy naval garrison", "Amoy"],
+  ["JAP", "Hainan garrison (naval landing forces)", "Hainan"]
+ ]
+}
