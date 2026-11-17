@@ -5,5 +5,16 @@
     "answer": "answers",
     "told": "Brian was told on 17 November 2026 at 17:33 UTC that on his campaign's seed Britain answers at the first month's end, at war from January 1941"
   },
-  "hold": ["Pittsburgh", "Washington", "Norfolk", "Philadelphia", "Buffalo", "New York"]
+  "hold": [
+    "Pittsburgh",
+    "Washington",
+    "Norfolk",
+    "Philadelphia",
+    "Buffalo",
+    "New York"
+  ],
+  "alarm": {
+    "army": "Vancouver",
+    "why": "Ruling 211(c), Version 84.2.6: as the save opens in December 1940, the first red row names his nearest army, the one round Vancouver (the Playtester's test of fl-home-alarm)."
+  }
 }

@@ -18,6 +18,7 @@ import * as GOALS from '../../src/campaign/goals';
 import * as MARCH from '../../src/campaign/marches';
 import * as ROUND from '../../src/campaign/round';
 import * as CARD from '../../src/campaign/monthcard';
+import * as DANGER from '../../src/campaign/danger';
 import { turnToDate } from '../../src/core/ticket';
 import worldData from '../../data/campaign/world.json';
 import type { Corps, Game } from '../../src/campaign/types';
@@ -57,7 +58,7 @@ const strings = (v: unknown, out: string[] = []): string[] => {
 if (!SAVE || !existsSync(SAVE)) { console.log(`no save at ${SAVE}`); console.log('errors:', JSON.stringify([`no save at ${SAVE}`])); process.exit(0); }
 const text = readFileSync(SAVE, 'utf8');
 const expectPath = SAVE.replace(/\.json$/, '.expect.json');
-const expect: { britain?: { dominion: string; answer: 'answers' | 'stays out'; told?: string }; hold?: string[] } = existsSync(expectPath) ? JSON.parse(readFileSync(expectPath, 'utf8')) : {};
+const expect: { britain?: { dominion: string; answer: 'answers' | 'stays out'; told?: string }; hold?: string[]; alarm?: { army: string } } = existsSync(expectPath) ? JSON.parse(readFileSync(expectPath, 'utf8')) : {};
 const raw = JSON.parse(text);
 console.log(`save ${SAVE.split('/').pop()}: ${raw.human} in ${label(raw.turn)} (turn ${raw.turn}), seed ${raw.seed}, ${Math.round(text.length / 1024)} KB`);
 
@@ -243,6 +244,33 @@ const dominionWars = (gm: Game): [string, string, number][] => {
 const motherNews = (gm: Game, from: number): { head: string; kind: string; text: string; turn: number }[] =>
   gm.headlines.slice(from).filter((h: any) => typeof h.head === 'string' && /^Britain (stands by|stays out of)|^\S+ (stands by|stays out of) .+('s war)?$/.test(h.head)).map((h: any) => ({ head: h.head, kind: h.kind, text: h.text, turn: h.turn }));
 
+/**
+ * Ruling 211(c), Version 84.2.6: the red row, the home front's alarm, one rules reading both games draw
+ * (danger.ts homeAlarms). Every alarm reads whole, and the army its press picks up is his own and alive. In the
+ * save as loaded, the first alarm names the army `expect.alarm.army` says (December 1940: the army round Vancouver).
+ */
+const homeAlarms: ((gm: Game, nat: string) => any[]) | undefined = any(DANGER).homeAlarms;
+function alarms(gm: Game, when: string, first: boolean): void {
+  if (!homeAlarms) return;
+  let list: any[];
+  try { list = homeAlarms(gm, me) ?? []; } catch (e) { say('FAIL', `${when}: the red rows throw: ${(e as Error).stack?.split('\n').slice(0, 4).join(' | ')}`); return; }
+  const holes = list.flatMap((a) => strings(a)).filter((s) => BAD_TEXT.test(s));
+  const bad: string[] = [];
+  for (const a of list) {
+    const h = a?.help;
+    if (!h) continue;
+    for (const id of (h.corps ?? []) as number[]) { const c = gm.corps.find((x) => x.id === id); if (!c || c.dead || c.nat !== me) bad.push(`corps ${id} is not a live corps of ${me}'s`); }
+    if (h.to !== undefined && h.to !== null && !gm.regions[h.to]) bad.push(`no province ${h.to}`);
+  }
+  check(!holes.length && !bad.length, `${when}: the red rows (${list.length}) read whole, and each press picks up an army of his`, { holes: holes.slice(0, 3), bad: bad.slice(0, 3) });
+  if (!first || !expect.alarm) return;
+  const at = gm.byName[expect.alarm.army];
+  if (!list.length) { say('WATCH', `${when}: no red row at all; the save was to show one naming the army round ${expect.alarm.army}`); return; }
+  const a = list[0], ids: number[] = a?.help?.corps ?? [];
+  const where = [...new Set(ids.map((id) => gm.corps.find((c) => c.id === id)).filter(Boolean).map((c) => gm.regions[c!.reg].name))];
+  check(!!at && ids.length > 0 && where.length === 1 && where[0] === expect.alarm.army, `${when}: the first red row names the army round ${expect.alarm.army}: "${String(a?.hand ?? '').slice(0, 140)}"`, { corps: ids, standing: where, to: a?.help?.to !== undefined ? gm.regions[a.help.to]?.name : undefined });
+}
+
 // ---- Play on -----------------------------------------------------------------------------------------------------------
 
 const pending = standsBy && Object.keys(dominions).length ? dominionWars(g).filter(([, d]) => g!.flags[`domroll:${me}:${d}`] === undefined) : [];
@@ -250,6 +278,8 @@ if (!standsBy) say('note', 'Britain and her dominions (ruling 211(b)): not in th
 else if (!pending.length) say('note', `Britain and her dominions (ruling 211(b)): no war of ${me}'s on a dominion waits for an answer in this save`);
 else for (const [p, d, since] of pending) say('note', `Britain and her dominions: ${me} has been at war with ${d} since ${label(since)}; ${p}'s one roll falls at the end of ${label(g.turn)}${dominionAnswers ? `, and on this campaign's seed it says she ${dominionAnswers(g, p, me, d, since) ? 'answers' : 'stays out'}` : ''}`);
 if (!gunsRule) say('note', 'guns never go forward alone (ruling 211(a)): not in this tree, passed over');
+if (!homeAlarms) say('note', 'the red row (ruling 211(c)): not in this tree, passed over');
+else alarms(g, `as loaded (${label(g.turn)})`, true);
 
 // The same month loaded twice gives the same month.
 {
@@ -308,6 +338,7 @@ for (let m = 1; m <= months; m++) {
   for (const n of holds) { const now = g.byName[n].ctrl; if (now !== holder.get(n)) { say('WATCH', `${label(turn)}: ${n} went from ${holder.get(n)} to ${now}`); holder.set(n, now); } }
   for (const s of gunSieges(g)) say('FAIL', `${label(g.turn)}: guns alone keep up a siege (ruling 211(a)): ${s}`);
   roundTrip(g, `after ${label(turn)}`);
+  alarms(g, `${label(g.turn)} opens`, false);
   mark = markOf(g);
   // Britain's one roll falls at the end of the first month after loading.
   if (m === 1 && pending.length) {
