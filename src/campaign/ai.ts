@@ -1044,16 +1044,26 @@ export const landingWatch: { tell: ((e: { nat: string; to: Region; force: Corps[
  * of a computer-led country beyond the old chart that went by sea to foreign ground on its own side of the water,
  * and now has no enemy next to it and none left standing on that side, takes ship for the nearest harbour of its own
  * country with room, and is again part of the army at home (and so of the army that sails). One that stands where
- * there is no harbour marches to the nearest first. It runs in peace as in war.
+ * there is no harbour marches to the nearest first. It runs in peace as in war. One that marched in from its own
+ * country's ground next door, and stands on the ground of a country now fallen, marches back to it (the Canal Zone's
+ * garrison from Panama City, once a besieger kept its siege beyond Europe: b387).
  */
 function homeAgain(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (nat === g.human || !keepsDoor(g, nat)) return;
-  const abroad = g.corps
-    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.town && c.joint === undefined && !!g.flags[`sf:${c.id}`] && beyondEurope(c.reg) && g.regions[c.reg].owner !== nat)
+  const away = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.town && c.joint === undefined && beyondEurope(c.reg) && g.regions[c.reg].owner !== nat;
+  const abroad = g.corps.filter((c) => away(c) && !!g.flags[`sf:${c.id}`]).sort((a, b) => a.id - b.id);
+  const walked = g.corps
+    .filter((c) => away(c) && !g.flags[`sf:${c.id}`] && !g.nations[g.regions[c.reg].owner]?.alive && g.regions[c.reg].nb.some((j) => g.regions[j].owner === nat))
     .sort((a, b) => a.id - b.id);
-  if (!abroad.length) return;
+  if (!abroad.length && !walked.length) return;
   if (enemyAtTheDoor(g, nat) || n.atWar.some((e) => g.nations[e]?.alive && neighbourAcrossTheWater(g, nat, e))) return;
+  for (const c of walked) {
+    const here = g.regions[c.reg];
+    if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
+    const home = here.nb.map((j) => g.regions[j]).filter((r) => r.owner === nat && r.ctrl === nat && friendlyUnits(g, r, nat).length < STACK).sort((a, b) => a.id - b.id)[0];
+    if (home && moveCorps(g, c, home)) c.hold = false;
+  }
   const havens = g.regions.filter((r) => r.owner === nat && !r.overseas && r.port && r.ctrl === nat);
   for (const c of abroad) {
     const here = g.regions[c.reg];
