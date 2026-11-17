@@ -103,12 +103,15 @@ let land = [];
 // one row to a province, by name. Once a province has a row, the row is the source for its owner, ground, victory
 // points, factories and the flags port, col, cap, depot, oil and fort. The seed's own values stand until then, and
 // 'islet' is always the seed's: how large an island is drawn is the map's business.
+// cities-parents.csv is read apart: its rows say what a province of the far side is worth once cities have been cut
+// out of it, on the chart with the cities only. The chart as handed over never reads it.
 const tables = new Map();
+const parentRows = new Map();
 {
   const dir = new URL('../data/campaign/tables/', import.meta.url);
   if (arg('tables')) {
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv', 'cities.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
+    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv', 'cities.csv', 'cities-parents.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
   }
   const parse = (text) => {
     const rows = [[]];
@@ -129,17 +132,18 @@ const tables = new Map();
     const head = rows.shift().map((h) => h.trim());
     for (const row of rows) {
       const r = Object.fromEntries(head.map((h, i) => [h, (row[i] ?? '').trim()]));
-      if (tables.has(r.name)) warn(`! the tables have two rows for ${r.name}`);
-      tables.set(r.name, r);
+      const into = f === 'cities-parents.csv' ? parentRows : tables;
+      if (into.has(r.name)) warn(`! the tables have two rows for ${r.name}`);
+      into.set(r.name, r);
     }
   }
 }
 const GROUND = new Set(['plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert']);
 let tabled = 0;
-function fromTable(name, owner, terrain, vp, fac, flags) {
-  const r = tables.get(name);
+function fromTable(name, owner, terrain, vp, fac, flags, rows = tables) {
+  const r = rows.get(name);
   if (!r) return { owner, terrain, vp, fac, flags };
-  tabled++;
+  if (rows === tables) tabled++;
   const f = { ...flags };
   const set = (key, on) => { if (on) f[key] = 1; else delete f[key]; };
   if (r.feeds_troops !== undefined && r.feeds_troops !== '') set('port', r.feeds_troops === '1');
@@ -930,4 +934,4 @@ if (arg('csv')) {
 // ---- The thicker chart ---------------------------------------------------------------------------------------
 
 // The cities cut out of the provinces round them (carve-cities.mjs): written beside this chart, which stays as it is.
-carveCities({ core, today, regions, first, tables, fromTable, tabledSoFar: () => tabled, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet });
+carveCities({ core, today, regions, first, tables, parentRows, fromTable, tabledSoFar: () => tabled, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet });

@@ -14,7 +14,7 @@ import { CITY_GROUPS, CITY_SHORES, CITY_LINKS } from '../data/campaign/cities.mj
 
 export function carveCities(chart) {
   if (!CITY_GROUPS.length) return;
-  const { core, today, regions, first, tables, fromTable, tabledSoFar, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet } = chart;
+  const { core, today, regions, first, tables, parentRows, fromTable, tabledSoFar, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet } = chart;
   const SMALL = 400;
   const base = [...today.regions, ...regions];
   const byId = new Map(base.map((r) => [r.id, r]));
@@ -24,6 +24,7 @@ export function carveCities(chart) {
   const kids = new Map(), parentOf = new Map(), latLon = new Map();
   const cities = [];
   const tabledBefore = tabledSoFar();
+  let parentTabled = 0;
   for (const [parentName, list, change] of CITY_GROUPS) {
     const p = baseByName.get(parentName);
     if (!p) { warn(`! no province called ${parentName} to cut a city from`); continue; }
@@ -31,6 +32,8 @@ export function carveCities(chart) {
     if (change && p.id >= first) warn(`! ${parentName}: the tables say what a province of the far side is worth, not 'change'`);
     else if (change) for (const [k, v] of Object.entries(change)) { if (k === 'vp' || k === 'fac' || k === 'terrain') row[k] = v; else if (v) row.flags[k] = v; else delete row.flags[k]; }
     if (p.id < first && tables.has(p.name)) Object.assign(row, fromTable(p.name, row.owner, row.terrain, row.vp, row.fac, row.flags));
+    // A province of the far side as it stands once it is cut: the clerk's row in cities-parents.csv (never its owner).
+    if (p.id >= first && parentRows.has(p.name)) { const t = fromTable(p.name, row.owner, row.terrain, row.vp, row.fac, row.flags, parentRows); Object.assign(row, { terrain: t.terrain, vp: t.vp, fac: t.fac, flags: t.flags }); parentTabled++; }
     for (const [name, lat, lon, terrain0, vp0, fac0, flags0] of list) {
       if (names.has(name)) warn(`! two provinces are called ${name}`);
       names.add(name);
@@ -264,7 +267,7 @@ export function carveCities(chart) {
     }
   })();
   const zones2 = zones.map(({ i, ...z }) => ({ ...z, adj: [...z.adj], coast: z.coast.filter((id) => !kids.has(id)) }));
-  const dry = [];
+  const dry = [], portsPassed = [];
   for (const pid of kids.keys()) {
     const p = byId.get(pid), own = new Set(p.seas);
     const allowed = new Set(zones.filter((z) => z.coast.includes(pid)).map((z) => z.i));
@@ -293,9 +296,17 @@ export function carveCities(chart) {
       for (const zone of seas) zones2[zone].coast.push(x.id);
       if (x.flags.port && !seas.length) dry.push(x.name);
     }
+    // A province of the far side whose whole coast is now a city's cannot be a port: the port passes to the city
+    // that holds the coast and is a port itself. (Today's provinces say so themselves, by 'change'.)
+    const self = rows.get(pid);
+    if (pid >= first && self.flags.port && !self.seas.length) {
+      const heir = kids.get(pid).find((c) => c.flags.port && c.seas.length);
+      if (heir) { delete self.flags.port; dry.splice(dry.indexOf(self.name), 1); portsPassed.push(`${self.name} to ${heir.name}`); }
+    }
   }
   for (const z of zones2) z.coast.sort((a, b) => a - b);
   for (const name of dry) warn(`! ${name} is a port with no sea`);
+  if (portsPassed.length) console.log(`ports passed to the city on the coast: ${portsPassed.join(', ')}`);
 
   // The checks.
   const checks2 = [];
@@ -335,6 +346,7 @@ export function carveCities(chart) {
   fs.writeFileSync(new URL(`../src/generated/${arg('cities-out') ?? 'world-cities'}.json`, import.meta.url), JSON.stringify(out2));
   console.log(`\ncities: ${cities.length} new provinces (${first + regions.length} to ${first + regions.length + cities.length - 1}) cut out of ${kids.size}; ${out2.regions.length + core.regions.length} provinces in the world; ${(JSON.stringify(out2).length / 1024).toFixed(0)} KB`);
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
+  if (parentTabled) console.log(`${parentTabled} cut provinces of the far side have a row in cities-parents.csv`);
   if (!quiet && moved2.length) console.log(`pieces passed to a sister: ${moved2.join(', ')}`);
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);
   if (small.length) console.log(`small (under 700 square units): ${small.map(([n, a]) => `${n} ${a}`).join(', ')}`);
