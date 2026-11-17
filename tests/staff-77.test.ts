@@ -257,21 +257,21 @@ describe('a quay must have room', () => {
 });
 
 describe('the fleet and the air groups follow the army', () => {
-  it('the Atlantic Squadron bases itself across the ocean once the first corps is over, and its carrier wings go with it', () => {
+  it('the Atlantic Fleet bases itself across the ocean once the first corps is over, and its carrier wings go with it', () => {
     const O = WORLD.overseas.USA;
-    expect(O.fleet).toEqual(['Atlantic Squadron']);
+    expect(O.fleet).toEqual(['Atlantic Fleet']);
     expect(O.air).toBe(0);
     const early = wide(7);
-    const home = fleetsOf(early, 'USA').find((f) => f.name === 'Atlantic Squadron')!;
+    const home = fleetsOf(early, 'USA').find((f) => f.name === 'Atlantic Fleet')!;
     expect(beyondEurope(home.base)).toBe(true);
     const g = at(JAN_43);
     expect(g.flags['fy:first:USA']).toBe(1);
-    const f = fleetsOf(g, 'USA').find((x) => x.name === 'Atlantic Squadron')!;
+    const f = fleetsOf(g, 'USA').find((x) => x.name === 'Atlantic Fleet')!;
     expect(f.base).toBeGreaterThanOrEqual(0);
     expect(beyondEurope(f.base)).toBe(false);
     expect(allied(g, 'USA', g.regions[f.base].ctrl)).toBe(true);
     for (const w of g.airFleets.filter((a) => a.ship === f.id)) expect(w.base).toBe(f.base);
-    expect(g.headlines.some((h) => /^The Atlantic Squadron crosses the ocean to /.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /^The Atlantic Fleet crosses the ocean to /.test(h.text))).toBe(true);
     // No land-based group raised for the war overseas is left at home beyond the figure. The home commands (Version
     // 84.2: the First Air Force and the rest) guard their own country and never cross.
     const land = g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined);

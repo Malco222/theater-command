@@ -150,7 +150,7 @@ export interface GroupRow {
   /** For a carrier wing ordered ashore: the fleet whose decks it left, and that fleet's name ('' if it is gone). -1 and '' for every other group. */
   ashore: number;
   fleetName: string;
-  /** Where it is, in a line: "Aboard the Atlantic Squadron", "Ashore at Norfolk", or "At Kent" for a group that was never a wing. */
+  /** Where it is, in a line: "Aboard the Atlantic Fleet", "Ashore at Norfolk", or "At Kent" for a group that was never a wing. */
   where: string;
   /**
    * A carrier wing's one order of its own (ruling 175(b)): 'ashore' for a wing aboard, 'aboard' for one ashore, with

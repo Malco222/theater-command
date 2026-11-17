@@ -587,9 +587,9 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g>
         </svg>
-        <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+        <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g id="fxmarks"></g><g id="fxcover"></g><g id="ghost"></g></svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
@@ -775,10 +775,11 @@ function drawLabels(): void {
     // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
     // (A name with no room is not written, and its worth line with it: the art director's rule of 2026-11-16.)
-    if (slid[r.id].hide) { delete labelBox[r.id]; return `${star}${fort}${high}`; }
+    if (slid[r.id].hide) { delete labelBox[r.id]; labelHtml[r.id] = ''; return `${star}${fort}${high}`; }
     // Where the name and the worth line under it lie, for the marks that give way to them (Version 82).
     labelBox[r.id] = { ...nameBoxes(spots[r.id], slid[r.id].dx, slid[r.id].dy), cap: !!r.cap, size: t.size };
-    return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
+    labelHtml[r.id] = `<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
+    return `${star}${fort}${high}${labelHtml[r.id]}`;
   }).join('');
   badgeDrawn = { cities, list };
   $('#obadges').innerHTML = orderBadges(cities, list);
@@ -889,6 +890,8 @@ function figuresWide(t: TownView): number {
 }
 /** Each province's name and the worth line under it as boxes on the map, written down as they are drawn. */
 const labelBox: { name: Box; figs: Box | null; cap: boolean; size: string }[] = [];
+/** Each name as it is drawn, with the worth line under it: a name a ring meets is drawn again on the sheet over the ring. */
+const labelHtml: string[] = [];
 /** What was last drawn as city badges, so they can find their places again when the map comes nearer and names appear. */
 let badgeDrawn: { cities: CityOrders[]; list: TownView[] } | null = null;
 let namesShown = '';
@@ -946,6 +949,28 @@ function orderBadge(c: CityOrders, stage: 1 | 2 | 3): { w: number; h: number; dr
 
 /** A box on the map, in map units. */
 interface Box { x0: number; y0: number; x1: number; y1: number }
+
+/** Where something on the sheet turns or flickers: the band of a ring round a point, or a flame's box. */
+type FxZone = { x: number; y: number; r0: number; r1: number } | Box;
+let fxZones: FxZone[] = [];
+let fxShields = '', fxPieces = '';
+/** True when a box, with one map unit to spare, lies on a ring's band or a flame's box. */
+function meetsZone(b: Box): boolean {
+  const x0 = b.x0 - 1, y0 = b.y0 - 1, x1 = b.x1 + 1, y1 = b.y1 + 1;
+  return fxZones.some((z) => {
+    if (!('r0' in z)) return x0 < z.x1 && x1 > z.x0 && y0 < z.y1 && y1 > z.y0;
+    // Its nearest point is within the band's outer edge, and its farthest point beyond the inner one.
+    if (Math.hypot(Math.max(x0, Math.min(z.x, x1)) - z.x, Math.max(y0, Math.min(z.y, y1)) - z.y) > z.r1) return false;
+    return Math.hypot(Math.max(Math.abs(x0 - z.x), Math.abs(x1 - z.x)), Math.max(Math.abs(y0 - z.y), Math.abs(y1 - z.y))) >= z.r0;
+  });
+}
+/** A piece's own boxes, from where it is drawn: the pole, the flag, its base and bar, and on the top piece the letters over it, the number under it and the count's disc. */
+function pieceBoxes(x: number, y: number, top: boolean, more: boolean): Box[] {
+  const out: Box[] = [{ x0: x - 1.2, y0: y - 1.5, x1: x, y1: y + 16.2 }, { x0: x, y0: y, x1: x + 22, y1: y + 14 }, { x0: x - 2, y0: y + 12.8, x1: x + 24, y1: y + 19.6 }];
+  if (top) out.push({ x0: x - 1, y0: y - 7, x1: x + 23, y1: y - 0.6 }, { x0: x + 4, y0: y + 19.4, x1: x + 18, y1: y + 26 });
+  if (more) out.push({ x0: x + 18, y0: y - 4, x1: x + 26, y1: y + 4 });
+  return out;
+}
 /** How much of one box lies on another. */
 const boxOver = (a: Box, b: Box): number => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
 /** The box a town's mark fills on the map: the buildings, not a capital's star. */
@@ -974,14 +999,28 @@ function sizeLamps(): void {
  * from where it stood, and after them nothing is drawn. The paths are taken off the map when the fade is over.
  */
 const FLASH_MS = 2200;
-let flashFor: number[] | null = null, flashAt = 0, flashTimer = 0;
+/**
+ * The fade, in steps: [its age in milliseconds, how strong it stands]. A fade the browser animates is drawn sixty
+ * times a second, and each time it repaints the map under it: with the war's rings turning on the sheet above, that
+ * is the whole map, a tenth of a second a picture (10 to 20 pictures a second for as long as the flash lasts, counted
+ * on the Playtester's America of March 1942). Steps repaint it once each, and nothing in the map is animated.
+ * Three beats, the art director's (17 November): the flash, the glow, a faint linger. One large drop reads as a
+ * signal lamp, meant and not broken; five small ones read as a fade drawn at three pictures a second.
+ */
+const FLASH_STEPS: [number, number][] = [[0, 0.9], [220, 0.42], [900, 0.16]];
+const flashStrength = (age: number): number => { let o = 0; for (const [at, v] of FLASH_STEPS) if (age >= at) o = v; return o; };
+let flashFor: number[] | null = null, flashAt = 0, flashTimers: number[] = [];
 function flashPaths(): string {
   if (ui.flash !== flashFor) { flashFor = ui.flash; flashAt = performance.now(); }
   const age = performance.now() - flashAt;
+  for (const t of flashTimers) clearTimeout(t);
+  flashTimers = [];
   if (!ui.flash.length || age >= FLASH_MS) return '';
-  clearTimeout(flashTimer);
-  flashTimer = window.setTimeout(() => { for (const el of document.querySelectorAll('#fx .flash')) el.remove(); }, FLASH_MS - age + 80);
-  return ui.flash.map((id) => `<path class="flash" style="animation-delay:-${Math.round(age)}ms" d="${pathOf(g.regions[id].polys)}"/>`).join('');
+  for (const [at, v] of FLASH_STEPS) {
+    if (at > age) flashTimers.push(window.setTimeout(() => { for (const el of document.querySelectorAll<SVGElement>('#fx .flash')) el.style.opacity = String(v); }, at - age));
+  }
+  flashTimers.push(window.setTimeout(() => { for (const el of document.querySelectorAll('#fx .flash')) el.remove(); }, FLASH_MS - age));
+  return ui.flash.map((id) => `<path class="flash" style="opacity:${flashStrength(age)}" d="${pathOf(g.regions[id].polys)}"/>`).join('');
 }
 /** The map's width on the screen as applyView last measured it. (Asking the page for it in the middle of a redraw makes the page lay itself out again, some 70 ms each time.) */
 let mapPixels = 0;
@@ -1341,6 +1380,7 @@ function refresh(): void {
   $('#riches').innerHTML = ui.lens === 'worth' ? towns(g).map((t) => `<path class="rich k${t.rank}" d="${pathOf(g.regions[t.region].polys)}"/>`).join('') + tradeMarks() : '';
   ($('#legtrade') as HTMLElement).hidden = !(ui.lens === 'worth' && tradeRules(g) && g.trade.length > 0);
   $('#map').classList.toggle('lensworth', ui.lens === 'worth');
+  $('#mapfx').classList.toggle('lensworth', ui.lens === 'worth');
   $('#lensbtn').classList.toggle('on', ui.lens === 'worth');
   // The fog of war: ground the player's side cannot see into is veiled, lightly where an army shows as a flag and a count.
   seen = sight(g);
@@ -1354,17 +1394,28 @@ function refresh(): void {
   for (const k of Object.keys(g.sky)) { const who = skyOver(g, +k); if (who) skies += `<path class="skywon" d="${pathOf(g.regions[+k].polys)}" stroke="${g.nations[who].color}"/>`; }
   // The capital of a fallen country the player could free by taking it is ringed in gold.
   let freeable = '';
-  if (me && isOpen(g)) for (const f of nationsFallen(g)) if (f.yours && f.capital >= 0 && !allied(g, me, f.holder)) freeable += `<circle class="freeme" cx="${g.regions[f.capital].x}" cy="${g.regions[f.capital].y}" r="15"/>`;
+  const freeZones: FxZone[] = [];
+  if (me && isOpen(g)) for (const f of nationsFallen(g)) if (f.yours && f.capital >= 0 && !allied(g, me, f.holder)) {
+    freeable += `<circle class="freeme" cx="${g.regions[f.capital].x}" cy="${g.regions[f.capital].y}" r="15"/>`;
+    freeZones.push({ x: g.regions[f.capital].x, y: g.regions[f.capital].y, r0: 13.9, r1: 16.1 });
+  }
   ($('#legfree') as HTMLElement).hidden = !freeable;
   // Sieges (the grand campaign): the country round a besieged town in the besieger's colour, the town ringed, a shield on a garrison.
   const sg = siegeMarks();
   const pm = placeMarks();
+  // Where a ring turns or a flame flickers on the sheet. Whatever of the map's own stands there (a piece, the
+  // garrison's shield, a name) is drawn again on the sheet after the ring, as a copy that stands still, so that the
+  // ring passes behind it as it did when it was drawn on the map (the ruling of 13:33Z, amended at 14:01Z).
+  fxZones = [...freeZones, ...sg.zones, ...pm.zones];
+  fxShields = ''; fxPieces = '';
+  let shieldsOver = '';
+  for (const s of sg.shields) if (meetsZone(s.box)) fxShields += s.html; else shieldsOver += s.html;
   $('#fx').innerHTML = flashPaths() + skies + sg.under;
-  $('#sieges').innerHTML = sg.over + pm.still;
+  $('#sieges').innerHTML = sg.over + shieldsOver + pm.still;
   // Whatever turns or flickers stands on a sheet of its own over the map (ruling 206): a mark that moves on the
   // map's own drawing makes the whole map redraw for every picture, ten a second where sixty are wanted. The
   // cabinet's directive is among them, and so stands over the armies, where a flag beside the town cannot hide it.
-  $('#mapfx').innerHTML = freeable + sg.turning + pm.moving + directiveMark();
+  $('#fxmarks').innerHTML = freeable + sg.turning + pm.moving + directiveMark();
   $('#orders').innerHTML = wonStamps();
 
   // Where the picked corps can go.
@@ -1431,6 +1482,12 @@ function refresh(): void {
   // Armies. Each nation's force in a region is one piece on the map: its colours on a standard with the branch
   // of its strongest corps, its commander's name over it, and under it a bar for the strength it has left.
   let units = '';
+  // A piece a ring meets is drawn on the sheet, over the ring, and its own place on the map is kept but not shown.
+  const put = (x: number, y: number, top: boolean, more: boolean, html: string): void => {
+    if (!fxZones.length || !pieceBoxes(x, y, top, more).some(meetsZone)) { units += html; return; }
+    fxPieces += html;
+    units += html.replace('<g class="ctr army', '<g class="ctr army covered');
+  };
   for (const r of g.regions) {
     if (!r.units.length) continue;
     // An army the player cannot see is not on the map at all, and one only glimpsed is a flag and a count of corps.
@@ -1444,10 +1501,10 @@ function refresh(): void {
     groups.forEach(([nat, cs], i) => {
       const k = groups.length - 1 - i;
       if (!inFull(r, nat)) {
-        units += `<g class="ctr army dimly" data-reg="${r.id}" data-nat="${nat}" transform="translate(${r.x - 11 + k * 4.5} ${r.y - 7 - k * 4})"><title>${esc(g.nations[nat].adj)} troops, ${cs.length} corps. Their kinds and strength are not known.</title>
+        put(r.x - 11 + k * 4.5, r.y - 7 - k * 4, k === 0, k === 0, `<g class="ctr army dimly" data-reg="${r.id}" data-nat="${nat}" transform="translate(${r.x - 11 + k * 4.5} ${r.y - 7 - k * 4})"><title>${esc(g.nations[nat].adj)} troops, ${cs.length} corps. Their kinds and strength are not known.</title>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
         ${flagUse(nat, g.nations[nat].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/>
-        ${k === 0 ? `<text x="11" y="24.6">?</text><circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`;
+        ${k === 0 ? `<text x="11" y="24.6">?</text><circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`);
         return;
       }
       if (!friendOf(nat) && !allKnown(cs)) {
@@ -1456,11 +1513,11 @@ function refresh(): void {
         const top = idd.length ? [...idd].sort((a, b) => KIND[b.kind].atk * b.divs - KIND[a.kind].atk * a.divs)[0] : null;
         const e = armyAt(g, r.id, nat)?.est ?? null;
         const picked = r.id === ui.sel && trayArmy?.reg === r.id && trayArmy.nat === nat;
-        units += `<g class="ctr army unsure${picked ? ' chosen' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${r.x - 11 + k * 4.5} ${r.y - 7 - k * 4})"><title>${esc(g.nations[nat].adj)} army, ${cs.length} corps, ${idd.length ? `${idd.length} identified` : 'none identified'}: ${estWords(e)}. ${HOW_TO_KNOW}</title>
+        put(r.x - 11 + k * 4.5, r.y - 7 - k * 4, k === 0, k === 0 && inSight > 1, `<g class="ctr army unsure${picked ? ' chosen' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${r.x - 11 + k * 4.5} ${r.y - 7 - k * 4})"><title>${esc(g.nations[nat].adj)} army, ${cs.length} corps, ${idd.length ? `${idd.length} identified` : 'none identified'}: ${estWords(e)}. ${HOW_TO_KNOW}</title>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
         ${worksMark(cs)}${top ? standard(nat, top.kind) : `${flagUse(nat, g.nations[nat].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/>`}
         ${k === 0 ? `<text x="11" y="24.6">${e ? `${Math.max(1, Math.round((e.lo + e.hi) / 2))}?` : '?'}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>` : ''}
-        ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`;
+        ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`);
         return;
       }
       const lead = [...cs].sort((a, b) => KIND[b.kind].atk * b.divs - KIND[a.kind].atk * a.divs)[0];
@@ -1473,12 +1530,12 @@ function refresh(): void {
       // A joint army flies its allies' colours in the corner of its standard.
       const guests = [...new Set(cs.filter((c) => c.nat !== nat).map((c) => c.nat))].slice(0, 2);
       const pennants = guests.map((o, i) => `<g class="pennant" transform="translate(${13.4 - i * 8.4} 8.2) scale(.4)">${flagUse(o, g.nations[o].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/></g>`).join('');
-      units += `<g class="ctr army${ready ? ' ready' : ''}${spent ? ' spent' : ''}${chosen ? ' chosen' : ''}${who ? ' led' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${x} ${y})"${marchHide && marchHide.reg === r.id && marchHide.nat === nat ? ' style="visibility:hidden"' : ''}>
+      put(x, y, k === 0, k === 0 && inSight > 1, `<g class="ctr army${ready ? ' ready' : ''}${spent ? ' spent' : ''}${chosen ? ' chosen' : ''}${who ? ' led' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${x} ${y})"${marchHide && marchHide.reg === r.id && marchHide.nat === nat ? ' style="visibility:hidden"' : ''}>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
         ${worksMark(cs)}${standard(nat, lead.kind)}${pennants}
         ${k === 0 ? `<rect class="strbg" x="0" y="15.2" width="22" height="2.2" rx=".6"/><rect class="str${fit < 0.5 ? ' low' : fit < 0.75 ? ' mid' : ''}" x="0" y="15.2" width="${(22 * Math.min(1, fit)).toFixed(1)}" height="2.2" rx=".6"/>
         <text x="11" y="24.6">${num(sumDivs(cs))}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>${who ? `<text class="cmdr" x="11" y="-2">${esc(surname(who.name))}</text>` : ''}` : ''}
-        ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`;
+        ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`);
     });
   }
   // Fieldworks standing empty on ground the player's side holds: a small dotted bank, under whatever stands there.
@@ -1489,6 +1546,10 @@ function refresh(): void {
   }
   $('#units').innerHTML = left + units + agentMarks();
   drawLabels();
+  // The names a ring meets, a neighbour's too; then the shields; then the pieces: the map's own order.
+  let fxNames = '';
+  if (fxZones.length) for (const r of g.regions) { const b = labelBox[r.id]; if (b && labelHtml[r.id] && (meetsZone(b.name) || (b.figs !== null && meetsZone(b.figs)))) fxNames += labelHtml[r.id]; }
+  $('#fxcover').innerHTML = fxNames + fxShields + fxPieces;
 
   drawBar();
   drawTabs();
@@ -2215,7 +2276,7 @@ function drawFleetTray(f: Fleet): void {
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
-    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a fleet of their own.">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
@@ -2380,8 +2441,7 @@ function march(pts: [number, number][], nat: string, kind: Kind, to: number): vo
   const done = (): void => {
     ghost.innerHTML = '';
     marchHide = null;
-    const real = document.querySelector<SVGGElement>(`#units .army[data-reg="${to}"][data-nat="${nat}"]`);
-    if (real) real.style.visibility = '';
+    for (const real of document.querySelectorAll<SVGGElement>(`.army[data-reg="${to}"][data-nat="${nat}"]`)) real.style.visibility = '';
   };
   if (pts.length < 2 || typeof requestAnimationFrame !== 'function') { done(); return; }
   ghost.innerHTML = `<g class="ctr army chosen"><ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>${standard(nat, kind)}</g>`;
@@ -3000,7 +3060,8 @@ function dirLine(r: Region): string {
   return `<button class="dirline${d.left <= 2 ? ' late' : ''}" data-act="cabinet" title="Open the cabinet room"><i class="dseal">${d.left}</i><span class="grow"><b>${d.from === g.human ? 'The war cabinet directs' : `${esc(d.by)} asks`}: ${esc(d.title)}</b><small>${d.left === 1 ? 'This is the last month' : `${d.left} months left`}, to the end of ${date(d.due)}. ${esc(d.progress)}</small></span></button>`;
 }
 
-function placeMarks(): { still: string; moving: string } {
+function placeMarks(): { still: string; moving: string; zones: FxZone[] } {
+  const zones: FxZone[] = [];
   const leg = $('#legprize') as HTMLElement;
   const marks = prizesOnMap(g);
   let out = '', fire = '', flames = 0;
@@ -3010,10 +3071,11 @@ function placeMarks(): { still: string; moving: string } {
     // The airfield alone is not worth a pennant: nearly every province has one.
     const worth = m.seized.filter((k) => k !== 'airfield');
     if (m.by && worth.length) out += `<g class="pzflag" transform="translate(${t.x + 11.5} ${t.y + 6})"><path class="pole" d="M0 4.6V-4.8"/><path d="M0 -4.8L6.2 -2.9 0 -1Z" fill="${g.nations[m.by].color}"/></g>`;
+    if (m.burning.length) zones.push({ x0: t.x - 15.1, y0: t.y - 14.5, x1: t.x - 5.9, y1: t.y - 3.5 });
     if (m.burning.length) { flames++; fire += `<g class="pzfire" transform="translate(${t.x - 10.5} ${t.y - 8.5})"><path class="o" d="${FLAME}"/><path class="i" d="M0 4.3C-1.7 4.3-2.3 3-2 1.9-1.6.8-.5.3 0-1.2 1.1.2 2.2 1 2.1 2.4 2 3.5 1.2 4.3 0 4.3Z"/></g>`; }
   }
   leg.hidden = !flames;
-  return { still: out, moving: fire };
+  return { still: out, moving: fire, zones };
 }
 const FLAME = 'M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z';
 
@@ -3049,10 +3111,11 @@ const ringIcon = (color: string, px = 22): string => `<svg class="sgicon" width=
  * town keeps a disc in its holder's colour and is ringed by the siege lines, and a town with troops inside carries
  * a shield with their number. `under` goes beneath the towns, `over` above them.
  */
-function siegeMarks(): { under: string; over: string; turning: string } {
+function siegeMarks(): { under: string; over: string; turning: string; zones: FxZone[]; shields: { html: string; box: Box }[] } {
   const leg = $('#legsiege') as HTMLElement;
   leg.hidden = true;
-  if (!siegeRules(g)) return { under: '', over: '', turning: '' };
+  const zones: FxZone[] = [], shields: { html: string; box: Box }[] = [];
+  if (!siegeRules(g)) return { under: '', over: '', turning: '', zones, shields };
   const list = towns(g);
   let under = '', over = '', turning = '';
   const sg = siegesInSight(g).filter((v) => v.by !== null);
@@ -3062,16 +3125,17 @@ function siegeMarks(): { under: string; over: string; turning: string } {
     under += `<path class="sieged" d="${pathOf(r.polys)}" fill="${by}"/><circle class="sgdisc" cx="${t.x}" cy="${t.y}" r="7.6" fill="${g.nations[v.holder].color}"/>`;
     over += `<circle class="sgo" cx="${t.x}" cy="${t.y}" r="10.4"/>`;
     turning += `<circle class="sgi" cx="${t.x}" cy="${t.y}" r="10.4" stroke="${by}"/>`;
+    zones.push({ x: t.x, y: t.y, r0: 9.25, r1: 11.55 });
   }
   for (const r of g.regions) {
     if (!r.garr || !r.garr.length) continue;
     const v = townSiege(g, r.id);
     if (!v || v.inside <= 0) continue;
     const t = list[r.id];
-    over += `<g class="garrb" transform="translate(${t.x + 9.5} ${t.y - 9})"><path d="${SHIELD}" fill="${g.nations[r.ctrl].color}"/><text y="2.5">${v.inside}</text></g>`;
+    shields.push({ html: `<g class="garrb" transform="translate(${t.x + 9.5} ${t.y - 9})"><path d="${SHIELD}" fill="${g.nations[r.ctrl].color}"/><text y="2.5">${v.inside}</text></g>`, box: { x0: t.x + 4.8, y0: t.y - 14.1, x1: t.x + 14.2, y1: t.y - 3.3 } });
   }
   leg.hidden = !sg.length;
-  return { under, over, turning };
+  return { under, over, turning, zones, shields };
 }
 
 /** On the army tray: the siege this army is laying, with the assault one click away; or the town it could go into. */
@@ -4945,7 +5009,7 @@ function fleetOrders(f: Fleet): string {
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
   let out = `<div class="orders">
-    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a squadron of their own: an escort group for a lane, a hunting group, a bombardment force.">Split off ships</button>' : ''}</div>`;
+    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>`;
   const wings = wingsOfFleet(g, f.id);
   if (wings.length) {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
@@ -5033,9 +5097,9 @@ function splitCard(): string {
     return `<div class="pickrow splitrow">${shipPlate(f.nat, c, 30, 21)}<span class="grow"><b>${esc(NAVY.classes[c].label)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(FLEETS.brief[c])} · ${f.ships[c]} in the fleet</span></span><span class="stepper">${step(-5, '−5')}${step(-1, '−')}<b>${take[c]}</b>${step(1, '+')}${step(5, '+5')}</span></div>`;
   }).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${esc(f.name)} · ${esc(fleetDoing(g, f))}</div><h2>Split off ships</h2></header>
-    <div class="body"><p class="sub" style="margin-top:0">The ships you choose form a squadron of their own, in the same place and under the same order. Give it work of its own afterwards: destroyers to escort a lane or hunt submarines, battleships and cruisers to shell a coast.</p>${rows}
+    <div class="body"><p class="sub" style="margin-top:0">The ships you choose form a fleet of their own, in the same place and under the same order. Give it work of its own afterwards: destroyers to escort a lane or hunt submarines, battleships and cruisers to shell a coast.</p>${rows}
     <div class="note">${why ? esc(why) : `<b>${esc(squadronName(g, f.nat, take))}</b> will form with ${esc(shipList(take))}. ${shipCount(f.ships) - n} ship${shipCount(f.ships) - n === 1 ? '' : 's'} stay with the ${esc(f.name)}.`}</div></div>
-    <footer><button class="btn" data-act="close">Cancel</button><button class="btn go" data-act="dosplit" ${why ? 'disabled' : ''}>Form the squadron</button></footer>`;
+    <footer><button class="btn" data-act="close">Cancel</button><button class="btn go" data-act="dosplit" ${why ? 'disabled' : ''}>Form the fleet</button></footer>`;
 }
 
 /** What a route that feeds an army overseas means for that army this month. */
@@ -5153,9 +5217,18 @@ function holdTicket(h: SeaHold): string {
 }
 
 /** One way over the water: where from, where to, what it would cost today, and the button that makes it the plan. */
-function crossingRow(x: CrossingOutlook, order: boolean): string {
+function crossingRow(x: CrossingOutlook, order: boolean, again = false): string {
   const loss = lostAtSea(x.account.risk);
   const route = x.path.map((z) => g.seas[z].name).join(', then the ');
+  // The short crossing a closed sea bars (ruling 207): one line under the way listed to the same shore, with the
+  // sea, both strengths and what opens it. Said in full once for each sea, and by its name after that.
+  if (x.short) {
+    const why = x.shut === undefined || !g.human ? x.bar ?? '' : again ? `The ${g.seas[x.shut].name} is closed to your troopships, as above.` : closedLine(g, x.shut, g.human);
+    return `<div class="cross short">
+    <div class="sub"><b style="color:var(--ink)">The short crossing</b>, from ${esc(x.from.name)} to ${esc(x.to.name)} by way of the ${esc(route)}, is barred today. ${esc(why)}</div>
+    <div class="acts">${order ? `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>` : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
+  </div>`;
+  }
   const open = x.planned || ui.cross === x.to.id;
   const air = staffRunsDesk(g, 'air'), navy = staffRunsDesk(g, 'navy');
   const prep = !x.planned ? '' : `<p class="sub" style="margin-top:6px"><b style="color:var(--ink)">Your plan.</b> ${
@@ -5166,8 +5239,8 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
   } The landing is always your own order: stand the force on the quay at ${esc(x.from.name)}, and it can embark the month after.</p>`;
   return `<div class="cross${x.planned ? ' plan' : ''}">
     <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
-    <div class="sub">${x.short ? '<b style="color:var(--ink)">The short crossing.</b> ' : ''}From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
-    ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.shut !== undefined && g.human ? closedLine(g, x.shut, g.human) : x.bar)}</div>` : ''}
+    <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
+    ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.shut !== undefined && g.human ? (again ? `The ${g.seas[x.shut].name} is closed to your troopships, as above.` : closedLine(g, x.shut, g.human)) : x.bar)}</div>` : ''}
     ${holdLine(x.account.hold, x.to)}
     ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
@@ -5206,7 +5279,9 @@ function crossingNotes(): string {
     const s = shorts.find((y) => y.owner === x.owner && y.foe === x.foe && y.home === x.home);
     if (s && !shown.includes(s)) shown.push(s);
   }
-  return `<h3>Crossing the sea</h3><p class="sub">Where your army cannot march it has to sail. Each line is the safest way, as things stand this month, to a shore the enemy holds: what the troopships would lose, why, and what would bring it down. The enemy's coast watch sees troops and shipping gather on a quay, so expect to be met.</p>${shown.map((x) => crossingRow(x, humanUp(g))).join('')}${rows.length > picked.length ? `<p class="sub">${rows.length - picked.length} more ${rows.length - picked.length === 1 ? 'shore is' : 'shores are'} within reach, each more dangerous than these. <button class="btn small" data-act="crossall">Show ${rows.length - picked.length === 1 ? 'it' : 'them'}</button></p>` : ui.crossAll && rows.length > 5 ? '<p class="sub"><button class="btn small" data-act="crossall">Show the five safest only</button></p>' : ''}`;
+  // A closed sea is said in full on the first row it bars, and by its name on the rows after.
+  const saidShut = new Set<number>();
+  return `<h3>Crossing the sea</h3><p class="sub">Where your army cannot march it has to sail. Each line is the safest way, as things stand this month, to a shore the enemy holds: what the troopships would lose, why, and what would bring it down. The enemy's coast watch sees troops and shipping gather on a quay, so expect to be met.</p>${shown.map((x) => crossingRow(x, humanUp(g), x.shut !== undefined && saidShut.has(x.shut) ? true : (x.shut !== undefined && saidShut.add(x.shut), false))).join('')}${rows.length > picked.length ? `<p class="sub">${rows.length - picked.length} more ${rows.length - picked.length === 1 ? 'shore is' : 'shores are'} within reach, each more dangerous than these. <button class="btn small" data-act="crossall">Show ${rows.length - picked.length === 1 ? 'it' : 'them'}</button></p>` : ui.crossAll && rows.length > 5 ? '<p class="sub"><button class="btn small" data-act="crossall">Show the five safest only</button></p>' : ''}`;
 }
 
 /** One sea: who holds it, which fleets are in it, and what it would cost to cross. */
@@ -8358,7 +8433,7 @@ function onClick(e: MouseEvent): void {
       if (!m || m.kind !== 'split') break;
       const made = orderSplit(g, m.fleet, m.take as Ships);
       openModal(null);
-      if (made >= 0) { pickFleet(made); ui.msg = `${g.fleets.find((x) => x.id === made)?.name ?? 'The squadron'} forms. Give it its orders.`; }
+      if (made >= 0) { pickFleet(made); ui.msg = `${g.fleets.find((x) => x.id === made)?.name ?? 'The new fleet'} forms. Give it its orders.`; }
       refresh(); break;
     }
     case 'fleetjoin': {
@@ -9134,6 +9209,9 @@ function applyView(): void {
   placeResult();
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
+  // (The copies that stand over a ring on the sheet show and hide their names and figures as the map's own do.)
+  $('#mapfx').classList.toggle('near', v.w < 600);
+  $('#mapfx').classList.toggle('mid', v.w < 760);
   // The gate marks: with the name close up, the flag and the lamp at the height he plays at, the lamp alone from far up.
   mapPixels = svg.clientWidth;
   const upp = v.w / Math.max(1, mapPixels);

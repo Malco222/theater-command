@@ -295,7 +295,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       ...(held ? { tech: held.tech } : {}),
       key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
-      note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new squadron there.`,
+      note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new fleet there.`,
       why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
   }
@@ -401,7 +401,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
-    if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Squadron`);
+    if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).

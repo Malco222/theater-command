@@ -163,7 +163,7 @@ describe('the wider world', () => {
       expect(c, name).toBeDefined();
       expect([c.divs, g.regions[c.reg].name, c.str], name).toEqual([divs, at, o.str ?? 1]);
     }
-    const sq = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Atlantic Squadron')!;
+    const sq = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Atlantic Fleet')!;
     expect(g.regions[sq.base].name).toBe('Norfolk');
     expect(g.seas[sq.zone].key).toBe('seaboard');
     expect(g.fleets.some((f) => f.nat === 'CAN' && g.seas[f.zone].key === 'scotian')).toBe(true);
@@ -376,8 +376,8 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     expect(fleetReach(g, med)).not.toContain(black);
     const b = fleetsAnswer(g, 'GER', [black], g.byName.Odessa);
     expect([...b.come, ...b.kept, ...b.shy]).not.toContain(med);
-    // Dover Command keeps the Channel and Western Approaches Command its convoys: only the first answers in the Channel.
-    const dover = fleet(g, 'UK', 'Dover Command'), wac = fleet(g, 'UK', 'Western Approaches Command');
+    // Dover Fleet keeps the Channel and Western Approaches Fleet its convoys: only the first answers in the Channel.
+    const dover = fleet(g, 'UK', 'Dover Fleet'), wac = fleet(g, 'UK', 'Western Approaches Fleet');
     expect([dover.tied, wac.tied, dover.station === channel, wac.station === channel]).toEqual([true, true, true, false]);
     expect(fleetReach(g, wac)).toContain(channel);
     const c = fleetsAnswer(g, 'GER', [channel], g.byName.Kent);
@@ -411,10 +411,10 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     expect(airOver(g, north, 'UK', true) - airOver(g, north, 'UK', false)).toBeGreaterThan(NAVY.air.avoid);
     const n = fleetsAnswer(g, 'GER', [north], g.byName.Bergen);
     expect(n.come).toEqual([]);
-    expect(called(n.kept)).toEqual(expect.arrayContaining(['FRA Atlantic Squadron', 'UK Home Fleet']));
+    expect(called(n.kept)).toEqual(expect.arrayContaining(['FRA Atlantic Fleet', 'UK Home Fleet']));
     const y = fleetsAnswer(g, 'GER', [north], g.byName.Yorkshire);
     expect(called(y.come)).toContain('UK Home Fleet');
-    expect(called(y.kept)).toContain('FRA Atlantic Squadron');
+    expect(called(y.kept)).toContain('FRA Atlantic Fleet');
     expect(called(y.kept)).not.toContain('UK Home Fleet');
   });
 
@@ -452,7 +452,7 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     const a = fleetsAnswer(g, 'GER', [skag], g.byName.Jutland);
     expect(called(a.come)).toContain('UK Home Fleet');
     expect(called(a.kept)).not.toContain('UK Home Fleet');
-    expect(called(fleetsAnswer(g, 'GER', [channel], g.byName.Kent).come)).toContain('UK Western Approaches Command');
+    expect(called(fleetsAnswer(g, 'GER', [channel], g.byName.Kent).come)).toContain('UK Western Approaches Fleet');
   });
 
   it('says what the admirals then do', () => {

@@ -293,8 +293,8 @@ describe('the weight of the news (rulings 84 and 95)', () => {
   it('Germany, September 1939: the fleet action won leads the sea and air, and the lost submarine is a row below', () => {
     const g = game();
     const mark = monthMark(g, ME);
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
-    sea(g, { attNat: ME, defNat: 'POL', zoneName: 'the Baltic Sea', att: [fleet(ME, 'Baltic Station', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4, ss: 5 }, { dd: 2, ss: 1 })], won: true });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    sea(g, { attNat: ME, defNat: 'POL', zoneName: 'the Baltic Sea', att: [fleet(ME, 'Swinemunde Fleet', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4, ss: 5 }, { dd: 2, ss: 1 })], won: true });
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ kind: 'FLEET ACTION', tag: 'WON', place: 'the Baltic Sea' });
     expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual(['SUNK Western Approaches']);
@@ -312,7 +312,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     expect(card.lead).toMatchObject({ kind: 'FLEET ACTION', place: 'the Norwegian Sea' });
     expect(card.rows[0]).toMatchObject({ tag: 'SUNK', tone: 'bad', place: 'North Sea', line: 'Torpedoed: a battleship of the Battle Fleet.', figures: [{ n: '1', label: 'battleship lost' }] });
     // And escorts that sink a submarine of his in the same month as a fleet action against the same navy are still a row.
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
     expect(monthCard(g, mark, ME).rows.map((r) => r.place)).toEqual(['North Sea', 'Western Approaches']);
     // A fleet action lost, smaller than the one won beside it, still comes first: a loss counts double.
     const h = game();
@@ -482,9 +482,9 @@ describe('one story is told once, and in the room the card has', () => {
   it('submarines sunk are a headline and a figure, and the row says who sank them', () => {
     const g = game();
     const mark = monthMark(g, ME);
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 2 German submarines in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 2 German submarines in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
     const card = monthCard(g, mark, ME);
-    expect(card.lead).toMatchObject({ place: 'Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Command.' });
+    expect(card.lead).toMatchObject({ place: 'Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Fleet.' });
     expect(card.lead!.figures).toEqual([{ n: '2', label: 'submarines lost' }]);
   });
 
@@ -606,8 +606,8 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
     const g = game();
     const mark = monthMark(g, ME);
     const baltic = g.seas.findIndex((z) => /Baltic/.test(z.name));
-    sea(g, { attNat: ME, defNat: 'POL', zone: baltic, zoneName: g.seas[baltic].name, att: [fleet(ME, 'Baltic Station', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4 }, { dd: 2 })], won: true });
-    news(g, { kind: 'battle', arm: 'sea', text: `The escorts of the Western Approaches Command sink 1 German submarine in the ${g.seas[0].name.replace(/^the /i, '')}.`, nat: 'UK', won: 'UK', lost: ME });
+    sea(g, { attNat: ME, defNat: 'POL', zone: baltic, zoneName: g.seas[baltic].name, att: [fleet(ME, 'Swinemunde Fleet', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4 }, { dd: 2 })], won: true });
+    news(g, { kind: 'battle', arm: 'sea', text: `The escorts of the Western Approaches Fleet sink 1 German submarine in the ${g.seas[0].name.replace(/^the /i, '')}.`, nat: 'UK', won: 'UK', lost: ME });
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ arm: 'sea', sea: baltic });
     expect(card.lead!.region).toBeUndefined();
