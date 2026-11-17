@@ -1,0 +1,21 @@
+=== grow SAF, seed 7, 24 months, aim air; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 2, divisions 2 on paper and 0.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 2 (1 in its best province); men in the pool for 3.2 divisions; income 946.9 a month
+    December 1939: Factory (one factory) for 3000, due August 1940
+    March 1940: Factory (one factory) for 3500, due November 1940
+    August 1940: Fighter wing (100 fighters) for 1200, due November 1940
+    August 1940: Fighter wing (100 fighters) for 1200, due November 1940
+    August 1940: Fighter wing (100 fighters) for 1200, due November 1940
+    September 1940: Fighter wing (100 fighters) for 1200, due December 1940
+    October 1940: Fighter wing (100 fighters) for 1200, due January 1941
+    November 1940: Fighter wing (100 fighters) for 1200, due February 1941
+    December 1940: Fighter wing (100 fighters) for 1200, due March 1941
+    January 1941: Fighter wing (100 fighters) for 1200, due April 1941
+    February 1941: Fighter wing (100 fighters) for 1200, due May 1941
+    March 1941: Fighter wing (100 fighters) for 1200, due June 1941
+    April 1941: Fighter wing (100 fighters) for 1200, due July 1941
+    June 1941: Fighter wing (100 fighters) for 1200, due September 1941
+    too slow for the run: air:bmr: 4 months in the building: ordered from June 1941 on it is delivered after the run ends
+  September 1941: corps 2, divisions 2 on paper and 1.7 at strength; air groups 6 (1200 fighters, 0 bombers); ships 0; shipyard level 0; factories 4 (3 in its best province); men left in the pool for 3.2 divisions; treasury 3991.3; spent 20900; still on order: nothing
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+    [August 1941 after JAP] [note] crowd: 14 JAP corps stand in Tokyo (14 divisions)
+GROWN SAF air seed 7 to September 1941: divisions 2 -> 2 on paper (0.8 -> 1.7 at strength); aircraft 0 -> 1200; ships 0 -> 0; shipyard 0 -> 0; factories 2 -> 4; orders 14; invariants broken 0; standing

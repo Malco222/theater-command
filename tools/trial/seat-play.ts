@@ -14,7 +14,7 @@
 // own harness (lib.ts: start, advance, check), so a seat is opened and played as every seat has been since Version 53.
 // Exit code 0 when the verdict is PASS, 1 otherwise.
 import { T, advance, armySize, check, date, ledger, loadGame, saveGame, start, type Game } from '@pt/lib';
-import { offers, yardLevel } from '@tc/campaign/arsenal';
+import { isCity, offers, yardLevel } from '@tc/campaign/arsenal';
 import { friendsOf } from '@tc/campaign/diplomacy';
 import { allied, bloc } from '@tc/campaign/game';
 import { formOf } from '@tc/campaign/government';
@@ -281,7 +281,7 @@ function watch(seed: number, months: number, codes: string[]): boolean {
 }
 
 /** What a country fields: corps and divisions, aircraft, ships, and what is still on order. */
-function fielded(g: Game, me: string): { corps: number; paper: number; real: number; ftr: number; bmr: number; groups: number; ships: Record<string, number>; hulls: number; yard: number; onOrder: string[] } {
+function fielded(g: Game, me: string): { corps: number; paper: number; real: number; ftr: number; bmr: number; groups: number; ships: Record<string, number>; hulls: number; yard: number; fac: number; top: number; onOrder: string[] } {
   const cs = corpsOf(g, me);
   const air = (g.airFleets as any[]).filter((a) => a.nat === me);
   const ships: Record<string, number> = {};
@@ -291,11 +291,12 @@ function fielded(g: Game, me: string): { corps: number; paper: number; real: num
     corps: cs.length, paper: cs.reduce((s, c) => s + c.divs, 0), real: cs.reduce((s, c) => s + c.divs * c.str, 0),
     ftr: air.reduce((s, a) => s + a.ftr, 0), bmr: air.reduce((s, a) => s + a.bmr, 0), groups: air.length,
     ships, hulls: Object.values(ships).reduce((s, v) => s + v, 0), yard,
+    fac: g.regions.filter((r) => r.owner === me && r.ctrl === me).reduce((s, r) => s + r.fac, 0), top: Math.max(0, ...g.regions.filter((r) => r.owner === me && r.ctrl === me).map((r) => r.fac)),
     onOrder: g.nations[me].queue.map((b) => `${b.name} (due ${date(b.eta)})`),
   };
 }
 const fieldLine = (f: ReturnType<typeof fielded>): string =>
-  `corps ${f.corps}, divisions ${r1(f.paper)} on paper and ${r1(f.real)} at strength; air groups ${f.groups} (${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers); ships ${f.hulls}${f.hulls ? ` (${Object.entries(f.ships).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''}; shipyard level ${f.yard}`;
+  `corps ${f.corps}, divisions ${r1(f.paper)} on paper and ${r1(f.real)} at strength; air groups ${f.groups} (${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers); ships ${f.hulls}${f.hulls ? ` (${Object.entries(f.ships).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''}; shipyard level ${f.yard}; factories ${f.fac} (${f.top} in its best province)`;
 
 /**
  * A determined player (the design director's ruling of 16:10Z on the globe's paper, question 6): every month he is
@@ -317,20 +318,26 @@ function grow(me: string, seed: number, months: number, aim: string): boolean {
   const end = months + 1;   // the run ends on the day the player is up in turn months + 1
   const units = (o: any): number => Number(/^(\d+)/.exec(o.size)?.[1] ?? 1);
   const home = (): number => { const cap = n.capital >= 0 ? g.regions[n.capital] : null; const quay = g.regions.find((r) => r.owner === me && r.ctrl === me && r.port && !r.overseas); return aim === 'navy' && quay ? quay.id : cap ? cap.id : -1; };
-  const wanted = (o: any): boolean => (aim === 'army' ? o.group === 'army' : aim === 'air' ? o.group === 'air' || o.key === 'work:field' : o.group === 'navy' || o.key === 'work:yard');
+  const wanted = (o: any): boolean => (aim === 'army' ? o.group === 'army' : aim === 'air' ? o.group === 'air' || o.key === 'work:field' : aim === 'works' ? false : o.group === 'navy' || o.key === 'work:yard');
+  // Where a factory goes: the home city with the most industry that still has room (an aircraft industry is one province with two).
+  const cities = (): number[] => g.regions.filter((r) => r.owner === me && r.ctrl === me && !r.overseas && isCity(r)).sort((a, b) => b.fac - a.fac || b.vp - a.vp || a.id - b.id).map((r) => r.id);
+  const factory = (): any => { for (const id of cities()) { const o = offers(g, me, id).find((x) => x.key === 'work:factory'); if (o && (!o.why || o.poor)) return o; } return null; };
   let spent = 0; const bought: string[] = []; const barred = new Map<string, string>(), late = new Map<string, string>(), got = new Set<string>();
   let up = advance(g, (nat) => check(g, `after ${nat}`, problems, seen));
   while (up && g.turn <= months) {
     for (let guard = 0; guard < 40; guard++) {
       const all = offers(g, me, home()).filter(wanted);
+      // The industrialist buys factories; the airman buys one first when his country has no aircraft industry.
+      if (aim === 'works' || (aim === 'air' && all.some((o) => o.key === 'air:ftr' && o.why && !o.poor && /aircraft industry/.test(o.why)))) { const f = factory(); if (f) all.push(f); }
       const os = all.filter((o) => g.turn + o.months <= end);
       for (const o of os) if (o.why && !o.poor) barred.set(o.key, o.why);
       // On offer, but it would be delivered after the run ends: the year is too short for it.
-      for (const o of all) if (g.turn + o.months > end && (!o.why || o.poor) && !o.key.startsWith('work:')) late.set(o.key, `on offer from ${date(g.turn)} and ${o.months} months in the building: delivered after the run ends`);
+      for (const o of all) if (g.turn + o.months > end && (!o.why || o.poor) && !o.key.startsWith('work:') && !late.has(o.key)) late.set(o.key, `${o.months} months in the building: ordered from ${date(g.turn)} on it is delivered after the run ends`);
       // The offers money alone decides, best bargain first: most of the thing for the money (a yard or a field comes
       // first when the arm cannot be had without it: it is ordered only when nothing of the arm itself is on offer).
       const open = os.filter((o) => !o.why || o.poor).filter((o) => !o.key.startsWith('work:') || !os.some((x) => !x.key.startsWith('work:') && (!x.why || x.poor)));
-      open.sort((a, b) => units(b) / b.cost - units(a) / a.cost || a.cost - b.cost);
+      const lead = (o: any): number => (o.key === 'work:factory' ? 0 : 1);
+      open.sort((a, b) => lead(a) - lead(b) || units(b) / b.cost - units(a) / a.cost || a.cost - b.cost);
       const net = ledger(g, me).net;
       // The best bargain he can pay for now, or will be able to pay for by the last month it can still be ordered.
       let pick: any = null, wait = false;
@@ -356,7 +363,7 @@ function grow(me: string, seed: number, months: number, aim: string): boolean {
   out(`  ${date(g.turn)}: ${fieldLine(last)}; men left in the pool for ${r1(menLeft(g, me))} divisions; treasury ${r1(n.pp * sc)}; spent ${r1(spent * sc)}; still on order: ${last.onOrder.join(', ') || 'nothing'}`);
   const bad = real(problems);
   for (const p of problems.slice(0, 20)) out(`    ${p}`);
-  out(`GROWN ${me} ${aim} seed ${seed} to ${date(g.turn)}: divisions ${r1(first.paper)} -> ${r1(last.paper)} on paper (${r1(first.real)} -> ${r1(last.real)} at strength); aircraft ${Math.round(first.ftr + first.bmr)} -> ${Math.round(last.ftr + last.bmr)}; ships ${first.hulls} -> ${last.hulls}; shipyard ${first.yard} -> ${last.yard}; orders ${bought.length}; invariants broken ${bad.length}; ${n.alive ? 'standing' : 'FALLEN'}`);
+  out(`GROWN ${me} ${aim} seed ${seed} to ${date(g.turn)}: divisions ${r1(first.paper)} -> ${r1(last.paper)} on paper (${r1(first.real)} -> ${r1(last.real)} at strength); aircraft ${Math.round(first.ftr + first.bmr)} -> ${Math.round(last.ftr + last.bmr)}; ships ${first.hulls} -> ${last.hulls}; shipyard ${first.yard} -> ${last.yard}; factories ${first.fac} -> ${last.fac}; orders ${bought.length}; invariants broken ${bad.length}; ${n.alive ? 'standing' : 'FALLEN'}`);
   return !bad.length && n.alive;
 }
 

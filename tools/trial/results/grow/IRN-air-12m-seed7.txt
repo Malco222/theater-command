@@ -1,0 +1,8 @@
+=== grow IRN, seed 7, 12 months, aim air; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 7, divisions 9 on paper and 4.6 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men in the pool for 7.4 divisions; income 469.3 a month
+    November 1939: Airfields (level 1) for 1000, due February 1940
+    March 1940: Airfields (level 2) for 1500, due June 1940
+    never on offer: air:ftr: Needs an aircraft industry: a home province with 2 factories.
+    never on offer: air:bmr: Needs an aircraft industry: a home province with 3 factories.
+  September 1940: corps 7, divisions 9 on paper and 6.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men left in the pool for 7 divisions; treasury 2423.5; spent 2500; still on order: nothing
+GROWN IRN air seed 7 to September 1940: divisions 9 -> 9 on paper (4.6 -> 6.8 at strength); aircraft 0 -> 0; ships 2 -> 2; shipyard 0 -> 0; factories 1 -> 1; orders 2; invariants broken 0; standing

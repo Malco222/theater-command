@@ -1,0 +1,7 @@
+=== grow LBR, seed 7, 12 months, aim air; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 1, divisions 1 on paper and 0.2 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men in the pool for 2.6 divisions; income 159.3 a month
+    March 1940: Airfields (level 1) for 1000, due June 1940
+    never on offer: air:ftr: Needs an aircraft industry: a home province with 2 factories.
+    never on offer: air:bmr: Needs an aircraft industry: a home province with 3 factories.
+  September 1940: corps 1, divisions 1 on paper and 0.3 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 0 (0 in its best province); men left in the pool for 2.6 divisions; treasury 1015.5; spent 1000; still on order: nothing
+GROWN LBR air seed 7 to September 1940: divisions 1 -> 1 on paper (0.2 -> 0.3 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 0 -> 0; orders 1; invariants broken 0; standing

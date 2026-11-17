@@ -58,17 +58,16 @@ Iran (IRN), September 1939; part of the world: the Middle East; government: auth
   September 1939  alive  provinces  23  corps  7 (4.7 divs)  treasury   404.1  net    459/month  independent  at war with: none  [0 s]
   October 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Tehran; treasury 806.2 -> 6.2; orders in hand 1
   October 1939    alive  provinces  23  corps  7 (4.9 divs)  treasury     6.2  net  458.7/month  independent  at war with: none  [4 s]
-  November 1939   alive  provinces  23  corps  7 (5 divs)  treasury   405.9  net    458/month  independent  at war with: none  [2 s]
-  December 1939   alive  provinces  23  corps  7 (5.2 divs)  treasury     795  net  444.1/month  independent  at war with: none  [2 s]
-  January 1940    alive  provinces  23  corps  7 (5.3 divs)  treasury  1152.1  net  418.8/month  independent  at war with: none  [2 s]
-  February 1940   alive  provinces  23  corps  7 (5.5 divs)  treasury  1506.9  net  418.5/month  independent  at war with: none  [2 s]
-  March 1940      alive  provinces  23  corps  7 (5.7 divs)  treasury  1859.5  net  418.2/month  independent  at war with: none  [5 s]
-  April 1940      alive  provinces  23  corps  7 (5.8 divs)  treasury  2209.9  net  417.9/month  independent  at war with: none  [3 s]
-  May 1940        alive  provinces  23  corps  7 (6 divs)  treasury  2557.3  net    417/month  independent  at war with: none  [4 s]
-  June 1940       alive  provinces  23  corps  7 (6.2 divs)  treasury  2897.3  net  411.7/month  independent  at war with: none  [4 s]
-  July 1940       alive  provinces  23  corps  7 (6.4 divs)  treasury    3202  net  378.5/month  independent  at war with: none  [4 s]
-  August 1940     alive  provinces  23  corps  7 (6.6 divs)  treasury    3504  net  378.1/month  independent  at war with: none  [4 s]
-  September 1940  alive  provinces  23  corps  7 (6.8 divs)  treasury  3803.4  net  377.7/month  independent  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
-    [note] saved at February 1940: 471 KB
-VERDICT IRN seed 7: PASS: started yes; order given (October 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 43 s
+  November 1939   alive  provinces  23  corps  7 (5 divs)  treasury   406.4  net  458.4/month  independent  at war with: none  [2 s]
+  December 1939   alive  provinces  23  corps  7 (5.2 divs)  treasury   804.5  net  453.1/month  independent  at war with: none  [2 s]
+  January 1940    alive  provinces  23  corps  7 (5.3 divs)  treasury  1195.5  net  452.8/month  independent  at war with: none  [3 s]
+  February 1940   alive  provinces  23  corps  7 (5.5 divs)  treasury  1584.3  net  452.5/month  independent  at war with: none  [2 s]
+  March 1940      alive  provinces  23  corps  7 (5.7 divs)  treasury  1970.8  net  452.2/month  independent  at war with: none  [5 s]
+  April 1940      alive  provinces  23  corps  7 (5.8 divs)  treasury  2355.1  net  451.8/month  independent  at war with: none  [4 s]
+  May 1940        alive  provinces  23  corps  7 (6 divs)  treasury  2736.5  net    451/month  independent  at war with: none  [4 s]
+  June 1940       alive  provinces  23  corps  7 (6.2 divs)  treasury  3110.5  net  445.6/month  independent  at war with: none  [5 s]
+  July 1940       alive  provinces  23  corps  7 (6.4 divs)  treasury  3449.1  net  412.4/month  independent  at war with: none  [4 s]
+  August 1940     alive  provinces  23  corps  7 (6.6 divs)  treasury  3785.1  net    412/month  independent  at war with: none  [5 s]
+  September 1940  alive  provinces  23  corps  7 (6.8 divs)  treasury  4118.5  net  411.6/month  independent  at war with: none  (end)
+    [note] saved at February 1940: 473 KB
+VERDICT IRN seed 7: PASS: started yes; order given (October 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 51 s

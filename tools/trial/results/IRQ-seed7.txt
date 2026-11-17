@@ -48,19 +48,18 @@ Iraq (IRQ), September 1939; part of the world: the Middle East; government: auth
       frontiers that road comes to: FRA at Deir ez-Zor, 1 off; IRN at Kermanshah, 1 off; UK at Kuwait, 1 off; SAU at Hail, 1 off; TUR at Diyarbakir, 2 off
   September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 223.8; at 246.5 a month that is 3 month(s) away
   September 1939  alive  provinces   4  corps  3 (2 divs)  treasury   223.8  net  246.5/month  leaning_allies  at war with: none  [0 s]
-  October 1939    alive  provinces   4  corps  3 (2 divs)  treasury   446.8  net  246.4/month  leaning_allies  at war with: none  [4 s]
+  October 1939    alive  provinces   4  corps  3 (2 divs)  treasury   446.8  net  246.4/month  leaning_allies  at war with: none  [3 s]
   November 1939   alive  provinces   4  corps  3 (2.1 divs)  treasury     669  net  246.3/month  leaning_allies  at war with: none  [2 s]
   December 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Baghdad; treasury 890.4 -> 90.4; orders in hand 1
   December 1939   alive  provinces   4  corps  3 (2.1 divs)  treasury    90.4  net  246.1/month  leaning_allies  at war with: none  [2 s]
   January 1940    alive  provinces   4  corps  3 (2.2 divs)  treasury   310.9  net    246/month  leaning_allies  at war with: none  [2 s]
   February 1940   alive  provinces   4  corps  3 (2.3 divs)  treasury   530.5  net  240.9/month  leaning_allies  at war with: none  [2 s]
   March 1940      alive  provinces   4  corps  3 (2.3 divs)  treasury   744.1  net  240.7/month  leaning_allies  at war with: none  [5 s]
-  April 1940      alive  provinces   4  corps  3 (2.4 divs)  treasury   956.8  net  240.6/month  leaning_allies  at war with: none  [3 s]
+  April 1940      alive  provinces   4  corps  3 (2.4 divs)  treasury   956.8  net  240.6/month  leaning_allies  at war with: none  [4 s]
   May 1940        alive  provinces   4  corps  3 (2.5 divs)  treasury  1168.5  net  240.5/month  leaning_allies  at war with: none  [4 s]
-  June 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury    1379  net  240.1/month  leaning_allies  at war with: none  [4 s]
-  July 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury  1588.4  net  239.9/month  leaning_allies  at war with: none  [4 s]
-  August 1940     alive  provinces   4  corps  3 (2.7 divs)  treasury  1796.7  net  239.7/month  leaning_allies  at war with: none  [4 s]
+  June 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury    1379  net  240.1/month  leaning_allies  at war with: none  [5 s]
+  July 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury  1588.4  net  239.9/month  leaning_allies  at war with: none  [5 s]
+  August 1940     alive  provinces   4  corps  3 (2.7 divs)  treasury  1796.7  net  239.7/month  leaning_allies  at war with: none  [6 s]
   September 1940  alive  provinces   4  corps  3 (2.8 divs)  treasury  2003.9  net  239.5/month  leaning_allies  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
-    [note] saved at February 1940: 471 KB
-VERDICT IRQ seed 7: PASS: started yes; order given (December 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 43 s
+    [note] saved at February 1940: 473 KB
+VERDICT IRQ seed 7: PASS: started yes; order given (December 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 52 s

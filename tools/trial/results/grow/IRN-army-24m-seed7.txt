@@ -1,0 +1,13 @@
+=== grow IRN, seed 7, 24 months, aim army; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 7, divisions 9 on paper and 4.6 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men in the pool for 7.4 divisions; income 469.3 a month
+    September 1940: Infantry corps (3 divisions) for 4800, due February 1941
+    February 1941: Engineer corps (1 division) for 1800, due May 1941
+    too slow for the run: corps:mtn: 5 months in the building: ordered from May 1941 on it is delivered after the run ends
+    too slow for the run: corps:art: 5 months in the building: ordered from May 1941 on it is delivered after the run ends
+    never on offer: corps:mot: Needs the technology Motorised infantry. Open Research to begin it.
+    never on offer: corps:arm: Needs the technology Tank arm. Open Research to begin it.
+    never on offer: para: Needs the technology Airborne forces. Open Research to begin it.
+  September 1941: corps 9, divisions 13 on paper and 13 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men left in the pool for 2.5 divisions; treasury 2383.1; spent 6600; still on order: nothing
+    [October 1940 after GER] [note] Norway fights on with its capital Oslo in GER hands
+    [August 1941 after JAP] [note] crowd: 14 JAP corps stand in Tokyo (14 divisions)
+GROWN IRN army seed 7 to September 1941: divisions 9 -> 13 on paper (4.6 -> 13 at strength); aircraft 0 -> 0; ships 2 -> 2; shipyard 0 -> 0; factories 1 -> 1; orders 2; invariants broken 0; standing

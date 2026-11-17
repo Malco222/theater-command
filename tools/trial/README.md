@@ -29,7 +29,7 @@ node dist/trial/seat-play.mjs list               # the seats this build knows
 node dist/trial/seat-play.mjs SAF 7 12           # one seat: SEAT [SEED=7] [MONTHS=12] [LEVEL=colonel]
 tools/trial/run-all.sh                           # every seat, four at a time; printouts in dist/trial/out/
 tools/trial/run-all.sh dist/trial/out 7 12 "SAF IRN"   # OUT_DIR [SEED] [MONTHS] ["SEATS"]
-node dist/trial/seat-play.mjs grow SAF 7 12 army # a determined player: buys all he can of one arm (army, air, navy) for a year
+node dist/trial/seat-play.mjs grow SAF 7 12 army # a determined player: buys all he can of one arm (army, air, navy, works) for a year
 node dist/trial/seat-play.mjs watch 7 24         # nobody playing: what the computer does with each country
 node dist/trial/seat-play.mjs watch 7 24 CHN,AUS # the same, for the countries named
 ```
@@ -102,13 +102,16 @@ to another folder holding `lib.ts` if that one is out of reach.
 
 `grow SEAT SEED MONTHS AIM` is the year-one measure the design director asked for (her ruling of 16:10Z on the
 globe's paper, question 6): the most a determined player can field by the end of year one. Every month he is up
-he buys all he can of one arm (`army`, `air` or `navy`) that will be delivered by the end, through `orderArsenal`,
+he buys all he can of one arm (`army`, `air`, `navy`, or `works` for factories) that will be delivered by the end, through `orderArsenal`,
 best bargain first (most divisions, aircraft or ships for the money); he saves for the best bargain while his income
 can still reach it before its last order date, and takes the next best when it cannot. A shipyard or an airfield is
-ordered only when nothing of the arm itself is on offer. He researches nothing and moves nothing. It prints the
-orders, what was never on offer and why (no technology, no men, no yard), and one line:
+ordered only when nothing of the arm itself is on offer; the airman of a country with no aircraft industry builds
+a factory first, in the home city with the most industry. He researches nothing and moves nothing. It prints the
+orders, what was never on offer and why (no technology, no men, no yard), what was on offer too late to arrive, and one line:
 `GROWN SEAT AIM seed N to September 1940: divisions a -> b on paper (c -> d at strength); aircraft; ships; ...`.
-The printouts for the globe's eight are in `results/grow/`.
+The printouts for the globe's eight are in `results/grow/` (a year four ways for each seat, and South Africa and
+Iran run on to 18 and 24 months); `results/grow/three-factories/` is South Africa on the chart before its factories
+went from 3 to 2. The report is section 7 of the globe's paper.
 
 `watch` plays with nobody at the controls and prints, for each country, the months in which something changed
 (wars, alignment, provinces, corps, news that names it): the computer's path when nobody leads it.
@@ -264,6 +267,19 @@ Each was met while building the trial. Lines are those of this branch.
     Italian frontier at Kismayu (11 provinces off), to Egypt (Faiyum, 19 off) and to Palestine (23 off): see
     `results/SAF-seed7.txt`, "ways out". A computer-run South Africa has no row under
     `world.json` `overseas`, so nothing of its is ever shipped (`overseasOf`, `world.ts:388-394`).
+
+22. **No row says which countries have an aircraft industry.** A fighter wing asks only for a home province with
+    two factories and a bomber wing for one with three (`arsenal.json` `air`, `industry()` in `arsenal.ts`), and
+    any country may build factories (3,000 and 500 more for each built there, eight months, three new in a city).
+    South Africa at two factories (Johannesburg 1, Pretoria 1, as ruled) orders a factory in December 1939, has an
+    aircraft industry in August 1940, 500 fighters in March 1941 and 1,200 in September 1941
+    (`results/grow/SAF-air-24m-seed7.txt`). Iran has two factories at Tehran in December 1940. Filed with the design
+    director in the globe's year-one report; a row or a rule here is every smaller power's.
+23. **Thin first-day corps fill up.** A corps below strength takes replacements each month by the one rule for every
+    country (`game.ts:2822`), paid from the treasury and drawn from the pool. With nothing bought, each of the eight
+    is about half again as strong after a year (Iran 4.6 divisions to 6.8, and 9.0 after two), where the record says
+    six of them did not grow. The data's lever is a `pool` and `class` row in `manpower.json`, which `manpower.ts`
+    reads for any country (lines 56 and 67), not only the great powers. Filed with the same report.
 
 ## Not verified
 

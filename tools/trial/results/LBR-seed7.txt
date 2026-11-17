@@ -34,7 +34,7 @@ Liberia (LBR), September 1939; part of the world: Africa; government: authoritar
     work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
     work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
     work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
-  first month reached in 4 s
+  first month reached in 6 s
 --- month by month (the line is the day the player is up)
   ways out of the country on September 1939 (sea lift 0, seaSupply false):
     Liberian Frontier Force in Monrovia: marches to 1 provinces this month, 0 outside its own country; by sea to no port (no friendly port abroad)
@@ -50,11 +50,10 @@ Liberia (LBR), September 1939; part of the world: Africa; government: authoritar
   February 1940   alive  provinces   2  corps  1 (0.2 divs)  treasury   137.8  net  158.8/month  independent  at war with: none  [2 s]
   March 1940      alive  provinces   2  corps  1 (0.2 divs)  treasury   293.8  net  158.8/month  independent  at war with: none  [4 s]
   April 1940      alive  provinces   2  corps  1 (0.3 divs)  treasury   449.7  net  153.8/month  independent  at war with: none  [3 s]
-  May 1940        alive  provinces   2  corps  1 (0.3 divs)  treasury   600.5  net  153.8/month  independent  at war with: none  [4 s]
+  May 1940        alive  provinces   2  corps  1 (0.3 divs)  treasury   600.5  net  153.8/month  independent  at war with: none  [5 s]
   June 1940       alive  provinces   2  corps  1 (0.3 divs)  treasury   751.1  net  153.8/month  independent  at war with: none  [4 s]
-  July 1940       alive  provinces   2  corps  1 (0.3 divs)  treasury   901.7  net  153.8/month  independent  at war with: none  [5 s]
+  July 1940       alive  provinces   2  corps  1 (0.3 divs)  treasury   901.7  net  153.8/month  independent  at war with: none  [4 s]
   August 1940     alive  provinces   2  corps  1 (0.3 divs)  treasury  1052.2  net  153.8/month  independent  at war with: none  [4 s]
   September 1940  alive  provinces   2  corps  1 (0.3 divs)  treasury  1202.5  net  153.7/month  independent  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
-    [note] saved at February 1940: 472 KB
-VERDICT LBR seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 44 s
+    [note] saved at February 1940: 474 KB
+VERDICT LBR seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 45 s

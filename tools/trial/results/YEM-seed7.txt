@@ -47,16 +47,15 @@ Yemen (YEM), September 1939; part of the world: the Middle East; government: aut
   October 1939    alive  provinces   2  corps  1 (0.5 divs)  treasury   288.9  net  150.5/month  independent  at war with: none  [3 s]
   November 1939   alive  provinces   2  corps  1 (0.5 divs)  treasury     433  net  150.4/month  independent  at war with: none  [2 s]
   December 1939   alive  provinces   2  corps  1 (0.6 divs)  treasury   576.9  net  150.4/month  independent  at war with: none  [2 s]
-  January 1940    alive  provinces   2  corps  1 (0.6 divs)  treasury   720.5  net  150.4/month  independent  at war with: none  [2 s]
+  January 1940    alive  provinces   2  corps  1 (0.6 divs)  treasury   720.5  net  150.4/month  independent  at war with: none  [3 s]
   February 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Sanaa; treasury 864 -> 64; orders in hand 1
   February 1940   alive  provinces   2  corps  1 (0.6 divs)  treasury      64  net  150.3/month  independent  at war with: none  [2 s]
   March 1940      alive  provinces   2  corps  1 (0.6 divs)  treasury   207.2  net  150.3/month  independent  at war with: none  [4 s]
-  April 1940      alive  provinces   2  corps  1 (0.6 divs)  treasury   350.1  net  145.3/month  independent  at war with: none  [4 s]
-  May 1940        alive  provinces   2  corps  1 (0.7 divs)  treasury   487.8  net  145.2/month  independent  at war with: none  [5 s]
+  April 1940      alive  provinces   2  corps  1 (0.6 divs)  treasury   350.1  net  145.3/month  independent  at war with: none  [3 s]
+  May 1940        alive  provinces   2  corps  1 (0.7 divs)  treasury   487.8  net  145.2/month  independent  at war with: none  [4 s]
   June 1940       alive  provinces   2  corps  1 (0.7 divs)  treasury   625.2  net  145.2/month  independent  at war with: none  [4 s]
   July 1940       alive  provinces   2  corps  1 (0.7 divs)  treasury   762.3  net  145.2/month  independent  at war with: none  [4 s]
   August 1940     alive  provinces   2  corps  1 (0.7 divs)  treasury   899.2  net  145.1/month  independent  at war with: none  [4 s]
   September 1940  alive  provinces   2  corps  1 (0.7 divs)  treasury  1035.7  net  145.1/month  independent  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
-    [note] saved at February 1940: 472 KB
+    [note] saved at February 1940: 474 KB
 VERDICT YEM seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 45 s

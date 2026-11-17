@@ -1,0 +1,5 @@
+=== grow SAF, seed 7, 12 months, aim works; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 2, divisions 2 on paper and 0.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 2 (1 in its best province); men in the pool for 3.2 divisions; income 946.9 a month
+    December 1939: Factory (one factory) for 3000, due August 1940
+  September 1940: corps 2, divisions 2 on paper and 1.2 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; factories 3 (2 in its best province); men left in the pool for 3.2 divisions; treasury 9211.7; spent 3000; still on order: nothing
+GROWN SAF works seed 7 to September 1940: divisions 2 -> 2 on paper (0.8 -> 1.2 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; factories 2 -> 3; orders 1; invariants broken 0; standing

@@ -46,19 +46,18 @@ Afghanistan (AFG), September 1939; part of the world: the Middle East; governmen
       frontiers that road comes to: SOV at Merv, 2 off; UK at Peshawar, 2 off; CHN at Yarkand, 2 off; IRN at Birjand, 3 off
   September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 145.9; at 167.4 a month that is 4 month(s) away
   September 1939  alive  provinces   7  corps  3 (1.9 divs)  treasury   145.9  net  167.4/month  independent  at war with: none  [0 s]
-  October 1939    alive  provinces   7  corps  3 (1.9 divs)  treasury   291.1  net  167.3/month  independent  at war with: none  [3 s]
+  October 1939    alive  provinces   7  corps  3 (1.9 divs)  treasury   291.1  net  167.3/month  independent  at war with: none  [4 s]
   November 1939   alive  provinces   7  corps  3 (2 divs)  treasury   435.5  net  167.2/month  independent  at war with: none  [2 s]
   December 1939   alive  provinces   7  corps  3 (2 divs)  treasury   579.1  net  167.1/month  independent  at war with: none  [2 s]
-  January 1940    alive  provinces   7  corps  3 (2.1 divs)  treasury   721.8  net  166.9/month  independent  at war with: none  [2 s]
+  January 1940    alive  provinces   7  corps  3 (2.1 divs)  treasury   721.8  net  166.9/month  independent  at war with: none  [3 s]
   February 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Kabul; treasury 863.7 -> 63.7; orders in hand 1
   February 1940   alive  provinces   7  corps  3 (2.1 divs)  treasury    63.7  net  166.8/month  independent  at war with: none  [2 s]
-  March 1940      alive  provinces   7  corps  3 (2.2 divs)  treasury   204.8  net  166.7/month  independent  at war with: none  [4 s]
-  April 1940      alive  provinces   7  corps  3 (2.3 divs)  treasury   344.9  net  161.6/month  independent  at war with: none  [4 s]
+  March 1940      alive  provinces   7  corps  3 (2.2 divs)  treasury   204.8  net  166.7/month  independent  at war with: none  [5 s]
+  April 1940      alive  provinces   7  corps  3 (2.3 divs)  treasury   344.9  net  161.6/month  independent  at war with: none  [3 s]
   May 1940        alive  provinces   7  corps  3 (2.3 divs)  treasury   479.1  net  161.4/month  independent  at war with: none  [4 s]
   June 1940       alive  provinces   7  corps  3 (2.4 divs)  treasury   592.9  net  141.8/month  independent  at war with: none  [4 s]
   July 1940       alive  provinces   7  corps  3 (2.5 divs)  treasury   705.7  net  141.7/month  independent  at war with: none  [4 s]
   August 1940     alive  provinces   7  corps  3 (2.6 divs)  treasury   817.5  net  141.5/month  independent  at war with: none  [4 s]
   September 1940  alive  provinces   7  corps  3 (2.6 divs)  treasury   928.2  net  141.4/month  independent  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
-    [note] saved at February 1940: 472 KB
-VERDICT AFG seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 45 s
+    [note] saved at February 1940: 474 KB
+VERDICT AFG seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 46 s
