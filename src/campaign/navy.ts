@@ -25,6 +25,7 @@ import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
+import { stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -57,7 +58,16 @@ export const NAVY = data as unknown as {
   fleets: FleetRow[];
   building: { nat: string; fleet: string; cls: ShipClass; from: number; to: number; perMonth: number }[];
   arrivals: [number, string, string, Partial<Ships>, string][];
+  /** The far side: a fleet's base by date. None in the older files. */
+  moves?: FleetMove[];
 };
+
+/**
+ * A fleet's base by date (navy.json, 'moves'; the Pacific planner's rows): in its month a computer-run navy moves
+ * the fleet's base to the province named, if its country holds the place, and only at the stops of the history dial
+ * the row names (every stop where it names none). A player's fleet moves when he says.
+ */
+export interface FleetMove { turn: number; nat: string; fleet: string; base: string; port: string; home: string; words: string; stops?: number[] }
 
 /** The grand campaign's navy: escorts bound to lanes, destroyers that hunt, guns that shell a coast. See fleets.json. */
 export const FLEETS = fleetData as unknown as {
@@ -1234,6 +1244,7 @@ export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
   for (const row of NAVY.fleets) {
     if (row.nat !== nat || (row.from ?? 1) !== g.turn || g.turn <= 1 || g.fleets.some((f) => f.nat === nat && f.name === row.name)) continue;
+    if (row.base && !g.byName[row.base]) continue; // a fleet of ground this campaign's chart does not reach
     const f = addFleet(g, row);
     headline(g, 'info', `${f.name} forms at ${f.port}.`, nat);
   }
@@ -1242,8 +1253,20 @@ export function navalUpkeep(g: Game, nat: string): void {
   for (const [turn, who, fleet, ships, what] of NAVY.arrivals) {
     const f = who === nat && turn === g.turn ? named(fleet) : undefined;
     if (!f) continue;
-    for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
-    headline(g, 'info', `${cap(what)} ${/ and /.test(what) || /s$/.test(what.split(' ')[0]) ? 'join' : 'joins'} the ${f.name}.`, nat);
+    // A count below none is ships leaving for another fleet (the far side's rows): never more than are there, and the words say where they go.
+    const leaving = CLASSES.some((c) => (ships[c] ?? 0) < 0);
+    for (const c of CLASSES) f.ships[c] = Math.max(0, f.ships[c] + (ships[c] ?? 0));
+    headline(g, 'info', leaving ? `${cap(what)}.` : `${cap(what)} ${/ and /.test(what) || /s$/.test(what.split(' ')[0]) ? 'join' : 'joins'} the ${f.name}.`, nat);
+  }
+  for (const m of NAVY.moves ?? []) {
+    if (m.nat !== nat || m.turn !== g.turn || nat === g.human || (m.stops && !m.stops.includes(stopOf(g)))) continue;
+    const f = named(m.fleet), r = g.byName[m.base], sea = zoneOf(g, m.home);
+    if (!f || !r || r.ctrl !== nat || r.id === f.base || sea < 0) continue;
+    f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+    delete f.lane;
+    g.supplyDirty = true;
+    syncWings(g);
+    headline(g, 'info', `${m.words}.`, nat);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;

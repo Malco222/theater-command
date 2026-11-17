@@ -8,7 +8,9 @@
 //   Japan, the seventh great power: its nation row, its army of September 1939 in Japan, Korea, Manchukuo and
 //     China, its nine fleets, its generals and officers' names, its rows by date to 1944
 //   the old powers' garrisons out there on the first day and by date (Britain, the Netherlands, France, the Soviet
-//     Far East). America's own rows (Hawaii, Alaska, the Philippines, its Pacific fleets) are laid with the chart
+//     Far East, and America's in Hawaii, Alaska and the Philippines)
+//   America's fleets in the Pacific, with their ships by date, their building and their bases by date, and the
+//     bases by date of Japan's battle line (the planner's pacific-fleets.json)
 //   the men of rulings 213(b), 216(b) and 218 (pool and class), and China's last levy
 //   who holds what on 1 September 1939 where that is not the owner (the clerk's held_1939)
 //
@@ -33,9 +35,10 @@ const opening = src('pacific-planner/opening-armies.json');
 const generals = src('historian/generals-usa-japan.json');
 const men = src('historian/manpower-213.json');
 const levy = src('pacific-planner/runs-219/levy218-seats.json');
+const pacific = src('pacific-planner/pacific-fleets.json');
 const chinaSetup = read(path.join(ROOT, 'data/campaign/china-setup.json'));
 const stop3 = read(path.join(ROOT, 'data/campaign/china-stop3.json'));
-const chart = read(path.join(ROOT, 'src/generated/world-cities.json'));
+const chart = read(path.join(ROOT, 'src/generated/world-whole.json'));
 const owner = new Map(chart.regions.map((r) => [r.name, r.owner]));
 const seaOf = (name, pick = 0) => chart.seas.zones[chart.regions.find((r) => r.name === name).seas[pick]].id;
 
@@ -58,14 +61,14 @@ const japan = [...first.japan, ...first.manchuria].map(firstRow).map((row) => {
 });
 need(stay.size === 0, `china-stop3.json '_stay' names rows the planner's file has not: ${[...stay].join('; ')}`);
 
-// The old powers' garrisons of the first day. America's are the chart stage's.
-const garrisons = opening.first_day.filter((r) => r[0] !== 'USA').map(firstRow);
+// The old powers' garrisons of the first day, America's among them.
+const garrisons = opening.first_day.map(firstRow);
 for (const row of [...japan, ...garrisons]) need(owner.has(row[4]), `first-day row "${row[1]}": ${row[4]} is not a province of the chart`);
 
 // Rows by date. A row china-setup.json lays already (the raids' four) is not laid twice.
 const laid = new Set(chinaSetup['setup-1939'].expeditions.map((r) => `${r[0]}|${r[1]}|${r[2]}`));
 const dated = { expeditions: [], formations: [] };
-for (const row of [...opening.by_date.filter((r) => r[1] !== 'USA'), ...opening.japan_by_date, ...opening.japan_1944]) {
+for (const row of [...opening.by_date, ...opening.japan_by_date, ...opening.japan_1944]) {
   if (laid.has(`${row[0]}|${row[1]}|${row[2]}`)) continue;
   const list = row[6].list ?? 'expeditions';
   need(list in dated, `row by date "${row[2]}": list "${list}"`);
@@ -118,6 +121,25 @@ const arrivals = [
   [28, 'JAP', 'Combined Fleet', { dd: 1 }, 'a new destroyer'],
 ];
 
+// America's fleets in the Pacific (the planner's pacific-fleets.json, in navy.json's own forms). A fleet that forms
+// later ('from') is a row of navy.json, where the navy's month looks for it; the others stand on the first day.
+// 'standing' is the planner's note of a rule that comes with the hunt, and is left out.
+const seas = new Set(chart.seas.zones.map((z) => z.id));
+const usFleets = pacific.fleets.map(({ standing, ...f }) => f);
+for (const f of usFleets) {
+  need(owner.get(f.base) === f.nat, `fleet "${f.name}": ${f.base} is not ${f.nat}'s on the chart`);
+  need(seas.has(f.home) && seas.has(f.zone), `fleet "${f.name}": no sea "${f.home}" or "${f.zone}"`);
+}
+const fleetNames = new Set([...fleets, ...usFleets].map((f) => `${f.nat}|${f.name}`));
+// The Atlantic Fleet is world.json's own row: three battleships and a carrier cross to it in May 1941 and come back (ruling 189(1)).
+fleetNames.add('USA|Atlantic Fleet');
+for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
+for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
+for (const m of pacific.moves) {
+  need(fleetNames.has(`${m.nat}|${m.fleet}`), `move "${m.words}": no fleet "${m.fleet}"`);
+  need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
+}
+
 // ---- The men (rulings 213(b), 216(b), 218) -----------------------------------------------------------
 const pool = {}, klass = {};
 const menRow = (code, row, from) => { pool[code] = row.pool; klass[code] = row.class; notes.push(`men ${code}: pool ${row.pool}, class ${row.class} (${from})`); };
@@ -165,8 +187,8 @@ for (const [nat, name, , , at] of [...japan, ...garrisons]) {
 
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
-  _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France and the Soviet Far East are paper 18's; America's rows are laid with the chart. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json'].map((p) => [p, stamp(p)])),
+  _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -180,10 +202,16 @@ const out = {
     great: ['JAP'],
     parts: { of: { JAP: 'asia' } },
     corps: [...japan, ...garrisons],
-    fleets,
+    fleets: [...fleets, ...usFleets.filter((f) => f.from === undefined)],
   },
-  navy: { arrivals },
-  league: { never: ['JAP', 'MAN', 'MGL'] },
+  navy: {
+    fleets: usFleets.filter((f) => f.from !== undefined),
+    arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
+    building: pacific.building,
+    moves: pacific.moves,
+  },
+  // A great power founds and joins no League. The two clients are barred by their tie (league.ts), and keep a small country's own path.
+  league: { never: ['JAP'] },
   traits: {
     nations: {
       CHN: levy['traits.json'].nations.CHN,
@@ -218,6 +246,6 @@ if (process.argv.includes('--check')) {
   console.log('far-world.json is what the sources give today');
 } else {
   fs.writeFileSync(OUT, text);
-  console.log(`wrote ${path.relative(ROOT, OUT)}: Japan ${japan.length} first-day rows, ${garrisons.length} garrison rows of the old powers, ${fleets.length} fleets, ${dated.expeditions.length} expeditions and ${dated.formations.length} formations by date, ${Object.keys(held).length} provinces held by another than their owner`);
+  console.log(`wrote ${path.relative(ROOT, OUT)}: Japan ${japan.length} first-day rows, ${garrisons.length} garrison rows of the old powers, ${fleets.length + usFleets.length} fleets, ${arrivals.length + pacific.arrivals.length} arrivals and ${pacific.moves.length} moves of base by date, ${dated.expeditions.length} expeditions and ${dated.formations.length} formations by date, ${Object.keys(held).length} provinces held by another than their owner`);
   for (const n of notes) console.log('  ' + n);
 }

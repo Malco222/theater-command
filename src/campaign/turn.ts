@@ -14,7 +14,7 @@ import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './diffic
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
-  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
+  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
@@ -2381,7 +2381,7 @@ export function declarable(g: Game): string[] {
   const out = new Set<string>();
   const add = (o: string): void => {
     const N = g.nations[o];
-    if (N && N.alive && !allied(g, me, o) && !atWar(g, me, o)) out.add(o);
+    if (N && N.alive && !sameSide(g, me, o) && !atWar(g, me, o)) out.add(o);
   };
   for (const r of g.regions) {
     if (!allied(g, me, r.ctrl)) continue;

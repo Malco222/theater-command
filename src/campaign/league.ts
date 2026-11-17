@@ -77,9 +77,16 @@ export function threatened(g: Game, id: string): boolean {
   return false;
 }
 
+/**
+ * A client state (world.json, 'clients': Manchukuo, Mongolia) founds and joins no League (the rider to ruling 209(c)):
+ * its patron's army stands on its soil. There is none on the older chart.
+ */
+const client = (id: string): boolean => !!(worldData as unknown as { clients?: Record<string, unknown> }).clients?.[id];
+const CLIENT_NO = 'A client state joins no League: its patron would not have it.';
+
 /** A computer-run country that could found or join the League of its own accord: small, at peace, and leaning to neither side. */
 function free(g: Game, n: Nation): boolean {
-  return n.alive && !n.dormant && small(n.id) && n.id !== g.human && !n.atWar.length && bloc(n) === null && step(n) === 0;
+  return n.alive && !n.dormant && small(n.id) && !client(n.id) && n.id !== g.human && !n.atWar.length && bloc(n) === null && step(n) === 0;
 }
 
 /** Makes a country a member. It leaves the track between the two blocs and takes its stand in the middle. */
@@ -104,6 +111,7 @@ export function willing(g: Game, id: string, members: string[]): { ok: boolean; 
   const no = (why: string): { ok: boolean; why: string; friend: boolean } => ({ ok: false, why, friend: false });
   if (!n || !n.alive || n.dormant) return no('Not there to ask.');
   if (!small(id)) return no('A great power joins no league of small nations.');
+  if (client(id)) return no(CLIENT_NO);
   if (n.league) return no('Already a member.');
   const far = farFrom(id, members);
   if (far) return no(`A pact of neighbours: ${g.nations[far]?.name ?? 'its founder'} lies in ${partName(far)}, another part of the world.`);
@@ -187,7 +195,8 @@ export function pathOptions(g: Game, nat: string): PathOption[] {
   out.push({ id: 'alone', ok: mine === null && step(n) !== 0, why: mine ? 'An alliance, once joined, is not left.' : step(n) === 0 ? 'You answer to nobody.' : '', now: mine === null && step(n) === 0 });
   if (!leagueFounded(g)) {
     const partner = !mine && !n.atWar.length && founders(g, nat).some((x) => x.ok);
-    out.push({ id: 'found', ok: partner, why: mine ? `You have given your word to ${mine === 'axis' ? 'the Axis' : 'the Allies'}.` : n.atWar.length ? 'A country at war finds no partners: the League is founded in peace.' : partner ? '' : 'No other country is ready to found it with you yet.', now: false });
+    if (client(nat)) out.push({ id: 'found', ok: false, why: CLIENT_NO, now: false });
+    else out.push({ id: 'found', ok: partner, why: mine ? `You have given your word to ${mine === 'axis' ? 'the Axis' : 'the Allies'}.` : n.atWar.length ? 'A country at war finds no partners: the League is founded in peace.' : partner ? '' : 'No other country is ready to found it with you yet.', now: false });
   } else {
     const members = leagueMembers(g);
     let why = '';
@@ -197,6 +206,7 @@ export function pathOptions(g: Game, nat: string): PathOption[] {
     else if (n.atWar.length) why = 'The League takes in no country that is already at war.';
     else if (members.length >= LEAGUE.join.most) why = 'The League is as large as it can hold together.';
     else if (farFrom(nat, members.map((m) => m.id))) why = `The League is a pact of neighbours, and its members lie in ${partName(members[0].id)}.`;
+    if (client(nat) && mine !== 'league') why = CLIENT_NO;
     out.push({ id: 'join', ok: why === '', why, now: mine === 'league' });
   }
   return out;
@@ -217,7 +227,7 @@ export function invites(g: Game, nat: string): Invite[] {
 function asked(g: Game, members: string[]): Invite[] {
   const out: Invite[] = [];
   for (const n of Object.values(g.nations)) {
-    if (!n.alive || n.dormant || n.league || members.includes(n.id) || !small(n.id) || bloc(n)) continue;
+    if (!n.alive || n.dormant || n.league || members.includes(n.id) || !small(n.id) || client(n.id) || bloc(n)) continue;
     // Only neighbours are asked: a country in another part of the world is not on the list at all.
     if (farFrom(n.id, members)) continue;
     out.push({ nat: n.id, ...willing(g, n.id, members) });

@@ -50,6 +50,7 @@ import { TOWNS, townName, townSize } from './towns';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
+import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -306,6 +307,15 @@ export function bloc(n: Nation): Bloc | null {
 }
 
 export function allied(g: Game, a: string, b: string): boolean {
+  return sameSide(g, a, b) || tiedPair(g, a, b);
+}
+
+/**
+ * True for one country, or two members of one alliance. 'allied' is this and, on the far side of the world, a client
+ * and its patron while their tie holds (far.ts): the two stand on each other's ground as allies do, and are members
+ * of no alliance together, so what asks about membership (who may declare war on whom) asks this.
+ */
+export function sameSide(g: Game, a: string, b: string): boolean {
   if (a === b) return true;
   const A = g.nations[a], B = g.nations[b];
   if (!A || !B) return false;
@@ -326,7 +336,8 @@ export function setWar(g: Game, a: string, b: string): void {
 
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
-  if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
+  if (!A.alive || !B.alive || atWar(g, a, b) || sameSide(g, a, b)) return;
+  const tied = tiedPair(g, a, b); // a client turning on its patron, or the patron on it (far.ts): read before the war is set
   // The grand campaign: a blow against a country at peace is a surprise this month, and when the player strikes a
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
   const sneak = wouldSurprise(g, a, b);
@@ -366,6 +377,7 @@ export function declareWar(g: Game, a: string, b: string): void {
   }
   // Britain may stand by its dominions, one way only (ruling 211(b)): six times in ten she goes to war the same month.
   standsBy(g, a, b);
+  clientWar(g, a, b, tied); // the far side: war on a client is war on its patron, and a tie broken parts the two
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }

@@ -22,6 +22,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
+import { clientMonth, farCountries, farGround, farSettle } from './far';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
 
@@ -155,6 +156,7 @@ export function attachWorld(g: Game, fresh = true): void {
     if (!A.nb.includes(b)) A.nb = [...A.nb, b];
     if (!B.nb.includes(a)) B.nb = [...B.nb, a];
   }
+  farGround(g); // the far side's first day on the ground: who holds what, and the capitals that move (far.ts)
   // The chart itself: the coasts, the ferries, and the frame the interfaces draw in.
   g.links = [...g.links, ...WORLD_MAP.links];
   // Europe's factories as the wider world counts them (world.json, 'works'): a saved campaign is laid over a fresh
@@ -215,6 +217,7 @@ export function attachWorld(g: Game, fresh = true): void {
     for (const e of M.atWar) if (g.nations[e]?.alive) setWar(g, id, e);
   }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
+  farCountries(g, fresh); // the far side's countries on their first day: armies on a client's ground, the wars standing (far.ts)
   standInCountries(g);
 }
 
@@ -277,6 +280,7 @@ export function settleNewGround(g: Game, from: number): void {
   }
   for (const row of WORLD.fleets) if (fresh(row.base) && g.nations[row.nat]?.alive && g.byName[row.base!].ctrl === row.nat) addFleet(g, row);
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
+  farSettle(g, from); // a save from before the far side: its countries begin as on their first day (far.ts)
   g.supplyDirty = true;
 }
 
@@ -286,6 +290,7 @@ export function settleNewGround(g: Game, from: number): void {
  */
 export function worldMonth(g: Game): void {
   if (!worldOn(g) || (g.flags.dom ?? 0) > 0) return;
+  clientMonth(g); // the far side: a client's tie to its patron (far.ts)
   for (const [id, of] of Object.entries(WORLD.follow)) {
     const n = g.nations[id], M = g.nations[of];
     if (!n?.alive || !M?.alive || id === g.human || !allied(g, id, of)) continue;

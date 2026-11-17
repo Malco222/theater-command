@@ -1,8 +1,9 @@
 {
- "_about": "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France and the Soviet Far East are paper 18's; America's rows are laid with the chart. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
+ "_about": "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
  "_sources": {
   "pacific-planner/first-day-corps.json": "2026-11-17T18:06Z",
   "pacific-planner/opening-armies.json": "2026-11-17T20:08Z",
+  "pacific-planner/pacific-fleets.json": "2026-11-17T23:11Z",
   "historian/generals-usa-japan.json": "2026-11-17T14:38Z",
   "historian/manpower-213.json": "2026-11-17T18:10Z",
   "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z"
@@ -754,6 +755,87 @@
     }
    ],
    [
+    "USA",
+    "Philippine Division (Fort McKinley)",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0.2,
+     "str": 0.6,
+     "gen": "Walter Grant",
+     "est": 0.7
+    }
+   ],
+   [
+    "USA",
+    "Harbor Defenses of Manila and Subic Bays (Corregidor)",
+    "fort",
+    1,
+    "Bataan",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "USA",
+    "26th Cavalry, Philippine Scouts (Fort Stotsenburg)",
+    "cav",
+    1,
+    "Lingayen",
+    {
+     "xp": 0.2,
+     "str": 0.25,
+     "est": 0.25
+    }
+   ],
+   [
+    "USA",
+    "Philippine Army (cadres, regulars and trainees)",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "est": 0.35
+    }
+   ],
+   [
+    "USA",
+    "Hawaiian Division (Schofield Barracks)",
+    "inf",
+    1,
+    "Pearl Harbor",
+    {
+     "xp": 0.05,
+     "str": 0.7,
+     "est": 0.8
+    }
+   ],
+   [
+    "USA",
+    "Hawaiian Separate Coast Artillery Brigade",
+    "fort",
+    1,
+    "Pearl Harbor",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "USA",
+    "Guam (Marines and the Insular Force Guard)",
+    "inf",
+    1,
+    "Guam",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
     "SOV",
     "1st Red Banner Army (Primorye)",
     "inf",
@@ -1155,10 +1237,81 @@
      "ss": 15
     },
     "admiral": "Conrad Helfrich"
+   },
+   {
+    "nat": "USA",
+    "name": "Pacific Fleet",
+    "base": "San Diego",
+    "port": "San Diego",
+    "home": "california",
+    "zone": "california",
+    "duty": "port",
+    "admiral": "Chester Nimitz",
+    "ships": {
+     "bb": 12,
+     "cv": 4,
+     "ca": 21,
+     "dd": 54,
+     "ss": 0
+    }
+   },
+   {
+    "nat": "USA",
+    "name": "Pacific Submarine Fleet",
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "zone": "hawaii",
+    "duty": "port",
+    "admiral": "Thomas Withers",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 0,
+     "dd": 0,
+     "ss": 22
+    }
+   },
+   {
+    "nat": "USA",
+    "name": "Asiatic Fleet",
+    "base": "Manila",
+    "port": "Manila",
+    "home": "luzonsea",
+    "zone": "luzonsea",
+    "duty": "patrol",
+    "admiral": "Thomas Hart",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 3,
+     "dd": 13,
+     "ss": 6
+    }
    }
   ]
  },
  "navy": {
+  "fleets": [
+   {
+    "nat": "USA",
+    "name": "Escort Carrier Fleet",
+    "from": 51,
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "zone": "hawaii",
+    "duty": "patrol",
+    "admiral": "Van Ragsdale",
+    "ships": {
+     "bb": 0,
+     "cv": 3,
+     "ca": 0,
+     "dd": 0,
+     "ss": 0
+    }
+   }
+  ],
   "arrivals": [
    [
     3,
@@ -1287,6 +1440,26 @@
     "a new destroyer"
    ],
    [
+    21,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": -3,
+     "cv": -1
+    },
+    "the battleships Idaho, Mississippi and New Mexico and the carrier Yorktown leave for the Atlantic"
+   ],
+   [
+    21,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "bb": 3,
+     "cv": 1
+    },
+    "the battleships Idaho, Mississippi and New Mexico and the carrier Yorktown, from the Pacific"
+   ],
+   [
     22,
     "JAP",
     "Mobile Fleet",
@@ -1315,6 +1488,15 @@
     "two new fleet carriers"
    ],
    [
+    27,
+    "USA",
+    "Asiatic Fleet",
+    {
+     "ss": 23
+    },
+    "twenty-three submarines reach Manila"
+   ],
+   [
     28,
     "JAP",
     "Combined Fleet",
@@ -1322,14 +1504,491 @@
      "dd": 1
     },
     "a new destroyer"
+   ],
+   [
+    29,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "cv": -1,
+     "bb": -2
+    },
+    "the carrier Yorktown and the battleships Mississippi and New Mexico leave for the Pacific"
+   ],
+   [
+    29,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1,
+     "bb": 2
+    },
+    "the carrier Yorktown and the battleships Mississippi and New Mexico, back from the Atlantic"
+   ],
+   [
+    30,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "bb": -1
+    },
+    "the battleship Idaho leaves for the Pacific"
+   ],
+   [
+    30,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the battleship Idaho, back from the Atlantic"
+   ],
+   [
+    31,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hornet"
+   ],
+   [
+    35,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the carrier Wasp, from the Atlantic"
+   ],
+   [
+    35,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship North Carolina"
+   ],
+   [
+    37,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 2
+    },
+    "the new battleships Washington and South Dakota"
+   ],
+   [
+    41,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Indiana"
+   ],
+   [
+    43,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Massachusetts"
+   ],
+   [
+    45,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Essex"
+   ],
+   [
+    47,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Yorktown, named for the one lost at Midway"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Lexington, named for the one lost in the Coral Sea"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Independence and Princeton"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Alabama"
+   ],
+   [
+    50,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bunker Hill"
+   ],
+   [
+    51,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Belleau Wood and Cowpens"
+   ],
+   [
+    52,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carrier Monterey"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Intrepid"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Langley and Cabot"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 2
+    },
+    "the new battleships Iowa and New Jersey"
+   ],
+   [
+    55,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hornet, named for the one lost at Santa Cruz"
+   ],
+   [
+    57,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Wasp, named for the one lost off Guadalcanal"
+   ],
+   [
+    57,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Bataan and San Jacinto"
+   ],
+   [
+    58,
+    "USA",
+    "Escort Carrier Fleet",
+    {
+     "cv": 1
+    },
+    "more escort carriers"
+   ],
+   [
+    59,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Franklin"
+   ],
+   [
+    62,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hancock"
+   ],
+   [
+    62,
+    "USA",
+    "Escort Carrier Fleet",
+    {
+     "cv": 2
+    },
+    "more escort carriers"
+   ],
+   [
+    63,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Ticonderoga"
+   ],
+   [
+    64,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Wisconsin"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bennington"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Randolph"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Missouri"
+   ],
+   [
+    69,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Shangri-La"
+   ],
+   [
+    70,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bon Homme Richard"
    ]
+  ],
+  "building": [
+   {
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "cls": "dd",
+    "from": 35,
+    "to": 70,
+    "perMonth": 6
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Submarine Fleet",
+    "cls": "ss",
+    "from": 35,
+    "to": 40,
+    "perMonth": 4
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Submarine Fleet",
+    "cls": "ss",
+    "from": 41,
+    "to": 70,
+    "perMonth": 5
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "cls": "ca",
+    "from": 41,
+    "to": 70,
+    "perMonth": 1
+   }
+  ],
+  "moves": [
+   {
+    "turn": 9,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "words": "The Pacific Fleet is ordered to stay at Pearl Harbor"
+   },
+   {
+    "turn": 54,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Eastern Marshalls",
+    "port": "Majuro",
+    "home": "marshalls",
+    "words": "The Pacific Fleet moves forward to Majuro",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 60,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Eniwetok",
+    "port": "Eniwetok",
+    "home": "eniwetok",
+    "words": "The Pacific Fleet moves forward to Eniwetok",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 62,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Ulithi",
+    "port": "Ulithi",
+    "home": "wcarolines",
+    "words": "The Pacific Fleet moves forward to Ulithi",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 36,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Truk",
+    "port": "Truk",
+    "home": "truk",
+    "words": "The Combined Fleet moves to Truk",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 55,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Singapore",
+    "port": "Lingga Roads",
+    "home": "natuna",
+    "words": "The battle line moves to Lingga, near the oil",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 57,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Jolo",
+    "port": "Tawi-Tawi",
+    "home": "sulu",
+    "words": "The battle line moves forward to Tawi-Tawi",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 59,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Singapore",
+    "port": "Lingga Roads",
+    "home": "natuna",
+    "words": "The battle line goes back to Lingga",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 62,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Brunei",
+    "port": "Brunei Bay",
+    "home": "palawan",
+    "words": "The battle line moves to Brunei Bay",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 63,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Hiroshima",
+    "port": "Kure",
+    "home": "inland",
+    "words": "The battle line comes home to Kure",
+    "stops": [
+     1,
+     2
+    ]
+   }
   ]
  },
  "league": {
   "never": [
-   "JAP",
-   "MAN",
-   "MGL"
+   "JAP"
   ]
  },
  "traits": {
@@ -2472,6 +3131,43 @@
   ],
   "formations": [
    [
+    10,
+    "USA",
+    "4th Infantry Regiment (Fort Richardson)",
+    "inf",
+    1,
+    "Anchorage",
+    {
+     "xp": 0.05,
+     "str": 0.25,
+     "est": 0.5
+    }
+   ],
+   [
+    13,
+    "USA",
+    "Marine defense battalion (Midway)",
+    "fort",
+    1,
+    "Midway",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    19,
+    "USA",
+    "7th Defense Battalion (Tutuila)",
+    "fort",
+    1,
+    "Samoa",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
     21,
     "SOV",
     "Transbaikal Military District (Chita, new divisions)",
@@ -2482,6 +3178,163 @@
      "xp": 0.05,
      "str": 0.85,
      "hold": 1
+    }
+   ],
+   [
+    24,
+    "USA",
+    "1st Defense Battalion detachment (Wake)",
+    "fort",
+    1,
+    "Wake",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Kodiak garrison (Fort Greely)",
+    "inf",
+    1,
+    "Kodiak",
+    {
+     "xp": 0,
+     "str": 0.25,
+     "hold": 1,
+     "est": 0.25
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Dutch Harbor garrison (Fort Mears)",
+    "inf",
+    1,
+    "Dutch Harbor",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    25,
+    "USA",
+    "North Luzon Force (11th, 21st, 31st and 71st Divisions, Philippine Army)",
+    "inf",
+    4,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "gen": "Jonathan Wainwright",
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "91st Division, Philippine Army (USAFFE reserve, Cabanatuan)",
+    "inf",
+    1,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "41st Division, Philippine Army (South Luzon Force, Batangas)",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "51st Division, Philippine Army (South Luzon Force)",
+    "inf",
+    1,
+    "Legaspi",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "61st Division, Philippine Army (Panay)",
+    "inf",
+    1,
+    "Panay",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "81st Division, Philippine Army (Cebu and Negros)",
+    "inf",
+    1,
+    "Cebu",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "101st Division, Philippine Army (Mindanao)",
+    "inf",
+    1,
+    "Del Monte",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Provisional Tank Group (192nd and 194th Tank Battalions)",
+    "arm",
+    1,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.15,
+     "est": 0.3
+    }
+   ],
+   [
+    26,
+    "USA",
+    "25th Infantry Division (with Hawaii's two Guard regiments)",
+    "inf",
+    1,
+    "Honolulu",
+    {
+     "xp": 0.05,
+     "str": 0.8
     }
    ],
    [
@@ -2508,6 +3361,20 @@
      "xp": 0.05,
      "str": 0.85,
      "hold": 1
+    }
+   ],
+   [
+    28,
+    "USA",
+    "4th Marines (from Shanghai)",
+    "inf",
+    1,
+    "Bataan",
+    {
+     "xp": 0.1,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
     }
    ]
   ]

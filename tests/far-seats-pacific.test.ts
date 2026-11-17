@@ -1,11 +1,12 @@
 // The Pacific's six seats (ruling 209): China, Australia, New Zealand, Thailand, Manchukuo and Mongolia, each on the
 // door's second row from September 1939. Their rows wait in data/campaign/far-seats-pacific.json, keyed by the file
-// each block is lifted into when the Pacific's map is attached (step 13). Nothing in the game reads that file yet.
+// each block is laid over when the far side's switch is on (src/campaign/far-rows.ts, stage.json). With the switch
+// off nothing in the game reads that file.
 //
-// The first half runs today: the rows are in the forms the game's own files use, and pass the gates those files pass.
-// The second half is skipped until step 13: it needs the Pacific's map, and for Manchukuo and Mongolia the client's
-// mend in world.ts (the rider to ruling 209(c)). It is the six tests of a client's tie, each for both clients, led by
-// the computer and by a player.
+// The first half runs with the switch off or on: the rows are in the forms the game's own files use, and pass the
+// gates those files pass. The second half runs only with the switch on (tests/far-on.test.ts runs this file that
+// way): it needs the Pacific's map, and for Manchukuo and Mongolia the client's tie (far.ts; the rider to ruling
+// 209(c)). It is the six tests of a client's tie, each for both clients, led by the computer and by a player.
 import { describe, expect, it } from 'vitest';
 import seats from '../data/campaign/far-seats-pacific.json';
 import grandData from '../data/campaign/grand.json';
@@ -24,6 +25,8 @@ const S = seats as any;
 const W = worldData as any;
 type Row = [string, string, string, number, string, { xp?: number; str?: number; hold?: number }];
 const corps = S.world.corps as Row[];
+/** True once the rows are laid over the game's own files: the far side's switch is on. */
+const merged = W.nations.CHN !== undefined;
 
 describe('the rows as they wait', () => {
   it('has the six seats and no other, each small and from 1939 only', () => {
@@ -50,7 +53,7 @@ describe('the rows as they wait', () => {
     for (const id of ['MAN', 'MGL']) expect(S.traits.nations[id].traits.map((t: any) => t.id), id).toContain('client');
     // None is on the door already, and none is a country the League bars.
     const door = (grandData as any).nations.map((n: any) => n.id);
-    for (const id of SIX) { expect(door, id).not.toContain(id); expect((leagueData as any).never, id).not.toContain(id); }
+    for (const id of SIX) { if (!merged) expect(door, id).not.toContain(id); expect((leagueData as any).never, id).not.toContain(id); }
   });
 
   it('writes each nation in the form world.json has, with a part of the world and a place in the order of play', () => {
@@ -59,7 +62,7 @@ describe('the rows as they wait', () => {
     expect(S.world.order).toEqual(SIX);
     for (const id of SIX) {
       const n = S.world.nations[id];
-      expect(W.nations[id], id).toBeUndefined();
+      if (!merged) expect(W.nations[id], id).toBeUndefined();
       for (const k of Object.keys(n)) expect(keys.has(k), `${id}.${k}`).toBe(true);
       expect(n.color, id).toMatch(/^#[0-9a-f]{6}$/);
       // A small country is never balanced toward the great powers (209(b)): none is as good as a great power's army.
@@ -184,7 +187,7 @@ describe('the rows as they wait', () => {
   });
 });
 
-// ---- Step 13: the Pacific's map is attached, and the client's mend is in world.ts -------------------------------
+// ---- The switch on: the Pacific's map is attached, and the client's tie is in far.ts ----------------------------
 
 const grand = (human: string | null = null, seed = 3): Game => startOpen(createGame(seed, human));
 const month = (g: Game): void => monthlyDiplomacy(g);
@@ -192,7 +195,7 @@ const wars = (g: Game, id: string): string[] => [...g.nations[id].atWar].sort();
 /** Every case is run with the client led by the computer and by a player. */
 const LED: [string, (client: string) => string | null][] = [['led by the computer', () => null], ['in a player\'s hands', (c) => c]];
 
-describe.skip('the seats on the map (step 13)', () => {
+describe.runIf(merged)('the seats on the map (the far side\'s switch on)', () => {
   it('opens a campaign from each seat with its army on its own ground and its capital in its hands', () => {
     for (const id of SIX) {
       const g = grand(id);
@@ -206,7 +209,7 @@ describe.skip('the seats on the map (step 13)', () => {
   });
 
   it('lands the garrisons of Australia\'s territories in their month and place, each thin and never a full division', () => {
-    // As main stands a dated row's strength is not read (game.ts startPhase, addCorps): each lands at full strength.
+    // A dated row's strength is read (game.ts startPhase; the mend ruled with paper 18): each lands as thin as its row says.
     const g = grand();
     const rows = [...S['setup-1939'].formations].sort((a: any, b: any) => a[0] - b[0]);
     for (const [turn, , name, , , at, o] of rows) {
@@ -216,6 +219,7 @@ describe.skip('the seats on the map (step 13)', () => {
       expect(c, name).toBeDefined();
       expect(g.regions[c!.reg].name, name).toBe(at);
       expect(c!.str, name).toBeLessThan(o.str + 0.2);
+      expect(c!.divs * c!.str, name).toBeLessThan(1);
     }
   });
 
@@ -228,7 +232,7 @@ describe.skip('the seats on the map (step 13)', () => {
   });
 });
 
-describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c); needs the mend in world.ts)", () => {
+describe.runIf(merged)("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c); far.ts)", () => {
   for (const [how, who] of LED) {
     it(`T1, the first day, ${how}: Manchukuo is at war with China beside Japan, and Mongolia with nobody`, () => {
       expect(wars(grand(who('MAN')), 'MAN')).toEqual(['CHN']);
@@ -272,8 +276,8 @@ describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c
       declareWar(a, 'UK', 'MAN');
       month(a);
       expect(atWar(a, 'UK', 'JAP')).toBe(true);
-      // And it drags the client into nothing else of Japan's.
-      expect(wars(a, 'MAN')).toEqual(['CHN', 'UK']);
+      // And it drags the client into nothing else of Japan's. (Britain's dominions follow her into her war, as they do into every war of hers.)
+      expect(wars(a, 'MAN').filter((id) => W.follow[id] !== 'UK')).toEqual(['CHN', 'UK']);
 
       const b = grand(who('MGL'));
       declareWar(b, 'GER', 'MGL');
@@ -284,8 +288,11 @@ describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c
     it(`T5, no sanctuary, ${how}: the patron's army stands on its client's ground, and that ground shelters nobody`, () => {
       const g = grand(who('MAN'));
       const on = (nat: string, owner: string) => g.corps.filter((c) => c.nat === nat && !c.dead && g.regions[c.reg].owner === owner);
-      // Japan's army in Manchuria is put down where it stood: nine divisions in five corps (the planner's rows).
-      expect(on('JAP', 'MAN').length).toBe(5);
+      // Japan's army in Manchuria is put down where it stood: every one of the planner's rows that stands on
+      // Manchukuo's ground (six corps since the 3rd Army's row was cut in two).
+      const rows = (W.corps as Row[]).filter((c) => c[0] === 'JAP' && g.byName[c[4]]?.owner === 'MAN').length;
+      expect(rows).toBeGreaterThanOrEqual(5);
+      expect(on('JAP', 'MAN').length).toBe(rows);
       const hailar = g.regions.find((r) => r.name === 'Hailar')!;
       const beside = hailar.nb.map((i) => g.regions[i]).find((r) => r.ctrl === 'SOV')!;
       const red = g.corps.find((c) => c.nat === 'SOV' && !c.dead)!;
@@ -295,6 +302,12 @@ describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c
       declareWar(g, 'SOV', 'JAP');
       month(g);
       red.ap = red.apMax;
+      // Japan's 6th Army stands at Hailar beside Manchukuo's cavalry, and a corps marches into no province an enemy
+      // stands in: it fights for it.
+      expect(hailar.units.map((u) => u.nat).sort()).toEqual(['JAP', 'MAN']);
+      expect(moveCorps(g, red, hailar)).toBe(false);
+      // With the garrison set aside the frontier itself is open to him: the ground is at war with him, and shelters nobody.
+      hailar.units = [];
       expect(moveCorps(g, red, hailar)).toBe(true);
       // A Soviet corps may stand in Mongolia in the same way.
       const h = grand(who('MGL'));
