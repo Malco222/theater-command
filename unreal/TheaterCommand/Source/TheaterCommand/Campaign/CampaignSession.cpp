@@ -1218,6 +1218,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			}
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
 			Unit->TryGetStringField(TEXT("noOrders"), C.NoOrders);
+			Unit->TryGetStringField(TEXT("garrison"), C.Garrison);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
 			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
@@ -4284,7 +4285,7 @@ bool FCampaignSession::Court(const FString& Nation, FString& OutNote)
 	return bOk;
 }
 
-bool FCampaignSession::Declare(const FString& Nation)
+bool FCampaignSession::Declare(const FString& Nation, FString* Said)
 {
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(TEXT("declare"), FString::Printf(TEXT("[%s]"), *JsonQuote(Nation)), Object))
@@ -4293,6 +4294,10 @@ bool FCampaignSession::Declare(const FString& Nation)
 	}
 	bool bOk = false;
 	Object->TryGetBoolField(TEXT("ok"), bOk);
+	if (Said)
+	{
+		Object->TryGetStringField(TEXT("note"), *Said); // (rules 84.2.5) what the declaration brought at once: Britain's answer
+	}
 	TakeView(Object);
 	return bOk;
 }

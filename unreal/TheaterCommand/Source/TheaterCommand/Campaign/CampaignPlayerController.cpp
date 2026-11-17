@@ -5944,19 +5944,16 @@ void ACampaignPlayerController::RefreshOrders()
 		return;
 	}
 	// (The code checker, 17 November.) With the army in the field in hand, the town's garrison cannot be clicked in among
-	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why.
+	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why, in
+	// the rules' refusal of 84.2.4 that names the town (the UI director, 17 November: no sentence of the 3D game's own).
 	if (Tray.Cards.ContainsByPredicate([](const FTrayCard& C) { return C.bPicked && !C.bInTown; }))
 	{
-		FString Why;
 		for (FTrayCard& Card : Tray.Cards)
 		{
 			if (Card.bInTown && !Card.bPicked && Card.bCanOrder)
 			{
-				if (Why.IsEmpty())
-				{
-					Why = Session->GarrisonWhy(ArmyRegion);
-				}
-				Card.Apart = Why.IsEmpty() ? FString(TEXT("The town's garrison takes no marching orders until it takes the field.")) : Why;
+				const FViewCorps* Inside = View.Corps.FindByPredicate([&Card](const FViewCorps& Each) { return Each.Id == Card.CorpsId; });
+				Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
 			}
 		}
 	}
@@ -6276,6 +6273,9 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 			StoodAt.Add(Unit.Id, Unit.Region);
 		}
 	}
+	// (the army as the tray named it when the order was given: the paper names it the same way if it stops short)
+	const FString ArmyWas = HandArmy;
+	const TArray<int32> ArmyIdsWas = HandArmyIds;
 	// The march, as a right-click on the approach would give it (the same order, the same words where it says any).
 	RefreshOrders();
 	OrderTo(Way.Region);
@@ -6284,10 +6284,12 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 		return; // (it has a question of its own to ask first)
 	}
 	{
-		// Where the corps set off and none of them got there, the paper says where the army stands. (Where none set off,
-		// the order has already said why.)
+		// Where the corps set off and none of them got there, the paper says where the army stops, naming it as the rest
+		// of "One voice after a press" does (the UI director, 17 November). Where none set off the order has already said
+		// why, and where the march goes on by itself next month the kept march's own sentence has said so.
 		FString StoppedAt;
-		bool bArrived = false, bWent = false;
+		bool bArrived = false, bKept = false;
+		TArray<const FViewCorps*> Went;
 		for (const FViewCorps& Unit : Session->GetView().Corps)
 		{
 			const int32* From = StoodAt.Find(Unit.Id);
@@ -6295,8 +6297,9 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 			{
 				continue;
 			}
-			bWent = true;
+			Went.Add(&Unit);
 			bArrived = bArrived || Unit.Region == Way.Region;
+			bKept = bKept || Unit.MarchTo != INDEX_NONE;
 			if (StoppedAt.IsEmpty() && Map->GetData().Regions.IsValidIndex(Unit.Region))
 			{
 				StoppedAt = Map->GetData().Regions[Unit.Region].Name;
@@ -6304,9 +6307,32 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 		}
 		if (!bArrived)
 		{
-			if (bWent)
+			if (Went.Num() > 0 && !bKept && !StoppedAt.IsEmpty())
 			{
-				Notify(FString::Printf(TEXT("The march did not reach %s this month: the army stands at %s."), *Way.Name, *StoppedAt), 9.0);
+				// Whole army "The American army"; part "2 corps of the American army"; one corps by its name, without the bracket.
+				FString Who;
+				if (Went.Num() == 1)
+				{
+					Who = Went[0]->Name;
+					int32 Open = INDEX_NONE;
+					if (Who.EndsWith(TEXT(")")) && Who.FindLastChar(TEXT('('), Open) && Who.Mid(Open).Contains(TEXT("Division")))
+					{
+						Who = Who.Left(Open).TrimEnd();
+					}
+				}
+				else if (Went.Num() == ArmyIdsWas.Num() && !Went.ContainsByPredicate([&ArmyIdsWas](const FViewCorps* Each) { return !ArmyIdsWas.Contains(Each->Id); }))
+				{
+					Who = ArmyWas;
+				}
+				else
+				{
+					Who = FString::Printf(TEXT("%d corps of %s"), Went.Num(), *ArmyWas);
+				}
+				if (!Who.IsEmpty())
+				{
+					Who[0] = FChar::ToUpper(Who[0]);
+					Notify(FString::Printf(TEXT("%s stops at %s this month, short of %s."), *Who, *StoppedAt, *Way.Name), 9.0);
+				}
 			}
 			return;
 		}
@@ -7111,7 +7137,8 @@ void ACampaignPlayerController::ConfirmWar()
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
 	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? Nation->Name : Asked.Tag;
-	if (!Session->Declare(Asked.Tag))
+	FString Answered;
+	if (!Session->Declare(Asked.Tag, &Answered))
 	{
 		Notify(FString::Printf(TEXT("War could not be declared on %s this month."), *Name));
 		return;
@@ -7119,7 +7146,9 @@ void ACampaignPlayerController::ConfirmWar()
 	// The table as it stands now: their ground is enemy ground, and the army in hand may be able to reach it.
 	ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	RefreshOrders();
-	Notify(FString::Printf(TEXT("War is declared on %s."), *Name), 6.0);
+	// (Rules 84.2.5; the UI director, 17 November: one voice after a press.) A war that brings another at once says so on
+	// the same paper, in the rules' words: "Britain stands by Canada. Britain declares war on the United States: ..."
+	Notify(Answered.IsEmpty() ? FString::Printf(TEXT("War is declared on %s."), *Name) : FString::Printf(TEXT("War is declared on %s. %s"), *Name, *Answered), Answered.IsEmpty() ? 6.0 : 11.0);
 	CampaignSounds::Play(this, TEXT("siren"), 0.5f);
 	const FReachRegion* Onward = Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE ? FindReach(Asked.Region) : nullptr;
 	if (Onward && !Onward->IsWar())

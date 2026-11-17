@@ -102,6 +102,7 @@ struct FViewCorps
 	bool bMarchNext = false; // (one voice after a press) and that it has still to set off, as the next month opens
 	bool bCanOrder = false; // the player may give this corps orders right now
 	FString NoOrders; // (rules 84.1, ruling 176(c)) why a corps of his own never takes orders, in the rules' sentence: "Fortress troops man their works and do not move."
+	FString Garrison; // (rules 84.2.4) a corps of his own inside a town: the rules' refusal naming the town ("First Army is the garrison of Pittsburgh. ...")
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
