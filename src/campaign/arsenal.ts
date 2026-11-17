@@ -374,7 +374,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     const war = airWar(g);
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
-      f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined);
+      f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
       tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
     } else {
       // The air war: the wing goes to the strongest group of its own kind.

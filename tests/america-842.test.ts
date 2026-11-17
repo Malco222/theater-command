@@ -52,10 +52,11 @@ describe("America's home commands stand on their fields from the first day", () 
       expect(fieldClass(g, f.base)).toBe(AIRWAR.fields.seed.base);
       expect(homeCommand(f), `${f.name} guards its own country`).toBe(true);
     }
-    // A command that is one group keeps its own name; one of both kinds is numbered as America numbers its groups.
+    // A command that is one group keeps its own name; one of both kinds is named as America named its own of that
+    // strength (ruling 220): forty pursuit planes a squadron, eighty bombers a group.
     expect(at(g, 'New York').map((f) => f.name)).toEqual(['First Air Force']);
     expect(at(g, 'Norfolk').map((f) => f.name)).toEqual(['I Bomber Command']);
-    expect(at(g, 'Louisiana').map((f) => f.name).sort()).toEqual(['1st Bomb Group', '1st Fighter Group']);
+    expect(at(g, 'Louisiana').map((f) => f.name).sort()).toEqual(['1st Bombardment Group', '1st Pursuit Squadron']);
     // The carriers' wings are still aboard, and no group is listed at a field where none stands.
     const rows = myAirGroups(g);
     expect(rows.filter((r) => r.base === -1).length).toBe(2);

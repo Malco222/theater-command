@@ -12,6 +12,7 @@
 import { byHand } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
+import namesData from '../../data/campaign/air-names.json';
 import carrierData from '../../data/campaign/carriers.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -325,12 +326,12 @@ function addAir(g: Game, r: FleetRow): AirFleet | null {
 }
 
 /** A new air fleet with no aircraft yet, on airfields the nation holds: the grand campaign's arsenal fills it. In the air war it is an air group of one kind. */
-export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr'): AirFleet {
+export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr', strength = 0): AirFleet {
   const taken = (x: string): boolean => g.airFleets.some((f) => f.name === x);
   let unique = name;
   for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
   const f: AirFleet = {
-    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind, strength, r) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
     mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
   if (kind) { f.kind = kind; f.parent = unique; f.share = 1; }
@@ -342,14 +343,70 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
 
 const ordinal = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
 
-/** The next name on a nation's list of air groups of one kind: "3rd Bomber Group". */
-function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr'): string {
+/** A rung of a country's ladder of air formation names (ruling 220, the historian's data/campaign/air-names.json). */
+export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number }
+const NAMES = namesData as unknown as { near: [number, number]; navyBases: string[]; ladders: Record<string, Rung[]> };
+
+/** A country's homeland is lost while it does not hold its own capital. */
+const homeLost = (g: Game, nat: string): boolean => { const n = g.nations[nat]; return !n || !n.alive || n.capital < 0 || g.regions[n.capital]?.ctrl !== nat; };
+
+/**
+ * The rungs a country's new air group may be named for this month: its ladder's rows that hold now (from, until),
+ * and while its homeland is lost only the rows of its forces in exile, where it has them. Japan's navy names the
+ * groups based on the Pacific islands, its army the rest (and all of them while the map cannot tell).
+ */
+export function rungsOf(g: Game, nat: string, base: Region | null): Rung[] {
+  const ladder = (nat === 'JAP' && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+  const now = ladder.filter((r) => (r.from ?? 1) <= g.turn && g.turn <= (r.until ?? Infinity));
+  const exile = now.filter((r) => /in exile/.test(r.rung));
+  return exile.length && homeLost(g, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
+}
+
+/** The rung nearest a group's full strength by ratio, among those near it (half to twice the rung's), or null. */
+export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number): Rung | null {
+  const [lo, hi] = NAMES.near;
+  let best: Rung | null = null, bd = Infinity;
+  for (const r of rungs) {
+    const v = r[kind];
+    if (!(v > 0) || strength < lo * v || strength > hi * v) continue;
+    const d = Math.abs(Math.log(strength / v));
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+}
+
+/** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
+export function formName(form: string, n: number): string {
+  return form
+    .replace(/\{n\+(\d+)\}/g, (_, k: string) => String(n + Number(k)))
+    .replace(/\{nth_fr\}/g, n === 1 ? (/R[ée]giment/i.test(form) ? '1er' : '1re') : `${n}e`)
+    .replace(/\{nth_nl\}/g, `${n}e`)
+    .replace(/\{nth\}/g, ordinal(n))
+    .replace(/\{n\}/g, String(n));
+}
+
+/**
+ * A new air group's name, taken once as it is formed and kept as it is worn down (ruling 220): the rung of its
+ * country's ladder nearest its full strength, with the next number of that rung; where no rung is near, the plain
+ * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
+ */
+function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
+  const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
+  const rungs = rungsOf(g, nat, base);
+  for (let left = rungs; left.length;) {
+    const r = nearestRung(left, kind, strength);
+    if (!r) break;
+    const form = r.form[kind];
+    // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation: once it is taken, the next rung.
+    if (!/\{n/.test(form)) { if (!taken(form)) return form; left = left.filter((x) => x !== r); continue; }
+    const key = `agn:${nat}:${kind}:${r.rung}`;
+    let name: string;
+    do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(form, g.flags[key]); } while (taken(name));
+    return name;
+  }
   const key = `agn:${nat}:${kind}`;
   let name: string;
-  do {
-    g.flags[key] = (g.flags[key] ?? 0) + 1;
-    name = (AIRWAR.groups.names[nat] ?? AIRWAR.groups.names._default)[kind].replace('{nth}', ordinal(g.flags[key])).replace('{n}', String(g.flags[key]));
-  } while (g.airFleets.some((f) => f.nat === nat && f.name === name));
+  do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
 }
 
@@ -389,7 +446,7 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     out.push(grp);
   });
   // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!);
+  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
   return out;
 }
 

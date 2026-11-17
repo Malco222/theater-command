@@ -52,7 +52,10 @@ describe('A group of ships is called a fleet', () => {
     part.name = '1st Escort Group';
     g.headlines.push({ turn: g.turn, week: g.week, text: 'The Atlantic Squadron crosses the ocean to Plymouth.', kind: 'info', nat: 'USA' });
     const before = { ships: { ...f.ships }, base: f.base, zone: f.zone, id: f.id, n: g.fleets.length };
-    const h = loadGame(saveGame(g))!;
+    // An older build wrote no mark of today's words on its save.
+    const old = saveGame(g).replace('{"v":1,"words":1,', '{"v":1,');
+    expect(old.startsWith('{"v":1,"seed":')).toBe(true);
+    const h = loadGame(old)!;
     const now = h.fleets.find((x) => x.id === before.id)!;
     expect(now.name).toBe('Atlantic Fleet');
     expect([now.ships, now.base, now.zone, h.fleets.length]).toEqual([before.ships, before.base, before.zone, before.n]);
@@ -80,6 +83,8 @@ describe('A group of ships is called a fleet', () => {
     const h = loadGame(saveGame(g))!;
     expect(h.airFleets.map((a) => a.name)).toEqual(g.airFleets.map((a) => a.name));
     expect(h.fleets.map((f) => f.name)).toEqual(g.fleets.map((f) => f.name));
-    expect(saveGame(h)).not.toMatch(/[^r] Squadron|Escort Group|Submarine Flotilla/);
+    // No fleet carries an old word; an air group may be a squadron (ruling 220), and comes back as it went in.
+    expect(h.fleets.some((f) => /Squadron|Escort Group|Flotilla/.test(f.name))).toBe(false);
+    expect(saveGame(h)).toBe(saveGame(g));
   });
 });

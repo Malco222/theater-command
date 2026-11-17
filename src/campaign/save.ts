@@ -55,7 +55,9 @@ export const armyWords = (text: string): string => ARMIES_RENAMED.reduce((t, [wa
 
 export function saveGame(g: Game): string {
   return JSON.stringify({
-    v: SAVE_VERSION, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
+    // A grand campaign is written in today's words: its air groups may be squadrons (ruling 220), and no old fleet
+    // word is read into them on loading. Left out of a historical save, which is written exactly as it always was.
+    v: SAVE_VERSION, words: g.flags.open === 1 ? 1 : undefined, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
     dirty: g.supplyDirty,
     // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
@@ -103,17 +105,19 @@ export function staleSave(text: string): boolean {
  * A campaign saved before every group of ships was called a fleet (the player's ask of 17 November 2026: "ships
  * should be called fleets"): "Atlantic Squadron" reads "Atlantic Fleet", an escort group an escort fleet, wherever
  * the save wrote the name: on the fleet, on its carrier wings, in the news and in the battle reports. An air group's
- * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched.
+ * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched. A save written in
+ * today's words (marked "words") takes none of these: America's "1st Pursuit Squadron" is an air group (ruling 220).
  * Version 84.3 (the design director's rider of 17 November): the five fleets whose names did not say ships take the
- * word as well. Germany's fleet in the Baltic is named for its port, since the Soviet Baltic Fleet shares that sea.
+ * word as well, in every save. Germany's fleet in the Baltic is named for its port, since the Soviet Baltic Fleet
+ * shares that sea.
  */
 const FLEETS_RENAMED: [RegExp, string][] = [
   [/\bWestern Approaches Command\b/g, 'Western Approaches Fleet'], [/\bDover Command\b/g, 'Dover Fleet'], [/\bU-boat Arm\b/g, 'U-boat Fleet'],
   [/\bBaltic Station\b/g, 'Swinemunde Fleet'], [/\bSubmarine Command\b/g, 'Submarine Fleet'],
 ];
 const OLD_FLEET_WORDS = /Squadron|Escort Group|Submarine Flotilla|Western Approaches Command|Dover Command|U-boat Arm|Baltic Station|Submarine Command/;
-export const fleetWords = (text: string): string => {
-  let t = text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+export const fleetWords = (text: string, today = false): string => {
+  let t = today ? text : text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
   for (const [was, now] of FLEETS_RENAMED) t = t.replace(was, now);
   return t;
 };
@@ -121,7 +125,8 @@ export const fleetWords = (text: string): string => {
 export function loadGame(text: string): Game | null {
   if (text.includes(' Army (')) text = armyWords(text);
   let d: any;
-  try { d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text) : text); } catch { return null; }
+  const today = text.startsWith(`{"v":${SAVE_VERSION},"words":1,`);
+  try { d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text, today) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);

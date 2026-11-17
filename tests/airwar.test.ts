@@ -165,12 +165,15 @@ describe('air groups', () => {
 
   it('are numbered the way each air force numbered its own, and a small command keeps its name', () => {
     const g = grand('GER');
-    expect(mine(g, 'ftr').every((f) => /^Jagdgeschwader \d+$/.test(f.name))).toBe(true);
-    expect(mine(g, 'bmr').every((f) => /^Kampfgeschwader \d+$/.test(f.name))).toBe(true);
-    expect(g.airFleets.some((f) => f.nat === 'FRA' && /^Groupe de Chasse \d+$/.test(f.name))).toBe(true);
+    // Each takes the formation of its own air force nearest its strength (ruling 220): a Geschwader or a division.
+    for (const f of mine(g, 'ftr')) expect(f.name).toMatch(/^(Jagdgeschwader \d+|\d+\. Jagddivision)$/);
+    for (const f of mine(g, 'bmr')) expect(f.name).toMatch(/^(Kampfgeschwader \d+|\d+\. Fliegerdivision)$/);
+    expect(mine(g, 'ftr').some((f) => /^Jagdgeschwader \d+$/.test(f.name))).toBe(true);
+    expect(mine(g, 'bmr').some((f) => /^Kampfgeschwader \d+$/.test(f.name))).toBe(true);
+    expect(g.airFleets.some((f) => f.nat === 'FRA' && /^Groupement de Chasse \d+$/.test(f.name))).toBe(true);
     const uk = g.airFleets.filter((f) => f.nat === 'UK').map((f) => f.name);
     expect(uk).toContain('No. 11 Group');
-    expect(uk.some((n) => /^No\. \d+ Bomber Group$/.test(n))).toBe(true);
+    expect(uk.some((n) => /^No\. \d+ Group$/.test(n) && n !== 'No. 11 Group')).toBe(true);
     // The first group of a fleet keeps its commander.
     const led = whole_leaders(createGame(7, 'GER'));
     for (const name of led) expect(g.airFleets.filter((f) => f.leader?.name === name).length, name).toBe(1);
@@ -236,7 +239,7 @@ describe('standing orders', () => {
     expect(jobs[jobs.length - 1].key).toBe('rest');
     const escorts = jobs.filter((j) => j.key.startsWith('escort:'));
     expect(escorts.length).toBeGreaterThan(0);
-    for (const j of escorts) { expect(j.why).toBeNull(); expect(j.label).toMatch(/^Escort the Kampfgeschwader \d+$/); expect(j.forecast).toMatch(/Sticks with/); expect(group(g, Number(j.key.split(':')[1])).kind).toBe('bmr'); }
+    for (const j of escorts) { expect(j.why).toBeNull(); expect(j.label).toMatch(/^Escort the (Kampfgeschwader \d+|\d+\. Fliegerdivision)$/); expect(j.forecast).toMatch(/Sticks with/); expect(group(g, Number(j.key.split(':')[1])).kind).toBe('bmr'); }
     // Bombers have no escort job: they stand ready, or rest.
     expect(groupJobs(g, mine(g, 'bmr')[0].id).map((j) => j.key)).toEqual(['patrol', 'rest']);
     expect(groupJobs(g, mine(g, 'bmr')[0].id)[0].label).toBe('Support the armies');

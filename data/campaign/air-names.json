@@ -1,0 +1,1031 @@
+{
+ "_about": "Ruling 220 (log b352, b359): each country's ladder of air formation names with the real strength of each rung in aircraft, by the historian (historian/air-formation-names-220.json, 17 November 2026). An air group takes, once, as it is formed, the name of the rung nearest its full strength: near is between half and twice the rung's strength, the nearest by ratio; where no rung is near, the plain form of airwar.json's groups.names._default. Tokens: {n} the number, {nth} the English ordinal, {n+K} the number plus K, {nth_fr} the French ordinal (1re, 1er before a régiment), {nth_nl} the Dutch (1e). Rows with from or until (months from 1, September 1939) hold only then; rows 'in exile' hold only while the country's homeland is lost, and then only they. Japan: JAP_navy for groups based on the provinces named in navyBases (none on the map yet), JAP elsewhere.",
+ "near": [
+  0.5,
+  2
+ ],
+ "navyBases": [],
+ "ladders": {
+  "GER": [
+   {
+    "rung": "Gruppe",
+    "ftr": 40,
+    "bmr": 30,
+    "form": {
+     "ftr": "Jagdgruppe {n}",
+     "bmr": "Kampfgruppe {n}"
+    }
+   },
+   {
+    "rung": "Geschwader",
+    "ftr": 120,
+    "bmr": 90,
+    "form": {
+     "ftr": "Jagdgeschwader {n}",
+     "bmr": "Kampfgeschwader {n}"
+    }
+   },
+   {
+    "rung": "Division",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "{n}. Jagddivision",
+     "bmr": "{n}. Fliegerdivision"
+    }
+   }
+  ],
+  "UK": [
+   {
+    "rung": "squadron",
+    "ftr": 16,
+    "bmr": 16,
+    "form": {
+     "ftr": "No. {n} Squadron",
+     "bmr": "No. {n} Squadron"
+    }
+   },
+   {
+    "rung": "wing",
+    "ftr": 48,
+    "bmr": 48,
+    "form": {
+     "ftr": "No. {n} Wing",
+     "bmr": "No. {n} Wing"
+    }
+   },
+   {
+    "rung": "group",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "No. {n} Group",
+     "bmr": "No. {n} Group"
+    }
+   }
+  ],
+  "CAN": [
+   {
+    "rung": "squadron",
+    "ftr": 16,
+    "bmr": 16,
+    "form": {
+     "ftr": "No. {n} Squadron RCAF",
+     "bmr": "No. {n} Squadron RCAF"
+    }
+   },
+   {
+    "rung": "wing",
+    "ftr": 48,
+    "bmr": 48,
+    "form": {
+     "ftr": "No. {n} Wing RCAF",
+     "bmr": "No. {n} Wing RCAF"
+    }
+   },
+   {
+    "rung": "group",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "No. {n} Group RCAF",
+     "bmr": "No. {n} (RCAF) Group"
+    }
+   }
+  ],
+  "AUS": [
+   {
+    "rung": "squadron",
+    "ftr": 18,
+    "bmr": 18,
+    "form": {
+     "ftr": "No. {n} Squadron RAAF",
+     "bmr": "No. {n} Squadron RAAF"
+    }
+   },
+   {
+    "rung": "wing",
+    "ftr": 60,
+    "bmr": 60,
+    "form": {
+     "ftr": "No. {n} Wing RAAF",
+     "bmr": "No. {n} Wing RAAF"
+    }
+   },
+   {
+    "rung": "operational group",
+    "ftr": 200,
+    "bmr": 200,
+    "form": {
+     "ftr": "No. {n} Operational Group RAAF",
+     "bmr": "No. {n} Operational Group RAAF"
+    },
+    "from": 37
+   }
+  ],
+  "NZL": [
+   {
+    "rung": "squadron",
+    "ftr": 18,
+    "bmr": 18,
+    "form": {
+     "ftr": "No. {n} Squadron RNZAF",
+     "bmr": "No. {n} Squadron RNZAF"
+    }
+   },
+   {
+    "rung": "group",
+    "ftr": 100,
+    "bmr": 100,
+    "form": {
+     "ftr": "No. {n} Group RNZAF",
+     "bmr": "No. {n} Group RNZAF"
+    }
+   }
+  ],
+  "SAF": [
+   {
+    "rung": "squadron",
+    "ftr": 18,
+    "bmr": 18,
+    "form": {
+     "ftr": "No. {n} Squadron SAAF",
+     "bmr": "No. {n} Squadron SAAF"
+    }
+   },
+   {
+    "rung": "wing",
+    "ftr": 50,
+    "bmr": 50,
+    "form": {
+     "ftr": "No. {n} Wing SAAF",
+     "bmr": "No. {n} Wing SAAF"
+    }
+   }
+  ],
+  "FRA": [
+   {
+    "rung": "groupe",
+    "ftr": 26,
+    "bmr": 12,
+    "form": {
+     "ftr": "Groupe de Chasse I/{n}",
+     "bmr": "Groupe de Bombardement I/{n}"
+    }
+   },
+   {
+    "rung": "escadre",
+    "ftr": 52,
+    "bmr": 24,
+    "form": {
+     "ftr": "{nth_fr} Escadre de Chasse",
+     "bmr": "{nth_fr} Escadre de Bombardement"
+    }
+   },
+   {
+    "rung": "groupement",
+    "ftr": 130,
+    "bmr": 60,
+    "form": {
+     "ftr": "Groupement de Chasse {n}",
+     "bmr": "Groupement de Bombardement {n}"
+    }
+   }
+  ],
+  "VIC": [
+   {
+    "rung": "groupe",
+    "ftr": 26,
+    "bmr": 12,
+    "form": {
+     "ftr": "Groupe de Chasse I/{n}",
+     "bmr": "Groupe de Bombardement I/{n}"
+    }
+   },
+   {
+    "rung": "escadre",
+    "ftr": 52,
+    "bmr": 24,
+    "form": {
+     "ftr": "{nth_fr} Escadre de Chasse",
+     "bmr": "{nth_fr} Escadre de Bombardement"
+    }
+   }
+  ],
+  "ITA": [
+   {
+    "rung": "gruppo",
+    "ftr": 27,
+    "bmr": 18,
+    "form": {
+     "ftr": "{n}° Gruppo Caccia Terrestre",
+     "bmr": "{n}° Gruppo Bombardamento Terrestre"
+    }
+   },
+   {
+    "rung": "stormo",
+    "ftr": 54,
+    "bmr": 36,
+    "form": {
+     "ftr": "{n}° Stormo Caccia Terrestre",
+     "bmr": "{n}° Stormo Bombardamento Terrestre"
+    }
+   },
+   {
+    "rung": "brigata",
+    "ftr": 110,
+    "bmr": 75,
+    "form": {
+     "ftr": "{n}ª Brigata Aerea",
+     "bmr": "{n}ª Brigata Aerea"
+    }
+   },
+   {
+    "rung": "divisione",
+    "ftr": 220,
+    "bmr": 150,
+    "form": {
+     "ftr": "{n}ª Divisione Aerea",
+     "bmr": "{n}ª Divisione Aerea"
+    }
+   }
+  ],
+  "SOV": [
+   {
+    "rung": "regiment",
+    "ftr": 60,
+    "bmr": 60,
+    "form": {
+     "ftr": "{nth} Fighter Aviation Regiment",
+     "bmr": "{nth} Bomber Aviation Regiment"
+    },
+    "until": 24
+   },
+   {
+    "rung": "regiment",
+    "ftr": 32,
+    "bmr": 32,
+    "form": {
+     "ftr": "{nth} Fighter Aviation Regiment",
+     "bmr": "{nth} Bomber Aviation Regiment"
+    },
+    "from": 25
+   },
+   {
+    "rung": "division",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "{nth} Fighter Aviation Division",
+     "bmr": "{nth} Bomber Aviation Division"
+    },
+    "until": 24
+   },
+   {
+    "rung": "division",
+    "ftr": 100,
+    "bmr": 100,
+    "form": {
+     "ftr": "{nth} Fighter Aviation Division",
+     "bmr": "{nth} Bomber Aviation Division"
+    },
+    "from": 25
+   },
+   {
+    "rung": "corps",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "{nth} Fighter Aviation Corps",
+     "bmr": "{nth} Bomber Aviation Corps"
+    },
+    "from": 37
+   }
+  ],
+  "USA": [
+   {
+    "rung": "squadron",
+    "ftr": 25,
+    "bmr": 12,
+    "form": {
+     "ftr": "{nth} Pursuit Squadron",
+     "bmr": "{nth} Bombardment Squadron"
+    },
+    "until": 32
+   },
+   {
+    "rung": "squadron",
+    "ftr": 25,
+    "bmr": 12,
+    "form": {
+     "ftr": "{nth} Fighter Squadron",
+     "bmr": "{nth} Bombardment Squadron"
+    },
+    "from": 33
+   },
+   {
+    "rung": "group",
+    "ftr": 75,
+    "bmr": 48,
+    "form": {
+     "ftr": "{nth} Pursuit Group",
+     "bmr": "{nth} Bombardment Group"
+    },
+    "until": 32
+   },
+   {
+    "rung": "group",
+    "ftr": 75,
+    "bmr": 48,
+    "form": {
+     "ftr": "{nth} Fighter Group",
+     "bmr": "{nth} Bombardment Group"
+    },
+    "from": 33
+   },
+   {
+    "rung": "wing",
+    "ftr": 225,
+    "bmr": 190,
+    "form": {
+     "ftr": "{nth} Fighter Wing",
+     "bmr": "{nth} Bombardment Wing"
+    }
+   }
+  ],
+  "JAP": [
+   {
+    "rung": "sentai",
+    "ftr": 36,
+    "bmr": 27,
+    "form": {
+     "ftr": "{nth} Sentai",
+     "bmr": "{nth} Sentai"
+    }
+   },
+   {
+    "rung": "air brigade",
+    "ftr": 100,
+    "bmr": 90,
+    "form": {
+     "ftr": "{nth} Air Brigade",
+     "bmr": "{nth} Air Brigade"
+    }
+   },
+   {
+    "rung": "air division",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "{nth} Air Division",
+     "bmr": "{nth} Air Division"
+    }
+   }
+  ],
+  "JAP_navy": [
+   {
+    "rung": "kokutai",
+    "ftr": 54,
+    "bmr": 36,
+    "form": {
+     "ftr": "{n+200} Air Group",
+     "bmr": "{n+700} Air Group"
+    }
+   },
+   {
+    "rung": "air flotilla",
+    "ftr": 150,
+    "bmr": 150,
+    "form": {
+     "ftr": "{nth} Air Flotilla",
+     "bmr": "{nth} Air Flotilla"
+    }
+   }
+  ],
+  "POL": [
+   {
+    "rung": "eskadra",
+    "ftr": 10,
+    "bmr": 9,
+    "form": {
+     "ftr": "{n}. Eskadra Myśliwska",
+     "bmr": "{n}. Eskadra Bombowa"
+    }
+   },
+   {
+    "rung": "dywizjon",
+    "ftr": 21,
+    "bmr": 18,
+    "form": {
+     "ftr": "{n}. Dywizjon Myśliwski",
+     "bmr": "{n}. Dywizjon Bombowy"
+    }
+   },
+   {
+    "rung": "brigade",
+    "ftr": 54,
+    "bmr": 86,
+    "form": {
+     "ftr": "Brygada Pościgowa",
+     "bmr": "Brygada Bombowa"
+    }
+   },
+   {
+    "rung": "squadron in exile",
+    "ftr": 16,
+    "bmr": 16,
+    "form": {
+     "ftr": "No. {n+301} (Polish) Squadron",
+     "bmr": "No. {n+299} (Polish) Squadron"
+    },
+    "from": 11
+   },
+   {
+    "rung": "wing in exile",
+    "ftr": 48,
+    "bmr": 48,
+    "form": {
+     "ftr": "No. {n+130} (Polish) Wing",
+     "bmr": "No. {n+130} (Polish) Wing"
+    },
+    "from": 11
+   }
+  ],
+  "SVK": [
+   {
+    "rung": "letka",
+    "ftr": 12,
+    "bmr": 9,
+    "form": {
+     "ftr": "Letka {n}",
+     "bmr": "Letka {n}"
+    }
+   }
+  ],
+  "BEL": [
+   {
+    "rung": "groupe",
+    "ftr": 28,
+    "bmr": 22,
+    "form": {
+     "ftr": "Groupe I/{n} Aé",
+     "bmr": "Groupe I/{n} Aé"
+    }
+   },
+   {
+    "rung": "régiment",
+    "ftr": 70,
+    "bmr": 55,
+    "form": {
+     "ftr": "{nth_fr} Régiment d'Aéronautique",
+     "bmr": "{nth_fr} Régiment d'Aéronautique"
+    }
+   }
+  ],
+  "NED": [
+   {
+    "rung": "afdeling",
+    "ftr": 10,
+    "bmr": 9,
+    "form": {
+     "ftr": "{nth_nl} Jachtvliegtuigafdeling",
+     "bmr": "{nth_nl} Bommenwerpersafdeling"
+    }
+   },
+   {
+    "rung": "vliegtuiggroep",
+    "ftr": 27,
+    "bmr": 27,
+    "form": {
+     "ftr": "Vliegtuiggroep {n}",
+     "bmr": "Vliegtuiggroep {n}"
+    }
+   },
+   {
+    "rung": "regiment",
+    "ftr": 65,
+    "bmr": 65,
+    "form": {
+     "ftr": "{nth_nl} Luchtvaartregiment",
+     "bmr": "{nth_nl} Luchtvaartregiment"
+    }
+   }
+  ],
+  "DEN": [
+   {
+    "rung": "eskadrille",
+    "ftr": 9,
+    "bmr": 9,
+    "form": {
+     "ftr": "{n}. Eskadrille",
+     "bmr": "{n}. Eskadrille"
+    }
+   }
+  ],
+  "NOR": [
+   {
+    "rung": "ving",
+    "ftr": 9,
+    "bmr": 6,
+    "form": {
+     "ftr": "Jagevingen",
+     "bmr": "Bombevingen"
+    }
+   },
+   {
+    "rung": "squadron in exile",
+    "ftr": 16,
+    "bmr": 16,
+    "form": {
+     "ftr": "No. {n+330} (Norwegian) Squadron",
+     "bmr": "No. {n+332} (Norwegian) Squadron"
+    },
+    "from": 10
+   },
+   {
+    "rung": "wing in exile",
+    "ftr": 36,
+    "bmr": 36,
+    "form": {
+     "ftr": "No. 132 (Norwegian) Wing",
+     "bmr": "No. 132 (Norwegian) Wing"
+    },
+    "from": 56
+   }
+  ],
+  "SWE": [
+   {
+    "rung": "flygflottilj",
+    "ftr": 36,
+    "bmr": 36,
+    "form": {
+     "ftr": "Flygflottilj F {n}",
+     "bmr": "Flygflottilj F {n}"
+    }
+   },
+   {
+    "rung": "flygeskader",
+    "ftr": 150,
+    "bmr": 150,
+    "form": {
+     "ftr": "{n}. Flygeskadern",
+     "bmr": "{n}. Flygeskadern"
+    }
+   }
+  ],
+  "FIN": [
+   {
+    "rung": "lentolaivue",
+    "ftr": 24,
+    "bmr": 12,
+    "form": {
+     "ftr": "Lentolaivue {n}",
+     "bmr": "Lentolaivue {n}"
+    }
+   },
+   {
+    "rung": "lentorykmentti",
+    "ftr": 60,
+    "bmr": 40,
+    "form": {
+     "ftr": "Lentorykmentti {n}",
+     "bmr": "Lentorykmentti {n}"
+    }
+   }
+  ],
+  "SUI": [
+   {
+    "rung": "Fliegerkompanie",
+    "ftr": 10,
+    "bmr": 10,
+    "form": {
+     "ftr": "Fliegerkompanie {n}",
+     "bmr": "Fliegerkompanie {n}"
+    }
+   },
+   {
+    "rung": "Fliegerabteilung",
+    "ftr": 30,
+    "bmr": 30,
+    "form": {
+     "ftr": "Fliegerabteilung {n}",
+     "bmr": "Fliegerabteilung {n}"
+    }
+   },
+   {
+    "rung": "Fliegerregiment",
+    "ftr": 90,
+    "bmr": 90,
+    "form": {
+     "ftr": "Fliegerregiment {n}",
+     "bmr": "Fliegerregiment {n}"
+    }
+   }
+  ],
+  "ESP": [
+   {
+    "rung": "grupo",
+    "ftr": 27,
+    "bmr": 27,
+    "form": {
+     "ftr": "Grupo {n} de Caza",
+     "bmr": "Grupo {n} de Bombardeo"
+    }
+   },
+   {
+    "rung": "regimiento",
+    "ftr": 55,
+    "bmr": 36,
+    "form": {
+     "ftr": "{n}.º Regimiento de Caza",
+     "bmr": "{n}.º Regimiento de Bombardeo"
+    }
+   }
+  ],
+  "POR": [
+   {
+    "rung": "esquadrilha",
+    "ftr": 10,
+    "bmr": 9,
+    "form": {
+     "ftr": "Esquadrilha {n}",
+     "bmr": "Esquadrilha {n}"
+    }
+   }
+  ],
+  "HUN": [
+   {
+    "rung": "század",
+    "ftr": 12,
+    "bmr": 9,
+    "form": {
+     "ftr": "{n}. Vadászszázad",
+     "bmr": "{n}. Bombázószázad"
+    }
+   },
+   {
+    "rung": "osztály",
+    "ftr": 36,
+    "bmr": 27,
+    "form": {
+     "ftr": "{n}. Vadászosztály",
+     "bmr": "{n}. Bombázóosztály"
+    }
+   },
+   {
+    "rung": "ezred",
+    "ftr": 100,
+    "bmr": 60,
+    "form": {
+     "ftr": "{n}. Vadászrepülő-ezred",
+     "bmr": "{n}. Bombázóezred"
+    }
+   }
+  ],
+  "ROM": [
+   {
+    "rung": "escadrila",
+    "ftr": 12,
+    "bmr": 9,
+    "form": {
+     "ftr": "Escadrila {n} Vânătoare",
+     "bmr": "Escadrila {n} Bombardament"
+    }
+   },
+   {
+    "rung": "grupul",
+    "ftr": 30,
+    "bmr": 24,
+    "form": {
+     "ftr": "Grupul {n} Vânătoare",
+     "bmr": "Grupul {n} Bombardament"
+    }
+   },
+   {
+    "rung": "flotila",
+    "ftr": 70,
+    "bmr": 50,
+    "form": {
+     "ftr": "Flotila {n} Vânătoare",
+     "bmr": "Flotila {n} Bombardament"
+    }
+   },
+   {
+    "rung": "gruparea",
+    "ftr": 250,
+    "bmr": 250,
+    "form": {
+     "ftr": "Gruparea Aeriană de Luptă",
+     "bmr": "Gruparea Aeriană de Luptă"
+    }
+   }
+  ],
+  "YUG": [
+   {
+    "rung": "grupa",
+    "ftr": 25,
+    "bmr": 18,
+    "form": {
+     "ftr": "{n}. Vazduhoplovna Grupa",
+     "bmr": "{n}. Vazduhoplovna Grupa"
+    }
+   },
+   {
+    "rung": "puk",
+    "ftr": 50,
+    "bmr": 36,
+    "form": {
+     "ftr": "{n}. Lovački Puk",
+     "bmr": "{n}. Bombarderski Puk"
+    }
+   },
+   {
+    "rung": "brigada",
+    "ftr": 100,
+    "bmr": 70,
+    "form": {
+     "ftr": "{n}. Vazduhoplovna Brigada",
+     "bmr": "{n}. Vazduhoplovna Brigada"
+    }
+   }
+  ],
+  "BUL": [
+   {
+    "rung": "orlyak",
+    "ftr": 24,
+    "bmr": 18,
+    "form": {
+     "ftr": "{n}. Iztrebitelen Orlyak",
+     "bmr": "{n}. Bombardirovachen Orlyak"
+    }
+   },
+   {
+    "rung": "polk",
+    "ftr": 70,
+    "bmr": 50,
+    "form": {
+     "ftr": "{n}. Iztrebitelen Polk",
+     "bmr": "{n}. Bombardirovachen Polk"
+    }
+   }
+  ],
+  "GRE": [
+   {
+    "rung": "mira",
+    "ftr": 10,
+    "bmr": 9,
+    "form": {
+     "ftr": "{n+20} Mira Dioxeos",
+     "bmr": "{n+30} Mira Vomvardismou"
+    }
+   },
+   {
+    "rung": "squadron in exile",
+    "ftr": 16,
+    "bmr": 16,
+    "form": {
+     "ftr": "No. {n+334} (Hellenic) Squadron",
+     "bmr": "No. {n+12} (Hellenic) Squadron"
+    },
+    "from": 20
+   }
+  ],
+  "TUR": [
+   {
+    "rung": "bölük",
+    "ftr": 9,
+    "bmr": 9,
+    "form": {
+     "ftr": "{n}. Bölük",
+     "bmr": "{n}. Bölük"
+    }
+   },
+   {
+    "rung": "alay",
+    "ftr": 60,
+    "bmr": 60,
+    "form": {
+     "ftr": "{n}. Hava Alayı",
+     "bmr": "{n}. Hava Alayı"
+    }
+   }
+  ],
+  "IRQ": [
+   {
+    "rung": "squadron",
+    "ftr": 10,
+    "bmr": 10,
+    "form": {
+     "ftr": "No. {n} Squadron RIrAF",
+     "bmr": "No. {n} Squadron RIrAF"
+    }
+   }
+  ],
+  "IRN": [
+   {
+    "rung": "squadron",
+    "ftr": 12,
+    "bmr": 12,
+    "form": {
+     "ftr": "{nth} Squadron",
+     "bmr": "{nth} Squadron"
+    }
+   },
+   {
+    "rung": "regiment",
+    "ftr": 40,
+    "bmr": 40,
+    "form": {
+     "ftr": "{nth} Air Regiment",
+     "bmr": "{nth} Air Regiment"
+    }
+   }
+  ],
+  "AFG": [
+   {
+    "rung": "squadron",
+    "ftr": 10,
+    "bmr": 10,
+    "form": {
+     "ftr": "{nth} Squadron",
+     "bmr": "{nth} Squadron"
+    }
+   }
+  ],
+  "CHN": [
+   {
+    "rung": "squadron",
+    "ftr": 9,
+    "bmr": 9,
+    "form": {
+     "ftr": "{nth} Pursuit Squadron",
+     "bmr": "{nth} Bombardment Squadron"
+    }
+   },
+   {
+    "rung": "group",
+    "ftr": 30,
+    "bmr": 27,
+    "form": {
+     "ftr": "{nth} Pursuit Group",
+     "bmr": "{nth} Bombardment Group"
+    },
+    "until": 47
+   },
+   {
+    "rung": "group",
+    "ftr": 30,
+    "bmr": 27,
+    "form": {
+     "ftr": "{nth} Fighter Group",
+     "bmr": "{nth} Bombardment Group"
+    },
+    "from": 48
+   },
+   {
+    "rung": "wing",
+    "ftr": 100,
+    "bmr": 100,
+    "form": {
+     "ftr": "Chinese-American Composite Wing",
+     "bmr": "Chinese-American Composite Wing"
+    },
+    "from": 50
+   }
+  ],
+  "THA": [
+   {
+    "rung": "squadron",
+    "ftr": 12,
+    "bmr": 9,
+    "form": {
+     "ftr": "{nth} Squadron",
+     "bmr": "{nth} Squadron"
+    }
+   },
+   {
+    "rung": "wing",
+    "ftr": 36,
+    "bmr": 27,
+    "form": {
+     "ftr": "{nth} Wing",
+     "bmr": "{nth} Wing"
+    }
+   }
+  ],
+  "ARG": [
+   {
+    "rung": "grupo",
+    "ftr": 25,
+    "bmr": 18,
+    "form": {
+     "ftr": "Grupo {n} de Caza",
+     "bmr": "Grupo {n} de Bombardeo"
+    }
+   },
+   {
+    "rung": "regimiento",
+    "ftr": 50,
+    "bmr": 40,
+    "form": {
+     "ftr": "Regimiento Aéreo {n}",
+     "bmr": "Regimiento Aéreo {n}"
+    }
+   }
+  ],
+  "BRA": [
+   {
+    "rung": "grupo",
+    "ftr": 25,
+    "bmr": 15,
+    "form": {
+     "ftr": "{n}º Grupo de Aviação de Caça",
+     "bmr": "{n}º Grupo de Bombardeio"
+    }
+   },
+   {
+    "rung": "regimento",
+    "ftr": 50,
+    "bmr": 50,
+    "form": {
+     "ftr": "{n}º Regimento de Aviação",
+     "bmr": "{n}º Regimento de Aviação"
+    },
+    "until": 16
+   }
+  ],
+  "MEX": [
+   {
+    "rung": "escuadrón",
+    "ftr": 25,
+    "bmr": 25,
+    "form": {
+     "ftr": "Escuadrón {n}",
+     "bmr": "Escuadrón {n}"
+    }
+   },
+   {
+    "rung": "grupo",
+    "ftr": 50,
+    "bmr": 50,
+    "form": {
+     "ftr": "Grupo Aéreo {n}",
+     "bmr": "Grupo Aéreo {n}"
+    }
+   }
+  ],
+  "CHL": [
+   {
+    "rung": "grupo",
+    "ftr": 20,
+    "bmr": 15,
+    "form": {
+     "ftr": "Grupo de Aviación N.º {n}",
+     "bmr": "Grupo de Aviación N.º {n}"
+    }
+   }
+  ],
+  "PER": [
+   {
+    "rung": "escuadrón",
+    "ftr": 12,
+    "bmr": 9,
+    "form": {
+     "ftr": "Escuadrón de Caza N.º {n}",
+     "bmr": "Escuadrón de Bombardeo N.º {n}"
+    }
+   },
+   {
+    "rung": "grupo",
+    "ftr": 30,
+    "bmr": 30,
+    "form": {
+     "ftr": "Grupo Aéreo N.º {n}",
+     "bmr": "Grupo Aéreo N.º {n}"
+    }
+   }
+  ],
+  "COL": [
+   {
+    "rung": "escuadrilla",
+    "ftr": 9,
+    "bmr": 9,
+    "form": {
+     "ftr": "Escuadrilla {n}",
+     "bmr": "Escuadrilla {n}"
+    }
+   }
+  ],
+  "VEN": [
+   {
+    "rung": "escuadrilla",
+    "ftr": 9,
+    "bmr": 9,
+    "form": {
+     "ftr": "Escuadrilla {n}",
+     "bmr": "Escuadrilla {n}"
+    }
+   }
+  ]
+ }
+}
