@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c76d872 2026-11-17. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 80043bd 2026-11-17. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -21354,6 +21354,7 @@
       if (cap8) {
         cap8.cap = true;
         V.capital = cap8.id;
+        g2.capDist.VIC = capitalDistances(g2, cap8.id);
       }
       headline(g2, "fall", "France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.", "FRA", void 0, { arm: "land", won: by, lost: "FRA" });
     } else {
@@ -27633,6 +27634,7 @@
     for (const k of Object.keys(g2.flags)) if (k.startsWith("harbour:") && g2.regions[+k.slice(8)]) g2.regions[+k.slice(8)].port = true;
     restoreWorks(g2);
     for (const [id, n] of Object.entries(d.nations)) g2.nations[id] = { ...g2.nations[id], ...n };
+    for (const n of Object.values(g2.nations)) if (n.capital >= 0) g2.capDist[n.id] = capitalDistances(g2, n.capital);
     for (const [id, n] of Object.entries(d.nations)) {
       const lab = g2.nations[id]?.lab;
       if (!lab || n.lab !== void 0) continue;

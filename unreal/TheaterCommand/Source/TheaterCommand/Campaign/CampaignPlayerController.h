@@ -1312,6 +1312,8 @@ private:
 	void EnterKey();
 	void EscapeKey();
 	void SpaceKey();
+	/** (Rules 84.3.2.) Tab, NEXT ARMY's key: on the question before the month's end it is SHOW ME, and it tells the guard. */
+	void TabKey();
 	bool IsCardUp() const { return IsTableBusy() || EndAsk.bVisible; }
 	double KeyShutAt = -1000.0;
 	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second

@@ -5958,8 +5958,9 @@ namespace
 										// (The UI director's 84.3 check, item 6: one rule for every card. Enter presses the lit button,
 										// and on a question the lit button is the safe one: before a declaration of war NOT NOW is lit and
 										// takes Enter and Esc, and the declaration takes a click. The order cards, the landing and the
-										// gate keep their order lit, as ruling 138(1) had it. The way out always shows ESC. The places
-										// never change: only the light moves.)
+										// gate keep their order lit, and Enter gives it, as in the browser (the UI director, 17 November,
+										// in place of ruling 138(1)'s words). The way out always shows ESC. The places never change:
+										// only the light moves.)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
@@ -6005,11 +6006,8 @@ namespace
 												]
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
-													// (the approach order is given with Enter: its key cap says so)
-													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsOrder() ? EVisibility::Visible : EVisibility::Collapsed; })
-													[
-														KeyCap(TEXT("ENTER"), BrightBrass)
-													]
+													// (the lit order is given with Enter, the landing's and the gate's as well: its key cap says so)
+													KeyCap(TEXT("ENTER"), BrightBrass)
 												]
 											]
 										]

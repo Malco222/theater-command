@@ -882,7 +882,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
-	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
+	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::TabKey); // (rules 84.3.2: through the key guard)
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
@@ -2614,6 +2614,19 @@ void ACampaignPlayerController::SpaceKey()
 	if (bCardUp)
 	{
 		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::TabKey()
+{
+	// (Rules 84.3.2; the second playtester's check of 84.3.1.) Tab on the question before the month's end is its SHOW ME
+	// and puts the question down by a key: the map's own Enter then waits the guard's half second, so Tab and a hurried
+	// Enter never end the month the question was asked about.
+	const bool bCardUp = IsCardUp();
+	NextArmy();
+	if (bCardUp && !IsCardUp())
+	{
+		KeyShutAt = FPlatformTime::Seconds();
 	}
 }
 
@@ -8570,8 +8583,8 @@ void ACampaignPlayerController::CloseFaceOff()
 void ACampaignPlayerController::EndMonth()
 {
 	FCampaignSession* Session = GetSession();
-	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with the
-	// question before a war or a landing up, the key never ends the month behind the card: it puts the card away.)
+	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with a card up
+	// the key never ends the month behind it: it presses the card's lit button, below.)
 	if (Opening.bVisible && Opening.AskKind != 0)
 	{
 		AnswerBegin(false);
@@ -8594,9 +8607,12 @@ void ACampaignPlayerController::EndMonth()
 	}
 	if (WarPrompt.bVisible && !bScripted)
 	{
-		if (WarPrompt.IsOrder())
+		if (!WarPrompt.IsWarQuestion())
 		{
 			// (The design director, 17 November: Enter marches. He asked for the card himself; not in its first half second.)
+			// (The UI director, 17 November, in place of ruling 138(1)'s words: as in the browser, Enter gives the lit
+			// order on the landing and the gate cards too, and Esc puts them away. Those orders can be changed again before
+			// the month ends. Before a declaration of war, which cannot be taken back, Enter is NOT NOW, below.)
 			if (FPlatformTime::Seconds() - WarPromptSince > 0.5)
 			{
 				ConfirmWar();
