@@ -390,7 +390,7 @@ export interface WingCard {
   lost: number;
   /** How it is made up again, in a sentence: only in harbour. */
   note: string;
-  /** Where it is, in a line: "Aboard the Atlantic Squadron". */
+  /** Where it is, in a line: "Aboard the Atlantic Fleet". */
   where: string;
   /** Why it cannot be sent ashore anywhere now, or null where it can (ruling 175(b)). */
   whyNotAshore: string | null;
@@ -497,7 +497,7 @@ export function fleetKnown(g: Game, f: Fleet, viewer: string | null = g.human): 
 }
 
 /** The word for a force of this many surface ships, for a report that cannot say more. */
-const sizeWord = (n: number, subs: boolean): string => (subs ? 'Submarines' : n <= 6 ? 'A few ships' : n <= 20 ? 'A squadron' : 'A fleet');
+const sizeWord = (n: number, subs: boolean): string => (subs ? 'Submarines' : n <= 6 ? 'A few ships' : n <= 20 ? 'A small fleet' : 'A fleet');
 
 /** A fleet as a viewer may draw it. Where it is only reported there is a flag and a rough size, and no more. */
 export interface FleetSeen {

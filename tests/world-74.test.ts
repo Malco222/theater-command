@@ -163,7 +163,7 @@ describe('the wider world', () => {
       expect(c, name).toBeDefined();
       expect([c.divs, g.regions[c.reg].name, c.str], name).toEqual([divs, at, o.str ?? 1]);
     }
-    const sq = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Atlantic Squadron')!;
+    const sq = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Atlantic Fleet')!;
     expect(g.regions[sq.base].name).toBe('Norfolk');
     expect(g.seas[sq.zone].key).toBe('seaboard');
     expect(g.fleets.some((f) => f.nat === 'CAN' && g.seas[f.zone].key === 'scotian')).toBe(true);
@@ -411,10 +411,10 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     expect(airOver(g, north, 'UK', true) - airOver(g, north, 'UK', false)).toBeGreaterThan(NAVY.air.avoid);
     const n = fleetsAnswer(g, 'GER', [north], g.byName.Bergen);
     expect(n.come).toEqual([]);
-    expect(called(n.kept)).toEqual(expect.arrayContaining(['FRA Atlantic Squadron', 'UK Home Fleet']));
+    expect(called(n.kept)).toEqual(expect.arrayContaining(['FRA Atlantic Fleet', 'UK Home Fleet']));
     const y = fleetsAnswer(g, 'GER', [north], g.byName.Yorkshire);
     expect(called(y.come)).toContain('UK Home Fleet');
-    expect(called(y.kept)).toContain('FRA Atlantic Squadron');
+    expect(called(y.kept)).toContain('FRA Atlantic Fleet');
     expect(called(y.kept)).not.toContain('UK Home Fleet');
   });
 

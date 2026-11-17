@@ -82,8 +82,8 @@ svg#map.near .rivlbl { opacity: 1; }
 .bridge.down .deck, .bridge.down .wing { stroke: #a22d18; }
 .bridge.down .gap { fill: none; stroke: #c22a12; stroke-width: 1.1; stroke-linecap: round; }
 .bridge.down .deck, .bridge.down .wing { stroke-width: 1; }
-.flash { animation: flash 2.2s ease-out forwards; pointer-events: none; fill: #fff3c4; opacity: 0; }
-@keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
+/* The flash fades in steps set by the page (flashPaths): a fade the browser animates inside the map repaints the whole map for every picture of it. */
+.flash { pointer-events: none; fill: #fff3c4; opacity: 0; }
 .lbl { font-family: var(--head); font-size: 6.6px; fill: var(--map-ink); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(233, 226, 207, .8); stroke-width: 1.6px; letter-spacing: .04em; opacity: 0; }
 .lbl.cap { font-weight: 700; font-size: 7.6px; opacity: 1; text-transform: uppercase; }
 .lbl.west { text-anchor: end; }

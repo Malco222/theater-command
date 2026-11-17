@@ -86,9 +86,18 @@ export function staleSave(text: string): boolean {
   } catch { return false; }
 }
 
+/**
+ * A campaign saved before every group of ships was called a fleet (the player's ask of 17 November 2026: "ships
+ * should be called fleets"): "Atlantic Squadron" reads "Atlantic Fleet", an escort group an escort fleet, wherever
+ * the save wrote the name: on the fleet, on its carrier wings, in the news and in the battle reports. An air group's
+ * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched.
+ */
+export const fleetWords = (text: string): string =>
+  text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+
 export function loadGame(text: string): Game | null {
   let d: any;
-  try { d = JSON.parse(text); } catch { return null; }
+  try { d = JSON.parse(/Squadron|Escort Group|Submarine Flotilla/.test(text) ? fleetWords(text) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);

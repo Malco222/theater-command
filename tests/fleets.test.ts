@@ -444,14 +444,14 @@ describe('splitting and joining fleets', () => {
     expect(whyNotDetach(g, home, { ...home.ships })).toMatch(/have to stay/);
     const id = orderSplit(g, home.id, { dd: 12 });
     const group = g.fleets.find((f) => f.id === id)!;
-    expect(group.name).toBe('1st Escort Group');
+    expect(group.name).toBe('1st Escort Fleet');
     expect(group.ships).toEqual({ bb: 0, cv: 0, ca: 0, dd: 12, ss: 0 });
     expect(shipCount(home.ships) + shipCount(group.ships)).toBe(all);
     expect([group.zone, group.stance, group.base, group.port, group.ready]).toEqual([home.zone, home.stance, home.base, home.port, home.ready]);
     expect(group.tied).toBe(false);
-    expect(squadronName(g, 'UK', { bb: 0, cv: 0, ca: 0, dd: 5, ss: 0 })).toBe('2nd Escort Group');
-    expect(squadronName(g, 'UK', { bb: 1, cv: 0, ca: 2, dd: 5, ss: 0 })).toBe('1st Battle Squadron');
-    expect(squadronName(g, 'UK', { bb: 0, cv: 0, ca: 0, dd: 0, ss: 5 })).toBe('1st Submarine Flotilla');
+    expect(squadronName(g, 'UK', { bb: 0, cv: 0, ca: 0, dd: 5, ss: 0 })).toBe('2nd Escort Fleet');
+    expect(squadronName(g, 'UK', { bb: 1, cv: 0, ca: 2, dd: 5, ss: 0 })).toBe('1st Battle Fleet');
+    expect(squadronName(g, 'UK', { bb: 0, cv: 0, ca: 0, dd: 0, ss: 5 })).toBe('1st Submarine Fleet');
     // The new group can be given work of its own: this is how destroyers are found for a lane or a hunt.
     expect(orderEscort(g, group.id, 'atlantic')).toBe(fleetReach(g, group).some((z) => seaRoutes(g).find((r) => r.id === 'atlantic')!.zones.includes(z)));
     expect(orderFleet(g, id, sea(g, 'nsea'), 'hunt')).toBe(true);

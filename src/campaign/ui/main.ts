@@ -958,14 +958,26 @@ function sizeLamps(): void {
  * from where it stood, and after them nothing is drawn. The paths are taken off the map when the fade is over.
  */
 const FLASH_MS = 2200;
-let flashFor: number[] | null = null, flashAt = 0, flashTimer = 0;
+/**
+ * The fade, in steps: [its age in milliseconds, how strong it stands]. A fade the browser animates is drawn sixty
+ * times a second, and each time it repaints the map under it: with the war's rings turning on the sheet above, that
+ * is the whole map, a tenth of a second a picture (10 to 20 pictures a second for as long as the flash lasts, counted
+ * on the Playtester's America of March 1942). Five steps repaint it five times, and nothing in the map is animated.
+ */
+const FLASH_STEPS: [number, number][] = [[0, 0.9], [260, 0.66], [620, 0.45], [1050, 0.27], [1550, 0.12]];
+const flashStrength = (age: number): number => { let o = 0; for (const [at, v] of FLASH_STEPS) if (age >= at) o = v; return o; };
+let flashFor: number[] | null = null, flashAt = 0, flashTimers: number[] = [];
 function flashPaths(): string {
   if (ui.flash !== flashFor) { flashFor = ui.flash; flashAt = performance.now(); }
   const age = performance.now() - flashAt;
+  for (const t of flashTimers) clearTimeout(t);
+  flashTimers = [];
   if (!ui.flash.length || age >= FLASH_MS) return '';
-  clearTimeout(flashTimer);
-  flashTimer = window.setTimeout(() => { for (const el of document.querySelectorAll('#fx .flash')) el.remove(); }, FLASH_MS - age + 80);
-  return ui.flash.map((id) => `<path class="flash" style="animation-delay:-${Math.round(age)}ms" d="${pathOf(g.regions[id].polys)}"/>`).join('');
+  for (const [at, v] of FLASH_STEPS) {
+    if (at > age) flashTimers.push(window.setTimeout(() => { for (const el of document.querySelectorAll<SVGElement>('#fx .flash')) el.style.opacity = String(v); }, at - age));
+  }
+  flashTimers.push(window.setTimeout(() => { for (const el of document.querySelectorAll('#fx .flash')) el.remove(); }, FLASH_MS - age));
+  return ui.flash.map((id) => `<path class="flash" style="opacity:${flashStrength(age)}" d="${pathOf(g.regions[id].polys)}"/>`).join('');
 }
 /** The map's width on the screen as applyView last measured it. (Asking the page for it in the middle of a redraw makes the page lay itself out again, some 70 ms each time.) */
 let mapPixels = 0;
@@ -2189,7 +2201,7 @@ function drawFleetTray(f: Fleet): void {
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
-    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a fleet of their own.">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
@@ -4912,7 +4924,7 @@ function fleetOrders(f: Fleet): string {
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
   let out = `<div class="orders">
-    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a squadron of their own: an escort group for a lane, a hunting group, a bombardment force.">Split off ships</button>' : ''}</div>`;
+    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>`;
   const wings = wingsOfFleet(g, f.id);
   if (wings.length) {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
@@ -5000,9 +5012,9 @@ function splitCard(): string {
     return `<div class="pickrow splitrow">${shipPlate(f.nat, c, 30, 21)}<span class="grow"><b>${esc(NAVY.classes[c].label)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(FLEETS.brief[c])} · ${f.ships[c]} in the fleet</span></span><span class="stepper">${step(-5, '−5')}${step(-1, '−')}<b>${take[c]}</b>${step(1, '+')}${step(5, '+5')}</span></div>`;
   }).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${esc(f.name)} · ${esc(fleetDoing(g, f))}</div><h2>Split off ships</h2></header>
-    <div class="body"><p class="sub" style="margin-top:0">The ships you choose form a squadron of their own, in the same place and under the same order. Give it work of its own afterwards: destroyers to escort a lane or hunt submarines, battleships and cruisers to shell a coast.</p>${rows}
+    <div class="body"><p class="sub" style="margin-top:0">The ships you choose form a fleet of their own, in the same place and under the same order. Give it work of its own afterwards: destroyers to escort a lane or hunt submarines, battleships and cruisers to shell a coast.</p>${rows}
     <div class="note">${why ? esc(why) : `<b>${esc(squadronName(g, f.nat, take))}</b> will form with ${esc(shipList(take))}. ${shipCount(f.ships) - n} ship${shipCount(f.ships) - n === 1 ? '' : 's'} stay with the ${esc(f.name)}.`}</div></div>
-    <footer><button class="btn" data-act="close">Cancel</button><button class="btn go" data-act="dosplit" ${why ? 'disabled' : ''}>Form the squadron</button></footer>`;
+    <footer><button class="btn" data-act="close">Cancel</button><button class="btn go" data-act="dosplit" ${why ? 'disabled' : ''}>Form the fleet</button></footer>`;
 }
 
 /** What a route that feeds an army overseas means for that army this month. */
@@ -8025,7 +8037,7 @@ function onClick(e: MouseEvent): void {
       if (!m || m.kind !== 'split') break;
       const made = orderSplit(g, m.fleet, m.take as Ships);
       openModal(null);
-      if (made >= 0) { pickFleet(made); ui.msg = `${g.fleets.find((x) => x.id === made)?.name ?? 'The squadron'} forms. Give it its orders.`; }
+      if (made >= 0) { pickFleet(made); ui.msg = `${g.fleets.find((x) => x.id === made)?.name ?? 'The new fleet'} forms. Give it its orders.`; }
       refresh(); break;
     }
     case 'fleetjoin': {
