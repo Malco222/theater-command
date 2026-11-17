@@ -89,12 +89,13 @@ describe("America's home commands stand on their fields from the first day", () 
 });
 
 describe('the air forces raised against Germany form on history\'s schedule', () => {
-  it('the Eighth Air Force forms in Georgia in January 1942, at part strength, and fills from the factories', () => {
+  it('the Eighth Air Force forms in Georgia in June 1942, at part strength, and fills from the factories', () => {
     const g = seat('USA');
-    g.turn = 28;
+    // Dated by the month history sent it overseas: it was activated in January and flew from England that summer.
+    g.turn = 33;
     airUpkeep(g, 'USA');
     expect(at(g, 'Georgia')).toEqual([]);
-    g.turn = 29;
+    g.turn = 34;
     airUpkeep(g, 'USA');
     const eighth = at(g, 'Georgia');
     expect(eighth.length).toBe(2);
@@ -109,7 +110,7 @@ describe('the air forces raised against Germany form on history\'s schedule', ()
     airUpkeep(g, 'USA');
     expect(at(g, 'Georgia').length).toBe(2);
     // By the summer of 1944 every command has formed: about 1,000 fighters and 1,400 bombers are kept for the war overseas.
-    for (let t = 30; t <= 58; t++) { g.turn = t; airUpkeep(g, 'USA'); }
+    for (let t = 35; t <= 58; t++) { g.turn = t; airUpkeep(g, 'USA'); }
     const abroad = land(g).filter((f) => !homeCommand(f));
     expect(abroad.reduce((s, f) => s + f.est.ftr, 0)).toBe(1000);
     expect(abroad.reduce((s, f) => s + f.est.bmr, 0)).toBe(1400);
