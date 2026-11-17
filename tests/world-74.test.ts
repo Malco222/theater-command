@@ -376,8 +376,8 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     expect(fleetReach(g, med)).not.toContain(black);
     const b = fleetsAnswer(g, 'GER', [black], g.byName.Odessa);
     expect([...b.come, ...b.kept, ...b.shy]).not.toContain(med);
-    // Dover Command keeps the Channel and Western Approaches Command its convoys: only the first answers in the Channel.
-    const dover = fleet(g, 'UK', 'Dover Command'), wac = fleet(g, 'UK', 'Western Approaches Command');
+    // Dover Fleet keeps the Channel and Western Approaches Fleet its convoys: only the first answers in the Channel.
+    const dover = fleet(g, 'UK', 'Dover Fleet'), wac = fleet(g, 'UK', 'Western Approaches Fleet');
     expect([dover.tied, wac.tied, dover.station === channel, wac.station === channel]).toEqual([true, true, true, false]);
     expect(fleetReach(g, wac)).toContain(channel);
     const c = fleetsAnswer(g, 'GER', [channel], g.byName.Kent);
@@ -452,7 +452,7 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     const a = fleetsAnswer(g, 'GER', [skag], g.byName.Jutland);
     expect(called(a.come)).toContain('UK Home Fleet');
     expect(called(a.kept)).not.toContain('UK Home Fleet');
-    expect(called(fleetsAnswer(g, 'GER', [channel], g.byName.Kent).come)).toContain('UK Western Approaches Command');
+    expect(called(fleetsAnswer(g, 'GER', [channel], g.byName.Kent).come)).toContain('UK Western Approaches Fleet');
   });
 
   it('says what the admirals then do', () => {

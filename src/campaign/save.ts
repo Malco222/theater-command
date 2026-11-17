@@ -101,14 +101,24 @@ export function staleSave(text: string): boolean {
  * should be called fleets"): "Atlantic Squadron" reads "Atlantic Fleet", an escort group an escort fleet, wherever
  * the save wrote the name: on the fleet, on its carrier wings, in the news and in the battle reports. An air group's
  * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched.
+ * Version 84.3 (the design director's rider of 17 November): the five fleets whose names did not say ships take the
+ * word as well. Germany's fleet in the Baltic is named for its port, since the Soviet Baltic Fleet shares that sea.
  */
-export const fleetWords = (text: string): string =>
-  text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+const FLEETS_RENAMED: [RegExp, string][] = [
+  [/\bWestern Approaches Command\b/g, 'Western Approaches Fleet'], [/\bDover Command\b/g, 'Dover Fleet'], [/\bU-boat Arm\b/g, 'U-boat Fleet'],
+  [/\bBaltic Station\b/g, 'Swinemunde Fleet'], [/\bSubmarine Command\b/g, 'Submarine Fleet'],
+];
+const OLD_FLEET_WORDS = /Squadron|Escort Group|Submarine Flotilla|Western Approaches Command|Dover Command|U-boat Arm|Baltic Station|Submarine Command/;
+export const fleetWords = (text: string): string => {
+  let t = text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+  for (const [was, now] of FLEETS_RENAMED) t = t.replace(was, now);
+  return t;
+};
 
 export function loadGame(text: string): Game | null {
   if (text.includes(' Army (')) text = armyWords(text);
   let d: any;
-  try { d = JSON.parse(/Squadron|Escort Group|Submarine Flotilla/.test(text) ? fleetWords(text) : text); } catch { return null; }
+  try { d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);

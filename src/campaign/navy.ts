@@ -255,7 +255,10 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
 
 /** The smallest strength of a nation's own side in a sea, in whole points, that opens it to its troopships; 0 while it is open. */
 export function opensAt(g: Game, z: number, nat: string): number {
-  return closedTo(g, z, nat) ? Math.floor(seaSide(g, z, nat, true).total / NAVY.closed.ratio) + 1 : 0;
+  if (!closedTo(g, z, nat)) return 0;
+  // From the enemy's strength as the sentence prints it, so that the two figures agree; never less than the rule needs.
+  const e = seaSide(g, z, nat, true).total;
+  return Math.max(Math.floor(e / NAVY.closed.ratio), Math.floor(Math.round(e) / NAVY.closed.ratio)) + 1;
 }
 
 /**

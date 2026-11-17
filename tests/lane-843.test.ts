@@ -76,8 +76,9 @@ describe('The landing says why no sea lane serves it (ruling 207)', () => {
     const e = seaSide(g, sea, 'GER', true).total, own = seaSide(g, sea, 'GER', false).total;
     // The rule: closed while the enemy has at least `ratio` for every one of his, so exactly that is still closed.
     const n = opensAt(g, sea, 'GER');
-    expect(n).toBe(Math.floor(e / NAVY.closed.ratio) + 1);
-    expect(e >= NAVY.closed.ratio * (n - 1)).toBe(true);
+    expect(n).toBe(Math.max(Math.floor(e / NAVY.closed.ratio), Math.floor(Math.round(e) / NAVY.closed.ratio)) + 1);
+    // One less is still closed by the figure the sentence prints; that many is open by the rule itself.
+    expect(Math.round(e) >= NAVY.closed.ratio * (n - 1) || e >= NAVY.closed.ratio * (n - 1)).toBe(true);
     expect(e >= NAVY.closed.ratio * n).toBe(false);
     expect(n).toBeGreaterThan(own);
     const why = whyNotLand(g, force, x.to)!;

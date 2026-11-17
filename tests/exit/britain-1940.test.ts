@@ -220,9 +220,9 @@ describe('Operation Sea Lion waits on the air battle', () => {
   it('the Royal Navy puts to sea against an invasion', () => {
     const g = germanPlayer(2);
     const channel = zoneOf(g, 'channel');
-    const dover = g.fleets.find((f) => f.name === 'Dover Command')!;
+    const dover = g.fleets.find((f) => f.name === 'Dover Fleet')!;
     const coming = sortieAgainst(g, 'GER', [channel]);
-    // Dover Command from its harbour on the Channel, and the fleets on the seas either side of it.
+    // Dover Fleet from its harbour on the Channel, and the fleets on the seas either side of it.
     expect(coming).toBeGreaterThan(fleetPower(g, dover) * 0.5);
     expect(coming).toBeGreaterThan(40);
     // Against a coast with no fighters over it, that alone makes a crossing very costly.
