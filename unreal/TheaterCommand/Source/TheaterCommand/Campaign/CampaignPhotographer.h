@@ -101,6 +101,25 @@ private:
 
 	TArray<FShot> Shots;
 	TSharedPtr<class FStepPlayer> Steps; // ("-TheaterSteps=<file>": the playtester's step file is played in place of the pictures)
+	// ("-TheaterTime=<name>:<setting>=<value>,...|<name>:...": the first view is held and the render settings are
+	// switched inside the one running game, round after round, so that each is timed in the same warmth of the
+	// machine. This Mac has no fan: a series of separate runs reads slower run by run, whatever is being tried.)
+	struct FTimeSet
+	{
+		FString Name;
+		TArray<TPair<FString, FString>> Vars;
+		TArray<float> Fps, Game, Draw, Chip;
+		TArray<int32> Slow;
+	};
+	TArray<FTimeSet> TimeSets;
+	TMap<FString, FString> TimeDefaults; // each setting touched, as it stood before the first trial
+	int32 TimeRound = 0, TimeRounds = 3, TimeAt = -1, TimeFrames = 0, TimeSlow = 0;
+	float TimeClock = 0.0f, TimeSum = 0.0f;
+	double TimeGame = 0.0, TimeDraw = 0.0, TimeChip = 0.0;
+	bool bTimePictured = false;
+	/** One frame of the trials. False when every round is done and the summary is written. */
+	bool TickTiming(float DeltaSeconds);
+	void ApplyTimeSet(int32 Index);
 	FString AmberFrom, AmberTo; // the army and the shore of a landing with an amber verdict, once one has been looked for and found
 	FString Folder;
 	int32 Current = -1;

@@ -1915,6 +1915,37 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		bTaken = false;
 		// ("-TheaterSteps=<file>": the playtester's step file is played in place of the pictures. The game is left as
 		// a player finds it, on its opening screen: the file's own first step begins the campaign.)
+		{
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTime="), Asked, false))
+			{
+				TArray<FString> Sets;
+				Asked.ParseIntoArray(Sets, TEXT("|"), true);
+				for (const FString& Each : Sets)
+				{
+					FTimeSet& Set = TimeSets.AddDefaulted_GetRef();
+					FString Vars;
+					if (!Each.Split(TEXT(":"), &Set.Name, &Vars))
+					{
+						Set.Name = Each;
+					}
+					TArray<FString> Pairs;
+					Vars.ParseIntoArray(Pairs, TEXT(","), true);
+					for (const FString& Pair : Pairs)
+					{
+						FString Key, Value;
+						if (Pair.Split(TEXT("="), &Key, &Value))
+						{
+							// ("size" is the share of the window the map is drawn at, in hundredths each way)
+							Set.Vars.Emplace(Key == TEXT("size") ? FString(TEXT("r.ScreenPercentage")) : Key, Value);
+						}
+					}
+				}
+				FParse::Value(FCommandLine::Get(), TEXT("TheaterTimeRounds="), TimeRounds);
+				TimeRounds = FMath::Clamp(TimeRounds, 1, 8);
+				UE_LOG(LogTheater, Display, TEXT("Timing: %d settings, %d rounds"), TimeSets.Num(), TimeRounds);
+			}
+		}
 		FString StepFile;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), StepFile, false))
 		{
@@ -2012,6 +2043,17 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		}
 	}
 
+	// ("-TheaterTime=": the view is held and the settings are tried against one another in place of the pictures.)
+	if (!bTaken && TimeSets.Num() > 0 && Clock >= 3.0f + Shots[Current].Wait)
+	{
+		if (!TickTiming(DeltaSeconds))
+		{
+			bStarted = false;
+			UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+		}
+		return;
+	}
+
 	// Give the picture three seconds to settle, then take it.
 	if (!bTaken && Clock >= 3.0f + Shots[Current].Wait)
 	{
@@ -2078,4 +2120,99 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		bMarched = false;
 		Arrange(Shots[Current]);
 	}
+}
+
+void ACampaignPhotographer::ApplyTimeSet(int32 Index)
+{
+	// Everything touched so far goes back to how it stood, then this trial's own settings are laid over it.
+	for (const TPair<FString, FString>& Was : TimeDefaults)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Was.Key))
+		{
+			Variable->Set(*Was.Value, ECVF_SetByConsole);
+		}
+	}
+	if (!TimeSets.IsValidIndex(Index))
+	{
+		return;
+	}
+	for (const TPair<FString, FString>& Each : TimeSets[Index].Vars)
+	{
+		IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Each.Key);
+		if (!Variable)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Timing: no such setting: %s"), *Each.Key);
+			continue;
+		}
+		if (!TimeDefaults.Contains(Each.Key))
+		{
+			TimeDefaults.Add(Each.Key, Variable->GetString());
+		}
+		Variable->Set(*Each.Value, ECVF_SetByConsole);
+	}
+}
+
+bool ACampaignPhotographer::TickTiming(float DeltaSeconds)
+{
+	const float Settle = 2.0f, Measure = 4.0f;
+	if (TimeAt < 0)
+	{
+		TimeAt = 0;
+		TimeRound = 0;
+		TimeClock = 0.0f;
+		ApplyTimeSet(0);
+		return true;
+	}
+	TimeClock += DeltaSeconds;
+	if (TimeClock >= Settle)
+	{
+		++TimeFrames;
+		TimeSum += DeltaSeconds;
+		TimeGame += FPlatformTime::ToMilliseconds(GGameThreadTime);
+		TimeDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+		TimeChip += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		TimeSlow += DeltaSeconds > 0.0334f ? 1 : 0;
+	}
+	// (one picture of each setting, in the first round, for the eye: the same view under each)
+	if (TimeRound == 0 && !bTimePictured && TimeClock >= Settle + Measure - 0.5f)
+	{
+		bTimePictured = true;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, TEXT("time-") + TimeSets[TimeAt].Name + TEXT(".png")), true, false);
+	}
+	if (TimeClock < Settle + Measure)
+	{
+		return true;
+	}
+	FTimeSet& Set = TimeSets[TimeAt];
+	const int32 Count = FMath::Max(TimeFrames, 1);
+	Set.Fps.Add(TimeSum > 0.0f ? Count / TimeSum : 0.0f);
+	Set.Game.Add(static_cast<float>(TimeGame / Count));
+	Set.Draw.Add(static_cast<float>(TimeDraw / Count));
+	Set.Chip.Add(static_cast<float>(TimeChip / Count));
+	Set.Slow.Add(TimeSlow);
+	UE_LOG(LogTheater, Display, TEXT("Timing: round %d, %s: %.1f frames a second (game %.1f ms, draw %.1f ms, graphics chip %.1f ms), %d of %d frames over 33 ms"),
+		TimeRound + 1, *Set.Name, Set.Fps.Last(), Set.Game.Last(), Set.Draw.Last(), Set.Chip.Last(), TimeSlow, Count);
+	TimeFrames = TimeSlow = 0;
+	TimeSum = 0.0f;
+	TimeGame = TimeDraw = TimeChip = 0.0;
+	TimeClock = 0.0f;
+	bTimePictured = false;
+	if (++TimeAt >= TimeSets.Num())
+	{
+		TimeAt = 0;
+		if (++TimeRound >= TimeRounds)
+		{
+			// The middle value of each setting over the rounds: what the comparison is read from.
+			auto Middle = [](TArray<float> Values) { Values.Sort(); return Values.Num() > 0 ? Values[Values.Num() / 2] : 0.0f; };
+			for (const FTimeSet& Each : TimeSets)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Timing: MIDDLE OF %d ROUNDS, %s: %.1f frames a second (game %.1f ms, draw %.1f ms, graphics chip %.1f ms)"),
+					TimeRounds, *Each.Name, Middle(Each.Fps), Middle(Each.Game), Middle(Each.Draw), Middle(Each.Chip));
+			}
+			ApplyTimeSet(INDEX_NONE);
+			return false;
+		}
+	}
+	ApplyTimeSet(TimeAt);
+	return true;
 }

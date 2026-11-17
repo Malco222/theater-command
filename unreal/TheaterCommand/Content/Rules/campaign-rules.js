@@ -18706,8 +18706,8 @@
       cmdA += p * lead2;
       A += p * lead2;
     }
-    const sally2 = town || opts.sally ? { power: 0, corps: 0 } : sortiePower(g2, target, attNat);
-    if (sally2.power > 0) A += sally2.power;
+    const sally3 = town || opts.sally ? { power: 0, corps: 0 } : sortiePower(g2, target, attNat);
+    if (sally3.power > 0) A += sally3.power;
     const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
     A *= flank;
     const walls = town ? townBonus(g2, target, breach2 ? 1 - (1 - soften) * (1 - breach2) : soften) : 1;
@@ -18822,7 +18822,7 @@
       lines.push({ label: "Forces", value: `${attackers2.length} corps, ${sum2(attackers2)} men, against ${defenders.length} corps, ${sum2(defenders)} men` });
       lines.push({ label: "Terrain", value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : "Open ground, no help to the defender" });
       if (opts.sally) lines.push({ label: "The sortie", value: `The garrison of ${townName(target)} comes out against the army round it`, effect: "Win, and the siege is raised. Lose, and the garrison goes back inside the weaker for it" });
-      else if (sally2.power > 0) lines.push({ label: "The garrison", value: `The garrison of ${townName(target)} sallies out as the relief comes up: ${sally2.corps} corps`, effect: `It adds ${Math.round(SIEGE.sortie * 100)}% of its strength to the attack` });
+      else if (sally3.power > 0) lines.push({ label: "The garrison", value: `The garrison of ${townName(target)} sallies out as the relief comes up: ${sally3.corps} corps`, effect: `It adds ${Math.round(SIEGE.sortie * 100)}% of its strength to the attack` });
       else if (siegeRules(g2) && !allied(g2, attNat, target.ctrl) && townHeld(g2, target)) lines.push({
         label: "The town",
         value: garrisonOf(target).length ? `${townName(target)} is garrisoned` : `${townName(target)} is held by its own guard`,
@@ -32286,6 +32286,73 @@
       return out;
     }
   }
+  function sallyLook(region) {
+    const s = game();
+    const r = s.regions[region];
+    const me = s.human;
+    if (!r || !me) return null;
+    const why = whyNotSallyOut(s, region);
+    if (why) return { region, refused: why };
+    const corps = salliers(s, r, me);
+    const a = corps.length ? previewSally(s, r, me) : null;
+    const look = a ? sallyOutlook(s, region) : null;
+    if (!a || !look) return null;
+    let town = r.name;
+    try {
+      town = townSiege(s, region)?.town ?? r.name;
+    } catch {
+      town = r.name;
+    }
+    const v = verdictOf(look, "sortie");
+    const named2 = (c) => {
+      const kn = c.nat !== me && !allied(s, c.nat, me) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+    };
+    const ids2 = corps.map((c) => c.id);
+    return {
+      region,
+      sortie: true,
+      town,
+      chancePct: oddsPct(look.exact ? look.chance : look.guess),
+      chancePctLo: oddsPct(look.chanceLo),
+      chancePctHi: oddsPct(look.chanceHi),
+      hasChance: true,
+      mass: "",
+      massIds: [],
+      chanceWords: chanceWords(look),
+      cost: costLines(look),
+      ids: ids2,
+      opened: "",
+      pickedIds: [],
+      tone: v.tone,
+      verdict: v.word,
+      face: (look.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown })),
+      allies: [],
+      exact: look.exact,
+      lo: look.lo,
+      hi: look.hi,
+      chance: look.chance,
+      chanceLo: look.chanceLo,
+      chanceHi: look.chanceHi,
+      note: look.exact ? "" : `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ""}`,
+      even: look.even,
+      prize: `Win, and the army round ${town} is driven off: the siege is raised. The garrison goes back inside either way.`,
+      attack: look.exact ? a.A : look.odds,
+      defence: look.exact ? a.D : 1,
+      odds: look.exact ? a.odds : look.odds,
+      lines: briefTicket(look.exact ? a.lines : look.lines, look.face),
+      attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      defenders: a.defenders.map(named2)
+    };
+  }
+  function sally2(region) {
+    const s = game();
+    const r = s.regions[region];
+    const why = r ? whyNotSallyOut(s, region) : "Pick a province.";
+    const report = why ? null : orderSally(s, region);
+    const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
+    return { report, siege: false, fell: false, stands: "", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
+  }
   function garrisonWhy(region) {
     try {
       return { why: whyNotOrderGarrison(game(), region) ?? "" };
@@ -36033,6 +36100,8 @@ ${standing5}`,
     gateLeft: gateLeftOf,
     approach,
     garrisonWhy,
+    sallyLook,
+    sally: sally2,
     endMonth
   };
 })();

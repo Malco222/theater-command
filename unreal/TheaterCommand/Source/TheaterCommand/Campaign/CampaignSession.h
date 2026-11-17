@@ -132,6 +132,9 @@ public:
 	 * there is nothing to storm; Refused carries the rules' sentence where they will not have a storm this month.
 	 */
 	FAttackPreview PreviewStorm(int32 RegionId);
+	/** The garrison's sortie against the army round its town, as a forecast for the attack card; and the sortie ordered from that card. */
+	FAttackPreview PreviewSally(int32 RegionId);
+	FAttackResult Sally(int32 RegionId);
 
 	/** (Ruling 182.) The storm, ordered from its card: every corps of the player's round the town goes in. */
 	FAttackResult Storm(int32 RegionId);

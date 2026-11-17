@@ -79,7 +79,7 @@ import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
 import { carried } from '../../../src/campaign/support';
 import { briefTicket } from '../../../src/campaign/facing';
-import { guardMen } from '../../../src/campaign/siege';
+import { guardMen, previewSally, salliers } from '../../../src/campaign/siege';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
@@ -1992,6 +1992,59 @@ function approach(ids: number[], to: number) {
       : `An army attacks from the province next door, and nothing beside ${target.name} can be reached this month.`;
     return out;
   } catch { return out; }
+}
+
+/**
+ * (The design director, 17 November 2026: no press fights a battle whose odds have not been shown.) The garrison's
+ * sortie against the army round its town, for the attack card: the same fields an attack's forecast has, the
+ * garrison as the attackers and the besiegers as far as they are known. `refused` where the rules will not have a
+ * sortie now (one a month from each town, nobody fit to go, no army round it); null where there is nothing to ask.
+ */
+function sallyLook(region: number) {
+  const s = game();
+  const r = s.regions[region];
+  const me = s.human;
+  if (!r || !me) return null;
+  const why = whyNotSallyOut(s, region);
+  if (why) return { region, refused: why };
+  const corps = salliers(s, r, me);
+  const a = corps.length ? previewSally(s, r, me) : null;
+  const look = a ? sallyOutlook(s, region) : null;
+  if (!a || !look) return null;
+  let town = r.name;
+  try { town = townSiege(s, region)?.town ?? r.name; } catch { town = r.name; }
+  const v = verdictOf(look, 'sortie');
+  const named = (c: Corps) => {
+    const kn = c.nat !== me && !allied(s, c.nat, me) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
+    return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
+      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
+        : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+  };
+  const ids = corps.map((c) => c.id);
+  return {
+    region, sortie: true, town,
+    chancePct: oddsPct(look.exact ? look.chance : look.guess), chancePctLo: oddsPct(look.chanceLo), chancePctHi: oddsPct(look.chanceHi), hasChance: true, mass: '', massIds: [] as number[],
+    chanceWords: chanceWords(look), cost: costLines(look), ids, opened: '', pickedIds: [] as number[],
+    tone: v.tone, verdict: v.word,
+    face: (look.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown })),
+    allies: [] as string[], exact: look.exact, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi,
+    note: look.exact ? '' : `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ''}`, even: look.even,
+    prize: `Win, and the army round ${town} is driven off: the siege is raised. The garrison goes back inside either way.`,
+    attack: look.exact ? a.A : look.odds, defence: look.exact ? a.D : 1, odds: look.exact ? a.odds : look.odds,
+    lines: briefTicket(look.exact ? a.lines : look.lines, look.face),
+    attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    defenders: a.defenders.map(named),
+  };
+}
+
+/** The sortie ordered from its card. The answer reads as an attack's does. */
+function sally(region: number) {
+  const s = game();
+  const r = s.regions[region];
+  const why = r ? whyNotSallyOut(s, region) : 'Pick a province.';
+  const report = why ? null : orderSally(s, region);
+  const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? '' } : null;
+  return { report, siege: false, fell: false, stands: '', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
 }
 
 /** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; '' where he has none there. */
@@ -5476,4 +5529,4 @@ function find(name: string) {
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally, endMonth };
