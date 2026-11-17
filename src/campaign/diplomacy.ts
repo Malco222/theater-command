@@ -8,7 +8,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, standsByWhom, theName, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -351,6 +351,8 @@ export interface WarForecast {
   trade: boolean;
   /** The other members of the League, when the country belongs to it: each goes to war with the declarer the same day. */
   league: string[];
+  /** The mother country that stands by it, when it is a dominion of hers (ruling 211(b)): she goes to war with the declarer the same month. Or null. */
+  patron: string | null;
 }
 
 export function warForecast(g: Game, by: string, on: string): WarForecast {
@@ -367,6 +369,7 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
     league: standsWith(g, by, on),
+    patron: standsByWhom(g, by, on),
   };
 }
 

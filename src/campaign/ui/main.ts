@@ -15,7 +15,7 @@ import {
   DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
 } from '../game';
 import {
-  beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
+  beginEve, beginHuman, canOrder, candidates, declarable, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
@@ -2402,6 +2402,9 @@ function orderAt(id: number): boolean {
     if (onEve(g)) { ui.msg = 'On the eve of war every army stays where it is placed: no attack goes in until the war has opened.'; refresh(); return true; }
     // The card opens on the best attack to be had: everyone the roads will carry, where that beats the army picked.
     const open = openingForce(g, near, r);
+    // (Guns open no attack alone, ruling 211(a): said, where no fighting corps stands in reach to go in with them.)
+    const alone = whyNotLead(g, open.corps, id);
+    if (alone) { ui.msg = alone; refresh(); return true; }
     openModal({ kind: 'attack', target: id, chosen: new Set(open.corps.map((c) => c.id)), picked: open.widened ? near.map((c) => c.id) : null });
     return true;
   }
@@ -2414,6 +2417,9 @@ function orderAt(id: number): boolean {
   }
   // Enemy ground with no army in its field: marching in is the order to take the place (ruling 175(c)). Where only
   // the town's own guard will fight, the card comes first: the guard as the defender, the forecast, nothing ordered.
+  // (Guns march onto no enemy-held ground alone, ruling 211(a): said.)
+  const alone = whyNotLead(g, picked, id);
+  if (alone) { ui.msg = alone; refresh(); return true; }
   const meet = marchOutlook(g, picked, id);
   if (meet && meet.meets === 'guard' && meet.outlook) { openModal({ kind: 'siege', mode: 'march', target: id, corps: meet.going, meet }); return true; }
   return marchTo(id, picked, meet !== null && meet.meets === 'unknown');
@@ -2433,7 +2439,7 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
   const nat = lead.nat, kind = lead.kind;
   let moved = 0;
   const leftGate = gateLeft(g, picked);
-  for (const c of picked) if (orderMove(g, c, id) > 0) moved++;
+  for (const c of marchOrder(g, picked)) if (orderMove(g, c, id) > 0) moved++;
   if (!moved) {
     // A full province next door: one corps can still change places with a corps there, in one order.
     const one = picked.length === 1 ? picked[0] : null;
@@ -6770,7 +6776,9 @@ function attackCard(): string {
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ' against prepared positions' : ''}</span><span>Theirs</span></div></div>
       ${look ? costBlock(look) : ''}
       ${ticketBlock('What the campaign map feeds into this battle', briefTicket(a.lines, look?.face))}`;
-  } else body = cands.length && cands.every((c) => barred(g, c, target))
+  } else body = whyNotLead(g, cands.filter((c) => m.chosen.has(c.id)), target.id)
+    ? `<div class="empty">${esc(whyNotLead(g, cands.filter((c) => m.chosen.has(c.id)), target.id) ?? '')}</div>`
+    : cands.length && cands.every((c) => barred(g, c, target))
     ? `<div class="empty">${esc(target.name)} is too steep for tanks. Bring infantry or mountain troops up beside it to attack.</div>`
     : cands.length && cands.every((c) => blocked(g, c, target))
     ? `<div class="empty">${esc(whyBlocked(g, cands[0], target) ?? '')} Infantry can still cross in boats.</div>`
@@ -7115,6 +7123,7 @@ function invadeCard(on: string, target: number): string {
   const The = esc(upFirst(theName(on)));
   what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${divsOf(fieldArmy(g, on))} fight${Math.round(fieldArmy(g, on)) === 1 ? 's' : ''} for them.` : `<b>${The}</b> and its ${divsOf(fieldArmy(g, on))} are at war with you from today.`);
   if (f.league.length) what.push(`<b>The League stands by it.</b> ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${esc(listOf(f.league.map(natName)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${divsOf(f.league.reduce((sum, id) => sum + fieldArmy(g, id), 0))} between them.`);
+  if (f.patron) { const P = f.patron === 'UK' ? 'Britain' : esc(natName(f.patron)); what.push(`<b>${P} stands by it.</b> ${esc(natName(on))} is a dominion, and war on a dominion is war with ${P}: ${P} goes to war with you the same month.`); }
   if (f.trade) what.push(`<b>Its trade ends.</b> ${The} trades with you today, worth ${money(DIPLOMACY.tradeIncome)} a month to your treasury.`);
   if (f.sneak > 1) what.push(`<b>Surprise.</b> It is at peace and not expecting you: this month your attacks on its ground are <b>${Math.round((f.sneak - 1) * 100)}% stronger</b>. Next month the bonus is gone.`);
   else what.push(f.ready === 'war' ? 'No surprise: it is already at war with your side and its army is ready.'

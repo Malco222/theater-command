@@ -3,6 +3,7 @@
     "what": "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
     "nations": "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
     "home": "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
+    "dominions": "A mother country stands by each of her dominions, one way only (ruling 211(b)): war on a dominion is war with her the same month, whoever declares it, while the two stand in the same alliance. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
     "follow": "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
     "corps": "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
     "fleets": "Fleets in home waters on the first day, in the form of navy.json.",
@@ -45,6 +46,7 @@
     "USA": { "align": "leaning_allies" }
   },
   "follow": { "CAN": "UK" },
+  "dominions": { "UK": ["CAN", "AUS", "NZL", "SAF"] },
   "corps": [
     ["USA", "First Army (1st Division)", "inf", 2, "New York", { "xp": 0.05, "str": 0.5 }],
     ["USA", "Washington garrison", "inf", 1, "Washington", { "xp": 0.05, "str": 0.6, "hold": 1 }],

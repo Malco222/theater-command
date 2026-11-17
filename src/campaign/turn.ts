@@ -13,7 +13,7 @@ import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gat
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
@@ -300,6 +300,10 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
   const out = new Map<number, Reach>();
   if (c.kind === 'fort' || c.ap <= 0) return out;
   out.set(c.reg, { cost: 0, prev: -1, attack: false });
+  // Guns and engineers follow a fighting corps onto enemy-held ground, they never lead (ruling 211(a), the grand
+  // campaign). Such a corps reaches enemy-held ground only where a fighting corps of its side stands already, or
+  // where one stands with it that still has a move this month and can go first (marchOrder sends it first).
+  const led = !gunsRule(g) || fights(c) || g.regions[c.reg].units.some((u) => u !== c && !u.dead && u.ap > 0 && fights(u) && allied(g, u.nat, c.nat));
   const open = [c.reg];
   while (open.length) {
     open.sort((a, b) => out.get(a)!.cost - out.get(b)!.cost);
@@ -319,6 +323,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
         if (a === c.reg && !out.has(j)) out.set(j, { cost: 1, prev: a, attack: true });
         continue;
       }
+      if (!friendly && !led && !gunsMayFollow(g, c, r)) continue;
       const step = moveCost(g, c, r, a);
       const left = c.ap - ca;
       if (left <= 0 || left < Math.min(step, 4)) continue;
@@ -346,6 +351,29 @@ export function orderMove(g: Game, c: Corps, to: number): number {
   let n = 0;
   for (const j of path) { if (!moveCorps(g, c, g.regions[j])) break; n++; }
   return n;
+}
+
+/**
+ * The order the corps of an army are marched in (both games): the fighting corps first, then the guns and the
+ * engineers, who follow them onto enemy-held ground and never lead (ruling 211(a), the grand campaign). Elsewhere
+ * the order given.
+ */
+export const marchOrder = (g: Game, corps: Corps[]): Corps[] => (gunsRule(g) ? [...corps].sort((a, b) => Number(fights(b)) - Number(fights(a))) : corps);
+
+/**
+ * Why these corps cannot go forward onto this ground by themselves, or null if they can (ruling 211(a), the grand
+ * campaign; both games say the sentence). A force with no fighting corps in it (infantry, cavalry, mountain troops,
+ * motorized troops or tanks) opens no attack and marches onto no enemy-held ground: guns and engineers go in beside
+ * a fighting corps, or follow one onto ground it stands on. Asked of the corps picked for an attack or a march.
+ */
+export function whyNotLead(g: Game, corps: Corps[], to: number): string | null {
+  const r = g.regions[to];
+  if (!gunsRule(g) || !r) return null;
+  const able = corps.filter((c) => !c.dead && c.kind !== 'fort' && !blocked(g, c, r));
+  if (!able.length || able.some(fights)) return null;
+  const c = able[0];
+  if (allied(g, c.nat, r.ctrl) || !atWar(g, c.nat, r.ctrl) || gunsMayFollow(g, c, r)) return null;
+  return aloneLine(able);
 }
 
 /** The player's corps that could join an attack on a region. */
@@ -1059,7 +1087,7 @@ export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook 
   if (!h) return null;
   const hr = h.regions[to];
   const there: number[] = [];
-  for (const c of able) { const hc = h.corps.find((x) => x.id === c.id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(c.id); }
+  for (const c of marchOrder(g, able)) { const hc = h.corps.find((x) => x.id === c.id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(c.id); }
   if (!there.length) return null;
   if (allied(h, me, hr.ctrl)) return { ...base, going: there, meets: 'gates', line: `Only ${guardWords}, holds ${v.town}, and against this force it opens its gates: ${r.name} is yours as your army marches in.` };
   const outlook = stormOutlook(h, to);
@@ -1129,7 +1157,7 @@ export function orderTake(g: Game, corps: Corps[], to: number, assault = true): 
   const none: TakeResult = { moved: 0, fell: false, report: null, stands: null };
   if (!r || me === null) return none;
   let moved = 0, arrived = 0;
-  for (const c of corps) if (canOrder(g, c) && orderMove(g, c, to) > 0) { moved++; if (c.reg === to) arrived++; }
+  for (const c of marchOrder(g, corps)) if (canOrder(g, c) && orderMove(g, c, to) > 0) { moved++; if (c.reg === to) arrived++; }
   if (!moved) return none;
   if (!arrived) return { moved, fell: false, report: null, stands: null };
   if (allied(g, me, r.ctrl)) return { moved, fell: true, report: null, stands: null };

@@ -871,7 +871,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const said = h.kind === 'war' && !warn ? (h.text.match(/[^.!?]+/g) ?? []).map((s) => s.trim()).find((s) => { const at = s.search(/\bwar on\b/); return at >= 0 && nameAt(me, s.slice(at)) >= 0; }) : undefined;
     const declarers = said ? namedIn(said.slice(0, said.search(/\bdeclares? war\b|\bwar on\b/))).filter((x) => x !== me) : [];
     // (The flags are those of the headline: who did it, and a great power the headline names as entering the war.)
-    const head = said ?? first(h.text);
+    // (News of war with a title of its own is headed by it: "Britain stands by Canada", ruling 211(b).)
+    const head = h.kind === 'war' && h.warn && !warn ? h.warn : said ?? first(h.text);
     // (A warning flies the flag of the country its news is about, Italy's for "Rome wavers": the art director's rule.)
     const nats = warn ? [h.about && g.nations[h.about] ? h.about : me] : declarers.length ? declarers.slice(0, 2) : [...new Set([h.nat, ...enters.filter((m) => nameAt(m, head) >= 0), p?.by])].filter((x): x is string => !!x && !!g.nations[x] && x !== 'none').slice(0, 2);
     banded.push({ band: { word, title: warn ? h.warn : undefined, nats, head, text: h.text, week: h.week, when: '', ...dated(h.turn), region: h.region, ...(lib && (mine(h.nat) || side(lib.by)) ? { good: true } : {}) }, rank: great ? 0 : warn ? 1 : 2, h, onHim: !!said, good: !!lib && (mine(h.nat) || side(lib.by)) });
