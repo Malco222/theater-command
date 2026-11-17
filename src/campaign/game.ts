@@ -744,6 +744,11 @@ export interface AttackOpts {
    * grand campaign): the defenders that much more tired, their works worn by that many months. A staff planning two waves reads it.
    */
   after?: { blows: number; wear: number };
+  /**
+   * The battle was fought out on the field by the player (src/battle): the ratio it came to stands in for the day's
+   * luck, and the rules apply their own losses, retreats and prisoners from it. Absent, the dice roll as always.
+   */
+  fought?: number;
 }
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
@@ -1507,7 +1512,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const dice = aside ? new Rng(hashString(`land:${g.seed}:${g.turn}:${target.id}:${attNat}:${count}`)) : g.rng;
   // Luck runs wider in the streets of a town than in the open, and mostly against the attacker.
   // Against a line that is dug in and fed it runs wider still (the grand campaign): the assessment carries the run.
-  const R = a.odds * dice.range(a.dice[0], a.dice[1]);
+  const R = opts.fought ?? a.odds * dice.range(a.dice[0], a.dice[1]);
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
