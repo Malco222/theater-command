@@ -320,6 +320,11 @@ struct FWarPrompt
 	// them".) The same card plans the march up to an enemy army that is not next door, and the attack, as one order:
 	// the ways up as rows (the game's pick first), the one chosen, and the enemy's province.
 	bool bApproach = false;
+	// (The design director, 17 November.) And it asks before a garrison's sortie, which was fought at a press with no
+	// way back: the odds stand on the card, and it can be called off.
+	bool bSortie = false;
+	/** True where the card is an order he asked for himself: Enter gives it, Esc calls it off, and the buttons wear their key caps. */
+	bool IsOrder() const { return bApproach || bSortie; }
 	int32 ApproachTo = INDEX_NONE;
 	TArray<FApproachRow> Ways;
 	int32 Way = 0;
@@ -373,6 +378,9 @@ struct FFaceOff
 	// (Rulings 182 and 183.) The same card for a town the army already stands round: SEND THEM IN and KEEP UP THE
 	// SIEGE. bArrival: it opened by itself as the army arrived, and a card that opens by itself takes no Enter.
 	bool bStorm = false, bArrival = false;
+	// (The design director, 17 November 2026: no press fights a battle whose odds have not been shown.) The garrison's
+	// sortie against the army round its town, on the attack card: SALLY OUT in SEND THEM IN's place.
+	bool bSally = false;
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
@@ -1028,10 +1036,15 @@ private:
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have
 	 * no plan to offer (no enemy army seen there, or it is next door already).
 	 */
+	/** The sortie's card: the attack card under the sortie's title. False where the rules will not have a sortie (their reason is said). */
+	bool OpenSortieCard(int32 RegionId);
 	bool OpenApproach(int32 RegionId, bool bSayNone);
 	void DressApproach();
 	void CarryOutApproach(const FWarPrompt& Asked);
 	double WarPromptSince = 0.0; // (an order's card takes no key in its first half second)
+	bool bSortieAsked = false; // (the sortie's question has been answered yes: the order goes through)
+	/** Where a garrison's own order stands, said after the rules' sentence so that no hint sends him to a press that does nothing. */
+	FString GarrisonWhere() const;
 	/** Why the army in hand cannot attack the enemy army seen at a place, in a sentence that says what to do; empty where none is seen there. */
 	FString WhyNoAttackOn(int32 RegionId) const;
 	FText HoverTipMarked;

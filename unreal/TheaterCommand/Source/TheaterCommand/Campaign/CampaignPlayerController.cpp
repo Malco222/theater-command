@@ -955,6 +955,13 @@ void ACampaignPlayerController::ProvinceAction(const FString& Action)
 		OpenStormCard(Map->GetSelectedRegion(), true);
 		return;
 	}
+	if (Action == TEXT("work:sally"))
+	{
+		// (The design director, 17 November: no press fights a battle whose odds have not been shown. The sortie has
+		// the attack card, under its own title, with SALLY OUT and a way to call it off.)
+		OpenSortieCard(Map->GetSelectedRegion());
+		return;
+	}
 	FString Note;
 	TArray<FSortie> Sorties;
 	const bool bDone = Session->OrderInProvince(Action, Map->GetSelectedRegion(), Note, &Sorties);
@@ -4372,7 +4379,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			const FString GarrisonTip = (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion) ? GarrisonSays() : FString();
 			if (!GarrisonTip.IsEmpty())
 			{
-				Line += TEXT("\n") + GarrisonTip; // (a garrison in hand is promised no march)
+				Line += TEXT("\n") + GarrisonTip + GarrisonWhere(); // (a garrison in hand is promised no march)
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
@@ -5300,6 +5307,10 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 	if (ArmyRegion != INDEX_NONE && Target != INDEX_NONE && Target != ArmyRegion && !bByRail && !bBySea && !WhyNoAttackOn(Target).IsEmpty())
 	{
 		WhyNot = GarrisonSays();
+		if (!WhyNot.IsEmpty())
+		{
+			WhyNot += GarrisonWhere();
+		}
 		if (WhyNot.IsEmpty() && bHandSpent)
 		{
 			const FMarchPlan& KeptWay = PlanFor(Target);
@@ -5486,7 +5497,7 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
 		{
-			Tray.Hint = FText::FromString(Garrison + TEXT(" Esc puts them down."));
+			Tray.Hint = FText::FromString(Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
 	}
 	if (FCampaignSession* Rules = GetSession())
@@ -5508,7 +5519,7 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		if (!Garrison.IsEmpty())
 		{
 			Tray.HintLead = FText::GetEmpty();
-			Tray.Hint = FText::FromString(Garrison + TEXT(" Esc puts them down."));
+			Tray.Hint = FText::FromString(Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
 	}
 	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
@@ -5559,7 +5570,7 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 			Piece->ReturnToRest();
 			if (bOnTable && RegionId != INDEX_NONE && RegionId != ArmyRegion)
 			{
-				Notify(Garrison, 10.0);
+				Notify(Garrison + GarrisonWhere(), 10.0);
 			}
 			return;
 		}
@@ -5660,7 +5671,7 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
 		{
-			Notify(Garrison, 9.0);
+			Notify(Garrison + GarrisonWhere(), 10.0);
 		}
 	}
 	if (bNewInHand)
@@ -6190,6 +6201,14 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 	Notify(FString::Printf(TEXT("The army stands at %s, beside the enemy at %s. It has no move left this month: the attack waits for next month."), *Way.Name, *Asked.Name), 9.0);
 }
 
+FString ACampaignPlayerController::GarrisonWhere() const
+{
+	// (The design director, 17 November: no hint sends him to a press that does nothing. The sortie and the order to
+	// take the field stand under ORDERS on the province's card, and a right-click on the garrison's own town, or on
+	// the army round it, opens that card there.)
+	return TEXT(" Right-click the town to open its orders.");
+}
+
 FString ACampaignPlayerController::GarrisonSays() const
 {
 	// (The rules builder, 17 November: corps in a town neither march nor attack until they take the field; a garrison
@@ -6313,7 +6332,18 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 				// the province's card opens on its orders, where that order stands with its odds.
 				SelectRegion(RegionId);
 				SetProvinceTab(2);
-				// (where the rules will not have the sortie now, as after one this month, their reason is what is said)
+				// (A garrison shut in: the sortie's card, with its odds and a way to call it off. Where the rules will
+				// not have a sortie now, as after one this month, their reason is said by the card's own asking.)
+				bool bShutIn = false;
+				for (const FProvinceOption& Option : Session->Province(RegionId).Options)
+				{
+					bShutIn = bShutIn || Option.Action.StartsWith(TEXT("work:sally"));
+				}
+				if (bShutIn)
+				{
+					OpenSortieCard(RegionId);
+					return;
+				}
 				FString Refused;
 				for (const FProvinceOption& Option : Session->Province(RegionId).Options)
 				{
@@ -6339,7 +6369,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
 		{
-			Notify(Garrison, 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
+			Notify(Garrison + GarrisonWhere(), 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
 			return;
 		}
 	}
@@ -6892,6 +6922,7 @@ void ACampaignPlayerController::ConfirmWar()
 		CarryOutApproach(Asked);
 		return;
 	}
+
 	if (Asked.bGate)
 	{
 		// The holder's order: the gate is shut to all ships but his own and his allies', or opened again.
@@ -7365,6 +7396,45 @@ bool ACampaignPlayerController::OpenMarchCard(int32 RegionId, FString& OutSays, 
 	return true;
 }
 
+bool ACampaignPlayerController::OpenSortieCard(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || RegionId == INDEX_NONE)
+	{
+		return false;
+	}
+	const FAttackPreview Preview = Session->PreviewSally(RegionId);
+	if (!Preview.Refused.IsEmpty())
+	{
+		Notify(Preview.Refused, 8.0); // (one sortie a town a month, nobody fit to go: the rules' own sentence)
+		return false;
+	}
+	if (!Preview.bValid || Preview.Attackers.Num() == 0)
+	{
+		Notify(TEXT("No garrison of yours is shut in here by an army round its town."), 6.0);
+		return false;
+	}
+	PickedBeforeMass.Reset();
+	OpenFaceOff(RegionId, false, &Preview);
+	if (!FaceOff.bVisible)
+	{
+		return false;
+	}
+	const FString Town = Preview.Town.IsEmpty() ? (Map->GetData().Regions.IsValidIndex(RegionId) ? Map->GetData().Regions[RegionId].Name : FString()) : Preview.Town;
+	FaceOff.bSally = true;
+	FaceOff.bSoften = false; // (a sortie is not softened first: no probe, no bombers' row)
+	FaceOff.bBomb = false;
+	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The sortie from %s"), *Town));
+	// (the forecast's line speaks of the siege, not of taking the town it already holds)
+	{
+		// (the line is set in phrases that do not break: the words are looked for as they were set)
+		const FString Place = Map->GetData().Regions.IsValidIndex(RegionId) ? Map->GetData().Regions[RegionId].Name : Town;
+		const FString Taken = FString::Printf(TEXT("to take %s"), *Place), Raised = TEXT("to raise the siege");
+		FaceOff.OddsLine = FText::FromString(FaceOff.OddsLine.ToString().Replace(*CampaignText::Phrases(Taken), *CampaignText::Phrases(Raised)).Replace(*Taken, *Raised));
+	}
+	return true;
+}
+
 bool ACampaignPlayerController::OpenStormCard(int32 RegionId, bool bSayWhy, bool bOnArrival)
 {
 	FCampaignSession* Session = GetSession();
@@ -7596,7 +7666,8 @@ void ACampaignPlayerController::ResolveAttack()
 	const int32 RegionId = FaceOff.Region;
 	const bool bMarch = FaceOff.bMarch; // (rules 84.1: the army marches in and goes at the town as it arrives)
 	const bool bStorm = FaceOff.bStorm; // (ruling 182: the army already round the town storms it)
-	const FAttackResult Result = bStorm ? Session->Storm(RegionId) : bMarch ? Session->Take(PickedCorps, RegionId, true) : Session->Attack(PickedCorps, RegionId);
+	const bool bSally = FaceOff.bSally; // (the garrison's sortie against the army round its town)
+	const FAttackResult Result = bSally ? Session->Sally(RegionId) : bStorm ? Session->Storm(RegionId) : bMarch ? Session->Take(PickedCorps, RegionId, true) : Session->Attack(PickedCorps, RegionId);
 	const TArray<int32> HandBefore = PickedBeforeMass;
 	PickedBeforeMass.Reset();
 	if (!Result.bFought)
@@ -7609,9 +7680,9 @@ void ACampaignPlayerController::ResolveAttack()
 			PickedCorps = HandBefore;
 			RefreshOrders();
 		}
-		if (bStorm)
+		if (bStorm || bSally)
 		{
-			Notify(Result.Note.IsEmpty() ? FString(TEXT("The assault could not go in.")) : Result.Note, 7.0);
+			Notify(Result.Note.IsEmpty() ? FString(bSally ? TEXT("The sortie could not go out.") : TEXT("The assault could not go in.")) : Result.Note, 7.0);
 			return;
 		}
 		if (bMarch && Result.Moved.Num() > 0)
@@ -7658,7 +7729,8 @@ void ACampaignPlayerController::ResolveAttack()
 		bMomentDue = bMoments && !bPictures && !bScripted && ((Result.bTaken && bCapital) || bGreat);
 	}
 	FaceOff.ResultTitle = FText::FromString(Result.bYielded ? FString(TEXT("They fell back without a fight")) : Result.Level);
-	const FString Outcome = (bMarch || bStorm) ? (Result.bTaken || Result.bFell ? TEXT("The town is stormed. The ground is yours.")
+	const FString Outcome = bSally ? FString(Result.bTaken ? TEXT("The ring is broken: the siege is raised.") : TEXT("The sortie was driven back in. The siege goes on."))
+		: (bMarch || bStorm) ? (Result.bTaken || Result.bFell ? TEXT("The town is stormed. The ground is yours.")
 			: TEXT("The assault was thrown back. Your army stands round the town: the siege goes on, and the assault can go in again next month, made ready."))
 		: Result.bSiege ? TEXT("The country is yours, but the town holds. It is now besieged: starve it out, or pick the province and storm it.")
 		: Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
@@ -7744,7 +7816,7 @@ void ACampaignPlayerController::EndMonth()
 	}
 	if (WarPrompt.bVisible && !bScripted)
 	{
-		if (WarPrompt.bApproach)
+		if (WarPrompt.IsOrder())
 		{
 			// (The design director, 17 November: Enter marches. He asked for the card himself; not in its first half second.)
 			if (FPlatformTime::Seconds() - WarPromptSince > 0.5)

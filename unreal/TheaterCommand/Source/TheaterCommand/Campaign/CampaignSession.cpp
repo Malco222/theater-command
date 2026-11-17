@@ -1638,6 +1638,31 @@ FAttackPreview FCampaignSession::PreviewStorm(int32 RegionId)
 	return ReadMarch(Object, RegionId);
 }
 
+FAttackPreview FCampaignSession::PreviewSally(int32 RegionId)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("sallyLook"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		return FAttackPreview(); // (the rules answer null: no garrison of the player's is shut in there)
+	}
+	FString Refused;
+	if (Object->TryGetStringField(TEXT("refused"), Refused) && !Refused.IsEmpty())
+	{
+		FAttackPreview Out;
+		Out.Region = RegionId;
+		Out.Refused = Refused; // (one sortie a town a month, and the like: the rules' own sentence)
+		return Out;
+	}
+	FAttackPreview Out = ReadPreview(Object, RegionId);
+	Object->TryGetStringField(TEXT("town"), Out.Town);
+	return Out;
+}
+
+FAttackResult FCampaignSession::Sally(int32 RegionId)
+{
+	return Fight(TEXT("sally"), FString::Printf(TEXT("[%d]"), RegionId));
+}
+
 FAttackResult FCampaignSession::Storm(int32 RegionId)
 {
 	return Fight(TEXT("storm"), FString::Printf(TEXT("[%d]"), RegionId));

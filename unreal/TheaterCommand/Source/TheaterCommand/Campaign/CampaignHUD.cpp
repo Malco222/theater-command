@@ -4465,7 +4465,7 @@ namespace
 												SNew(SHorizontalBox)
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+													SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
 												]
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
@@ -4484,7 +4484,7 @@ namespace
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
 											]
 										]
 										// (Rules 84.1; rulings 177(b) and 178(c).) Before a march on a guarded town: the two orders in the
@@ -5531,7 +5531,7 @@ namespace
 												]
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
-													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Visible : EVisibility::Collapsed; })
+													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsOrder() ? EVisibility::Visible : EVisibility::Collapsed; })
 													[
 														KeyCap(TEXT("ESC"), Muted)
 													]
@@ -5552,7 +5552,7 @@ namespace
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
 													// (the approach order is given with Enter: its key cap says so)
-													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Visible : EVisibility::Collapsed; })
+													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsOrder() ? EVisibility::Visible : EVisibility::Collapsed; })
 													[
 														KeyCap(TEXT("ENTER"), BrightBrass)
 													]
