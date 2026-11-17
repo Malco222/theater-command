@@ -615,6 +615,8 @@ function mount(): void {
   }, true);
   document.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
+  document.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', forgetKeys);
   // A result's slip lies on the map until the next press anywhere (ruling 204). The press still does its own work.
   document.addEventListener('pointerdown', (e) => {
     if (ui.result && !(e.target as Element | null)?.closest?.('#rslip')) { ui.result = null; drawResult(); }
@@ -6078,6 +6080,7 @@ function airReportCard(r: AirReport): string {
 
 function openModal(m: typeof ui.modal): void {
   ui.modal = m;
+  cardDrawn(m);
   const veil = $('#veil');
   if (!m) {
     veil.classList.remove('open');
@@ -9159,8 +9162,35 @@ function onClick(e: MouseEvent): void {
   }
 }
 
+/**
+ * The key guard (the UI director's standing rule of 17 November 2026, a rider to rulings 183(b) and 207(g)): no card takes
+ * the press that answered the card before it. A key acts on a new card only once it has been let go since the card came
+ * up, and the card has stood fully drawn for the kit's beat (`--key-guard`, 500 ms). A held or repeating key never
+ * answers two cards, and a hurried second Enter is swallowed while the odds stay in front of him.
+ */
+const KEY_GUARD = 500;
+/** The keys held down just now, and those that were already down when the card that is up was drawn. */
+const keysDown = new Set<string>(), heldAtCard = new Set<string>();
+/** The card that is up, and when it was first drawn. Drawing the same card again (a chip pressed on it) keeps its time. */
+let guardedCard: typeof ui.modal = null, cardAt = 0;
+const cardKey = (m: NonNullable<typeof ui.modal>): string => `${m.kind}:${m.target ?? m.id ?? m.region ?? ''}`;
+function cardDrawn(m: typeof ui.modal): void {
+  const same = !!m && !!guardedCard && cardKey(m) === cardKey(guardedCard);
+  if (m === guardedCard || same) { guardedCard = m; return; }
+  guardedCard = m;
+  cardAt = performance.now();
+  heldAtCard.clear();
+  for (const k of keysDown) heldAtCard.add(k);
+}
+/** True while a key may not yet answer the card that is up: it is a repeat, it was held when the card came, or the card is too new. */
+const cardGuarded = (e: KeyboardEvent): boolean => e.repeat || heldAtCard.has(e.key) || performance.now() - cardAt < KEY_GUARD;
+function onKeyUp(e: KeyboardEvent): void { keysDown.delete(e.key); heldAtCard.delete(e.key); }
+/** Keys let go outside the window are never heard: a window that loses the focus forgets them. */
+function forgetKeys(): void { keysDown.clear(); heldAtCard.clear(); }
+
 /** The keyboard: Escape backs out of whatever is open, Enter ends the month, Space skips the watching. */
 function onKey(e: KeyboardEvent): void {
+  keysDown.add(e.key);
   const el = e.target as HTMLElement | null;
   if (e.ctrlKey || e.metaKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
   // While the other staffs work no key gives an order.
@@ -9178,10 +9208,10 @@ function onKey(e: KeyboardEvent): void {
     else if (ui.picked.size || ui.sel >= 0) { ui.picked.clear(); ui.sel = -1; ui.rail = ui.ship = ui.land = false; ui.msg = ''; refresh(); }
     return;
   }
-  // The question before the month ends: Tab is SHOW ME and Enter is END THE MONTH, and it takes no key for its first half second.
+  // The question before the month ends: Tab is SHOW ME and Enter is END THE MONTH, under the key guard (its first half second).
   if (ui.modal?.kind === 'askend' && (e.key === 'Tab' || e.key === 'Enter')) {
     e.preventDefault();
-    if (e.repeat || performance.now() - (ui.modal.at ?? 0) < 500) return;
+    if (cardGuarded(e)) return;
     ($('#card').querySelector(e.key === 'Tab' ? '[data-act="askshow"]' : '[data-act="end"]') as HTMLElement | null)?.click();
     return;
   }
@@ -9191,13 +9221,13 @@ function onKey(e: KeyboardEvent): void {
   // unless the button in hand stands at the card's foot: a chip or a fold he has just pressed does not take it.
   if (el && el.tagName === 'BUTTON' && !(e.key === 'Enter' && ui.modal && (ENTER_CARDS.has(ui.modal.kind) || REPORT_CARDS.has(ui.modal.kind)) && !!el.closest('#card .body'))) return;
   // The month's report: Enter puts it down (GIVE ORDERS), and R opens it again at any time. A key held down is one press.
-  if (e.key === 'Enter' && ui.modal?.kind === 'news' && ui.modal.card) { e.preventDefault(); if (!e.repeat) { openModal(null); refresh(); } return; }
+  if (e.key === 'Enter' && ui.modal?.kind === 'news' && ui.modal.card) { e.preventDefault(); if (!cardGuarded(e)) { openModal(null); refresh(); } return; }
   // A question that can lose something (ruling 134(f)): Enter, like Escape, is the answer that loses nothing. "Keep it".
-  if (e.key === 'Enter' && ui.modal?.kind === 'replace') { e.preventDefault(); openModal(ui.modal.back ?? null); refresh(); return; }
+  if (e.key === 'Enter' && ui.modal?.kind === 'replace') { e.preventDefault(); if (!cardGuarded(e)) { openModal(ui.modal.back ?? null); refresh(); } return; }
   // An order's card the player opened himself: Enter is its lit button. A battle's report: Enter and Space are CONTINUE.
   if (ui.modal && !passing && !tour && (e.key === 'Enter' || (e.key === ' ' && REPORT_CARDS.has(ui.modal.kind)))) {
     const lit = enterButton();
-    if (lit) { e.preventDefault(); if (!e.repeat && !lit.disabled) { byKey = true; try { lit.click(); } finally { byKey = false; } } return; }
+    if (lit) { e.preventDefault(); if (!cardGuarded(e) && !lit.disabled) { byKey = true; try { lit.click(); } finally { byKey = false; } } return; }
   }
   if ((e.key === 'r' || e.key === 'R') && !ui.modal && !passing && !tour && ui.lastCard && g.human) { e.preventDefault(); reopenMonth(); return; }
   // Whatever plays ends on Space or Enter, and says so with the key cap (ruling 204).
