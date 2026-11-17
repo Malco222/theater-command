@@ -23,7 +23,7 @@ import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siege
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
-  STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
+  STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -255,11 +255,45 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
 
 /** Whether a nation's ships may pass between two neighbouring seas: most are open water, a few are straits someone holds. */
 export function canPass(g: Game, a: number, b: number, nat: string): boolean {
-  const gt = g.gates.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
-  if (!gt) return true;
-  const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
+  const i = g.gates.findIndex((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+  if (i < 0) return true;
+  const gt = g.gates[i];
+  const holder = gateHolder(g, gt);
+  // Shut by its holder's order (ruling 176(e)): only his own ships and his allies' pass.
+  if (g.flags[shutKey(i, holder)] !== undefined && !allied(g, holder, nat)) return false;
   if (gt.closed) return allied(g, holder, nat) || !g.nations[nat].atWar.length;
   return !atWar(g, holder, nat);
+}
+
+// ---- A gate its holder has shut (Version 84.1; ruling 176(e), on Brian's words of 2026-11-17: "you should be able
+// to open or close the panama canal") ----
+// The order is the holder's own, so it is kept under his name: the moment the gate changes hands it no longer
+// holds, and gatesTick forgets it so that it does not come back with the gate. No staff gives it in release 1.
+const shutKey = (i: number, holder: string): string => `gateshut:${i}:${holder}`;
+/** The country that holds a gate. */
+export const gateHolder = (g: Game, gt: Gate): string => (gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!);
+/** The month a gate's holder ordered it shut, or -1 while it stands as its own rule leaves it. */
+export function gateShutSince(g: Game, i: number): number {
+  const gt = g.gates[i];
+  return gt ? g.flags[shutKey(i, gateHolder(g, gt))] ?? -1 : -1;
+}
+/** Shuts a gate in its holder's name, or opens it again. Ships, supply and trade find it so from that moment. */
+export function setGate(g: Game, i: number, shut: boolean): void {
+  const gt = g.gates[i];
+  if (!gt) return;
+  const key = shutKey(i, gateHolder(g, gt));
+  if (!shut) delete g.flags[key];
+  else if (g.flags[key] === undefined) g.flags[key] = g.turn;
+  g.supplyDirty = true;
+}
+/** As a month opens: an order to shut a gate ends when the gate has changed hands, and does not come back with it. */
+export function gatesTick(g: Game): void {
+  for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('gateshut:')) continue;
+    const [, i, nat] = k.split(':');
+    const gt = g.gates[Number(i)];
+    if (!gt || gateHolder(g, gt) !== nat) delete g.flags[k];
+  }
 }
 
 /** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. */

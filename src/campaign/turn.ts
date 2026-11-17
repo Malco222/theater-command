@@ -9,7 +9,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -45,10 +45,12 @@ import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
+export { FORT_NO_ORDERS, whyNotOrder } from './armies';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
-import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
+import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
+import { gateViews, type GateView } from './gates';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
 import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
@@ -84,6 +86,8 @@ function closePhase(g: Game, nat: string): void {
   g.phase++;
   if (g.phase >= g.order.length) {
     g.phase = 0; g.turn++; g.week = 1;
+    // A gate that has changed hands is no longer shut by the order of the country that lost it.
+    gatesTick(g);
     openTheatres(g);
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -1454,6 +1458,92 @@ export function orderAir(g: Game, id: number, mission: AirMission, target = -1):
  * fleet this is the order to fly ashore (ruling 175(b)): to the airfield of the harbour its fleet lies in, or one on
  * the sea it is in. airGroupBases() lists where; a wing's GroupRow.wingMove says why not when it cannot.
  */
+// ---- The gate's order (Version 84.1; ruling 176(e), on Brian's words of 2026-11-17: "you should be able to open or
+// close the panama canal"). The holder may shut his gate to all ships but his own and his allies', and open it
+// again. The player's order only: no staff gives it. The question says whose trade it stops before he orders. ----
+
+export interface GateRow {
+  nat: string;
+  name: string;
+  /** The holder's own row: it stands first. */
+  own: boolean;
+  /** What happens to its trade, as a sentence. */
+  what: string;
+  /** What it loses a month. */
+  loss: number;
+}
+export interface GateQuestion {
+  gate: GateView;
+  /** The order the box offers: to shut the gate, or to open it again. */
+  order: 'shut' | 'open';
+  label: string;
+  question: string;
+  lead: string;
+  /** The price as rows: whose trade stops or goes the long way round, the holder's own first, with what each loses a month. */
+  heading: string;
+  rows: GateRow[];
+  total: number;
+  /** Said in place of the rows where no trade runs through the gate. */
+  none: string;
+  /** The two buttons: the order, and leaving things as they are. */
+  yes: string;
+  no: string;
+}
+/** Why the player cannot give a gate's order, or null when he can. */
+export function whyNotGate(g: Game, gate: number): string | null {
+  const gt = g.gates[gate];
+  if (!gt) return 'There is no such gate.';
+  if (g.human === null || !g.nations[g.human]?.alive || gateHolder(g, gt) !== g.human) return `Only its holder can ${gateShutSince(g, gate) < 0 ? 'shut' : 'open'} it.`;
+  if (!humanUp(g) || onEve(g)) return 'It is not your month.';
+  return null;
+}
+const namesOf = (g: Game, ids: string[]): string => {
+  const ns = ids.map((id) => theName(g.nations[id]));
+  return ns.length <= 1 ? ns.join('') : `${ns.slice(0, -1).join(', ')} and ${ns[ns.length - 1]}`;
+};
+/** The gate's question for its holder: what the order does, and what it costs whom, before he gives it. Null where he cannot give it. */
+export function gateQuestion(g: Game, gate: number): GateQuestion | null {
+  if (whyNotGate(g, gate)) return null;
+  const me = g.human!, gt = g.gates[gate];
+  const v = gateViews(g, me)[gate];
+  const isShut = v.shutSince >= 0;
+  const many = /s$/.test(gt.name), it = many ? 'they' : 'it', them = many ? 'them' : 'it';
+  // The same game with the gate the other way, as an exact copy: the price is read off the two, and nothing changes.
+  const other = loadGame(saveGame(g));
+  let list: GateTradeRow[] = [];
+  if (other) {
+    setGate(other, gate, !isShut);
+    list = isShut ? gateTrade(other, g, gate) : gateTrade(g, other, gate);
+  }
+  const what = (r: GateTradeRow, own: boolean): string => {
+    const parts: string[] = [];
+    if (r.stops.length) parts.push(`${own ? 'Your' : 'Its'} trade with ${namesOf(g, r.stops)} ${isShut ? 'is stopped' : 'stops'}`);
+    if (r.round.length) parts.push(`${parts.length ? (own ? 'your' : 'its') : own ? 'Your' : 'Its'} trade with ${namesOf(g, r.round)} goes the long way round`);
+    return `${parts.join('; ')}.`;
+  };
+  const rows: GateRow[] = list.map((r) => ({ nat: r.nat, name: g.nations[r.nat].name, own: r.nat === me, what: what(r, r.nat === me), loss: r.loss }))
+    .sort((x, y) => Number(y.own) - Number(x.own));
+  return {
+    gate: v, order: isShut ? 'open' : 'shut', label: 'Sea gate · you hold it',
+    question: isShut ? `Open ${gt.name} again?` : `Shut ${gt.name}?`,
+    lead: isShut
+      ? `You shut ${them} in ${turnToDate(v.shutSince).label}. Open, ${it} ${many ? 'stand' : 'stands'} as before: ${gt.closed ? 'in wartime only your allies may pass, and a country at war with nobody' : 'every country may pass that is not at war with you'}.`
+      : `Shut, ${it} ${many ? 'let' : 'lets'} through only your own ships and your allies'. Every other country's ships are turned back: its warships, its supply ships and the trade it carries, your own trade with it included. You can open ${them} again whenever you choose.`,
+    heading: isShut ? 'What it is costing each month' : 'What it costs each month',
+    rows, total: rows.reduce((s, r) => s + r.loss, 0),
+    none: isShut ? 'No agreement is held up by it today.' : 'No trade runs through it today: shutting it costs nobody anything yet.',
+    yes: isShut ? 'Open the gate' : 'Shut the gate', no: isShut ? 'Leave it shut' : 'Leave it open',
+  };
+}
+/** The holder's order: shuts his gate to all ships but his own and his allies', or opens it again. */
+export function orderGate(g: Game, gate: number, shut: boolean): boolean {
+  if (whyNotGate(g, gate) || (gateShutSince(g, gate) >= 0) === shut) return false;
+  setGate(g, gate, shut);
+  // His own agreements find the gate so at once; every other country's do in its own month.
+  refreshTrade(g, g.human!);
+  return true;
+}
+
 export function orderAirBase(g: Game, id: number, region: number): boolean {
   const f = myAir(g, id), r = g.regions[region];
   if (!f || !r) return false;

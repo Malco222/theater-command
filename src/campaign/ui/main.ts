@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateQuestion, orderGate, whyNotGate, whyNotOrder, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -1081,7 +1081,9 @@ function drawGates(): void {
     const spot = gateSpot(g, g.gates[i]);
     const lamp = v.open !== null;
     const wide = 5 + 24 + (lamp ? 5 + 18 : 0) + 5, tall = 22;
-    const nameW = Math.ceil(v.name.length * 7.1) + 8, full = wide + nameW;
+    // A gate shut by its holder's order says so on its plate, whoever is looking (ruling 176(e)).
+    const plateName = v.shutSince >= 0 ? `${v.name} · shut` : v.name;
+    const nameW = Math.ceil(plateName.length * 7.1) + 8, full = wide + nameW;
     // (The room it needs is the room of what is shown at this height: the lamp alone from far up, the name too close in.)
     const w = (stage === 3 ? 14 : stage === 1 ? full : wide) * k, h = (stage === 3 ? 14 : tall) * k;
     // Close in the plate grows to the east of the flag, so its middle lies east of the mark's own point.
@@ -1102,9 +1104,9 @@ function drawGates(): void {
     solid.push(box(at.x, at.y));
     const flag = `<g transform="translate(5 3)">${flagUse(v.holder, natColor(v.holder), 24, 16)}<rect class="gfl" width="24" height="16"/></g>`;
     const lampAt = (x: number): string => (lamp ? `<g transform="translate(${x} 2) scale(1.125)">${v.open ? LAMP.open : LAMP.shut}</g>` : '');
-    out += `<g class="gatemark${v.open === false ? ' shut' : ''}" data-id="${i}" data-x="${at.x.toFixed(1)}" data-y="${at.y.toFixed(1)}" transform="translate(${at.x.toFixed(1)} ${at.y.toFixed(1)}) scale(${k.toFixed(4)})">
+    out += `<g class="gatemark${v.open === false ? ' shut' : ''}${v.shutSince >= 0 ? ' ordered' : ''}${v.order ? ' mine' : ''}" data-id="${i}" data-x="${at.x.toFixed(1)}" data-y="${at.y.toFixed(1)}" transform="translate(${at.x.toFixed(1)} ${at.y.toFixed(1)}) scale(${k.toFixed(4)})">
       <g class="gmid" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${wide}" height="${tall}" rx="4"/>${flag}${lampAt(34)}</g>
-      <g class="gfull" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${full}" height="${tall}" rx="4"/>${flag}${lampAt(34)}<text class="gname" x="${wide + 1}" y="15.6">${esc(v.name)}</text></g>
+      <g class="gfull" transform="translate(${-wide / 2} ${-tall / 2})"><rect class="gplate" width="${full}" height="${tall}" rx="4"/>${flag}${lampAt(34)}<text class="gname" x="${wide + 1}" y="15.6">${esc(plateName)}</text></g>
       ${lamp ? `<g class="gfar" transform="translate(-6 -6) scale(1.2)">${v.open ? LAMP.farOpen : LAMP.farShut}</g>` : ''}</g>`;
   });
   el.innerHTML = out;
@@ -1126,7 +1128,34 @@ function gateTip(id: number): string {
   const v = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null)[id];
   if (!v) return '';
   const line = esc(v.line).replace(/(Open to your ships)/, '<span class="tipgo"><b>$1</b></span>').replace(/(Shut to your ships)/, '<span class="tipno"><b>$1</b></span>');
-  return `<b>${esc(v.name)}</b><br>${line}`;
+  // Who shut it and since when, where the line above has another reason to give.
+  const plate = v.shutLine && !/shut it|holder's order/.test(v.line) ? `<br>${esc(v.shutLine)}` : '';
+  // For its holder the box ends with the order a click opens; for anyone else, with whose order it is.
+  const why = v.order ? whyNotGate(g, id) : null;
+  const order = v.order && !why ? `<br><span class="tipgo"><kbd>Click</kbd> ${esc(v.orderLine)}</span>` : v.orderLine ? `<br><span class="tipgo dim">${LOCK} ${esc(why ?? v.orderLine)}</span>` : '';
+  return `<b>${esc(v.name)}</b><br>${line}${plate}${order}`;
+}
+/** The gate's question for its holder (ruling 176(e), laid as the UI director placed it): what the order does and whose trade it stops, before he gives it. */
+function gateCard(id: number): string {
+  const q = gateQuestion(g, id);
+  if (!q) return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Sea gate</div><h2>${esc(gateViews(g)[id]?.name ?? '')}</h2></header><div class="body"><p>${esc(whyNotGate(g, id) ?? '')}</p></div><footer><button class="btn" data-act="close">Close</button></footer>`;
+  const v = q.gate, shut = v.shutSince >= 0;
+  const rows = q.rows.map((r) => `<tr${r.own ? ' class="own"' : ''}><td><div class="gr">${chip(r.nat)}<b>${esc(r.own ? 'You' : r.name)}</b><small>${esc(r.what)}</small></div></td><td>${cash(-r.loss, true)}<small> a month</small></td></tr>`).join('');
+  return `<header class="gatehead"><button class="x" data-act="close" aria-label="Close">×</button>
+    ${flagIcon(v.holder, natColor(v.holder), 60, 'gflag')}<div class="grow"><div class="kick">${esc(q.label)}</div><h2>${esc(q.question)}</h2></div><span class="gstate ${shut ? 'shut' : 'open'}">${shut ? 'Shut' : 'Open'}</span></header>
+    <div class="body"><p class="lead">${esc(q.lead)}</p>
+    <h3>${esc(q.heading)}</h3>
+    ${q.rows.length ? `<table class="ltab gatetab">${rows}${q.rows.length > 1 ? `<tr class="sum"><td>All told</td><td>${cash(-q.total, true)}<small> a month</small></td></tr>` : ''}</table>` : `<p class="sub">${esc(q.none)}</p>`}</div>
+    <footer><button class="btn" data-act="close">${esc(q.no)}</button><button class="btn go" data-act="gateorder" data-id="${id}" data-shut="${shut ? 0 : 1}">${esc(q.yes)}</button></footer>`;
+}
+/** A click on a gate's plate, or on its line in the sea's panel: its holder gets the question, anyone else what pointing says. */
+function askGate(id: number): void {
+  const v = gateViews(g)[id];
+  if (!v) return;
+  const why = v.order ? whyNotGate(g, id) : null;
+  if (v.order && !why) { openModal({ kind: 'gate', id }); return; }
+  ui.msg = `${v.name}. ${v.line}${v.shutLine && !/shut it|holder's order/.test(v.line) ? ` ${v.shutLine}` : ''} ${why ?? v.orderLine}`.trim();
+  refresh();
 }
 
 /** The box of every army's flag on the map just now, with the size it carries over it: read from what is drawn, so only what the player sees. */
@@ -1484,6 +1513,38 @@ function heldCorps(): Corps[] {
   if (!humanUp(g)) return [];
   return g.corps.filter((c) => ui.picked.has(c.id) && canOrder(g, c) && c.kind !== 'fort');
 }
+/** The army looked at is the player's own and none of it takes orders (fortress troops, corps sent home): the rules' sentence for it, or ''. */
+function idleInHand(): string {
+  if (ui.sel < 0 || !g.human || !humanUp(g) || ui.tab !== 'region' || ui.picked.size) return '';
+  const whys = g.regions[ui.sel].units.filter((c) => c.nat === g.human && !c.dead).map((c) => whyNotOrder(g, c));
+  return whys.length && whys.every(Boolean) ? whys[0]! : '';
+}
+/**
+ * A right click that is not a march (the Playtester's dead clicks of 2026-11-17): the fleet in hand goes to the sea
+ * under the pointer, as a click sends it; the air group in hand changes base to the province, or says why it
+ * cannot; and an army that takes no orders says why. True when the click was one of these.
+ */
+function rightClickElse(id: number, x: number, y: number): boolean {
+  if (ui.modal) return false;
+  if (id < 0) {
+    if (ui.tab !== 'navy' || !myFleet()) return false;
+    const p = mapPoint(x, y), z = seaAt(p.x, p.y, g);
+    if (z < 0) return false;
+    onSea(z);
+    return true;
+  }
+  const af = ui.tab === 'air' && !ui.airMode && !(ui.raid && ui.raid !== 'menu') ? myAir() : null;
+  if (af) {
+    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name;
+    if (why) ui.msg = `${name} cannot ${deck ? 'fly ashore' : 'move'} to ${r.name}. ${why}`;
+    else if (orderAirBase(g, af.id, id)) { ui.msg = deck ? `${name} flies ashore to ${r.name}.` : `${name} moves to the airfield at ${r.name}.`; if (airWar(g)) ui.field = id; }
+    refresh();
+    return true;
+  }
+  const idle = id !== ui.sel ? idleInHand() : '';
+  if (idle) { ui.msg = idle; refresh(); return true; }
+  return false;
+}
 /** True when the army in hand has no move left this month: all it can be given is a march that is kept. */
 const spentInHand = (): boolean => heldCorps().length > 0 && !pickedCorps().length;
 /** Where no order comes with a place: the modes in which a click on the map means something else. */
@@ -1635,6 +1696,8 @@ function hintText(): string {
     ? `Right-click a green region to march there${trainTo.size ? ', a red one to plan an attack, or a blue one to go there by rail, which takes the whole month' : ', or a red one to plan an attack'}. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.`
     : trainTo.size ? 'Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes the whole month.'
     : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
+  // An army that takes no orders at all says why, in the rules' sentence (ruling 176(c)).
+  if (idleInHand()) return idleInHand();
   // An army with no move left, in hand: what it can still be given (Version 82).
   if (spentInHand()) return `${NO_MOVES} ${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and they march there from next month.`;
   const ready = g.corps.some((c) => c.nat === g.human && c.ap > 0 && c.kind !== 'fort');
@@ -1888,13 +1951,14 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
   else if (c.digging && autoDig()) tags.push(`<span class="tag good worn" title="${esc('Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.')}">Digging · no works yet</span>`);
   else if (autoDig() ? mine && c.kind !== 'fort' && c.town === undefined && !c.yields && !c.fought && c.ap >= c.apMax : c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(autoDig() ? STANCE_HOLD : STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
-  const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
+  const idle = whyNotOrder(g, c);
+  const pips = idle ? `<span class="nolock" title="${esc(idle)}">${LOCK}</span>` : c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
   const card = corpsDetail(g, c);
   if (card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7)) tags.push(`<span class="tag good" title="${esc(REST_RULE)}">Resting</span>`);
   return `<div class="unit"><${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
     ${icon(c)}<span class="nm">${esc(c.name)}${c.nick ? ` <i class="nick">${esc(c.nick)}</i>` : ''}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
-    <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men · ${esc(card.service)}</span>
+    ${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}<span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men · ${esc(card.service)}</span>
     <span class="chits wide">${card.divisions.map((d) => chit(d, true)).join('')}</span>
     ${moodMeters(c, card.mood, true)}${moodWhy(card.mood)}
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${jointStrip(c)}${recStrip('corps', c)}</div>`;
@@ -2000,14 +2064,15 @@ function moodWhy(m: Mood): string {
 function unitCard(c: Corps, mine: boolean): string {
   const can = mine && c.kind !== 'fort';
   const el = can ? 'button' : 'div';
-  const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
+  const idle = whyNotOrder(g, c);
+  const pips = idle ? `<span class="nolock" title="${esc(idle)}">${LOCK}</span>` : c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const gen = generalOf(g, c);
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
   const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
-    <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
+    <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
     <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>${carryRow(c)}
     ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
@@ -2666,7 +2731,7 @@ function provinceSlots(r: Region): string {
     const cost = mine ? fortCost(g, me!, r) : null;
     const have = me ? Math.floor(g.nations[me].pp) : 0;
     const works = cost !== null
-      ? `<button class="slot act${lv ? ' has' : ''}" data-act="fortify" ${have >= cost ? '' : 'disabled'} title="Defenders behind works fight far harder. Ready in ${PRODUCTION.fort.months} months, and the works face every direction.">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}</small><small class="do">Build level ${lv + queued + 1} · ${money(cost)}</small></button>`
+      ? `<button class="slot act${lv ? ' has' : ''}" data-act="fortify" ${have >= cost ? '' : 'disabled'} title="${have >= cost ? '' : `${money(cost - have)} short: the treasury holds ${money(have)}. `}Defenders behind works fight far harder. Ready in ${PRODUCTION.fort.months} months, and the works face every direction.">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}</small><small class="do">Build level ${lv + queued + 1} · ${money(cost)}</small></button>`
       : `<div class="slot${lv ? ' has' : ''}">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}${mine && lv + queued >= 3 ? ', as strong as they can be' : ''}</small></div>`;
     const harbour = `<div class="slot${r.port ? ' has' : ''}">${slotIcon(GLYPH.harbour)}<b>Harbour</b><small>${sea}</small></div>`;
     const field = `<div class="slot${wings.length ? ' has' : ''}">${plane}<b>Airfields</b><small>${flying}</small></div>`;
@@ -2679,7 +2744,7 @@ function provinceSlots(r: Region): string {
     const o = list.find((x) => x.key === key);
     const cls = `slot${has ? ' has' : ''}${wide ? ' wide' : ''}`;
     if (o && o.at === r.id && (o.why === null || o.poor)) {
-      return `<button class="${cls} act" data-act="arsenal" data-key="${key}" ${humanUp(g) && o.why === null ? '' : 'disabled'} title="${esc(o.blurb)} Ready in ${months(o.months)}.${o.upkeep > 0 ? ` Each level costs ${cash(o.upkeep)} a month to man.` : ''}">${glyph}<b>${title}</b>${pips}<small>${text}</small><small class="do">${verb} · ${money(o.cost)}</small></button>`;
+      return `<button class="${cls} act" data-act="arsenal" data-key="${key}" ${humanUp(g) && o.why === null ? '' : 'disabled'} title="${shortBy(o) ? `${shortBy(o)}: the treasury holds ${money(g.nations[g.human!].pp)}. ` : o.why ? `${esc(o.why)} ` : humanUp(g) ? '' : 'It is not your month. '}${esc(o.blurb)} Ready in ${months(o.months)}.${o.upkeep > 0 ? ` Each level costs ${cash(o.upkeep)} a month to man.` : ''}">${glyph}<b>${title}</b>${pips}<small>${text}</small><small class="do">${verb} · ${money(o.cost)}</small></button>`;
     }
     return `<div class="${cls}"${o?.why ? ` title="${esc(o.why)}"` : ''}>${glyph}<b>${title}</b>${pips}<small>${text}</small></div>`;
   };
@@ -5078,7 +5143,7 @@ function seaPane(): string {
     const other = g.seas[gt.a === z.id ? gt.b : gt.a];
     const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
     const gv = gateViews(g, me || null)[g.gates.indexOf(gt)];
-    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(natName(holder))}.`}</div>`;
+    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(natName(holder))}.`}${gv.shutLine && !/shut it|holder's order/.test(gv.line) ? ` ${esc(gv.shutLine)}` : ''}${gv.order ? ` <button class="btn small" data-act="gateask" data-id="${gv.id}" ${whyNotGate(g, gv.id) ? `disabled title="${esc(whyNotGate(g, gv.id)!)}"` : ''}>${esc(gv.orderLine)}</button>` : ''}</div>`;
   }
   return `<h2>${esc(z.name)}</h2>${head}${straits}
     <h3>Fleets at sea here</h3>${here.length ? here.map(rowOf).join('') : `<div class="empty">${pic ? 'No fleet has been found at sea here.' : 'No fleet at sea here.'}</div>`}
@@ -5402,8 +5467,8 @@ function groupOrders(x: GroupRow): string {
   // The fleets a wing ashore can board now: with one, the button gives the order; with several, they are listed.
   const decks = mv?.order === 'aboard' ? airGroupDecks(g, x.id).filter((d) => !d.why) : [];
   const acts = `<div class="acts"><button class="btn small go${ui.raid && ui.lead === x.id ? ' on' : ''}" data-act="raidmenu" data-id="${x.id}" ${x.flew || peace ? 'disabled' : ''} title="${x.flew ? 'It has flown its raid this month.' : peace ? 'The nation is at peace.' : 'Pick the kind of raid and its target. You see the chance of success and the losses to expect, then choose who else flies it.'}">${deck ? 'Plan a strike with it' : 'Plan a raid with it'}</button>
-    <button class="btn small${ui.airMode === 'scout' ? ' on' : ''}" data-act="scoutmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft photograph one province: every army there and beside it is identified, corps by corps, with its strength, its rest and its morale. The report is exact this month and goes stale after. It keeps its patrol.'}">Scout from the air</button>
-    ${carrierRules(g) ? `<button class="btn small${ui.airMode === 'search' ? ' on' : ''}" data-act="searchmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month. Enemy ships there may be reported, or identified: a fleet has to be found before it can be struck. It keeps its patrol.'}">Search a sea</button>` : ''}
+    <button class="btn small${ui.airMode === 'scout' ? ' on' : ''}" data-act="scoutmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : peace ? 'The nation is at peace.' : 'A few aircraft photograph one province: every army there and beside it is identified, corps by corps, with its strength, its rest and its morale. The report is exact this month and goes stale after. It keeps its patrol.'}">Scout from the air</button>
+    ${carrierRules(g) ? `<button class="btn small${ui.airMode === 'search' ? ' on' : ''}" data-act="searchmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : peace ? 'The nation is at peace.' : 'A few aircraft quarter one sea for the month. Enemy ships there may be reported, or identified: a fleet has to be found before it can be struck. It keeps its patrol.'}">Search a sea</button>` : ''}
     ${deck ? `<button class="btn small" data-act="fleetgo" data-id="${x.ship}" title="Its aircraft go where its fleet goes: pick the fleet up to move them.">Go to its fleet</button>` : `<button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to another airfield. Settling in costs readiness.'}">Move to another airfield</button>`}
     ${mv && (mv.order === 'ashore' || decks.length <= 1) ? `<button class="btn small${mv.order === 'ashore' && ui.airMode === 'base' ? ' on' : ''}" data-act="${mv.order === 'ashore' ? 'airbase' : 'wingaboard'}" ${mv.why ? 'disabled' : ''} title="${esc(mv.why ?? mv.price)}">${mv.order === 'ashore' ? 'Fly ashore' : 'Back aboard'}</button>` : ''}</div>
     ${mv ? `<p class="sub wingprice">${mv.why ? `${LOCK} ${esc(mv.why)}` : esc(mv.price)}</p>` : ''}
@@ -5727,6 +5792,7 @@ function openModal(m: typeof ui.modal): void {
   }
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
+  else if (m.kind === 'gate') card.innerHTML = gateCard(m.id);
   else if (m.kind === 'invade') {
     if (!previewDeclare(g, m.on)) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = invadeCard(m.on, m.target ?? -1);
@@ -6726,7 +6792,7 @@ function menOrders(nat: string): string {
   const e = c.early, up = humanUp(g);
   const early = ui.modal?.ask === 'early' && !e.why
     ? `<div class="menorder asking"><div class="note warn"><b>Call up the next class early?</b> About ${menWords(e.men)} men join the reserve at once, ${e.months === 1 ? 'a month' : `${e.months} months`} of classes together. No class then comes of age for ${e.gap === 1 ? 'a month' : `${e.gap} months`}, because those boys are with the colours already. They are the same men, sooner, and it cannot be undone.</div><div class="acts"><button class="btn small go" data-act="menearly" data-sure="1">Yes, call them up</button><button class="btn small" data-act="govkeep">Not now</button></div></div>`
-    : `<div class="menorder"><span class="grow"><b>The next class, early</b><small>${esc(e.text)}</small>${e.why ? `<small class="whyno">${esc(e.why)}</small>` : ''}</span><button class="btn small" data-act="menearly" ${e.why ? 'disabled' : ''}>Call them up now</button></div>`;
+    : `<div class="menorder"><span class="grow"><b>The next class, early</b><small>${esc(e.text)}</small>${e.why ? `<small class="whyno">${esc(e.why)}</small>` : ''}</span><button class="btn small" data-act="menearly" ${e.why ? `disabled title="${esc(e.why)}"` : ''}>Call them up now</button></div>`;
   const w = c.callUp;
   const wave = w ? `<div class="menorder"><span class="grow"><b>The standing call-up${w.held ? ' <span class="tag warn">Held</span>' : ''}</b><small>${esc(w.text)}</small></span><button class="btn small" data-act="menhold" data-hold="${w.held ? 0 : 1}" ${up ? '' : 'disabled title="It is not your month."'}>${w.held ? 'Let it run' : 'Hold it'}</button></div>` : '';
   return `<div class="menorders"><small>Your say over the call-up</small>${early}${wave}</div>`;
@@ -8205,6 +8271,17 @@ function onClick(e: MouseEvent): void {
     case 'stopresearch': if (orderStopResearch(g, t.dataset.id ?? '')) { refresh(); showTech(t.dataset.id); } break;
     case 'setlevel': { if (g.human && setLevel(g, t.dataset.level ?? '')) { const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; } break; }
     case 'askdeclare': openModal({ kind: 'invade', on: t.dataset.nat!, target: -1 }); break;
+    case 'gateask': askGate(Number(t.dataset.id)); break;
+    case 'gateorder': {
+      const id = Number(t.dataset.id), shut = t.dataset.shut === '1';
+      if (orderGate(g, id, shut)) {
+        const v = gateViews(g)[id], are = /s$/.test(v.name) ? 'are' : 'is';
+        ui.msg = shut ? `${v.theName} ${are} shut: only your own ships and your allies' pass.` : `${v.theName} ${are} open again.`;
+      } else ui.msg = whyNotGate(g, id) ?? '';
+      openModal(null);
+      refresh();
+      break;
+    }
     case 'path': openModal({ kind: 'path', ask: t.dataset.ask ?? '' }); break;
     case 'lastact': g.flags['dom:seen'] ??= g.turn; openModal({ kind: 'lastact', ask: t.dataset.ask === '1' }); break;
     case 'keeppeace': if (orderKeepPeace(g)) { refresh(); openModal({ kind: 'lastact' }); } break;
@@ -8690,6 +8767,7 @@ function wireMap(): void {
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
+    if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
     if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
   });
   svg.addEventListener('pointerdown', (e) => {
@@ -8815,7 +8893,7 @@ function wireMap(): void {
         // A gate's mark: with a fleet in hand the click is for the sea under it; otherwise it says what pointing says (a finger has no pointing).
         const p = mapPoint(e.clientX, e.clientY), z = seaAt(p.x, p.y, g);
         if (ui.tab === 'navy' && myFleet() && z >= 0) onSea(z);
-        else { const v = gateViews(g)[Number(el.dataset.id)]; if (v) { ui.msg = `${v.name}. ${v.line}`; refresh(); } }
+        else askGate(Number(el.dataset.id));
       }
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
