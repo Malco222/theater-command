@@ -538,7 +538,7 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   if (by) g.flags[`relieved:${r.id}`] = g.turn;
   g.supplyDirty = true;
   tallySiege(g, 'raised');
-  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl });
+  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl, ...(was && g.nations[was] ? { lost: was } : {}) });
   // Driven off by a relieving army, the besiegers burn what they held outside the walls, if that is their order.
   if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }

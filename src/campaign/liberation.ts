@@ -14,7 +14,7 @@ import data from '../../data/campaign/liberation.json';
 import { clamp } from '../core/math';
 import { turnToDate } from '../core/ticket';
 import { STACK, type Game, type Nation, type Passing, type Region } from './types';
-import { addCorps, allied, armySize, atWar, bloc, headline, setWar, theName, type Bloc } from './game';
+import { addCorps, allied, armySize, atWar, bloc, headline, newsWeek, setWar, theName, type Bloc } from './game';
 import { corpsName } from './economy';
 import { homeOpinion } from './diplomacy';
 import { enrol, small } from './league';
@@ -45,9 +45,11 @@ export function recordFall(g: Game, nat: string, by: string, how: Passing['how']
   if (!X) return;
   let provinces = 0;
   for (const r of g.regions) if (r.owner === nat && !r.overseas) provinces++;
+  // The roll is dated as the news is (display only), so a fall's line and its headline keep the same week.
+  const week = newsWeek(g);
   g.passings.push({
-    id: g.passings.length + 1, turn: g.turn, week: g.week, kind: 'fell', nat, by, how, capital: X.capital, provinces,
-    weeks: (g.turn - 1) * 4 + g.week, ...(g.human === nat ? { player: true } : {}),
+    id: g.passings.length + 1, turn: g.turn, week, kind: 'fell', nat, by, how, capital: X.capital, provinces,
+    weeks: (g.turn - 1) * 4 + week, ...(g.human === nat ? { player: true } : {}),
   });
 }
 
@@ -178,7 +180,7 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   if (player) { g.human = nat; delete g.flags[`was:${nat}`]; }
   const foe = after ? g.nations[after] : null;
   headline(g, 'event', fill(player ? LIB.lines.freedSelf : foe ? LIB.lines.freedAfter : LIB.lines.freed, { Name: theName(X, true), name: theName(X), adj: H.adj, capital: cap.name, side: LIB.lines.sides[side], foe: foe ? theName(foe) : '' }), nat, cap.id, { arm: 'land', won: by });
-  g.passings.push({ id: g.passings.length + 1, turn: g.turn, week: g.week, kind: 'freed', nat, by, how: 'freed', capital: cap.id, provinces, corps, side, ...(after ? { after } : {}), ...(player ? { player: true } : {}) });
+  g.passings.push({ id: g.passings.length + 1, turn: g.turn, week: newsWeek(g), kind: 'freed', nat, by, how: 'freed', capital: cap.id, provinces, corps, side, ...(after ? { after } : {}), ...(player ? { player: true } : {}) });
   return true;
 }
 

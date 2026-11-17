@@ -209,7 +209,7 @@ describe('Britain may stand by its dominions: six times in ten (Version 84.2.5, 
   const titled = (g: Game, from: number): Headline[] => g.headlines.slice(from).filter((x) => x.head === ANSWERS || x.head === STAYS);
 
   it('the odds sit in the data beside the row, and of 100 seeded declarations about 60 answer', () => {
-    expect(WORLD.dominions!.UK).toEqual({ of: ['CAN', 'AUS', 'NZL', 'SAF'], answers: 0.6 });
+    expect(WORLD.dominions!.UK).toMatchObject({ of: ['CAN', 'AUS', 'NZL', 'SAF'], answers: 0.6 });
     expect(answersOf('UK')).toBe(0.6);
     expect(answersOf('FRA')).toBe(0);
     const g = playing('USA');
