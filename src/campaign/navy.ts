@@ -17,7 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -431,6 +431,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!cs.length) return 'No corps chosen.';
   const nat = cs[0].nat, n = g.nations[nat], from = g.regions[cs[0].reg];
   for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
+  // Guns and engineers land on no enemy shore by themselves (ruling 211(a), the grand campaign).
+  if (gunsRule(g) && !cs.some(fights) && !allied(g, nat, to.ctrl) && !gunsMayFollow(g, cs[0], to)) return aloneLine(cs);
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';

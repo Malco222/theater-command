@@ -2282,6 +2282,11 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .mc-banner.good small { color: #cfe0bb; }
 .mc-banner.good .mc-alt { border-color: #9fbb86; }
 .mc-banner b.tight { font-size: 19.5px; text-overflow: clip; }
+/* News that is no alarm (Britain stays out of Canada's war: ruling 211(b)): the kit's brass band, `tc-band--news`. */
+.mc-banner.news { background: linear-gradient(90deg, #6c5024, #553f1d); border-color: #8a6b3b; border-left-color: #e0b872; }
+.mc-banner.news .k { color: #f3e2bd; }
+.mc-banner.news small { color: #e6d5b0; }
+.mc-banner.news .mc-alt { border-color: #b89a62; }
 .wayhit.dim { opacity: .45; }
 .card footer.raidfoot { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
 

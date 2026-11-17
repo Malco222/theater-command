@@ -17,7 +17,7 @@
 
 import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, theName } from './game';
+import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -40,6 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
+  dominions?: Record<string, { of: string[]; answers: number }>;
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
@@ -69,6 +70,17 @@ export const WORLD_STAGES = [104];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
+
+/** The mother country that stands by a dominion (world.json, 'dominions'), or null. */
+export function patronOf(nat: string): string | null {
+  for (const [p, row] of Object.entries(WORLD.dominions ?? {})) if (row.of.includes(nat)) return p;
+  return null;
+}
+
+/** The share of the time a mother country answers when war is made on a dominion of hers: 0.6 for Britain (Brian's rule of 17 November 2026). */
+export function answersOf(patron: string): number {
+  return WORLD.dominions?.[patron]?.answers ?? 0;
+}
 
 /** True for a province beyond the map of Europe. */
 export const beyondEurope = (r: Region | number): boolean => (typeof r === 'number' ? r : r.id) >= WORLD_FIRST;
@@ -191,6 +203,15 @@ export function worldMonth(g: Game): void {
       if (!E?.alive || n.atWar.includes(e) || allied(g, id, e)) continue;
       setWar(g, id, e);
       headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
+    }
+  }
+  // A campaign saved before ruling 211(b): the roll for a war somebody made on a dominion is made as the month
+  // ends, once (a new war has its roll the day it is declared, in declareWar, and is passed over here).
+  for (const row of Object.values(WORLD.dominions ?? {})) {
+    for (const d of row.of) {
+      const D = g.nations[d];
+      if (!D?.alive) continue;
+      for (const e of [...D.atWar]) { const since = g.flags[`war:${e}:${d}`]; if (since !== undefined) standsBy(g, e, d, since); }
     }
   }
   // No declaration switches such a country off (ruling 58). A computer-led country whose industry goes to war by
