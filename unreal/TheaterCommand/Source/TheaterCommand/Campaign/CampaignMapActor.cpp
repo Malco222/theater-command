@@ -1433,7 +1433,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 		}
 	}
 	// (by night the same paint came out at 57% of ground in view, where two thirds is asked: it is lifted a little there)
-	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * 1.35f, Moon));
+	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * ACampaignEnvironment::MoonLook().Haze, Moon)); // (ruling 205(a): the fog by night stays as built while the ground in view is lifted)
 	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
 	LandScalar(TEXT("HazeFloor"), HazeFloor);
 	{
@@ -6072,7 +6072,9 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		const FVector At = SurfacePoint(Spot->X, Spot->Y, 0.02);
 		// One small aircraft for each group, drawn up in a row on the grass on the side away from the hangars,
 		// their noses to the runway: silver, with wings and fin tipped in their country's colour.
-		const int32 Parked = FMath::Min(Each.Groups, 6);
+		// (Brian, 17 November 2026: "it says i have planes at an airfield but none are there". One aircraft stood for a
+		// whole group of eighty and could not be found: now one for every twenty-five or so, never fewer than two.)
+		const int32 Parked = Each.Aircraft > 0 ? FMath::Clamp(FMath::CeilToInt32(Each.Aircraft / 25.0f), FMath::Max(Each.Groups, 2), 6) : FMath::Min(Each.Groups, 6);
 		// (These silver ones are what the table shows from working height and above. Close to, each field's aircraft
 		// are its country's own fighters: see ShowParkedPlanes.)
 		FParkedField& Kept = ParkedFields.AddDefaulted_GetRef();
@@ -6937,9 +6939,9 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		// (The art director's ruling of round 26: the moon's grading comes in after the evening, not through it. The
 		// evening has a sun and a shade of its own on the land: gold on the slopes the lamp lights, cool in the shade.)
 		const float Moon = bLamplight ? 0.0f : ACampaignEnvironment::MoonOf(Night), Dusk = bLamplight ? 0.0f : ACampaignEnvironment::DuskOf(Night);
-		LandVector(TEXT("SunColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), ACampaignEnvironment_DuskSun(), Dusk), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
+		LandVector(TEXT("SunColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), ACampaignEnvironment_DuskSun(), Dusk), ACampaignEnvironment::MoonLook().Sun, Moon));
 		LandScalar(TEXT("WetMoon"), Moon); // (the lesser painted waters sink toward their ground by moonlight: see the land's paint)
-		LandVector(TEXT("ShadeColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), ACampaignEnvironment_DuskShade(), Dusk), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
+		LandVector(TEXT("ShadeColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), ACampaignEnvironment_DuskShade(), Dusk), ACampaignEnvironment::MoonLook().Shade, Moon));
 		if (PieceMaterial)
 		{
 			// (and the pieces: under a blue moon a blue base was the loudest thing on the table after the fires.
@@ -6957,7 +6959,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		// (the grey floor a wood keeps under the snow: the art director's ruling of round 19)
 		LandVector(TEXT("SnowWoodFloor"), SnowWoodFloor);
 		// (by moonlight the nations' colours sink into the dark, as colours do: the land is mostly the land)
-		LandScalar(TEXT("Politics"), FMath::Lerp(0.94f, 0.42f, Moon));
+		LandScalar(TEXT("Politics"), FMath::Lerp(0.94f, ACampaignEnvironment::MoonLook().Politics, Moon));
 	}
 	{
 		// The water by moonlight: greyed (a blue moon on blue water is cobalt, and a blue nation's coast is lost
@@ -8189,14 +8191,14 @@ AArmyPiece* ACampaignMapActor::FindPieceOfCorps(int32 CorpsId) const
 	return nullptr;
 }
 
-AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance) const
+AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance, const AArmyPiece* PassOver) const
 {
 	AArmyPiece* Best = nullptr;
 	double Nearest = TNumericLimits<double>::Max();
 	auto Try = [&](AArmyPiece* Piece)
 	{
 		double Distance = 0.0;
-		if (Piece && !Piece->IsHidden() && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
+		if (Piece && Piece != PassOver && !Piece->IsHidden() && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
 		{
 			Nearest = Distance;
 			Best = Piece;
@@ -8222,7 +8224,7 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 		{
 			const double Along = FVector::DotProduct(Line.Middle - Origin, Direction);
 			AArmyPiece* Owner = Line.Piece.Get();
-			if (Owner && !Owner->IsHidden() && Along > 0.0 && Along < Nearest && FVector::DistSquared(Origin + Direction * Along, Line.Middle) < Line.Radius * Line.Radius)
+			if (Owner && Owner != PassOver && !Owner->IsHidden() && Along > 0.0 && Along < Nearest && FVector::DistSquared(Origin + Direction * Along, Line.Middle) < Line.Radius * Line.Radius)
 			{
 				Nearest = Along;
 				Best = Owner;

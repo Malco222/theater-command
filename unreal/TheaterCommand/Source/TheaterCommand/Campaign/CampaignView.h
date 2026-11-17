@@ -100,6 +100,7 @@ struct FViewCorps
 	int32 MarchTo = INDEX_NONE; // (release 1) the province it is marching to on a standing order
 	int32 MarchMonths = 0; // and about how many months it has still to go
 	bool bCanOrder = false; // the player may give this corps orders right now
+	FString NoOrders; // (rules 84.1, ruling 176(c)) why a corps of his own never takes orders, in the rules' sentence: "Fortress troops man their works and do not move."
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
@@ -112,6 +113,11 @@ struct FViewCorps
 	TArray<FString> Why; // what has moved its morale, a line each
 	bool bResting = false; // it will count as rested if it neither marches nor fights this month
 	TArray<FViewDivision> Parts;
+	// (Rules version 84.) The weapons it carries, for the row of signs on its card and the weapons on its ring: its
+	// anti-tank guns' level (0 to 3), then machine guns, mortars and snipers as 1 or 0. Empty for a corps the rule
+	// counts none for (tanks, guns, engineers), for one not identified, and outside the grand campaign.
+	TArray<int32> Carry;
+	bool bDigging = false; // it has begun to dig where the first month's digging shows no works yet (the open desert)
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -555,6 +561,43 @@ struct FViewGate
 	bool bOpen = true;
 	FString Lead, Mark, Rest;
 	FString Shut; // for a fleet's route that is refused: "The Panama Canal is shut to your ships: ..."
+	// (Rules 84.1; ruling 176(e).) The order the player may give as its holder ("shut", "open", or nothing for anyone
+	// else), the slip's last line for it, and where its holder has shut it, who did and to whom.
+	FString Order, OrderLine, ShutLine;
+};
+
+/** (Rules 84.1; ruling 176(e).) The gate's question for its holder: what the order does, and whose trade it costs, as rows. */
+/** (The design director, 17 November 2026.) One way up to an enemy army that is not next door, for the approach order. */
+struct FApproachRow
+{
+	int32 Region = INDEX_NONE;
+	FString Name;
+	int32 Cost = 0, Left = 0;
+	bool bAttack = false; // a move is left on arrival and nothing bars the way in: the attack card opens there
+	FString Arrive; // "1 move left on arrival: you can attack this month"
+	FString How; // its river and ground in a word
+	FString Says; // enemy ground on the way: what the march does there
+	TArray<int32> Road; // the provinces marched through, the approach itself last
+};
+
+/** The march up and the attack planned as one order: the game's pick first, then up to three more ways. */
+struct FApproachPlan
+{
+	bool bOk = false;
+	FString Name; // the enemy's province
+	TArray<FApproachRow> Rows;
+	FString None; // where nothing beside the enemy can be reached this month: the sentence that says so and names the nearest
+};
+
+struct FGateAsk
+{
+	bool bOk = false;
+	FString Why; // why he cannot give the order, where he cannot
+	FString Order, Label, Question, Lead, Heading, Total, None, Yes, No, Holder;
+	TArray<FString> Rows; // "You: Your trade with X stops. -2.4 a month"
+	// (Rules 84.2; ruling 177(a).) Who resents it, a row each ("Mexico: 1 point of opinion a month, 8 at most"), and what that comes to.
+	FString ResentHeading, ResentNote;
+	TArray<FString> Resent;
 };
 
 /**
@@ -819,6 +862,7 @@ struct FReachRegion
 	int32 Cost = 0;
 	int32 Previous = INDEX_NONE; // the region it would be entered from
 	bool bAttack = false; // enemy-held: going there means a battle
+	bool bTake = false; // (rules 84.1) enemy ground with no army in its field: marching there is the order to take the place
 	FString War; // the country at peace that holds it: going there means declaring war on it first
 	bool IsWar() const { return !War.IsEmpty(); }
 };
@@ -855,6 +899,13 @@ struct FBattleUnit
 };
 
 /** The two armies drawn up against each other before an attack: who is there, the odds, and the Battle Ticket. */
+/** (Rules version 84.) One line of WHAT YOU FACE: a sign (tank, anti-tank, machine-gun, mortar, sniper, gun, scouted) and a sentence. bUnknown marks the line for what is not scouted. */
+struct FFaceLine
+{
+	FString Sign, Text;
+	bool bUnknown = false;
+};
+
 struct FAttackPreview
 {
 	bool bValid = false;
@@ -868,6 +919,14 @@ struct FAttackPreview
 	TArray<FString> Allies; // the allied countries whose corps march in the attack
 	FString Prize; // what taking the place is worth, in a sentence
 	FString Refused; // why the troops there may not be attacked at all (they stand on a neutral's ground): then nothing else is filled in
+	// (Rules 84.1; rulings 175(c), 177, 178.) A march onto enemy ground with no army in its field: what it meets
+	// ("open", "gates", "guard", "garrison", "unknown"), the rules' sentence for it, and the slip's and the card's
+	// words. Where the town's guard will fight (bForecast) the fields above carry the assault as the army arrives,
+	// and these the same assault made ready, a month later.
+	FString Meets, MarchLine, Town, Forces, OrderWord, GuardName, GuardLine, GuardWho, Favours, NowSays, LaterSays, LaterChanceWords;
+	FString NowLabel, LaterLabel, WaitSays; // (rulings 182 and 183) the two blocks' headings, and the rules' sentence on what waiting brings
+	bool bForecast = false, bLater = false, bLaterExact = true;
+	float LaterOdds = 0.0f, LaterOddsLow = 0.0f, LaterOddsHigh = 0.0f;
 	float Even = 1.2f; // the odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town
 	int32 ChancePct = -1, ChancePctLow = -1, ChancePctHigh = -1; // the chance of taking the place, in whole per cent (100 only when it cannot fail); -1 where the rules give none
 	FString Mass; // where more corps stand in reach than were picked: what sending everyone would come to, in a sentence
@@ -875,6 +934,7 @@ struct FAttackPreview
 	// (Version 63) The chance in words (a best guess with its limits where the band is too wide to plan on), what the
 	// fight is likely to cost each side in men either way, and how the card opened: the corps it counts, a sentence
 	// where the staff brought in more than were picked, and the corps that were picked.
+	FString VerdictTone, VerdictWord; // (rules 84.1) the staff's verdict in the rules' own word, and how it reads: "win", "" or "loss"
 	FString ChanceWords;
 	TArray<FString> Cost;
 	TArray<int32> Ids;
@@ -893,6 +953,7 @@ struct FAttackPreview
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;
+	TArray<FFaceLine> Face; // (Version 84) what the defence will do to what he brings, as far as his reports know it: four lines at most, and one for what is not scouted
 };
 
 /** One corps' march: the regions it passed through, ending where it now stands. */
@@ -911,10 +972,13 @@ struct FAttackResult
 	bool bTaken = false;
 	bool bYielded = false; // the defenders fell back without a fight
 	bool bSiege = false; // the country round the town was won, but the town holds: it is now besieged
+	bool bFell = false; // (rules 84.1, a march to take a place) the place is the player's side's: it fell with the move, or to the assault
+	FString Stands; // ...and what still holds the town where it did not: "guard", "garrison" or nothing
 	int32 AttackerLost = 0;
 	int32 DefenderLost = 0;
 	int32 Prisoners = 0;
 	FString Price; // (Version 63) what it cost each side in men, and the share of those sent in, in a sentence
+	FString Paid, PaidSign; // (Version 84) who paid most of it and to what, in a sentence or two, with its sign (or none)
 	float Odds = 0.0f; // the odds as they stood on the day
 	TArray<FTicketLine> Lines; // the Battle Ticket as it was on the day, read in the past
 	TArray<FBattleUnit> Attackers;
@@ -945,6 +1009,7 @@ struct FAnnouncement
 	FString Title; // "FRANCE HAS FALLEN"
 	FString Text;
 	bool bGood = false; // good news for the player
+	bool bEnding = false; // (ruling 204) the campaign's ending, won or lost: it alone may come before the month's card unasked
 	FString Kicker; // "Eliminated · June 1940"
 	FString More; // what it means from here on: how the country can come back
 	TArray<FString> FactLabels, FactValues; // three figures for the foot

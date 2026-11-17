@@ -269,6 +269,16 @@ bool ACampaignGameMode::ContinueCampaign()
 	return true;
 }
 
+bool ACampaignGameMode::RestoreCampaign(const FString& SaveText)
+{
+	if (!Session.IsValid() || !Session->Load(SaveText))
+	{
+		return false;
+	}
+	LayOutWar();
+	return true;
+}
+
 void ACampaignGameMode::BeginPlay()
 {
 	Super::BeginPlay();

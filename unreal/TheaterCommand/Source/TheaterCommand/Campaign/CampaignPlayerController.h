@@ -62,6 +62,7 @@ struct FTrayCard
 	bool bPicked = false; // going with the army, or left behind
 	bool bCanOrder = false;
 	FText Nickname; // empty until the corps has earned one
+	FString NoOrders; // (ruling 176(c)) why it never takes orders, in the rules' sentence
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
 	FString Ally; // an ally's corps marching with the army: its own country's tag
@@ -75,6 +76,8 @@ struct FTrayCard
 	FString MoraleWord, RestWord, Trend, MoodTip, Service;
 	bool bResting = false;
 	TArray<FViewDivision> Parts;
+	TArray<int32> Carry; // (Version 84) its weapons: anti-tank level, machine guns, mortars, snipers; empty where the rule counts none
+	bool bDigging = false; // (Version 84) digging, with no works to show yet
 	int32 Experience = 0; // 0 to 100
 	TArray<FHonourRibbon> Honours;
 };
@@ -308,6 +311,19 @@ struct FWarPrompt
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;
 	FText Confirm = FText::FromString(TEXT("DECLARE WAR"));
+	// (Rules 84.1; rulings 176(e) and 178(d).) The same card is the gate's question for its holder: the order to shut
+	// it or open it again, with the answer that changes nothing in the other button's words.
+	bool bGate = false, bGateShut = false;
+	int32 Gate = INDEX_NONE;
+	FText Cancel = FText::FromString(TEXT("NOT NOW"));
+	// (The design director, 17 November 2026; Brian the same day: "if an enemy army is out of a city i couldnt attack
+	// them".) The same card plans the march up to an enemy army that is not next door, and the attack, as one order:
+	// the ways up as rows (the game's pick first), the one chosen, and the enemy's province.
+	bool bApproach = false;
+	int32 ApproachTo = INDEX_NONE;
+	TArray<FApproachRow> Ways;
+	int32 Way = 0;
+	FText WaysHead;
 };
 
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
@@ -343,11 +359,26 @@ struct FFaceOff
 	bool bProbeOk = false, bBomb = false, bBombOk = false;
 	int32 ProbeCorps = INDEX_NONE;
 	FString BombOpen;
+	TArray<FFaceLine> Face; // (Version 84) WHAT YOU FACE, before the order
+	FString Paid, PaidSign; // (Version 84) who paid and to what, on the result
 	FText Ticket;
 	FText TicketKey; // the lines of the ticket that matter most: a long ticket opens folded to these
 	int32 TicketLines = 0, TicketHidden = 0;
 	FText ResultTitle;
 	FText ResultDetail;
+	// (Rules 84.1; rulings 175(c), 177, 178; the UI director's sheet 21.) The card before a march on a town held by
+	// its guard alone: two forecasts and two orders. The first forecast is the card's own (the assault as the army
+	// arrives); these are its heading and its sentence, and the second (the same assault made ready, a month later).
+	bool bMarch = false;
+	// (Rulings 182 and 183.) The same card for a town the army already stands round: SEND THEM IN and KEEP UP THE
+	// SIEGE. bArrival: it opened by itself as the army arrived, and a card that opens by itself takes no Enter.
+	bool bStorm = false, bArrival = false;
+	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
+	// that takes a click only, and the light and Enter go to CALL IT OFF.
+	bool bLongShot = false;
+	bool bFavourSiege = false; // which order the forecast favours: that button is the lit one
+	FText NowLabel, NowSays, LaterLabel, LaterOdds, LaterSays;
+	float LaterBalance = 0.5f;
 };
 
 /**
@@ -386,6 +417,8 @@ public:
 
 	/** Declares the war that was asked about, and sends the army in hand on if it was on its way there. */
 	void ConfirmWar();
+	/** (Ruling 178(d).) The gate's question for its holder, opened by a click on the gate's plate. Anyone else is told that only the holder can give the order. */
+	void OpenGateBox(int32 GateId);
 	void CloseWarPrompt();
 
 	/** A page shown over the table: a unit's service record or the roll of honour. Revision goes up when it changes. */
@@ -580,7 +613,7 @@ public:
 	/** Where the pointer is, in the window's own pixels. */
 	FVector2D GetPointer() const { return (StagedHover != INDEX_NONE || StagedGate != INDEX_NONE || StagedSea != INDEX_NONE) ? StagedPointer : LastMouse; }
 	// For the photographer, who has no mouse: the tip as it would read with the pointer resting on this region.
-	void StageHover(int32 RegionId) { StagedHover = RegionId; }
+	void StageHover(int32 RegionId, bool bOnItsAirfield = false) { StagedHover = RegionId; bStagedField = bOnItsAirfield; }
 	/** (Ruling 86.) For the photographer: the pointer resting on the mark of the gate whose name begins so. */
 	void StageGate(const FString& NameBegins);
 	/** For the photographer: with a fleet in hand, the pointer resting on the sea whose name begins so. */
@@ -759,6 +792,9 @@ public:
 	void NextNewsCard();
 	void EndNewsreel();
 	void ToggleNewsreels();
+	/** (Ruling 203.) The month's newsreel, played from the month's card: the card comes back when it is over. */
+	bool HasLastReel() const { return LastReel.Num() > 0 && !Newsreel.bOn; }
+	void PlayLastReel();
 	/** Day and night in the room: running, held at day, or held at night (T). */
 	void ToggleDayNight();
 	/** Begins a moment over a province: the eye goes down to it, stays about three seconds and is handed back. Any key or click ends it sooner. */
@@ -819,12 +855,45 @@ public:
 
 	/** A click on a territory, as the mouse makes it: for scripts. */
 	void ClickRegion(int32 RegionId) { ClickOnTable(nullptr, RegionId); }
+	// ---- For the playtester's click-through (CampaignStepPlayer: a development tool) ----
+	/** What the player has in front of him: the card or page on top, the words he is shown, and what is in hand. */
+	void DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const;
+	/** A right-click with whatever is in hand, on a province or (Sea given) on a sea: the order the mouse gives. */
+	void RightClickOn(int32 RegionId, int32 Sea, bool bOnTheTable);
+	/**
+	 * A right-click on the figure of the army this corps stands in, aimed as the mouse aims it: along the line from the
+	 * eye through its colours. Says which province the order went to, and which province's ground lay behind the pointer.
+	 */
+	bool RightClickOnFigure(int32 CorpsId, int32& OutAimed, int32& OutGround);
+	/** On the approach order's card: another way up is picked. */
+	void PickApproach(int32 Index);
+	/** True while a card, a page or a screen lies over the table and its clicks do not reach the map. */
+	bool IsTableBusy() const;
+	/** True while the game plays something through by itself: the other countries' month, a newsreel, an announcement. */
+	bool IsBusyForSteps() const;
+	/** Answers what a month's end puts in the way, as a player in a hurry would: the question, the newsreel, the announcements, the replay. */
+	void StepThroughMonth();
+	bool RestoreCampaign(const FString& SaveText);
+	/** Begins a grand campaign as this country from this month, with these dice and this level, as the opening screen would. */
+	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord);
+	const TArray<int32>& StepPicked() const { return PickedCorps; }
+	int32 StepFleet() const { return FleetInHand; }
+	void PressEscape() { Escape(); }
+	void PressSpace() { SpaceBar(); }
+	/** What the game is showing by itself just now, for the screens a month's end brings: the question, the replay, a newsreel, an announcement, or the page on top. */
+	FString StepState() const;
+	/** A click on a province's airfield, as the mouse gives it. */
+	void ClickAirfield(int32 RegionId) { PointedField = RegionId; ClickOnTable(nullptr, RegionId); }
+	/** A click on the plate of the gate whose name begins so, as the mouse gives it with nothing in hand. False where there is no such gate. */
+	bool ClickGate(const FString& NameBegins);
 
 	/** Sends the army in hand to the place that was clicked once and is waiting for the word. */
 	void ConfirmPending();
 
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
+	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
+	void ConfirmMarch(bool bAssault);
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
 	void SendEveryone();
 	/** (Version 63) Back to the corps that were in hand when the attack was ordered, where the staff brought in more. */
@@ -875,7 +944,24 @@ private:
 	void RefreshRegionPanel(int32 RegionId);
 	void RefreshOrders();
 	void Notify(const FString& Text, double Seconds = 5.0);
-	void OpenFaceOff(int32 RegionId, bool bOpening = false);
+	void OpenFaceOff(int32 RegionId, bool bOpening = false, const FAttackPreview* Given = nullptr);
+	/**
+	 * (Rules 84.1.) The army in hand is ordered onto enemy ground with no army in its field. Where the town's guard
+	 * will fight, opens the attack card and returns true. Otherwise returns false (nothing is risked: no card and no
+	 * yes, ruling 178), with the rules' sentence for what the march meets in OutSays where they have one.
+	 */
+	bool OpenMarchCard(int32 RegionId, FString& OutSays, FString* OutMeets = nullptr);
+	/**
+	 * (Ruling 182: no storm is fought without its card.) The assault on the town of a province the player's army
+	 * stands round: opens the card and returns true. Where the rules refuse a storm this month their sentence is
+	 * said; where there is nothing to storm, bSayWhy says so. bOnArrival: the army has just marched up to a town
+	 * its reports could not see into, and the card opens by itself only where its guard alone holds it.
+	 */
+	bool OpenStormCard(int32 RegionId, bool bSayWhy, bool bOnArrival = false);
+	/** The march's and the storm's card over the attack card as it stands: the guard as the defender, the two blocks' headings and sentences. */
+	void DressSiegeCard(const FAttackPreview& Preview, int32 RegionId);
+	/** The battle the card asked about is fought and its result shown: an attack, or the assault a march ends in. */
+	void ResolveAttack();
 	bool bTicketAll = false;
 	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
 	bool CanPickUp(const AArmyPiece* Piece) const;
@@ -924,9 +1010,27 @@ private:
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
+	bool bNightTold = false; // (ruling 205(c)) this campaign's first night has said that it is night, and which key holds the hour
 	FMarchPlan KeptPlan; // the rules' plan for a march to the place last asked about
 	int32 KeptPlanRegion = -2;
 	const FMarchPlan& PlanFor(int32 RegionId);
+	/** Where a line from the eye meets the table. */
+	bool RayOnTable(const FVector& Origin, const FVector& Direction, FVector& OutWorld) const;
+	/** The province an order goes to: that of the army whose figure the pointer is on, with an army in hand, or else the ground behind the pointer. */
+	int32 AimedOf(const AArmyPiece* Piece, int32 Ground) const;
+	/** Where every corps in hand is the garrison of its town: the sentence that says so and how it can be moved. Empty otherwise. */
+	FString GarrisonSays() const;
+	/**
+	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
+	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have
+	 * no plan to offer (no enemy army seen there, or it is next door already).
+	 */
+	bool OpenApproach(int32 RegionId, bool bSayNone);
+	void DressApproach();
+	void CarryOutApproach(const FWarPrompt& Asked);
+	double WarPromptSince = 0.0; // (an order's card takes no key in its first half second)
+	/** Why the army in hand cannot attack the enemy army seen at a place, in a sentence that says what to do; empty where none is seen there. */
+	FString WhyNoAttackOn(int32 RegionId) const;
 	FText HoverTipMarked;
 	TArray<int32> StandingRoad; // and the road still ahead of it, if it is on a standing march
 	int32 RouteTarget = INDEX_NONE;
@@ -1004,6 +1108,12 @@ private:
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }
 	FNewsreelShow Newsreel;
 	bool bNewsreels = true; // K turns them off
+	// (Ruling 203.) Off, as it stands unless he asks: the month's card comes first, and the other countries' moves,
+	// the newsreel and the great moments are a press away on it. On: they play before the card, as they used to.
+	bool bShowsFirst = false;
+	TArray<FNewsCard> LastReel; // the month's newsreel, kept for the card's own button
+	FString LastReelDate;
+	double FaceOffSince = 0.0; // when the attack card opened: it takes no key for its first half second
 	// The standing choices, kept in a file of their own so they outlast the campaign.
 	void LoadOptions();
 	void SaveOptions() const;
@@ -1079,6 +1189,7 @@ private:
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
 	int32 HoverTipField = INDEX_NONE;
 	int32 StagedHover = INDEX_NONE;
+	bool bStagedField = false; // (for the photographer: the staged pointer rests on that province's airfield)
 	// (Ruling 86.) The gates' marks as last drawn; the gate under the pointer, and what its box says.
 	TArray<TPair<int32, FBox2D>> GateMarks;
 	int32 StagedGate = INDEX_NONE;

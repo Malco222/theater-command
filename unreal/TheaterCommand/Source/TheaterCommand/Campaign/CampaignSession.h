@@ -100,6 +100,38 @@ public:
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);
 
+	/** (The playtester's click-through.) The digest a step is logged with, as the rules write it, with its stamp and the holder of the province named. */
+	FString StepDigest(int32 RegionId, const TArray<int32>& CorpsIds, int32 FleetId, int64& OutStamp, FString& OutHolder);
+	/** (The same.) A unit or a place by its name: a province, a sea, a corps and where it stands, a fleet, an air group. INDEX_NONE for what no such name is. */
+	bool StepFind(const FString& Name, int32& OutRegion, int32& OutSea, int32& OutCorps, int32& OutCorpsRegion, int32& OutFleet, int32& OutGroup);
+
+	/**
+	 * (Rules 84.1.) What marching the given corps onto enemy ground with no army in its field will meet. Not valid
+	 * where the march is a plain move or a field battle. The rules read the forecast off a copy of the campaign: it
+	 * is for the slip of a province the pointer rests on and for the card, never for every frame.
+	 */
+	FAttackPreview PreviewTake(const TArray<int32>& CorpsIds, int32 RegionId);
+
+	/** (Rules 84.1.) The order to take a place: the corps march in, and with bAssault go at a town held by its guard alone as they arrive. */
+	FAttackResult Take(const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault);
+
+	/** (Rules 84.1; ruling 176(e).) The gate's question for its holder, and his order to shut it or open it again. */
+	FGateAsk AskGate(int32 GateId);
+	/** The march up to an enemy army that is not next door, and the attack, planned as one order (the rules' own reckoning). */
+	FApproachPlan PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId);
+	bool OrderGate(int32 GateId, bool bShut, FString& OutNote);
+	/** (Rules 84.2.) The warning where the corps in hand are the last to hold a gate's province: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
+	FString GateLeft(const TArray<int32>& CorpsIds);
+
+	/**
+	 * (Ruling 182.) The assault on a town the player's army already stands round, for its card. Not valid where
+	 * there is nothing to storm; Refused carries the rules' sentence where they will not have a storm this month.
+	 */
+	FAttackPreview PreviewStorm(int32 RegionId);
+
+	/** (Ruling 182.) The storm, ordered from its card: every corps of the player's round the town goes in. */
+	FAttackResult Storm(int32 RegionId);
+
 	/** The player's standing order for these corps on the day the enemy comes: "stand", "dig" or "back". */
 	void SetStance(const TArray<int32>& CorpsIds, const FString& Posture);
 
@@ -218,6 +250,8 @@ public:
 
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
+	/** An order that may end in a battle (attack, take): what the rules answer, read as a battle's result. */
+	FAttackResult Fight(const FString& Function, const FString& ArgumentsJson);
 	static FCampaignView ParseView(const TSharedPtr<FJsonObject>& Object);
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 

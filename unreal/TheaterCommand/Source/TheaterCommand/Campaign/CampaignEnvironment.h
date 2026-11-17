@@ -43,6 +43,25 @@ public:
 	static float MoonOf(float Night); // how far the moonlight has come in: 0 until the evening rests, 1 at night
 	static float DuskRests(); // how far into the night the evening rests when a month ends
 	/**
+	 * (Ruling 205(a); the art director's speed and night brief, 17 November 2026. Brian took the night for the fog of
+	 * war: "the US seems like fog of war even though i own the entire country".) The moon's light and what the land
+	 * keeps under it, so that ground the player sees rests at about six tenths of its day brightness, at least half
+	 * again as bright as the fog beside it and no bluer than that fog. One place holds the numbers for the room's
+	 * lights and for the map's paint. ("-TheaterMoonLook=key,fill,sky,keyR,keyG,keyB,skyR,skyG,skyB,haze,politics,
+	 * sunR,sunG,sunB,shadeR,shadeG,shadeB" tries others without a rebuild.)
+	 */
+	struct FMoonLook
+	{
+		float Key = 3.0f, Fill = 0.55f, Sky = 0.52f; // the lamp's, the fill's and the sky's strength at full night
+		FLinearColor KeyColour = FLinearColor(0.3f, 0.5f, 1.0f);
+		FLinearColor SkyColour = FLinearColor(0.42f, 0.58f, 1.0f);
+		float Haze = 1.35f; // how much of the day's share of light the fog of war's haze keeps by night
+		float Politics = 0.42f; // how much of a nation's colour its ground keeps by night (0.94 by day)
+		FLinearColor Sun = FLinearColor(0.77f, 0.81f, 1.0f); // the land's own printed light and shade by the moon
+		FLinearColor Shade = FLinearColor(0.44f, 0.48f, 0.7f);
+	};
+	static const FMoonLook& MoonLook();
+	/**
 	 * Dusk when the month ends (Brian's approved list). While the rest of the world moves, evening comes over the
 	 * table: not the full night, so that the others' moves are still seen. With the player's new month it is
 	 * morning again, and the room's day begins afresh from there. Nothing where the player has held the hour (T).

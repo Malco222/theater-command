@@ -5,6 +5,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/CampaignStepPlayer.h"
 #include "TheaterCommand.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -1399,8 +1400,10 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		Controller->ShowRouteTo(*Route);
 	}
 	{
-		const int32* Rest = Shot.Hover.IsEmpty() ? nullptr : Data.RegionByName.Find(Shot.Hover);
-		Controller->StageHover(Rest ? *Rest : INDEX_NONE);
+		// ("-TheaterHover=airfield:Norfolk" rests it on that province's airfield, for the airfield's own box)
+		const bool bOnField = Shot.Hover.StartsWith(TEXT("airfield:"));
+		const int32* Rest = Shot.Hover.IsEmpty() ? nullptr : Data.RegionByName.Find(bOnField ? Shot.Hover.Mid(9) : Shot.Hover);
+		Controller->StageHover(Rest ? *Rest : INDEX_NONE, bOnField);
 		if (Rest)
 		{
 			Table->SetHoveredRegion(*Rest); // (as the game does for the real pointer)
@@ -1910,7 +1913,32 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		SheetWait = 0.0f;
 		Frames = 0;
 		bTaken = false;
+		// ("-TheaterSteps=<file>": the playtester's step file is played in place of the pictures. The game is left as
+		// a player finds it, on its opening screen: the file's own first step begins the campaign.)
+		FString StepFile;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), StepFile, false))
+		{
+			Steps = MakeShared<FStepPlayer>();
+			if (!Steps->Load(StepFile, Folder))
+			{
+				Steps.Reset();
+				bStarted = false;
+				UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+			}
+			return;
+		}
 		Arrange(Shots[0]);
+		return;
+	}
+	if (Steps.IsValid())
+	{
+		ACampaignPlayerController* Hand = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		if (!Hand || !Steps->Tick(*Hand, DeltaSeconds))
+		{
+			Steps.Reset();
+			bStarted = false;
+			UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+		}
 		return;
 	}
 

@@ -63,6 +63,35 @@ namespace
 	}
 }
 
+const ACampaignEnvironment::FMoonLook& ACampaignEnvironment::MoonLook()
+{
+	static FMoonLook Kept;
+	static bool bRead = false;
+	if (!bRead)
+	{
+		bRead = true;
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterMoonLook="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 11)
+		{
+			auto Number = [&Parts](int32 K) { return FCString::Atof(*Parts[K]); };
+			Kept.Key = Number(0);
+			Kept.Fill = Number(1);
+			Kept.Sky = Number(2);
+			Kept.KeyColour = FLinearColor(Number(3), Number(4), Number(5));
+			Kept.SkyColour = FLinearColor(Number(6), Number(7), Number(8));
+			Kept.Haze = Number(9);
+			Kept.Politics = Number(10);
+			if (Parts.Num() >= 17)
+			{
+				Kept.Sun = FLinearColor(Number(11), Number(12), Number(13));
+				Kept.Shade = FLinearColor(Number(14), Number(15), Number(16));
+			}
+		}
+	}
+	return Kept;
+}
+
 float ACampaignEnvironment::DuskRests()
 {
 	return DuskLook().Rests;
@@ -260,7 +289,8 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 	{
 		DayClock = FMath::Fmod(DayClock + DeltaSeconds / DayLasts, 1.0);
 	}
-	// (the day is the first 0.58 of it, then dusk to 0.68, night to 0.9, and dawn)
+	// (Ruling 205(b): a night is an event, not a state. The day is the first five sixths of it; then dusk for about
+	// half a minute, full night for about a minute, and dawn for about half a minute.)
 	float Wanted = 0.0f;
 	if (TimeKeeping == 2)
 	{
@@ -269,7 +299,7 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 	else if (TimeKeeping == 0)
 	{
 		const float Clock = static_cast<float>(DayClock);
-		Wanted = Clock < 0.58f ? 0.0f : Clock < 0.68f ? FMath::SmoothStep(0.58f, 0.68f, Clock) : Clock < 0.9f ? 1.0f : 1.0f - FMath::SmoothStep(0.9f, 1.0f, Clock);
+		Wanted = Clock < 0.8333f ? 0.0f : Clock < 0.875f ? FMath::SmoothStep(0.8333f, 0.875f, Clock) : Clock < 0.9583f ? 1.0f : 1.0f - FMath::SmoothStep(0.9583f, 1.0f, Clock);
 		// (the month has ended: evening, whatever the hour was, and night if it was night already)
 		if (bMonthsEnd)
 		{
@@ -359,12 +389,13 @@ void ACampaignEnvironment::LightRoom()
 		KeyLight->SetTemperature(FMath::Lerp(DayWarmth, 6500.0f, Moon));
 		// (the land carries moon colours of its own to go with this light: see the map's SetNight. The key is kept
 		// low and blue so that the yellow of autumn woods does not shine out of the dark like lamps.)
-		KeyLight->SetIntensity(FMath::Lerp(DayKey, 3.0f, Moon) * Left);
-		KeyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Amber, Look.AmberShare * Dusk), FLinearColor(0.3f, 0.5f, 1.0f), Moon));
-		FillLight->SetIntensity(FMath::Lerp(DayFill, 0.55f, Moon) * Left);
+		const FMoonLook& ByMoon = MoonLook();
+		KeyLight->SetIntensity(FMath::Lerp(DayKey, ByMoon.Key, Moon) * Left);
+		KeyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Amber, Look.AmberShare * Dusk), ByMoon.KeyColour, Moon));
+		FillLight->SetIntensity(FMath::Lerp(DayFill, ByMoon.Fill, Moon) * Left);
 		FillLight->SetLightColor(FMath::Lerp(FLinearColor::White, Look.Cool, Look.CoolShare * Dusk));
-		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Moon) * Left);
-		SkyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Cool, Look.CoolShare * Dusk), FLinearColor(0.42f, 0.58f, 1.0f), Moon));
+		SkyLight->SetIntensity(FMath::Lerp(0.72f, ByMoon.Sky, Moon) * Left);
+		SkyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Cool, Look.CoolShare * Dusk), ByMoon.SkyColour, Moon));
 	}
 }
 

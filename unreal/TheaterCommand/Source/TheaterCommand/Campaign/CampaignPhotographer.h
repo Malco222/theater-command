@@ -100,6 +100,7 @@ private:
 	void Arrange(const FShot& Shot);
 
 	TArray<FShot> Shots;
+	TSharedPtr<class FStepPlayer> Steps; // ("-TheaterSteps=<file>": the playtester's step file is played in place of the pictures)
 	FString AmberFrom, AmberTo; // the army and the shore of a landing with an amber verdict, once one has been looked for and found
 	FString Folder;
 	int32 Current = -1;

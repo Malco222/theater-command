@@ -1408,6 +1408,250 @@ namespace
 		int32 Over = 0; // the button under the pointer: 1 the strip's, 2 the staff's, 3 the stud that closes
 	};
 
+	/**
+	 * (Rules version 84.) The support weapons' signs, the art director's (art-director/works/weapon-signs.json, with the
+	 * three the browser adds: a tank, a gun, and an eye for what is scouted): strokes of one weight on a box of 24,
+	 * drawn here on a box `Size` across with its corner at `Corner`.
+	 */
+	void PaintWeaponSign(FSlateWindowElementList& OutDrawElements, int32 Layer, const FGeometry& Geometry, const FString& Sign, const FVector2D& Corner, double Size, const FLinearColor& Ink)
+	{
+		const double K = Size / 24.0;
+		const float Pen = static_cast<float>(FMath::Max(1.2, 1.9 * K));
+		auto P = [&Corner, K](double X, double Y) { return FVector2D(Corner.X + X * K, Corner.Y + Y * K); };
+		auto Line = [&](const TArray<FVector2D>& Points)
+		{
+			FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Pen);
+		};
+		auto Bow = [&](double CX, double CY, double RX, double RY, double From, double To)
+		{
+			TArray<FVector2D> Points;
+			const int32 Steps = FMath::Max(4, FMath::CeilToInt32(FMath::Abs(To - From) / 24.0));
+			for (int32 Step = 0; Step <= Steps; ++Step)
+			{
+				const double Angle = FMath::DegreesToRadians(FMath::Lerp(From, To, static_cast<double>(Step) / Steps));
+				Points.Add(P(CX + FMath::Cos(Angle) * RX, CY + FMath::Sin(Angle) * RY));
+			}
+			return Points;
+		};
+		auto Ring = [&](double CX, double CY, double R) { Line(Bow(CX, CY, R, R, 0.0, 360.0)); };
+		if (Sign == TEXT("anti-tank"))
+		{
+			// (a gun on its wheel, the barrel level, its trail to the ground)
+			Ring(10.5, 16.8, 3.7);
+			Line({ P(8.0, 9.6), P(22.4, 9.6) });
+			Line({ P(22.4, 7.6), P(22.4, 11.6) });
+			Line({ P(10.5, 4.2), P(10.5, 13.0) });
+			Line({ P(8.0, 9.6), P(2.0, 20.4) });
+		}
+		else if (Sign == TEXT("machine-gun"))
+		{
+			// (a gun on its tripod)
+			Line({ P(5.0, 7.8), P(11.2, 7.8), P(11.2, 11.2), P(5.0, 11.2), P(5.0, 7.8) });
+			Line({ P(11.2, 9.5), P(21.5, 9.5) });
+			Line({ P(4.6, 20.0), P(8.6, 11.2), P(13.4, 20.0) });
+			Line({ P(5.0, 9.5), P(2.6, 9.5) });
+			Line({ P(2.6, 8.0), P(2.6, 11.0) });
+		}
+		else if (Sign == TEXT("mortar"))
+		{
+			// (a tube on its base plate, with its leg)
+			Line({ P(7.7, 18.5), P(14.1, 4.5), P(16.3, 5.5), P(9.9, 19.5), P(7.7, 18.5) });
+			Line({ P(4.0, 20.5), P(13.2, 20.5) });
+			Line({ P(13.4, 11.8), P(19.8, 20.5) });
+		}
+		else if (Sign == TEXT("sniper"))
+		{
+			// (a telescopic sight)
+			Ring(12.0, 12.0, 7.0);
+			Line({ P(12.0, 2.2), P(12.0, 7.8) });
+			Line({ P(12.0, 16.2), P(12.0, 21.8) });
+			Line({ P(2.2, 12.0), P(7.8, 12.0) });
+			Line({ P(16.2, 12.0), P(21.8, 12.0) });
+			Line({ P(11.6, 12.0), P(12.4, 12.0) });
+		}
+		else if (Sign == TEXT("tank"))
+		{
+			// (a tank from the side: its track, its hull, its turret and its gun)
+			TArray<FVector2D> Track = Bow(19.0, 17.0, 3.0, 3.0, -90.0, 90.0);
+			Track.Append(Bow(5.0, 17.0, 3.0, 3.0, 90.0, 270.0));
+			Track.Add(P(19.0, 14.0));
+			Line(Track);
+			Line({ P(7.0, 14.0), P(7.0, 11.0), P(15.0, 11.0), P(16.5, 14.0) });
+			Line({ P(12.0, 11.0), P(12.0, 8.0), P(15.0, 8.0) });
+			Line({ P(15.0, 9.5), P(21.5, 9.5) });
+			for (const double Wheel : { 7.0, 11.0, 15.0, 19.0 })
+			{
+				Line({ P(Wheel - 0.4, 17.0), P(Wheel + 0.4, 17.0) });
+			}
+		}
+		else if (Sign == TEXT("gun"))
+		{
+			// (a field gun: its wheel, its barrel raised, its trail)
+			Ring(8.0, 16.0, 4.0);
+			Line({ P(8.0, 16.0), P(20.0, 7.0) });
+			Line({ P(10.5, 12.8), P(5.0, 20.0) });
+			Line({ P(17.8, 8.6), P(18.9, 10.1) });
+		}
+		else if (Sign == TEXT("defence"))
+		{
+			// (a shield: the walls of a town)
+			Line({ P(4.5, 4.0), P(19.5, 4.0), P(19.5, 12.0), P(17.6, 16.6), P(12.0, 21.0), P(6.4, 16.6), P(4.5, 12.0), P(4.5, 4.0) });
+		}
+		else if (Sign == TEXT("scouted"))
+		{
+			// (an eye)
+			TArray<FVector2D> Lids = Bow(12.0, 15.2, 10.4, 9.7, 198.0, 342.0);
+			Lids.Append(Bow(12.0, 8.8, 10.4, 9.7, 18.0, 162.0));
+			const FVector2D Corner0 = Lids[0]; // (a copy: an array is never handed its own element)
+			Lids.Add(Corner0);
+			Line(Lids);
+			Ring(12.0, 12.0, 3.0);
+		}
+	}
+
+	/** One of the weapons' signs as a thing of its own, for a row of them: on a corps' card. */
+	class SWeaponSign : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SWeaponSign) : _Size(15.0f), _Ink(FLinearColor::White) {}
+			SLATE_ARGUMENT(FString, Sign)
+			SLATE_ARGUMENT(float, Size)
+			SLATE_ARGUMENT(FLinearColor, Ink)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Sign = Args._Sign;
+			Size = Args._Size;
+			Ink = Args._Ink;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(Size, Size); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			PaintWeaponSign(OutDrawElements, LayerId + 1, Geometry, Sign, FVector2D::ZeroVector, Size, Ink);
+			return LayerId + 1;
+		}
+
+	private:
+		FString Sign;
+		float Size = 15.0f;
+		FLinearColor Ink = FLinearColor::White;
+	};
+
+	/**
+	 * (Rules version 84; rulings 149(d), 164(f) and 174.) WHAT YOU FACE, on the battle card just above the odds: a
+	 * sign and a sentence for each thing the defence will do to what he brings, four at most, facts and never a
+	 * warning; and beside the heading, in italics, what is not scouted. Every sentence is the rules' own. With bPaid
+	 * it is the result's line instead: who paid most of it and to what, under the price.
+	 */
+	class SFaceBlock : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SFaceBlock) : _bPaid(false) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Player)
+			SLATE_ARGUMENT(bool, bPaid)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Player = Args._Player;
+			bPaid = Args._bPaid;
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		static constexpr double BlockWide = 820.0, LineHigh = 22.0, SignSize = 17.0;
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			if (!Player.IsValid())
+			{
+				return FVector2D(BlockWide, 0.0);
+			}
+			const FFaceOff& Face = Player->GetFaceOff();
+			if (bPaid)
+			{
+				return FVector2D(BlockWide, Face.bResolved && !Face.Paid.IsEmpty() ? LineHigh + 6.0 : 0.0);
+			}
+			int32 Lines = 0;
+			for (const FFaceLine& Line : Face.Face)
+			{
+				Lines += Line.bUnknown ? 0 : 1;
+			}
+			return FVector2D(BlockWide, Face.bResolved || Face.Face.Num() == 0 ? 0.0 : 9.0 + 20.0 + Lines * LineHigh + 2.0);
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			if (!Player.IsValid())
+			{
+				return LayerId;
+			}
+			const FFaceOff& Face = Player->GetFaceOff();
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			const FSlateFontInfo Sentence = Serif(TEXT("Regular"), 11.5f), Slanted = Serif(TEXT("Italic"), 10.5f), Head = Typed(8.5f, true, 140);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& With) { return static_cast<double>(Measure->Measure(Words, With).X); };
+			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& With, const FLinearColor& Ink)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(900.0, 30.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, With, ESlateDrawEffect::None, Ink);
+			};
+			const double Width = Geometry.GetLocalSize().X;
+			if (bPaid)
+			{
+				if (!Face.bResolved || Face.Paid.IsEmpty())
+				{
+					return LayerId;
+				}
+				// One line, set in the middle: its sign, where the rules give one, and the sentence.
+				const bool bSign = !Face.PaidSign.IsEmpty();
+				const double Whole = Wide(Face.Paid, Sentence) + (bSign ? SignSize + 8.0 : 0.0);
+				double X = FMath::Max(0.5 * (Width - Whole), 0.0);
+				if (bSign)
+				{
+					PaintWeaponSign(OutDrawElements, LayerId + 1, Geometry, Face.PaidSign, FVector2D(X, 6.0), SignSize, Brass);
+					X += SignSize + 8.0;
+				}
+				Write(Face.Paid, X, 4.0, Sentence, Cream);
+				return LayerId + 1;
+			}
+			if (Face.bResolved || Face.Face.Num() == 0)
+			{
+				return LayerId;
+			}
+			// A thin rule; the heading; and beside it, at the right, what is not scouted.
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Width, 1.0), FSlateLayoutTransform(FVector2D(0.0, 0.0))), &Solid, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("7A6038"))).CopyWithNewOpacity(0.7f));
+			Write(TEXT("WHAT YOU FACE"), 0.0, 11.0, Head, Brass);
+			for (const FFaceLine& Line : Face.Face)
+			{
+				if (Line.bUnknown)
+				{
+					const double Left = Width - Wide(Line.Text, Slanted);
+					PaintWeaponSign(OutDrawElements, LayerId + 1, Geometry, Line.Sign, FVector2D(Left - SignSize - 7.0, 9.0), SignSize - 2.0, Muted);
+					Write(Line.Text, Left, 8.0, Slanted, Muted);
+					break;
+				}
+			}
+			double Y = 9.0 + 20.0;
+			for (const FFaceLine& Line : Face.Face)
+			{
+				if (Line.bUnknown)
+				{
+					continue;
+				}
+				PaintWeaponSign(OutDrawElements, LayerId + 1, Geometry, Line.Sign, FVector2D(0.0, Y + 2.0), SignSize, Brass);
+				Write(Line.Text, SignSize + 9.0, Y, Sentence, Cream);
+				Y += LineHigh;
+			}
+			return LayerId + 1;
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Player;
+		bool bPaid = false;
+	};
+
 	/** The agent's picture for his card's well: the art director's studio picture of her own sculpt (Content/UI/agent-well.png). Read once; null if it is not there. */
 	const FSlateBrush* AgentWellBrush()
 	{
@@ -3878,6 +4122,11 @@ namespace
 											SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ResultDetail : FText::GetEmpty(); })
 										]
+										// (Version 84) Who paid, and to what.
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill)
+										[
+											SNew(SFaceBlock).Player(Controller).bPaid(true)
+										]
 									]
 
 									// The two armies.
@@ -3898,8 +4147,16 @@ namespace
 										]
 									]
 
+									// (Rules 84.1; the UI director's sheet 21.) Before a march on a guarded town each of the two
+									// forecasts is headed by its order's own words, so nobody has to match a forecast to a button.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->NowLabel : FText::GetEmpty(); })
+									]
 									// The balance of strength between them.
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 20.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && (F->bMarch || F->bStorm) && !F->bResolved ? 6.0f : 20.0f, 0.0f, 0.0f); }))
 									[
 										SNew(SBox).HeightOverride(10.0f)
 										[
@@ -3924,12 +4181,71 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->OddsLine : FText::GetEmpty(); })
 									]
+									// (Rules 84.1.) The first forecast's sentence, opening with the game's own verdict.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(40.0f, 4.0f, 40.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved && !F->NowSays.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->NowSays : FText::GetEmpty(); })
+									]
+									// The second forecast, on the same scale under the first: the same assault made ready, a month later.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										SNew(SVerticalBox)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved && (!F->LaterOdds.IsEmpty() || !F->LaterSays.IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FSlateColor(Brass.CopyWithNewOpacity(0.35f)))]
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterLabel : FText::GetEmpty(); })
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+										[
+											SNew(SBox).HeightOverride(10.0f)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->LaterOdds.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot()
+												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
+												[
+													SNew(SBorder).BorderImage(&BarBrush)
+													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->OurColor : FLinearColor::Gray); })
+												]
+												+ SHorizontalBox::Slot()
+												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return 1.0f - FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
+												.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBorder).BorderImage(&BarBrush)
+													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->TheirColor : FLinearColor::Gray); })
+												]
+											]
+										]
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->LaterOdds.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterOdds : FText::GetEmpty(); })
+										]
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(40.0f, 4.0f, 40.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.2f)
+											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterSays : FText::GetEmpty(); })
+										]
+									]
 									// (Version 63) The bill before the order: what it is likely to cost each side in men, either way.
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(40.0f, 6.0f, 40.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.2f)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Cost.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Cost : FText::GetEmpty(); })
+									]
+									// (Version 84, ruling 174; ruling 203 for its place) WHAT YOU FACE: after the verdict and what it should cost, before the prize.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										SNew(SFaceBlock).Player(Controller)
 									]
 									// The prize: what taking the place is worth.
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(40.0f, 8.0f, 40.0f, 0.0f)
@@ -4079,35 +4395,164 @@ namespace
 										]
 									]
 
-									// What to do about it.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 20.0f, 12.0f, 0.0f)
+									// What to do about it. (The foot stands at the right: CALL IT OFF, then the order.)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 20.0f, 12.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false).IsEnabled(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility(EVisibility::Collapsed) // (FIGHT IT YOURSELF leaves the foot until that battle exists)
 											.ToolTipText(FText::FromString(TEXT("Fighting the battle yourself, in real time, comes with the battlefield.")))
 											[
 												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF  (to come)"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Faint)
 											]
 										]
+										// (The foot's places never change: CALL IT OFF, then SEND THEM IN, then the siege's order where there is one. Only the light moves.)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
+											// (...and the light is on CALL IT OFF, which takes Enter as well as Esc.)
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved ? EVisibility::Visible : EVisibility::Collapsed; })
-											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("CALL IT OFF"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											// (the UI director, ruling 183: on the storm's card CALL IT OFF's place stays empty, with no dimmed button;
+											// and where the light is on CALL IT OFF, the lit one stands for it)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bStorm && !F->bResolved ? EVisibility::Hidden : F && F->bLongShot && !F->bResolved && !F->bMarch ? EVisibility::Collapsed : EVisibility::Visible; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+													.Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bResolved ? TEXT("CONTINUE") : TEXT("CALL IT OFF")); })
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ESC"), Cream)
+													]
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													// (CONTINUE takes Enter and Space)
+													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ENTER"), Cream)
+													]
+												]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													// (a card that opened by itself takes no Enter, and shows no key: ruling 183)
+													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bArrival ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ENTER"), BrightBrass)
+													]
+												]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.)
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+											]
+										]
+										// (Rules 84.1; rulings 177(b) and 178(c).) Before a march on a guarded town: the two orders in the
+										// forecasts' order, after CALL IT OFF. They never change places: only the light moves, to the
+										// order its own forecast favours.
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && !F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("Every corps of yours round the town goes in.") : TEXT("The army marches in and goes at the town as it arrives: a hasty assault, off the march.")); })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(true); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													// (a card that opened by itself takes no Enter, and shows no key: ruling 183)
+													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bArrival ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ENTER"), BrightBrass)
+													]
+												]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("Every corps of yours round the town goes in.") : TEXT("The army marches in and goes at the town as it arrives: a hasty assault, off the march.")); })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(true); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("SEND THEM IN"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("The siege goes on. Nothing changes this month.") : TEXT("The army marches in and closes round the town. Nothing is risked this month, and next month the assault goes in made ready.")); })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(false); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+													.Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("KEEP UP THE SIEGE") : TEXT("LAY SIEGE FIRST")); })
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bArrival ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ENTER"), BrightBrass)
+													]
+												]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && !F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("The siege goes on. Nothing changes this month.") : TEXT("The army marches in and closes round the town. Nothing is risked this month, and next month the assault goes in made ready.")); })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(false); } return FReply::Handled(); })
+											[
 												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
-												.Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bResolved ? TEXT("CONTINUE") : TEXT("CALL IT OFF")); })
+												.Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("KEEP UP THE SIEGE") : TEXT("LAY SIEGE FIRST")); })
 											]
 										]
 									]
@@ -5039,6 +5484,22 @@ namespace
 										})
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Ashore : FText::GetEmpty(); })
 									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										// (The design director, 17 November 2026.) The approach order: the ways up to the enemy, the game's
+										// pick first and lit. A press picks another; the road on the map and the card's words follow it.
+										SNew(SVerticalBox)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach && Controller->GetWarPrompt().Ways.Num() > 1 ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Brass)
+											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().WaysHead : FText::GetEmpty(); })
+										]
+										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(0)]
+										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(1)]
+										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(2)]
+										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(3)]
+									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
@@ -5062,7 +5523,19 @@ namespace
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseWarPrompt(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("NOT NOW"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Cancel : FText::GetEmpty(); })
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Visible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ESC"), Muted)
+													]
+												]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
@@ -5070,8 +5543,20 @@ namespace
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmWar(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
-												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Confirm : FText::GetEmpty(); })
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Confirm : FText::GetEmpty(); })
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+												[
+													// (the approach order is given with Enter: its key cap says so)
+													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Visible : EVisibility::Collapsed; })
+													[
+														KeyCap(TEXT("ENTER"), BrightBrass)
+													]
+												]
 											]
 										]
 									]
@@ -6484,6 +6969,39 @@ namespace
 				];
 		}
 
+		/** One way up on the approach order's card: its province, its river and ground in a word, and what is left on arrival. The one chosen is lit. */
+		TSharedRef<SWidget> ApproachRow(int32 Index)
+		{
+			auto Way = [this, Index]() -> const FApproachRow* { return Controller.IsValid() && Controller->GetWarPrompt().Ways.IsValidIndex(Index) ? &Controller->GetWarPrompt().Ways[Index] : nullptr; };
+			auto Lit = [this, Index]() { return Controller.IsValid() && Controller->GetWarPrompt().Way == Index; };
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false)
+				.Visibility_Lambda([Way]() { return Way() ? EVisibility::Visible : EVisibility::Collapsed; })
+				.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickApproach(Index); } return FReply::Handled(); })
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(170.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 13))
+							.ColorAndOpacity_Lambda([this, Lit]() { return FSlateColor(Lit() ? BrightBrass : Cream); })
+							.Text_Lambda([Way, Lit]() { const FApproachRow* Row = Way(); return Row ? FText::FromString((Lit() ? TEXT("\u25B8 ") : TEXT("   ")) + Row->Name) : FText::GetEmpty(); })
+						]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted)
+						.Text_Lambda([Way]()
+						{
+							const FApproachRow* Row = Way();
+							if (!Row) { return FText::GetEmpty(); }
+							const FString Left = Row->bAttack ? FString::Printf(TEXT("%d %s left"), Row->Left, Row->Left == 1 ? TEXT("move") : TEXT("moves")) : FString(TEXT("no move left"));
+							return FText::FromString(Row->How + TEXT("  \u00B7  ") + Left);
+						})
+					]
+				];
+		}
+
 		TSharedRef<SWidget> KeyCap(const TCHAR* Key, const FLinearColor& Ink)
 		{
 			return SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Ink.CopyWithNewOpacity(0.85f)).Padding(FMargin(5.0f, 0.0f, 5.0f, 1.0f)).VAlign(VAlign_Center)
@@ -6946,6 +7464,7 @@ namespace
 
 			// 1. The title, and the two buttons.
 			const bool bAgain = Controller.IsValid() && Controller->CanWatchAgain();
+			const bool bFilm = Controller.IsValid() && Controller->HasLastReel(); // (ruling 203: the newsreel is a press away on the card)
 			PageBody->AddSlot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
@@ -6960,11 +7479,21 @@ namespace
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false)
+					.Visibility(bFilm ? EVisibility::Visible : EVisibility::Collapsed)
+					.ToolTipText(FText::FromString(TEXT("The month's great stories as film. This report comes back when it is over; Space or Enter ends it.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->PlayLastReel(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("THE NEWSREEL"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false).IsEnabled(bAgain)
-					.ToolTipText(FText::FromString(bAgain ? TEXT("Shows the month's moves on the table once more. This report comes back when they are over.") : TEXT("The month's moves are kept only until the game is put away.")))
+					.ToolTipText(FText::FromString(bAgain ? TEXT("Shows the other countries' moves of the month on the table. This report comes back when they are over.") : TEXT("The month's moves are kept only until the game is put away.")))
 					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->WatchAgain(); } return FReply::Handled(); })
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("WATCH IT AGAIN"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(bAgain ? Cream : Faint)
+						SNew(STextBlock).Text(FText::FromString(TEXT("TOUR THE MAP"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(bAgain ? Cream : Faint)
 					]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -10722,6 +11251,51 @@ namespace
 		}
 
 		/**
+		 * (Rules version 84.) The row of weapon signs on a corps' card: its anti-tank guns with their level, machine guns
+		 * and mortars once their technology is in, snipers always. A sign not yet earned is left out and its cell stays
+		 * empty, so that each sign keeps its place in the row. And "Digging" for a corps that has begun to dig where
+		 * the first month's digging shows no works. Nothing for a corps the rule counts no weapons for.
+		 */
+		TSharedRef<SWidget> CarryRow(const FTrayCard& Card, bool bGoing)
+		{
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+			const FLinearColor Ink = bGoing ? Brass : Faint;
+			if (Card.Carry.Num() >= 4)
+			{
+				auto Cell = [this, &Row, &Ink, bGoing](bool bHas, const TCHAR* Sign, const FString& Says, const FString& Figure)
+				{
+					Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+					[
+						SNew(SBox).MinDesiredWidth(15.0f).HeightOverride(15.0f).ToolTipText(FText::FromString(bHas ? Says : FString()))
+						[
+							bHas
+							? StaticCastSharedRef<SWidget>(SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SWeaponSign).Sign(Sign).Size(15.0f).Ink(Ink)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(Figure.IsEmpty() ? 0.0f : 3.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(FText::FromString(Figure)).Font(Typed(9.0f, true)).ColorAndOpacity(bGoing ? Cream : Faint)
+								])
+							: StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(15.0, 15.0)))
+						]
+					];
+				};
+				Cell(true, TEXT("anti-tank"), FString::Printf(TEXT("Anti-tank guns, level %d"), Card.Carry[0]), FString::FromInt(Card.Carry[0]));
+				Cell(Card.Carry[1] > 0, TEXT("machine-gun"), TEXT("Machine guns"), FString());
+				Cell(Card.Carry[2] > 0, TEXT("mortar"), TEXT("Mortars"), FString());
+				Cell(Card.Carry[3] > 0, TEXT("sniper"), TEXT("Snipers"), FString());
+			}
+			if (Card.bDigging)
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(Card.Carry.Num() >= 4 ? 6.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("DIGGING  \u00B7  NO WORKS YET"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Muted : Faint)
+					.ToolTipText(FText::FromString(TEXT("Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.")))
+				];
+			}
+			return Row;
+		}
+
+		/**
 		 * One corps of the army in hand, as a card for each of its divisions: a picture of what it is, how much of
 		 * it is left, how well it holds together, and how seasoned it is. A click on any of them tells the corps to
 		 * come along or stay behind.
@@ -10733,7 +11307,7 @@ namespace
 			const FLinearColor Ink = bGoing ? Cream : Muted;
 			const FString MovesLine = Card.bLook ? (Card.bUnknown ? FString(TEXT("kind and strength not known"))
 					: Card.Stale > 0 ? FString::Printf(TEXT("from a report %d month%s old"), Card.Stale, Card.Stale == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("as it stands today")))
-				: !Card.bCanOrder ? FString(TEXT("holds its ground"))
+				: !Card.bCanOrder ? (!Card.NoOrders.IsEmpty() ? Card.NoOrders : FString(Card.KindId == TEXT("fort") ? TEXT("fortress troops: they do not move") : TEXT("holds its ground")))
 				: (!Card.bPicked ? FString(TEXT("staying behind"))
 					: !Card.Marching.IsEmpty() ? Card.Marching // (release 1: a corps on a standing march says where to, and how long)
 					: (Card.Moves <= 0 && Card.MovesMax > 0) ? FString(TEXT("No moves left this month")) // (ruling 87)
@@ -10911,6 +11485,7 @@ namespace
 						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Card.Kind.ToString(), *Card.Grade.ToString(), *MovesLine)))
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.Carry.Num() >= 4 || Card.bDigging ? 6.0f : 0.0f)[CarryRow(Card, bGoing)]
 					+ SVerticalBox::Slot().AutoHeight()[Divisions]
 				];
 			if (!Card.bUnknown)

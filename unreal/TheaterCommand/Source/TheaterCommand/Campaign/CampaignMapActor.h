@@ -113,7 +113,7 @@ public:
 	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
 
 	/** The piece a line from Origin along Direction passes through, nearest first. */
-	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr) const;
+	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr, const AArmyPiece* PassOver = nullptr) const;
 
 	// ---- (Ruling 127; the art director's weather-sky brief.) The weather's sky.
 	/** A weather zone and its sky this month: 0 clear, 1 in cloud, 2 closed. */

@@ -50,6 +50,8 @@ public:
 
 	/** Picks up the campaign saved on this computer. */
 	bool ContinueCampaign();
+	/** (The playtester's click-through.) The campaign as it stood when this text was saved, laid on the table again. */
+	bool RestoreCampaign(const FString& SaveText);
 
 	/** Writes the campaign to this computer, so it can be continued another day. */
 	void SaveCampaign();
