@@ -2151,7 +2151,7 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 }
 
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
-function wantsOut(g: Game, c: Corps): boolean {
+export function wantsOut(g: Game, c: Corps): boolean {
   if (g.regions[c.reg].owner === c.nat || c.dead) return false;
   // The men of a second front went ashore to stay: they come off only when cut off or broken.
   if (g.flags[`sf:${c.id}`]) return !c.supplied || c.org < 0.3;
@@ -2162,6 +2162,11 @@ function wantsOut(g: Game, c: Corps): boolean {
     if (!scope || !leaving || !scope.has(c.reg) || havensOf(g.regions[c.reg]).includes(g.regions[c.reg].name)) return false;
     return !c.supplied || !g.nations[g.regions[c.reg].owner].alive || leaving.when.some((nm) => !!g.byName[nm] && atWar(g, c.nat, g.byName[nm].ctrl));
   }
+  // Beyond Europe, an army on ground it has taken from a country it is still at war with is nobody's guest: it holds
+  // its conquest, and comes off only when cut off or broken. (Japan in China has no ally on the continent to be its
+  // host, and without this its whole army sailed home in September 1939.) Europe keeps the host rule below.
+  const here = g.regions[c.reg];
+  if (beyondEurope(here) && here.ctrl === c.nat && atWar(g, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;
