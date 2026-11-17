@@ -11,7 +11,8 @@ import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify } from './arsenal';
 import { blocked, blowBridges } from './rivers';
-import { groundRules } from './ground';
+import { groundRules, isFoot } from './ground';
+import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount } from './navy';
 import { shoreAI } from './fleets';
@@ -408,6 +409,8 @@ function overseas(g: Game, nat: string): void {
       const enemies = new Set<string>();
       for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
       for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
+      // An army overseas brings its guns up as the main army does: the guns go where the works are (the grand campaign).
+      if (enemies.size) gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null);
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
@@ -1066,13 +1069,20 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const most = ask === null || !STRENGTH ? L.force : Math.max(L.force, Math.min(ready.length, liftLeft(g, nat), STRENGTH.wave, STACK));
   // (The smallest wave that would hold by itself; failing that the biggest, where it holds with what the ships
   // can bring in after it from the quay.)
+  // (Tanks do not go ashore alone against a gunned shore either: infantry from the quay takes the last tank corps'
+  // place in the boats, and with none there the wave is not made.)
+  const mixed = (r: Region, w: Corps[]): Corps[] | null => {
+    if (!hostileUnits(g, r, nat).length) return w;
+    const sent = notTanksAlone(g, w, ready, r);
+    return !sent || sent === w ? sent : [...w.slice(0, -1), sent[sent.length - 1]];
+  };
   const waveFor = (r: Region): Corps[] | null => {
     for (let k = L.force; k <= most; k++) {
-      const w = ready.slice(0, k);
-      if (holdsAshore(g, nat, r, w)) return w;
+      const w = mixed(r, ready.slice(0, k));
+      if (w && holdsAshore(g, nat, r, w)) return w;
     }
-    const w = ready.slice(0, most);
-    return holdsAshore(g, nat, r, w, followUp(g, nat, quay, w, r)) ? w : null;
+    const w = mixed(r, ready.slice(0, most));
+    return w && holdsAshore(g, nat, r, w, followUp(g, nat, quay, w, r)) ? w : null;
   };
   if (sea.second) takeAim(g, nat, sfx, quay, ready.slice(0, L.force), L, you, ask === null ? null : waveFor);
   const force = ready.slice(0, Math.min(L.force, liftLeft(g, nat)));
@@ -1363,6 +1373,41 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
 
 const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
 
+/**
+ * Tanks are not sent alone at a gunned line (ruling 152(g), the grand campaign). Where the pick is tanks with no men
+ * on foot and the defence's anti-tank strength is 'gunned' or more, the strongest infantry to hand goes in with them;
+ * at 'never' or more with no infantry to send, the attack is not made. Gives the force to send, or null.
+ */
+export function notTanksAlone(g: Game, pick: Corps[], pool: Corps[], target: Region): Corps[] | null {
+  if (g.flags.open !== 1 || !pick.some((c) => c.kind === 'arm') || pick.some((c) => isFoot(c))) return pick;
+  const at = assess(g, pick, target).faced?.antiTank;
+  if (!at) return pick;
+  // (The marks are met at their printed value: 0.58 less 0.08 is a half, whatever the machine's arithmetic makes of it.)
+  const strength = Math.round(at.strength * 1e6) / 1e6;
+  if (strength < SUPPORT.staff.gunned) return pick;
+  const foot = pool.filter((c) => isFoot(c) && !pick.includes(c)).sort((a, b) => atkPower(g, b) - atkPower(g, a))[0];
+  if (foot) return [...pick, foot];
+  return strength >= SUPPORT.staff.never ? null : pick;
+}
+
+/**
+ * The same rule for a force already cut to the roads (a counter-stroke, a relief, a first wave): the infantry next
+ * door goes in beside the tanks, in the place of the weakest tank corps where the roads are full. Null where the
+ * rule says the attack is not made.
+ */
+export function footBeside(g: Game, force: Corps[], near: Corps[], target: Region): Corps[] | null {
+  const sent = notTanksAlone(g, force, near, target);
+  if (!sent || sent === force) return sent;
+  const fits = (cs: Corps[]): boolean => limitAttackers(g, cs, target).length === cs.length;
+  if (fits(sent)) return sent;
+  const foot = sent[sent.length - 1];
+  for (const t of [...force].sort((a, b) => atkPower(g, a) - atkPower(g, b))) {
+    const swap = [...force.filter((c) => c !== t), foot];
+    if (fits(swap)) return swap;
+  }
+  return notTanksAlone(g, force, [], target);
+}
+
 /** Whose army holds the country of a province: in the grand campaign an army round a town it has not taken holds the roads there. Armies march and are counted by this. */
 const ctl = (g: Game, r: Region): string => fieldCtrl(g, r);
 
@@ -1407,7 +1452,16 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
       const v = f * 10 - d;
       if (v > bv) { bv = v; best = r; }
     }
-    if (best) walkToward(g, c, best);
+    if (!best) continue;
+    // An army overseas has one road, and the sector at the end of it stands full. Its weakest corps on foot, one the
+    // road would not carry into the attack in any case, steps back to where the guns stood and they take its place.
+    if (scope && here.nb.includes(best.id) && friendlyUnits(g, best, nat).length >= STACK) {
+      const out = best.units
+        .filter((u) => u.nat === nat && !u.dead && u.kind === 'inf' && !u.hold && !u.town && u.ap > 0 && u.joint === undefined && u.leave === undefined && !massed.has(u.id))
+        .sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
+      if (out) moveCorps(g, out, here);
+    }
+    walkToward(g, c, best);
   }
 }
 
@@ -1420,8 +1474,11 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
 export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region, need: number): { corps: Corps[]; then: number } | null {
   if (g.flags.open !== 1) return null;
   const H = DEFENCE.hammer;
-  const first = limitAttackers(g, avail.filter((c) => c.org >= 0.35 && !pool.includes(c)), target);
-  if (!first.length) return null;
+  const spare = avail.filter((c) => c.org >= 0.35 && !pool.includes(c));
+  const cut = limitAttackers(g, spare, target);
+  // (A first wave of tanks alone is not thrown at a gunned line either: infantry goes in with it, or there is no first wave.)
+  const first = cut.length ? footBeside(g, cut, spare, target) : null;
+  if (!first?.length) return null;
   const a1 = assess(g, first, target);
   if (a1.odds < H.first) return null;
   const a2 = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
@@ -1520,6 +1577,12 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
               pick = two.corps; odds = two.then; wave = true;
             }
           }
+          // Tanks do not go alone at a gunned line: infantry goes in with them, or they do not go.
+          if (!wave) {
+            const sent = notTanksAlone(g, pick, pool, target);
+            if (!sent) continue;
+            if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
+          }
           // (A place that needs two waves is a dearer prize than one that falls to one.)
           const score = value + Math.min(odds, 4) - (wave ? 0.5 : 0);
           if (!best || score > best.score) best = { score, target, corps: pick, battle: true, wave };
@@ -1584,6 +1647,9 @@ function localAttacks(g: Game, nat: string): void {
         if (odds >= 2.6) { pick = pool.slice(0, k); break; }
       }
       if (odds < P.odds) continue;
+      const sent = notTanksAlone(g, pick, pool, target);
+      if (!sent) continue;
+      if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
       const score = Math.min(odds, 4) + value;
       if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
     }
@@ -1955,7 +2021,10 @@ function defend(g: Game, nat: string, line = true): void {
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     // In free play the force a staff keeps at a place stays there: it is not thrown into a counter-attack next door.
     const kept = isOpen(g) ? massed : null;
-    const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id)), r);
+    const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id));
+    const cut = limitAttackers(g, near, r);
+    // (The local commander's tanks do not go alone at a gunned line any more than the army's: the infantry next door goes in with them, or he waits.)
+    const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
     // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
     // (The grand campaign: an army goes to the relief of a town at shorter odds than it would counter-attack, and of its capital at shorter still.)
     const bar = shut && siegeRules(g) ? (townSize(g, r) === 'capital' ? SIEGE.ai.relief.capital : SIEGE.ai.relief.other) : 1.8;

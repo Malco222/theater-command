@@ -5,7 +5,7 @@
     "start": "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
     "slots": "Research teams each nation begins with.",
     "units": "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
-    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json), less 'winter' for winter equipment when the advisers are the player's own and a winter in the east is in sight (Version 67: he is at war with the Soviet Union or his ground touches Soviet ground and he is no ally; a computer-run nation keeps history's order). 'order' is each nation's preference among the branches."
+    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, less 'guns' for Anti-tank guns while it is at war with an army that has tanks, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json), less 'winter' for winter equipment when the advisers are the player's own and a winter in the east is in sight (Version 67: he is at war with the Soviet Union or his ground touches Soviet ground and he is no ally; a computer-run nation keeps history's order). 'order' is each nation's preference among the branches."
   },
   "months": [0, 5, 8, 11, 14],
   "early": 0.5,
@@ -19,16 +19,16 @@
   ],
   "eras": ["", "Before the war", "1940 to 1941", "1942 to 1943", "1944 to 1945"],
   "techs": [
-    { "id": "antitank", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Anti-tank guns", "text": "Light, low guns that travel with the infantry and can stop a tank at close range.", "field": "infantry" },
+    { "id": "antitank", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Anti-tank guns", "text": "Light, low guns that travel with the infantry and can stop a tank at close range.", "weapons": true },
     { "id": "tanks", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Tank arm", "text": "Tanks gathered into divisions of their own, with the workshops, fuel columns and radio sets that keep them moving.", "unlock": ["corps:arm"] },
     { "id": "motor", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Motorised infantry", "text": "Infantry carried in lorries, able to keep up with the tanks and hold what they take.", "unlock": ["corps:mot"] },
     { "id": "mediums", "branch": "land", "tier": 2, "year": 1941, "needs": ["tanks"], "name": "Medium tanks", "text": "A tank with a gun that can fight other tanks and armour the light guns of 1939 cannot pierce.", "field": "armour" },
     { "id": "heavyguns", "branch": "land", "tier": 2, "year": 1940, "needs": [], "name": "Heavy artillery", "text": "Long-range guns and heavy howitzers, worked to a single fire plan.", "attack": 1.15, "defence": 1.15, "when": { "kinds": ["art"] } },
-    { "id": "smg", "branch": "land", "tier": 2, "year": 1940, "needs": ["antitank"], "name": "Submachine guns and mortars", "text": "Firepower a platoon can carry: more automatic weapons, and mortars of its own.", "field": "infantry" },
+    { "id": "smg", "branch": "land", "tier": 2, "year": 1940, "needs": ["antitank"], "name": "Submachine guns and mortars", "text": "Firepower a platoon can carry: more automatic weapons, and mortars of its own.", "weapons": true },
     { "id": "heavies", "branch": "land", "tier": 3, "year": 1942, "needs": ["mediums"], "name": "Heavy tanks", "text": "Thick armour and a gun that outranges anything it meets, at the price of weight, fuel and factory hours.", "field": "armour" },
     { "id": "rockets", "branch": "land", "tier": 3, "year": 1942, "needs": ["heavyguns"], "name": "Rocket artillery", "text": "Batteries of rockets on lorries: a whole regiment's weight of fire in half a minute, then gone before the reply.", "attack": 1.15, "when": { "kinds": ["art"] } },
-    { "id": "tankdestroyers", "branch": "land", "tier": 3, "year": 1943, "needs": ["mediums", "antitank"], "name": "Tank destroyers", "text": "Heavy guns on tracks: cheap to build, hard to see and deadly from ambush.", "defence": 1.1, "when": { "kinds": ["arm", "mot"] } },
-    { "id": "assaultrifles", "branch": "land", "tier": 4, "year": 1944, "needs": ["smg"], "name": "Assault rifles", "text": "One weapon with the reach of a rifle and the fire of a machine pistol, in every rifleman's hands.", "field": "infantry" },
+    { "id": "tankdestroyers", "branch": "land", "tier": 3, "year": 1943, "needs": ["mediums", "antitank"], "name": "Tank destroyers", "text": "Heavy guns on tracks: cheap to build, hard to see and deadly from ambush.", "defence": 1.1, "when": { "kinds": ["arm", "mot"] }, "weapons": true },
+    { "id": "assaultrifles", "branch": "land", "tier": 4, "year": 1944, "needs": ["smg"], "name": "Assault rifles", "text": "One weapon with the reach of a rifle and the fire of a machine pistol, in every rifleman's hands.", "weapons": true },
     { "id": "latetanks", "branch": "land", "tier": 4, "year": 1944, "needs": ["heavies"], "name": "Late-war armour", "text": "Sloped plate, a long gun and wide tracks in one design, built in thousands.", "field": "armour" },
 
     { "id": "monoplanes", "branch": "air", "tier": 1, "year": 1939, "needs": [], "name": "Monoplane fighters", "text": "All-metal fighters with enclosed cockpits, retracting wheels and a battery of guns in the wings.", "field": "fighters" },
@@ -93,7 +93,7 @@
     "para": { "label": "Airborne corps", "word": "Airborne", "divs": 2, "cost": 44, "months": 6, "most": 2, "blurb": "Parachute and glider troops. Once a month they can be dropped on an enemy coast across one sea with no ships at all, as long as the enemy's fighters do not hold the sky there. They land without heavy weapons, so pick a weakly held target." }
   },
   "ai": {
-    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100, "fuel": 40, "winter": 300,
+    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100, "fuel": 40, "winter": 300, "guns": 12,
     "skip": { "_all": ["airborne", "carriers"] },
     "order": {
       "_default": ["land", "industry", "doctrine", "air", "naval"],

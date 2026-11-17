@@ -40,8 +40,10 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 7: America's staff makes a landing of its own in this war (in seed 3 it joins a British front at Nantes and needs none).
-  const g = wide(7);
+  // Seed 8: America's staff makes landings of its own in this war, on Sardinia in January 1943 and at Marseille in June 1944
+  // (in seed 3 it joins a British front at Nantes and needs none). Seed 7 until Version 84, whose rules of what an attack
+  // brings and faces moved every war.
+  const g = wide(8);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);

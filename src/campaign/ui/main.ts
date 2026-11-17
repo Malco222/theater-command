@@ -38,6 +38,7 @@ import {
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
+import { carried } from '../support';
 import { INTEL, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
@@ -59,6 +60,7 @@ import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } 
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
+import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
@@ -1865,6 +1867,7 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
+  else if (c.digging && autoDig()) tags.push(`<span class="tag good worn" title="${esc('Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.')}">Digging · no works yet</span>`);
   else if (autoDig() ? mine && c.kind !== 'fort' && c.town === undefined && !c.yields && !c.fought && c.ap >= c.apMax : c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(autoDig() ? STANCE_HOLD : STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
@@ -1983,11 +1986,11 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
-    <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>
+    <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>${carryRow(c)}
     ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
 }
 
@@ -3203,7 +3206,8 @@ function groundBlock(r: Region): string {
 /** The rivers on this province's borders: which bridges stand, which are down, and the order to blow them. */
 function riverBlock(r: Region): string {
   const notes = riverNotes(g, r.id);
-  const mines = minesAt(g, r);
+  // Mines hide with the guns (ruling 158(a)): on foreign ground the row is there only with a report from it.
+  const mines = minesKnown(g, r) ? minesAt(g, r) : 0;
   if (!notes.length && !mines) return '';
   const mine = humanUp(g);
   const rows = notes.map((n) => {
@@ -6385,7 +6389,39 @@ function priceLine(r: BattleReport): string {
 /** A chance as a whole percentage that never rounds a near thing up to a sure one, or a faint hope down to none. */
 const oddsPct = (p: number): number => (p >= 0.9995 ? 100 : p <= 0.0005 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100))));
 /** The lines of a Battle Ticket that matter most: on a narrow screen the ticket opens folded to these, with a button for the rest. */
-const TICKET_KEY = new Set(['Forces', 'Troops', 'Dug in', 'Supply', 'Earlier attacks', 'Weight of attack']);
+const TICKET_KEY = new Set(['Forces', 'Troops', 'Dug in', 'Supply', 'Earlier attacks', 'Weight of attack', 'Who pays']);
+// ---- What you bring and what you face (the design director's rulings 146, 149 and 152; the grand campaign) ----
+/** The support weapons' signs, the art director's, as the UI director's kit draws them: strokes of one weight on a 24 box. */
+const WEAPON_SIGN: Record<string, string> = {
+  tank: '<path d="M5 14h14a3 3 0 0 1 0 6H5a3 3 0 0 1 0-6zM7 14v-3h8l1.5 3M12 11V8h3M15 9.5h6.5"/><path d="M7 17h.1M11 17h.1M15 17h.1M19 17h.1"/>',
+  'anti-tank': '<circle cx="10.5" cy="16.8" r="3.7"/><path d="M8 9.6H22.4M22.4 7.6v4M10.5 4.2V13M8 9.6L2 20.4"/>',
+  'machine-gun': '<path d="M5 7.8h6.2v3.4H5zM11.2 9.5H21.5M8.6 11.2L4.6 20M8.6 11.2L13.4 20M5 9.5H2.6M2.6 8v3"/>',
+  mortar: '<path d="M7.7 18.5L14.1 4.5L16.3 5.5L9.9 19.5ZM4 20.5H13.2M13.4 11.8L19.8 20.5"/>',
+  sniper: '<circle cx="12" cy="12" r="7"/><path d="M12 2.2v5.6M12 16.2v5.6M2.2 12h5.6M16.2 12h5.6M12 12h.1"/>',
+  gun: '<circle cx="8" cy="16" r="4"/><path d="M8 16L20 7M10.5 12.8L5 20M17.8 8.6l1.1 1.5"/>',
+  scouted: '<path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+};
+const weaponSign = (id: string): string => `<svg class="wsign" viewBox="0 0 24 24" aria-hidden="true">${WEAPON_SIGN[id] ?? ''}</svg>`;
+/** A sign and one sentence: a line of WHAT YOU FACE, or the result's line on who paid. */
+const signLine = (l: { sign?: string | null; text: string; unknown?: boolean }): string => `<div class="tc-signline${l.unknown ? ' is-unknown' : ''}${l.sign ? '' : ' bare'}">${l.sign ? weaponSign(l.sign) : ''}<span>${esc(l.text)}</span></div>`;
+/** WHAT YOU FACE, just above the odds: what the defence will do to what he brings, as far as his reports know it. Nothing in a history campaign. */
+const faceBlock = (face: { sign: string; text: string; unknown?: boolean }[] | null | undefined): string => (face?.length
+  ? `<div class="facepart"><div class="facehead"><h3>What you face</h3>${face.filter((l) => l.unknown).map(signLine).join('')}</div>${face.filter((l) => !l.unknown).map(signLine).join('')}</div>` : '');
+/** Who paid and what did it, under the sentence of losses: as the attacker reads it, or with the sides turned for the defender. */
+function paidLine(r: BattleReport): string {
+  if (!r.paid || r.yielded) return '';
+  const me = g.human;
+  const attacked = !!me && (r.attNat === me || r.attackers.some((u) => u.nat === me)), defended = !!me && !attacked && r.defenders.some((u) => u.nat === me);
+  return `<div class="paidline">${signLine({ sign: r.paid.sign, text: defended ? r.paid.def : r.paid.att })}</div>`;
+}
+/** The row of weapon signs on a corps card: the anti-tank guns with their level, machine guns and mortars once their technology is in, snipers always. */
+function carryRow(c: Corps): string {
+  const k = carried(g, c);
+  if (!k) return '';
+  // A sign not yet earned is left out and its cell stays empty, so each sign keeps its place in the row.
+  const cell = (on: boolean, sign: string, title: string, figure = ''): string => (on ? `<span title="${esc(title)}">${weaponSign(sign)}${figure}</span>` : '<span class="none"></span>');
+  return `<span class="tc-carry">${cell(true, 'anti-tank', `Anti-tank guns, level ${k.antiTank}`, `<b>${k.antiTank}</b>`)}${cell(k.machineGuns, 'machine-gun', 'Machine guns')}${cell(k.mortars, 'mortar', 'Mortars')}${cell(k.snipers, 'sniper', 'Snipers')}</span>`;
+}
 const ticketBlock = (title: string, lines: BattleReport['lines']): string => {
   const more = lines.filter((l) => !TICKET_KEY.has(l.label)).length;
   const fold = more > 0 && !ui.ticketAll;
@@ -6448,7 +6484,7 @@ function reportCard(r: BattleReport): string {
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
-      ${spoils}${next}${wornNote(r)}
+      ${paidLine(r)}${spoils}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
         <div class="ends"><span>${esc(g.nations[r.attNat].adj)} strength on the day</span><span>${esc(g.nations[r.defNat].adj)} strength on the day</span></div></div>
@@ -6511,12 +6547,12 @@ function attackCard(): string {
     const at = (odds: number): number => (100 * odds) / (1 + odds);
     const p = look.chance;
     const word = look.chanceLo >= 0.95 ? 'Victory looks certain' : look.chanceHi <= 0 ? 'This attack looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
-    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
-      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">The staff's estimate: odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
+      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="${esc(`The balance lies somewhere in this band. ${look.note}${look.wide ? ` ${look.narrow}` : ''}`)}"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
       ${costBlock(look)}
-      <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}${scoutButton(target)}</div>
-      ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
+      ${look.face?.length ? (scoutButton(target) ? `<div class="acts scoutrow">${scoutButton(target)}</div>` : '') : `<div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}${scoutButton(target)}</div>`}
+      ${ticketBlock('What the campaign map feeds into this battle', briefTicket(look.lines, look.face))}`;
   } else if (a) {
     const p = chanceOn(a.odds, a.dice);
     const share = a.A / (a.A + a.D);
@@ -6525,7 +6561,7 @@ function attackCard(): string {
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ' against prepared positions' : ''}</span><span>Theirs</span></div></div>
       ${look ? costBlock(look) : ''}
-      ${ticketBlock('What the campaign map feeds into this battle', a.lines)}`;
+      ${ticketBlock('What the campaign map feeds into this battle', briefTicket(a.lines, look?.face))}`;
   } else body = cands.length && cands.every((c) => barred(g, c, target))
     ? `<div class="empty">${esc(target.name)} is too steep for tanks. Bring infantry or mountain troops up beside it to attack.</div>`
     : cands.length && cands.every((c) => blocked(g, c, target))
@@ -6533,7 +6569,7 @@ function attackCard(): string {
     : '<div class="empty">Choose at least one corps to attack with.</div>';
   const ground = `${target.terrain[0].toUpperCase() + target.terrain.slice(1)}${steep(g, target) ? ', too steep for tanks' : ''}`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The armies meet · ${date(g.turn)}</div><h2>Battle for ${esc(target.name)}</h2></header>
-    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${massNote}${prizeStrip(target)}${a ? softenRow(target, chosen) : ''}${body}</div>
+    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${massNote}${prizeStrip(target)}${a ? softenRow(target, chosen) : ''}${faceBlock(look?.face)}${body}</div>
     <footer><button class="btn" data-act="close" title="Call the attack off. Nothing is spent.">Withdraw</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'} title="Settle the battle at once from the Battle Ticket">Auto-resolve</button></footer>`;
 }
 
