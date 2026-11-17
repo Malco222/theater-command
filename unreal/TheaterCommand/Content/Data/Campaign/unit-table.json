@@ -250,7 +250,7 @@
    },
    "fighter": {
     "src": "own",
-    "model": "Fighter, Yak 1941"
+    "model": "Fighter, Yak 1942"
    },
    "bomber": {
     "src": "generic",
