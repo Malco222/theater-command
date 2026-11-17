@@ -64,6 +64,19 @@ export function yardLevel(g: Game, r: Region): number {
 /** A city: a province where a factory can be built. */
 export const isCity = (r: Region): boolean => r.terrain === 'urban' || r.cap || r.fac > 0 || r.vp >= 2;
 
+// TRIAL (ruling 213(e), in force 17:14Z): a smaller power builds no factory past half again its first-day count,
+// rounded up (two become three at most, three five, none stays none); a factory lost may be built back. The first-day
+// count is read off the home ground it still holds: what stands there less what it has built since (nothing is
+// stored, so a save is unchanged; home ground lost lowers the count, which the rules builder's lever should fix by
+// setting it as the campaign opens). Null for a great power, or with the rulings off.
+const homeFactories = (g: Game, nat: string): number => g.regions.reduce((s, r) => s + (isHome(g, nat, r) ? r.fac : 0), 0);
+const factoryBound = (g: Game, nat: string): number | null => {
+  if (!T213.on || T213.great.includes(nat) || !budgeted(g)) return null;
+  const first = g.regions.reduce((s, r) => s + (isHome(g, nat, r) ? Math.max(0, r.fac - factoriesBuilt(g, r.id)) : 0), 0);
+  return Math.ceil(first * 1.5);
+};
+const factoriesQueued = (g: Game, nat: string): number => g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === 'factory').length;
+
 const queued = (g: Game, nat: string, item: string, region: number): number => g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === item && b.region === region).length;
 
 /** What guns and airfields cost a nation to man each month, as lines for its ledger. */
@@ -318,7 +331,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const have = r ? factoriesBuilt(g, r.id) + queued(g, nat, 'factory', r.id) : 0;
     const most = r && (r.terrain === 'urban' || r.cap) ? W.factory.most.city : W.factory.most.town;
     const cost = W.factory.cost + W.factory.step * have;
-    const why = !r ? pick : !isHome(g, nat, r) || r.overseas ? 'Factories are built in the home country.' : !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost);
+    const bound = factoryBound(g, nat);   // TRIAL (ruling 213(e))
+    const why = !r ? pick : !isHome(g, nat, r) || r.overseas ? 'Factories are built in the home country.' : !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : bound !== null && homeFactories(g, nat) + factoriesQueued(g, nat) >= bound ? `The country's industry can grow no further: ${plural(bound, 'factory', 'factories')} is the most it can keep at work.` : poor(cost);
     out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.` : '', why });
   }
   const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.' };

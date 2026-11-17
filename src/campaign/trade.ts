@@ -37,7 +37,8 @@ export function wealthOf(g: Game, nat: string): number {
   const n = g.nations[nat];
   if (!n) return 0;
   let sum = n.offmap?.industry ?? 0;
-  for (const r of g.regions) if (r.ctrl === nat) sum += provinceYield(g, r, nat).total;
+  // TRIAL (the director, 17:14Z): trade reads the land before ruling 214's factor, so no great power's first day moves.
+  for (const r of g.regions) if (r.ctrl === nat) sum += provinceYield(g, r, nat, false, true).total;
   return sum;
 }
 

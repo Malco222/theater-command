@@ -183,7 +183,8 @@ the printout says `ability: none`.
 | `data/campaign/trial-213.json` | New: the rows of rulings 213 and 214, copied unchanged from the clerk's and the historian's tables by `node tools/trial/bake-213.mjs` (`--off` writes it empty: the game as it stood before the rulings). Build again after it |
 | `src/campaign/economy.ts` | `provinceYield`: the land and harbour pay of a province is multiplied by `landFactor` of the country that owns the ground (ruling 214; sixteen countries, everyone else 1) |
 | `src/campaign/manpower.ts` | The historian's `pool` and `class` rows for Australia, New Zealand, South Africa and Manchukuo are laid over `manpower.json` (ruling 213(b)) |
-| `src/campaign/arsenal.ts` | For a smaller power the historian's list of aircraft works stands in place of the two- and three-factory test (ruling 213(d)): on the list and inside its months it builds that kind at home, otherwise never. The great powers keep the factory test. The dated deliveries of that file are not played |
+| `src/campaign/trade.ts` | `wealthOf` reads a province's pay before the land factor (`provinceYield(..., raw)`), so the factor does not reach trade and no great power's first day moves (the director, 17:14Z) |
+| `src/campaign/arsenal.ts` | For a smaller power the historian's list of aircraft works stands in place of the two- and three-factory test (ruling 213(d)): on the list and inside its months it builds that kind at home, otherwise never. The great powers keep the factory test. The dated deliveries of that file are not played. Ruling 213(e), in force 17:14Z: a smaller power is refused a factory past half again its first-day count, rounded up (`factoryBound`; the first-day count is read off the home ground it still holds, less what it has built) |
 | `tools/trial/` | `seats.mjs` (the overlay and its checks), `build.mjs`, `seat-play.ts`, `run-all.sh`, `bake-held.mjs`, `placeholder-seats.json`, `results/`; the Pacific seat builder's `front.ts` and `build-front.mjs` (one war read month by month with nobody playing: `node tools/trial/build-front.mjs && node dist/trial/front.mjs 7 24 CHN JAP`) |
 
 Nothing else in `src/` was changed, and no crash had to be fixed: the game attached the 1,758-province chart and
@@ -299,7 +300,8 @@ Each was met while building the trial. Lines are those of this branch.
     partner's provinces pay (`wealthOf`, `trade.ts:36`), so the factor of ruling 214 makes the sixteen countries
     poorer partners. On the first day Britain goes from 7,301 to 7,287 and the United States from 1,465 to 1,412,
     through trade alone (Germany, Italy, France and the Soviet Union do not move); Nepal gains an agreement (206 to
-    225). Ruling 213(a) says no great power's total moves: `wealthOf` read before the factor would hold it.
+    225). Ruling 213(a) says no great power's total moves: `wealthOf` read before the factor would hold it. Ruled so at
+    17:14Z, and the rig does it: Britain 7,301 and the United States 1,465 again.
 
 ## Not verified
 

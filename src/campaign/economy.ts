@@ -111,7 +111,7 @@ export interface Yield { land: number; port: number; oil: number; fac: number; c
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
  */
-export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false): Yield {
+export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false, raw = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
   const works = workingFactories(g, r);
@@ -120,7 +120,7 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const lift = own ? 0 : hallShare(g, r);
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
-  const f214 = landFactor(r);   // TRIAL (ruling 214)
+  const f214 = raw ? 1 : landFactor(r);   // TRIAL (ruling 214); 'raw' is the land before the factor, which trade reads (ruled 17:14Z)
   const land = BUDGET.land[r.terrain] * k * f214;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * f214 : 0;
