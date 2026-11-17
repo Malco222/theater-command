@@ -266,6 +266,8 @@ private:
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 
 	TUniquePtr<FRulesHost> Host;
+	/** The rules' last answers to the questions that change nothing, by question and what was asked: see CallRules. */
+	TMap<FString, FString> RulesMemo;
 	FCampaignView View;
 	bool bReady = false;
 	bool bRunning = false;

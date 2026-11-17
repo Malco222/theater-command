@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMapActor.h"
+#include "Campaign/TheaterSpeed.h"
 #include "ImageUtils.h"
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
@@ -300,6 +301,7 @@ float ACampaignMapActor::CoverAt(double InX, double Y) const
 
 void ACampaignMapActor::ShowWorksGoing(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWorksGoing);
 	// Works on order in a province: pairs, the province and what. A builder's yard stands there while they go up.
 	TMap<int32, int32> Now;
 	for (int32 K = 0; K + 1 < FromRules.Num(); K += 2)
@@ -425,6 +427,7 @@ void ACampaignMapActor::ShowVictorFlags()
 
 void ACampaignMapActor::DrawVictorFlags()
 {
+	THEATER_SPEED_SCOPE(DrawVictorFlags);
 	if (!VictorFlagMesh)
 	{
 		VictorFlagMesh = NewObject<UProceduralMeshComponent>(this);
@@ -526,6 +529,7 @@ void ACampaignMapActor::DrawVictorFlags()
 
 void ACampaignMapActor::ShowFrontLine(const TArray<FString>& Wars, const FString& Player)
 {
+	THEATER_SPEED_SCOPE(ShowFrontLine);
 	if (Wars == WarPairs && Player == WarPlayer && FrontLineMesh)
 	{
 		return;
@@ -704,6 +708,7 @@ void ACampaignMapActor::BuildFrontLine()
 
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWrecked);
 	// Factories that are not working: the province and how many. The towns are built again only when that changes
 	// (a raid that told, a saboteur, a works relaid): their wrecked works stand roofless, with cold stacks.
 	TMap<int32, int32> Now;
@@ -851,6 +856,7 @@ void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FStr
 
 void ACampaignMapActor::UpdateSinkings()
 {
+	THEATER_SPEED_SCOPE(UpdateSinkings);
 	if (SinkingShips.Num() == 0 || !GetWorld())
 	{
 		return;
@@ -902,6 +908,7 @@ void ACampaignMapActor::UpdateSinkings()
 
 void ACampaignMapActor::ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn)
 {
+	THEATER_SPEED_SCOPE(ShowWrecks);
 	TArray<FWreckMark> Now = Wrecks;
 	{
 		// ("-TheaterWrecks=6:GER:bb,6:UK:ca" stands wrecks on the chart for a picture: the sea, whose, what class)
@@ -1284,6 +1291,7 @@ void ACampaignMapActor::SetPiecesShown(bool bShown)
 
 void ACampaignMapActor::ShowIdle(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowIdle);
 	// Only the smoke changes: the stacks stand as they are, and the plumes are drawn afresh every frame.
 	IdleIn.Reset();
 	IdleIn.Append(FromRules);
@@ -1351,6 +1359,7 @@ void ACampaignMapActor::SeaScalar(FName Name, float Value)
 
 void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSeaMotion);
 	if (!SeaMaterial)
 	{
 		return;
@@ -2251,6 +2260,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 
 bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
 {
+	THEATER_SPEED_SCOPE(UpdateLand);
 	if (Sheet.Heights.Num() == 0 || !Sheet.Shape)
 	{
 		return false;
@@ -2612,6 +2622,7 @@ void ACampaignMapActor::BuildWorld()
 
 void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateFineSheets);
 	if (!Data.bWorld || FineXs.Num() < 2 || FineYs.Num() < 2 || !WorldLandMaterial)
 	{
 		return;
@@ -3114,6 +3125,7 @@ void ACampaignMapActor::BuildBorders()
 
 void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 {
+	THEATER_SPEED_SCOPE(SetLand);
 	Land = InLand;
 	bLandLaid = true;
 	bWorksShown = false;
@@ -3124,6 +3136,7 @@ void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 
 void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 {
+	THEATER_SPEED_SCOPE(ShowBuildings);
 	if (!BuildingsMesh || !Data.IsLoaded() || Works == ShownBuildings)
 	{
 		return;
@@ -3593,6 +3606,7 @@ void ACampaignMapActor::SetRailRoute(int32 ToRegion)
 
 void ACampaignMapActor::UpdateRailLight(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateRailLight);
 	if (!RailLightMesh)
 	{
 		return;
@@ -3799,6 +3813,7 @@ FVector2D ACampaignMapActor::CutSpot(int32 RegionId) const
 
 void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 {
+	THEATER_SPEED_SCOPE(ShowCuts);
 	CutLamps.Reset();
 	for (const FViewCut& Cut : Cuts)
 	{
@@ -3811,6 +3826,7 @@ void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 
 void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateCutLamps);
 	UWorld* World = GetWorld();
 	if (!CutLampMesh || !World)
 	{
@@ -4331,6 +4347,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 
 void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut)
 {
+	THEATER_SPEED_SCOPE(ShowWorks);
 	if (bWorksShown && BridgesDown == ShownDown && RailsCut == ShownCut)
 	{
 		return;
@@ -4776,6 +4793,7 @@ void ACampaignMapActor::MakeUpTrain(FTrain& Train, int32 FromRegion) const
 
 void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateTrains);
 	UWorld* World = GetWorld();
 	if (!World || Land.Rails.Num() == 0)
 	{
@@ -4787,6 +4805,20 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	const FVector2D Looking = WorldToMap(CameraFocus);
 	// From far off the trains are too small to see, and are put away.
 	const bool bNear = CameraDistance < 9000.0f;
+	// (Speed: "tc.Speed.TrainShadows", for measuring only. A thing that throws a shadow and moves has the shadows round
+	// it drawn again every frame, with everything else that throws one there.)
+	const bool bTrainShadows = TheaterSpeed::TrainShadows();
+	if (bTrainShadows != bTrainShadowsCast)
+	{
+		bTrainShadowsCast = bTrainShadows;
+		for (FTrain& Each : Trains)
+		{
+			if (Each.Mesh)
+			{
+				Each.Mesh->SetCastShadow(bTrainShadows);
+			}
+		}
+	}
 
 	// The trains running: each along its link, and on to another when it arrives.
 	for (int32 Index = Trains.Num() - 1; Index >= 0; --Index)
@@ -5002,7 +5034,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		Train.FlakLevel = 0;
 		MakeUpTrain(Train, StartRegion);
 	}
-	Train.Mesh->SetCastShadow(true);
+	Train.Mesh->SetCastShadow(TheaterSpeed::TrainShadows()); // ("tc.Speed.TrainShadows 0" is for measuring only)
 	Train.Mesh->SetVisibility(false); // until its first place on the line is set, at the next frame
 	Train.Mesh->SetVisibility(true);
 	Train.Mesh->SetRelativeLocation(SurfacePointOver(Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.X, Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.Y, 0.2));
@@ -5518,6 +5550,7 @@ void ACampaignMapActor::BuildWarRoom()
 
 void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 {
+	THEATER_SPEED_SCOPE(ShowCivic);
 	if (!Data.IsLoaded() || (CivicMesh && Civic == ShownCivic))
 	{
 		return;
@@ -5591,6 +5624,7 @@ void ACampaignMapActor::SetColourStrength(int32 Level)
 
 void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 {
+	THEATER_SPEED_SCOPE(ShowSieges);
 	if (Sieges == ShownSieges)
 	{
 		return;
@@ -5616,6 +5650,7 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 
 void ACampaignMapActor::ShowBombed(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowBombed);
 	TArray<int32> Pairs = FromRules;
 	{
 		// (for pictures: "-TheaterBombedAt=Katowice:hard;Krakow" stands a raid's smoke over those places as well)
@@ -5688,6 +5723,7 @@ void ACampaignMapActor::ShowBombed(const TArray<int32>& FromRules)
 
 void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWorksLeft);
 	TArray<int32> Left = FromRules;
 	{
 		// (for pictures: -TheaterWorksLeft=Province,Province stands empty fieldworks in those provinces as well)
@@ -5768,6 +5804,7 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 
 void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 {
+	THEATER_SPEED_SCOPE(ShowPrizes);
 	FString Signature;
 	for (const FPrizeMark& Mark : Marks)
 	{
@@ -5899,8 +5936,55 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 	return TownSpreads[RegionId];
 }
 
+void ACampaignMapActor::ShowTownForm(bool bFar)
+{
+	if (TownMesh)
+	{
+		TownMesh->SetVisibility(!bFar);
+	}
+	if (TownFarMesh)
+	{
+		TownFarMesh->SetVisibility(bFar);
+	}
+	for (UProceduralMeshComponent* Square : TownSquares)
+	{
+		if (Square)
+		{
+			Square->SetVisibility(!bFar);
+		}
+	}
+	for (UProceduralMeshComponent* Square : TownFarSquares)
+	{
+		if (Square)
+		{
+			Square->SetVisibility(bFar);
+		}
+	}
+	if (LightsMesh && LightsMesh->GetNumSections() > 0)
+	{
+		LightsMesh->SetMeshSectionVisible(0, !bFar);
+	}
+}
+
+void ACampaignMapActor::SetTownShadows(bool bCast)
+{
+	TownShadowsCast = bCast ? 1 : 0;
+	if (TownMesh)
+	{
+		TownMesh->SetCastShadow(bCast);
+	}
+	for (UProceduralMeshComponent* Square : TownSquares)
+	{
+		if (Square)
+		{
+			Square->SetCastShadow(bCast);
+		}
+	}
+}
+
 void ACampaignMapActor::SetTownPlots(bool bPlots)
 {
+	THEATER_SPEED_SCOPE(SetTownPlots);
 	if (bPlots != bTownPlots)
 	{
 		bTownPlots = bPlots;
@@ -5996,6 +6080,7 @@ bool ACampaignMapActor::GetAirfieldWorld(int32 RegionId, FVector& OutWorld) cons
 
 void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 {
+	THEATER_SPEED_SCOPE(ShowAirfieldSigns);
 	{
 		// Which airfields are in use: if that has changed, the airfields themselves are built again, the empty ones smaller.
 		TSet<int32> Used;
@@ -6107,6 +6192,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 
 void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(ShowParkedPlanes);
 	// (The art director's ruling of round 21: a parked aircraft must be recognisably the one on its card, by its
 	// outline, its hood, its blades, its marking and its paint. Close to, each airfield in use shows its country's
 	// own fighter, its plainer model, standing on its wheels, in place of the silver box aircraft. Only close to,
@@ -6191,6 +6277,7 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 
 void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 {
+	THEATER_SPEED_SCOPE(ShowScars);
 	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
 	{
 		return;
@@ -6392,6 +6479,7 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 
 void ACampaignMapActor::BuildTowns()
 {
+	THEATER_SPEED_SCOPE(BuildTowns);
 	TownMarkers->ClearInstances();
 	CapitalMarkers->ClearInstances();
 	if (!TownMesh)
@@ -6412,11 +6500,32 @@ void ACampaignMapActor::BuildTowns()
 	}
 	TownFarMesh->ClearAllMeshSections();
 	TownsFarShown = -1;
-	FMiniatureMesh FarModel; // (the same towns for the eye high up: see FTownSite::bFar)
+	// (Speed, 17 November 2026; "tc.Speed.TownSquares".) The towns are cut into squares of country, each square a mesh
+	// of its own in its near form and its far: only the squares in view are drawn, and only those near a change are
+	// drawn again into the shadows. Each town is built exactly as before, into its square's mesh in place of the one
+	// mesh for the world. With the switch at 0 there is one square, and it is TownMesh and TownFarMesh as they were.
+	const bool bSquares = TheaterSpeed::TownSquares();
+	TownsCut = bSquares ? 1 : 0;
+	const double SquareSide = 260.0; // (in map units: twice a square of the woods, a few to the width of the view from playing height)
+	TMap<FIntPoint, int32> SquareOf;
+	TArray<FMiniatureMesh> NearModels, FarModels; // (FarModels: the same towns for the eye high up, see FTownSite::bFar)
+	auto SquareFor = [&](const FVector2D& Where)
+	{
+		const FIntPoint Key = bSquares ? FIntPoint(FMath::FloorToInt32(Where.X / SquareSide), FMath::FloorToInt32(Where.Y / SquareSide)) : FIntPoint(0, 0);
+		if (const int32* Known = SquareOf.Find(Key))
+		{
+			return *Known;
+		}
+		const int32 Index = NearModels.Num();
+		NearModels.AddDefaulted();
+		FarModels.AddDefaulted();
+		NearModels[Index].Windows = &TownWindows;
+		SquareOf.Add(Key, Index);
+		return Index;
+	};
 
 	// Every town of note stands on the table as a cluster of houses: a few for a town, more for a city, a domed
 	// palace in the middle of a capital, and a works with a chimney for each pair of factories the province has.
-	FMiniatureMesh Model;
 	const double U = UnitScale;
 	int32 Count = 0;
 	TownChimneys.Reset();
@@ -6426,7 +6535,6 @@ void ACampaignMapActor::BuildTowns()
 	TownQuarters.Reset();
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
-	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -6436,6 +6544,9 @@ void ACampaignMapActor::BuildTowns()
 		{
 			continue;
 		}
+		const int32 Square = SquareFor(Region.Center);
+		FMiniatureMesh& Model = NearModels[Square];
+		FMiniatureMesh& FarModel = FarModels[Square];
 		// What the place is worth, where the eye can count it: a stack of gold coins beside the town, one for each
 		// point it scores toward victory.
 		if (Region.VictoryPoints > 0)
@@ -6491,17 +6602,56 @@ void ACampaignMapActor::BuildTowns()
 		}
 		++Count;
 	}
-	if (Model.Vertices.Num() > 0)
+	// (the squares' meshes are kept from one building to the next: those not wanted this time are left empty)
+	auto SquareMesh = [this](TArray<TObjectPtr<UProceduralMeshComponent>>& Pool, int32 Index, bool bFar)
 	{
-		TownMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-		TownMesh->SetMaterial(0, SceneryMaterial);
-	}
-	if (FarModel.Vertices.Num() > 0)
+		while (Pool.Num() <= Index)
+		{
+			UProceduralMeshComponent* Made = NewObject<UProceduralMeshComponent>(this);
+			Made->SetupAttachment(Root);
+			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			if (bFar || TownShadowsCast == 0)
+			{
+				Made->SetCastShadow(false); // (as TownFarMesh; a near square throws its shadows as TownMesh does)
+			}
+			Made->RegisterComponent();
+			Pool.Add(Made);
+		}
+		return Pool[Index].Get();
+	};
+	auto Fill = [this](UProceduralMeshComponent* Mesh, const FMiniatureMesh& Each)
 	{
-		TownFarMesh->CreateMeshSection(0, FarModel.Vertices, FarModel.Triangles, FarModel.Normals, TArray<FVector2D>(), FarModel.Colors, TArray<FProcMeshTangent>(), false);
-		TownFarMesh->SetMaterial(0, SceneryMaterial);
+		Mesh->ClearAllMeshSections();
+		if (Each.Vertices.Num() > 0)
+		{
+			Mesh->CreateMeshSection(0, Each.Vertices, Each.Triangles, Each.Normals, TArray<FVector2D>(), Each.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(0, SceneryMaterial);
+		}
+	};
+	int32 NearPoints = 0, FarPoints = 0;
+	for (int32 Index = 0; Index < NearModels.Num(); ++Index)
+	{
+		NearPoints += NearModels[Index].Vertices.Num();
+		FarPoints += FarModels[Index].Vertices.Num();
+		Fill(bSquares ? SquareMesh(TownSquares, Index, false) : TownMesh.Get(), NearModels[Index]);
+		Fill(bSquares ? SquareMesh(TownFarSquares, Index, true) : TownFarMesh.Get(), FarModels[Index]);
 	}
-	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up)"), Count, Model.Vertices.Num(), FarModel.Vertices.Num());
+	for (int32 Index = bSquares ? NearModels.Num() : 0; Index < TownSquares.Num(); ++Index)
+	{
+		if (TownSquares[Index])
+		{
+			TownSquares[Index]->ClearAllMeshSections();
+		}
+	}
+	for (int32 Index = bSquares ? FarModels.Num() : 0; Index < TownFarSquares.Num(); ++Index)
+	{
+		if (TownFarSquares[Index])
+		{
+			TownFarSquares[Index]->ClearAllMeshSections();
+		}
+	}
+	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up), in %d square%s of country"), Count, NearPoints, FarPoints,
+		bSquares ? NearModels.Num() : 1, bSquares && NearModels.Num() != 1 ? TEXT("s") : TEXT(""));
 
 	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
 	if (!LightsMesh)
@@ -6667,6 +6817,7 @@ void ACampaignMapActor::BuildTowns()
 
 void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts)
 {
+	THEATER_SPEED_SCOPE(SetWarAtNight);
 	if (Fronts != FrontPairs || (Fronts.Num() > 0 && FrontFires.Num() == 0))
 	{
 		// Where the fires of each front burn: along the very frontier the two provinces share. They stand thick
@@ -6918,6 +7069,7 @@ void ACampaignMapActor::BuildSheetMargin()
 
 void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 {
+	THEATER_SPEED_SCOPE(SetNight);
 	const bool bLampChanged = bLamplight != bLamplightNow;
 	NightNow = Night;
 	bLamplightNow = bLamplight;
@@ -8240,6 +8392,7 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
+	THEATER_SPEED_SCOPE(ShowArmies);
 	UWorld* World = GetWorld();
 	if (!World || !Data.IsLoaded() || HasParade())
 	{
@@ -8445,6 +8598,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 
 void ACampaignMapActor::BuildGunLines()
 {
+	THEATER_SPEED_SCOPE(BuildGunLines);
 	if (!GunLineMesh || !Data.IsLoaded() || !bPiecesShown)
 	{
 		return; // (with the pieces lifted off the table the lines are out of sight, and are made again when they are set back)
@@ -8844,6 +8998,7 @@ void ACampaignMapActor::BuildGunLines()
 
 void ACampaignMapActor::ApplyCrowds()
 {
+	THEATER_SPEED_SCOPE(ApplyCrowds);
 	for (AArmyPiece* Piece : Pieces)
 	{
 		if (!Piece)
@@ -9190,6 +9345,7 @@ void ACampaignMapActor::FogBeyond()
 
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners, const TArray<FCampaignView::FSiegePaint>& Sieges)
 {
+	THEATER_SPEED_SCOPE(SetHolders);
 	{
 		// ("-TheaterHold=Virginia:GER,Norfolk:GER" shows those provinces as held by another country, for a picture of
 		// occupied ground where the campaign has none: the rules know nothing of it.)
@@ -9565,6 +9721,7 @@ void ACampaignMapActor::EndInk()
 
 void ACampaignMapActor::UpdateOwnershipPaint()
 {
+	THEATER_SPEED_SCOPE(UpdateOwnershipPaint);
 	UWorld* World = GetWorld();
 	if (!World || (InkRuns.Num() == 0 && !bSiegesMoving))
 	{
@@ -9644,6 +9801,7 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
 {
+	THEATER_SPEED_SCOPE(SetReach);
 	if (RailLight.Tracks.Num() + RailLight.Tint.Num() + RailLight.Bars.Num() + RailLight.Dots.Num() + RailLight.Ringed.Num() > 0)
 	{
 		SetRailLight(FRailLight()); // (the railway's light goes out with the reach it belongs to: whoever shows a reach lights it again)
@@ -9692,6 +9850,7 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 
 void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 {
+	THEATER_SPEED_SCOPE(ShowEnemyReach);
 	OrdersMesh->ClearMeshSection(9); // (a section of its own: the route to the province under the pointer is drawn and cleared in section 1)
 	if (EnemyReachMesh)
 	{
@@ -9786,6 +9945,7 @@ float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
 
 void ACampaignMapActor::SetSeason(int32 Turn)
 {
+	THEATER_SPEED_SCOPE(SetSeason);
 	// ("-TheaterSeason=5" on the command line holds the table at one month of the war, for a picture)
 	int32 Held = 0;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held))
@@ -9904,6 +10064,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 
 void ACampaignMapActor::SetTowns(const TArray<FTownInfo>& InTowns)
 {
+	THEATER_SPEED_SCOPE(SetTowns);
 	Towns.Reset();
 	Towns.SetNum(Data.Regions.Num());
 	for (const FTownInfo& Town : InTowns)
@@ -9942,6 +10103,7 @@ void ACampaignMapActor::ShowWealth(bool bOn)
 
 void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 {
+	THEATER_SPEED_SCOPE(ShowSides);
 	if (bOn == bSides && Standing == SideOf)
 	{
 		return;
@@ -9981,6 +10143,7 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 
 void ACampaignMapActor::UpdateFlashes()
 {
+	THEATER_SPEED_SCOPE(UpdateFlashes);
 	UWorld* World = GetWorld();
 	if (!World || (Flashes.Num() == 0 && FlashesDrawn <= 0.0))
 	{
@@ -10016,6 +10179,7 @@ void ACampaignMapActor::UpdateFlashes()
 
 void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
 {
+	THEATER_SPEED_SCOPE(ShowMud);
 	if (Regions == ShownMud)
 	{
 		return;
@@ -10040,6 +10204,7 @@ void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
 
 void ACampaignMapActor::UpdateClouds()
 {
+	THEATER_SPEED_SCOPE(UpdateClouds);
 	UWorld* World = GetWorld();
 	if (!CloudMesh || !World || !HighlightMaterial || !Data.IsLoaded())
 	{
@@ -10124,6 +10289,7 @@ void ACampaignMapActor::UpdateClouds()
 
 void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int32>& Glimpsed)
 {
+	THEATER_SPEED_SCOPE(ShowShroud);
 	if (Unseen == ShownUnseen && Glimpsed == ShownGlimpsed)
 	{
 		return;
@@ -10210,6 +10376,7 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int
 
 void ACampaignMapActor::UpdateFogFade(float DeltaSeconds)
 {
+	THEATER_SPEED_SCOPE(UpdateFogFade);
 	if (!bFogFading || !FogPicture || FogShownPixels.Num() != Paint.NX * Paint.NY || FogWantedPixels.Num() != FogShownPixels.Num())
 	{
 		return;
@@ -10245,6 +10412,7 @@ void ACampaignMapActor::UpdateFogFade(float DeltaSeconds)
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
 {
+	THEATER_SPEED_SCOPE(ShowFreeCapitals);
 	if (Capitals == ShownFree)
 	{
 		return;
@@ -10457,6 +10625,7 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 
 void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 {
+	THEATER_SPEED_SCOPE(ShowLanes);
 	if (!LanesMesh || !Data.IsLoaded())
 	{
 		return;
@@ -11094,6 +11263,7 @@ bool ACampaignMapActor::FirstRaidTarget(FVector2D& OutSpot, float& OutHeight) co
 
 void ACampaignMapActor::UpdateSorties()
 {
+	THEATER_SPEED_SCOPE(UpdateSorties);
 	UWorld* World = GetWorld();
 	if (!SortieMesh || !World)
 	{
@@ -11244,6 +11414,7 @@ void ACampaignMapActor::UpdateSorties()
 
 void ACampaignMapActor::UpdateSearchlights(float CameraDistance)
 {
+	THEATER_SPEED_SCOPE(UpdateSearchlights);
 	UWorld* World = GetWorld();
 	if (!BeamMesh || !World)
 	{
@@ -11555,6 +11726,7 @@ void ACampaignMapActor::AddSeaBattle(int32 Zone)
 
 void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSmoke);
 	UWorld* World = GetWorld();
 	if (!SmokeMesh || !World || !HighlightMaterial)
 	{
@@ -11564,20 +11736,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// only across its rim. With one ring a puff was thick at its very middle alone, a third as thick as it was meant
 	// taken all over, and smoke built of such puffs was a haze of thin streaks.)
 	const int32 MaxPuffs = 2400, Rim = 8, PerPuff = 2 * Rim + 1; // (room for the columns over bombed places, which are dense)
-	if (!bSmokeMade)
+	// The mesh on the graphics chip, with room for so many puffs (the first so many of SmokeVertices: see the end).
+	auto MakeSmokeSection = [&](int32 Room, const TArray<FVector>& Points, const TArray<FColor>& Colours)
 	{
-		// The mesh is made once, with room for every puff; after that only its points and colours change.
-		bSmokeMade = true;
-		SmokeVertices.Init(FVector::ZeroVector, MaxPuffs * PerPuff);
-		// (two far corners to begin with, so that the mesh is never thought too small to draw)
-		SmokeVertices[1] = FVector(-20000.0, -20000.0, 0.0);
-		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
-		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
 		TArray<int32> Triangles;
-		Triangles.Reserve(MaxPuffs * Rim * 18);
-		for (int32 Puff = 0; Puff < MaxPuffs; ++Puff)
+		Triangles.Reserve(Room * Rim * 18);
+		for (int32 Each = 0; Each < Room; ++Each)
 		{
-			const int32 First = Puff * PerPuff;
+			const int32 First = Each * PerPuff;
 			// (both faces of every triangle, so that a puff shows whichever way it is wound to the eye)
 			auto Both = [&Triangles](int32 A, int32 B, int32 C)
 			{
@@ -11593,9 +11759,21 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 		TArray<FVector> Normals;
-		Normals.Init(FVector::UpVector, SmokeVertices.Num());
-		SmokeMesh->CreateMeshSection(0, SmokeVertices, Triangles, Normals, TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>(), false);
+		Normals.Init(FVector::UpVector, Points.Num());
+		SmokeMesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 		SmokeMesh->SetMaterial(0, HighlightMaterial);
+		SmokeRoom = Room;
+	};
+	if (!bSmokeMade)
+	{
+		// The mesh is made once, with room for every puff; after that only its points and colours change.
+		bSmokeMade = true;
+		SmokeVertices.Init(FVector::ZeroVector, MaxPuffs * PerPuff);
+		// (two far corners to begin with, so that the mesh is never thought too small to draw)
+		SmokeVertices[1] = FVector(-20000.0, -20000.0, 0.0);
+		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
+		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
+		MakeSmokeSection(MaxPuffs, SmokeVertices, SmokeColours);
 		SmokeMesh->SetCastShadow(false);
 	}
 
@@ -12696,11 +12874,66 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			SmokeColours[First + K] = FColor(0, 0, 0, 0);
 		}
 	}
-	SmokeMesh->UpdateMeshSection(0, SmokeVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>());
+
+	// (Speed, 17 November 2026; "tc.Speed.SmokeTrim".) Every point of all 2,400 puffs was sent to the graphics chip
+	// every frame, some forty thousand, when a few hundred puffs are in the air from playing height. Only the puffs in
+	// use are sent now, with room kept in steps of 300 (let down only after two seconds with fewer, so that it is not
+	// made again and again), and two points more that are no puff's: the corners of all the puffs, folded ones too,
+	// so that the mesh's bounds are what they always were and it is sorted among the see-through things as before.
+	// The puffs are the same puffs in the same order, so the picture is the same. At 0, all of them, as before.
+	int32 Wanted = MaxPuffs;
+	if (TheaterSpeed::SmokeTrim())
+	{
+		const int32 Step = 300;
+		Wanted = FMath::Clamp(FMath::DivideAndRoundUp(FMath::Max(Puff, 1), Step) * Step, Step, MaxPuffs);
+		if (Wanted < SmokeRoom && ++SmokeRoomSpare < 120)
+		{
+			Wanted = SmokeRoom;
+		}
+		else if (Wanted >= SmokeRoom)
+		{
+			SmokeRoomSpare = 0;
+		}
+	}
+	if (Wanted == MaxPuffs)
+	{
+		if (SmokeRoom != MaxPuffs)
+		{
+			MakeSmokeSection(MaxPuffs, SmokeVertices, SmokeColours);
+		}
+		else
+		{
+			SmokeMesh->UpdateMeshSection(0, SmokeVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>());
+		}
+		return;
+	}
+	const int32 Sent = Wanted * PerPuff;
+	SmokeSentVertices.SetNumUninitialized(Sent + 2);
+	SmokeSentColours.SetNumUninitialized(Sent + 2);
+	FMemory::Memcpy(SmokeSentVertices.GetData(), SmokeVertices.GetData(), Sent * sizeof(FVector));
+	FMemory::Memcpy(SmokeSentColours.GetData(), SmokeColours.GetData(), Sent * sizeof(FColor));
+	FBox Whole(ForceInit);
+	for (const FVector& Point : SmokeVertices)
+	{
+		Whole += Point;
+	}
+	SmokeSentVertices[Sent] = Whole.Min;
+	SmokeSentVertices[Sent + 1] = Whole.Max;
+	SmokeSentColours[Sent] = FColor(0, 0, 0, 0);
+	SmokeSentColours[Sent + 1] = FColor(0, 0, 0, 0);
+	if (Wanted != SmokeRoom)
+	{
+		MakeSmokeSection(Wanted, SmokeSentVertices, SmokeSentColours);
+	}
+	else
+	{
+		SmokeMesh->UpdateMeshSection(0, SmokeSentVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeSentColours, TArray<FProcMeshTangent>());
+	}
 }
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(MapUpdate);
 	if (bVictorsMoving)
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
@@ -12998,16 +13231,23 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// Beyond working height the towns are drawn in their cheaper form: one piece to a block, laid out just the same,
 	// and throwing no shadows. (The windows' panes are too small to see from there, and are not drawn either.)
 	{
+		// (Speed: "tc.Speed.TownSquares" turned the other way since the towns were built: they are built again to match,
+		// as when the cities leave room for a quarter. And "tc.Speed.TownShadows", which is for measuring only.)
+		if (TownMesh && TownsCut != -1 && TownsCut != (TheaterSpeed::TownSquares() ? 1 : 0) && Data.IsLoaded())
+		{
+			BuildTowns();
+			ShownNight = -1.0f;
+			SetNight(NightNow, bLamplightNow);
+		}
+		if ((TownShadowsCast == 0) == TheaterSpeed::TownShadows())
+		{
+			SetTownShadows(TheaterSpeed::TownShadows());
+		}
 		const int32 FarNow = CameraDistance > (TownsFarShown == 1 ? 10800.0f : 11600.0f) ? 1 : 0;
 		if (FarNow != TownsFarShown && TownMesh && TownFarMesh)
 		{
 			TownsFarShown = FarNow;
-			TownMesh->SetVisibility(FarNow == 0);
-			TownFarMesh->SetVisibility(FarNow == 1);
-			if (LightsMesh && LightsMesh->GetNumSections() > 0)
-			{
-				LightsMesh->SetMeshSectionVisible(0, FarNow == 0);
-			}
+			ShowTownForm(FarNow == 1);
 		}
 	}
 
@@ -13587,6 +13827,7 @@ void ACampaignMapActor::DrawSkyEdge(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFocus)
 {
+	THEATER_SPEED_SCOPE(UpdateSky);
 	UWorld* World = GetWorld();
 	if (!World || !LandMaterial || !Data.IsLoaded())
 	{
@@ -13928,6 +14169,7 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 
 void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 {
+	THEATER_SPEED_SCOPE(ShowAgents);
 	if (!GetWorld() || !Data.IsLoaded() || HasParade())
 	{
 		return;
@@ -14198,6 +14440,7 @@ int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direct
 
 void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 {
+	THEATER_SPEED_SCOPE(UpdateAgents);
 	if (AgentStands.Num() > 0)
 	{
 		const float Delta = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
@@ -14466,6 +14709,7 @@ void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
 
 void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(SetHoveredRegion);
 	if (RegionId != HoveredRegion)
 	{
 		HoveredRegion = RegionId;
@@ -14480,6 +14724,7 @@ void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 
 void ACampaignMapActor::RebuildHighlight()
 {
+	THEATER_SPEED_SCOPE(RebuildHighlight);
 	HighlightMesh->ClearAllMeshSections();
 	if (SelectedRegion != INDEX_NONE)
 	{

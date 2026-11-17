@@ -323,7 +323,29 @@ function carriedBy(s: Game, c: Corps): number[] | null {
   try { const k = carried(s, c); return k ? [k.antiTank, k.machineGuns ? 1 : 0, k.mortars ? 1 : 0, k.snipers ? 1 : 0] : null; } catch { return null; }
 }
 
+// (Speed, 17 November 2026.) One picture of the war asks for the player's trade book three times over (for the
+// lanes on the table, for the pages, and for what wants doing), and the book is the dearest thing in it: about two
+// thirds of the picture's time. While a picture is being drawn up nothing in the war changes, so the book is worked
+// out once a picture and kept until the picture is done. Everywhere else it is worked out each time, as before.
+let pictureDepth = 0;
+let pictureBook: { s: Game; book: ReturnType<typeof tradeLedger> } | null = null;
+function tradeLedgerOnce(s: Game): ReturnType<typeof tradeLedger> {
+  if (pictureDepth > 0 && pictureBook && pictureBook.s === s) return pictureBook.book;
+  const book = tradeLedger(s);
+  if (pictureDepth > 0) pictureBook = { s, book };
+  return book;
+}
+
 function view() {
+  pictureDepth++;
+  try {
+    return drawView();
+  } finally {
+    if (--pictureDepth === 0) pictureBook = null;
+  }
+}
+
+function drawView() {
   const s = game();
   const up = humanUp(s);
   const seen = sight(s);
@@ -707,7 +729,7 @@ function view() {
     lanes: s.flags.open === 1 ? [
       ...shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
       // The player's trade routes, over land and sea, in gold: red where one is cut.
-      ...(tradeLedger(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
+      ...(tradeLedgerOnce(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
     ] : [],
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
@@ -3504,7 +3526,7 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   // The government and its war cabinet (Version 57, the grand campaign).
   try { if (governmentOf(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
   // Towns to build up and trade agreements (the grand campaign).
-  if (tradeLedger(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
+  if (tradeLedgerOnce(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
@@ -3565,7 +3587,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
     if (theirs.length) out.push({ k: `goto:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: pick the province and look under ORDERS.` });
   } catch { /* a campaign from history has no sieges */ }
   // Trade: a route cut, or a trading house idle with a country ready to sign.
-  const book = tradeLedger(s);
+  const book = tradeLedgerOnce(s);
   if (book) {
     const cut = book.deals.filter((d) => d.state === 'cut').length;
     if (cut) out.push({ k: 'page:trade', t: cut === 1 ? 'A TRADE ROUTE IS CUT' : `${cut} TRADE ROUTES ARE CUT`, tip: 'An agreement pays nothing while its route is cut. Open TRADE AGREEMENTS to see which, and why.' });

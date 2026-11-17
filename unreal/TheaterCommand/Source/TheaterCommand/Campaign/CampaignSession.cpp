@@ -1,6 +1,7 @@
 #include "Campaign/CampaignSession.h"
 
 #include "Campaign/CampaignMapData.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Rules/RulesHost.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
@@ -107,6 +108,7 @@ TArray<FStartGroup> FCampaignSession::Starts()
 	TArray<FStartGroup> Out;
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || !Host->Call(TEXT("starts"), TEXT("[]"), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
@@ -207,6 +209,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
 	const double Began = FPlatformTime::Seconds();
+	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false")), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
@@ -246,10 +249,15 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)),
 		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""));
 	FString ViewJson;
+	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
+	const double Began = FPlatformTime::Seconds();
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
 		return false;
 	}
+	// (Speed: the same call takes about 0.25 to 0.6 s in a fast JavaScript engine on a laptop, and two or three times
+	// that where the engine cannot compile the rules as it runs them. This line says which the game has.)
+	UE_LOG(LogTheater, Display, TEXT("Rules: the campaign was set up in %.0f ms (%d characters of picture)"), (FPlatformTime::Seconds() - Began) * 1000.0, ViewJson.Len());
 	TSharedPtr<FJsonObject> Object;
 	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ViewJson), Object) || !Object.IsValid())
 	{
@@ -284,6 +292,7 @@ FString FCampaignSession::DescribeSave(const FString& SaveText)
 {
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("peek"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
@@ -302,6 +311,7 @@ bool FCampaignSession::Load(const FString& SaveText)
 {
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("load"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
@@ -324,12 +334,45 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	{
 		return false;
 	}
-	FString ResultJson, Error;
-	if (!Host->Call(Function, ArgumentsJson, ResultJson, Error))
+	THEATER_SPEED_SCOPE(Rules);
+	// (Speed, 17 November 2026; ruling 206(a), "the odds may be kept if they are what the card would show".) The
+	// questions that change nothing in the war (the odds of an attack, what a march will meet, where an army can reach
+	// and by which road, what the railway can do) are answered from the last asking while nothing has been asked since
+	// that could change it: the hover tip asks them again each time the pointer comes back over a province. Every other
+	// call may change the war, and forgets them all. (Each of the five was checked against the rules: asked twice it
+	// answers the same, and it leaves the saved game as it found it.) "tc.Speed.RulesMemo 0" always asks.
+	static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip") };
+	const bool bQuestion = Questions.Contains(Function);
+	if (!bQuestion)
 	{
-		UE_LOG(LogTheater, Error, TEXT("Rules: %s"), *Error);
-		return false;
+		RulesMemo.Reset();
 	}
+	const FString Key = bQuestion && TheaterSpeed::RulesMemo() ? Function + TEXT("|") + ArgumentsJson : FString();
+	const double Began = FPlatformTime::Seconds();
+	FString ResultJson, Error;
+	const FString* Known = Key.IsEmpty() ? nullptr : RulesMemo.Find(Key);
+	if (Known)
+	{
+		ResultJson = *Known;
+	}
+	else
+	{
+		if (!Host->Call(Function, ArgumentsJson, ResultJson, Error))
+		{
+			UE_LOG(LogTheater, Error, TEXT("Rules: %s"), *Error);
+			return false;
+		}
+		if (!Key.IsEmpty())
+		{
+			if (RulesMemo.Num() >= 256)
+			{
+				RulesMemo.Reset(); // (a long month of looking about: start again rather than keep it all)
+			}
+			RulesMemo.Add(Key, ResultJson);
+		}
+	}
+	TheaterSpeed::NoteRulesCall(Function, FPlatformTime::Seconds() - Began, Known != nullptr);
+	THEATER_SPEED_SCOPE(RulesJson); // (reading the answer: a picture of the war is some 80,000 characters)
 	return FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ResultJson), OutObject) && OutObject.IsValid();
 }
 
@@ -393,6 +436,7 @@ namespace
 
 FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 {
+	THEATER_SPEED_SCOPE(ParseView);
 	FCampaignView Out;
 	Object->TryGetStringField(TEXT("rules"), Out.Rules);
 	Out.Turn = Object->GetIntegerField(TEXT("turn"));
