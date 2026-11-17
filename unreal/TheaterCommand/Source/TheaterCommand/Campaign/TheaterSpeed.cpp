@@ -3,7 +3,11 @@
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "SceneView.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
@@ -35,6 +39,12 @@ namespace
 	TAutoConsoleVariable<int32> CVarTrainShadows(
 		TEXT("tc.Speed.TrainShadows"), 1,
 		TEXT("(for measuring only: it changes the picture) 0 stops the trains throwing shadows."));
+	TAutoConsoleVariable<int32> CVarOneEye(
+		TEXT("tc.Speed.OneEye"), 1,
+		TEXT("1 works out the eye's view once for all the names and plates laid over the map; 0 works it out again for every point, as before."));
+	TAutoConsoleVariable<int32> CVarFineAside(
+		TEXT("tc.Speed.FineAside"), 1,
+		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
 
 	bool bLogging = false;
 	uint64 SlateBegan = 0; // (when Slate's tick began this frame, while logging)
@@ -178,6 +188,49 @@ namespace TheaterSpeed
 	bool TrainShadows()
 	{
 		return CVarTrainShadows.GetValueOnGameThread() != 0;
+	}
+
+	bool OneEye()
+	{
+		return CVarOneEye.GetValueOnGameThread() != 0;
+	}
+
+	bool FineAside()
+	{
+		return CVarFineAside.GetValueOnGameThread() != 0;
+	}
+
+	FEye::FEye(const APlayerController* InPlayer)
+		: Player(InPlayer)
+	{
+		// (As UGameplayStatics::ProjectWorldToScreen does it, once.)
+		if (!Player || !OneEye())
+		{
+			return;
+		}
+		const ULocalPlayer* const Local = Player->GetLocalPlayer();
+		if (!Local || !Local->ViewportClient || !Local->ViewportClient->Viewport)
+		{
+			return;
+		}
+		FSceneViewProjectionData Projection;
+		if (Local->GetProjectionData(Local->ViewportClient->Viewport, Projection))
+		{
+			ViewProjection = Projection.ComputeViewProjectionMatrix();
+			Rect = Projection.GetConstrainedViewRect();
+			bOwn = true;
+		}
+	}
+
+	bool FEye::Project(const FVector& World, FVector2D& OutScreen) const
+	{
+		if (!bOwn)
+		{
+			return Player && Player->ProjectWorldLocationToScreen(World, OutScreen, false);
+		}
+		// (The controller's own way then lets PostProcessWorldToScreen have its say; the campaign's controller leaves
+		// it as the engine has it, which says yes and changes nothing.)
+		return FSceneView::ProjectWorldToScreen(World, Rect, ViewProjection, OutScreen);
 	}
 
 	int32 SlotFor(const TCHAR* Name)

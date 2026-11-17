@@ -5,6 +5,7 @@
 #include "ProfilingDebugging/CsvProfiler.h"
 
 class UWorld;
+class APlayerController;
 
 /**
  * (Speed, 17 November 2026. Brian: "how do we make the game run more smooth, its not very easy and enjoyable to
@@ -25,6 +26,10 @@ class UWorld;
  *                         each frame. 0: all of it, as before.
  *   tc.Speed.RulesMemo    1 (default): the odds and the like, asked again of the rules for the same army and the
  *                         same place with nothing changed between, are answered from the last asking. 0: always asked.
+ *   tc.Speed.OneEye       1 (default): the names, plates and lamps laid over the map work out the eye's view once for
+ *                         all their points. 0: the controller works the whole view out again for every point, as before.
+ *   tc.Speed.FineAside    1 (default): the smaller copies of a fine sheet's pictures are made on the thread that models
+ *                         the sheet, not in the frame that dresses it. 0: in that frame, as before.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -48,6 +53,27 @@ namespace TheaterSpeed
 	bool SmokeTrim();
 	bool RulesMemo();
 	bool TrainShadows();
+	bool OneEye();
+	bool FineAside();
+
+	/**
+	 * The eye's view, worked out once and then used for as many points as are wanted: the same answer, to the bit, as
+	 * APlayerController::ProjectWorldLocationToScreen(Point, Out, false), which works the whole view out again (the
+	 * camera's settings copied, the lens and the screen's shape) for every single point. Make one where a job projects
+	 * many points in one go, and not across frames: the camera moves. With tc.Speed.OneEye 0, or where the view cannot
+	 * be had, each point is asked of the controller as before.
+	 */
+	struct FEye
+	{
+		explicit FEye(const APlayerController* InPlayer);
+		bool Project(const FVector& World, FVector2D& OutScreen) const;
+
+	private:
+		const APlayerController* Player = nullptr;
+		FMatrix ViewProjection = FMatrix::Identity;
+		FIntRect Rect;
+		bool bOwn = false;
+	};
 
 	/** (for THEATER_SPEED_SCOPE) */
 	int32 SlotFor(const TCHAR* Name);

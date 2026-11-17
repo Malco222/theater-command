@@ -97,7 +97,8 @@ public:
 
 	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
 	/** bOpening: the card is being opened, so the staff may bring in everyone the roads will carry where that beats the pick. */
-	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening = false);
+	/** bGlance: for the pointer's tip, which reads only the odds; the rules leave out the card's soften row, the dearest part. */
+	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening = false, bool bGlance = false);
 
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);

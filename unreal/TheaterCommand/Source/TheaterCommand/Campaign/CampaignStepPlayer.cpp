@@ -317,6 +317,17 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 	auto Find = [&](const FString& Name)
 	{
+		// (the name was looked up before the press was timed: asking the rules again here would count against the game)
+		if (bFound && Name == FoundName)
+		{
+			Region = FoundRegion;
+			Sea = FoundSea;
+			Corps = FoundCorps;
+			CorpsRegion = FoundCorpsRegion;
+			Fleet = FoundFleet;
+			Group = FoundGroup;
+			return true;
+		}
 		return Session && Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group);
 	};
 	const FString& Verb = Step.Verb;
@@ -486,6 +497,32 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			auto Named = [Map](int32 Id) { return Map && Map->GetData().Regions.IsValidIndex(Id) ? Map->GetData().Regions[Id].Name : FString(TEXT("no province")); };
 			Note = FString::Printf(TEXT("the figure stands in %s; the ground behind the pointer is %s; the order went to %s%s"), *Named(CorpsRegion), *Named(Ground), *Named(Aimed),
 				Player.IsTableBusy() && Aimed == INDEX_NONE ? TEXT(" (a card lay over the table)") : TEXT(""));
+		}
+	}
+	else if (Verb == TEXT("ask-war"))
+	{
+		// The WAR button on that country's row in the Foreign Office (a row may lie below the fold of its list): the
+		// question's card opens, as the button opens it. DECLARE WAR on the card is pressed by its words.
+		const FCampaignNation* Asked = nullptr;
+		if (Map)
+		{
+			for (const auto& Pair : Map->GetData().Nations)
+			{
+				const FCampaignNation& Each = Pair.Value;
+				if (Each.Name.Equals(Step.Target, ESearchCase::IgnoreCase) || Each.Tag.Equals(Step.Target, ESearchCase::IgnoreCase))
+				{
+					Asked = &Each;
+				}
+			}
+		}
+		if (!Asked)
+		{
+			bMissing = true;
+			Note = TEXT("no country of that name");
+		}
+		else
+		{
+			Player.AskWarOn(Asked->Tag);
 		}
 	}
 	else if (Verb == TEXT("order-sea") || Verb == TEXT("select-sea"))
@@ -768,17 +805,43 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			}
 			int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 			const bool bOfUnit = Step.Verb == TEXT("select-unit") || Step.Verb == TEXT("order-unit");
-			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start")
+			bFound = false;
+			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
 				&& Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group))
 			{
 				Named = bOfUnit ? CorpsRegion : Region;
+				bFound = true;
+				FoundName = Name;
+				FoundRegion = Region;
+				FoundSea = Sea;
+				FoundCorps = Corps;
+				FoundCorpsRegion = CorpsRegion;
+				FoundFleet = Fleet;
+				FoundGroup = Group;
 			}
 		}
 		Before = Look(Player, Named);
 		ShownBefore = ShownLast = Before.Open + TEXT("|") + Before.Words + TEXT("|") + Before.Hand;
+		// (That reading asked the rules several questions, and its frame is a long one. It is let go by before the
+		// press, so that what is timed after the press is the game's own work and not the hook's.)
+		Phase = 3;
+		Clock = 0.0f;
+		LookFrames = 0;
+		return true;
+	}
+	if (Phase == 3)
+	{
+		if (++LookFrames < 3 || Clock < 0.12f)
+		{
+			return true;
+		}
 		const double Began = FPlatformTime::Seconds();
 		Act(Player, Step);
 		ActMs = (FPlatformTime::Seconds() - Began) * 1000.0;
+		// (Time is read off the clock from here: the engine caps the length it reports for a frame at 0.4 s. The first
+		// frame counted runs from the press itself, so the press's own work is in it.)
+		ActBegan = Began;
+		LastTickAt = Began;
 		FirstMs = LastMs = -1.0;
 		SinceAct = 0.0;
 		Frames.Reset();
@@ -791,8 +854,12 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 	if (Phase == 1)
 	{
 		// How smooth it is while it happens: every frame's length, and when what he is shown first changed and last changed.
-		SinceAct += DeltaSeconds;
-		Frames.Add(DeltaSeconds);
+		{
+			const double NowAt = FPlatformTime::Seconds();
+			Frames.Add(static_cast<float>(NowAt - LastTickAt));
+			LastTickAt = NowAt;
+			SinceAct = NowAt - ActBegan;
+		}
 		GameMs += FPlatformTime::ToMilliseconds(GGameThreadTime);
 		DrawMs += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 		ChipMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
@@ -802,7 +869,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			const FString Shown = Open + TEXT("|") + Words + TEXT("|") + Hand;
 			if (Shown != ShownLast)
 			{
-				LastMs = ActMs + SinceAct * 1000.0;
+				LastMs = SinceAct * 1000.0; // (from the press, by the clock)
 				if (FirstMs < 0.0 && Shown != ShownBefore)
 				{
 					FirstMs = LastMs;

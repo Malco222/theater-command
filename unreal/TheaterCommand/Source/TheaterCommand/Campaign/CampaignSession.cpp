@@ -339,9 +339,11 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	// questions that change nothing in the war (the odds of an attack, what a march will meet, where an army can reach
 	// and by which road, what the railway can do) are answered from the last asking while nothing has been asked since
 	// that could change it: the hover tip asks them again each time the pointer comes back over a province. Every other
-	// call may change the war, and forgets them all. (Each of the five was checked against the rules: asked twice it
-	// answers the same, and it leaves the saved game as it found it.) "tc.Speed.RulesMemo 0" always asks.
-	static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip") };
+	// call may change the war, and forgets them all. (Each of the six was checked against the rules: asked twice it
+	// answers the same, and it leaves the saved game as it found it. "lead", why an army may not go alone, is asked by
+	// the same hover tip just before the odds: were it not here, it would forget the odds on every hover.)
+	// "tc.Speed.RulesMemo 0" always asks.
+	static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead") };
 	const bool bQuestion = Questions.Contains(Function);
 	if (!bQuestion)
 	{
@@ -1697,10 +1699,13 @@ namespace
 	FAttackPreview ReadMarch(const TSharedPtr<FJsonObject>& Object, int32 RegionId);
 }
 
-FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening)
+FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bGlance)
 {
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false")), Object))
+	const FString Arguments = bGlance
+		? FString::Printf(TEXT("[[%s],%d,%s,true]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false"))
+		: FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false"));
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), Arguments, Object))
 	{
 		return FAttackPreview(); // also what comes back when the rules answer null: there is nobody there to attack
 	}

@@ -544,29 +544,39 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data)
 {
 	BorderDistance.Init(1.0e6f, NX * NY);
-	auto OwnerOf = [&](int32 Idx) -> const FString*
+	// (Speed, 17 November 2026: whose each province is, as a number. The grid was comparing two names a cell, on
+	// every sheet of the world, each time one province changed hands.)
+	TMap<FString, int32> Numbers;
+	TArray<int32> Holder;
+	Holder.SetNumUninitialized(Data.Regions.Num());
+	for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+	{
+		const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
+		Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+	}
+	auto OwnerOf = [&](int32 Idx) -> int32
 	{
 		const int16 Id = Region[Idx];
-		return Id >= 0 ? &Data.Regions[Id].Owner : nullptr;
+		return Id >= 0 && Holder.IsValidIndex(Id) ? Holder[Id] : -1;
 	};
 	for (int32 J = 0; J < NY; ++J)
 	{
 		for (int32 I = 0; I < NX; ++I)
 		{
 			const int32 Idx = Index(I, J);
-			const FString* Mine = OwnerOf(Idx);
-			if (!Mine)
+			const int32 Mine = OwnerOf(Idx);
+			if (Mine < 0)
 			{
 				continue;
 			}
-			const FString* Right = I + 1 < NX ? OwnerOf(Idx + 1) : nullptr;
-			const FString* Down = J + 1 < NY ? OwnerOf(Idx + NX) : nullptr;
-			if (Right && *Right != *Mine)
+			const int32 Right = I + 1 < NX ? OwnerOf(Idx + 1) : -1;
+			const int32 Down = J + 1 < NY ? OwnerOf(Idx + NX) : -1;
+			if (Right >= 0 && Right != Mine)
 			{
 				BorderDistance[Idx] = 0.0f;
 				BorderDistance[Idx + 1] = 0.0f;
 			}
-			if (Down && *Down != *Mine)
+			if (Down >= 0 && Down != Mine)
 			{
 				BorderDistance[Idx] = 0.0f;
 				BorderDistance[Idx + NX] = 0.0f;
