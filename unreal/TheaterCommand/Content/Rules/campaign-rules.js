@@ -36279,8 +36279,12 @@ ${standing5}`,
     const pick2 = (list4, of2) => list4.find((x) => of2(x).toLowerCase() === want) ?? list4.find((x) => of2(x).toLowerCase().startsWith(want));
     const me = s.human;
     const corps = pick2(s.corps.filter((c) => !c.dead && (!me || c.nat === me)), (c) => c.name);
+    const fleet = pick2(s.fleets.filter((f) => !me || f.nat === me), (f) => f.name);
+    const group = pick2(s.airFleets.filter((f) => (!me || f.nat === me) && f.ftr + f.bmr > 0), (f) => f.name);
+    const region = pick2(s.regions, (r) => r.name);
+    const sea = pick2(s.seas, (z) => z.name);
     let seenId = -1, seenReg = -1;
-    if (!corps && me) {
+    if (!corps && !fleet && !group && !region && !sea && me) {
       try {
         const seen2 = pick2(view2().corps.filter((c) => c.nat !== me), (c) => c.name);
         if (seen2) {
@@ -36290,10 +36294,6 @@ ${standing5}`,
       } catch {
       }
     }
-    const fleet = pick2(s.fleets.filter((f) => !me || f.nat === me), (f) => f.name);
-    const group = pick2(s.airFleets.filter((f) => (!me || f.nat === me) && f.ftr + f.bmr > 0), (f) => f.name);
-    const region = pick2(s.regions, (r) => r.name);
-    const sea = pick2(s.seas, (z) => z.name);
     return {
       region: region ? region.id : -1,
       sea: sea ? s.seas.indexOf(sea) : -1,

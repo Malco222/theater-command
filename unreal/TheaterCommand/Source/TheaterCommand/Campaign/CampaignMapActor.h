@@ -1077,6 +1077,8 @@ private:
 		float Start = 0.0f;
 	};
 	TArray<FInkRun> InkRuns;
+	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
+	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
 	double InkBegan = 0.0, PaintStepped = 0.0;
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);

@@ -29,6 +29,12 @@ namespace CampaignTextures
 	 * paint that moves several times a second (ink that spreads). The smaller copies are stale until Update is called.
 	 */
 	void UpdateBox(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1);
+	/**
+	 * (Speed, 17 November 2026.) The same box, and with it the box's share of every smaller copy of the picture, so
+	 * that the far view is right without the whole picture being halved and sent again: ground that changes hands
+	 * costs what the province costs, not what the world costs.
+	 */
+	void UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1);
 
 	/** The size of the detail pictures, each way. */
 	constexpr int32 DetailSize = 512;

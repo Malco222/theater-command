@@ -47,6 +47,12 @@ private:
 
 	TArray<FStep> Steps;
 	FString Folder;
+	double ActBegan = 0.0, LastTickAt = 0.0; // the clock at the press, and at the last frame counted
+	int32 LookFrames = 0; // frames let go by after the hook's own reading, before the press
+	// What the step's name was found to be, before the press was timed.
+	bool bFound = false;
+	FString FoundName;
+	int32 FoundRegion = INDEX_NONE, FoundSea = INDEX_NONE, FoundCorps = INDEX_NONE, FoundCorpsRegion = INDEX_NONE, FoundFleet = INDEX_NONE, FoundGroup = INDEX_NONE;
 	FString StepFolder; // where the step file lies: a saved game named in it is looked for here
 	int32 At = 0, Phase = 0, Logged = 0;
 	float Clock = 0.0f;

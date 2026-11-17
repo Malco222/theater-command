@@ -5656,18 +5656,19 @@ function find(name: string) {
   const pick = <T>(list: T[], of: (x: T) => string): T | undefined => list.find((x) => of(x).toLowerCase() === want) ?? list.find((x) => of(x).toLowerCase().startsWith(want));
   const me = s.human;
   const corps = pick(s.corps.filter((c) => !c.dead && (!me || c.nat === me)), (c) => c.name);
+  const fleet = pick(s.fleets.filter((f) => !me || f.nat === me), (f) => f.name);
+  const group = pick(s.airFleets.filter((f) => (!me || f.nat === me) && f.ftr + f.bmr > 0), (f) => f.name);
+  const region = pick(s.regions, (r) => r.name);
+  const sea = pick(s.seas, (z) => z.name);
   // (a corps of another country, by the name the player knows it by: for a right-click on its figure)
   let seenId = -1, seenReg = -1;
-  if (!corps && me) {
+  if (!corps && !fleet && !group && !region && !sea && me) { // (the whole picture is read only where nothing else answers to the name)
     try {
       const seen = pick((view() as unknown as { corps: { id: number; nat: string; name: string; reg: number }[] }).corps.filter((c) => c.nat !== me), (c) => c.name);
       if (seen) { seenId = seen.id; seenReg = seen.reg; }
     } catch { /* (nothing seen of that name) */ }
   }
-  const fleet = pick(s.fleets.filter((f) => !me || f.nat === me), (f) => f.name);
-  const group = pick(s.airFleets.filter((f) => (!me || f.nat === me) && f.ftr + f.bmr > 0), (f) => f.name);
-  const region = pick(s.regions, (r) => r.name);
-  const sea = pick(s.seas, (z) => z.name);
+
   return {
     region: region ? region.id : -1, sea: sea ? s.seas.indexOf(sea) : -1,
     corps: corps ? corps.id : seenId, corpsRegion: corps ? corps.reg : seenReg,
