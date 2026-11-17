@@ -956,9 +956,11 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 	// Each air force flies what its designers have brought into service: history's year, moved by research.
 	const int32 Reached = YearOf(Tag, 1);
 	if (Tag == TEXT("GER")) return Reached >= 1942 ? TEXT("Fw190") : TEXT("Bf109");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1941 ? TEXT("Spitfire") : TEXT("Hurricane");
-	if (Tag == TEXT("USA")) return Reached >= 1943 ? TEXT("Mustang") : TEXT("Warhawk");
-	if (Tag == TEXT("SOV")) return TEXT("Yak");
+	// (The art director's unit table after the historian's realism audit, items 3 and 18, 17 November 2026: the Spitfire
+	// from 1940, beside the Hurricane in the Battle of Britain; the Mustang from 1944; the Yak from 1941.)
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1940 ? TEXT("Spitfire") : TEXT("Hurricane");
+	if (Tag == TEXT("USA")) return Reached >= 1944 ? TEXT("Mustang") : TEXT("Warhawk");
+	if (Tag == TEXT("SOV")) return Reached >= 1941 ? FString(TEXT("Yak")) : TEXT("Fighter:") + Tag;
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Zero");
 	return TEXT("Fighter:") + Tag;
 }
