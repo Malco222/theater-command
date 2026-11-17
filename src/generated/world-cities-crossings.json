@@ -161,14 +161,6 @@
   [
    "Tennessee",
    "USA",
-   "Alabama",
-   "USA",
-   "Tennessee",
-   "middle"
-  ],
-  [
-   "Tennessee",
-   "USA",
    "Memphis",
    "USA",
    "Tennessee",
@@ -178,6 +170,14 @@
    "Tennessee",
    "USA",
    "Tupelo",
+   "USA",
+   "Tennessee",
+   "middle"
+  ],
+  [
+   "Tennessee",
+   "USA",
+   "Birmingham",
    "USA",
    "Tennessee",
    "middle"
@@ -193,7 +193,7 @@
   [
    "Arkansas",
    "USA",
-   "North Texas",
+   "Dallas",
    "USA",
    "Red River of the South",
    "middle"
@@ -201,15 +201,7 @@
   [
    "Oklahoma",
    "USA",
-   "North Texas",
-   "USA",
-   "Red River of the South",
-   "middle"
-  ],
-  [
-   "North Texas",
-   "USA",
-   "Fort Smith",
+   "Dallas",
    "USA",
    "Red River of the South",
    "middle"
@@ -1356,6 +1348,14 @@
    "Burlington",
    "USA",
    "Hudson",
+   "middle"
+  ],
+  [
+   "Fort Smith",
+   "USA",
+   "Dallas",
+   "USA",
+   "Red River of the South",
    "middle"
   ],
   [

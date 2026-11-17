@@ -1937,6 +1937,27 @@ export const CITY_GROUPS = [
   ['Canton', [
     ['Tungkun', 23.02, 113.75, 'plains', 0, 0, {}],
   ]],
+  // ---- America's great cities (Brian, 17 November 2026: "the USA should have more major cities too"). Every city of
+  // the 1940 census over 250,000 is a city of the map. These five stood inside a province named for its state or
+  // country, far enough from its seed to be cut: Houston (384,514), Denver (322,412), Columbus (306,087), Dallas
+  // (294,734) and Birmingham (267,583). Urban ground, as Providence (253,504) and Milwaukee have; what each is worth
+  // comes from its parent (ruling 210). Indianapolis and Seattle stand at their province's own seed, and Newark and
+  // Jersey City inside New York's, so they are not cut. ----
+  ['East Texas', [
+    ['Houston', 29.76, -95.37, 'urban', 0, 0, { port: 1 }],
+  ], { port: 0 }], // the whole Gulf shore, Beaumont and Port Arthur too, is nearer Houston
+  ['North Texas', [
+    ['Dallas', 32.78, -96.8, 'urban', 0, 0, {}],
+  ]],
+  ['Colorado', [
+    ['Denver', 39.74, -104.99, 'urban', 0, 0, {}],
+  ]],
+  ['Ohio Valley', [
+    ['Columbus', 39.96, -83.0, 'urban', 0, 0, {}],
+  ]],
+  ['Alabama', [
+    ['Birmingham', 33.52, -86.81, 'urban', 0, 0, {}],
+  ]],
 ];
 
 // Which seas a city stands on where the count of water squares misleads: name -> [sea keys].
@@ -2106,8 +2127,8 @@ export const CITY_RAIL_LINES = [
   ['Yuma', 'Tucson', 'El Paso', 'Marfa', 'West Texas'], ['El Paso', 'New Mexico'], ['Gallup', 'Flagstaff'],
   ['Reno', 'Elko', 'Ogden', 'Pocatello'], ['Ogden', 'Rock Springs'], ['Boise', 'Pendleton', 'Portland'],
   ['Billings', 'Butte', 'Missoula'], ['Butte', 'Pocatello'],
-  ['Lubbock', 'Amarillo'], ['Wichita Falls', 'North Texas'], ['San Antonio', 'Corpus Christi'], ['Shreveport', 'North Texas'],
-  ['New York', 'Albany'], ['Baltimore', 'Susquehanna'], ['Toledo', 'Fort Wayne'], ['Toledo', 'Ohio Valley'],
+  ['Lubbock', 'Amarillo'], ['Wichita Falls', 'North Texas'], ['San Antonio', 'Corpus Christi'], ['Shreveport', 'Dallas'],
+  ['New York', 'Albany'], ['Baltimore', 'Susquehanna'], ['Toledo', 'Fort Wayne'], ['Toledo', 'Columbus'],
   ['Grand Rapids', 'South Bend'], ['Cheyenne', 'Scottsbluff'], ['Sacramento', 'San Joaquin'],
   // ---- Canada: the Newfoundland Railway, and the Northern Alberta line to Dawson Creek ----
   ['Corner Brook', 'Newfoundland', 'Gander', "St John's"], ['Alberta', 'Edson', 'Grande Prairie', 'Dawson Creek'],
@@ -2171,6 +2192,10 @@ export const CITY_RAIL_LINES = [
   ['Campeche', 'Yucatan'],
   // The Peking-Mukden main line along the coast by Tangshan and Shanhaikwan (now Tangshan's) into Chinchow.
   ['Tientsin', 'Tangshan', 'Chinchow'],
+  // Round the five great cities cut on Brian's word: the International-Great Northern from Austin by San Marcos to
+  // San Antonio (beside the Southern Pacific's Sunset Route from Houston); Shreveport to Dallas is the Texas and
+  // Pacific, Toledo to Columbus the Hocking Valley.
+  ['Austin', 'San Antonio'],
   // Colombia (the historian): the Northern line from Bogota to Barbosa (Tunja), the Girardot and Tolima-Huila lines to
   // Neiva (1937), and the Caldas line from Manizales to the Pacific line (Cali). Bogota's system and the Pacific's
   // met only over the Quindio (1949); Medellin's line ran to the Magdalena at Puerto Berrio, Santander's from Puerto
