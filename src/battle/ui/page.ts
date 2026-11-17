@@ -28,8 +28,15 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 const num = (n: number): string => Math.round(n).toLocaleString('en-GB');
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
-/** A practice ground's name: its ground, or the river crossing and the fortress works (the field's title is the card's name). */
+/** A practice ground's name: its ground, or the river crossing and the fortress works, as its card is headed. */
 const practiceName = (p: PracticeGround): string => (p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
+/** The field's title on a practice ground: "Practice: Marsh" (b408). The after card, already headed "Practice result", gives the ground alone. */
+const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p)}`;
+/**
+ * How worn a practice defence stands, against the attack's 90 in 100 (b408): the card says so, so the enemy's lower
+ * strength on the field is no surprise. Nothing where it stands as the attack does.
+ */
+const wornWords = (s: number): string => (s >= 0.95 ? 'theirs fresh, at full strength' : s >= 0.85 ? '' : s >= 0.75 ? 'theirs worn to four fifths strength' : s >= 0.6 ? 'theirs worn to two thirds strength' : 'theirs worn to half strength');
 /** What the staff makes of a card's chance, as the offer and practice cards say it. */
 const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
@@ -119,13 +126,13 @@ function showChooser(): void {
   };
   // Each practice ground's card is reckoned as the campaign would reckon the two practice armies there (b400).
   const practice = (p: PracticeGround, i: number): string => {
-    const t = practiceTicket(p), k = t.reckoning;
+    const t = practiceTicket(p), k = t.reckoning, worn = wornWords(p.str ?? 0.9);
     // The ground line in the campaign cards' own form, where the card's name does not already say it all.
     const ground = p.river || p.fort ? facts([TERRAIN_WORD[p.terrain], ...(p.river ? ['across a river'] : []), ...(p.fort ? [`fortress works, level ${p.fort}`] : [])]) : '';
     return `<button class="tc-card is-press offer ground" data-ground="${i}">
       <span class="otop"><b class="tc-title-3">${practiceName(p)}</b><span class="tc-data"><b>${odds(k.odds)}</b> to 1</span></span>
       ${ground ? `<span class="tc-data omid">${ground}</span>` : ''}
-      <span class="tc-data olow">${facts([`${t.att.forces.length} corps against ${t.def.forces.length}`, staffSays(diceChance(k.odds, k.dice))])}</span></button>`;
+      <span class="tc-data olow">${facts([`${t.att.forces.length} corps against ${t.def.forces.length}`, ...(worn ? [worn] : []), staffSays(diceChance(k.odds, k.dice))])}</span></button>`;
   };
   app.innerHTML = `<div class="choose tc">
     <header class="chead"><div><div class="tc-label">Field battles · first slice</div><h1 class="tc-title-1">Choose a battle to fight</h1></div></header>
@@ -145,7 +152,7 @@ function showChooser(): void {
   }));
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
     const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
-    const t = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceName(p) });
+    const t = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
     startBattle(t, null);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
@@ -208,7 +215,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
   S.colours = col; S.scene.colours = col;
   app.innerHTML = `<div class="battle tc">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(TERRAIN_WORD[t.place.terrain]), ...(t.place.river ? [`the ${esc(t.place.river)}`] : [])])}</span></div>
+      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), ...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`the ${esc(t.place.river)}`] : [])])}</span></div>
       <div class="bclock" title="At ${mmss(t.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Speed">
         <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
@@ -745,7 +752,8 @@ function frame(): void {
   // With no orders given it stands, and says so (the UI director, after the retest).
   if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) {
     const who = !S.offer ? 'Your army' : `The ${b.ticket[S.scene.me].adj} army`;
-    const going = b.units.some((u) => u.side === S.scene.me && u.order !== null);
+    // Orders that only turn a block where it stands are not a march (b408).
+    const going = b.units.some((u) => u.side === S.scene.me && u.order !== null && Math.hypot(u.order.x - u.x, u.order.y - u.y) > 20);
     S.dispatch = { t: b.t, what: 'contact', text: going ? `${who} is moving.` : `${who} stands where it is, without orders.`, unit: -1 }; S.dispatchAge = 0;
   }
   // His own army near breaking has its amber line that stays (fwarn); everything else comes through the strip.
@@ -763,10 +771,11 @@ function frame(): void {
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** How the day went against the chance the staff gave it, in the UI director's plain words (no dice on the player's page). */
-function reckoned(carried: boolean, chance: number): string {
+function reckoned(carried: boolean, chance: number, practice = false): string {
   if (chance >= 0.995) return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
   if (chance <= 0.005) return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
-  const p = `they gave you about ${Math.round(chance * 100)}% to take it.`;
+  // A practice ground is not a place to take (b408): there the staff gave him a chance to win it.
+  const p = `they gave you about ${Math.round(chance * 100)}% to ${practice ? 'win' : 'take'} it.`;
   if (carried) return chance < 0.5 ? `You did better than the staff expected: ${p}` : `As the staff expected: ${p}`;
   return chance >= 0.5 ? `You did worse than the staff expected: ${p}` : `As the staff feared: ${p}`;
 }
@@ -813,12 +822,12 @@ function showAfter(): void {
   veil.className = 'veil';
   veil.innerHTML = `<div class="after tc-paper" role="dialog" aria-label="Battle result">
     <div class="tc-label kick">${rep ? 'Battle result' : 'Practice result'} · ${esc(t.date)}</div>
-    <h2 class="tc-title-2">${esc(t.title)}</h2>
+    <h2 class="tc-title-2">${esc(rep ? t.title : t.title.replace(/^Practice: /, ''))}</h2>
     <div class="verdict"><span class="tc-stamp ${won ? 'tc-stamp--won' : ''}">${esc(level)}</span></div>
     ${rep ? `<p class="told"><b>${told}</b> ${price}</p>${paid}` : ''}
     <h3 class="tc-label">On the field</h3><ul class="flines">${fieldLines}</ul>
     <h3 class="tc-label">Against the staff's reckoning</h3>
-    <p class="dice">${esc(reckoned(won, chance))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
+    <p class="dice">${esc(reckoned(won, chance, !rep))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
     ${settled?.drift ? '<p class="warn">The campaign moved while the battle was fought: its odds are not the card\'s any more.</p>' : ''}
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>

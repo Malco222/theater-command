@@ -18,7 +18,11 @@ export interface SampleOpts { river?: boolean; bridgeDown?: boolean; fort?: numb
 /** A corps of a hand-made army: its name, kind, divisions, share of its side's strength, and its first division's number. */
 type Corps5 = [string, Kind, number, number, number];
 
-/** The test armies: the Northern attack and the Southern defence. On the practice grounds the defence is sized to the ground (b406). */
+/**
+ * The test armies: the attack and the defence. On the practice grounds the defence is sized to the ground (b406). No
+ * nation's tables reckon them, so they carry no nation's name: the attack is yours and the defence is the enemy, as the
+ * sea page names its practice fleets (b408).
+ */
 const ATT: Corps5[] = [['I Corps', 'inf', 3, 0.38, 1], ['II Corps', 'inf', 3, 0.34, 4], ['III Armoured Corps', 'arm', 2, 0.28, 1]];
 const DEF: Corps5[] = [['X Corps', 'inf', 3, 0.45, 21], ['XI Corps', 'inf', 3, 0.4, 24], ['Artillery Corps', 'art', 1, 0.15, 1]];
 
@@ -29,11 +33,11 @@ export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {})
 
 function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], o: SampleOpts, defence: Corps5[] = DEF, defStr = 0.9): FieldTicket<LandPlace> {
   const att: SideTicket = {
-    nat: 'RED', adj: 'Northern', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
+    nat: 'RED', adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
     forces: ATT.map(([name, kind, divs, share, first], i) => force(i + 1, name, 'RED', kind, divs, share, false, first)),
   };
   const def: SideTicket = {
-    nat: 'BLU', adj: 'Southern', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
+    nat: 'BLU', adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
     forces: defence.map(([name, kind, divs, share, first], i) => force(11 + i, name, 'BLU', kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
   };
   return {

@@ -585,7 +585,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const loser = other(winner);
     // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
-    const pct = (p: number): string => (p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
+    // Where nothing was lost at all, it says "none" (b408).
+    const pct = (p: number): string => (p < 1e-4 ? 'none' : p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
     const cap = (t: string): string => t[0].toUpperCase() + t.slice(1);
     const line = this.practice && this.ticket.def.human ? 'Your line' : this.practice ? 'Their line' : `The ${this.ticket.def.adj} line`;
     const lines = [
@@ -598,7 +599,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
-    if (how !== 'objective') lines.push(`${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike).
     for (const u of this.units) if (live(u) && u.state !== 'routing') { u.act = 'idle'; u.speed = 0; u.engaged = undefined; }
@@ -617,13 +618,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    * where the card put it, by five points of the balance or more.
    */
   private staffLine(): string {
-    const where = this.ticket.place.name;
-    if (this.contactAt === null) return `The staff settled the whole attack on ${where}: no shot had been fired.`;
+    // A practice ground is not a place: the staff settle the battle there, not the attack on it (b408).
+    const what = this.practice ? 'battle' : `attack on ${this.ticket.place.name}`;
+    if (this.contactAt === null) return `The staff settled the whole ${what}: no shot had been fired.`;
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bal = this.standing(), tot = this.power.att + this.power.def;
     // Moved his way by five points of the balance's share or more (the design director, 20:51): a point's drift is not a gain.
     const moved = (bal[me] / Math.max(1e-9, bal.att + bal.def)) >= this.power[me] / tot + 0.05;
-    return `The staff settled the rest of the attack on ${where} from where it stood${moved ? ': what you had won stays won' : ''}.`;
+    return `The staff settled the rest of the ${what} from where it stood${moved ? ': what you had won stays won' : ''}.`;
   }
 
   /** How long it broke after, counted from the first contact (ruling 226(6), the UI director's words). */
