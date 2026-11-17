@@ -46,7 +46,7 @@ describe("the paper's line once the help is in hand names the right place (84.3.
     for (const a of rows) {
       const town = g.regions[a.region].name, to = g.regions[a.help!.to].name;
       const ok = a.help!.to === a.region ? new RegExp(` is in hand\\. Right-click ${town} to (send it|march in)\\.$`)
-        : a.help!.to === a.help!.region ? new RegExp(` is in hand\\. It can (march into|strike at) ${town} next month\\.$`)
+        : a.help!.to === a.help!.region ? new RegExp(` is in hand\\. It can (march into|storm|attack) ${town} next month\\.$`)
         : new RegExp(` is in hand\\. Right-click ${to} to send it on towards ${town}\\.$`);
       expect(a.hand, a.hand).toMatch(ok);
     }

@@ -332,7 +332,8 @@ export interface HomeAlarm {
   /**
    * What the paper says once a press has picked up the help, '' where none can come: "The army at Chicago is in hand.
    * Right-click Pittsburgh to send it.", "Right-click Cleveland to send it on towards Pittsburgh." where the road
-   * passes through his own ground first, or "It can march into Buffalo next month." where it already stands beside it.
+   * passes through his own ground first, or "It can march into Buffalo next month." ("storm" where only a garrison holds
+   * the town, "attack" where an enemy army stands) where it already stands beside it.
    */
   hand: string;
 }
@@ -451,10 +452,11 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
  * the help already stands beside the town with no moves left, the line says when it can go in. A lone corps is in
  * hand by its name alone: "First Army is in hand", not "First Army at New York".
  */
-function handLine(g: Game, help: NonNullable<HomeAlarm['help']>, r: Region, empty: boolean): string {
+function handLine(g: Game, help: NonNullable<HomeAlarm['help']>, r: Region, cure: 'empty' | 'storm' | 'attack'): string {
   const held = help.name.startsWith('the army ') ? `The${help.name.slice(3)}` : g.corps.find((c) => c.id === help.corps[0])?.name ?? help.name;
-  if (help.to === r.id) return `${held} is in hand. Right-click ${r.name} to ${empty ? 'march in' : 'send it'}.`;
-  if (help.to === help.region) return `${held} is in hand. It can ${empty ? 'march into' : 'strike at'} ${r.name} next month.`;
+  if (help.to === r.id) return `${held} is in hand. Right-click ${r.name} to ${cure === 'empty' ? 'march in' : 'send it'}.`;
+  // (One verb a case, as the hint line has them: the UI director.)
+  if (help.to === help.region) return `${held} is in hand. It can ${cure === 'empty' ? 'march into' : cure} ${r.name} next month.`;
   return `${held} is in hand. Right-click ${g.regions[help.to].name} to send it on towards ${r.name}.`;
 }
 
@@ -523,7 +525,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const s3 = !help ? `No army of yours can come. A new corps takes ${monthsWord(raise)}.`
       : help.months === 0 ? `Nearest help: ${help.name}, in reach this month.`
       : `Nearest help: ${help.name}, ${monthsWord(help.months)} by ${help.rail ? 'rail' : 'road'}.`;
-    const hand = help ? handLine(g, help, r, false) : '';
+    const hand = help ? handLine(g, help, r, inTown ? 'storm' : 'attack') : '';
     out.push({ case: kase, region: r.id, by, reach: reachIds, help, raise, lines: [s1, s2, s3], hand });
   }
   out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
@@ -540,7 +542,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const s3 = !help ? `No army of yours can reach it. A new corps takes ${monthsWord(raise)}.`
       : help.months === 0 ? `${who} can march in and take it back this month.`
       : `${who} can march in and take it back in ${monthsWord(help.months)}, by ${help.rail ? 'rail' : 'road'}.`;
-    const hand = help ? handLine(g, help, r, true) : '';
+    const hand = help ? handLine(g, help, r, 'empty') : '';
     out.push({ case: 'empty', region: r.id, by: r.ctrl, reach: [], help, raise, lines: [s1, '', s3], hand });
   }
   return out;

@@ -6992,8 +6992,9 @@ const chanceEnd = (lo: number, hi = lo): 'sure' | 'none' | null => {
   return a === 100 && b === 100 ? 'sure' : a === 0 && b === 0 ? 'none' : null;
 };
 const chanceEndOf = (look: Outlook): 'sure' | 'none' | null => (look.wide ? null : chanceEnd(look.chanceLo, look.chanceHi));
-const endSaid = (end: 'sure' | 'none', named: boolean): string => `${named ? 'they' : 'your staff'} ${end === 'sure' ? 'are sure of it' : 'give it no chance'}`;
-/** "about 60% chance to take Pomorze", "40 to 70% chance of storming it", or at the ends "your staff are sure of it". */
+const endSaid = (end: 'sure' | 'none', named: boolean): string =>
+  named ? `they ${end === 'sure' ? 'are sure of it' : 'give it no chance'}` : `your staff ${end === 'sure' ? 'is sure of it' : 'gives it no chance'}`;
+/** "about 60% chance to take Pomorze", "40 to 70% chance of storming it", or at the ends "your staff is sure of it". */
 const chanceSaid = (lo: number, hi: number, what: string, named = false): string => {
   const end = chanceEnd(lo, hi);
   if (end) return endSaid(end, named);
