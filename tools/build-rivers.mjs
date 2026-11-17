@@ -18,12 +18,18 @@ const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${far ? 'world-
 // On the far side only the new provinces are looked at: today's crossings are kept as they are.
 const fresh = far ? map.first + map.stages[0] : -1;
 const before = far ? JSON.parse(fs.readFileSync(new URL('../src/generated/world-rivers.json', import.meta.url), 'utf8')) : { rivers: [], crossings: [] };
-// A province by its number: the new world's are numbered on from Europe's.
-const at = new Map(map.regions.map((r) => [r.id, r]));
+// A province by its number: the new world's are numbered on from Europe's. On the far side a new province can
+// border one of the map of Europe across the old sheet's edge ('joins'), so Europe's provinces are known too.
+const europe = far ? JSON.parse(fs.readFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), 'utf8')).regions.map((r) => ({ ...r, nb: [] })) : [];
+const all = [...europe, ...map.regions];
+const at = new Map(all.map((r) => [r.id, r]));
 // The same projection as tools/build-geo-campaign.mjs. The far side counts its longitudes eastward from the
 // chart's west edge (141 W), as tools/build-geo-far.mjs does.
 const W = -11, N = 71.4, SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
-const proj = ([lat, lon]) => [((far && lon < 0 ? lon + 360 : lon) - W) * KX * SCALE, (N - lat) * SCALE];
+const proj = ([lat, lon]) => [((far && lon < -141 ? lon + 360 : lon) - W) * KX * SCALE, (N - lat) * SCALE];
+/** The far side's chart runs the full circle: a province across its edge is met the short way round. */
+const ROUND = 360 * KX * SCALE;
+const beside = (r, t) => (far && Math.abs(t.x - r.x) > ROUND / 2 ? { ...t, x: t.x + (t.x < r.x ? ROUND : -ROUND) } : t);
 const r1 = (v) => Math.round(v * 10) / 10;
 /** How near the middle of the road between two regions a river must cross it to count as running between them. */
 const NEAR = 0.28;
@@ -37,19 +43,28 @@ function meet(a, b, c, d) {
   return t > 0 && t < 1 && u >= 0 && u <= 1 ? [a[0] + t * rx, a[1] + t * ry, t] : null;
 }
 
-const byName = new Map(map.regions.map((r) => [r.name, r]));
-const rivers = RIVERS.map(([name, course]) => ({ name, ll: course, pts: course.map(proj).map(([x, y]) => [r1(x), r1(y)]) }));
+const byName = new Map(all.map((r) => [r.name, r]));
+// A course is drawn unbroken: where it crosses the chart's edge (141 W) its points follow each other round, and
+// the whole course lies at the end of the chart where most of it runs.
+function unbroken(course) {
+  if (!far) return course.map(proj);
+  const lons = [];
+  for (const [, lon] of course) { let l = lon; if (lons.length) { const last = lons[lons.length - 1]; while (l - last > 180) l -= 360; while (last - l > 180) l += 360; } lons.push(l); }
+  const mean = lons.reduce((s, l) => s + l, 0) / lons.length, turn = mean < -141 ? 360 : mean >= 219 ? -360 : 0;
+  return course.map(([lat], i) => [(lons[i] + turn - W) * KX * SCALE, (N - lat) * SCALE]);
+}
+const rivers = RIVERS.map(([name, course]) => ({ name, ll: course, pts: unbroken(course).map(([x, y]) => [r1(x), r1(y)]) }));
 const key = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 const cut = new Set(CUT.map(([a, b]) => { if (!byName.has(a) || !byName.has(b)) console.warn('bad cut', a, b); return key(byName.get(a)?.id, byName.get(b)?.id); }));
 const found = new Map();
 // On the far side a new province's borders with today's provinces stand apart in the chart ('joins').
 const joined = new Map();
 for (const [a, b] of map.joins ?? []) (joined.get(a) ?? joined.set(a, []).get(a)).push(b);
-for (const r of map.regions) {
+for (const r of all) {
   for (const j of [...r.nb, ...(joined.get(r.id) ?? [])]) {
     if (j < r.id || j < fresh) continue;
-    const t = at.get(j);
-    if (!t) continue;
+    if (!at.has(j)) continue;
+    const t = beside(r, at.get(j));
     if (cut.has(key(r.id, j))) continue;
     // A road that crosses a river an even number of times ends on the bank it started from.
     let best = null;
@@ -66,7 +81,7 @@ for (const r of map.regions) {
 }
 for (const [a, b, river] of ADD) {
   const ra = byName.get(a), rb = byName.get(b), k = rivers.findIndex((rv) => rv.name === river);
-  if (!ra || !rb || k < 0 || !ra.nb.includes(rb.id)) { console.warn('bad crossing', a, b, river); continue; }
+  if (!ra || !rb || k < 0 || !(ra.nb.includes(rb.id) || (joined.get(ra.id) ?? []).includes(rb.id) || (joined.get(rb.id) ?? []).includes(ra.id))) { console.warn('bad crossing', a, b, river); continue; }
   const [lo, hi] = ra.id < rb.id ? [ra, rb] : [rb, ra];
   // The bridge is drawn where the river comes nearest the middle of the road between the two.
   const mx = (lo.x + hi.x) / 2, my = (lo.y + hi.y) / 2;

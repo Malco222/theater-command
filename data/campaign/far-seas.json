@@ -70,13 +70,15 @@
     {"id": "andaman", "air": 0.4, "name": "Andaman Sea", "at": [11.0, 96.0]},
     {"id": "bengal", "air": 0.2, "name": "Bay of Bengal", "at": [15.0, 88.5]},
     {"id": "ceylon", "air": 0.3, "name": "Ceylon Waters", "at": [5.0, 80.0]},
-    {"id": "arabian", "air": 0.1, "name": "Arabian Sea", "at": [16.0, 64.0], "waters": [[7.5, 62.0]]},
+    {"id": "arabian", "air": 0.1, "name": "Arabian Sea", "at": [16.0, 64.0], "waters": [[7.5, 62.0], [24.3, 59.8]]},
     {"id": "persian", "air": 0.8, "name": "Persian Gulf", "at": [26.6, 52.0], "narrow": true},
     {"id": "cindian", "air": 0.05, "name": "Central Indian Ocean", "at": [-12.0, 72.0]},
     {"id": "mascarene", "air": 0.1, "name": "Mascarene Waters", "at": [-18.0, 54.0]},
-    {"id": "somali", "air": 0.1, "name": "Somali Coast", "at": [2.0, 50.5]},
+    {"id": "somali", "air": 0.1, "name": "Somali Coast", "at": [2.0, 50.5], "takes": [{"from": "mozambique", "within": [[-1.6, 38.0], [-1.9, 43.0], [-3.5, 48.0], [6.0, 48.0], [6.0, 38.0]]}]},
     {"id": "sindian", "air": 0.05, "name": "Southern Indian Ocean", "at": [-40.0, 80.0]},
-    {"id": "chukchi", "air": 0.1, "name": "Chukchi Sea", "at": [69.0, -170.5]}
+    {"id": "chukchi", "air": 0.1, "name": "Chukchi Sea", "at": [69.0, -170.5]},
+    {"id": "redsea", "air": 0.6, "name": "Red Sea", "at": [20.5, 38.5], "takes": [{"from": "aden", "within": [[30.5, 32.0], [30.5, 35.6], [28.0, 37.0], [20.0, 42.0], [13.5, 44.2], [12.75, 43.6], [12.4, 43.25], [12.6, 42.5], [13.5, 41.5], [14.5, 40.3], [15.5, 39.0], [18.0, 37.5], [20.0, 36.0], [27.0, 32.0]]}]},
+    {"id": "zanzibar", "air": 0.2, "name": "Zanzibar Coast", "at": [-6.0, 41.5], "takes": [{"from": "mozambique", "within": [[-1.6, 38.0], [-1.9, 43.0], [-3.5, 48.0], [-10.7, 48.0], [-10.7, 38.0]]}]}
   ],
   "adjacent": [
     ["california", "calrun"],
@@ -190,7 +192,7 @@
     ["japansea", "tsushima"],
     ["okhotsk", "japansea"],
     ["echina", "formosa"],
-    ["ryukyu", "formosa"],
+    ["echina", "luzonstrait"],
     ["formosa", "luzonstrait"],
     ["formosa", "schina"],
     ["luzonstrait", "schina"],
@@ -245,7 +247,11 @@
     ["arabian", "persian"],
     ["aden", "arabian"],
     ["aden", "somali"],
-    ["mozambique", "somali"],
+    ["zanzibar", "somali"],
+    ["zanzibar", "mozambique"],
+    ["zanzibar", "mascarene"],
+    ["redsea", "aden"],
+    ["emed", "redsea"],
     ["mozambique", "mascarene"],
     ["mozambique", "sindian"],
     ["cape", "sindian"],
@@ -260,13 +266,16 @@
     ["arabian", "cindian"],
     ["luzonsea", "visayan"]
   ],
-  "passages": [["sulu", "leyte"], ["leyte", "celebes"], ["luzonsea", "visayan"]],
+  "passages": [["sulu", "leyte"], ["leyte", "celebes"], ["luzonsea", "visayan"], ["redsea", "aden"]],
   "shores": {
     "Singapore": ["malacca", "natuna"],
     "Leyte": ["leyte", "visayan"],
     "Lingayen": ["luzonsea"],
     "Manila": ["luzonsea"],
-    "Vogelkop": ["molucca", "ngnorth"]
+    "Vogelkop": ["molucca", "ngnorth"],
+    "Sanaa": [],
+    "Asmara": []
   },
-  "gates": []
+  "gates": [{"between": ["emed", "redsea"], "name": "the Suez Canal", "region": "Suez"}],
+  "unlink": [["mozambique", "aden"]]
 }

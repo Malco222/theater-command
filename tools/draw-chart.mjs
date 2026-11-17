@@ -4,9 +4,11 @@
 //
 //   node tools/draw-chart.mjs out.svg [--file=world-map.json] [--ll=north,west,south,east] [--scale=0.5]
 //                                     [--names=0|1|2] [--links=0|1] [--seas=0|1] [--font=1.5] [--labels=file.json] [--title=...]
-//                                     [--rivers=1] [--rails=1]
+//                                     [--rivers=1] [--rails=1] [--europe=1]
 //
 // --ll is in degrees as an atlas writes them (east positive); west may be greater than east to cross the date line.
+// --europe=1 draws the provinces of the map of Europe as well (campaign-map.json, with its rivers and railways
+// when those are asked for), which the chart itself leaves blank.
 import fs from 'node:fs';
 
 const args = process.argv.slice(2);
@@ -41,10 +43,14 @@ const inBox = (x, y, d, pad = 0) => x + d >= bx0 - pad && x + d <= bx1 + pad && 
 const OWNER = {
   USA: '#7d9a6a', UK: '#c98f8f', CAN: '#c9a58f', JAP: '#d9c26a', CHN: '#b7c48a', MAN: '#d8b77a', MGL: '#b9a98d', SOV: '#b0605a', THA: '#9fb7c9',
   FRA: '#7f95c4', NED: '#e0a35c', AUS: '#c7a0c0', NZL: '#b08db0', POR: '#6fa78f', GER: '#8a8a8a', ITA: '#9cc29c', MEX: '#a9c48c', BRA: '#8fbf7a',
+  BEL: '#c8b25e', ESP: '#d6b676', SAF: '#b88a92', IRN: '#a9b7a0', IRQ: '#b7ab8f', SAU: '#c9c29a', YEM: '#b3a890', AFG: '#a8a39a', NEP: '#bfae9a',
+  LBR: '#9db0b8', TUR: '#b5a9c9',
 };
 const hue = (i) => `hsl(${(i * 47) % 360} ${28 + ((i * 13) % 20)}% ${78 + ((i * 7) % 10)}%)`;
 const ownerColour = (o) => OWNER[o] ?? '#cfc7b4';
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const readCore = (name) => JSON.parse(fs.readFileSync(new URL(`../src/generated/campaign-${name}.json`, import.meta.url)));
+const europe = Number(opt('europe', 0)) ? readCore('map').regions : [];
 const path = (rings, d) => rings.map((ring) => 'M' + ring.map(([x, y]) => `${X(x, d)} ${Y(y)}`).join('L') + 'Z').join('');
 const boxOf = (rings) => { let a = 1e9, b = -1e9, c = 1e9, e = -1e9; for (const [x, y] of rings[0]) { if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > e) e = y; } return [a, b, c, e]; };
 const seen = (rings, d) => { const [a, b, c, e] = boxOf(rings); return b + d >= bx0 && a + d <= bx1 && e >= by0 && c <= by1; };
@@ -111,7 +117,7 @@ for (const d of turns) {
   if (p) out.push(`<path d="${p}" fill="#d6d2c8" fill-rule="evenodd" stroke="none"/>`);
 }
 for (const d of turns) {
-  for (const r of map.regions) {
+  for (const r of [...europe, ...map.regions]) {
     const polys = r.polys.filter((poly) => seen(poly, d));
     if (!polys.length) continue;
     out.push(`<path d="${polys.map((poly) => path(poly, d)).join('')}" fill="${ownerColour(r.owner)}" fill-rule="evenodd" stroke="#5a5347" stroke-width="${r.id >= (map.stages?.[0] ?? 1e9) + map.first ? 0.6 : 0.3}" stroke-linejoin="round"/>`);
@@ -145,15 +151,22 @@ if (showLinks && showSeas) {
   const base = opt('file', 'world-next.json').replace(/-map\.json$|\.json$/, '');
   const read = (name) => { try { return JSON.parse(fs.readFileSync(new URL(`../src/generated/${base}-${name}.json`, import.meta.url))); } catch { return null; } };
   const rivers = Number(opt('rivers', 0)) ? read('rivers') : null, rails = Number(opt('rails', 0)) ? read('rails') : null;
-  const byId = new Map(map.regions.map((r) => [r.id, r]));
+  const byId = new Map([...europe, ...map.regions].map((r) => [r.id, r]));
+  // (The map of Europe's own rivers and railways are drawn with it.)
+  const coreRivers = europe.length && rivers ? readCore('rivers') : null, coreRails = europe.length && rails ? readCore('rails') : null;
   const wrapTo = (x, ref) => { let v = x; if (round) { while (v - ref > W / 2) v -= W; while (ref - v > W / 2) v += W; } return v; };
   for (const d of turns) {
-    for (const rv of rivers?.rivers ?? []) {
-      const pts = rv.pts.map(([x, y]) => [px0(x), y]);
-      if (!pts.some(([x, y]) => inBox(x, y, d, 100))) continue;
-      out.push(`<path d="M${pts.map(([x, y], i) => `${X(i ? wrapTo(x, pts[i - 1][0]) : x, d)} ${Y(y)}`).join('L')}" fill="none" stroke="#2f7fb5" stroke-width="${f1(1.6 * font)}" stroke-linejoin="round" opacity="0.9"/>`);
+    for (const rv of [...(coreRivers?.rivers ?? []), ...(rivers?.rivers ?? [])]) {
+      // A course is drawn unbroken, each point the short way round from the one before, and again a turn of the
+      // globe to either side where it runs over the chart's edge.
+      let last = null;
+      const pts = rv.pts.map(([x, y]) => [(last = last === null ? px0(x) : wrapTo(px0(x), last)), y]);
+      for (const over of round ? [-W, 0, W] : [0]) {
+        if (!pts.some(([x, y]) => inBox(x + over, y, d, 100))) continue;
+        out.push(`<path d="M${pts.map(([x, y]) => `${X(x + over, d)} ${Y(y)}`).join('L')}" fill="none" stroke="#2f7fb5" stroke-width="${f1(1.6 * font)}" stroke-linejoin="round" opacity="0.9"/>`);
+      }
     }
-    for (const [a, b, x, y] of rails?.links ?? []) {
+    for (const [a, b, x, y] of [...(coreRails?.links ?? []), ...(rails?.links ?? [])]) {
       const p = byId.get(a), q = byId.get(b);
       if (!p || !q || (!inBox(p.x, p.y, d, 60) && !inBox(q.x, q.y, d, 60))) continue;
       const mx = wrapTo(x, p.x), qx = wrapTo(q.x, p.x);

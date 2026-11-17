@@ -200,9 +200,66 @@ for (const s of seeds) {
 // (Africa below the map of Europe, islands nobody claimed). Ground a province of today stands on is closed.
 const oldPoints = new Set();
 for (const r of today.regions) for (const p of r.polys) for (const ring of p) for (const [x, y] of ring) oldPoints.add(`${x},${y}`);
-const masses = [];
-CHART.landFull.forEach((p) => { if (!p[0].some(([x, y]) => oldPoints.has(`${r1(x)},${r1(y)}`))) masses.push({ poly: p, box: boxOf(p[0]), old: true }); });
-for (const p of land) masses.push({ poly: p, box: boxOf(p[0]), old: false });
+// (Each mass remembers one of the coasts it is made of, to tell later which ground a province stands on.)
+const nCoreLand = core.land.length, nOldLand = CHART.landFull.length;
+let masses = [];
+CHART.landFull.forEach((p, i) => {
+  if (p[0].some(([x, y]) => oldPoints.has(`${r1(x)},${r1(y)}`))) return;
+  // The lakes of Africa lie in land of today's chart, whose coast stands as it is written: they are cut out of the
+  // ground the provinces grow on, and listed with the other lakes.
+  const box = boxOf(p[0]);
+  const wet = lakes.filter((l) => boxesMeet(boxOf(l.poly[0]), box));
+  let parts = [p];
+  if (wet.length) { try { parts = polygonClipping.difference(p, ...wet.map((l) => l.poly)); } catch (e) { warn(`! could not cut a lake out of today's land: ${e.message}`); } }
+  for (const q of parts) if (q.length && Math.abs(ringArea(q[0])) >= 3) masses.push({ poly: q, box: boxOf(q[0]), old: true, shape: nCoreLand + i });
+});
+land.forEach((p, i) => masses.push({ poly: p, box: boxOf(p[0]), old: false, shape: nCoreLand + nOldLand + i }));
+// Today's east edge (47 E) runs through Arabia, Somalia and Madagascar, where no frontier does. South of the map of
+// Europe the land of today's chart that no province stands on and the new land east of it are one ground: the two
+// are made one mass, so a province lies across the old edge as if it were not there.
+{
+  const onLine = (x) => Math.abs(x - X47) < 0.11;
+  const spans = masses.map((m) => {
+    const out = [];
+    // (A stretch of the edge that begins beside the map of Europe counts from the map's south edge down.)
+    for (const ring of m.poly) for (let i = 0; i + 1 < ring.length; i++) { const [ax, ay] = ring[i], [bx, by] = ring[i + 1]; if (onLine(ax) && onLine(bx) && Math.max(ay, by) > 1712.3) out.push([Math.max(1712, Math.min(ay, by)), Math.max(ay, by)]); }
+    return out;
+  });
+  const boss = masses.map((_, i) => i);
+  const find = (i) => { while (boss[i] !== i) { boss[i] = boss[boss[i]]; i = boss[i]; } return i; };
+  masses.forEach((a, i) => {
+    if (!a.old || !spans[i].length) return;
+    masses.forEach((b, j) => {
+      if (b.old || !spans[j].length) return;
+      if (spans[i].some(([p0, p1]) => spans[j].some(([q0, q1]) => Math.min(p1, q1) - Math.max(p0, q0) > 0.3))) boss[find(j)] = find(i);
+    });
+  });
+  const groups = new Map();
+  masses.forEach((_, i) => { const b = find(i); (groups.get(b) ?? groups.set(b, []).get(b)).push(i); });
+  const gone = new Set(), made = [];
+  for (const [b, list] of groups) {
+    if (list.length < 2) continue;
+    // The new land is let a hair over the old, so the two overlap instead of touching along a line.
+    // Beside the map of Europe the new land keeps to the edge: a stretch of it that runs on south of the map is
+    // broken at the map's corner, and only what lies south of the corner is let over.
+    const letOver = (ring) => {
+      const out = [];
+      ring.forEach(([x, y], k) => {
+        out.push([onLine(x) && y > 1712.05 ? X47 - 0.4 : x, y]);
+        const next = ring[k + 1];
+        if (next && onLine(x) && onLine(next[0]) && (y - 1712) * (next[1] - 1712) < 0 && Math.abs(y - 1712) > 0.05 && Math.abs(next[1] - 1712) > 0.05) out.push([X47, 1712]);
+      });
+      return out;
+    };
+    const polys = list.map((i) => (masses[i].old ? masses[i].poly : masses[i].poly.map(letOver)));
+    let whole;
+    try { whole = polygonClipping.union(...polys); } catch (e) { warn(`! could not join the land across today's east edge: ${e.message}`); continue; }
+    if (whole.length !== 1) warn(`! land across today's east edge came out in ${whole.length} pieces`);
+    for (const i of list) gone.add(i);
+    for (const q of whole) made.push({ poly: q, box: boxOf(q[0]), old: false, shape: masses[b].shape, across: list.length });
+  }
+  if (made.length) masses = [...masses.filter((_, i) => !gone.has(i)), ...made];
+}
 const massAt = (x, y) => masses.findIndex((m) => x >= m.box[0] && x <= m.box[2] && y >= m.box[1] && y <= m.box[3] && inPoly(m.poly, x, y));
 
 // The atlas's countries, their longitudes counted eastward like everything else here.
@@ -300,13 +357,30 @@ for (const [m, all] of onMass) {
   }
 }
 
+/**
+ * An outline without the hairs the joining of two grounds can leave: a point twice running, or out and straight
+ * back. The first slice (the Pacific) was handed over before this was done, and its outlines stand as they were.
+ */
+function trim(ring, slice) {
+  if (slice === 0) return ring;
+  const out = ring.slice();
+  for (let changed = true; changed && out.length > 3; ) {
+    changed = false;
+    for (let i = 0; i < out.length && out.length > 3; i++) {
+      const a = out[(i + out.length - 1) % out.length], b = out[i], c = out[(i + 1) % out.length];
+      if ((b[0] === c[0] && b[1] === c[1]) || (a[0] === c[0] && a[1] === c[1])) { out.splice(i, 1); changed = true; i--; }
+    }
+  }
+  return out;
+}
+
 const regions = [];
 for (const s of seeds) {
   if (s.id < 0) continue;
   let polys = [];
   if (s.mass >= 0) { try { polys = s.cell ? polygonClipping.intersection([s.cell], s.part) : s.part; } catch (e) { warn(`! clip failed for ${s.name}`); } }
   polys = polys
-    .map((p) => p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)])))
+    .map((p) => p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => trim(r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]), s.slice)))
     .filter((p) => p.length && p[0].length >= 3);
   if (!polys.length) warn(`! ${s.name} has no land`);
   const flags = { ...s.flags };
@@ -391,7 +465,7 @@ const joined = [];
         }
       }
       if (!best) return;
-      const rings = p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]));
+      const rings = p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => trim(r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]), k));
       if (!rings.length || rings[0].length < 3) return;
       regionOfId(best.id).polys.push(rings);
       seeded.add(m);
@@ -438,10 +512,9 @@ for (let r = 0; r < ROWS; r++) {
     for (const b of [landOf[r * COLS + (c + 1) % COLS], r + 1 < ROWS ? landOf[(r + 1) * COLS + c] : -1]) if (b >= 0 && b !== a && edgy[b] && find(a) !== find(b)) boss[find(a)] = find(b);
   }
 }
-const nCoreLand = core.land.length, nOldLand = CHART.landFull.length;
 // The land a province stands on: its seed's, for a new one; whatever lies under its middle, for one of today's.
 const groundOf = new Map();
-for (const s of seeds) if (s.id >= 0 && s.mass >= 0) { const m = masses[s.mass]; groundOf.set(s.id, find(m.old ? nCoreLand + CHART.landFull.indexOf(m.poly) : nCoreLand + nOldLand + land.indexOf(m.poly))); }
+for (const s of seeds) if (s.id >= 0 && s.mass >= 0) groundOf.set(s.id, find(masses[s.mass].shape));
 const groundAt = (r) => { const c = Math.floor((r.x - gx0) / CELL), row = Math.floor(r.y / CELL); const i = landOf[row * COLS + c]; return i < 0 ? -1 : find(i); };
 for (const r of [...core.regions, ...today.regions]) groundOf.set(r.id, groundAt(r));
 
@@ -538,12 +611,35 @@ const pop = () => {
   return top;
 };
 const STEPS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
+// By agreement with the rules, a new sea may be cut out of one of today's where today's chart had no shore to cut
+// it by ('takes': the sea it is cut from, and a shape in [lat, lon]): the Red Sea out of the Gulf of Aden, the
+// East African coast out of the Mozambique Channel. Those squares change sea, and nothing else of today's does.
+const given = new Uint8Array(COLS * ROWS);
+const takings = [];
+seaData.zones.forEach((z, k) => {
+  for (const t of z.takes ?? []) {
+    const from = index.get(t.from);
+    if (from === undefined || from >= nOld) { warn(`! ${z.name} takes from ${t.from}, which is not a sea of today's chart`); continue; }
+    const ring = t.within.map(([lat, lon]) => proj([lon, lat]));
+    const [a, b, c, d] = boxOf(ring);
+    let n = 0;
+    for (let r = Math.max(1, Math.floor(b / CELL)); r <= Math.min(ROWS - 2, Math.ceil(d / CELL)); r++) {
+      for (let col = Math.max(0, Math.floor((a - gx0) / CELL)); col <= Math.min(COLS - 1, Math.ceil((c - gx0) / CELL)); col++) {
+        const j = r * COLS + col;
+        if (zoneAt[j] === from && inRing(ring, gx0 + (col + 0.5) * CELL, (r + 0.5) * CELL)) { zoneAt[j] = nOld + k; given[j] = 1; n++; }
+      }
+    }
+    if (!n) warn(`! ${z.name} takes no water from ${t.from}`);
+    takings.push(`${n} squares of ${zones[from].name} to ${z.name}`);
+  }
+});
 // Today's waters stay with the seas they belong to, and those seas go on spreading from where they stand.
 for (let k = 0; k < frozen.length; k++) if (frozen[k]) push(dist[k], k);
 const anchor = (lat, lon, zone, what) => {
   const [x, y] = proj([lon, lat]);
   const c = Math.floor((x - gx0) / CELL), r = Math.floor(y / CELL);
   if (c < 0 || r < 1 || c >= COLS || r >= ROWS - 1 || isLand[r * COLS + c]) { warn(`! sea anchor on land or off the chart: ${what} (${lat}, ${lon})`); return; }
+  if (frozen[r * COLS + c] && zoneAt[r * COLS + c] === zone) return;
   if (frozen[r * COLS + c]) { warn(`! sea anchor inside the seas of today's chart: ${what} (${lat}, ${lon})`); return; }
   dist[r * COLS + c] = 0; zoneAt[r * COLS + c] = zone; push(0, r * COLS + c);
 };
@@ -573,7 +669,7 @@ for (let r = 0; r < ROWS; r++) {
       const rr = r + dr;
       if (rr < 0 || rr >= ROWS) continue;
       const id = regionAt[rr * COLS + (c + dc + COLS) % COLS];
-      if (id < first - today.regions.length) continue;
+      if (id < 0) continue;
       let m = touch.get(id);
       if (!m) touch.set(id, (m = new Map()));
       m.set(zone, (m.get(zone) ?? 0) + 1);
@@ -587,9 +683,12 @@ for (const [id, m] of touch) {
   const most = Math.max(...m.values());
   const ranked = [...m].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
   if (id < first) {
-    // A province of today keeps the coasts it has. Where it also lies on a new sea, that sea's list says so.
-    const r = today.regions[id - today.first];
+    // A province of today (or of the map of Europe) keeps the coasts it has. Where it also lies on a new sea, that
+    // sea's list says so.
+    const r = id < today.first ? core.regions[id] : today.regions[id - today.first];
     for (const [zone, n] of ranked) if (zone >= nOld && n >= 8 && n >= most * 0.2) { zones[zone].coast.push(id); oldOnNew.push(`${r.name} on ${zones[zone].name}`); }
+    if (id < today.first) continue;
+    // (A sea cut out of one of today's by agreement may take a coast with it; none of today's provinces stands there.)
     const now = ranked.filter(([zone, n]) => zone < nOld && n >= 8 && n >= most * 0.2).map(([zone]) => zone);
     for (const z of r.seas) if (!now.includes(z)) warn(`! ${r.name} no longer comes out on ${zones[z].name}`);
     continue;
@@ -618,6 +717,16 @@ for (const [a, b] of seaData.adjacent) {
   if (ia === undefined || ib === undefined) { warn(`! bad sea link: ${a}, ${b}`); continue; }
   if (ia < nOld && ib < nOld) { warn(`! ${a} and ${b} are both seas of today: their link is not this file's to make`); continue; }
   if (!zones[ia].adj.includes(ib)) { zones[ia].adj.push(ib); zones[ib].adj.push(ia); }
+}
+// A link between two of today's seas that stood for water off the old chart is struck where the full chart shows
+// the seas between ('unlink', by agreement with the rules): the Mozambique Channel no longer borders the Gulf of Aden.
+const unlinked = [];
+for (const [a, b] of seaData.unlink ?? []) {
+  const ia = index.get(a), ib = index.get(b);
+  if (ia === undefined || ib === undefined || !zones[ia].adj.includes(ib)) { warn(`! no link to strike: ${a}, ${b}`); continue; }
+  zones[ia].adj = zones[ia].adj.filter((j) => j !== ib);
+  zones[ib].adj = zones[ib].adj.filter((j) => j !== ia);
+  unlinked.push(ia < ib ? `${ia}-${ib}` : `${ib}-${ia}`);
 }
 const gates = [...today.seas.gates, ...(seaData.gates ?? []).map((gt) => ({ a: index.get(gt.between[0]), b: index.get(gt.between[1]), name: gt.name, region: gt.region ?? null, nation: gt.nation ?? null, closed: !!gt.closed }))];
 
@@ -699,12 +808,12 @@ const checks = [];
 const check = (ok, text) => { checks.push(`${ok ? 'ok  ' : 'FAIL'} ${text}`); if (!ok) process.exitCode = 1; };
 // 1. Every square of today's chart that holds a sea holds the same sea.
 {
-  let wrong = 0, seen = 0;
+  let wrong = 0, seen = 0, cut2 = 0;
   today.seas.grid.forEach((row, r) => {
     let c = 0;
-    for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0; k--, c++) { if (row[i] < 0) continue; seen++; if (zoneAt[r * LOOK * COLS + c * LOOK] !== row[i]) wrong++; }
+    for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0; k--, c++) { if (row[i] < 0) continue; seen++; const j = r * LOOK * COLS + c * LOOK; if (given[j]) cut2++; else if (zoneAt[j] !== row[i]) wrong++; }
   });
-  check(wrong === 0, `today's seas: ${seen} squares of water hold the sea they hold today (${wrong} do not)`);
+  check(wrong === 0, `today's seas: ${seen - cut2} squares of water hold the sea they hold today (${wrong} do not)${cut2 ? `, and ${cut2} are given to a new sea by agreement` : ''}`);
 }
 // Water of today's chart that holds no sea today (a lake, a fjord the flood never reached) gains none.
 {
@@ -757,7 +866,7 @@ const check = (ok, text) => { checks.push(`${ok ? 'ok  ' : 'FAIL'} ${text}`); if
 }
 // 4. Today's provinces and seas stand as they are written.
 check(JSON.stringify(zones.slice(0, nOld).map(({ i, adj, coast, ...z }) => z)) === JSON.stringify(today.seas.zones.map(({ adj, coast, ...z }) => z)), `today's ${nOld} seas keep their keys, names and places`);
-check(zones.slice(0, nOld).every((z, i) => today.seas.zones[i].adj.every((j) => z.adj.includes(j)) && today.seas.zones[i].coast.every((j) => z.coast.includes(j))), `today's seas keep every neighbour and every coast they have`);
+check(zones.slice(0, nOld).every((z, i) => today.seas.zones[i].adj.every((j) => z.adj.includes(j) || unlinked.includes(i < j ? `${i}-${j}` : `${j}-${i}`)) && today.seas.zones[i].coast.every((j) => z.coast.includes(j))), `today's seas keep every neighbour and every coast they have${unlinked.length ? ` (but for ${unlinked.length} link struck by agreement)` : ''}`);
 // 5. No new province has a neighbour that does not have it back, and every name is its own.
 check(regions.every((r) => r.nb.every((j) => j >= first && regionOfId(j).nb.includes(r.id))), 'every border between new provinces is written on both sides');
 check(new Set([...core.regions, ...today.regions, ...regions].map((r) => r.name)).size === first + regions.length, 'no two provinces share a name');
@@ -799,6 +908,7 @@ if (!quiet) {
   if (alone.length) console.log(`no neighbours: ${alone.join(', ')}`);
   if (joins.length) console.log(`borders with today's provinces: ${joins.map(([a, b]) => `${[...core.regions, ...today.regions][a].name} - ${regionOfId(b).name}`).join(', ')}`);
   if (oldOnNew.length) console.log(`today's provinces on new seas: ${oldOnNew.join(', ')}`);
+  if (takings.length) console.log(`cut out of today's seas: ${takings.join(', ')}`);
 }
 for (const h of hints) console.log(h);
 console.log(checks.join('\n'));
