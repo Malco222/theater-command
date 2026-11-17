@@ -311,6 +311,9 @@ export function armyIdle(g: Game, nat: string): boolean {
   let home = n.queue.reduce((s, b) => s + (b.what === 'corps' && b.kind !== 'eng' ? 1 : 0), 0);
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
+    // A corps in an overseas possession is that place's garrison and not the army at home (as the ferry reckons it):
+    // the Canal's division, infantry since Version 84.2, counts no more than the fortress troops it replaced.
+    if (r.overseas) continue;
     for (const c of r.units) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
     for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
   }

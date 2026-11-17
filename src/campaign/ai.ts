@@ -1281,6 +1281,8 @@ function ferry(g: Game, nat: string): void {
  * that it can cover the crossing its staff has its eye on (navalAI). And the air groups still at home, beyond the
  * 'air' kept there, are shipped one a month to the airfield of its side's nearest that harbour with room for them:
  * from there its air staff flies them as it flies any group based abroad (airAI: raids, and the sky over the beach).
+ * A command marked 'home' in air.json guards its own country and never follows the army (Version 84.2: America's
+ * First Air Force and the rest); the commands raised for the war overseas form at home and sail in their turn.
  */
 function follow(g: Game, nat: string, O: OverseasRules): void {
   const id = Object.keys(O.oceans).map((o) => g.flags[`st:base:${nat}:${o}`] ?? 0).find((x) => x > 0);

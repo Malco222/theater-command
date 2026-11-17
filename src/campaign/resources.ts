@@ -429,7 +429,9 @@ export function stores(g: Game, nat: string): StoresView | null {
 /** Opens the stocks of every power that keeps them, once, when a grand campaign begins. */
 export function openStores(g: Game): void {
   if (!resRules(g)) return;
-  for (const nat of RES.nations) storesOf(g, nat);
+  // Counted afresh as the campaign opens: a depot looked into while the world was still being set up (before
+  // America's air commands stood on their fields, Version 84.2) was filled for a smaller force than takes the field.
+  for (const nat of RES.nations) { delete g.nations[nat].res; storesOf(g, nat); }
 }
 
 /**

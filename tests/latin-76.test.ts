@@ -263,8 +263,9 @@ describe('Latin America is on the chart', () => {
     const key = (k: string): number => g.seas.findIndex((s) => s.key === k);
     expect([zone.owner, zone.ctrl, zone.overseas, zone.port]).toEqual(['USA', 'USA', true, true]);
     expect(zone.seas.sort((a, b) => a - b)).toEqual([key('caribbean'), key('panama')]);
-    // A fortress garrison stands in it, and is not counted among the corps America keeps at home.
-    expect(zone.units.map((c) => [c.nat, c.kind, c.hold])).toEqual([['USA', 'fort', true]]);
+    // Its garrison stands in it (infantry the staff holds in place since Version 84.2, ruling 176(d)), and is not
+    // counted among the corps America keeps at home.
+    expect(zone.units.map((c) => [c.nat, c.kind, c.hold])).toEqual([['USA', 'inf', true]]);
     expect(armyIdle(g, 'USA')).toBe(wideIdle());
     // Open to everybody at peace with its holder, shut to his enemies.
     for (const id of ['UK', 'GER', 'BRA', 'CHL']) expect(canPass(g, key('caribbean'), key('panama'), id), id).toBe(true);
@@ -360,7 +361,7 @@ describe('Latin America is on the chart', () => {
     expect(l.order.slice(-LATIN.length)).toEqual(LATIN);
     for (const id of LATIN) expect(l.corps.filter((c) => c.nat === id).length, id).toBe(g.corps.filter((c) => c.nat === id).length);
     expect(l.fleets.filter((f) => LATIN.includes(f.nat)).map((f) => f.nat)).toEqual(['BRA', 'ARG', 'CHL', 'PER']);
-    expect(l.byName['Canal Zone'].units.map((c) => c.kind)).toEqual(['fort']);
+    expect(l.byName['Canal Zone'].units.map((c) => c.kind)).toEqual(['inf']);
     expect(new Set(l.corps.map((c) => c.id)).size).toBe(l.corps.length);
     // Ground of a country the save has seen fall goes where a fallen country's colonies go.
     expect(['Curacao', 'Dutch Guiana'].map((n) => l.byName[n].ctrl)).toEqual(['UK', 'UK']);

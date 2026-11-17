@@ -1142,12 +1142,15 @@ function gateCard(id: number): string {
   const q = gateQuestion(g, id);
   if (!q) return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Sea gate</div><h2>${esc(gateViews(g)[id]?.name ?? '')}</h2></header><div class="body"><p>${esc(whyNotGate(g, id) ?? '')}</p></div><footer><button class="btn" data-act="close">Close</button></footer>`;
   const v = q.gate, shut = v.shutSince >= 0;
-  const rows = q.rows.map((r) => `<tr${r.own ? ' class="own"' : ''}><td><div class="gr">${chip(r.nat)}<b>${esc(r.own ? 'You' : r.name)}</b><small>${esc(r.what)}</small></div></td><td>${cash(-r.loss, true)}<small> a month</small></td></tr>`).join('');
+  // His own row stands first, with no figure where none of his trade runs through; the last row says whose money it adds up.
+  const rows = q.rows.map((r) => `<tr${r.own ? ' class="own"' : ''}><td><div class="gr">${chip(r.nat)}<b>${esc(r.own ? 'You' : r.name)}</b><small>${esc(r.what)}</small></div></td><td>${r.own && r.loss <= 0 ? '' : `${cash(-r.loss, true)}<small> a month</small>`}</td></tr>`).join('');
+  const others = q.rows.filter((r) => !r.own).length;
+  const sore = q.resent.length ? `<h3>${esc(q.resentHeading)}</h3><table class="ltab gatetab">${q.resent.map((r) => `<tr><td><div class="gr">${chip(r.nat)}<b>${esc(r.name)}</b></div></td><td><small>${esc(r.line)}</small></td></tr>`).join('')}</table><p class="sub">${esc(q.resentNote)}</p>` : '';
   return `<header class="gatehead"><button class="x" data-act="close" aria-label="Close">×</button>
     ${flagIcon(v.holder, natColor(v.holder), 60, 'gflag')}<div class="grow"><div class="kick">${esc(q.label)}</div><h2>${esc(q.question)}</h2></div><span class="gstate ${shut ? 'shut' : 'open'}">${shut ? 'Shut' : 'Open'}</span></header>
     <div class="body"><p class="lead">${esc(q.lead)}</p>
     <h3>${esc(q.heading)}</h3>
-    ${q.rows.length ? `<table class="ltab gatetab">${rows}${q.rows.length > 1 ? `<tr class="sum"><td>All told</td><td>${cash(-q.total, true)}<small> a month</small></td></tr>` : ''}</table>` : `<p class="sub">${esc(q.none)}</p>`}</div>
+    <table class="ltab gatetab">${rows}${others > 1 ? `<tr class="sum"><td>${esc(q.sumLabel)}</td><td>${cash(-q.others, true)}<small> a month</small></td></tr>` : ''}</table>${others ? '' : `<p class="sub">${esc(q.none)}</p>`}${sore}</div>
     <footer><button class="btn" data-act="close">${esc(q.no)}</button><button class="btn go" data-act="gateorder" data-id="${id}" data-shut="${shut ? 0 : 1}">${esc(q.yes)}</button></footer>`;
 }
 /** A click on a gate's plate, or on its line in the sea's panel: its holder gets the question, anyone else what pointing says. */
@@ -2163,14 +2166,14 @@ function drawFleetTray(f: Fleet): void {
     ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
     : '';
   const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>
-    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare">${esc(card.bare)}</small>` : ''}</div>`;
+    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare" title="${esc(card.bare)}">${WARN_SIGN}${esc(card.bareBrief)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
     ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
-  const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop"><b>${esc(w.name)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
+  const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
   el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
@@ -3167,7 +3170,9 @@ function siegeBlock(r: Region): string {
       : `Whoever holds ${esc(v.town)} holds the province.`;
     head = `<div class="sghead plain"><span class="grow"><b>The key to ${esc(r.name)}</b><small>${say}</small></span></div>`;
   }
-  const lines = v.by ? v.lines.slice(1).map((l) => `<p>${esc(l)}</p>`).join('') : '';
+  // An enemy town held by its guard alone: the fact that decides the march, said where he reads how the town falls.
+  const only = v.by ? null : guardOnly(g, r.id);
+  const lines = v.by ? v.lines.slice(1).map((l) => `<p>${esc(l)}</p>`).join('') : only?.march ? `<p class="sgonly">${esc(`${only.head}: ${only.march[0].toLowerCase()}${only.march.slice(1)}`)}</p>` : '';
   // Who is inside: the player's own corps one by one, anyone else's as an army.
   let inside = '';
   if (mine) inside += myGarrison(g, r.id).map((c) => garrisonRow(c, up)).join('');
@@ -3201,7 +3206,10 @@ function siegeBlock(r: Region): string {
 }
 
 /** What the staff says of a battle before it is ordered: the verdict, the balance (a band where the enemy is not fully known) and the Battle Ticket. */
-function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: string, sure: string, scout: Region | null): string {
+function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: string, sure: string, scout: Region | null, extra: { head?: string; second?: string } = {}): string {
+  // Where a card carries two forecasts, the first is headed by its button's words and the second stands straight under it, above the ticket.
+  const top = extra.head ? `<h3 class="blockhead">${esc(extra.head)}</h3>` : '';
+  const under = extra.second ?? '';
   const at = (odds: number): number => (100 * odds) / (1 + odds);
   const need = at(look.even).toFixed(1);
   const takes = look.even.toFixed(look.even === 1.2 ? 1 : 2);
@@ -3209,15 +3217,15 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
   // The verdict is the rules' own line (verdictOf), so that the 3D table prints the same words.
   const say = verdictOf(look, sure === 'Victory' ? 'storm' : 'sortie');
   if (!look.exact) {
-    return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
+    return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
-      <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
+      <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>${under}
       <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scout ? scoutButton(scout) : ''}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   }
-  return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
+  return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
     <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
-    <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>
+    <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>${under}
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
 }
 
@@ -3257,6 +3265,8 @@ function siegeCard(): string {
   const theirs: Side = {
     nats: foes.length ? [...new Set(foes.map((c) => c.nat))] : [r.ctrl], role: out ? 'round the town' : 'inside the town', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + (out ? 0 : guardMen(g, r)), corps: foes.length, divs: rollDivs(foes) + (out ? 0 : Math.round(v.guard * 10) / 10),
     ...(look.exact ? {} : { menText: '?', divsText: '?' }),
+    // A town no army holds is named for what does hold it (the UI director's review of 84.1, point 6).
+    ...(!out && !foes.length && v.inside === 0 && v.guard > 0 ? { guardOf: v.town } : {}),
     cards: foes.map((c) => (kn(c) === 'exact' ? battleCard(c) : foeCard(c))).join('') + guard,
     under: out ? '' : `<small class="fhelp">Behind the walls of ${esc(v.town)}: ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, with ${Math.round(v.broken * 100)}% of the works broken down` : ''}.</small>`,
   };
@@ -3273,10 +3283,12 @@ function siegeCard(): string {
   const made = marching ? (m.meet as MarchOutlook).prepared : choice?.prepared ?? null;
   const waits = marching ? (m.meet as MarchOutlook).ifSiege : choice?.ifWait ?? '';
   const second = (marching || choice) && (made || waits)
-    ? `<div class="waitblock"><h3>${marching ? 'Lay siege first' : 'Keep up the siege'}${made ? ' <small>the same storm next month, made ready</small>' : ''}</h3>${made ? balanceOnly(made, g.nations[me].color, g.nations[foeNat].color, `to carry ${esc(v.town)}`) : ''}<p>${esc(made && marching ? waits : made ? 'Nothing is risked this month, if nothing else changes.' : waits)}</p></div>` : '';
+    ? `<div class="waitblock"><h3 class="blockhead">${marching ? 'Lay siege first' : 'Keep up the siege'}${made ? ' <small>the same storm next month, made ready</small>' : ''}</h3>${made ? balanceOnly(made, g.nations[me].color, g.nations[foeNat].color, `to carry ${esc(v.town)}`) : ''}<p>${esc(made && marching ? waits : made ? 'Nothing is risked this month, if nothing else changes.' : waits)}</p></div>` : '';
+  // The first block is headed by its button's words, so the two forecasts can be told apart at a glance.
+  const firstHead = marching ? 'Send them in · a hasty assault as you arrive' : `Send them in · ${hasty ? 'a hasty assault' : 'the assault, made ready'}`;
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
-      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${second}${note}</div>
+      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r, second ? { head: firstHead, second } : {})}${note}</div>
     <footer>${marching
       ? `<button class="btn" data-act="close" title="Nothing is spent and nobody marches.">Call it off</button><button class="btn${stormLit ? ' go' : ''}" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">Send them in</button><button class="btn${stormLit ? '' : ' go'}" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month. The storm is yours to order next month from the siege, made ready.">Lay siege first</button>`
       : out ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">Stay inside</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">Sally out</button>`
@@ -5443,6 +5455,11 @@ function airWarMarks(): string {
   return out;
 }
 
+/** A small sign in the ink of the line it stands in: a carrier for a wing aboard, an aircraft for one ashore. */
+const inkSign = (key: string, px = 17): string => `<svg class="inksign" width="${px}" height="${Math.round(px * 0.75)}" viewBox="-1 -3 28 21" aria-hidden="true"><path d="${ORDER_SIGN[key] ?? ORDER_SIGN.ftr}"/></svg>`;
+/** The warning sign, in plain ink: something the player ordered is costing him, and can be taken back. */
+const WARN_SIGN = '<svg class="inksign warn" width="13" height="12" viewBox="0 0 16 15" aria-hidden="true"><path d="M8 1.6 15 13.6H1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.6M8 11.2v.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 /** One air group as a row: its kind, its name and command, where it is, what it is doing, and how fit it is. */
 function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   const tags: string[] = [];
@@ -5455,9 +5472,9 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   const el = canOrder ? 'button' : 'div';
   const ldr = x.leader ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(x.leader)} <span class="lvl" title="Level ${x.level} air commander">${x.level}</span></span>` : '';
   return `<${el} class="corps fleet grp${canOrder && ui.air === x.id ? ' pick' : ''}" ${canOrder ? `data-act="airfleet" data-id="${x.id}"` : ''}>
-    ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
+    ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${x.ashore >= 0 ? ' <span class="tag">Carrier wing</span>' : ''}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''}${x.ship >= 0 && whose ? ` · aboard the ${esc(x.baseName)}` : ''} · reach ${num(x.range)} km</span>
-    ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${esc(x.where)}${x.ashore >= 0 ? ` <span class="tag">Carrier wing</span>${x.fleetName ? ` of the ${esc(x.fleetName)}` : ''}` : ''}</span>` : ''}
+    ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${inkSign(x.ship >= 0 ? 'cv' : 'ftr')}${esc(x.where)}${x.ashore >= 0 && x.fleetName ? ` · of the ${esc(x.fleetName)}` : ''}</span>` : ''}
     <span class="meta">${esc(x.doing)}</span>
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
@@ -6459,6 +6476,8 @@ function scenarioCard(): string {
 // ---- The face-off: two armies drawn up against each other, before the battle and after it ----
 
 interface Side {
+  /** The town whose guard alone stands on this side: the head names the guard, and no corps are counted. */
+  guardOf?: string;
   /** Said in place of the numbers of men and divisions where they are only an estimate. */
   menText?: string;
   divsText?: string;
@@ -6483,9 +6502,10 @@ function sidePanel(o: Side, cls: string): string {
   const n = g.nations[o.nats[0]];
   const head = o.who
     ? `<span class="seal" style="background:${n.color}">${esc(initialsOf(o.who.name))}</span><span class="grow"><b>${esc(o.who.name)}</b><small>${esc(adjs(o.nats))} army ${o.role} · level ${o.who.level} general</small>${o.who.traits.length ? `<span class="tags">${traitTags(o.who)}</span>` : ''}</span>`
+    : o.guardOf ? `<span class="seal guard">${ringIcon(n.color, 40)}</span><span class="grow"><b>Town guard of ${esc(o.guardOf)}</b><small>Depot troops, police and militia · no army inside</small></span>`
     : `<span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(adjs(o.nats))} army</b><small>${o.role[0].toUpperCase() + o.role.slice(1)}${o.who === null && o.corps ? ' · no general in command' : ''}</small></span>`;
   return `<div class="fside ${cls}" style="--side:${n.color}"><div class="fhead">${head}</div>
-    <div class="fnum"><span><b>${o.menText ?? num(o.men)}</b><small>men</small></span><span><b>${o.divsText ?? num(o.divs)}</b><small>division${o.divs === 1 && !o.divsText ? '' : 's'}</small></span><span><b>${o.corps}</b><small>corps</small></span></div>${o.under ?? ''}
+    <div class="fnum"><span><b>${o.menText ?? num(o.men)}</b><small>men</small></span><span><b>${o.divsText ?? num(o.divs)}</b><small>division${o.divs === 1 && !o.divsText ? '' : 's'}</small></span>${o.guardOf ? '' : `<span><b>${o.corps}</b><small>corps</small></span>`}</div>${o.under ?? ''}
     <div class="fcards">${o.cards}</div></div>`;
 }
 

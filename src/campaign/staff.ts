@@ -99,8 +99,9 @@ export function startOpen(g: Game, wide = true): Game {
   startEngineers(g);
   openTraits(g);
   openTech(g);
-  openStores(g);
+  // America's air commands stand on their fields before the depots are counted: the stores open with what they burn.
   openWorldAir(g);
+  openStores(g);
   openAirWar(g);
   openCarriers(g);
   openSieges(g);
