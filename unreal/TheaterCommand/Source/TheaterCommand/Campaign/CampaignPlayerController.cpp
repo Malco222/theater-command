@@ -800,6 +800,35 @@ void ACampaignPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// (Brian, 17 November 2026: "how do we make the game run more smooth". The art director's speed brief, group A,
+	// all at once: a map seen from above needs one sun, one soft fill, the relief shade already painted into the
+	// ground and the table lamp. Bounced light worked out each frame, mirror reflections, fine contact shade and the
+	// lens's blurs are given up; shadows are softer; the map is drawn at two thirds of the window each way and
+	// sharpened up, with the frame, the cards and the plates drawn after at full size. Timed inside one running game
+	// on his Mac, over New York and Louisiana at playing height: the graphics chip's share of a frame falls from
+	// 22.8 ms to 15.9, and the picture's light stays within one part in a hundred. "-TheaterOldLight" keeps the
+	// old settings, for a picture to set beside the new.)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")))
+	{
+		static const TPair<const TCHAR*, const TCHAR*> Trims[] = {
+			{ TEXT("r.DynamicGlobalIlluminationMethod"), TEXT("0") },
+			{ TEXT("r.ReflectionMethod"), TEXT("0") },
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("0") },
+			{ TEXT("r.ContactShadows"), TEXT("0") },
+			{ TEXT("sg.ShadowQuality"), TEXT("2") },
+			{ TEXT("r.DepthOfFieldQuality"), TEXT("0") },
+			{ TEXT("r.LensFlareQuality"), TEXT("0") },
+			{ TEXT("r.LightShaftQuality"), TEXT("0") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& Trim : Trims)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(Trim.Key))
+			{
+				Variable->Set(Trim.Value, ECVF_SetByCode);
+			}
+		}
+	}
+
 	FInputModeGameAndUI Mode;
 	Mode.SetHideCursorDuringCapture(false);
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -3989,11 +4018,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		if (ViewWidth > 0 && ViewHeight > 0)
 		{
 			// ("-TheaterMapSize=67": the map drawn at that many hundredths of a 1600 by 1000 window each way, for timing a trim before it is decided.)
+			// (The art director's group A, item 5: the map at two thirds of a 1600 by 1000 window each way. It was at
+			// about four fifths. "-TheaterOldLight" keeps the old size with the old light.)
 			static const double Budget = []
 			{
 				int32 Hundredths = 0;
 				return FParse::Value(FCommandLine::Get(), TEXT("TheaterMapSize="), Hundredths) && Hundredths >= 40 && Hundredths <= 100
-					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0) : 1250.0 * 780.0;
+					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0)
+					: FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")) ? 1250.0 * 780.0 : 1072.0 * 670.0;
 			}();
 			const int32 Percent = FMath::Clamp(FMath::RoundToInt32(100.0 * FMath::Sqrt(Budget / (static_cast<double>(ViewWidth) * ViewHeight))), 50, 100);
 			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))

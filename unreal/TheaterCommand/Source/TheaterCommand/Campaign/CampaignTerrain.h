@@ -37,6 +37,12 @@ public:
 
 	/** Works out how far every point is from a border between two nations. Run again when ground changes hands. */
 	void MeasureFrontiers(const FCampaignMapData& Data);
+	/**
+	 * (Speed, 17 November 2026.) The same for one box of the grid, where ground has just changed hands: the field is
+	 * measured again inside the box and left as it stands beyond it. The box must reach past the changed provinces by
+	 * as far as the field is ever read (the band of stain along a frontier), so that what is stale beyond it is never used.
+	 */
+	void MeasureFrontiers(const FCampaignMapData& Data, int32 I0, int32 J0, int32 I1, int32 J1);
 
 	int32 Index(int32 I, int32 J) const { return J * NX + I; }
 
