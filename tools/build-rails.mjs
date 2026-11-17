@@ -4,18 +4,25 @@
 // [region, region, x, y]: the two provinces it joins and the point where it crosses from one into the other.
 // Run after build-geo-campaign and build-rivers.
 // With 'world' it lays the net of the wider world the same way, on the provinces of world-map.json (run after
-// build-geo-world and build-rivers world), written to world-rails.json.
+// build-geo-world and build-rivers world), written to world-rails.json. With 'far' it lays the net of the far
+// side on the new provinces of world-next.json (run after build-geo-far and build-rivers far) and writes
+// world-next-rails.json: today's lines, then the new ones.
 import fs from 'node:fs';
 import { GROUND, NEAREST } from '../data/campaign/rails.mjs';
 
-const world = process.argv.includes('world');
-const { ADD, CUT, NO_RAIL } = world
-  ? await import('../data/campaign/world.mjs').then((m) => ({ ADD: m.WORLD_RAIL_ADD, CUT: m.WORLD_RAIL_CUT, NO_RAIL: new Set(m.WORLD_NO_RAIL) }))
-  : await import('../data/campaign/rails.mjs').then((m) => ({ ADD: m.ADD, CUT: m.CUT, NO_RAIL: new Set() }));
-const file = world ? 'world' : 'campaign';
-const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${file}-map.json`, import.meta.url), 'utf8'));
-// The provinces as a list, and by their numbers: the new world's are numbered on from Europe's.
-const L = map.regions;
+const far = process.argv.includes('far');
+const world = !far && process.argv.includes('world');
+const { ADD, CUT, NO_RAIL } = far
+  ? await import('../data/campaign/far.mjs').then((m) => ({ ADD: m.FAR_RAIL_ADD, CUT: m.FAR_RAIL_CUT, NO_RAIL: new Set(m.FAR_NO_RAIL) }))
+  : world
+    ? await import('../data/campaign/world.mjs').then((m) => ({ ADD: m.WORLD_RAIL_ADD, CUT: m.WORLD_RAIL_CUT, NO_RAIL: new Set(m.WORLD_NO_RAIL) }))
+    : await import('../data/campaign/rails.mjs').then((m) => ({ ADD: m.ADD, CUT: m.CUT, NO_RAIL: new Set() }));
+const file = far ? 'world-next' : world ? 'world' : 'campaign';
+const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${far ? 'world-next' : `${file}-map`}.json`, import.meta.url), 'utf8'));
+// The provinces as a list, and by their numbers: the new world's are numbered on from Europe's. On the far side
+// the net is laid over the new provinces only, and today's lines are kept as they stand in world-rails.json.
+const L = far ? map.regions.filter((r) => r.id >= map.first + map.stages[0]) : map.regions;
+const before = far ? JSON.parse(fs.readFileSync(new URL('../src/generated/world-rails.json', import.meta.url), 'utf8')).links : [];
 const R = [];
 for (const r of L) R[r.id] = r;
 const byName = new Map(L.map((r) => [r.name, r]));
@@ -104,7 +111,7 @@ function via(a, b) {
   return [r1(best[0]), r1(best[1])];
 }
 const links = [...lines].map((k) => k.split(':').map(Number)).sort((p, q) => p[0] - q[0] || p[1] - q[1]).map(([a, b]) => [a, b, ...via(R[a], R[b])]);
-fs.writeFileSync(new URL(`../src/generated/${file}-rails.json`, import.meta.url), JSON.stringify({ links }) + '\n');
+fs.writeFileSync(new URL(`../src/generated/${file}-rails.json`, import.meta.url), JSON.stringify({ links: [...before, ...links] }) + '\n');
 const on = new Set(links.flatMap(([a, b]) => [a, b]));
 console.log(`rails: ${links.length} lines of ${edges.length} borders, ${on.size} provinces on the net, ${cities.length} cities; off the net: ${L.filter((r) => !on.has(r.id)).map((r) => r.name).join(', ') || 'none'}`);
 if (joined.length) console.log(`joined within a country: ${joined.join(', ')}`);

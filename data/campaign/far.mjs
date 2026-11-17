@@ -4,6 +4,10 @@
 // chart are made, and writes src/generated/world-next.json. The provinces follow today's in number (576 up), in
 // the order of the slices below and of each slice's list. Add new ones at the end of the last slice.
 //
+// To build: node tools/build-geo-far.mjs, then node tools/build-rivers.mjs far, then node tools/build-rails.mjs far
+// (world-next.json, world-next-rivers.json, world-next-rails.json), and node tools/check-reach.mjs to judge the
+// seas by the Pacific planner's test.
+//
 // [name, lat, lon, owner, terrain, victory points, factories, flags]   (flags as in regions.mjs, and 'islet', 'disc')
 // Longitudes are written as an atlas writes them, east positive: the tool counts them eastward from today's west
 // edge (141 W), so Hawaii and Alaska lie at the far east end of the chart, beside the America they belong to.
@@ -244,6 +248,7 @@ export const PACIFIC_REGIONS = [
   ['Hanoi', 21.03, 105.85, 'FRA', 'plains', 2, 0, { port: 1, col: 1 }],
   ['Vinh', 18.67, 105.6, 'FRA', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Hue', 16.46, 107.5, 'FRA', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Qui Nhon', 13.9, 109.0, 'FRA', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Cam Ranh', 12.3, 108.95, 'FRA', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Saigon', 10.85, 106.65, 'FRA', 'plains', 2, 0, { port: 1, col: 1, fort: [1, 'JAP'] }],
   ['Phnom Penh', 11.56, 104.92, 'FRA', 'plains', 1, 0, { port: 1, col: 1 }],
@@ -254,6 +259,7 @@ export const PACIFIC_REGIONS = [
   // ---- Thailand.
   ['Bangkok', 13.75, 100.5, 'THA', 'plains', 3, 0, { port: 1, cap: 1 }],
   ['Chiang Mai', 18.79, 98.98, 'THA', 'mountain', 0, 0, {}],
+  ['Phitsanulok', 16.82, 100.26, 'THA', 'plains', 0, 0, {}],
   ['Korat', 14.97, 102.1, 'THA', 'plains', 0, 0, {}],
   ['Udon', 17.2, 102.79, 'THA', 'plains', 0, 0, {}],
   ['Kra', 9.2, 99.2, 'THA', 'forest', 0, 0, { port: 1 }],
@@ -437,6 +443,119 @@ export const FAR_LAKES = [
   ['Lake Baikal', 456, [[51.5, 103.7], [51.85, 104.9], [52.3, 106.0], [52.9, 107.0], [53.4, 107.6], [54.0, 108.6], [54.9, 109.3], [55.75, 109.6], [55.7, 109.95], [55.0, 109.8], [54.3, 109.5], [53.7, 109.0], [53.0, 108.2], [52.5, 107.2], [52.2, 106.4], [51.75, 105.7], [51.45, 104.6]]],
   // The Aral Sea at its 1939 shore.
   ['Aral Sea', 53, [[46.75, 61.6], [46.5, 60.6], [46.0, 59.7], [45.3, 58.9], [44.6, 58.3], [43.9, 58.25], [43.55, 59.2], [43.75, 60.3], [44.3, 61.1], [44.9, 61.7], [45.5, 61.95], [46.2, 61.95]]],
+];
+
+/**
+ * The great rivers of the far side, as in world.mjs: [name, course in [lat, lon]]. tools/build-rivers.mjs (run
+ * with 'far') finds the crossings: neighbouring provinces whose centres lie on opposite banks.
+ */
+export const FAR_RIVERS = [
+  // China. The Yellow River runs as it ran from June 1938 to 1947, south-east from the broken dykes above
+  // Chengchow to the Huai: the flood was the front between the two armies in Honan.
+  ['Yangtze', [[30.0, 99.1], [28.0, 99.3], [26.87, 99.95], [27.6, 100.4], [26.6, 101.7], [26.2, 102.9], [27.4, 103.2], [28.77, 104.63], [28.88, 105.44], [29.56, 106.58], [29.7, 107.4], [30.81, 108.38], [31.02, 109.47], [30.7, 111.29], [30.32, 112.25], [29.75, 112.9], [29.45, 113.15], [30.0, 113.9], [30.58, 114.29], [30.22, 115.1], [29.73, 116.0], [30.51, 117.05], [31.35, 118.37], [32.08, 118.75], [32.2, 119.45], [31.95, 120.3], [31.75, 121.1], [31.4, 121.9]]],
+  ['Yellow River', [[36.06, 103.8], [37.5, 105.0], [38.5, 106.4], [39.7, 106.8], [40.7, 107.4], [40.6, 109.85], [40.3, 111.2], [39.0, 111.1], [38.0, 110.5], [37.0, 110.45], [36.1, 110.45], [35.6, 110.6], [34.6, 110.3], [34.8, 111.2], [34.85, 112.5], [34.9, 113.65], [34.2, 114.3], [33.6, 114.65], [32.9, 115.8], [32.6, 116.6], [32.95, 117.35], [33.2, 118.4], [33.8, 119.3], [34.3, 120.2]]],
+  ['Han', [[33.07, 107.03], [32.7, 109.0], [32.8, 110.8], [32.38, 111.67], [32.02, 112.15], [31.2, 112.6], [30.4, 113.4], [30.57, 114.28]]],
+  ['West River', [[22.8, 108.3], [23.1, 109.6], [23.4, 110.1], [23.48, 111.3], [23.15, 112.0], [23.05, 112.5], [22.75, 113.1], [22.3, 113.55]]],
+  // Manchuria and the Soviet frontier: the Argun and the Amur, the Ussuri, the Sungari, the Liao, and Korea's two
+  // frontier rivers.
+  ['Argun', [[49.6, 117.9], [50.25, 119.3], [51.3, 120.0], [52.3, 120.7], [53.33, 121.5]]],
+  ['Amur', [[53.33, 121.5], [53.4, 124.1], [52.5, 126.3], [51.2, 126.9], [50.25, 127.5], [49.4, 129.0], [48.8, 130.5], [47.7, 131.0], [47.7, 132.5], [48.2, 134.4], [48.45, 135.05], [49.4, 136.5], [50.55, 137.0], [51.3, 138.6], [52.4, 140.4], [53.15, 140.7], [53.0, 141.2]]],
+  ['Ussuri', [[45.1, 133.5], [45.93, 133.7], [46.8, 134.05], [47.7, 134.7], [48.4, 134.9]]],
+  ['Sungari', [[43.85, 126.55], [44.6, 126.1], [45.3, 124.8], [45.78, 126.6], [46.0, 128.7], [46.8, 130.3], [47.3, 131.5], [47.7, 132.5]]],
+  ['Liao', [[43.6, 122.3], [43.0, 123.6], [42.0, 123.0], [41.3, 122.4], [40.7, 122.1]]],
+  ['Yalu', [[39.9, 124.3], [40.1, 124.4], [40.45, 124.9], [40.9, 125.9], [41.3, 126.5], [41.8, 126.9], [41.5, 127.8], [41.4, 128.2]]],
+  ['Tumen', [[42.0, 128.9], [42.45, 129.6], [42.95, 129.85], [42.85, 130.2], [42.3, 130.7]]],
+  // South-East Asia.
+  ['Red River', [[22.5, 103.97], [21.7, 104.87], [21.03, 105.85], [20.3, 106.55]]],
+  ['Mekong', [[25.2, 99.35], [22.0, 100.8], [21.2, 101.15], [20.35, 100.1], [19.9, 102.14], [19.25, 101.75], [18.2, 101.45], [17.9, 101.67], [17.97, 102.6], [18.4, 103.7], [17.4, 104.8], [16.55, 104.75], [15.1, 105.8], [13.55, 105.95], [12.5, 106.0], [11.56, 104.93], [10.75, 105.2], [10.0, 106.3], [9.8, 106.6]]],
+  ['Chao Phraya', [[15.7, 100.13], [14.9, 100.4], [13.75, 100.5], [13.55, 100.6]]],
+  ['Salween', [[28.0, 98.65], [26.5, 98.9], [25.3, 98.85], [24.3, 98.95], [23.5, 98.8], [22.0, 98.7], [20.5, 98.6], [19.5, 97.9], [18.5, 97.5], [17.5, 97.75], [16.55, 97.6]]],
+  ['Sittang', [[19.8, 96.2], [18.93, 96.45], [17.9, 96.8], [17.2, 96.9], [16.4, 96.95]]],
+  ['Irrawaddy', [[25.4, 97.4], [24.25, 97.23], [24.18, 96.33], [23.0, 96.0], [21.98, 96.06], [21.46, 95.38], [20.9, 94.82], [20.46, 94.87], [18.82, 95.22], [17.65, 95.45], [15.9, 95.2]]],
+  ['Chindwin', [[26.0, 95.7], [24.87, 94.9], [23.2, 94.3], [22.1, 95.13], [21.45, 95.25]]],
+  // Siberia, Alaska and Australia.
+  ['Lena', [[57.8, 108.1], [59.45, 112.57], [60.72, 114.93], [60.37, 120.43], [61.48, 129.15], [62.03, 129.73], [63.92, 127.47], [66.77, 123.37], [70.68, 127.37], [71.4, 127.3]]],
+  ['Yukon', [[64.8, -141.0], [65.83, -144.06], [66.56, -145.27], [66.0, -149.1], [65.17, -152.08], [64.74, -155.5], [64.74, -156.9], [64.33, -158.72], [62.2, -159.77], [61.78, -161.32], [62.6, -164.4]]],
+  ['Murray', [[-36.8, 148.2], [-36.2, 148.0], [-36.0, 147.5], [-36.08, 146.9], [-36.13, 144.75], [-35.34, 143.55], [-34.2, 142.15], [-34.17, 140.75], [-34.03, 139.67], [-35.12, 139.27], [-35.55, 138.88]]],
+];
+/** Crossings the geometry finds that are not there: [region, region]. */
+export const FAR_RIVER_CUT = [
+  // Both stand on the Soviet bank: the straight road between them only clips Manchukuo's northern corner.
+  ['Skovorodino', 'Dauria'],
+];
+/** Crossings the geometry misses: [region, region, river]. */
+export const FAR_RIVER_ADD = [
+  // The whole frontier of Manchukuo and the Soviet Union but for the hills behind Vladivostok is a river, and so
+  // is Korea's with Manchukuo.
+  ['Heiho', 'Skovorodino', 'Amur'], ['Hailar', 'Skovorodino', 'Argun'], ['Kiamusze', 'Blagoveshchensk', 'Amur'], ['Kiamusze', 'Iman', 'Ussuri'], ['Mutankiang', 'Iman', 'Ussuri'],
+  ['Chongjin', 'Mutankiang', 'Tumen'], ['Chongjin', 'Tunghwa', 'Tumen'],
+  // The Yangtze's cities stand on its banks, so the roads between them cross it at one end: Pukow lies over the
+  // river from Nanking, Anking and Hankow on the north bank, Chungking between its two rivers.
+  ['Nanking', 'Pengpu', 'Yangtze'], ['Nanking', 'Anking', 'Yangtze'], ['Anking', 'Hangchow', 'Yangtze'], ['Anking', 'Chuchow', 'Yangtze'], ['Anking', 'Nanchang', 'Yangtze'],
+  ['Hankow', 'Nanchang', 'Yangtze'], ['Hankow', 'Changsha', 'Yangtze'], ['Ichang', 'Changsha', 'Yangtze'], ['Chungking', 'Changsha', 'Yangtze'], ['Chungking', 'Kweiyang', 'Yangtze'],
+  // The flood of 1938 lay between Kaifeng and the country to its south-west.
+  ['Kaifeng', 'Nanyang', 'Yellow River'],
+  // The Salween gorge was the front in Yunnan from 1942; the Chindwin and the Irrawaddy lie between Mandalay
+  // and the hills to its west.
+  ['Paoshan', 'Lashio', 'Salween'], ['Paoshan', 'Myitkyina', 'Salween'], ['Mandalay', 'Kalewa', 'Chindwin'], ['Yenangyaung', 'Akyab', 'Irrawaddy'],
+  // The Mekong is the frontier of Laos and Thailand, and lies between Phnom Penh and Saigon.
+  ['Vientiane', 'Udon', 'Mekong'], ['Pakse', 'Udon', 'Mekong'], ['Pakse', 'Korat', 'Mekong'], ['Phnom Penh', 'Saigon', 'Mekong'],
+];
+
+/**
+ * The railways of the far side, laid by tools/build-rails.mjs (run with 'far') as the new world's are: a line to
+ * every province but these, main lines between the cities. No line ran into these in 1939: Alaska off its one
+ * railway; China's west and south-west, where the war was fed by road and river; Mongolia but for the army's line
+ * to Choibalsan; Siberia off the Trans-Siberian; Laos, the Arakan and Tenasserim; Borneo, Celebes and the islands
+ * east of Java; Mindanao; New Guinea; Australia's north-west and Cape York.
+ */
+export const FAR_NO_RAIL = [
+  'Copper River', 'Nome', 'Kuskokwim', 'Yukon Flats', 'Arctic Slope', 'Bristol Bay',
+  'Silingol', 'Siangyang', 'Ichang', 'Anking', 'Kanchow', 'Foochow', 'Amoy', 'Swatow', 'Pakhoi', 'Hainan', 'Nanning',
+  'Chungking', 'Chengtu', 'Kweiyang', 'Paoshan', 'Sikang', 'Yenan', 'Hanchung', 'Lanchow', 'Ningsia', 'Etsin Gol', 'Sining', 'Yumen', 'Tsaidam',
+  'Tihwa', 'Hami', 'Kuldja', 'Kashgar', 'Khotan', 'Charkhlik', 'Lhasa', 'Chamdo', 'Gartok', 'Changtang',
+  'Ulan Bator', 'Sain Shand', 'Gobi', 'Uliassutai', 'Kobdo',
+  'Nikolayevsk', 'North Sakhalin', 'Bodaibo', 'Aldan', 'Yakutsk', 'Vilyuisk', 'Tiksi', 'Verkhoyansk', 'Kolyma', 'Okhotsk', 'Magadan', 'Koryak', 'Anadyr', 'Providenya', 'Ust-Kamchatsk', 'Petropavlovsk',
+  'Pakse', 'Vientiane', 'Luang Prabang', 'Mergui', 'Akyab', 'Kalewa',
+  'Kuching', 'Brunei', 'Jesselton', 'Sandakan', 'Djambi', 'Pakanbaru', 'Bali', 'Flores', 'Koepang', 'Dili',
+  'Pontianak', 'Bandjermasin', 'Balikpapan', 'Tarakan', 'Makassar', 'Kendari', 'Palu', 'Menado', 'Ambon',
+  'Vogelkop', 'Sarmi', 'Hollandia', 'Mimika', 'Merauke',
+  'Aparri', 'Bataan', 'Del Monte', 'Davao', 'Zamboanga',
+  'Port Moresby', 'Milne Bay', 'Buna', 'Lae', 'Madang', 'Wewak', 'Kerema', 'Rabaul', 'Cape Gloucester',
+  'Wyndham', 'Cape York',
+];
+/** Lines the tool leaves out that history built: [region, region]. */
+export const FAR_RAIL_ADD = [
+  // Korea's main line from Pusan to Seoul and on to Wonsan, and the line over the Tumen to Mutankiang.
+  ['Seoul', 'Pusan'], ['Seoul', 'Hamhung'], ['Chongjin', 'Mutankiang'],
+  // Peiping to Mukden by Shanhaikwan; Peiping to Hankow by Shihkiachwang, Chengchow and Sinyang; the line down
+  // Shansi; Hengyang to Kweilin; Hanoi to Kunming; the Manchurian line from Ssupingkai to Tsitsihar.
+  ['Tientsin', 'Jehol'], ['Peiping', 'Shihkiachwang'], ['Shihkiachwang', 'Kaifeng'], ['Kaifeng', 'Nanyang'], ['Nanyang', 'Hankow'],
+  ['Tatung', 'Taiyuan'], ['Taiyuan', 'Linfen'], ['Hengyang', 'Kweilin'], ['Hanoi', 'Kunming'], ['Tungliao', 'Tsitsihar'],
+  // The Trans-Siberian between Chita and Skovorodino.
+  ['Skovorodino', 'Chita'],
+  // The coast line of Annam; Siam's northern line; the line to Kota Bharu up the middle of Malaya; Burma's main
+  // line to Mandalay.
+  ['Hue', 'Qui Nhon'], ['Qui Nhon', 'Cam Ranh'], ['Bangkok', 'Phitsanulok'], ['Phitsanulok', 'Chiang Mai'], ['Singora', 'Kota Bharu'], ['Kota Bharu', 'Kuantan'], ['Kuantan', 'Johore'], ['Ipoh', 'Kuala Lumpur'],
+  ['Toungoo', 'Mandalay'],
+  // Australia's lines across the desert: Perth to Port Augusta, the Ghan to Alice Springs, Broken Hill's two
+  // lines; and Brisbane's western line.
+  ['Perth', 'Kalgoorlie'], ['Kalgoorlie', 'Nullarbor'], ['Nullarbor', 'Adelaide'], ['Adelaide', 'Oodnadatta'], ['Oodnadatta', 'Alice Springs'], ['Adelaide', 'Broken Hill'], ['Broken Hill', 'Sydney'],
+  ['Brisbane', 'Charleville'],
+];
+/** Lines the tool lays that were never there: [region, region]. */
+export const FAR_RAIL_CUT = [
+  // No bridge crossed the Amur, the Ussuri or the Tumen into the Soviet Union; the only lines over that frontier
+  // ran by Manchouli and by Suifenho.
+  ['Chongjin', 'Vladivostok'], ['Mutankiang', 'Iman'], ['Kiamusze', 'Khabarovsk'], ['Heiho', 'Blagoveshchensk'], ['Skovorodino', 'Dauria'],
+  // China's lines ran north and south: none joined Tientsin to Shihkiachwang, Hsuchow to Nanking but by Pengpu,
+  // Pengpu or Nanchang to Hankow, or Kukong to Kweilin; the Shansi line stopped at the Yellow River; the line
+  // from Burma to Yunnan was never finished.
+  ['Tientsin', 'Shihkiachwang'], ['Hsuchow', 'Nanking'], ['Pengpu', 'Hankow'], ['Hankow', 'Nanchang'], ['Kukong', 'Kweilin'], ['Linfen', 'Loyang'], ['Kunming', 'Lashio'],
+  // No line ran from Annam or Cambodia into Siam's north-east, from Saigon to Phnom Penh, or from Siam into Burma
+  // before 1943.
+  ['Vinh', 'Udon'], ['Saigon', 'Phnom Penh'], ['Battambang', 'Korat'], ['Bangkok', 'Moulmein'], ['Chiang Mai', 'Toungoo'], ['Phitsanulok', 'Moulmein'], ['Phitsanulok', 'Udon'], ['Phitsanulok', 'Korat'],
+  ['Kota Bharu', 'Penang'], ['Ipoh', 'Kuantan'], ['Kuantan', 'Kuala Lumpur'], ['Loyang', 'Nanyang'], ['Nanyang', 'Sian'], ['Rockhampton', 'Charleville'],
 ];
 
 /** How large an islet is drawn: half its width and half its height in map units (a unit is 2.8 km north to south). */

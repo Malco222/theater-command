@@ -4,6 +4,7 @@
 //
 //   node tools/draw-chart.mjs out.svg [--file=world-map.json] [--ll=north,west,south,east] [--scale=0.5]
 //                                     [--names=0|1|2] [--links=0|1] [--seas=0|1] [--font=1.5] [--labels=file.json] [--title=...]
+//                                     [--rivers=1] [--rails=1]
 //
 // --ll is in degrees as an atlas writes them (east positive); west may be greater than east to cross the date line.
 import fs from 'node:fs';
@@ -16,6 +17,7 @@ const K = Math.cos((50 * Math.PI) / 180) * 40, W = 360 * K;
 const x0f = map.frame.x0, round = map.frame.x1 - map.frame.x0 > W - 1;
 const px = (lon) => { let x = (lon + 11) * K; while (x < x0f) x += W; while (x >= x0f + W) x -= W; return x; };
 const py = (lat) => (71.4 - lat) * 40;
+const px0 = (x) => { let v = x; while (v < x0f) v += W; while (v >= x0f + W) v -= W; return v; };
 
 let bx0 = map.frame.x0, bx1 = map.frame.x1, by0 = map.frame.y0, by1 = map.frame.y1;
 const ll = opt('ll', null);
@@ -136,6 +138,33 @@ if (showLinks && showSeas) {
       out.push(`<path d="M${X(z.x, d)} ${Y(z.y)}L${X(ox, d)} ${Y(o.y)}" stroke="#35607a" stroke-width="1.1" opacity="0.55"/>`);
     }
   });
+}
+// --rivers=1 and --rails=1 draw the chart's rivers and railways, from the files that stand beside it
+// (world-next.json has world-next-rivers.json and world-next-rails.json, world-map.json has world-rivers.json and world-rails.json).
+{
+  const base = opt('file', 'world-next.json').replace(/-map\.json$|\.json$/, '');
+  const read = (name) => { try { return JSON.parse(fs.readFileSync(new URL(`../src/generated/${base}-${name}.json`, import.meta.url))); } catch { return null; } };
+  const rivers = Number(opt('rivers', 0)) ? read('rivers') : null, rails = Number(opt('rails', 0)) ? read('rails') : null;
+  const byId = new Map(map.regions.map((r) => [r.id, r]));
+  const wrapTo = (x, ref) => { let v = x; if (round) { while (v - ref > W / 2) v -= W; while (ref - v > W / 2) v += W; } return v; };
+  for (const d of turns) {
+    for (const rv of rivers?.rivers ?? []) {
+      const pts = rv.pts.map(([x, y]) => [px0(x), y]);
+      if (!pts.some(([x, y]) => inBox(x, y, d, 100))) continue;
+      out.push(`<path d="M${pts.map(([x, y], i) => `${X(i ? wrapTo(x, pts[i - 1][0]) : x, d)} ${Y(y)}`).join('L')}" fill="none" stroke="#2f7fb5" stroke-width="${f1(1.6 * font)}" stroke-linejoin="round" opacity="0.9"/>`);
+    }
+    for (const [a, b, x, y] of rails?.links ?? []) {
+      const p = byId.get(a), q = byId.get(b);
+      if (!p || !q || (!inBox(p.x, p.y, d, 60) && !inBox(q.x, q.y, d, 60))) continue;
+      const mx = wrapTo(x, p.x), qx = wrapTo(q.x, p.x);
+      out.push(`<path d="M${X(p.x, d)} ${Y(p.y)}L${X(mx, d)} ${Y(y)}L${X(qx, d)} ${Y(q.y)}" fill="none" stroke="#3a3a3a" stroke-width="${f1(1.1 * font)}" stroke-dasharray="5 2" opacity="0.85"/>`);
+    }
+    for (const [a, b, , x, y] of rivers?.crossings ?? []) {
+      const p = byId.get(a);
+      if (!p || !inBox(wrapTo(x, p.x), y, d)) continue;
+      out.push(`<rect x="${f1(X(wrapTo(x, p.x), d) - 2.5)}" y="${f1(Y(y) - 2.5)}" width="5" height="5" fill="#fff" stroke="#2f7fb5" stroke-width="1"/>`);
+    }
+  }
 }
 const halo = 'paint-order="stroke" stroke="#fff" stroke-width="${f1(2.4 * font)}" stroke-linejoin="round"';
 if (showSeas) {
