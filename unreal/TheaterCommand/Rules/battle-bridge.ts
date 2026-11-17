@@ -34,7 +34,7 @@
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
 //                                   battle is over; null before that (after an air battle: what TC.act returns for the raid)
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
-//                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'night', 'superiority')
+//                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //
 // A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }

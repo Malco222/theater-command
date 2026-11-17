@@ -80,7 +80,13 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   const W = Math.round(f.w * PAINT), H = Math.round(f.h * PAINT), cs = f.cell * PAINT;
   const [out, x] = sheet(W, H);
   const [detail, dx] = sheet(W, H);
-  const g = (c: number, r: number): Ground => GROUNDS[f.ground[Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c))]];
+  // A bunker's cell is painted as the ground it was dug into: the sign alone marks it, drawn on the screen (the art director).
+  const raw = (c: number, r: number): Ground => GROUNDS[f.ground[Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c))]];
+  const g = (c: number, r: number): Ground => {
+    const i = Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c));
+    const under = f.beneath?.[i];
+    return GROUNDS[under !== undefined ? under : f.ground[i]];
+  };
   const hgt = (c: number, r: number): number => f.height[Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c))];
   // Field row r is metres north; the picture's row 0 is the north edge.
   const px = (c: number): number => c * cs;
@@ -274,7 +280,7 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   // 3). Only their places here: drawFrame draws the sign at its whole-field size on the screen.
   const forts: [number, number][] = [];
   {
-    const isBunker = (c: number, r: number): boolean => g(c, r) === 'bunker';
+    const isBunker = (c: number, r: number): boolean => raw(c, r) === 'bunker';
     const seen = new Uint8Array(f.cols * f.rows);
     for (let i = 0; i < seen.length; i++) {
       const c0 = i % f.cols, r0 = Math.floor(i / f.cols);

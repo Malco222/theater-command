@@ -52,6 +52,12 @@ export interface LandField {
   zones: { att: [number, number, number, number]; def: [number, number, number, number] };
   /** The town's centre, where there is one on the field. */
   town: { x: number; y: number; r: number } | null;
+  /**
+   * What lay under each bunker cell before the bunker, by cell index: the screens paint that ground (a bunker in a wood
+   * keeps its trees, and a bunker thinned off the screen leaves no trace, the art director), while the sim keeps the
+   * bunker's cover.
+   */
+  beneath?: Record<number, number>;
 }
 
 export const FIELD = { w: 3000, h: 2000, cell: 25 };
@@ -199,6 +205,7 @@ export function buildField(place: LandPlace, seed: number): LandField {
 
   // Fortress works: bunkers along the front edge of the line the defenders draw up on, across their zone and a little
   // past it, thicker with the level, so the defenders stand in their works (the art director, ruling 226(12)).
+  const beneath: Record<number, number> = {};
   if (place.fort > 0) {
     // The defenders' front row stands 40 m inside their zone (deploy in units.ts); its front edge 20 m before that.
     const fy = h * 0.62 + 40 - 20 - cell, every = Math.round(10 / place.fort);
@@ -206,13 +213,13 @@ export function buildField(place: LandPlace, seed: number): LandField {
       const r = Math.floor(fy / cell);
       for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
         const i = at(c + dc, r + dr);
-        if (ground[i] !== G.water && ground[i] !== G.bridge && ground[i] !== G.blown) ground[i] = G.bunker;
+        if (ground[i] !== G.water && ground[i] !== G.bridge && ground[i] !== G.blown) { if (ground[i] !== G.bunker) beneath[i] = ground[i]; ground[i] = G.bunker; }
       }
     }
   }
 
   return {
-    w, h, cell, cols, rows, ground, height,
+    w, h, cell, cols, rows, ground, height, beneath,
     zones: { att: [w * 0.12, 120, w * 0.88, 480], def: [w * 0.12, h * 0.62, w * 0.88, h * 0.9] },
     town,
   };

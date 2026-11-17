@@ -94,6 +94,7 @@ button { cursor: pointer; }
 .ucard .ustate b { color: var(--paper-100); }
 .ucard .ustate.warn b { color: var(--amber); }
 .ucard .ustate.bad b { color: var(--alarm); }
+.ucard .ustate.muted b { color: var(--text-muted); }
 .ucard.is-off { opacity: .45; border-style: dashed; }
 .ucard[hidden], .tmore[hidden], .ugroup[hidden] { display: none; }
 /* A big battle's tray (the design director, b388): its blocks under their corps; a header picks up the corps. */
@@ -119,7 +120,7 @@ button { cursor: pointer; }
 .urow .rbar b.is-mid { background: var(--amber); }
 .urow .rbar b.is-low { background: var(--alarm); }
 /* "7 more ▸" and "◂ 7 more" (ruling 226(9)): a card of its own at the end of the row. */
-.tmore { flex: none; width: 112px; display: grid; place-items: center; font: 700 12px/16px var(--font-typed); letter-spacing: .06em; text-transform: uppercase; color: var(--paper-200); }
+.tmore { flex: none; min-width: 112px; padding: 0 12px; white-space: nowrap; display: grid; place-items: center; font: 700 12px/16px var(--font-typed); letter-spacing: .06em; text-transform: uppercase; color: var(--paper-200); }
 
 /* SINCE YOUR LAST BATTLE (ruling 226(11)): one line per change, the place in bold. */
 .since { margin: 0 0 18px; padding: 10px 16px; }
