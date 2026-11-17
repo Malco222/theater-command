@@ -40,6 +40,12 @@ class APlayerController;
  *                         of whose each province is are kept apart from the change by a lock held for a moment, and a
  *                         sheet that was in the making has the ground that changed painted again before it is shown.
  *                         0: the change waits for every sheet in the making to be finished, as before.
+ *   tc.Speed.KeptHeights  1 (default): the points the frontiers, the front line and the enemy's reach are laid on are
+ *                         worked out once and kept (ACampaignMapActor::SurfacePointKept), until a fine sheet stands up
+ *                         or goes over them. 0: every point is worked out again each time a line is laid, as before.
+ *   tc.Speed.DressSteps   1 (default): a fine sheet built on another thread is dressed (its pictures and paints made)
+ *                         a little at a time, about 8 ms a frame and one sheet at a time, before its tiles are stood up
+ *                         out of sight as ever. 0: every sheet that is ready is dressed whole in one frame, as before.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -67,6 +73,8 @@ namespace TheaterSpeed
 	bool FineAside();
 	bool StillMeshes(); // (on any thread)
 	bool HoldersLock();
+	bool KeptHeights();
+	bool DressSteps();
 
 	/**
 	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed

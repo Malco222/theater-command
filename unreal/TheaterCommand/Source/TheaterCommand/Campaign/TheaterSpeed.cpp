@@ -51,6 +51,12 @@ namespace
 	TAutoConsoleVariable<int32> CVarHoldersLock(
 		TEXT("tc.Speed.HoldersLock"), 1,
 		TEXT("1 lets ground change hands without waiting for the world's fine sheets still being modelled (a sheet in the making has the change painted in before it is shown); 0 waits for them, as before."));
+	TAutoConsoleVariable<int32> CVarKeptHeights(
+		TEXT("tc.Speed.KeptHeights"), 1,
+		TEXT("1 keeps the points the frontiers, the front line and the enemy's reach are laid on, until a fine sheet stands up or goes over them; 0 works every point out again each time, as before."));
+	TAutoConsoleVariable<int32> CVarDressSteps(
+		TEXT("tc.Speed.DressSteps"), 1,
+		TEXT("1 dresses a fine sheet a little at a time (about 8 ms a frame, one sheet at a time); 0 dresses every ready sheet whole in one frame, as before."));
 	TAutoConsoleVariable<int32> CVarFineAside(
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
@@ -90,6 +96,8 @@ namespace
 	double WindowClock = 0.0;
 	int32 WindowFrames = 0;
 	int32 WindowSlow = 0;
+	int32 WindowSlowBeside = 0; // (of those, the ones in or just after a frame the step player looked at the game)
+	bool bLookedBefore = false; // (the step player worked in the frame before this one)
 	double WindowWorst = 0.0;
 	double WindowGame = 0.0, WindowDraw = 0.0, WindowChip = 0.0;
 	int32 Summaries = 0;
@@ -288,6 +296,16 @@ namespace TheaterSpeed
 		return CVarHoldersLock.GetValueOnGameThread() != 0;
 	}
 
+	bool KeptHeights()
+	{
+		return CVarKeptHeights.GetValueOnGameThread() != 0;
+	}
+
+	bool DressSteps()
+	{
+		return CVarDressSteps.GetValueOnGameThread() != 0;
+	}
+
 	FHoldersRead::FHoldersRead()
 		: bHeld(!IsInGameThread())
 	{
@@ -422,7 +440,7 @@ namespace TheaterSpeed
 			}
 			RulesTallies().Reset();
 			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = 0.0;
-			WindowFrames = WindowSlow = 0;
+			WindowFrames = WindowSlow = WindowSlowBeside = 0;
 			return;
 		}
 		// (Slate's tick, its laying out and painting of every panel, is timed from its own start and end.)
@@ -447,13 +465,20 @@ namespace TheaterSpeed
 		// A long frame is named at once: every job that took a share of it, the longest first. (The jobs are counted
 		// from one start of the player's tick to the next, which is the frame just ended give or take its edges: a
 		// press's work can fall in the line before or the line after.)
+		// (Speed, 17 November, the design director's b414: every frame over 33 ms is named, not only those over 100 ms
+		// or with a job over 40, and a frame in which the step player looked at the game, or the one after it, where its
+		// picture is taken, is marked: its time is the harness's, which a player does not pay.)
+		static const int32 LookSlot = SlotFor(TEXT("HarnessLook"));
+		const bool bLookedNow = Each.IsValidIndex(LookSlot) && Each[LookSlot].Frame > 0;
+		const bool bBeside = bLookedNow || bLookedBefore;
+		bLookedBefore = bLookedNow;
 		{
 			uint64 Longest = 0;
 			for (const FSlot& Slot : Each)
 			{
 				Longest = FMath::Max(Longest, Slot.Frame);
 			}
-			if (DeltaSeconds > 0.1f || Ms(Longest) > 40.0)
+			if (DeltaSeconds > 0.0334f || Ms(Longest) > 20.0)
 			{
 				TArray<const FSlot*> Heavy;
 				for (const FSlot& Slot : Each)
@@ -469,9 +494,9 @@ namespace TheaterSpeed
 				{
 					Jobs += FString::Printf(TEXT("%s%s %.1f"), Jobs.IsEmpty() ? TEXT("") : TEXT(", "), *Slot->Name, Ms(Slot->Frame));
 				}
-				UE_LOG(LogTheater, Display, TEXT("Speed: a long frame, %.0f ms (game %.1f, draw %.1f, graphics chip %.1f ms); its jobs in ms (inner jobs counted in their outer ones too): %s"),
+				UE_LOG(LogTheater, Display, TEXT("Speed: a long frame, %.0f ms (game %.1f, draw %.1f, graphics chip %.1f ms)%s; its jobs in ms (inner jobs counted in their outer ones too): %s"),
 					DeltaSeconds * 1000.0, FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
-					Jobs.IsEmpty() ? TEXT("none of the timed jobs") : *Jobs);
+					bBeside ? TEXT(" [beside the step player's look]") : TEXT(""), Jobs.IsEmpty() ? TEXT("none of the timed jobs") : *Jobs);
 			}
 		}
 		// The frame just ended: its time, and each job's share of it.
@@ -484,6 +509,7 @@ namespace TheaterSpeed
 		WindowClock += DeltaSeconds;
 		++WindowFrames;
 		WindowSlow += DeltaSeconds > 0.0334f ? 1 : 0;
+		WindowSlowBeside += DeltaSeconds > 0.0334f && bBeside ? 1 : 0;
 		WindowWorst = FMath::Max(WindowWorst, static_cast<double>(DeltaSeconds));
 		WindowGame += FPlatformTime::ToMilliseconds(GGameThreadTime);
 		WindowDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
@@ -494,8 +520,8 @@ namespace TheaterSpeed
 		}
 
 		const double Frames = WindowFrames;
-		UE_LOG(LogTheater, Display, TEXT("Speed: %.1f s, %.1f frames a second (worst frame %.1f ms; %d of %d over 33 ms); game %.1f ms, draw %.1f ms, graphics chip %.1f ms"),
-			WindowClock, Frames / WindowClock, WindowWorst * 1000.0, WindowSlow, WindowFrames, WindowGame / Frames, WindowDraw / Frames, WindowChip / Frames);
+		UE_LOG(LogTheater, Display, TEXT("Speed: %.1f s, %.1f frames a second (worst frame %.1f ms; %d of %d over 33 ms, %d of those beside the step player's look); game %.1f ms, draw %.1f ms, graphics chip %.1f ms"),
+			WindowClock, Frames / WindowClock, WindowWorst * 1000.0, WindowSlow, WindowFrames, WindowSlowBeside, WindowGame / Frames, WindowDraw / Frames, WindowChip / Frames);
 		TArray<const FSlot*> Busy;
 		for (const FSlot& Slot : Each)
 		{
@@ -534,6 +560,6 @@ namespace TheaterSpeed
 		}
 		RulesTallies().Reset();
 		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = 0.0;
-		WindowFrames = WindowSlow = 0;
+		WindowFrames = WindowSlow = WindowSlowBeside = 0;
 	}
 }
