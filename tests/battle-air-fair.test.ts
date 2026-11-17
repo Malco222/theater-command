@@ -18,7 +18,8 @@ import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
 const RUNS = 30;
-const RAIDS: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['UK', 'bomb', 'Bremen']];
+// The play file's three (b401: the third a raid without escort whose card sits between 3 and 7 in 10).
+const RAIDS: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['FRA', 'bomb', 'Ruhr']];
 
 /** The play file's k-th battle: the September 1939 opening, with that battle's own luck (air-page.ts raidOf). */
 function game(k: number, nat: string): Game {
@@ -79,7 +80,15 @@ describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () 
     }
   }
 
-  it('Bremen is flown by the RAF from its own airfields, not by the Home Fleet', () => {
+  it('the third raid is unescorted, and its card sits between 3 and 7 in 10 (b401)', () => {
+    const r = raid(game(0, 'FRA'), 'FRA', 'bomb', 'Ruhr');
+    expect(r.ticket.att.forces.every((f) => f.kind === 'bmr')).toBe(true);
+    expect(r.ticket.place.chance).toBeGreaterThanOrEqual(0.3);
+    expect(r.ticket.place.chance).toBeLessThanOrEqual(0.7);
+    expect(r.ticket.def.forces.length).toBeGreaterThan(0);
+  });
+
+  it("a raid's groups fly from the nation's own airfields: Bremen would be the RAF's, not the Home Fleet's (b397)", () => {
     const r = raid(game(0, 'UK'), 'UK', 'bomb', 'Bremen');
     expect(r.ticket.place.from).toBe('land');
     expect(r.ticket.att.forces.map((f) => f.name).join(' ')).not.toMatch(/Home Fleet/);
@@ -89,7 +98,7 @@ describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () 
 
 describe('what the bombs do is decided on the field, by the campaign\'s law (b397)', () => {
   it('the law weighs the bombs as the rules do', () => {
-    for (const [nat, name] of [['GER', 'Alsace'], ['UK', 'Bremen']] as [string, string][]) {
+    for (const [nat, name] of [['GER', 'Alsace'], ['UK', 'Bremen'], ['FRA', 'Ruhr']] as [string, string][]) {
       const g = game(0, nat);
       const r = raid(g, nat, 'bomb', name);
       const L = r.ticket.place.bombs!;
@@ -174,13 +183,13 @@ describe('the break can be seen coming, and the staff says its chance now (rulin
 
   it("the score on the field is the stamp's: the aim slip's counts give the verdict the campaign books", () => {
     for (let k = 0; k < 6; k++) {
-      const g = game(k, 'UK');
-      const r = raid(g, 'UK', 'bomb', 'Bremen');
+      const g = game(k, 'FRA');
+      const r = raid(g, 'FRA', 'bomb', 'Ruhr');
       const s = airBattle(r.ticket);
       s.ai.def = true;
       space(s);
       const sc = s.score();
-      const rep = launchRaid(g, 'bomb', r.target, r.ids, 'UK', foughtAir(s.outcome()))!;
+      const rep = launchRaid(g, 'bomb', r.target, r.ids, 'FRA', foughtAir(s.outcome()))!;
       expect(sc.ratio >= 1).toBe(rep.won);
       const lost = rep.att.reduce((n, x) => n + x.lostFtr + x.lostBmr, 0);
       expect(lost).toBe(sc.lost.att);

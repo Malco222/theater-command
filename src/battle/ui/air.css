@@ -6,6 +6,7 @@
 .air .bbar { flex-wrap: nowrap; gap: 12px; }
 .air .btitle { flex: 1 1 220px; min-width: 0; }
 .air .btitle .tc-title-3 { line-height: 22px; }
+.air .btitle .nw { white-space: nowrap; }
 .air .bclock, .air .bspeed, .air .bacts { flex: none; }
 /* The clock box says the state over the time: PAUSED in brass, RUNNING in paper (ruling 226, mark 8). */
 .air .bclock { min-width: 64px; }

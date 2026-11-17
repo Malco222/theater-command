@@ -77,7 +77,10 @@ const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
 const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string }[] = [
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'bomb', name: 'Alsace' },
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'superiority', name: 'Alsace' },
-  { nat: 'UK', wars: ['GER'], kind: 'bomb', name: 'Bremen' },
+  // The third raid: a raid without escort whose card sits between 3 and 7 in 10, so the player's choices matter (the
+  // design director, b401). Over the Ruhr the raid is judged by its bombs against its own losses, which height and the
+  // run in decide; a raid without escort on a railway is won only if the line is cut, as the defenders lose nothing.
+  { nat: 'FRA', wars: ['GER'], kind: 'bomb', name: 'Ruhr' },
 ];
 
 /**
@@ -165,11 +168,21 @@ function aimSlip(sim: AirSim): [string, string, string] {
   }
 }
 
-/** What kind of battle it is, for the top bar's subtitle: "an escorted day raid", "a fight for the sky", "a night raid". */
+/**
+ * The title, for the top bar: where it must wrap, it wraps before "over", never inside either half (the UI director,
+ * 21:18Z): "The fight for the sky / over Alsace".
+ */
+function titleWords(title: string): string {
+  const at = title.lastIndexOf(' over ');
+  if (at < 0) return esc(title);
+  return `<span class="nw">${esc(title.slice(0, at))}</span> <span class="nw">${esc(title.slice(at + 1))}</span>`;
+}
+
+/** What kind of battle it is, for the top bar's subtitle: "an escorted day raid", "a day raid without escort", "a fight for the sky". */
 function kindWords(t: FieldTicket<AirPlace>): string {
   if (t.place.mission === 'superiority') return 'a fight for the sky';
   if (t.place.night) return 'a night raid';
-  return t.att.forces.some((f) => f.kind !== 'bmr') ? 'an escorted day raid' : 'a day raid';
+  return t.att.forces.some((f) => f.kind !== 'bmr') ? 'an escorted day raid' : 'a day raid without escort';
 }
 
 function showChooser(): void {
@@ -239,7 +252,7 @@ function startBattle(r: Raid): void {
   const mine = t[sc.me], theirs = t[sc.me === 'att' ? 'def' : 'att'];
   app.innerHTML = `<div class="battle tc air">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(kindWords(t))])}</span></div>
+      <div class="btitle"><b class="tc-title-3">${titleWords(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(kindWords(t))])}</span></div>
       <div class="bclock"><span class="tc-label" id="cstate">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)"><span id="pword">Paused</span> <span class="tc-key">Space</span></button>
@@ -371,7 +384,8 @@ function updateTop(force = false): void {
   el('balMe').style.width = `${(S.now.p * 100).toFixed(1)}%`;
   el('balThem').style.width = `${((1 - S.now.p) * 100).toFixed(1)}%`;
   el('balMark').style.left = `${(S.mark * 100).toFixed(1)}%`;
-  const pc = (p: number): string => (p >= 0.995 ? 'sure' : p <= 0.005 ? 'no chance' : `about ${Math.round(p * 100)}%`);
+  // The bar speaks in numbers at its ends too (the UI director, 21:18Z); the cards and the question keep "sure of it".
+  const pc = (p: number): string => (p >= 0.995 ? 'over 99%' : p <= 0.005 ? 'under 1%' : `about ${Math.round(p * 100)}%`);
   const line = `Card ${pc(mineOf(sim.place.chance))} · now ${pc(S.now.p)}`;
   if (el('ratio').textContent !== line) el('ratio').textContent = line;
   el('nearMe').style.width = `${(100 * Math.min(1, sim.nearBreak(me))).toFixed(1)}%`;
