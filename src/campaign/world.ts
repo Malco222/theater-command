@@ -15,9 +15,13 @@
 // The world is attached once, as the grand campaign opens (staff.ts), before anything else is set up for it, and
 // again whenever a campaign saved on it is loaded (save.ts).
 
-import worldMap from '../generated/world-map.json';
+// TRIAL (far-side seats rig, never for main): the final chart with its cities stands in for world-map.json.
+import worldMap from '../generated/world-cities.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, theName } from './game';
+// TRIAL: what the rig lays over the chart on the first day: who holds a province that is not its owner's, the
+// capitals to move, first-day rows to drop, wars standing on the first day (tools/trial/README.md).
+import trialFar from '../../data/campaign/trial-far.json';
+import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, removeCorps, setWar, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -31,8 +35,20 @@ interface WorldMap {
   lakes: { name: string; level: number; x: number; y: number; outline: number[][] }[];
   regions: any[];
   links: [number, number][];
+  /** TRIAL: land borders between a province of an earlier stage (Europe's among them) and a new one: [old id, new id]. */
+  joins?: [number, number][];
+  /** TRIAL: how many provinces the wider world had at each stage of its drawing, today's last. */
+  stages?: number[];
   seas: { zones: any[]; gates: any[]; borders: [number, number][][] };
 }
+
+/** TRIAL: the rig's first-day table (data/campaign/trial-far.json, with every seats file's 'setup' laid over it at build time). */
+export const TRIAL_FAR = trialFar as unknown as {
+  held: Record<string, string>;
+  capitals: Record<string, string>;
+  drop: [string, string][];
+  wars: [string, string][];
+};
 
 export const WORLD_MAP = worldMap as unknown as WorldMap;
 
@@ -65,7 +81,8 @@ export const WORLD_REGIONS = WORLD_MAP.regions.length;
  * islands alone (Versions 74 and 75). The chart only ever grows at its end, so a campaign saved on an earlier
  * stage can be laid over today's (save.ts): the ground it never knew begins as it stood on the first day.
  */
-export const WORLD_STAGES = [104];
+// TRIAL: every earlier stage of the chart file but today's (North America 104 came before the file kept a list).
+export const WORLD_STAGES = [104, ...((WORLD_MAP.stages ?? []).slice(0, -1))];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
@@ -92,6 +109,28 @@ export function attachWorld(g: Game, fresh = true): void {
     // A depot is a home province that can feed an army cut off from its capital.
     if (row.flags.depot) g.flags['depot:' + r.id] = 1;
   }
+  // TRIAL: the land borders between the old provinces and the new (the chart file's 'joins'). The lists are copied
+  // first: a province's 'nb' is the map file's own array, shared by every game made in this process.
+  for (const [a, b] of WORLD_MAP.joins ?? []) {
+    const A = g.regions[a], B = g.regions[b];
+    if (!A || !B) continue;
+    if (!A.nb.includes(b)) A.nb = [...A.nb, b];
+    if (!B.nb.includes(a)) B.nb = [...B.nb, a];
+  }
+  // TRIAL: who holds a province on the first day where it is not its owner (the clerk's held_1939: Japan in China).
+  // A saved campaign brings its own holders and lays them over this.
+  for (const [name, by] of Object.entries(TRIAL_FAR.held)) {
+    const r = g.byName[name];
+    if (r && beyondEurope(r)) r.ctrl = by;
+  }
+  // TRIAL: a capital that moves once the country's whole homeland is on the chart (Tehran, Baghdad): the flag is
+  // taken off its other provinces here, so a campaign on the map of Europe keeps the capital it has.
+  for (const [id, name] of Object.entries(TRIAL_FAR.capitals)) {
+    const to = g.byName[name];
+    if (!to || to.owner !== id) continue;
+    for (const r of g.regions) if (r.owner === id) r.cap = false;
+    to.cap = true;
+  }
   // The chart itself: the coasts, the ferries, and the frame the interfaces draw in.
   g.links = [...g.links, ...WORLD_MAP.links];
   g.land = [...WORLD_MAP.land, ...g.land];
@@ -110,6 +149,11 @@ export function attachWorld(g: Game, fresh = true): void {
     if (!g.order.includes(id)) g.order.push(id);
   }
   // And the countries whose homeland was beyond the map come home to it.
+  // TRIAL: and a country of the old chart whose capital the rig has moved takes it up.
+  for (const id of Object.keys(TRIAL_FAR.capitals)) {
+    const n = g.nations[id], cap = g.regions.find((r) => r.owner === id && r.cap);
+    if (n && cap) n.capital = cap.id;
+  }
   for (const [id, h] of Object.entries(WORLD.home)) {
     const n = g.nations[id];
     const cap = g.regions.find((r) => r.owner === id && r.cap);
@@ -134,11 +178,18 @@ export function attachWorld(g: Game, fresh = true): void {
   // A saved campaign's picture is laid over one drawn here, with every country in its usual place in it. (A new
   // campaign's is drawn once everything else is set up: staff.ts.)
   if (!fresh) { computeSupply(g); return; }
+  // TRIAL: first-day rows a seats file replaces (the one-corps armies Iraq and Iran have on the map of Europe).
+  for (const [nat, name] of TRIAL_FAR.drop) {
+    const c = g.corps.find((x) => x.nat === nat && x.name === name && !x.dead);
+    if (c) removeCorps(g, c);
+  }
   // The armies standing at home on the first day: peacetime cadres.
   for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
-    if (!g.nations[nat]?.alive || !g.byName[at] || g.byName[at].ctrl !== nat) continue;
-    const c = addCorps(g, nat, name, kind as any, divs, at, o);
-    if (o.str !== undefined) c.str = o.str;
+    if (TRIAL_FAR.drop.some(([n, x]) => n === nat && x === name)) continue;
+    // TRIAL: a row also stands on ground held by the country it is tied to by 'follow', either way round (Japan's army in Manchukuo).
+    if (!g.nations[nat]?.alive || !g.byName[at] || !standsOn(g.byName[at].ctrl, nat)) continue;
+    const c = addCorps(g, nat, name, kind as any, divs, at, o ?? {});
+    if (o?.str !== undefined) c.str = o.str;
   }
   // The squadrons in home waters.
   for (const row of WORLD.fleets) if (g.nations[row.nat]?.alive && g.byName[row.base ?? '']?.ctrl === row.nat) addFleet(g, row);
@@ -148,8 +199,13 @@ export function attachWorld(g: Game, fresh = true): void {
     if (!n?.alive || !M?.alive) continue;
     for (const e of M.atWar) if (g.nations[e]?.alive) setWar(g, id, e);
   }
+  // TRIAL: wars standing on the first day (a seats file's setup.wars: China and Japan), once the armies are placed.
+  for (const [a, b] of TRIAL_FAR.wars) if (g.nations[a]?.alive && g.nations[b]?.alive && !g.nations[a].atWar.includes(b)) setWar(g, a, b);
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
 }
+
+/** TRIAL: true where a first-day row of `nat` may stand on ground `holder` holds: its own, or that of the country it follows or that follows it. */
+const standsOn = (holder: string, nat: string): boolean => holder === nat || WORLD.follow[holder] === nat || WORLD.follow[nat] === holder;
 
 /**
  * A campaign saved on an earlier stage of the chart is being laid over today's (save.ts): the provinces from

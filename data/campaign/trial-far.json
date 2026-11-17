@@ -1,0 +1,43 @@
+{
+ "_about": "TRIAL (far-side seats rig, never for main). What the rig lays over the wider chart on the first day, read by src/campaign/world.ts at attach. 'held': a province held on 1 September 1939 by another than its owner (baked from the clerk's held_1939 column by tools/trial/bake-held.mjs). 'capitals': a capital that moves once the whole homeland is on the chart. 'drop': first-day corps rows a seats file replaces, [nation, name]. 'wars': wars standing on the first day. Every seats file's 'setup' block is laid over this file when the rig is built (tools/trial/seats.mjs).",
+ "held": {
+  "Amoy": "JAP",
+  "Anking": "JAP",
+  "Canton": "JAP",
+  "Chefoo": "JAP",
+  "Haichow": "JAP",
+  "Hainan": "JAP",
+  "Hangchow": "JAP",
+  "Hankow": "JAP",
+  "Hsuchow": "JAP",
+  "Kaifeng": "JAP",
+  "Kalgan": "JAP",
+  "Kiukiang": "JAP",
+  "Linfen": "JAP",
+  "Nanchang": "JAP",
+  "Nanking": "JAP",
+  "Paoting": "JAP",
+  "Paotow": "JAP",
+  "Peiping": "JAP",
+  "Pengpu": "JAP",
+  "Shanghai": "JAP",
+  "Shihkiachwang": "JAP",
+  "Silingol": "JAP",
+  "Sinyang": "JAP",
+  "Suiyuan": "JAP",
+  "Swatow": "JAP",
+  "Taiyuan": "JAP",
+  "Tangshan": "JAP",
+  "Tatung": "JAP",
+  "Tientsin": "JAP",
+  "Tsinan": "JAP",
+  "Tsingtao": "JAP",
+  "Wuhu": "JAP"
+ },
+ "capitals": {
+  "IRN": "Tehran",
+  "IRQ": "Baghdad"
+ },
+ "drop": [],
+ "wars": []
+}

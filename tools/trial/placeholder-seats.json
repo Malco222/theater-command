@@ -1,0 +1,422 @@
+{
+ "_about": {
+  "what": "TRIAL (far-side seats rig, never for main). Placeholder rows so that every owner code on the final chart is a country and every one of the fourteen far-side seats can be opened before its seats file exists. Same layout as a seats file (tools/trial/seats.mjs). A seats file that brings a code (a nation row, a door entry or a corps row for it) takes this file's rows for that code away.",
+  "state": "NOT THE RECORD AND NOT TO BE LIFTED: every figure here is a stand-in (quality 0.5, no air force, one half-strength garrison in the capital, no tie, no war). Japan is not a seat: its row exists only because the chart has Japanese ground."
+ },
+ "world": {
+  "nations": {
+   "JAP": {
+    "name": "Japan",
+    "adj": "Japanese",
+    "color": "#b23a48",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "CHN": {
+    "name": "China",
+    "adj": "Chinese",
+    "color": "#3e6fa3",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "MAN": {
+    "name": "Manchukuo",
+    "adj": "Manchukuoan",
+    "color": "#a8894a",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "MGL": {
+    "name": "Mongolia",
+    "adj": "Mongolian",
+    "color": "#8c5a3c",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "THA": {
+    "name": "Thailand",
+    "adj": "Thai",
+    "color": "#5b8c8a",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "AUS": {
+    "name": "Australia",
+    "adj": "Australian",
+    "color": "#2f7d5b",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "NZL": {
+    "name": "New Zealand",
+    "adj": "New Zealand",
+    "color": "#40507a",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "SAF": {
+    "name": "South Africa",
+    "adj": "South African",
+    "color": "#d98a2b",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "SAU": {
+    "name": "Saudi Arabia",
+    "adj": "Saudi",
+    "color": "#3f8f5a",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "YEM": {
+    "name": "Yemen",
+    "adj": "Yemeni",
+    "color": "#b0563f",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "AFG": {
+    "name": "Afghanistan",
+    "adj": "Afghan",
+    "color": "#6f7f4a",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "NEP": {
+    "name": "Nepal",
+    "adj": "Nepalese",
+    "color": "#9c3d54",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "LBR": {
+    "name": "Liberia",
+    "adj": "Liberian",
+    "color": "#4a6fa5",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   }
+  },
+  "order": [
+   "JAP",
+   "CHN",
+   "MAN",
+   "MGL",
+   "THA",
+   "AUS",
+   "NZL",
+   "SAF",
+   "SAU",
+   "YEM",
+   "AFG",
+   "NEP",
+   "LBR"
+  ],
+  "parts": {
+   "names": {
+    "farside": "the far side of the world (rig placeholder)"
+   },
+   "of": {
+    "JAP": "farside",
+    "CHN": "farside",
+    "MAN": "farside",
+    "MGL": "farside",
+    "THA": "farside",
+    "AUS": "farside",
+    "NZL": "farside",
+    "SAF": "farside",
+    "SAU": "farside",
+    "YEM": "farside",
+    "AFG": "farside",
+    "NEP": "farside",
+    "LBR": "farside"
+   }
+  },
+  "corps": [
+   [
+    "JAP",
+    "Japanese garrison (rig placeholder)",
+    "inf",
+    1,
+    "Tokyo",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Chinese garrison (rig placeholder)",
+    "inf",
+    1,
+    "Chungking",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "MAN",
+    "Manchukuoan garrison (rig placeholder)",
+    "inf",
+    1,
+    "Hsinking",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "MGL",
+    "Mongolian garrison (rig placeholder)",
+    "inf",
+    1,
+    "Ulan Bator",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "THA",
+    "Thai garrison (rig placeholder)",
+    "inf",
+    1,
+    "Bangkok",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "AUS",
+    "Australian garrison (rig placeholder)",
+    "inf",
+    1,
+    "Canberra",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "NZL",
+    "New Zealand garrison (rig placeholder)",
+    "inf",
+    1,
+    "Wellington",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "SAF",
+    "South African garrison (rig placeholder)",
+    "inf",
+    1,
+    "Pretoria",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "SAU",
+    "Saudi garrison (rig placeholder)",
+    "inf",
+    1,
+    "Riyadh",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "YEM",
+    "Yemeni garrison (rig placeholder)",
+    "inf",
+    1,
+    "Sanaa",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "AFG",
+    "Afghan garrison (rig placeholder)",
+    "inf",
+    1,
+    "Kabul",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "NEP",
+    "Nepalese garrison (rig placeholder)",
+    "inf",
+    1,
+    "Kathmandu",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "LBR",
+    "Liberian garrison (rig placeholder)",
+    "inf",
+    1,
+    "Monrovia",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ]
+  ]
+ },
+ "grand": {
+  "nations": [
+   {
+    "id": "CHN",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "MAN",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "MGL",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "THA",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "AUS",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "NZL",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "SAF",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "IRN",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "IRQ",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "SAU",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "YEM",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "AFG",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "NEP",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   },
+   {
+    "id": "LBR",
+    "small": true,
+    "years": {
+     "1939": "RIG PLACEHOLDER: no door text has been written for this seat yet. It stands here only so that the far-side seats rig can open the country."
+    }
+   }
+  ]
+ }
+}

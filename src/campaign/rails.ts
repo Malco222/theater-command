@@ -16,7 +16,7 @@
 // from the player's railhead.
 
 import railData from '../generated/campaign-rails.json';
-import worldRails from '../generated/world-rails.json';
+import worldRails from '../generated/world-cities-rails.json'; // TRIAL: the final chart (far-side seats rig)
 import data from '../../data/campaign/railways.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';

@@ -5,7 +5,7 @@
 
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-cities.json'; // TRIAL: the final chart (far-side seats rig)
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
@@ -118,14 +118,14 @@ export function shipList(s: Ships): string {
 
 let lookup: Int8Array | null = null;
 let lookCols = 0;
-let wide: Int8Array | null = null;
+let wide: Int16Array | null = null; // TRIAL: 145 seas do not fit a signed byte
 
 /** The same on the wider world: its chart is laid out in the same squares, from its own west edge, each row as runs of [sea, squares]. */
 function seaAtWide(x: number, y: number): number {
   const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
   const md = W.seas;
   if (!wide) {
-    wide = new Int8Array(md.cols * md.grid.length).fill(-1);
+    wide = new Int16Array(md.cols * md.grid.length).fill(-1); // TRIAL
     md.grid.forEach((row, r) => {
       let c = 0;
       for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0 && c < md.cols; k--) wide![r * md.cols + c++] = row[i];

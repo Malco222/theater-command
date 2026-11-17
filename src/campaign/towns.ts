@@ -11,7 +11,7 @@
  */
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-cities.json'; // TRIAL: the final chart (far-side seats rig)
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, provinceYield } from './economy';
