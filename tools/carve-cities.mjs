@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import polygonClipping from 'polygon-clipping';
 import { ringArea } from './geo-common.mjs';
 import { CELL } from './geo-seas.mjs';
-import { CITY_GROUPS, CITY_SHORES, CITY_LINKS } from '../data/campaign/cities.mjs';
+import { CITY_GROUPS, CITY_SHORES, CITY_LINKS, CITY_STRAITS } from '../data/campaign/cities.mjs';
 import { cutLakes } from './cut-lakes.mjs';
 import { RULED_GROUND } from '../data/campaign/detail.mjs';
 
@@ -277,6 +277,20 @@ export function carveCities(chart) {
     const fa = now.find((id) => id === a || parentOf.get(id) === a), fb = now.find((id) => id === b || parentOf.get(id) === b);
     return [fa, fb];
   });
+  // Straits laid on this chart: the two become neighbours across the water, and the border is a strait.
+  const laidStraits = [];
+  {
+    const named = new Map([...rows.values()].map((r) => [r.name, r]));
+    for (const [an, bn] of CITY_STRAITS) {
+      const a = named.get(an), b = named.get(bn);
+      if (!a || !b) { warn(`! no province called ${!a ? an : bn} for a strait`); continue; }
+      if (a.nb.includes(b.id) || links2.some(([p, q]) => (p === a.id && q === b.id) || (p === b.id && q === a.id))) { warn(`! ${an} and ${bn} touch already: no strait laid`); continue; }
+      if (family(a.id) === family(b.id)) { a.nb.push(b.id); b.nb.push(a.id); a.nb.sort((p, q) => p - q); b.nb.sort((p, q) => p - q); }
+      else joins2.push(family(a.id) < family(b.id) ? [a.id, b.id] : [b.id, a.id]);
+      links2.push([a.id, b.id]);
+      laidStraits.push(`${an} - ${bn}`);
+    }
+  }
 
   // Coasts. A piece stands on a sea its parent stood on where that sea's water laps against it, by the same count;
   // every coast the parent had stays with one piece at least.
@@ -385,6 +399,7 @@ export function carveCities(chart) {
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
   if (parentTabled) console.log(`${parentTabled} cut provinces have a row in cities-parents.csv${worthOnly ? `, and ${worthOnly} of today's chart that were not cut` : ''}`);
   if (changedSince.length) console.log(`${changedSince.length} provinces read a row the clerk has changed since the chart was handed over: ${changedSince.join(', ')}`);
+  if (laidStraits.length) console.log(`straits laid on this chart (${laidStraits.length}): ${laidStraits.join(', ')}`);
   if (ruled.length) console.log(`ground laid by ruling on ${ruled.length} provinces whose seed or row says otherwise (${Object.keys(RULED_GROUND).length} ruled): ${ruled.join(', ')}`);
   if (!quiet && moved2.length) console.log(`pieces passed to a sister: ${moved2.join(', ')}`);
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);

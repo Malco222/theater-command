@@ -1945,6 +1945,20 @@ export const CITY_SHORES = {};
 // A crossing over a strait ('links') whose end is now one particular piece of a province that was cut: [a, b] by name.
 export const CITY_LINKS = [];
 
+// Straits laid on the chart with the cities (Brian's ruling of 17 November: straits to Europe's level everywhere):
+// short crossings armies can use without a fleet, as Europe's Great Belt, Sound, Messina, Bosporus and Kerch. Each
+// had a ferry or a regular crossing in 1939 and is no wider than about 25 kilometres at its narrows: [a, b] by name.
+export const CITY_STRAITS = [
+  ['Aomori', 'Sapporo'], // the Tsugaru strait: the Aomori-Hakodate train ferry
+  ['Okayama', 'Shikoku'], // the Inland Sea: the Uno-Takamatsu train ferry (Shikoku had no other way)
+  ['Madura', 'Trincomalee'], // the Palk strait: the Dhanushkodi-Talaimannar ferry, the Boat Mail to Ceylon (1914)
+  ['Batavia', 'Oosthaven'], // the Sunda strait: the Merak-Oosthaven train ferry (1912)
+  ['Pakhoi', 'Hainan'], // the Hainan strait: Hai-an on the Luichow peninsula to Hoihow
+  ['Wellington', 'Nelson'], // Cook strait: Wellington to Picton
+  ['Legaspi', 'Leyte'], // the San Bernardino strait: Matnog to Samar
+  ['Leyte', 'Del Monte'], // the Surigao strait: Leyte to Surigao on Mindanao
+];
+
 // River crossings among the cities and what is left of their provinces, as in far.mjs: a road between two seeds
 // that a river crosses near its middle is a crossing; CUT strikes a false one, ADD names one the test misses.
 export const CITY_RIVER_CUT = [];
@@ -2089,6 +2103,8 @@ export const CITY_RAIL_LINES = [
   ['Hankow', 'Sinyang', 'Chumatien', 'Kaifeng'], ['Loyang', 'Tungkwan', 'Sian', 'Paoki'], ['Liuchow', 'Tushan'],
   ['Harbin', 'Suihwa', 'Peian', 'Heiho'], ['Kiamusze', 'Hulin'], ['Taonan', 'Wangyehmiao', 'Arshan'], ['Sinuiju', 'Kanggye'],
   ['Mutankiang', 'Sansing', 'Kiamusze'], // the Tumen-Kiamusze line of 1937, by Linkou and Poli
+  // ---- Japan: the train ferries that carried the wagons across, as Europe's Great Belt and Messina do ----
+  ['Aomori', 'Sapporo'], ['Okayama', 'Shikoku'], // Aomori-Hakodate (1925), Uno-Takamatsu (1921)
   // ---- Indochina, Siam and Burma: the line from Hanoi to Lang Son and the frontier; Siam's northern line, which left
   // the Korat line at Ban Phachi and ran by Lopburi and Paknampo; the Rangoon-Mandalay line by Pyinmana and Thazi ----
   ['Hanoi', 'Lang Son'], ['Korat', 'Paknampo', 'Phitsanulok'], ['Toungoo', 'Loikaw', 'Meiktila'],
