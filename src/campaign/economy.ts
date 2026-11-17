@@ -30,6 +30,10 @@ import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
+import trial213 from '../../data/campaign/trial-213.json';   // TRIAL: the rows of rulings 213 and 214 (tools/trial/bake-213.mjs)
+
+/** TRIAL (ruling 214): what the land and harbours of a province pay, by the country that owned it on the first day. It goes with the ground, not the flag. */
+const landFactor = (r: Region): number => (trial213 as unknown as { landFactor: Record<string, number> }).landFactor[r.owner] ?? 1;
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -116,9 +120,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const lift = own ? 0 : hallShare(g, r);
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
-  const land = BUDGET.land[r.terrain] * k;
+  const f214 = landFactor(r);   // TRIAL (ruling 214)
+  const land = BUDGET.land[r.terrain] * k * f214;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * f214 : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.

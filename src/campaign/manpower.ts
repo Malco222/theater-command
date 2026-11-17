@@ -18,6 +18,7 @@
 import data from '../../data/campaign/manpower.json';
 import { turnToDate } from '../core/ticket';
 import { MEN_PER_DIV, type Game } from './types';
+import trial213 from '../../data/campaign/trial-213.json';   // TRIAL: the rows of rulings 213 and 214 (tools/trial/bake-213.mjs)
 
 export const MANPOWER = data as unknown as {
   /** The reserve a great power opens a campaign of September 1939 with, in divisions' worth. */
@@ -40,6 +41,10 @@ export const MANPOWER = data as unknown as {
   /** Folding two worn corps into one: see the note in the data. */
   fold: { worn: number; org: number; price: number; xp: number };
 };
+
+// TRIAL (ruling 213(b)): the historian's reserve and monthly class for the smaller powers it names, laid over the table.
+Object.assign(MANPOWER.pool, (trial213 as unknown as { pool: Record<string, number> }).pool);
+Object.assign(MANPOWER.class, (trial213 as unknown as { class: Record<string, number> }).class);
 
 const KP: Record<string, string> = {}, KX: Record<string, string> = {}, KL: Record<string, string> = {}, KS: Record<string, string> = {};
 const ks = (nat: string): string => (KS[nat] ??= `mps:${nat}`);

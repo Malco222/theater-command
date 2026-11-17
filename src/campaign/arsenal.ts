@@ -7,6 +7,7 @@
 
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
+import trial213 from '../../data/campaign/trial-213.json';   // TRIAL: the rows of rulings 213 and 214 (tools/trial/bake-213.mjs)
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
@@ -89,6 +90,15 @@ export function restoreWorks(g: Game): void {
 
 /** True if this nation has an aircraft industry: a home province with this many factories. */
 const industry = (g: Game, nat: string, factories: number): boolean => g.regions.some((r) => isHome(g, nat, r) && r.fac >= factories);
+// TRIAL (ruling 213(d)): for a smaller power the historian's list of aircraft works stands in place of the two- and
+// three-factory test: on the list and inside its months it builds that kind of aircraft at home, otherwise never.
+// Null for a great power, or with the rulings off: the factory test holds.
+const T213 = trial213 as unknown as { on: boolean; great: string[]; works: Record<string, { ftr: [number, number] | null; bmr: [number, number] | null }> };
+const worksOf = (g: Game, nat: string, wing: Wing): boolean | null => {
+  if (!T213.on || T213.great.includes(nat) || !budgeted(g)) return null;
+  const span = T213.works[nat]?.[wing];
+  return !!span && g.turn >= span[0] && g.turn <= span[1];
+};
 
 /** True if a new wing can be stationed in this region: the nation holds it and it has airfields, built or already in use by one of its fleets. */
 export function canStation(g: Game, nat: string, r: Region | undefined): boolean {
@@ -271,7 +281,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
 
   for (const wing of ['ftr', 'bmr'] as Wing[]) {
     const spec = ARSENAL.air[wing];
-    const built = industry(g, nat, spec.factories);
+    const listed = worksOf(g, nat, wing);   // TRIAL (ruling 213(d))
+    const built = listed ?? industry(g, nat, spec.factories);
     const at = built ? stationSite(g, nat, sel) : -1;
     const joins = at >= 0 ? fleetAt(g, nat, at, wing) : null;
     const cost = priceOf(g, nat, `air:${wing}`, spec.cost);
@@ -279,7 +290,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
       note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
-      why: !built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost),
+      why: !built ? (listed === false ? 'No works in the country build these: its aircraft come from abroad.' : `Needs an aircraft industry: a home province with ${spec.factories} factories.`) : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost),
     });
   }
 

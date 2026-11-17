@@ -1,0 +1,259 @@
+{
+ "_about": "TRIAL. The rows of rulings 213 and 214, copied unchanged by tools/trial/bake-213.mjs from the clerk's and the historian's tables. Read by economy.ts (landFactor), manpower.ts (pool, class) and arsenal.ts (works, great). Not a data file of the game: the levers are the rules builder's to write.",
+ "on": true,
+ "great": [
+  "GER",
+  "ITA",
+  "UK",
+  "FRA",
+  "SOV",
+  "USA",
+  "VIC",
+  "JAP"
+ ],
+ "landFactor": {
+  "MGL": 0.02,
+  "SAU": 0.04,
+  "AUS": 0.1,
+  "IRN": 0.15,
+  "BRA": 0.16,
+  "SAF": 0.17,
+  "MEX": 0.17,
+  "PER": 0.17,
+  "VEN": 0.18,
+  "CHL": 0.18,
+  "CAN": 0.2,
+  "NZL": 0.21,
+  "POR": 0.21,
+  "MAN": 0.4,
+  "ARG": 0.47,
+  "NED": 0.6
+ },
+ "pool": {
+  "AUS": 7,
+  "NZL": 1.6,
+  "SAF": 2.4,
+  "MAN": 1
+ },
+ "class": {
+  "AUS": 0.15,
+  "NZL": 0.032,
+  "SAF": 0.05,
+  "MAN": 0.02
+ },
+ "works": {
+  "POL": {
+   "ftr": [
+    1,
+    1
+   ],
+   "bmr": [
+    1,
+    1
+   ]
+  },
+  "NED": {
+   "ftr": [
+    1,
+    9
+   ],
+   "bmr": [
+    1,
+    9
+   ]
+  },
+  "BEL": {
+   "ftr": [
+    1,
+    9
+   ],
+   "bmr": [
+    1,
+    9
+   ]
+  },
+  "YUG": {
+   "ftr": [
+    1,
+    20
+   ],
+   "bmr": [
+    1,
+    20
+   ]
+  },
+  "SWE": {
+   "ftr": [
+    49,
+    72
+   ],
+   "bmr": [
+    1,
+    72
+   ]
+  },
+  "SUI": {
+   "ftr": [
+    1,
+    72
+   ],
+   "bmr": [
+    37,
+    72
+   ]
+  },
+  "FIN": {
+   "ftr": [
+    1,
+    24
+   ],
+   "bmr": [
+    21,
+    62
+   ]
+  },
+  "HUN": {
+   "ftr": [
+    13,
+    72
+   ],
+   "bmr": [
+    49,
+    72
+   ]
+  },
+  "ROM": {
+   "ftr": [
+    1,
+    72
+   ],
+   "bmr": [
+    1,
+    72
+   ]
+  },
+  "ESP": {
+   "ftr": [
+    1,
+    72
+   ],
+   "bmr": null
+  },
+  "TUR": {
+   "ftr": [
+    1,
+    12
+   ],
+   "bmr": null
+  },
+  "ARG": {
+   "ftr": [
+    13,
+    24
+   ],
+   "bmr": null
+  },
+  "CAN": {
+   "ftr": [
+    6,
+    72
+   ],
+   "bmr": [
+    3,
+    72
+   ]
+  },
+  "AUS": {
+   "ftr": [
+    35,
+    72
+   ],
+   "bmr": [
+    21,
+    72
+   ]
+  }
+ },
+ "dated": [
+  [
+   14,
+   "SAF",
+   2
+  ],
+  [
+   22,
+   "SAF",
+   4
+  ],
+  [
+   34,
+   "SAF",
+   3
+  ],
+  [
+   46,
+   "SAF",
+   3
+  ],
+  [
+   58,
+   "SAF",
+   2
+  ],
+  [
+   24,
+   "NZL",
+   1
+  ],
+  [
+   35,
+   "NZL",
+   2
+  ],
+  [
+   46,
+   "NZL",
+   2
+  ],
+  [
+   55,
+   "NZL",
+   3
+  ],
+  [
+   14,
+   "THA",
+   1
+  ],
+  [
+   40,
+   "THA",
+   1
+  ],
+  [
+   1,
+   "CHN",
+   0
+  ],
+  [
+   41,
+   "CHN",
+   3
+  ],
+  [
+   56,
+   "CHN",
+   3
+  ],
+  [
+   64,
+   "CHN",
+   3
+  ],
+  [
+   37,
+   "MAN",
+   1
+  ]
+ ]
+}

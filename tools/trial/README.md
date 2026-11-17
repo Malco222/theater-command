@@ -174,6 +174,10 @@ the printout says `ability: none`.
 | `data/campaign/trial-far.json` | New: the first-day table. `held` is baked from the clerk's `held_1939` column by `node tools/trial/bake-held.mjs` (32 provinces, all China's held by Japan) |
 | `src/campaign/ai.ts` | `wantsOut` (the Pacific seat builder's finding and patch, 16:12Z): on the wider world a corps on ground its nation holds and whose owner it is at war with is no guest of an ally; it leaves only if cut off or broken. Without it Japan's whole army in China sails home in September 1939, China walks into the empty ground and Manchukuo falls in December |
 | `vitest.config.ts` | A loader that lays the placeholder rows (and `TC_SEATS=file,file`) over the data for the tests |
+| `data/campaign/trial-213.json` | New: the rows of rulings 213 and 214, copied unchanged from the clerk's and the historian's tables by `node tools/trial/bake-213.mjs` (`--off` writes it empty: the game as it stood before the rulings). Build again after it |
+| `src/campaign/economy.ts` | `provinceYield`: the land and harbour pay of a province is multiplied by `landFactor` of the country that owns the ground (ruling 214; sixteen countries, everyone else 1) |
+| `src/campaign/manpower.ts` | The historian's `pool` and `class` rows for Australia, New Zealand, South Africa and Manchukuo are laid over `manpower.json` (ruling 213(b)) |
+| `src/campaign/arsenal.ts` | For a smaller power the historian's list of aircraft works stands in place of the two- and three-factory test (ruling 213(d)): on the list and inside its months it builds that kind at home, otherwise never. The great powers keep the factory test. The dated deliveries of that file are not played |
 | `tools/trial/` | `seats.mjs` (the overlay and its checks), `build.mjs`, `seat-play.ts`, `run-all.sh`, `bake-held.mjs`, `placeholder-seats.json`, `results/`; the Pacific seat builder's `front.ts` and `build-front.mjs` (one war read month by month with nobody playing: `node tools/trial/build-front.mjs && node dist/trial/front.mjs 7 24 CHN JAP`) |
 
 Nothing else in `src/` was changed, and no crash had to be fixed: the game attached the 1,758-province chart and
