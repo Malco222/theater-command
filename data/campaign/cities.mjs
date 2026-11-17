@@ -1200,6 +1200,737 @@ export const CITY_GROUPS = [
   ['Bristol Bay', [
     ['Cold Bay', 55.2, -162.72, 'hills', 0, 0, { port: 1 }],
   ]],
+  // ---- Part 4: China's war belt, Manchuria and Korea (the widest settled provinces cut to Europe's measure) ----
+  ['Ichang', [
+    ['Shasi', 30.31, 112.25, 'plains', 0, 0, {}],
+    ['Enshih', 30.3, 109.48, 'mountain', 0, 0, {}],
+  ]],
+  ['Hankow', [
+    ['Macheng', 31.18, 115.03, 'hills', 0, 0, {}],
+  ]],
+  ['Nanking', [
+    ['Yencheng', 33.39, 120.12, 'plains', 0, 0, {}],
+  ]],
+  ['Nanchang', [
+    ['Fuchow', 27.97, 116.36, 'plains', 0, 0, {}],
+  ]],
+  ['Pengpu', [
+    ['Fowyang', 32.9, 115.82, 'plains', 0, 0, {}],
+  ]],
+  ['Chungking', [
+    ['Pengshui', 29.29, 108.17, 'mountain', 0, 0, {}],
+  ]],
+  ['Chengtu', [
+    ['Mienyang', 31.47, 104.75, 'hills', 0, 0, {}],
+    ['Sungpan', 32.64, 103.6, 'mountain', 0, 0, {}],
+  ]],
+  ['Tsinan', [
+    ['Lintsing', 36.85, 115.7, 'plains', 0, 0, {}],
+    ['Sintai', 35.91, 117.77, 'hills', 0, 0, {}],
+  ]],
+  ['Kaifeng', [
+    ['Anyang', 36.1, 114.35, 'plains', 0, 0, {}],
+  ]],
+  ['Nanyang', [
+    ['Chumatien', 32.98, 114.02, 'plains', 0, 0, {}],
+  ]],
+  ['Taiyuan', [
+    ['Lishih', 37.52, 111.13, 'hills', 0, 0, {}],
+  ]],
+  ['Canton', [
+    ['Wuchow', 23.48, 111.31, 'hills', 0, 0, {}],
+  ]],
+  ['Chuchow', [
+    ['Shangjao', 28.46, 117.97, 'hills', 0, 0, {}],
+  ]],
+  ['Kweilin', [
+    ['Chuanhsien', 25.93, 111.07, 'hills', 0, 0, {}],
+  ]],
+  ['Kanchow', [
+    ['Ningtu', 26.47, 116.02, 'hills', 0, 0, {}],
+  ]],
+  ['Nanning', [
+    ['Kweihsien', 23.1, 109.6, 'plains', 0, 0, {}],
+    ['Poseh', 23.9, 106.61, 'hills', 0, 0, {}],
+  ]],
+  ['Kweiyang', [
+    ['Pichieh', 27.3, 105.29, 'mountain', 0, 0, {}],
+  ]],
+  ['Sian', [
+    ['Tungkwan', 34.61, 110.28, 'hills', 0, 0, {}],
+  ]],
+  ['Yenan', [
+    ['Kingyang', 36.01, 107.88, 'hills', 0, 0, {}],
+  ]],
+  ['Hanchung', [
+    ['Kwangyuan', 32.44, 105.84, 'mountain', 0, 0, {}],
+    ['Ankang', 32.68, 109.02, 'mountain', 0, 0, {}],
+  ]],
+  ['Harbin', [
+    ['Suihwa', 46.63, 126.98, 'plains', 0, 0, {}],
+    ['Anta', 46.4, 125.32, 'plains', 0, 0, {}],
+  ]],
+  ['Tsitsihar', [
+    ['Koshan', 48.03, 125.87, 'plains', 0, 0, {}],
+    ['Chalantun', 48, 122.72, 'forest', 0, 0, {}],
+    ['Wangyehmiao', 46.08, 122.08, 'hills', 0, 0, {}],
+  ]],
+  ['Tunghwa', [
+    ['Fusung', 42.33, 127.28, 'forest', 0, 0, {}],
+  ]],
+  ['Kiamusze', [
+    ['Sansing', 46.32, 129.57, 'forest', 0, 0, {}],
+  ]],
+  ['Tungliao', [
+    ['Lintung', 43.97, 119.38, 'plains', 0, 0, {}],
+  ]],
+  ['Seoul', [
+    ['Kangnung', 37.75, 128.9, 'mountain', 0, 0, {}],
+  ]],
+  ['Hamhung', [
+    ['Kanggye', 40.97, 126.6, 'mountain', 0, 0, {}],
+  ]],
+  ['Kalgan', [
+    ['Shangtu', 41.55, 113.53, 'plains', 0, 0, {}],
+  ]],
+  ['Lanchow', [
+    ['Pingliang', 35.54, 106.68, 'hills', 0, 0, {}],
+    ['Minhsien', 34.44, 104.04, 'mountain', 0, 0, {}],
+  ]],
+  ['Kunming', [
+    ['Kutsing', 25.49, 103.8, 'hills', 0, 0, {}],
+    ['Hweitseh', 26.41, 103.3, 'mountain', 0, 0, {}],
+    ['Szemao', 22.78, 100.97, 'forest', 0, 0, {}],
+  ]],
+  ['Paoshan', [
+    ['Likiang', 26.87, 100.23, 'mountain', 0, 0, {}],
+    ['Mienning', 23.88, 100.09, 'mountain', 0, 0, {}],
+  ]],
+  // ---- Part 4: Asia outside China (Burma, India, Siam, Indochina, the East Indies, Persia, Afghanistan, Arabia, Soviet Asia) ----
+  ['Lashio', [
+    ['Kengtung', 21.29, 99.61, 'mountain', 0, 0, {}],
+  ]],
+  ['Kalewa', [
+    ['Tamu', 24.22, 94.31, 'forest', 0, 0, {}],
+  ]],
+  ['Toungoo', [
+    ['Loikaw', 19.67, 97.21, 'hills', 0, 0, {}],
+  ]],
+  ['Dibrugarh', [
+    ['Ledo', 27.29, 95.73, 'forest', 0, 0, {}],
+  ]],
+  ['Myitkyina', [
+    ['Maingkwan', 26.33, 96.6, 'forest', 0, 0, {}],
+  ]],
+  ['Dacca', [
+    ['Rajshahi', 24.37, 88.6, 'plains', 0, 0, {}],
+  ]],
+  ['Darjeeling', [
+    ['Dinajpur', 25.63, 88.64, 'plains', 0, 0, {}],
+  ]],
+  ['Bangkok', [
+    ['Kanchanaburi', 14.02, 99.53, 'hills', 0, 0, {}],
+  ]],
+  ['Korat', [
+    ['Ubon', 15.23, 104.86, 'plains', 0, 0, {}],
+    ['Surin', 14.88, 103.49, 'plains', 0, 0, {}],
+  ]],
+  ['Udon', [
+    ['Sakon Nakhon', 17.16, 104.15, 'plains', 0, 0, {}],
+  ]],
+  ['Phitsanulok', [
+    ['Paknampo', 15.7, 100.13, 'plains', 0, 0, {}],
+    ['Raheng', 16.88, 99.13, 'hills', 0, 0, {}],
+  ]],
+  ['Chiang Mai', [
+    ['Chiang Rai', 19.91, 99.83, 'hills', 0, 0, {}],
+    ['Phrae', 18.15, 100.14, 'hills', 0, 0, {}],
+  ]],
+  ['Hanoi', [
+    ['Haiphong', 20.86, 106.68, 'plains', 0, 0, { port: 1 }],
+    ['Lang Son', 21.85, 106.76, 'hills', 0, 0, {}],
+    ['Lao Kay', 22.48, 103.97, 'mountain', 0, 0, {}],
+  ]],
+  ['Phnom Penh', [
+    ['Kratie', 12.49, 106.02, 'forest', 0, 0, {}],
+  ]],
+  ['Brunei', [
+    ['Miri', 4.39, 113.98, 'forest', 0, 0, { port: 1 }],
+  ]],
+  ['Balikpapan', [
+    ['Samarinda', -0.5, 117.15, 'forest', 0, 0, {}],
+  ]],
+  ['Pontianak', [
+    ['Singkawang', 0.91, 108.98, 'forest', 0, 0, {}],
+    ['Sintang', 0.07, 111.5, 'forest', 0, 0, {}],
+    ['Ketapang', -1.85, 109.97, 'forest', 0, 0, {}],
+  ]],
+  ['Bandjermasin', [
+    ['Sampit', -2.53, 112.95, 'forest', 0, 0, {}],
+    ['Amoentai', -2.42, 115.25, 'plains', 0, 0, {}],
+  ]],
+  ['Medan', [
+    ['Pematang Siantar', 2.96, 99.06, 'hills', 0, 0, {}],
+  ]],
+  ['Pakanbaru', [
+    ['Padang Sidempoean', 1.38, 99.27, 'mountain', 0, 0, {}],
+  ]],
+  ['Palembang', [
+    ['Benkoelen', -3.8, 102.53, 'hills', 0, 0, { port: 1 }],
+    ['Pangkalpinang', -2.13, 106.11, 'forest', 0, 0, { port: 1 }],
+  ]],
+  ['Quetta', [
+    ['Sibi', 29.54, 67.88, 'hills', 0, 0, {}],
+    ['Loralai', 30.37, 68.6, 'mountain', 0, 0, {}],
+  ]],
+  ['Sukkur', [
+    ['Jacobabad', 28.28, 68.44, 'plains', 0, 0, {}],
+    ['Dadu', 26.73, 67.78, 'plains', 0, 0, {}],
+    ['Rahimyar Khan', 28.42, 70.3, 'plains', 0, 0, {}],
+  ]],
+  ['Delhi', [
+    ['Hissar', 29.15, 75.72, 'plains', 0, 0, {}],
+  ]],
+  ['Lucknow', [
+    ['Fyzabad', 26.78, 82.14, 'plains', 0, 0, {}],
+  ]],
+  ['Patna', [
+    ['Darbhanga', 26.15, 85.9, 'plains', 0, 0, {}],
+  ]],
+  ['Jubbulpore', [
+    ['Katni', 23.83, 80.39, 'hills', 0, 0, {}],
+  ]],
+  ['Jhansi', [
+    ['Guna', 24.65, 77.31, 'hills', 0, 0, {}],
+  ]],
+  ['Nagpur', [
+    ['Chanda', 19.95, 79.3, 'forest', 0, 0, {}],
+  ]],
+  ['Hyderabad', [
+    ['Gulbarga', 17.33, 76.83, 'plains', 0, 0, {}],
+  ]],
+  ['Bellary', [
+    ['Kurnool', 15.83, 78.04, 'plains', 0, 0, {}],
+  ]],
+  ['Vizagapatam', [
+    ['Jagdalpur', 19.07, 82.03, 'forest', 0, 0, {}],
+  ]],
+  ['Cuttack', [
+    ['Berhampur', 19.31, 84.79, 'plains', 0, 0, {}],
+  ]],
+  ['Rajkot', [
+    ['Bhavnagar', 21.77, 72.15, 'plains', 0, 0, { port: 1 }],
+    ['Bhuj', 23.25, 69.67, 'plains', 0, 0, {}],
+  ]],
+  ['Resht', [
+    ['Ardebil', 38.25, 48.3, 'hills', 0, 0, {}],
+  ]],
+  ['Tehran', [
+    ['Semnan', 35.57, 53.39, 'plains', 0, 0, {}],
+  ]],
+  ['Bandar Shah', [
+    ['Damghan', 36.17, 54.35, 'plains', 0, 0, {}],
+  ]],
+  ['Meshed', [
+    ['Quchan', 37.1, 58.51, 'hills', 0, 0, {}],
+    ['Turbat-i-Haidari', 35.27, 59.22, 'hills', 0, 0, {}],
+  ]],
+  ['Isfahan', [
+    ['Kashan', 33.98, 51.44, 'plains', 0, 0, {}],
+  ]],
+  ['Shiraz', [
+    ['Jahrum', 28.5, 53.56, 'hills', 0, 0, {}],
+  ]],
+  ['Kandahar', [
+    ['Girishk', 31.82, 64.57, 'plains', 0, 0, {}],
+    ['Kalat-i-Ghilzai', 32.11, 66.9, 'hills', 0, 0, {}],
+  ]],
+  ['Herat', [
+    ['Farah', 32.37, 62.12, 'plains', 0, 0, {}],
+  ]],
+  ['Mazar-i-Sharif', [
+    ['Maimana', 35.92, 64.78, 'hills', 0, 0, {}],
+  ]],
+  ['Faizabad', [
+    ['Khanabad', 36.68, 69.11, 'plains', 0, 0, {}],
+  ]],
+  ['Dhahran', [
+    ['Hofuf', 25.38, 49.59, 'plains', 0, 0, {}],
+  ]],
+  ['Jeddah', [
+    ['Taif', 21.27, 40.42, 'hills', 0, 0, {}],
+  ]],
+  ['Kuibyshev', [
+    ['Buzuluk', 52.78, 52.26, 'plains', 0, 0, {}],
+  ]],
+  ['Kazan', [
+    ['Chistopol', 55.37, 50.64, 'plains', 0, 0, {}],
+    ['Yoshkar-Ola', 56.63, 47.89, 'forest', 0, 0, {}],
+  ]],
+  ['Kirov', [
+    ['Kotelnich', 58.31, 48.33, 'forest', 0, 0, {}],
+    ['Omutninsk', 58.67, 52.19, 'forest', 0, 0, {}],
+  ]],
+  ['Izhevsk', [
+    ['Glazov', 58.14, 52.66, 'forest', 0, 0, {}],
+    ['Sarapul', 56.47, 53.8, 'forest', 0, 0, {}],
+  ]],
+  ['Molotov', [
+    ['Kungur', 57.43, 56.94, 'hills', 0, 0, {}],
+  ]],
+  ['Chelyabinsk', [
+    ['Troitsk', 54.08, 61.57, 'plains', 0, 0, {}],
+  ]],
+  ['Magnitogorsk', [
+    ['Beloretsk', 53.97, 58.4, 'mountain', 0, 0, {}],
+    ['Kartaly', 53.05, 60.65, 'plains', 0, 0, {}],
+  ]],
+  ['Ufa', [
+    ['Birsk', 55.42, 55.53, 'plains', 0, 0, {}],
+    ['Bugulma', 54.54, 52.8, 'plains', 0, 0, {}],
+  ]],
+  ['Tyumen', [
+    ['Irbit', 57.67, 63.07, 'forest', 0, 0, {}],
+  ]],
+  ['Pugachev', [
+    ['Yershov', 51.35, 48.28, 'plains', 0, 0, {}],
+  ]],
+  ['Kurgan', [
+    ['Shadrinsk', 56.09, 63.63, 'plains', 0, 0, {}],
+    ['Petropavlovsk Kazakh', 54.87, 69.15, 'plains', 0, 0, {}],
+  ]],
+  ['Omsk', [
+    ['Tyukalinsk', 55.87, 72.2, 'plains', 0, 0, {}],
+    ['Isilkul', 54.91, 71.27, 'plains', 0, 0, {}],
+  ]],
+  ['Novosibirsk', [
+    ['Barabinsk', 55.35, 78.35, 'plains', 0, 0, {}],
+    ['Kamen-na-Obi', 53.79, 81.35, 'plains', 0, 0, {}],
+  ]],
+  ['Stalinsk', [
+    ['Leninsk-Kuznetsky', 54.66, 86.17, 'hills', 0, 0, {}],
+    ['Oirot-Tura', 51.96, 85.96, 'mountain', 0, 0, {}],
+  ]],
+  ['Nizhneudinsk', [
+    ['Tulun', 54.56, 100.58, 'forest', 0, 0, {}],
+  ]],
+  ['Irkutsk', [
+    ['Slyudyanka', 51.66, 103.71, 'mountain', 0, 0, {}],
+  ]],
+  ['Ulan-Ude', [
+    ['Petrovsk-Zabaikalsky', 51.28, 108.83, 'forest', 0, 0, {}],
+  ]],
+  ['Skovorodino', [
+    ['Mogocha', 53.74, 119.77, 'forest', 0, 0, {}],
+    ['Zeya', 53.73, 127.27, 'forest', 0, 0, {}],
+  ]],
+  ['Blagoveshchensk', [
+    ['Zavitaya', 50.11, 129.44, 'plains', 0, 0, {}],
+  ]],
+  ['Iman', [
+    ['Tetyukhe', 44.55, 135.57, 'mountain', 0, 0, {}],
+  ]],
+  ['North Sakhalin', [
+    ['Okha', 53.59, 142.95, 'forest', 0, 0, {}],
+  ]],
+  ['Sain Shand', [
+    ['Undur Khan', 47.32, 110.66, 'plains', 0, 0, {}],
+  ]],
+  ['Fergana', [
+    ['Kokand', 40.53, 70.94, 'plains', 0, 0, {}],
+    ['Andizhan', 40.78, 72.34, 'plains', 0, 0, {}],
+  ]],
+  ['Samarkand', [
+    ['Karshi', 38.86, 65.8, 'plains', 0, 0, {}],
+  ]],
+  ['Stalinabad', [
+    ['Kulyab', 37.91, 69.78, 'hills', 0, 0, {}],
+  ]],
+  ['Alma-Ata', [
+    ['Dzharkent', 44.17, 80, 'plains', 0, 0, {}],
+  ]],
+  ['Aralsk', [
+    ['Chelkar', 47.83, 59.6, 'plains', 0, 0, {}],
+  ]],
+  ['Semipalatinsk', [
+    ['Ayaguz', 47.96, 80.43, 'plains', 0, 0, {}],
+  ]],
+  // ---- Part 4: Africa, the Americas and Oceania ----
+  ['Mekele', [
+    ['Adowa', 14.17, 38.9, 'mountain', 0, 0, {}],
+    ['Quoram', 12.5, 39.52, 'mountain', 0, 0, {}],
+  ]],
+  ['Gondar', [
+    ['Debra Tabor', 11.85, 38.02, 'mountain', 0, 0, {}],
+  ]],
+  ['Debra Markos', [
+    ['Dangila', 11.27, 36.83, 'mountain', 0, 0, {}],
+  ]],
+  ['Dessie', [
+    ['Waldia', 11.83, 39.6, 'mountain', 0, 0, {}],
+  ]],
+  ['Lekemti', [
+    ['Asosa', 10.07, 34.53, 'hills', 0, 0, {}],
+    ['Gambela', 8.25, 34.58, 'plains', 0, 0, {}],
+  ]],
+  ['Jimma', [
+    ['Gore', 8.15, 35.54, 'forest', 0, 0, {}],
+    ['Shashamanna', 7.2, 38.59, 'hills', 0, 0, {}],
+  ]],
+  ['Neghelli', [
+    ['Yavello', 4.88, 38.08, 'plains', 0, 0, {}],
+    ['Ginir', 7.13, 40.7, 'hills', 0, 0, {}],
+  ]],
+  ['Harar', [
+    ['Asba Tafari', 9.08, 40.87, 'hills', 0, 0, {}],
+    ['Dagabur', 8.22, 43.56, 'plains', 0, 0, {}],
+  ]],
+  ['Mogadishu', [
+    ['Baidoa', 3.12, 43.65, 'plains', 0, 0, {}],
+    ['Bardera', 2.34, 42.28, 'plains', 0, 0, {}],
+  ]],
+  ['Berbera', [
+    ['Burao', 9.52, 45.54, 'desert', 0, 0, {}],
+  ]],
+  ['Wad Medani', [
+    ['Gallabat', 12.97, 36.15, 'hills', 0, 0, {}],
+    ['Roseires', 11.85, 34.38, 'plains', 0, 0, {}],
+  ]],
+  ['Malakal', [
+    ['Kurmuk', 10.55, 34.28, 'hills', 0, 0, {}],
+  ]],
+  ['Port Sudan', [
+    ['Tokar', 18.43, 37.73, 'desert', 0, 0, {}],
+  ]],
+  ['Marsabit', [
+    ['Lodwar', 3.12, 35.6, 'desert', 0, 0, {}],
+  ]],
+  ['Kisumu', [
+    ['Nakuru', -0.28, 36.07, 'hills', 0, 0, {}],
+  ]],
+  ['Tananarive', [
+    ['Antsirabe', -19.87, 47.03, 'hills', 0, 0, {}],
+  ]],
+  ['Majunga', [
+    ['Maevatanana', -16.95, 46.83, 'plains', 0, 0, {}],
+  ]],
+  ['Fianarantsoa', [
+    ['Ihosy', -22.4, 46.13, 'hills', 0, 0, {}],
+  ]],
+  ['Abeche', [
+    ['Mongo', 12.18, 18.69, 'plains', 0, 0, {}],
+  ]],
+  ['Fort-Archambault', [
+    ['Am Timan', 11.03, 20.28, 'plains', 0, 0, {}],
+  ]],
+  ['Libreville', [
+    ['Mitzic', 0.78, 11.55, 'forest', 0, 0, {}],
+  ]],
+  ['Yaounde', [
+    ['Ebolowa', 2.9, 11.15, 'forest', 0, 0, {}],
+    ['Batouri', 4.43, 14.37, 'forest', 0, 0, {}],
+  ]],
+  ['Douala', [
+    ['Dschang', 5.45, 10.07, 'hills', 0, 0, {}],
+  ]],
+  ['Bangui', [
+    ['Bambari', 5.76, 20.67, 'plains', 0, 0, {}],
+  ]],
+  ['Maiduguri', [
+    ['Yola', 9.2, 12.48, 'plains', 0, 0, {}],
+    ['Potiskum', 11.71, 11.08, 'plains', 0, 0, {}],
+  ]],
+  ['Kaduna', [
+    ['Minna', 9.61, 6.55, 'plains', 0, 0, {}],
+    ['Kontagora', 10.4, 5.47, 'plains', 0, 0, {}],
+    ['Bauchi', 10.31, 9.84, 'plains', 0, 0, {}],
+  ]],
+  ['Kano', [
+    ['Katsina', 12.99, 7.6, 'plains', 0, 0, {}],
+    ['Gusau', 12.17, 6.66, 'plains', 0, 0, {}],
+  ]],
+  ['Ibadan', [
+    ['Jebba', 9.13, 4.82, 'plains', 0, 0, {}],
+  ]],
+  ['Tamale', [
+    ['Wa', 10.06, -2.5, 'plains', 0, 0, {}],
+    ['Kintampo', 8.05, -1.73, 'plains', 0, 0, {}],
+  ]],
+  ['Freetown', [
+    ['Bo', 7.96, -11.74, 'forest', 0, 0, {}],
+  ]],
+  ['Zinder', [
+    ['Maradi', 13.5, 7.1, 'plains', 0, 0, {}],
+  ]],
+  ['Ouagadougou', [
+    ['Ouahigouya', 13.58, -2.42, 'plains', 0, 0, {}],
+    ["Fada N'Gourma", 12.06, 0.36, 'plains', 0, 0, {}],
+  ]],
+  ['Kankan', [
+    ['Siguiri', 11.42, -9.17, 'plains', 0, 0, {}],
+    ['Kissidougou', 9.18, -10.1, 'forest', 0, 0, {}],
+  ]],
+  ['Mopti', [
+    ['San', 13.3, -4.9, 'plains', 0, 0, {}],
+  ]],
+  ['Kampala', [
+    ['Mbarara', -0.61, 30.65, 'hills', 0, 0, {}],
+    ['Mbale', 1.08, 34.18, 'hills', 0, 0, {}],
+  ]],
+  ['Mwanza', [
+    ['Bukoba', -1.49, 31.56, 'hills', 0, 0, {}],
+  ]],
+  ['Mbeya', [
+    ['Songea', -10.68, 35.65, 'hills', 0, 0, {}],
+    ['Sumbawanga', -7.97, 31.62, 'hills', 0, 0, {}],
+  ]],
+  ['Lindi', [
+    ['Kilwa', -8.75, 39.36, 'plains', 0, 0, { port: 1 }],
+  ]],
+  ['El Obeid', [
+    ['En Nahud', 12.7, 28.43, 'plains', 0, 0, {}],
+  ]],
+  ['El Fasher', [
+    ['Nyala', 12.05, 24.88, 'plains', 0, 0, {}],
+  ]],
+  ['Juba', [
+    ['Torit', 4.41, 32.57, 'plains', 0, 0, {}],
+  ]],
+  ['Stanleyville', [
+    ['Ponthierville', -0.35, 25.48, 'forest', 0, 0, {}],
+  ]],
+  ['Albertville', [
+    ['Kongolo', -5.38, 27, 'plains', 0, 0, {}],
+    ['Manono', -7.3, 27.42, 'plains', 0, 0, {}],
+  ]],
+  ['Kamina', [
+    ['Dilolo', -10.7, 22.33, 'plains', 0, 0, {}],
+    ['Bukama', -9.2, 25.85, 'plains', 0, 0, {}],
+  ]],
+  ['Luluabourg', [
+    ['Lusambo', -4.97, 23.44, 'plains', 0, 0, {}],
+    ['Tshikapa', -6.42, 20.8, 'plains', 0, 0, {}],
+  ]],
+  ['Luanda', [
+    ['Ambriz', -7.85, 13.39, 'plains', 0, 0, { port: 1 }],
+    ['Sao Salvador', -6.27, 14.25, 'plains', 0, 0, {}],
+  ]],
+  ['Nova Lisboa', [
+    ['Silva Porto', -12.38, 16.93, 'hills', 0, 0, {}],
+  ]],
+  ['Porto Amelia', [
+    ['Mocimboa da Praia', -11.35, 40.35, 'plains', 0, 0, { port: 1 }],
+    ['Vila Cabral', -13.3, 35.25, 'hills', 0, 0, {}],
+  ]],
+  ['Beira', [
+    ['Vila Pery', -19.12, 33.47, 'hills', 0, 0, {}],
+  ]],
+  ['Kasama', [
+    ['Fort Rosebery', -11.2, 28.89, 'plains', 0, 0, {}],
+  ]],
+  ['Salisbury', [
+    ['Gatooma', -18.33, 29.92, 'plains', 0, 0, {}],
+    ['Sinoia', -17.37, 30.2, 'hills', 0, 0, {}],
+  ]],
+  ['Bulawayo', [
+    ['Fort Victoria', -20.07, 30.83, 'hills', 0, 0, {}],
+    ['Wankie', -18.37, 26.48, 'plains', 0, 0, {}],
+  ]],
+  ['Pietersburg', [
+    ['Louis Trichardt', -23.05, 29.9, 'hills', 0, 0, {}],
+  ]],
+  ['Ladysmith', [
+    ['Vryheid', -27.77, 30.8, 'hills', 0, 0, {}],
+  ]],
+  ['East London', [
+    ['Queenstown', -31.9, 26.88, 'hills', 0, 0, {}],
+    ['Umtata', -31.58, 28.78, 'hills', 0, 0, {}],
+  ]],
+  ['Rio Grande do Sul', [
+    ['Passo Fundo', -28.26, -52.41, 'hills', 0, 0, {}],
+    ['Bage', -31.33, -54.1, 'plains', 0, 0, {}],
+    ['Alegrete', -29.78, -55.79, 'plains', 0, 0, {}],
+    ['Lages', -27.82, -50.33, 'hills', 0, 0, {}],
+  ]],
+  ['Parana', [
+    ['Londrina', -23.31, -51.16, 'forest', 0, 0, {}],
+    ['Uniao da Vitoria', -26.23, -51.09, 'forest', 0, 0, {}],
+  ]],
+  ['Sao Paulo', [
+    ['Taubate', -23.03, -45.56, 'hills', 0, 0, {}],
+  ]],
+  ['Minas Gerais', [
+    ['Itabira', -19.62, -43.23, 'hills', 0, 0, {}],
+    ['Diamantina', -18.24, -43.6, 'hills', 0, 0, {}],
+    ['Teofilo Otoni', -17.86, -41.5, 'hills', 0, 0, {}],
+    ['Uberlandia', -18.92, -48.28, 'plains', 0, 0, {}],
+  ]],
+  ['Bahia', [
+    ['Jequie', -13.86, -40.08, 'hills', 0, 0, {}],
+    ['Conquista', -14.86, -40.84, 'hills', 0, 0, {}],
+    ['Jacobina', -11.18, -40.52, 'hills', 0, 0, {}],
+  ]],
+  ['Pernambuco', [
+    ['Crato', -7.23, -39.41, 'hills', 0, 0, {}],
+  ]],
+  ['Natal', [
+    ['Mossoro', -5.19, -37.34, 'plains', 0, 0, {}],
+  ]],
+  ['Ceara', [
+    ['Iguatu', -6.36, -39.3, 'plains', 0, 0, {}],
+  ]],
+  ['Buenos Aires', [
+    ['Junin', -34.59, -60.95, 'plains', 0, 0, {}],
+    ['Dolores', -36.31, -57.68, 'plains', 0, 0, {}],
+  ]],
+  ['Rosario', [
+    ['Santa Fe de la Vera Cruz', -31.63, -60.7, 'plains', 0, 0, {}],
+    ['Pergamino', -33.89, -60.57, 'plains', 0, 0, {}],
+    ['Gualeguaychu', -33.01, -58.52, 'plains', 0, 0, {}],
+  ]],
+  ['Pampas', [
+    ['Santa Rosa', -36.62, -64.29, 'plains', 0, 0, {}],
+    ['General Pico', -35.66, -63.76, 'plains', 0, 0, {}],
+    ['Bolivar', -36.23, -61.11, 'plains', 0, 0, {}],
+  ]],
+  ['Cordoba', [
+    ['Dean Funes', -30.42, -64.35, 'hills', 0, 0, {}],
+  ]],
+  ['Tucuman', [
+    ['Catamarca', -28.47, -65.78, 'hills', 0, 0, {}],
+  ]],
+  ['Mendoza', [
+    ['San Juan', -31.54, -68.53, 'hills', 0, 0, {}],
+  ]],
+  ['Neuquen', [
+    ['General Roca', -39.03, -67.58, 'plains', 0, 0, {}],
+  ]],
+  ['Tacuarembo', [
+    ['Melo', -32.37, -54.17, 'plains', 0, 0, {}],
+  ]],
+  ['Asuncion', [
+    ['Villa Concepcion', -23.41, -57.43, 'plains', 0, 0, {}],
+  ]],
+  ['Concepcion', [
+    ['Talca', -35.43, -71.66, 'plains', 0, 0, {}],
+  ]],
+  ['Cuzco', [
+    ['Ayacucho', -13.16, -74.22, 'mountain', 0, 0, {}],
+  ]],
+  ['Potosi', [
+    ['Uyuni', -20.46, -66.83, 'mountain', 0, 0, {}],
+    ['Tarija', -21.53, -64.73, 'hills', 0, 0, {}],
+  ]],
+  ['Santander', [
+    ['Socorro', 6.47, -73.26, 'hills', 0, 0, {}],
+  ]],
+  ['Bogota', [
+    ['Tunja', 5.53, -73.36, 'mountain', 0, 0, {}],
+  ]],
+  ['Cali', [
+    ['Popayan', 2.44, -76.61, 'hills', 0, 0, {}],
+    ['Neiva', 2.93, -75.28, 'hills', 0, 0, {}],
+  ]],
+  ['Barquisimeto', [
+    ['Barinas', 8.62, -70.21, 'plains', 0, 0, {}],
+  ]],
+  ['Apure', [
+    ['San Fernando de Apure', 7.89, -67.47, 'plains', 0, 0, {}],
+  ]],
+  ['Chihuahua', [
+    ['Ciudad Juarez', 31.74, -106.49, 'plains', 0, 0, {}],
+  ]],
+  ['Monterrey', [
+    ['Matamoros', 25.87, -97.5, 'plains', 0, 0, {}],
+    ['Nuevo Laredo', 27.48, -99.52, 'plains', 0, 0, {}],
+  ]],
+  ['Guadalajara', [
+    ['Aguascalientes', 21.88, -102.29, 'hills', 0, 0, {}],
+    ['Leon', 21.12, -101.68, 'hills', 0, 0, {}],
+    ['Tepic', 21.5, -104.89, 'hills', 0, 0, {}],
+  ]],
+  ['Sinaloa', [
+    ['Los Mochis', 25.79, -108.99, 'plains', 0, 0, {}],
+  ]],
+  ['Alberta', [
+    ['Red Deer', 52.27, -113.81, 'plains', 0, 0, {}],
+    ['Lloydminster', 53.28, -110, 'plains', 0, 0, {}],
+    ['Edson', 53.58, -116.43, 'forest', 0, 0, {}],
+    ['Drumheller', 51.46, -112.71, 'plains', 0, 0, {}],
+  ]],
+  ['Saskatchewan', [
+    ['Yorkton', 51.21, -102.46, 'plains', 0, 0, {}],
+    ['Swift Current', 50.29, -107.8, 'plains', 0, 0, {}],
+    ['North Battleford', 52.78, -108.3, 'plains', 0, 0, {}],
+  ]],
+  ['Winnipeg', [
+    ['Dauphin', 51.15, -100.05, 'plains', 0, 0, {}],
+  ]],
+  ['Vancouver', [
+    ['Kelowna', 49.89, -119.5, 'hills', 0, 0, {}],
+  ]],
+  ['British Columbia', [
+    ['Prince George', 53.92, -122.75, 'forest', 0, 0, {}],
+  ]],
+  ['Dakotas', [
+    ['Williston', 48.15, -103.62, 'plains', 0, 0, {}],
+    ['Bismarck', 46.81, -100.78, 'plains', 0, 0, {}],
+  ]],
+  ['Wyoming', [
+    ['Casper', 42.85, -106.31, 'plains', 0, 0, {}],
+  ]],
+  ['Nebraska', [
+    ['North Platte', 41.12, -100.77, 'plains', 0, 0, {}],
+  ]],
+  ['Nevada', [
+    ['Ely', 39.25, -114.89, 'mountain', 0, 0, {}],
+  ]],
+  ['West Texas', [
+    ['Marfa', 30.31, -104.02, 'hills', 0, 0, {}],
+  ]],
+  ['Arizona', [
+    ['Kingman', 35.19, -114.05, 'hills', 0, 0, {}],
+    ['Prescott', 34.54, -112.47, 'mountain', 0, 0, {}],
+  ]],
+  ['Utah', [
+    ['Price', 39.6, -110.81, 'mountain', 0, 0, {}],
+  ]],
+  ['Montana', [
+    ['Havre', 48.55, -109.68, 'plains', 0, 0, {}],
+  ]],
+  ['Fairbanks', [
+    ['Nenana', 64.56, -149.09, 'forest', 0, 0, {}],
+  ]],
+  ['Wewak', [
+    ['Aitape', -3.14, 142.35, 'forest', 0, 0, { port: 1 }],
+  ]],
+  ['Rockhampton', [
+    ['Emerald', -23.53, 148.16, 'plains', 0, 0, {}],
+    ['Bundaberg', -24.87, 152.35, 'plains', 0, 0, { port: 1 }],
+  ]],
+  ['Brisbane', [
+    ['Moree', -29.47, 149.85, 'plains', 0, 0, {}],
+  ]],
+  ['Sydney', [
+    ['Parkes', -33.14, 148.17, 'plains', 0, 0, {}],
+  ]],
+  ['Canberra', [
+    ['Griffith', -34.29, 146.04, 'plains', 0, 0, {}],
+  ]],
+  ['Melbourne', [
+    ['Shepparton', -36.38, 145.4, 'plains', 0, 0, {}],
+  ]],
+  ['Adelaide', [
+    ['Port Augusta', -32.49, 137.77, 'plains', 0, 0, { port: 1 }],
+  ]],
+  ['Perth', [
+    ['Albany WA', -35.02, 117.88, 'plains', 0, 0, { port: 1 }],
+  ]],
+  // ---- Part 4, the historian's cut (ruling 215): Yochow, on the Canton-Hankow railway and the east shore of
+  // Tungting Lake, Japan's from November 1938 and the base for all four battles of Changsha ----
+  ['Changsha', [
+    ['Yochow', 29.37, 113.1, 'plains', 0, 0, {}],
+  ]],
 ];
 
 // Which seas a city stands on where the count of water squares misleads: name -> [sea keys].
@@ -1290,11 +2021,39 @@ export const CITY_NO_RAIL = [
   // Australia and New Zealand: the north, and the lines that stood alone at Port Lincoln, Normanton, Cooktown and Nelson.
   'Daly Waters', 'Halls Creek', 'Derby', 'Exmouth Gulf', 'Port Lincoln', 'Normanton', 'Cooktown', 'Nelson',
   // Africa: the Dakar-Niger line ended at Koulikoro, short of Segou; the rest were river, road or caravan towns.
-  'Kikwit', 'Lisala', 'Paulis', 'Watsa', 'Fort Gouraud', 'Ziguinchor', 'Segou', 'Sikasso', 'Labe', 'Man', 'Sassandra', 'Tahoua',
+  'Kikwit', 'Lisala', 'Paulis', 'Watsa', 'Fort Gouraud', 'Ziguinchor', 'Segou', 'Sikasso', 'Man', 'Sassandra', 'Tahoua',
   'Mao', 'Ati', 'Moundou', 'Maroua', 'Ngaoundere', 'Bouar', 'Kribi', 'Bangassou', 'Dolo', 'Harper', 'Henrique de Carvalho',
   'Farafra', 'Geneina', 'Sokoto', 'Benin City', 'Moyale', 'Iringa', 'Abercorn',
   // Alaska: the Copper River line from Cordova closed in 1938; the Alaska Railroad ran from Seward to Fairbanks only.
   'Cordova', 'Big Delta', 'McGrath', 'Galena', 'Kotzebue', 'Cold Bay',
+  // ---- Part 4 ----
+  // A town whose own streets had no line is still left off this list where a trunk line crosses its province: the
+  // Tientsin-Pukow line at Tehchow (Lintsing) and Yenchow (Sintai), the lines to Kiamusze by Poli and Tiehli (Sansing),
+  // the Rangoon-Mandalay line at Pyinmana (Loikaw), the Trans-Iranian by Sari (Damghan), the Trans-Siberian at Tygda
+  // (Zeya), the Raipur-Vizianagram line at Rayagada (Jagdalpur), the Kassala line at Haiya (Tokar), the Conakry-Niger
+  // line between Mamou and Dabola (Labe), and the lines handed over through Conquista, Mossoro, Ayacucho, Tarija and
+  // Socorro.
+  // China: the hill and mountain towns round Szechwan, the coast of Kiangsu, the south and the far north had no line in
+  // September 1939 (Kutsing's came in 1941; the lines to Kingyang and Pingliang were never built).
+  'Shasi', 'Enshih', 'Macheng', 'Yencheng', 'Fuchow', 'Fowyang', 'Pengshui', 'Mienyang', 'Sungpan', 'Lishih', 'Wuchow',
+  'Ningtu', 'Kweihsien', 'Poseh', 'Pichieh', 'Kingyang', 'Kwangyuan', 'Ankang', 'Fusung', 'Lintung', 'Kangnung', 'Shangtu',
+  'Pingliang', 'Minhsien', 'Kutsing', 'Hweitseh', 'Szemao', 'Likiang', 'Mienning',
+  // Asia: the Burma Railway to Kanchanaburi came in 1942 and the Persian line to Kashan in 1949.
+  'Kengtung', 'Tamu', 'Maingkwan', 'Kanchanaburi', 'Sakon Nakhon', 'Raheng', 'Chiang Rai', 'Kratie', 'Miri', 'Samarinda',
+  'Singkawang', 'Sintang', 'Ketapang', 'Sampit', 'Amoentai', 'Padang Sidempoean', 'Benkoelen', 'Pangkalpinang', 'Loralai', 
+  'Bhuj', 'Ardebil', 'Quchan', 'Turbat-i-Haidari', 'Kashan', 'Jahrum', 'Girishk', 'Kalat-i-Ghilzai', 'Farah', 'Maimana',
+  'Khanabad', 'Hofuf', 'Taif', 'Chistopol', 'Beloretsk', 'Birsk', 'Tyukalinsk', 'Kamen-na-Obi', 'Oirot-Tura', 'Tetyukhe', 'Okha',
+  'Undur Khan', 'Kulyab', 'Dzharkent',
+  // Africa: Ethiopia had the one line from Jibuti; the rest were road, river and caravan towns.
+  'Adowa', 'Quoram', 'Debra Tabor', 'Dangila', 'Waldia', 'Asosa', 'Gambela', 'Gore', 'Shashamanna', 'Yavello', 'Ginir', 'Dagabur',
+  'Baidoa', 'Bardera', 'Burao', 'Gallabat', 'Roseires', 'Kurmuk', 'Lodwar', 'Maevatanana', 'Ihosy', 'Mongo', 'Am Timan',
+  'Mitzic', 'Ebolowa', 'Batouri', 'Dschang', 'Bambari', 'Yola', 'Potiskum', 'Kontagora', 'Bauchi', 'Katsina', 'Wa', 'Kintampo',
+  'Maradi', 'Ouahigouya', "Fada N'Gourma", 'Siguiri', 'Kissidougou', 'San', 'Mbarara', 'Bukoba', 'Songea', 'Sumbawanga', 'Kilwa',
+  'En Nahud', 'Nyala', 'Torit', 'Manono', 'Lusambo', 'Tshikapa', 'Ambriz', 'Sao Salvador', 'Mocimboa da Praia', 'Vila Cabral',
+  'Fort Rosebery',
+  // The Americas and New Guinea: the line to Itabira came in 1943; Teofilo Otoni's stood alone.
+  'Lages', 'Itabira', 'Teofilo Otoni', 'Villa Concepcion', 'Barinas',
+  'San Fernando de Apure', 'Aitape',
 ];
 // Lines laid by hand, each a chain of neighbouring provinces, and lines struck.
 export const CITY_RAIL_LINES = [
@@ -1304,33 +2063,50 @@ export const CITY_RAIL_LINES = [
   ['Greenville', 'Atlanta', 'Alabama'], ['Atlanta', 'Chattanooga'],
   ['Florida', 'Miami'], ['Tallahassee', 'Pensacola', 'Alabama'],
   ['Omaha', 'Kansas City', 'Joplin'], ['Duluth', 'Minneapolis', 'Iowa'], ['Minneapolis', 'Sioux Falls'], ['Sioux City', 'Iowa'],
-  ['Yuma', 'Tucson', 'El Paso', 'West Texas'], ['El Paso', 'New Mexico'], ['Gallup', 'Flagstaff'],
+  ['Yuma', 'Tucson', 'El Paso', 'Marfa', 'West Texas'], ['El Paso', 'New Mexico'], ['Gallup', 'Flagstaff'],
   ['Reno', 'Elko', 'Ogden', 'Pocatello'], ['Ogden', 'Rock Springs'], ['Boise', 'Pendleton', 'Portland'],
   ['Billings', 'Butte', 'Missoula'], ['Butte', 'Pocatello'],
   ['Lubbock', 'Amarillo'], ['Wichita Falls', 'North Texas'], ['San Antonio', 'Corpus Christi'], ['Shreveport', 'North Texas'],
   ['New York', 'Albany'], ['Baltimore', 'Susquehanna'], ['Toledo', 'Fort Wayne'], ['Toledo', 'Ohio Valley'],
   ['Grand Rapids', 'South Bend'], ['Cheyenne', 'Scottsbluff'], ['Sacramento', 'San Joaquin'],
   // ---- Canada: the Newfoundland Railway, and the Northern Alberta line to Dawson Creek ----
-  ['Corner Brook', 'Newfoundland', 'Gander', "St John's"], ['Alberta', 'Grande Prairie', 'Dawson Creek'],
+  ['Corner Brook', 'Newfoundland', 'Gander', "St John's"], ['Alberta', 'Edson', 'Grande Prairie', 'Dawson Creek'],
+  ['Alberta', 'Fort McMurray'], ['Winnipeg', 'Brandon', 'Regina'], // the Waterways line; the Canadian Pacific main line
   // ---- Mexico and Central America: Torreon, the junction of the north; the lines to Corinto and Puerto Limon ----
   ['Monterrey', 'Torreon', 'Parral'], ['Durango', 'Torreon', 'Zacatecas'], ['Corinto', 'Managua'], ['Puerto Limon', 'San Jose'],
   // ---- South America ----
-  ['La Paz', 'Oruro', 'Potosi'], ['Buenos Aires', 'Mar del Plata'],
-  // ---- China and Manchuria: the Peiping-Hankow line by Sinyang, the Kwangsi line to Tushan (1944), the lines to
-  // Peian and Heiho, to Hulin and to Arshan ----
-  ['Hankow', 'Sinyang', 'Nanyang'], ['Liuchow', 'Tushan'], ['Harbin', 'Peian', 'Heiho'], ['Kiamusze', 'Hulin'], ['Tsitsihar', 'Arshan'],
+  ['La Paz', 'Oruro', 'Potosi'], ['Buenos Aires', 'Dolores', 'Mar del Plata'], ['Salvador', 'Jequie'],
+  // ---- China and Manchuria: the Peiping-Hankow line by Chumatien and Sinyang (Nanyang had no line), the Lunghai line
+  // to Sian (1934) and Paoki (1936), the Kwangsi line to Tushan (1944), the lines to Peian and Heiho, to Hulin and
+  // to Arshan (1937, from Paichengtze by Wangyehmiao), the Manpo line to Kanggye (1939) ----
+  ['Hankow', 'Sinyang', 'Chumatien', 'Kaifeng'], ['Loyang', 'Tungkwan', 'Sian', 'Paoki'], ['Liuchow', 'Tushan'],
+  ['Harbin', 'Suihwa', 'Peian', 'Heiho'], ['Kiamusze', 'Hulin'], ['Taonan', 'Wangyehmiao', 'Arshan'], ['Sinuiju', 'Kanggye'],
+  ['Mutankiang', 'Sansing', 'Kiamusze'], // the Tumen-Kiamusze line of 1937, by Linkou and Poli
+  // ---- Indochina, Siam and Burma: the line from Hanoi to Lang Son and the frontier; Siam's northern line, which left
+  // the Korat line at Ban Phachi and ran by Lopburi and Paknampo; the Rangoon-Mandalay line by Pyinmana and Thazi ----
+  ['Hanoi', 'Lang Son'], ['Korat', 'Paknampo', 'Phitsanulok'], ['Toungoo', 'Loikaw', 'Meiktila'],
+  // ---- The Turksib (1930), east of Lake Balkhash by Aktogay and Ush-Tobe ----
+  ['Semipalatinsk', 'Ayaguz', 'Balkhash', 'Taldy-Kurgan', 'Alma-Ata'],
   // ---- Soviet Asia and Burma ----
   ['Chkalov', 'Orsk'], ['Mandalay', 'Meiktila'],
   // ---- Australia: the North Australia Railway from Darwin, the Marble Bar line, the Tasmanian main line, the
   // Victorian lines to Bendigo and Mildura and to Albury, the Central Western line to Longreach ----
   ['Darwin', 'Katherine'], ['Port Hedland', 'Marble Bar'], ['Hobart', 'Launceston'],
-  ['Albury', 'Bendigo', 'Melbourne'], ['Bendigo', 'Mildura'], ['Rockhampton', 'Longreach'],
+  ['Geraldton', 'Meekatharra'], // the Northern Railway by Mullewa and Cue (1910), across ground now ruled desert
+  ['Bendigo', 'Melbourne'], ['Bendigo', 'Mildura'], ['Rockhampton', 'Emerald', 'Longreach'],
   // ---- Africa: the Dahomey line to Parakou, the Gold Coast's two lines to Kumasi, the Sudan's lines by Sennar to
   // Gedaref and by Kosti to El Obeid, the Lualaba line from Kindu to Albertville, the Lumbo line to Nampula ----
   ['Cotonou', 'Parakou'], ['Takoradi', 'Kumasi', 'Accra'], ['Gedaref', 'Wad Medani'], ['Wad Medani', 'Kosti', 'El Obeid'],
-  ['Kindu', 'Albertville'], ['Nampula', 'Mocambique'],
+  ['Kindu', 'Kongolo', 'Albertville'], ['Nampula', 'Mocambique'],
+  // The line round the falls from Stanleyville to Ponthierville, Sierra Leone's line to Bo, Nigeria's branch to Gusau.
+  ['Stanleyville', 'Ponthierville'], ['Freetown', 'Bo'], ['Kaduna', 'Gusau'], ['Nairobi', 'Nanyuki'],
 ];
 export const CITY_RAIL_CUT = [
   ['Monclova', 'Chihuahua'], // the line from Monterrey to Chihuahua ran by Torreon
-  ['Albury', 'Sale'], // the line from Sydney to Melbourne ran by Albury and Seymour, west of the Alps
+  ['Nanyang', 'Chumatien'], // the Peiping-Hankow line ran east of Nanyang, by Yencheng and Chumatien
+];
+// Lines handed over that no longer run from piece to piece of their two provinces: the course is laid by hand above
+// (the line ran through a third province), or the historian struck the line (Nanyang to Hankow: no such line).
+export const CITY_RAIL_RELAID = [
+  ['Bangkok', 'Phitsanulok'], ['Toungoo', 'Mandalay'], ['Semipalatinsk', 'Alma-Ata'], ['Nanyang', 'Hankow'],
 ];

@@ -2,9 +2,12 @@
 // when the provinces are ready to be written). The chart as handed over is not touched.
 //
 // A lake (data/campaign/more-lakes.mjs) is cut out of the ground of every province it lies in and out of the land,
-// and listed with the chart's lakes, each with its water ('fresh', 'salt' or 'pan'). No province loses its chief
-// place: a town on the shore keeps a foot of ground (the shore is drawn round it). No border is struck: two
-// provinces that touched still touch, by rule, even where a lake now lies along their border.
+// and listed with the chart's lakes, each with its water ('fresh', 'salt' or 'pan'). A dry salt pan is ground, not
+// a gap (design director, 17 November): it is listed for the painter and cut out of nothing, its provinces keep
+// their ground and touch across it, and an army can cross it. No province loses its chief
+// place: a town on the shore keeps a foot of ground (the shore is drawn round it). A border that lay on dry land
+// and now lies wholly under a lake is struck (design director, 17 November): the two no longer touch, and the tool
+// counts the steps of the way round by land.
 import polygonClipping from 'polygon-clipping';
 import { MORE_LAKES } from '../data/campaign/more-lakes.mjs';
 import { OLD_LAKE_WATER } from '../data/campaign/detail.mjs';
@@ -30,7 +33,7 @@ export function cutLakes({ out, core, proj, warn }) {
   const disc = (x, y, r) => { const ring = []; for (let k = 0; k < 16; k++) ring.push([x + r * Math.cos((k * Math.PI) / 8), y + r * Math.sin((k * Math.PI) / 8)]); return [[...ring, ring[0]]]; };
   const lakes = out.lakes.map((l) => ({ ...l, water: OLD_LAKE_WATER[l.name] ?? 'fresh' }));
   const names = new Set(lakes.map((l) => l.name));
-  const lines = [], drowned = [], shores = [], thinned = [], apart = [], offLand = [];
+  const lines = [], drowned = [], shores = [], thinned = [], apart = [], offLand = [], pans = [];
   const key = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
   const touched = new Map();
   let cutArea = 0;
@@ -42,6 +45,14 @@ export function cutLakes({ out, core, proj, warn }) {
     const box = boxOf(ring);
     if (core.regions.some((r) => r.polys.some((poly) => boxesMeet(boxOf(poly[0]), box) && ring.some(([x, y]) => inRing(poly[0], x, y))))) { warn(`! ${name} lies on the map of Europe: not cut`); continue; }
     const near = out.regions.filter((r) => r.polys.some((poly) => boxesMeet(boxOf(poly[0]), box, FOOT)));
+    if (water === 'pan') {
+      const outline = open(lake)[0][0];
+      const on = near.filter((r) => r.polys.some((poly) => outline.some(([x, y]) => inRing(poly[0], x, y))));
+      lakes.push({ name, level, x: r1(outline.reduce((t, p) => t + p[0], 0) / outline.length), y: r1(outline.reduce((t, p) => t + p[1], 0) / outline.length), outline, water });
+      pans.push(name);
+      lines.push(`  ${name.padEnd(20)} ${water.padEnd(5)} ${String(Math.round(polyArea([outline]))).padStart(5)} square units painted on the ground of ${on.map((r) => r.name).join(', ') || 'no province'}`);
+      continue;
+    }
     // A chief place in the water or on the very shore keeps a foot of ground.
     for (const r of near) {
       if (!(inRing(ring, r.x, r.y) || toRing(ring, r.x, r.y) < SHORE)) continue;
@@ -89,13 +100,21 @@ export function cutLakes({ out, core, proj, warn }) {
     if (!o || seen.has(key(r.id, j))) continue;
     seen.add(key(r.id, j));
     // (Only a border that lay on dry land before the lakes were cut.)
-    if (meets(was, touched.get(j)?.was ?? o.polys) && !meets(r.polys, o.polys)) apart.push(`${r.name} - ${o.name}`);
+    if (meets(was, touched.get(j)?.was ?? o.polys) && !meets(r.polys, o.polys)) apart.push([r, o]);
   }
+  for (const [r, o] of apart) { r.nb = r.nb.filter((j) => j !== o.id); o.nb = o.nb.filter((j) => j !== r.id); }
+  const byId = new Map(out.regions.map((r) => [r.id, r]));
+  const steps = (a, b) => {
+    const d = new Map([[a, 0]]), queue = [a];
+    for (let i = 0; i < queue.length; i++) { const u = queue[i]; if (u === b) return d.get(u); for (const v of byId.get(u)?.nb ?? []) if (!d.has(v)) { d.set(v, d.get(u) + 1); queue.push(v); } }
+    return Infinity;
+  };
+  const struck = apart.map(([r, o]) => { const n = steps(r.id, o.id); if (n > 3) warn(`! ${r.name} and ${o.name} no longer touch across a lake, and the way round by land is ${n === Infinity ? 'cut' : `${n} steps`}`); return `${r.name} - ${o.name} (${n} steps round by land)`; });
   out.lakes = lakes;
-  const notes = [`lakes: ${lakes.length} on the chart (${lakes.length - lines.length} as handed over, ${lines.length} cut now: ${Math.round(cutArea)} square units of ground)`];
+  const notes = [`lakes: ${lakes.length} on the chart (${lakes.length - lines.length} as handed over, ${lines.length - pans.length} cut now: ${Math.round(cutArea)} square units of ground; ${pans.length} dry pans painted on the ground and cut out of nothing: ${pans.join(', ')})`];
   if (shores.length) notes.push(`the shore is drawn round ${shores.length} chief places: ${shores.join(', ')}`);
   if (thinned.length) notes.push(`provinces that lost over a third of their ground, or are left under 700 square units: ${thinned.join('; ')}`);
-  if (apart.length) notes.push(`borders that now lie under a lake (the two still touch by rule): ${apart.join('; ')}`);
+  if (struck.length) notes.push(`borders struck, the whole of them under a lake: ${struck.join('; ')}`);
   if (offLand.length) notes.push(`! lakes that lie mostly off the charted ground: ${offLand.join('; ')}`);
   if (drowned.length) notes.push(`! provinces a lake would have drowned (left as they were): ${drowned.join('; ')}`);
   return { notes, lines };

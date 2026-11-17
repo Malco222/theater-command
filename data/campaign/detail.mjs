@@ -263,6 +263,18 @@ export const MORE_RIVER_ADD = [
  * Lake Chad and Lop Nor are at their old shores: Chad has shrunk to a tenth since, and Lop Nor held water from
  * 1921 until the 1960s.
  */
+/**
+ * Shores laid by hand, as [lat, lon] points, in place of the survey's: the survey draws these lakes as they are
+ * today, after sixty years of dykes and silt. Both are at the summer shore of an atlas of the 1930s (the design
+ * director, the art director and the historian, 17 November): Tungting about 4,700 square km (4,700 surveyed in
+ * 1932, 4,350 in 1949; today's survey shows 720), from Yochow and the Siang's mouth round by Yuankiang and Hanshou
+ * to the delta of Nanhsien; Poyang about 4,700 (5,000 at high water in the 1940s; the survey shows 2,050), from the
+ * neck at Hukow to Poyang town, Yukan and the Kan's delta below Nanchang.
+ */
+export const LAKE_HAND = {
+  'Tungting Lake': [[29.42, 113.06], [29.34, 113.04], [29.2, 113.02], [29.03, 112.98], [28.87, 112.93], [28.77, 112.8], [28.72, 112.55], [28.74, 112.3], [28.81, 112.1], [28.9, 111.98], [29.05, 111.96], [29.2, 112.04], [29.28, 112.2], [29.2, 112.38], [29.08, 112.54], [29.07, 112.72], [29.2, 112.83], [29.36, 112.87], [29.46, 112.96]],
+  'Poyang Lake': [[29.74, 116.21], [29.55, 116.21], [29.38, 116.22], [29.26, 116.3], [29.2, 116.5], [29.11, 116.67], [28.95, 116.7], [28.78, 116.62], [28.66, 116.46], [28.55, 116.3], [28.58, 116.14], [28.7, 116.06], [28.95, 116.03], [29.15, 115.99], [29.3, 116.03], [29.45, 116.05], [29.6, 116.1], [29.72, 116.14]],
+};
 export const MORE_LAKE_LIST = [
   // North America
   ['lakes', 'Great Bear Lake', 'Great Bear Lake', 'fresh', 156],
@@ -333,3 +345,29 @@ export const MORE_LAKE_LIST = [
 
 /** The water of the lakes the chart was handed over with (fresh where not named). */
 export const OLD_LAKE_WATER = { 'Aral Sea': 'salt' };
+
+// ---- Ground laid by ruling -----------------------------------------------------------------------------------
+// Ground the design director has ruled, by province name, on the chart with the cities only. It stands over the
+// seed and over the clerk's tables until their rows say the same (carve-cities.mjs counts what it changed).
+const ground = (g, names) => Object.fromEntries(names.split(', ').map((n) => [n, g]));
+export const RULED_GROUND = {
+  // Ruling 212 (17 November): the true deserts outside Africa, where most of the ground is sand, gravel or salt even
+  // if the chief place is an oasis. Arid steppe and dry hills stay what they are. The builder's reading less Tennant
+  // Creek (grassland east of the town: 47% of its ground), and the historian's 23
+  // (/mnt/project-files/historian/deserts-212-review.md). Left as they are: Nevada, Monclova, Nogales, Changtang,
+  // Gartok, Leh, and the deserts the map of Europe already carries.
+  ...ground('desert', 'Etsin Gol, Hami, Turfan, Anhsi, Khotan, Charkhlik, Tsaidam, Gobi, Sain Shand'),
+  ...ground('desert', 'Krasnovodsk, Kizyl-Arvat, Khiva, Nukus, Aralsk, Kzyl-Orda, Fort Shevchenko, Balkhash, Dzhezkazgan'),
+  ...ground('desert', 'Yazd, Zahedan, Birjand, Kandahar, Riyadh, Buraida, Hail, Tabuk, Medina, Yanbu, Dhahran, Rub al Khali, Kuwait, Doha, Sharjah, Seiyun'),
+  ...ground('desert', 'Bikaner, Jodhpur, Bahawalpur, Pasni'),
+  ...ground('desert', 'Kalgoorlie, Nullarbor, Oodnadatta, Alice Springs, Marble Bar, Meekatharra, Marree'),
+  ...ground('desert', 'Yuma, Las Vegas, Arica, Tacna, Chuquicamata, Chimbote, Chiclayo'),
+  ...ground('desert', 'Kashgar, Yarkand, Aksu, Yumen, Ningsia, Merv, Chardzhou, Bukhara, Jeddah, Hodeida, Aden, Mukalla, Mirpur Khas'),
+  ...ground('desert', 'Tucson, El Paso, Guaymas, Sonora, Torreon, Baja California, Southern Baja, Antofagasta, Tarapaca, Atacama'),
+  // Two towns of part 4 were cut out of a province the ruling names, and hold most of the desert it was named for:
+  // Girishk the Dasht-i-Margo and the Registan (out of Kandahar), Hofuf the sands round the Hasa oasis (out of
+  // Dhahran). The builder's reading, for the director and the historian to strike.
+  ...ground('desert', 'Girishk, Hofuf'),
+  // Ruling 215 (17 November), on the historian's word: the Loushan pass on the road from Kweiyang to Chungking.
+  Tsunyi: 'mountain',
+};

@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import { GROUND } from '../data/campaign/rails.mjs';
 import { WORLD_RIVER_CUT, WORLD_RIVER_ADD } from '../data/campaign/world.mjs';
 import { FAR_RIVER_CUT, FAR_RIVER_ADD } from '../data/campaign/far.mjs';
-import { CITY_RIVER_CUT, CITY_RIVER_ADD, CITY_NO_RAIL, CITY_RAIL_LINES, CITY_RAIL_CUT } from '../data/campaign/cities.mjs';
+import { CITY_RIVER_CUT, CITY_RIVER_ADD, CITY_NO_RAIL, CITY_RAIL_LINES, CITY_RAIL_CUT, CITY_RAIL_RELAID } from '../data/campaign/cities.mjs';
 import { moreRivers } from './more-rivers-net.mjs';
 
 const read = (name) => JSON.parse(fs.readFileSync(new URL(`../src/generated/${name}.json`, import.meta.url), 'utf8'));
@@ -129,7 +129,15 @@ const cost = (a, b) => { const t = beside(a, b); return Math.hypot(a.x - t.x, a.
 const lines = new Set();
 let through = 0;
 const reroute = [];
+// Lines handed over whose course is laid by hand (or that the historian struck) are not carried from piece to piece.
+const relaid = new Set();
+for (const [a, b] of CITY_RAIL_RELAID) {
+  const p = byName.get(a), q = byName.get(b);
+  if (!p || !q || !beforeRails.links.some(([i, j]) => key(i, j) === key(p.id, q.id))) { console.warn('bad relaid line', a, b); continue; }
+  relaid.add(key(p.id, q.id));
+}
 for (const [a, b] of beforeRails.links) {
+  if (relaid.has(key(a, b))) continue;
   if (touches(a, b)) { lines.add(key(a, b)); continue; }
   // The two no longer touch: a city lies between them. The line runs by the easiest way through their pieces.
   const pieces = new Set(all.filter((r) => r.id === a || r.id === b || r.of === a || r.of === b).filter((r) => !noRail.has(r.name)).map((r) => r.id));
@@ -212,7 +220,10 @@ const links = [...lines].map((k) => k.split(':').map(Number)).map(([a, b]) => [a
 fs.writeFileSync(new URL('../src/generated/world-cities-rails.json', import.meta.url), JSON.stringify({ links }) + '\n');
 const on = onNet();
 const wasOn = new Set(beforeRails.links.flatMap(([a, b]) => [a, b]));
-const dropped = [...wasOn].filter((id) => !on.has(id)).map((id) => at.get(id).name);
+const byHand = new Set(CITY_RAIL_RELAID.flat());
+const offNow = [...wasOn].filter((id) => !on.has(id)).map((id) => at.get(id).name);
+const dropped = offNow.filter((n) => !byHand.has(n));
 console.log(`rails: ${links.length} lines (${beforeRails.links.length} as handed over, ${through} of them now running through a city), ${joinedUp.length} cities joined to the net; cities off it: ${map.regions.filter((r) => r.of !== undefined && !on.has(r.id)).map((r) => r.name).join(', ') || 'none'}`);
+if (relaid.size) console.log(`lines handed over that are laid by hand or struck: ${CITY_RAIL_RELAID.map(([a, b]) => `${a} - ${b}`).join(', ')}${offNow.some((n) => byHand.has(n)) ? `; off the net with them: ${offNow.filter((n) => byHand.has(n)).join(', ')}` : ''}`);
 if (dropped.length) console.log(`! provinces that were on the net and are off it: ${dropped.join(', ')}`);
 if (process.argv.includes('--list')) { console.log(`through a city: ${reroute.join('; ')}`); console.log(`joined: ${joinedUp.join('; ')}`); }

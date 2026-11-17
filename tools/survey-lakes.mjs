@@ -6,7 +6,7 @@
 //
 // The survey's files are not kept in the repository: they are downloaded into a folder of their own and read here.
 import fs from 'node:fs';
-import { MORE_LAKE_LIST } from '../data/campaign/detail.mjs';
+import { MORE_LAKE_LIST, LAKE_HAND } from '../data/campaign/detail.mjs';
 
 const [lakesFile, historicFile, playasFile] = process.argv.slice(2).filter((v) => !v.startsWith('--'));
 if (!lakesFile) { console.error('usage: node tools/survey-lakes.mjs <lakes.geojson> <historic.geojson> <playas.geojson>'); process.exit(1); }
@@ -44,6 +44,12 @@ function thin(ring, tol) {
 
 const out = [], notes = [];
 for (const [where, surveyName, name, water, level] of MORE_LAKE_LIST) {
+  // A shore laid by hand stands in place of the survey's.
+  if (LAKE_HAND[name]) {
+    const ring = LAKE_HAND[name].map(([lat, lon]) => [lon, lat]);
+    out.push({ name, water, level, shore: ring, area: Math.round(areaOf(ring)), kept: Math.round(areaOf(ring)), hand: true });
+    continue;
+  }
   const found = files[where].filter((ft) => ft.geometry && fold(ft.properties.name) === fold(surveyName));
   if (!found.length) { notes.push(`! ${name}: no ${surveyName} among the survey's ${where}`); continue; }
   // The lake's largest sheet of water (its islands are not drawn).
@@ -65,4 +71,4 @@ ${out.map((l) => `  [${q(l.name)}, ${q(l.water)}, ${l.level}, ${q(l.shore.map(([
 `);
 console.log(`${out.length} lakes written`);
 if (notes.length) console.log(notes.join('\n'));
-if (process.argv.includes('--list')) for (const l of out) console.log(`  ${l.name.padEnd(20)} ${l.water.padEnd(5)} ${String(l.level).padStart(5)} m  ${String(l.area).padStart(5)} square units, ${String(l.shore.length).padStart(3)} points (${l.kept} as drawn)`);
+if (process.argv.includes('--list')) for (const l of out) console.log(`  ${l.name.padEnd(20)} ${l.water.padEnd(5)} ${String(l.level).padStart(5)} m  ${String(l.area).padStart(5)} square units, ${String(l.shore.length).padStart(3)} points (${l.kept} as drawn${l.hand ? ', by hand' : ''})`);

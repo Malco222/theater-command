@@ -12,6 +12,7 @@ import { ringArea } from './geo-common.mjs';
 import { CELL } from './geo-seas.mjs';
 import { CITY_GROUPS, CITY_SHORES, CITY_LINKS } from '../data/campaign/cities.mjs';
 import { cutLakes } from './cut-lakes.mjs';
+import { RULED_GROUND } from '../data/campaign/detail.mjs';
 
 export function carveCities(chart) {
   if (!CITY_GROUPS.length) return;
@@ -73,6 +74,16 @@ export function carveCities(chart) {
   }
   const cityTabled = tabledSoFar() - tabledBefore;
   for (const c of cities) rows.set(c.id, c);
+  // Ground laid by a ruling stands over the seed and the tables, on this chart only.
+  const ruled = [];
+  {
+    const named = new Map([...rows.values()].map((r) => [r.name, r]));
+    for (const [name, g] of Object.entries(RULED_GROUND)) {
+      const row = named.get(name);
+      if (!row) { warn(`! no province called ${name} to lay ruled ground on`); continue; }
+      if (row.terrain !== g) { row.terrain = g; ruled.push(name); }
+    }
+  }
   const sitesOf = (pid) => [rows.get(pid), ...kids.get(pid)];
   const piecesOf = (id) => (kids.has(id) ? sitesOf(id).map((s) => s.id) : [id]);
   const isPiece = (id) => kids.has(id) || parentOf.has(id);
@@ -343,10 +354,10 @@ export function carveCities(chart) {
   }
   {
     // (A province whose row the clerk has changed since reads its ground, worth and flags from the row.)
-    const since = new Set(changedSince);
+    const since = new Set([...changedSince, ...ruled]);
     const worth = (r) => (since.has(r.name) ? [] : [r.terrain, r.vp, r.fac, r.flags]);
     const same = base.filter((r) => !kids.has(r.id)).every((r) => { const now = rows.get(r.id); return JSON.stringify([r.name, r.owner, worth(r), r.x, r.y, r.polys, r.seas]) === JSON.stringify([now.name, now.owner, worth(now), now.x, now.y, now.polys, now.seas]) && r.nb.every((j) => now.nb.includes(j) || kids.has(j)); });
-    check2(same, `the ${base.length - kids.size} provinces that were not cut are written as they stand, but for neighbours that are now cities${since.size ? ` and ${since.size} whose row in the tables has changed since` : ''}`);
+    check2(same, `the ${base.length - kids.size} provinces that were not cut are written as they stand, but for neighbours that are now cities${since.size ? ` and ${since.size} whose row in the tables has changed since or whose ground a ruling has laid` : ''}`);
     const kept = [...kids.keys()].every((pid) => { const r = byId.get(pid), now = rows.get(pid); return r.name === now.name && r.owner === now.owner && r.x === now.x && r.y === now.y; });
     check2(kept, `the ${kids.size} provinces that were cut keep their numbers, names, seeds and owners`);
   }
@@ -374,6 +385,7 @@ export function carveCities(chart) {
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
   if (parentTabled) console.log(`${parentTabled} cut provinces have a row in cities-parents.csv${worthOnly ? `, and ${worthOnly} of today's chart that were not cut` : ''}`);
   if (changedSince.length) console.log(`${changedSince.length} provinces read a row the clerk has changed since the chart was handed over: ${changedSince.join(', ')}`);
+  if (ruled.length) console.log(`ground laid by ruling on ${ruled.length} provinces whose seed or row says otherwise (${Object.keys(RULED_GROUND).length} ruled): ${ruled.join(', ')}`);
   if (!quiet && moved2.length) console.log(`pieces passed to a sister: ${moved2.join(', ')}`);
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);
   if (small.length) console.log(`small (under 700 square units): ${small.map(([n, a]) => `${n} ${a}`).join(', ')}`);
