@@ -21,6 +21,7 @@ import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
 import { CELL, fill, simplify, smooth } from './geo-seas.mjs';
 import { CHART } from './build-geo-world.mjs';
 import { FAR_SLICES, FAR_LAKES, ISLET_SIZE } from '../data/campaign/far.mjs';
+import { carveCities } from './carve-cities.mjs';
 
 const core = JSON.parse(fs.readFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), 'utf8'));
 const seaData = JSON.parse(fs.readFileSync(new URL('../data/campaign/far-seas.json', import.meta.url), 'utf8'));
@@ -107,7 +108,7 @@ const tables = new Map();
   const dir = new URL('../data/campaign/tables/', import.meta.url);
   if (arg('tables')) {
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
+    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv', 'cities.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
   }
   const parse = (text) => {
     const rows = [[]];
@@ -925,3 +926,8 @@ if (arg('csv')) {
   }
   fs.writeFileSync(arg('csv'), rows.map((row) => row.map(q).join(',')).join('\n') + '\n');
 }
+
+// ---- The thicker chart ---------------------------------------------------------------------------------------
+
+// The cities cut out of the provinces round them (carve-cities.mjs): written beside this chart, which stays as it is.
+carveCities({ core, today, regions, first, tables, fromTable, tabledSoFar: () => tabled, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet });
