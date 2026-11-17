@@ -5908,6 +5908,52 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 	return TownSpreads[RegionId];
 }
 
+void ACampaignMapActor::ShowTownForm(bool bFar)
+{
+	if (TownMesh)
+	{
+		TownMesh->SetVisibility(!bFar);
+	}
+	if (TownFarMesh)
+	{
+		TownFarMesh->SetVisibility(bFar);
+	}
+	for (UProceduralMeshComponent* Square : TownSquares)
+	{
+		if (Square)
+		{
+			Square->SetVisibility(!bFar);
+		}
+	}
+	for (UProceduralMeshComponent* Square : TownFarSquares)
+	{
+		if (Square)
+		{
+			Square->SetVisibility(bFar);
+		}
+	}
+	if (LightsMesh && LightsMesh->GetNumSections() > 0)
+	{
+		LightsMesh->SetMeshSectionVisible(0, !bFar);
+	}
+}
+
+void ACampaignMapActor::SetTownShadows(bool bCast)
+{
+	TownShadowsCast = bCast ? 1 : 0;
+	if (TownMesh)
+	{
+		TownMesh->SetCastShadow(bCast);
+	}
+	for (UProceduralMeshComponent* Square : TownSquares)
+	{
+		if (Square)
+		{
+			Square->SetCastShadow(bCast);
+		}
+	}
+}
+
 void ACampaignMapActor::SetTownPlots(bool bPlots)
 {
 	if (bPlots != bTownPlots)
@@ -6423,11 +6469,32 @@ void ACampaignMapActor::BuildTowns()
 	}
 	TownFarMesh->ClearAllMeshSections();
 	TownsFarShown = -1;
-	FMiniatureMesh FarModel; // (the same towns for the eye high up: see FTownSite::bFar)
+	// (Speed, 17 November 2026; "tc.Speed.TownSquares".) The towns are cut into squares of country, each square a mesh
+	// of its own in its near form and its far: only the squares in view are drawn, and only those near a change are
+	// drawn again into the shadows. Each town is built exactly as before, into its square's mesh in place of the one
+	// mesh for the world. With the switch at 0 there is one square, and it is TownMesh and TownFarMesh as they were.
+	const bool bSquares = TheaterSpeed::TownSquares();
+	TownsCut = bSquares ? 1 : 0;
+	const double SquareSide = 260.0; // (in map units: twice a square of the woods, a few to the width of the view from playing height)
+	TMap<FIntPoint, int32> SquareOf;
+	TArray<FMiniatureMesh> NearModels, FarModels; // (FarModels: the same towns for the eye high up, see FTownSite::bFar)
+	auto SquareFor = [&](const FVector2D& Where)
+	{
+		const FIntPoint Key = bSquares ? FIntPoint(FMath::FloorToInt32(Where.X / SquareSide), FMath::FloorToInt32(Where.Y / SquareSide)) : FIntPoint(0, 0);
+		if (const int32* Known = SquareOf.Find(Key))
+		{
+			return *Known;
+		}
+		const int32 Index = NearModels.Num();
+		NearModels.AddDefaulted();
+		FarModels.AddDefaulted();
+		NearModels[Index].Windows = &TownWindows;
+		SquareOf.Add(Key, Index);
+		return Index;
+	};
 
 	// Every town of note stands on the table as a cluster of houses: a few for a town, more for a city, a domed
 	// palace in the middle of a capital, and a works with a chimney for each pair of factories the province has.
-	FMiniatureMesh Model;
 	const double U = UnitScale;
 	int32 Count = 0;
 	TownChimneys.Reset();
@@ -6437,7 +6504,6 @@ void ACampaignMapActor::BuildTowns()
 	TownQuarters.Reset();
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
-	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -6447,6 +6513,9 @@ void ACampaignMapActor::BuildTowns()
 		{
 			continue;
 		}
+		const int32 Square = SquareFor(Region.Center);
+		FMiniatureMesh& Model = NearModels[Square];
+		FMiniatureMesh& FarModel = FarModels[Square];
 		// What the place is worth, where the eye can count it: a stack of gold coins beside the town, one for each
 		// point it scores toward victory.
 		if (Region.VictoryPoints > 0)
@@ -6502,17 +6571,56 @@ void ACampaignMapActor::BuildTowns()
 		}
 		++Count;
 	}
-	if (Model.Vertices.Num() > 0)
+	// (the squares' meshes are kept from one building to the next: those not wanted this time are left empty)
+	auto SquareMesh = [this](TArray<TObjectPtr<UProceduralMeshComponent>>& Pool, int32 Index, bool bFar)
 	{
-		TownMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-		TownMesh->SetMaterial(0, SceneryMaterial);
-	}
-	if (FarModel.Vertices.Num() > 0)
+		while (Pool.Num() <= Index)
+		{
+			UProceduralMeshComponent* Made = NewObject<UProceduralMeshComponent>(this);
+			Made->SetupAttachment(Root);
+			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			if (bFar || TownShadowsCast == 0)
+			{
+				Made->SetCastShadow(false); // (as TownFarMesh; a near square throws its shadows as TownMesh does)
+			}
+			Made->RegisterComponent();
+			Pool.Add(Made);
+		}
+		return Pool[Index].Get();
+	};
+	auto Fill = [this](UProceduralMeshComponent* Mesh, const FMiniatureMesh& Each)
 	{
-		TownFarMesh->CreateMeshSection(0, FarModel.Vertices, FarModel.Triangles, FarModel.Normals, TArray<FVector2D>(), FarModel.Colors, TArray<FProcMeshTangent>(), false);
-		TownFarMesh->SetMaterial(0, SceneryMaterial);
+		Mesh->ClearAllMeshSections();
+		if (Each.Vertices.Num() > 0)
+		{
+			Mesh->CreateMeshSection(0, Each.Vertices, Each.Triangles, Each.Normals, TArray<FVector2D>(), Each.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(0, SceneryMaterial);
+		}
+	};
+	int32 NearPoints = 0, FarPoints = 0;
+	for (int32 Index = 0; Index < NearModels.Num(); ++Index)
+	{
+		NearPoints += NearModels[Index].Vertices.Num();
+		FarPoints += FarModels[Index].Vertices.Num();
+		Fill(bSquares ? SquareMesh(TownSquares, Index, false) : TownMesh.Get(), NearModels[Index]);
+		Fill(bSquares ? SquareMesh(TownFarSquares, Index, true) : TownFarMesh.Get(), FarModels[Index]);
 	}
-	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up)"), Count, Model.Vertices.Num(), FarModel.Vertices.Num());
+	for (int32 Index = bSquares ? NearModels.Num() : 0; Index < TownSquares.Num(); ++Index)
+	{
+		if (TownSquares[Index])
+		{
+			TownSquares[Index]->ClearAllMeshSections();
+		}
+	}
+	for (int32 Index = bSquares ? FarModels.Num() : 0; Index < TownFarSquares.Num(); ++Index)
+	{
+		if (TownFarSquares[Index])
+		{
+			TownFarSquares[Index]->ClearAllMeshSections();
+		}
+	}
+	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up), in %d square%s of country"), Count, NearPoints, FarPoints,
+		bSquares ? NearModels.Num() : 1, bSquares && NearModels.Num() != 1 ? TEXT("s") : TEXT(""));
 
 	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
 	if (!LightsMesh)
@@ -13020,16 +13128,23 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// Beyond working height the towns are drawn in their cheaper form: one piece to a block, laid out just the same,
 	// and throwing no shadows. (The windows' panes are too small to see from there, and are not drawn either.)
 	{
+		// (Speed: "tc.Speed.TownSquares" turned the other way since the towns were built: they are built again to match,
+		// as when the cities leave room for a quarter. And "tc.Speed.TownShadows", which is for measuring only.)
+		if (TownMesh && TownsCut != -1 && TownsCut != (TheaterSpeed::TownSquares() ? 1 : 0) && Data.IsLoaded())
+		{
+			BuildTowns();
+			ShownNight = -1.0f;
+			SetNight(NightNow, bLamplightNow);
+		}
+		if ((TownShadowsCast == 0) == TheaterSpeed::TownShadows())
+		{
+			SetTownShadows(TheaterSpeed::TownShadows());
+		}
 		const int32 FarNow = CameraDistance > (TownsFarShown == 1 ? 10800.0f : 11600.0f) ? 1 : 0;
 		if (FarNow != TownsFarShown && TownMesh && TownFarMesh)
 		{
 			TownsFarShown = FarNow;
-			TownMesh->SetVisibility(FarNow == 0);
-			TownFarMesh->SetVisibility(FarNow == 1);
-			if (LightsMesh && LightsMesh->GetNumSections() > 0)
-			{
-				LightsMesh->SetMeshSectionVisible(0, FarNow == 0);
-			}
+			ShowTownForm(FarNow == 1);
 		}
 	}
 

@@ -1214,6 +1214,22 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownFarMesh;
 	int32 TownsFarShown = -1; // 1 while the far towns are the ones drawn, 0 the near, -1 not yet said
+	/**
+	 * (Speed, 17 November 2026; "tc.Speed.TownSquares".) The same towns cut into squares of country, near form and far
+	 * form, a mesh to each square. One mesh the size of the world is drawn whole every frame wherever the eye is, and
+	 * drawn whole again into every part of the shadows that changes; a square out of view is not drawn at all. While
+	 * the towns stand in squares, TownMesh and TownFarMesh are left empty.
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownSquares;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownFarSquares;
+	int32 TownsCut = -1; // 1 while the towns stand in squares, 0 in one piece, -1 not built yet
+	int32 TownShadowsCast = -1; // ("tc.Speed.TownShadows", for measuring only) 1 while the near towns throw shadows
+	/** Shows the near towns (and their windows' panes) or the far ones, in whichever pieces they stand. */
+	void ShowTownForm(bool bFar);
+	/** (for measuring only) Whether the near towns throw shadows. */
+	void SetTownShadows(bool bCast);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;
