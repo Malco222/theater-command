@@ -14,21 +14,21 @@
     "id": "SAF",
     "small": true,
     "years": {
-     "1939": "Two thin divisions, no navy, and the gold of the Rand. At war beside Britain from 6 September, after a split parliament voted 80 to 67. You will not decide this war: guard the Cape, and march north what you can raise."
+     "1939": "Two thin divisions, no navy, and the gold of the Rand. At war beside Britain since a split parliament voted for it, 80 to 67. You will not decide this war: guard the Cape, and march north what you can raise."
     }
    },
    {
     "id": "IRN",
     "small": true,
     "years": {
-     "1939": "Nine thin divisions, two sloops, and the world's largest refinery at Abadan, owned by the British. Neutral, with the Soviet Union to the north and British India to the east. Neither can be beaten in the field: stay out, or choose which to lean on."
+     "1939": "Nine thin divisions, two sloops, and the world's largest refinery at Abadan, owned by the British. Neutral, with the Soviet Union to the north and British India to the east. Neither can be beaten in the field: stay out, or choose your side in time."
     }
    },
    {
     "id": "IRQ",
     "small": true,
     "years": {
-     "1939": "Four thin divisions and an air force of obsolete biplanes. Neutral, bound to Britain by a treaty that keeps its air force at Habbaniya, while four colonels in Baghdad look to Berlin. Honour the treaty, or break it and face India's army landing at Basra."
+     "1939": "Four thin divisions and an air force of obsolete biplanes. Neutral, bound by treaty to Britain, whose air force sits at Habbaniya, while four colonels in Baghdad look to Berlin. Honour the treaty, or break it and face India's army landing at Basra."
     }
    },
    {
@@ -49,21 +49,21 @@
     "id": "YEM",
     "small": true,
     "years": {
-     "1939": "One thin division of regulars and tribesmen. Neutral, an imam's kingdom in the mountains above the Red Sea, closed to the world, with Britain at Aden on your southern coast. You can threaten nobody: hold the highlands and outlast the war."
+     "1939": "One thin division of regulars and tribesmen. Neutral, an imam's kingdom in the mountains above the Red Sea, closed to the world, with Britain at Aden to the south. You can threaten nobody: hold the highlands and outlast the war."
     }
    },
    {
     "id": "NEP",
     "small": true,
     "years": {
-     "1939": "One thin division of your own, and the hill villages that give Britain its Gurkha battalions. A Himalayan kingdom, Britain's ally by treaty, at war beside her from the first day. You cannot fight this war alone: the question is how much you lend."
+     "1939": "One thin division of your own, and the hill villages that give Britain its Gurkha battalions. A Himalayan kingdom that no treaty binds to any war. You cannot fight this war alone: the question is how much you lend."
     }
    },
    {
     "id": "LBR",
     "small": true,
     "years": {
-     "1939": "A Frontier Force of about a thousand men, and the largest rubber plantation in the world. Neutral, Africa's oldest republic, with America the only friend that matters. You have no means to make war: sell your rubber, and see who asks for an airfield."
+     "1939": "A Frontier Force of about a thousand men, and the world's largest rubber plantation. Neutral, Africa's oldest republic, with the United States the only friend that matters. You have no means to make war: sell your rubber, and pick the winning side in time."
     }
    }
   ]
@@ -76,8 +76,8 @@
    "SAU": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
    "AFG": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
    "YEM": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
-   "NEP": "Britain's ally by treaty: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
-   "LBR": "Join the Axis, join the Allies, or stand alone. No other free country lies in Africa, so there is no League to found. Open Your path on the top bar."
+   "NEP": "Britain's friend by choice: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "LBR": "Join the Axis, join the Allies, or stand alone. Africa has no other country free to join a League, so there is none to found. Open Your path on the top bar."
   }
  },
  "world": {
@@ -452,7 +452,7 @@
       "id": "dominion",
       "name": "A dominion of the Crown",
       "builtin": true,
-      "text": "South Africa's parliament voted 80 to 67 for war on 4 September 1939, and war was declared on 6 September.",
+      "text": "South Africa's parliament voted 80 to 67 for war on 4 September 1939, and war was declared on 6 September. From 1940 its volunteers swore to serve anywhere in Africa.",
       "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
      }
     ]
@@ -471,7 +471,7 @@
       "name": "The oil of Khuzestan",
       "builtin": true,
       "text": "The world's largest refinery stands at Abadan. Its owners are British.",
-      "rule": "The oilfield at Ahwaz pays into its budget as any oilfield does. It is on the map, and nothing is added for it."
+      "rule": "The oilfield at Ahwaz pays into its budget as any oilfield does."
      }
     ]
    },
@@ -500,7 +500,7 @@
       "name": "The first oil",
       "builtin": true,
       "text": "An oilfield at Dhahran that shipped its first tanker in May 1939.",
-      "rule": "The oilfield at Dhahran pays into its budget as any oilfield does. It is on the map, and nothing is added for it."
+      "rule": "The oilfield at Dhahran pays into its budget as any oilfield does."
      }
     ]
    },
@@ -559,10 +559,10 @@
       }
      },
      {
-      "id": "ally",
-      "name": "Britain's ally by treaty",
+      "id": "friend",
+      "name": "Britain's friend by choice",
       "builtin": true,
-      "text": "Bound to Britain by the treaty of 1923. In September 1939 Nepal offered 8,000 troops for garrison duty in India, and eight battalions went in 1940.",
+      "text": "The treaty of 1923 recognised Nepal's independence and bound it to no war. By its own choice Nepal declared war beside Britain on 4 September 1939, offered 8,000 troops for garrison duty in India, and sent eight battalions in 1940.",
       "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
      }
     ]
@@ -574,7 +574,7 @@
       "name": "America's friend",
       "builtin": true,
       "text": "Africa's oldest republic. The largest rubber plantation in the world, at Harbel, is an American company's.",
-      "rule": "The United States is its friend. Led by the computer it declares war on Germany from January 1944, while America is at war with Germany."
+      "rule": "The United States is its friend. Led by the computer it declares war on Germany from January 1944, while the United States is at war with Germany."
      }
     ]
    }

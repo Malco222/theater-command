@@ -1,0 +1,9 @@
+=== grow SAF, seed 7, 12 months, aim navy; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
+  first day: corps 2, divisions 2 on paper and 0.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; men in the pool for 3.2 divisions; income 1049.2 a month
+    October 1939: Shipyard (level 1) for 2000, due June 1940
+    January 1940: Shipyard (level 2) for 3000, due September 1940
+    never on offer: ship:dd: Needs a shipyard of level 1 in one of your home ports.
+    never on offer: ship:ss: Needs a shipyard of level 1 in one of your home ports.
+    never on offer: ship:tp: Needs a shipyard of level 1 in one of your home ports.
+  September 1940: corps 2, divisions 2 on paper and 1.2 at strength; air groups 0 (0 fighters, 0 bombers); ships 0; shipyard level 0; men left in the pool for 3.2 divisions; treasury 8439.3; spent 5000; still on order: nothing
+GROWN SAF navy seed 7 to September 1940: divisions 2 -> 2 on paper (0.8 -> 1.2 at strength); aircraft 0 -> 0; ships 0 -> 0; shipyard 0 -> 0; orders 2; invariants broken 0; standing

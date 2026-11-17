@@ -5,17 +5,21 @@
 //                                                                  as the player, who gives one order and then passes
 //   node dist/trial/seat-play.mjs watch [SEED] [MONTHS] [CODES]    nobody playing: what the computer does with each
 //                                                                  country (CODES: comma list; default every seat)
+//   node dist/trial/seat-play.mjs grow SEAT [SEED] [MONTHS] [AIM]  a determined player: every month he buys all he
+//                                                                  can of one arm (AIM: army, air or navy) that will
+//                                                                  be delivered by the end; what he fields then
 //   node dist/trial/seat-play.mjs list                             the seats this build knows
 //
 // Build first: node tools/trial/build.mjs (see tools/trial/README.md). The month is advanced by the Playtester's
 // own harness (lib.ts: start, advance, check), so a seat is opened and played as every seat has been since Version 53.
 // Exit code 0 when the verdict is PASS, 1 otherwise.
 import { T, advance, armySize, check, date, ledger, loadGame, saveGame, start, type Game } from '@pt/lib';
-import { offers } from '@tc/campaign/arsenal';
+import { offers, yardLevel } from '@tc/campaign/arsenal';
 import { friendsOf } from '@tc/campaign/diplomacy';
 import { allied, bloc } from '@tc/campaign/game';
 import { formOf } from '@tc/campaign/government';
 import { founders, partName, partOf, small } from '@tc/campaign/league';
+import { menLeft } from '@tc/campaign/manpower';
 import { whyNotShip } from '@tc/campaign/navy';
 import { eliteOf, traitsOf } from '@tc/campaign/traits';
 import { TRIAL_FAR, WORLD, WORLD_FIRST } from '@tc/campaign/world';
@@ -276,14 +280,94 @@ function watch(seed: number, months: number, codes: string[]): boolean {
   return pass;
 }
 
+/** What a country fields: corps and divisions, aircraft, ships, and what is still on order. */
+function fielded(g: Game, me: string): { corps: number; paper: number; real: number; ftr: number; bmr: number; groups: number; ships: Record<string, number>; hulls: number; yard: number; onOrder: string[] } {
+  const cs = corpsOf(g, me);
+  const air = (g.airFleets as any[]).filter((a) => a.nat === me);
+  const ships: Record<string, number> = {};
+  for (const f of g.fleets.filter((x) => x.nat === me)) for (const [k, v] of Object.entries(f.ships)) if (v > 0) ships[k] = (ships[k] ?? 0) + (v as number);
+  const yard = Math.max(0, ...g.regions.filter((r) => r.ctrl === me).map((r) => yardLevel(g, r)));
+  return {
+    corps: cs.length, paper: cs.reduce((s, c) => s + c.divs, 0), real: cs.reduce((s, c) => s + c.divs * c.str, 0),
+    ftr: air.reduce((s, a) => s + a.ftr, 0), bmr: air.reduce((s, a) => s + a.bmr, 0), groups: air.length,
+    ships, hulls: Object.values(ships).reduce((s, v) => s + v, 0), yard,
+    onOrder: g.nations[me].queue.map((b) => `${b.name} (due ${date(b.eta)})`),
+  };
+}
+const fieldLine = (f: ReturnType<typeof fielded>): string =>
+  `corps ${f.corps}, divisions ${r1(f.paper)} on paper and ${r1(f.real)} at strength; air groups ${f.groups} (${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers); ships ${f.hulls}${f.hulls ? ` (${Object.entries(f.ships).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''}; shipyard level ${f.yard}`;
+
+/**
+ * A determined player (the design director's ruling of 16:10Z on the globe's paper, question 6): every month he is
+ * up he buys all he can of one arm that will be delivered by the end of the run, through the interface's own order
+ * (turn.ts orderArsenal), and otherwise passes. For the army he buys the most divisions for the money: he saves for
+ * the best bargain on offer while his income can still reach it in time, and takes the next best when it cannot.
+ * Nothing is researched and nothing is moved: this measures what the country can raise, not what it can do with it.
+ */
+function grow(me: string, seed: number, months: number, aim: string): boolean {
+  out(`=== grow ${me}, seed ${seed}, ${months} months, aim ${aim}; seats files: ${TRIAL_FILES.join(', ') || 'none'}`);
+  const problems: string[] = [], seen = new Set<string>();
+  const g = start(me, 1, seed, 'colonel');
+  if (!g.nations[me]) { out(`${me} is no country in this game`); return false; }
+  if (T.beginEve(g)) T.endEve(g);
+  const n = g.nations[me];
+  const sc = money(g, me).scale;
+  const first = fielded(g, me);
+  out(`  first day: ${fieldLine(first)}; men in the pool for ${r1(menLeft(g, me))} divisions; income ${r1(money(g, me).gross)} a month`);
+  const end = months + 1;   // the run ends on the day the player is up in turn months + 1
+  const units = (o: any): number => Number(/^(\d+)/.exec(o.size)?.[1] ?? 1);
+  const home = (): number => { const cap = n.capital >= 0 ? g.regions[n.capital] : null; const quay = g.regions.find((r) => r.owner === me && r.ctrl === me && r.port && !r.overseas); return aim === 'navy' && quay ? quay.id : cap ? cap.id : -1; };
+  const wanted = (o: any): boolean => (aim === 'army' ? o.group === 'army' : aim === 'air' ? o.group === 'air' || o.key === 'work:field' : o.group === 'navy' || o.key === 'work:yard');
+  let spent = 0; const bought: string[] = []; const barred = new Map<string, string>(), late = new Map<string, string>(), got = new Set<string>();
+  let up = advance(g, (nat) => check(g, `after ${nat}`, problems, seen));
+  while (up && g.turn <= months) {
+    for (let guard = 0; guard < 40; guard++) {
+      const all = offers(g, me, home()).filter(wanted);
+      const os = all.filter((o) => g.turn + o.months <= end);
+      for (const o of os) if (o.why && !o.poor) barred.set(o.key, o.why);
+      // On offer, but it would be delivered after the run ends: the year is too short for it.
+      for (const o of all) if (g.turn + o.months > end && (!o.why || o.poor) && !o.key.startsWith('work:')) late.set(o.key, `on offer from ${date(g.turn)} and ${o.months} months in the building: delivered after the run ends`);
+      // The offers money alone decides, best bargain first: most of the thing for the money (a yard or a field comes
+      // first when the arm cannot be had without it: it is ordered only when nothing of the arm itself is on offer).
+      const open = os.filter((o) => !o.why || o.poor).filter((o) => !o.key.startsWith('work:') || !os.some((x) => !x.key.startsWith('work:') && (!x.why || x.poor)));
+      open.sort((a, b) => units(b) / b.cost - units(a) / a.cost || a.cost - b.cost);
+      const net = ledger(g, me).net;
+      // The best bargain he can pay for now, or will be able to pay for by the last month it can still be ordered.
+      let pick: any = null, wait = false;
+      for (const o of open) {
+        if (!o.why) { pick = o; break; }
+        const last = end - o.months;            // the last turn it can be ordered and still arrive
+        if (n.pp + net * Math.max(0, last - g.turn) >= o.cost) { wait = true; break; }
+      }
+      if (!pick || wait) break;
+      const b = T.orderArsenal(g, pick.key, pick.at);
+      if (!b) { problems.push(`[${date(g.turn)}] ${pick.key} was on offer and the order was refused`); break; }
+      spent += pick.cost; got.add(pick.key); bought.push(`${date(g.turn)}: ${pick.label} (${pick.size}) for ${r1(pick.cost * sc)}, due ${date(g.turn + pick.months)}`);
+    }
+    check(g, 'after the player', problems, seen);
+    T.endHuman(g);
+    up = advance(g, (nat) => check(g, `after ${nat}`, problems, seen));
+  }
+  for (const b of bought) out(`    ${b}`);
+  if (!bought.length) out('    nothing could be bought in time');
+  for (const [k, why] of late) if (!got.has(k)) out(`    too slow for the run: ${k}: ${why}`);
+  for (const [k, why] of barred) if (!got.has(k) && !late.has(k)) out(`    never on offer: ${k}: ${why}`);
+  const last = fielded(g, me);
+  out(`  ${date(g.turn)}: ${fieldLine(last)}; men left in the pool for ${r1(menLeft(g, me))} divisions; treasury ${r1(n.pp * sc)}; spent ${r1(spent * sc)}; still on order: ${last.onOrder.join(', ') || 'nothing'}`);
+  const bad = real(problems);
+  for (const p of problems.slice(0, 20)) out(`    ${p}`);
+  out(`GROWN ${me} ${aim} seed ${seed} to ${date(g.turn)}: divisions ${r1(first.paper)} -> ${r1(last.paper)} on paper (${r1(first.real)} -> ${r1(last.real)} at strength); aircraft ${Math.round(first.ftr + first.bmr)} -> ${Math.round(last.ftr + last.bmr)}; ships ${first.hulls} -> ${last.hulls}; shipyard ${first.yard} -> ${last.yard}; orders ${bought.length}; invariants broken ${bad.length}; ${n.alive ? 'standing' : 'FALLEN'}`);
+  return !bad.length && n.alive;
+}
+
 const args = process.argv.slice(2);
 if (!args.length || args[0] === 'list') {
   out(`seats of this build (${TRIAL_FILES.join(', ') || 'placeholder rows only'}; ${TRIAL_WARNINGS} warning(s) at build):`);
   for (const s of TRIAL_SEATS) out(`  ${s.id}  from ${s.from}${s.placeholder ? '  (placeholder rows)' : ''}`);
   out(`first-day table: ${Object.keys(TRIAL_FAR.held).length} provinces held by another than their owner; capitals moved: ${Object.entries(TRIAL_FAR.capitals).map(([k, v]) => `${k} to ${v}`).join(', ') || 'none'}; rows dropped: ${TRIAL_FAR.drop.length}; first-day wars: ${TRIAL_FAR.wars.map((w) => w.join('-')).join(', ') || 'none'}; the wider world begins at province ${WORLD_FIRST}`);
-  out('usage: node dist/trial/seat-play.mjs SEAT [SEED] [MONTHS] [LEVEL]   |   watch [SEED] [MONTHS] [CODES]   |   list');
+  out('usage: node dist/trial/seat-play.mjs SEAT [SEED] [MONTHS] [LEVEL]   |   grow SEAT [SEED] [MONTHS] [army|air|navy]   |   watch [SEED] [MONTHS] [CODES]   |   list');
   process.exit(0);
 }
 const seed = Number(args[1] ?? 7), months = Number(args[2] ?? 12);
-const ok = args[0] === 'watch' ? watch(seed, months, (args[3] ? args[3].split(',') : TRIAL_SEATS.map((s) => s.id))) : play(args[0].toUpperCase(), seed, months, args[3] ?? 'colonel');
+const ok = args[0] === 'grow' ? grow((args[1] ?? '').toUpperCase(), Number(args[2] ?? 7), Number(args[3] ?? 12), args[4] ?? 'army') : args[0] === 'watch' ? watch(seed, months, (args[3] ? args[3].split(',') : TRIAL_SEATS.map((s) => s.id))) : play(args[0].toUpperCase(), seed, months, args[3] ?? 'colonel');
 process.exit(ok ? 0 : 1);

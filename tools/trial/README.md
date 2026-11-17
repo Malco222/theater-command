@@ -29,6 +29,7 @@ node dist/trial/seat-play.mjs list               # the seats this build knows
 node dist/trial/seat-play.mjs SAF 7 12           # one seat: SEAT [SEED=7] [MONTHS=12] [LEVEL=colonel]
 tools/trial/run-all.sh                           # every seat, four at a time; printouts in dist/trial/out/
 tools/trial/run-all.sh dist/trial/out 7 12 "SAF IRN"   # OUT_DIR [SEED] [MONTHS] ["SEATS"]
+node dist/trial/seat-play.mjs grow SAF 7 12 army # a determined player: buys all he can of one arm (army, air, navy) for a year
 node dist/trial/seat-play.mjs watch 7 24         # nobody playing: what the computer does with each country
 node dist/trial/seat-play.mjs watch 7 24 CHN,AUS # the same, for the countries named
 ```
@@ -99,6 +100,16 @@ to another folder holding `lib.ts` if that one is out of reach.
    still standing. (So a run shorter than the months a poor country needs to afford its first order fails on
    "no order could be given": Nepal, Yemen and Liberia need four or five months.)
 
+`grow SEAT SEED MONTHS AIM` is the year-one measure the design director asked for (her ruling of 16:10Z on the
+globe's paper, question 6): the most a determined player can field by the end of year one. Every month he is up
+he buys all he can of one arm (`army`, `air` or `navy`) that will be delivered by the end, through `orderArsenal`,
+best bargain first (most divisions, aircraft or ships for the money); he saves for the best bargain while his income
+can still reach it before its last order date, and takes the next best when it cannot. A shipyard or an airfield is
+ordered only when nothing of the arm itself is on offer. He researches nothing and moves nothing. It prints the
+orders, what was never on offer and why (no technology, no men, no yard), and one line:
+`GROWN SEAT AIM seed N to September 1940: divisions a -> b on paper (c -> d at strength); aircraft; ships; ...`.
+The printouts for the globe's eight are in `results/grow/`.
+
 `watch` plays with nobody at the controls and prints, for each country, the months in which something changed
 (wars, alignment, provinces, corps, news that names it): the computer's path when nobody leads it.
 
@@ -154,8 +165,9 @@ the printout says `ability: none`.
 | `src/campaign/navy.ts` | Reads `world-cities.json`; the sea lookup `wide` is an `Int16Array` (145 seas do not fit a signed byte) |
 | `src/campaign/towns.ts`, `rivers.ts`, `rails.ts` | Read `world-cities.json`, `world-cities-rivers.json`, `world-cities-rails.json` |
 | `data/campaign/trial-far.json` | New: the first-day table. `held` is baked from the clerk's `held_1939` column by `node tools/trial/bake-held.mjs` (32 provinces, all China's held by Japan) |
+| `src/campaign/ai.ts` | `wantsOut` (the Pacific seat builder's finding and patch, 16:12Z): on the wider world a corps on ground its nation holds and whose owner it is at war with is no guest of an ally; it leaves only if cut off or broken. Without it Japan's whole army in China sails home in September 1939, China walks into the empty ground and Manchukuo falls in December |
 | `vitest.config.ts` | A loader that lays the placeholder rows (and `TC_SEATS=file,file`) over the data for the tests |
-| `tools/trial/` | `seats.mjs` (the overlay and its checks), `build.mjs`, `seat-play.ts`, `run-all.sh`, `bake-held.mjs`, `placeholder-seats.json`, `results/` |
+| `tools/trial/` | `seats.mjs` (the overlay and its checks), `build.mjs`, `seat-play.ts`, `run-all.sh`, `bake-held.mjs`, `placeholder-seats.json`, `results/`; the Pacific seat builder's `front.ts` and `build-front.mjs` (one war read month by month with nobody playing: `node tools/trial/build-front.mjs && node dist/trial/front.mjs 7 24 CHN JAP`) |
 
 Nothing else in `src/` was changed, and no crash had to be fixed: the game attached the 1,758-province chart and
 played on it at the first try once every owner code was a country.

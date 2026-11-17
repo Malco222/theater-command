@@ -19,7 +19,7 @@ import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
-import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
+import { beyondEurope, enemyAtTheDoor, overseasOf, worldOn, type OverseasRules } from './world';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -2087,6 +2087,10 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
 function wantsOut(g: Game, c: Corps): boolean {
   if (g.regions[c.reg].owner === c.nat || c.dead) return false;
+  // TRIAL (the Pacific seat builder's finding): an army on ground it has taken from a country it is still at war
+  // with is no guest of an ally: it stays unless it is cut off or broken. Without this Japan's whole army in China
+  // sails home in September 1939, because Japan has no ally on the continent to be the 'host'.
+  if (worldOn(g) && beyondEurope(c.reg) && g.regions[c.reg].ctrl === c.nat && atWar(g, c.nat, g.regions[c.reg].owner)) return !c.supplied || c.org < 0.3;
   // The men of a second front went ashore to stay: they come off only when cut off or broken.
   if (g.flags[`sf:${c.id}`]) return !c.supplied || c.org < 0.3;
   if (theatreOf(g, c) >= 0) {
