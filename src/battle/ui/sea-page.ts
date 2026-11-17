@@ -200,7 +200,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       <div class="bbal" title="Each fleet's strength still afloat. The pale mark is where the campaign's card put it.">
         <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
         <div class="btrack"><i id="balMe"></i><i id="balThem"></i><b id="balMark"></b></div>
-        <div class="bbreak" title="When a bar fills, that fleet breaks off and leaves the action."><span class="bbar2"><i id="brkMe"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem"></i></span></div>
+        <div class="bbreak" title="When a bar fills, that fleet breaks off and leaves the action."><span class="bbar2"><i id="brkMe"></i></span><span class="tc-label">How near to breaking off</span><span class="bbar2 is-theirs"><i id="brkThem"></i></span></div>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands.">Hand it to the staff</button>
