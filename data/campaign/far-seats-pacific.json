@@ -92,7 +92,8 @@
     "air": 1,
     "resilience": 0.9,
     "align": "allies",
-    "seaSupply": true
+    "seaSupply": true,
+    "sealift": 1
    },
    "THA": {
     "name": "Thailand",
@@ -159,11 +160,16 @@
   },
   "parts": {
    "names": {
-    "asia": "Asia"
+    "asia": "Asia",
+    "pacific": "the Pacific"
    },
    "of": {
     "CHN": "asia",
-    "THA": "asia"
+    "THA": "asia",
+    "MAN": "asia",
+    "MGL": "asia",
+    "AUS": "pacific",
+    "NZL": "pacific"
    }
   },
   "pairs": [
@@ -888,7 +894,7 @@
      "most": 1,
      "attack": 1.1,
      "defence": 1.1,
-     "text": "The country's whole field army abroad: one division of volunteers that sailed in January 1940 and fought in Greece, Crete, the desert and Italy, known above all for its attacks by night."
+     "text": "The country's main field army abroad: one division of volunteers that sailed in January 1940 and fought in Greece, Crete, the desert and Italy, known above all for its attacks by night."
     }
    },
    "THA": {

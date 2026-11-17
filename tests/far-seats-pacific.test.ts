@@ -63,11 +63,13 @@ describe('the rows as they wait', () => {
       expect(n.resilience, id).toBeGreaterThan(0); expect(n.resilience, id).toBeLessThan(1);
       expect(['allies', 'independent', 'leaning_axis'], id).toContain(n.align);
     }
-    // The League's parts as ruled: Asia is China and Thailand (and Nepal, from the globe). The dominions stand as
-    // Canada stands, with no row; the two clients join no League, which is the mend's to bar and not a part's.
-    expect(S.world.parts.of).toEqual({ CHN: 'asia', THA: 'asia' });
-    expect(S.world.parts.names.asia).toBe('Asia');
-    expect(W.parts.of.CAN).toBeUndefined();
+    // The League's parts as ruled: Asia for China, Thailand and the two clients, the Pacific for the two dominions.
+    // (A new country falls into 'the Americas' unless its part is named.) The clients join no League all the same:
+    // that bar is the mend's, and T6 holds it.
+    expect(S.world.parts.of).toEqual({ CHN: 'asia', THA: 'asia', MAN: 'asia', MGL: 'asia', AUS: 'pacific', NZL: 'pacific' });
+    expect(S.world.parts.names).toEqual({ asia: 'Asia', pacific: 'the Pacific' });
+    // A seat with a coast and a division to send has shipping for one corps, as Canada has.
+    for (const id of ['AUS', 'NZL']) expect(S.world.nations[id].sealift, id).toBe(W.nations.CAN.sealift);
   });
 
   it('gives every seat an army in the form of world.json corps, and never more than three corps to a province', () => {
@@ -269,14 +271,27 @@ describe.skip("a client's tie: Manchukuo and Mongolia (the rider to ruling 209(c
     }
   });
 
-  it('T6, the corner: a player\'s client in one alliance with its patron\'s enemy is still in the border war beside its patron', () => {
-    const g = grand('MGL');
-    g.nations.MGL.align = 'axis';
-    g.nations.JAP.align = 'axis_cobelligerent';
-    declareWar(g, 'JAP', 'SOV');
-    month(g);
-    expect(atWar(g, 'MGL', 'JAP')).toBe(true);
-    expect(atWar(g, 'MGL', 'SOV')).toBe(false);
+  it('T6, the tie broken by the client\'s own act: the row reads only while client and patron are at peace with each other', () => {
+    // A client at war with its patron is a small country on its own from that month: the row sends it nowhere.
+    const a = grand('MAN');
+    declareWar(a, 'MAN', 'JAP');
+    declareWar(a, 'SOV', 'JAP');
+    month(a);
+    expect(atWar(a, 'MAN', 'SOV')).toBe(false);
+    expect(atWar(a, 'MAN', 'MGL')).toBe(false);
+    // And war on it is no longer war on its patron.
+    declareWar(a, 'UK', 'MAN');
+    month(a);
+    expect(atWar(a, 'UK', 'JAP')).toBe(false);
+
+    // So is a client that stands in an alliance at war with its patron: the row never sets two members of one alliance at war.
+    const b = grand('MGL');
+    b.nations.MGL.align = 'axis';
+    b.nations.JAP.align = 'axis_cobelligerent';
+    declareWar(b, 'JAP', 'SOV');
+    month(b);
+    expect(atWar(b, 'MGL', 'JAP')).toBe(false);
+    expect(atWar(b, 'MGL', 'MAN')).toBe(false);
   });
 
   it('when a patron surrenders its client lives on with its own ground and its own wars', () => {
