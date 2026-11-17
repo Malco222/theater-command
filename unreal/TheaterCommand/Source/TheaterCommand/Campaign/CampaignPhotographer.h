@@ -104,6 +104,9 @@ private:
 	FString Folder;
 	int32 Current = -1;
 	float Clock = 0.0f;
+	// ("-TheaterClip=24,0.25": after the first picture, so many more of the same view, so many seconds apart, for a short clip)
+	int32 ClipFrames = 0, ClipTaken = 0;
+	float ClipEvery = 0.25f, ClipAt = 0.0f;
 	float SheetWait = 0.0f; // how long this picture has waited for the world's fine ground
 	float WarmUp = 0.0f;
 	int32 Frames = 0;

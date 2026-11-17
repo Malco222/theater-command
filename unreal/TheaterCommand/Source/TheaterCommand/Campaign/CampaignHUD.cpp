@@ -1967,6 +1967,9 @@ namespace
 		return Brush.Get();
 	}
 
+	/** Where the towns' name plates and their badges were last drawn, in the screen's own units: what a sky's plate steps clear of. */
+	TArray<FBox2D> DrawnTownPlates;
+
 	/**
 	 * (Ruling 127; the art director's weather-sky brief, section 4.) The sky's plates: in the sky view, one for each
 	 * weather zone in sight. A disc with the sky's sign, the zone's name in small brass capitals, then the word and
@@ -2050,18 +2053,8 @@ namespace
 				Flag.Min /= Scale;
 				Flag.Max /= Scale;
 			}
-			{
-				TArray<FTownPlate> Towns;
-				Controller->GetTownPlates(Towns);
-				for (const FTownPlate& Town : Towns)
-				{
-					if (!Town.Name.IsEmpty() && !Town.bSeal)
-					{
-						const double HalfWide = Town.Name.Len() * (Town.bCapital ? 4.6 : 3.8) + 16.0;
-						Taken.Add(FBox2D(FVector2D(Town.At.X - HalfWide, Town.At.Y - 2.0), FVector2D(Town.At.X + HalfWide, Town.At.Y + (Town.Line.IsEmpty() ? 22.0 : 34.0))));
-					}
-				}
-			}
+			// (the plates the towns' own layer has just drawn, as it drew them: not every town it knows of has one)
+			Taken.Append(DrawnTownPlates);
 			for (const ACampaignMapActor::FSkyPlate& Plate : Table->GetSkyPlates())
 			{
 				// Among the parts of its zone that are in sight.
@@ -2094,19 +2087,32 @@ namespace
 				FVector2D Corner = Sum / Seen - FVector2D(0.5 * PlateWide, 0.5 * High);
 				Corner.X = FMath::Clamp(Corner.X, 20.0 * U, FMath::Max(Size.X - 290.0 * U - PlateWide, 20.0 * U));
 				Corner.Y = FMath::Clamp(Corner.Y, 270.0 * U, FMath::Max(Size.Y - 70.0 * U - High, 270.0 * U));
-				for (int32 Try = 0; Try < 12; ++Try)
+				// (It steps aside to the nearest clear place, trying round about itself: it went straight down before, and
+				// from high up, where the flags stand thick, every plate ended at the foot of the screen far from its zone.)
 				{
-					const FBox2D Box(Corner - FVector2D(4.0, 4.0), Corner + FVector2D(PlateWide + 4.0, High + 4.0));
-					bool bClear = true;
-					for (const FBox2D& Other : Taken)
+					const FVector2D Wanted = Corner;
+					double Least = 1.0e18;
+					for (int32 DY = -6; DY <= 6; ++DY)
 					{
-						bClear &= !Box.Intersect(Other);
+						for (int32 DX = -4; DX <= 4; ++DX)
+						{
+							const FVector2D Try(FMath::Clamp(Wanted.X + DX * 0.5 * PlateWide, 20.0 * U, FMath::Max(Size.X - 290.0 * U - PlateWide, 20.0 * U)),
+								FMath::Clamp(Wanted.Y + DY * 30.0 * U, 270.0 * U, FMath::Max(Size.Y - 70.0 * U - High, 270.0 * U)));
+							const FBox2D Box(Try - FVector2D(4.0, 4.0), Try + FVector2D(PlateWide + 4.0, High + 4.0));
+							int32 Hits = 0;
+							for (const FBox2D& Other : Taken)
+							{
+								Hits += Box.Intersect(Other) ? 1 : 0;
+							}
+							// (clear before near; and where nowhere is clear, the place that covers least)
+							const double Cost = Hits * 4000.0 + FVector2D::Distance(Try, Wanted);
+							if (Cost < Least)
+							{
+								Least = Cost;
+								Corner = Try;
+							}
+						}
 					}
-					if (bClear || Corner.Y + High + 26.0 * U > Size.Y - 70.0 * U)
-					{
-						break;
-					}
-					Corner.Y += 26.0 * U;
 				}
 				Taken.Add(FBox2D(Corner, Corner + FVector2D(PlateWide, High)));
 				Fill(Corner.X, Corner.Y, PlateWide, High, Faded(Desk, 0.94f), 0);
@@ -2234,6 +2240,7 @@ namespace
 			if (Plates.Num() == 0)
 			{
 				Controller->NoteGateMarks(GateBoxes, Geometry.Scale);
+				DrawnTownPlates.Reset();
 				return LayerId;
 			}
 			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
@@ -2638,6 +2645,7 @@ namespace
 				}
 			}
 			Controller->NoteGateMarks(GateBoxes, Scale);
+			DrawnTownPlates = Taken;
 			return LayerId + 1;
 		}
 

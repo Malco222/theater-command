@@ -66,4 +66,11 @@ namespace CampaignTextures
 	 * bSnow small soft flakes.
 	 */
 	void MakeWeather(TArray<FColor>& OutPixels, bool bSnow);
+
+	/**
+	 * The wisps of the fog of war's haze, a picture that repeats (red): bands lying along its breadth, each with a
+	 * blunt head toward the picture's right and a tail that thins away to its left, with lumps along it. Its values
+	 * are spread as the haze's old wisps were, so that the haze has no more contrast than it had.
+	 */
+	void MakeHaze(TArray<FColor>& OutPixels);
 }

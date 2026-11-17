@@ -463,6 +463,84 @@ void CampaignTextures::MakeWaves(TArray<FColor>& OutPixels)
 	}
 }
 
+void CampaignTextures::MakeHaze(TArray<FColor>& OutPixels)
+{
+	// The picture is laid 2,920 of the table's units to a turn: a point of it is about four pixels from where he
+	// plays. A band is about 400 pixels long there (a hundred points) and 90 to 160 deep at its head.
+	TArray<float> Field;
+	Field.Init(0.0f, Size * Size);
+	FRandomStream Dice(1954);
+	for (int32 Band = 0; Band < 90; ++Band)
+	{
+		const float HeadX = Dice.FRandRange(0.0f, static_cast<float>(Size)), HeadY = Dice.FRandRange(0.0f, static_cast<float>(Size));
+		const float Long = Dice.FRandRange(82.0f, 124.0f), Deep = Dice.FRandRange(22.0f, 40.0f), Strength = Dice.FRandRange(0.6f, 1.0f);
+		const float Cap = 0.08f; // (the blunt head: a rounded end a twelfth of the band's length)
+		for (int32 J = FMath::FloorToInt32(HeadY - 0.5f * Deep) - 1; J <= FMath::CeilToInt32(HeadY + 0.5f * Deep) + 1; ++J)
+		{
+			for (int32 I = FMath::FloorToInt32(HeadX - Long) - 1; I <= FMath::CeilToInt32(HeadX + Cap * Long) + 1; ++I)
+			{
+				// (how far back from the head, 0 to 1 at the tail's end; less than nothing in the rounded end ahead of it)
+				const float Back = (HeadX - (I + 0.5f)) / Long;
+				if (Back < -Cap || Back >= 1.0f)
+				{
+					continue;
+				}
+				const float Half = 0.5f * Deep * (Back < 0.0f ? FMath::Sqrt(FMath::Max(1.0f - FMath::Square(Back / Cap), 0.0f)) : FMath::Pow(1.0f - Back, 0.65f));
+				if (Half < 0.05f)
+				{
+					continue;
+				}
+				const float Across = FMath::Abs(J + 0.5f - HeadY) / Half;
+				if (Across >= 1.0f)
+				{
+					continue;
+				}
+				Field[((J % Size + Size) % Size) * Size + (I % Size + Size) % Size] += Strength * (1.0f - Across * Across) * (Back < 0.0f ? 1.0f : FMath::Pow(1.0f - Back, 0.4f));
+			}
+		}
+	}
+	for (int32 J = 0; J < Size; ++J)
+	{
+		for (int32 I = 0; I < Size; ++I)
+		{
+			const float U = (I + 0.5f) / Size, V = (J + 0.5f) / Size;
+			float& Here = Field[J * Size + I];
+			// (lumps about every 150 pixels along a band, which ride with it; and under everything a slow unevenness, so
+			// that the pockets between the bands are not one flat tone)
+			Here *= 0.7f + 0.6f * (Layered(U, V, 13, 2, 151u) * 0.5f + 0.5f);
+			Here += 0.14f * (Layered(U, V, 4, 3, 157u) * 0.5f + 0.5f);
+		}
+	}
+	// Spread as the old wisps were (measured on the screen over France, 17 November 2026: the darkest twentieth at the
+	// floor, the lower quarter at 0.34, the middle at 0.585, the upper quarter at 0.81, the palest twentieth whole).
+	TArray<int32> Order;
+	Order.SetNumUninitialized(Size * Size);
+	for (int32 Index = 0; Index < Order.Num(); ++Index)
+	{
+		Order[Index] = Index;
+	}
+	Order.Sort([&Field](int32 A, int32 B) { return Field[A] < Field[B]; });
+	static const float Shares[7] = { 0.0f, 0.05f, 0.25f, 0.5f, 0.75f, 0.95f, 1.0f }, Values[7] = { 0.0f, 0.0f, 0.34f, 0.585f, 0.81f, 1.0f, 1.0f };
+	TArray<float> Spread;
+	Spread.SetNumUninitialized(Size * Size);
+	for (int32 Rank = 0; Rank < Order.Num(); ++Rank)
+	{
+		const float Share = (Rank + 0.5f) / Order.Num();
+		int32 Knot = 1;
+		while (Knot < 6 && Shares[Knot] < Share)
+		{
+			++Knot;
+		}
+		Spread[Order[Rank]] = FMath::Lerp(Values[Knot - 1], Values[Knot], (Share - Shares[Knot - 1]) / (Shares[Knot] - Shares[Knot - 1]));
+	}
+	OutPixels.SetNumUninitialized(Size * Size);
+	for (int32 Index = 0; Index < Size * Size; ++Index)
+	{
+		const uint8 Grey = ToByte(Spread[Index]);
+		OutPixels[Index] = FColor(Grey, Grey, Grey, 255);
+	}
+}
+
 void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
 {
 	TArray<float> Cloud, Mist;

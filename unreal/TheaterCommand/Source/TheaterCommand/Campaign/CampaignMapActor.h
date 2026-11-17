@@ -146,7 +146,7 @@ public:
 	/** Stands his agents in their provinces, and a mark where one was caught this month. Remade only when they change. Call it after ShowArmies: an agent stands clear of the armies' bases. */
 	void ShowAgents(const FCampaignView& View);
 	/** The agent whose piece (from high up, whose sign) a line from the eye passes through: his id, and how far along the line. INDEX_NONE if none. */
-	int32 AgentAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr) const;
+	int32 AgentAtRay(const FVector& Origin, const FVector& Direction, bool* bOutOnBody = nullptr) const;
 	/** The agent in hand, by his id (INDEX_NONE: none): his piece is lifted a little off the table and a brass ring is lit on its base. */
 	void SetAgentInHand(int32 AgentId);
 	/** The agent the pointer rests on: the ring on his base lights, to say he can be picked up. */
@@ -1104,6 +1104,12 @@ private:
 	TSet<int32> UnseenSet;
 	TSet<int32> GlimpsedSet; // (ruling 154) ground he only glimpses
 	TSet<int32> HazeSet; // the two together: where the haze lies
+	// (The fog's look brief, section 4.3.) The haze thins over about 0.6 seconds where ground comes into view, and
+	// returns over about a second where it goes out of view. What the fog's picture shows now, and what it is on its way to.
+	TArray<FColor> FogShownPixels, FogWantedPixels;
+	FIntRect FogFadeBox;
+	bool bFogFading = false, bFogLaidOnce = false;
+	void UpdateFogFade(float DeltaSeconds);
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;
 	bool bSides = false;
@@ -1288,6 +1294,8 @@ private:
 	TObjectPtr<UTexture2D> RipplesPicture;
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> WavesPicture; // the moving sea's swell, chop, flecks and slow unevenness
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> HazePicture; // the wisps of the fog of war's haze
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UTexture2D>> FlagTextures;

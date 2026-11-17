@@ -1437,8 +1437,10 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
 	LandScalar(TEXT("HazeFloor"), HazeFloor);
 	{
-		// How far the haze has travelled east, in the table's units: the game's clock times its pace. It starts again
-		// after 284,000 units, where both layers of wisp have turned a whole number of times, so nothing is seen.
+		// How far the haze has travelled, in the table's units: the game's clock times its pace, 7.3 units a second,
+		// about five pixels a second from where he plays (the art director: never over eight). It goes about twenty
+		// degrees north of east, off the bands' own long axis, so that their edges creep across the province lines.
+		// Its picture turns once in 2,920 units, each way.
 		// ("-TheaterHazeDrift=7.3" tries another pace, in units a second; "-TheaterHazeTravel=30" holds the haze where
 		// it stands after that many units, to measure a picture against another.)
 		static float HazeDrift = -1.0f, HazeHeld = -1.0f;
@@ -1449,7 +1451,8 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeTravel="), HazeHeld);
 		}
 		const double Clock = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		LandScalar(TEXT("HazeTravel"), HazeHeld >= 0.0f ? HazeHeld : static_cast<float>(FMath::Fmod(Clock * HazeDrift, 284000.0)));
+		const double Gone = HazeHeld >= 0.0f ? HazeHeld : Clock * HazeDrift;
+		LandVector(TEXT("HazeGone"), FLinearColor(static_cast<float>(FMath::Fmod(Gone * 0.9397, 2920.0)), static_cast<float>(FMath::Fmod(Gone * 0.342, 2920.0)), 0.0f, 0.0f));
 	}
 	LandVector(TEXT("HazeCast"), FMath::Lerp(HazeCastDay, HazeCastNight, Moon));
 	LandScalar(TEXT("HazeWisps"), HazeWisps);
@@ -1827,6 +1830,8 @@ void ACampaignMapActor::PaintGround()
 	RipplesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableRipples"));
 	CampaignTextures::MakeWaves(Pixels);
 	WavesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableWaves"));
+	CampaignTextures::MakeHaze(Pixels);
+	HazePicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableHaze"));
 
 	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
@@ -1977,6 +1982,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Waves"), WavesPicture); // (its painted lakes and rivers move with the sea)
+	LandMaterial->SetTextureParameterValue(TEXT("Haze"), HazePicture); // (the wisps of the fog of war's haze)
 	{
 		// "-TheaterSheen=0.1" tries another strength for the sheen of the painted land.
 		float Sheen = 0.0f;
@@ -10165,8 +10171,74 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int
 		}
 	}
 	SoftenFog(Pixels, Paint.NX, Paint.NY, Terrain.Cell);
-	CampaignTextures::Update(FogPicture, Pixels);
+	if (!bFogLaidOnce || FogShownPixels.Num() != Pixels.Num())
+	{
+		// (a campaign begun or taken up lays its haze at once)
+		bFogLaidOnce = true;
+		bFogFading = false;
+		FogShownPixels = Pixels;
+		FogWantedPixels = Pixels;
+		CampaignTextures::Update(FogPicture, Pixels);
+	}
+	else
+	{
+		// After that it comes and goes over a moment: the picture is walked toward what it should be, a little each
+		// frame, inside the box of what has changed (UpdateFogFade).
+		FogWantedPixels = MoveTemp(Pixels);
+		FogFadeBox = FIntRect(Paint.NX, Paint.NY, -1, -1);
+		for (int32 J = 0; J < Paint.NY; ++J)
+		{
+			const FColor* Shown = &FogShownPixels[J * Paint.NX];
+			const FColor* Wanted = &FogWantedPixels[J * Paint.NX];
+			for (int32 I = 0; I < Paint.NX; ++I)
+			{
+				if (Shown[I].R != Wanted[I].R)
+				{
+					FogFadeBox.Min.X = FMath::Min(FogFadeBox.Min.X, I);
+					FogFadeBox.Min.Y = FMath::Min(FogFadeBox.Min.Y, J);
+					FogFadeBox.Max.X = FMath::Max(FogFadeBox.Max.X, I);
+					FogFadeBox.Max.Y = FMath::Max(FogFadeBox.Max.Y, J);
+				}
+			}
+		}
+		bFogFading = FogFadeBox.Max.X >= FogFadeBox.Min.X;
+	}
 	FogBeyond();
+}
+
+void ACampaignMapActor::UpdateFogFade(float DeltaSeconds)
+{
+	if (!bFogFading || !FogPicture || FogShownPixels.Num() != Paint.NX * Paint.NY || FogWantedPixels.Num() != FogShownPixels.Num())
+	{
+		return;
+	}
+	// (thinning over 0.6 seconds where ground comes into view; returning over a second where it goes out)
+	const int32 Thins = FMath::Max(1, FMath::RoundToInt32(255.0f * DeltaSeconds / 0.6f)), Returns = FMath::Max(1, FMath::RoundToInt32(255.0f * DeltaSeconds / 1.0f));
+	bool bMore = false;
+	for (int32 J = FogFadeBox.Min.Y; J <= FogFadeBox.Max.Y; ++J)
+	{
+		FColor* Shown = &FogShownPixels[J * Paint.NX];
+		const FColor* Wanted = &FogWantedPixels[J * Paint.NX];
+		for (int32 I = FogFadeBox.Min.X; I <= FogFadeBox.Max.X; ++I)
+		{
+			const int32 Now = Shown[I].R, Aim = Wanted[I].R;
+			if (Now != Aim)
+			{
+				const int32 Next = Now > Aim ? FMath::Max(Aim, Now - Thins) : FMath::Min(Aim, Now + Returns);
+				Shown[I].R = static_cast<uint8>(Next);
+				bMore |= Next != Aim;
+			}
+		}
+	}
+	if (bMore)
+	{
+		CampaignTextures::UpdateBox(FogPicture, FogShownPixels, FogFadeBox.Min.X, FogFadeBox.Min.Y, FogFadeBox.Max.X, FogFadeBox.Max.Y);
+	}
+	else
+	{
+		bFogFading = false;
+		CampaignTextures::Update(FogPicture, FogShownPixels); // (the whole picture, with its smaller copies, now that it has arrived)
+	}
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
@@ -12717,6 +12789,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSeaMotion(CameraDistance, CameraFocus);
 	UpdateSky(CameraDistance, CameraFocus);
+	UpdateFogFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f);
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
@@ -13293,7 +13366,14 @@ void ACampaignMapActor::ShowSky(const TArray<FSkyZone>& Zones)
 				continue;
 			}
 			const FCampaignRegion& Region = Data.Regions[RegionId];
-			const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Region.Bounds.Min.X - X0) / Texel), 0, NX - 1), I1 = FMath::Clamp(FMath::CeilToInt32((Region.Bounds.Max.X - X0) / Texel), 0, NX - 1);
+			// (On the map of the whole world a province may be kept a turn of the world west of where the picture has
+			// it, as North America is: its columns are counted where it is kept, and written where the picture has them.)
+			int32 I0 = FMath::FloorToInt32((Region.Bounds.Min.X - X0) / Texel), I1 = FMath::CeilToInt32((Region.Bounds.Max.X - X0) / Texel);
+			if (!bWhole)
+			{
+				I0 = FMath::Clamp(I0, 0, NX - 1);
+				I1 = FMath::Clamp(I1, 0, NX - 1);
+			}
 			const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Region.Bounds.Min.Y - Y0) / Texel), 0, NY - 1), J1 = FMath::Clamp(FMath::CeilToInt32((Region.Bounds.Max.Y - Y0) / Texel), 0, NY - 1);
 			for (int32 J = J0; J <= J1; ++J)
 			{
@@ -13304,7 +13384,8 @@ void ACampaignMapActor::ShowSky(const TArray<FSkyZone>& Zones)
 					{
 						if (InRing(Ring, X, Y))
 						{
-							Kind[J * NX + I] = FMath::Max(Kind[J * NX + I], static_cast<uint8>(FMath::Min(Zone.Sky, 2)));
+							uint8& Here = Kind[J * NX + ((I % NX) + NX) % NX];
+							Here = FMath::Max(Here, static_cast<uint8>(FMath::Min(Zone.Sky, 2)));
 							break;
 						}
 					}
@@ -13334,7 +13415,7 @@ void ACampaignMapActor::ShowSky(const TArray<FSkyZone>& Zones)
 				const int32 I = From % NX, J = From / NX;
 				for (const FIntPoint& Step : { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) })
 				{
-					const int32 NI = I + Step.X, NJ = J + Step.Y;
+					const int32 NI = bWhole ? ((I + Step.X) % NX + NX) % NX : I + Step.X, NJ = J + Step.Y; // (the whole world goes round)
 					if (NI < 0 || NJ < 0 || NI >= NX || NJ >= NY || Kind[NJ * NX + NI] > 0)
 					{
 						continue;
@@ -13373,7 +13454,7 @@ void ACampaignMapActor::ShowSky(const TArray<FSkyZone>& Zones)
 	}
 	if (!SkyPicture || SkyNX != NX || SkyNY != NY)
 	{
-		SkyPicture = CampaignTextures::Create(NX, NY, Pixels, false, false, TEXT("TableSky"));
+		SkyPicture = CampaignTextures::Create(NX, NY, Pixels, false, bWhole, TEXT("TableSky")); // (the whole world's goes round: its twin to the west reads the same picture)
 		SkyNX = NX;
 		SkyNY = NY;
 		SkyDressed.Reset(); // (every material is handed the new picture)
@@ -13584,7 +13665,8 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 	}
 	// Everything that wears the sky: the ground, the sea, the towns and the woods. Never a piece, a flag or a plate.
 	TArray<UMaterialInstanceDynamic*, TInlineAllocator<16>> Wearing;
-	for (UMaterialInstanceDynamic* Each : { LandMaterial.Get(), WorldLandMaterial.Get(), SeaMaterial.Get(), WorldSeaMaterial.Get(), SceneryMaterial.Get(), WoodsMaterial.Get() })
+	// (and the rivers that are laid as ribbons: left out, they ran bright blue through a closed zone)
+	for (UMaterialInstanceDynamic* Each : { LandMaterial.Get(), WorldLandMaterial.Get(), SeaMaterial.Get(), WorldSeaMaterial.Get(), SceneryMaterial.Get(), WoodsMaterial.Get(), WaterMaterial.Get() })
 	{
 		if (Each)
 		{
@@ -13650,7 +13732,9 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 				Each->SetTextureParameterValue(TEXT("Weather"), bSnow ? WeatherSnowPicture : WeatherPicture);
 				Each->SetVectorParameterValue(TEXT("SkyFrame"), SkyFrame);
 			}
-			Each->SetScalarParameterValue(TEXT("SkyOn"), bSkyKnown && SkyPicture ? 1.0f : 0.0f);
+			// (The brief, section 10: on the staff's paper map there is no wash and no cloud, only the zones' edges and
+			// their plates. The sky goes as the paper comes.)
+			Each->SetScalarParameterValue(TEXT("SkyOn"), bSkyKnown && SkyPicture ? 1.0f - FMath::Clamp(GetPaper(), 0.0f, 1.0f) : 0.0f);
 			Each->SetScalarParameterValue(TEXT("SkyView"), SkyViewNow);
 			Each->SetScalarParameterValue(TEXT("SkyTravel"), Travel);
 			Each->SetScalarParameterValue(TEXT("SkyDim"), Dim);
@@ -14053,10 +14137,14 @@ bool ACampaignMapActor::GetAgentInHandStand(FVector& OutFoot, double& OutHigh) c
 	return false;
 }
 
-int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance) const
+int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direction, bool* bOutOnBody) const
 {
+	// (The art director's ruling: he is taken hold of within about a third of his height of his middle line. With two
+	// agents the nearer middle line wins. bOutOnBody says whether the pointer is on the figure itself: over an army's
+	// flag or base the army wins unless it is.)
 	int32 Found = INDEX_NONE;
 	double Nearest = TNumericLimits<double>::Max();
+	bool bOnBody = false;
 	if (bPiecesShown)
 	{
 		const FVector End = Origin + Direction * 200000.0;
@@ -14090,17 +14178,18 @@ int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direct
 					continue;
 				}
 			}
-			const double Distance = FVector::Dist(Origin, OnRay);
-			if (Distance < Nearest)
+			const double Off = FVector::Dist(OnRay, OnPart);
+			if (Off < Nearest)
 			{
-				Nearest = Distance;
+				Nearest = Off;
 				Found = Stand.Id;
+				bOnBody = bAgentFigures ? Off < 0.17 * High : Off < Stand.SignRadius;
 			}
 		}
 	}
-	if (OutDistance)
+	if (bOutOnBody)
 	{
-		*OutDistance = Nearest;
+		*bOutOnBody = bOnBody;
 	}
 	return Found;
 }

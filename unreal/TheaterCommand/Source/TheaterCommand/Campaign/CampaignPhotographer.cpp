@@ -1999,6 +1999,38 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 			*Shot.Name, Frames / Clock, View.X, View.Y,
 			FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
 		bTaken = true;
+		// ("-TheaterClip=24,0.25": the first picture is followed by so many more of the same view, so many seconds
+		// apart, named after it, to be put together as a short clip by Tools/clip.swift.)
+		if (Current == 0)
+		{
+			FString ClipAsked, ClipCount, ClipGap;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterClip="), ClipAsked, false))
+			{
+				if (!ClipAsked.Split(TEXT(","), &ClipCount, &ClipGap))
+				{
+					ClipCount = ClipAsked;
+				}
+				ClipFrames = FMath::Clamp(FCString::Atoi(*ClipCount), 0, 120);
+				ClipEvery = ClipGap.IsEmpty() ? 0.25f : FMath::Clamp(FCString::Atof(*ClipGap), 0.05f, 5.0f);
+				ClipTaken = 0;
+				ClipAt = Clock + ClipEvery;
+			}
+		}
+	}
+	if (bTaken && Current == 0 && ClipTaken < ClipFrames && Clock >= ClipAt)
+	{
+		++ClipTaken;
+		ClipAt += ClipEvery;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-clip-%02d.png"), *Shots[0].Name, ClipTaken)), true, false);
+		if (ClipTaken == ClipFrames)
+		{
+			ClipAt = Clock + 1.0f; // (and a second for the last of them to be written)
+		}
+		return;
+	}
+	if (bTaken && Current == 0 && ClipFrames > 0 && (ClipTaken < ClipFrames || Clock < ClipAt))
+	{
+		return;
 	}
 
 	// A second later, move on.

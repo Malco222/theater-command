@@ -1091,20 +1091,19 @@ def build_land():
     # about 5 px a second, the fine riding on the broad: at two paces the veil stirred in place and did not travel.
     # Its run from pocket to wisp is drawn in, so that it reads as haze and not as cloud, which is the weather's sign:
     # a floor of haze lies over the pockets ("HazeFloor"), and the wisps rise out of it more gently.
-    # (How far the haze has travelled east, in the table's own units: the game says, from its own clock
-    # ("HazeTravel"), so that the pace can be set and held by measure.)
-    travelled = scalar(m, "HazeTravel", 0.0, -200, -3050)
-
-    def wisps(long, deep, speed, x, y):
-        """The slow unevenness of the waves' picture, read long (east and west) and low, and drifting eastward."""
-        east = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y, r=False, g=True, b=False, a=False)
-        north = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y + 120, r=True, g=False, b=False, a=False)
-        upwind = plus(m, east, times(m, travelled, -speed, x + 60, y - 100), x + 120, y)
-        return (picture(m, "Waves", pair(m, times(m, upwind, 1.0 / long, x + 180, y), times(m, north, 1.0 / deep, x + 180, y + 120), x + 340, y), x + 700, y, numbers=True), "A")
-
-    veil = plus(m, times(m, wisps(4000.0, 830.0, 1.0, 0, -2700), 0.68, 1000, -2700), times(m, wisps(1420.0, 312.0, 1.0, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
-    wisp = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, veil, -0.34, 1350, -2900), 2.6, 1500, -2900), 1650, -2900)
-    wisp = lerp(m, scalar(m, "HazeFloor", 0.55, 1650, -3300), 1.0, wisp, 1720, -3250)
+    # (The art director's ruling of 17 November 2026: the haze travelled at the pace set and nobody could see it,
+    # because a wisp was 900 px long and smooth along the way it went. The fix is shape, not speed. The wisps are a
+    # picture of their own now, "Haze", which the game makes: bands about 400 px long from where he plays, each with a
+    # blunt head and a thinning tail, with lumps about every 150 px that ride with the band. They travel about twenty
+    # degrees off their own long axis, so that their edges creep across the province lines. The picture's values are
+    # spread exactly as the old wisps' were: no more contrast than before. How far the haze has travelled, east and
+    # north, the game says from its own clock ("HazeGone"), so that the pace can be set and held by measure.)
+    gone = vector(m, "HazeGone", (0.0, 0.0, 0.0, 0.0), -200, -3050)
+    haze_east = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, 0, -2700, r=False, g=True, b=False, a=False)
+    haze_north = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, 0, -2580, r=True, g=False, b=False, a=False)
+    haze_uv = pair(m, times(m, plus(m, haze_east, times(m, (gone, "R"), -1.0, 100, -2800), 250, -2700), 1.0 / 2920.0, 400, -2700),
+                   times(m, plus(m, haze_north, times(m, (gone, "G"), -1.0, 100, -2500), 250, -2580), 1.0 / 2920.0, 400, -2580), 550, -2650)
+    wisp = lerp(m, scalar(m, "HazeFloor", 0.55, 1650, -3300), 1.0, (picture(m, "Haze", haze_uv, 800, -2650, numbers=True), "R"), 1720, -3250)
     wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.72, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
     hazed = lerp(m, shaded, vector(m, "HazeColour", (0.21, 0.24, 0.27, 1.0), 1800, -2600), wisp, 2100, -2500)
     c = lerp(m, c, hazed, fog, 2250, -1500)

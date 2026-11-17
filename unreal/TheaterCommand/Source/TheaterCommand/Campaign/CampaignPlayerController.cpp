@@ -3825,12 +3825,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		FVector RayOrigin, RayDirection;
 		if (bHaveMouse && !bScripted && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
 		{
-			double PieceFar = 0.0, AgentFar = 0.0;
-			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection, &PieceFar);
-			// (Ruling 153.) An agent's piece: a small thing among large ones. Where the line from the eye passes through
-			// him he is what is pointed at, unless an army's piece stands nearer the eye.
-			PointedAgent = Map->AgentAtRay(RayOrigin, RayDirection, &AgentFar);
-			if (PointedAgent != INDEX_NONE && PointedPiece && PieceFar < AgentFar)
+			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
+			// (Ruling 153; the art director's ruling of 17 November.) An agent's piece: a small thing among large ones.
+			// He is taken hold of from a little way round him; but over an army's flag or base the army wins, unless
+			// the pointer is on his own body.
+			bool bOnHisBody = false;
+			PointedAgent = Map->AgentAtRay(RayOrigin, RayDirection, &bOnHisBody);
+			if (PointedAgent != INDEX_NONE && PointedPiece && !bOnHisBody)
 			{
 				PointedAgent = INDEX_NONE;
 			}
