@@ -5,6 +5,7 @@ import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import { generalOf } from '../../campaign/commanders';
 import { assess, corpsBase, evenOdds, limitAttackers, men, worksOf } from '../../campaign/game';
+import { divisionsOf } from '../../campaign/armies';
 import { armyOf } from '../../campaign/joint';
 import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
@@ -26,6 +27,8 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number):
   const forces: ForceTicket[] = cs.map((c, i) => ({
     corps: c.id, name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), str: c.str, org: c.org, xp: c.xp,
     ...(c.mor !== undefined ? { mor: c.mor } : {}), ...(c.dug ? { dug: true } : {}), ...(c.dn !== undefined ? { first: c.dn } : {}),
+    // Each block is one of these divisions, named as the army tray names it (the UI and design directors, b358).
+    divisions: divisionsOf(g, c).map((d) => ({ name: d.name, short: d.short, str: d.str, xp: d.xp, men: d.men })),
     share: w[i] / tot,
   }));
   // The general of the strongest corps commands on the field.
