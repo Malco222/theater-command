@@ -1,0 +1,33 @@
+step	verb	target	verdict	presses	click to picture ms	work ms	long work ms	longest work ms	card words	card px	card buttons	side page words	side page px	side page window px	tray words	pressed button px below the edge	card buttons below the edge	words shown	more
+1	press	United Kingdom	DID	1	40	10	0	0	794	2503	51	307	882	882	0	0	9		
+2	press	Supreme command	DID	1	32	10	0	0	777	2485	51	307	882	882	0	106	1		
+3	press	BEGIN THE CAMPAIGN	DID	1	1024	765	871	871	0	0	0	3467	6216	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+4	press	Your war cabinet is all caretakers	DID	1	312	133	177	177	202	650	8	3467	6216	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+5	press	MINISTERS	DID	1	48	6	0	0	392	1083	15	3467	6216	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+6	press	The organiser	DID	1	32	5	0	0	401	1068	15	3467	6216	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+7	press	YES, APPOINT HIM	DID	1	360	176	194	194	483	1166	15	3458	6186	826	0	0	2	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+8	close		DID	1	312	73	73	73	0	0	0	3458	6186	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+9	open-page	Powers	DID	1	352	162	232	232	0	0	0	576	3697	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+10	press	Court	SAID WHY	0	0	0	0	0	0	0	0	576	3697	826	0	103	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+11	press	Court	SAID WHY	0	0	0	0	0	0	0	0	576	3697	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+12	press	TRADE AGREEMENTS	DID	1	48	10	0	0	237	731	8	576	3697	826	0	173	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+13	close		DID	1	288	127	126	126	0	0	0	576	3697	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+14	open-page	Navy	DID	1	344	136	199	199	0	0	0	814	2918	826	0	0	0	Pick one of your fleets in the list to give it orders.	
+15	select-unit	Dover Command	DID	1	288	148	164	164	0	0	0	1072	4323	826	46	0	0	Click a ringed sea to send the Dover Command there.	
+16	order-sea	North Sea	DID	1	432	111	284	284	0	0	0	1088	4436	826	46	0	0	Click a ringed sea to send the Dover Command there.	
+17	press	Hunt subs	DID	1	448	182	312	312	0	0	0	1091	4454	826	48	0	0	Click a ringed sea to send the Dover Command there.	
+18	open-page	Air	DID	1	264	118	154	154	0	0	0	847	3202	826	0	0	0	Click an airfield on the map, or one of your air groups in the list. Plan a raid from its target.	
+19	select-unit	No. 1 Bomber Group	DID	1	304	85	146	146	0	0	0	927	3487	826	0	896	0	The rings show how far the No. 1 Bomber Group reaches. Give it standing orders, plan a raid with it, or move it.	
+20	press	PLAN A RAID WITH IT	DID	1	328	163	204	204	0	0	0	995	3697	826	0	0	0	The rings show how far the No. 1 Bomber Group reaches. Give it standing orders, plan a raid with it, or move it.	
+21	press	BOMB FACTORIES AND RAILWAYS	DID	1	352	166	220	220	0	0	0	1166	4344	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+22	press	Ruhr	DID	1	40	11	0	0	384	1316	9	1166	4344	826	0	0	0	Bomb factories and railways: click a red province to plan it. You see the odds before you commit.	
+23	press	FLY THE RAID BY	DID	1	392	104	199	199	191	828	3	958	3654	826	0	0	0	The rings show how far the No. 1 Bomber Group reaches. Give it standing orders, plan a raid with it, or move it.	
+24	close		DID	1	272	60	60	60	0	0	0	958	3654	826	0	0	0	The rings show how far the No. 1 Bomber Group reaches. Give it standing orders, plan a raid with it, or move it.	
+25	open-page	Navy	DID	1	344	160	229	229	0	0	0	1091	4454	826	48	0	0	Click a ringed sea to send the Dover Command there.	
+26	press	MAKE THIS THE PLAN	DID	1	248	88	153	153	0	0	0	1299	5038	826	48	0	0	The crossing to Hamburg is the plan.	
+27	open-page	Region	DID	1	296	103	145	145	0	0	0	3458	6186	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	
+28	select-province	London	DID	1	584	253	403	403	0	0	0	1265	4554	826	99	0	0	Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes t	
+29	press	Invade by sea	SAID WHY	1	336	94	179	179	0	0	0	1265	4554	826	99	1205	0	Landing from the sea: click a red coast to see the odds.	
+30	select-province	Hamburg	DID	1	224	43	0	0	604	1778	3	1265	4554	826	99	0	2	Landing from the sea: click a red coast to see the odds.	
+31	press	CALL IT OFF	DID	1	296	75	148	148	0	0	0	1265	4554	826	99	779	0	Landing from the sea: click a red coast to see the odds.	
+32	close		DID	1	288	127	127	127	0	0	0	3458	6186	826	0	0	0	No army at the front waits for orders. Tab shows the armies in the rear, or end the month.	

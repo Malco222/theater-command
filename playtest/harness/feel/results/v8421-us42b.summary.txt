@@ -1,0 +1,6 @@
+us42-d.steps.txt on file:///home/user/tc8421/dist/play.html
+steps 45: DID 36, SAID WHY 3, DEAD 0, MUTE 0, MISSING 3, ERROR 0; checks passed 0, failed 0
+
+MISSING  step 32 (line 32): press Ruhr  --  no button reads "Ruhr"
+MISSING  step 33 (line 33): press FLY THE RAID BY DAY  --  no button reads "FLY THE RAID BY DAY"
+MISSING  step 40 (line 40): press LAND THE TROOPS  --  no button reads "LAND THE TROOPS"

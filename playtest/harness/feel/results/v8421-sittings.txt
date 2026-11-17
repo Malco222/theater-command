@@ -1,0 +1,12 @@
+The long sittings on Version 84.2.1 (2026-11-17, a cloud machine, a new player).
+Every step gives the same verdict as on Version 84.2: America's first hour 66 steps, America's 1942 war 45,
+Germany's first hour 53, Britain's orders 32.
+
+Pictures made over the same timed map move (a drag round the pointer and a wheel in and out):
+  Germany, Warsaw near, December 1939     84.2: 204   84.2.1: 375   peace (Berlin near, September): 376
+  Germany, Warsaw far,  December 1939     84.2: 259   84.2.1: 325   peace (Berlin far): 323
+  America, Cotentin near, March 1942      84.2: 280   84.2.1: 311   peace (New York near, 1939): 404
+  America, Cotentin far,  March 1942      84.2: 254   84.2.1: 304   peace (New York far, 1939): 325
+
+A press: the middle of 35 presses in the 1942 sitting, each version played alone: 296 ms on 84.2, 288 ms on 84.2.1.
+The month's end in 1942: 3.4 to 4.5 s to the month card with the watch on, on both.
