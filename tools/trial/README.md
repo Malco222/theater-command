@@ -54,6 +54,20 @@ The printouts of the runs made on 17 November 2026 (seed 7, Colonel, the three s
 `/mnt/project-files/far-side-seats/`) are in `tools/trial/results/`: one file a seat, the 24-month watch, Iran
 for 40 months, the eight globe seats' verdicts on placeholder rows alone, and the two test files' output.
 
+The globe's eight printouts there were made again at 15:50Z on the chart as the map builder reissued it under
+ruling 210 (South Africa 3 factories, Iran 1) and on `globe-seats.json` as brought to the door's sheet (parts of the
+world, 45-word texts, rows of words). The Pacific's six are the first run's.
+
+**The globe's own test file** runs its second half only where the seats are in the data. On this branch:
+
+```
+TC_SEATS=/mnt/project-files/far-side-seats/globe/globe-seats.json npx vitest run tests/far-seats-globe.test.ts   # 13 pass
+```
+
+On `main` as it stands (the two new files alone: `data/campaign/far-seats-globe.json`, `tests/far-seats-globe.test.ts`)
+9 pass and 4 are skipped until the rows are lifted into `world.json`. Those two files are the only ones on this
+branch meant for the rules builder's merge: `git checkout origin/claude/project-thread-0h6wag -- data/campaign/far-seats-globe.json tests/far-seats-globe.test.ts`.
+
 The month is advanced by the Playtester's own harness (`/mnt/project-files/playtest/harness/lib.ts`: `start`,
 `advance`, `check`), so a seat is opened and played as every seat has been since Version 53. Set `PT_HARNESS`
 to another folder holding `lib.ts` if that one is out of reach.

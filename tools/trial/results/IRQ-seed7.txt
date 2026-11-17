@@ -1,19 +1,20 @@
 === IRQ, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
-Iraq (IRQ), September 1939; part of the world: the Near East; government: authoritarian; stands: leaning_allies; quality 0.55, air 1, resilience 0.4, sea lift 0
+Iraq (IRQ), September 1939; part of the world: the Middle East; government: authoritarian; stands: leaning_allies; quality 0.55, air 1, resilience 0.4, sea lift 0
   capital: Baghdad (province 366, held by IRQ)
   provinces: holds 4, owns 4; at home 4, colonies 0; ports 1; factories 0; victory points 3; oilfields 1
   seas it stands on: Persian Gulf
   neighbours by land: TUR, IRN, FRA, UK, SAU
-  army: 3 corps, 4 divisions on paper, 2.3 at strength
-    1st and 3rd Divisions (Baghdad) [inf] 2 div at 60% in Baghdad
-    2nd Division (Kirkuk) [inf] 1 div at 60% in Iraq
-    4th Division (Diwaniyah) [inf] 1 div at 50% in Basra
+  army: 3 corps, 4 divisions on paper, 1.9 at strength
+    1st and 3rd Divisions and the mechanised brigade [inf] 2 div at 50% in Baghdad
+    2nd Division (Kirkuk) [inf] 1 div at 50% in Iraq
+    4th Division (Diwaniyah and the south) [inf] 1 div at 40% in Basra
   fleets: none
   air groups: none
-  books (as the interface shows them, x100): income 302.9 a month, upkeep 4.6, net 298.3, treasury 0
-  at war with: none; follows: nobody; friends: TUR, IRN, AFG, UK
-  abilities: The Kirkuk pipeline; The two rivers
+  books (as the interface shows them, x100): income 250.4 a month, upkeep 3.8, net 246.6, treasury 0
+  at war with: none; follows: nobody; friends: IRN, AFG, TUR, UK
+  abilities: The treaty of 1930; The Saadabad Pact
   paths: axis (open); allies (open); alone (open); found (open)
+  League founders it could ask (4, all of the Middle East unless said): AFG (willing), IRN (willing), SAU (willing), YEM (willing); of another part of the world: none
   arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 7; barred for another reason 13
     corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
     corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
@@ -35,23 +36,31 @@ Iraq (IRQ), September 1939; part of the world: the Near East; government: author
     work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
     work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
     work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+    with Basra picked: ship:tp    Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    with Basra picked: work:yard  Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
   first month reached in 4 s
 --- month by month (the line is the day the player is up)
-  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 270.7; at 298.2 a month that is 2 month(s) away
-  September 1939  alive  provinces   4  corps  3 (2.4 divs)  treasury   270.7  net  298.2/month  leaning_allies  at war with: none  [0 s]
-  October 1939    alive  provinces   4  corps  3 (2.4 divs)  treasury   540.4  net    298/month  leaning_allies  at war with: none  [4 s]
-  November 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Baghdad; treasury 809.1 -> 9.1; orders in hand 1
-  November 1939   alive  provinces   4  corps  3 (2.5 divs)  treasury     9.1  net  297.9/month  leaning_allies  at war with: none  [2 s]
-  December 1939   alive  provinces   4  corps  3 (2.6 divs)  treasury   276.8  net  297.7/month  leaning_allies  at war with: none  [2 s]
-  January 1940    alive  provinces   4  corps  3 (2.7 divs)  treasury   543.5  net  292.6/month  leaning_allies  at war with: none  [2 s]
-  February 1940   alive  provinces   4  corps  3 (2.7 divs)  treasury     804  net  292.4/month  leaning_allies  at war with: none  [2 s]
-  March 1940      alive  provinces   4  corps  3 (2.8 divs)  treasury  1063.5  net  292.2/month  leaning_allies  at war with: none  [5 s]
-  April 1940      alive  provinces   4  corps  3 (2.9 divs)  treasury  1321.8  net  292.1/month  leaning_allies  at war with: none  [3 s]
-  May 1940        alive  provinces   4  corps  3 (3 divs)  treasury  1578.9  net  291.9/month  leaning_allies  at war with: none  [5 s]
-  June 1940       alive  provinces   4  corps  3 (3.1 divs)  treasury  1834.7  net  291.7/month  leaning_allies  at war with: none  [5 s]
-  July 1940       alive  provinces   4  corps  3 (3.2 divs)  treasury  2089.4  net  291.5/month  leaning_allies  at war with: none  [5 s]
-  August 1940     alive  provinces   4  corps  3 (3.3 divs)  treasury  2342.7  net  291.3/month  leaning_allies  at war with: none  [4 s]
-  September 1940  alive  provinces   4  corps  3 (3.4 divs)  treasury  2594.7  net  291.1/month  leaning_allies  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
-    [note] saved at February 1940: 454 KB
-VERDICT IRQ seed 7: PASS: started yes; order given (November 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 47 s
+  ways out of the country on September 1939 (sea lift 0, seaSupply false):
+    1st and 3rd Divisions and the mechanised brigade in Baghdad: marches to 3 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    2nd Division (Kirkuk) in Iraq: marches to 3 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    4th Division (Diwaniyah and the south) in Basra: marches to 3 provinces this month, 0 outside its own country; by sea to no port (no friendly port abroad)
+    by land in the end, over its own and its allies' ground from Baghdad: 4 provinces (IRQ 4); furthest Iraq, 1 provinces off; on the map of Europe 3 (nearest Baghdad, 0 off)
+      frontiers that road comes to: FRA at Deir ez-Zor, 1 off; IRN at Kermanshah, 1 off; UK at Kuwait, 1 off; SAU at Hail, 1 off; TUR at Diyarbakir, 2 off
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 223.8; at 246.5 a month that is 3 month(s) away
+  September 1939  alive  provinces   4  corps  3 (2 divs)  treasury   223.8  net  246.5/month  leaning_allies  at war with: none  [0 s]
+  October 1939    alive  provinces   4  corps  3 (2 divs)  treasury   446.8  net  246.4/month  leaning_allies  at war with: none  [4 s]
+  November 1939   alive  provinces   4  corps  3 (2.1 divs)  treasury     669  net  246.3/month  leaning_allies  at war with: none  [2 s]
+  December 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Baghdad; treasury 890.4 -> 90.4; orders in hand 1
+  December 1939   alive  provinces   4  corps  3 (2.1 divs)  treasury    90.4  net  246.1/month  leaning_allies  at war with: none  [2 s]
+  January 1940    alive  provinces   4  corps  3 (2.2 divs)  treasury   310.9  net    246/month  leaning_allies  at war with: none  [2 s]
+  February 1940   alive  provinces   4  corps  3 (2.3 divs)  treasury   530.5  net  240.9/month  leaning_allies  at war with: none  [2 s]
+  March 1940      alive  provinces   4  corps  3 (2.3 divs)  treasury   744.1  net  240.7/month  leaning_allies  at war with: none  [5 s]
+  April 1940      alive  provinces   4  corps  3 (2.4 divs)  treasury   956.8  net  240.6/month  leaning_allies  at war with: none  [3 s]
+  May 1940        alive  provinces   4  corps  3 (2.5 divs)  treasury  1168.5  net  240.5/month  leaning_allies  at war with: none  [4 s]
+  June 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury    1379  net  240.1/month  leaning_allies  at war with: none  [4 s]
+  July 1940       alive  provinces   4  corps  3 (2.6 divs)  treasury  1588.4  net  239.9/month  leaning_allies  at war with: none  [4 s]
+  August 1940     alive  provinces   4  corps  3 (2.7 divs)  treasury  1796.7  net  239.7/month  leaning_allies  at war with: none  [4 s]
+  September 1940  alive  provinces   4  corps  3 (2.8 divs)  treasury  2003.9  net  239.5/month  leaning_allies  at war with: none  (end)
+    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
+    [note] saved at February 1940: 471 KB
+VERDICT IRQ seed 7: PASS: started yes; order given (December 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 43 s

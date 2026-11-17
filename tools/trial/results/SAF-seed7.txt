@@ -1,29 +1,29 @@
 === SAF, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
-South Africa (SAF), September 1939; part of the world: Africa; government: democracy; stands: allies; quality 0.85, air 3, resilience 0.8, sea lift 1
+South Africa (SAF), September 1939; part of the world: Africa; government: democracy; stands: allies; quality 0.8, air 3, resilience 0.6, sea lift 0
   capital: Pretoria (province 1231, held by SAF)
-  provinces: holds 24, owns 24; at home 19, colonies 5; ports 8; factories 7; victory points 13; oilfields 0
+  provinces: holds 24, owns 24; at home 19, colonies 5; ports 8; factories 3; victory points 13; oilfields 0
   seas it stands on: Angola Basin, Cape Basin, Mozambique Channel
   neighbours by land: UK, POR
-  army: 3 corps, 3 divisions on paper, 1 at strength
-    Permanent Force and Special Service Battalion [inf] 1 div at 40% in Pretoria
-    Active Citizen Force, Cape Command [inf] 1 div at 30% in Cape Town
-    Active Citizen Force, Natal Command [inf] 1 div at 30% in Durban
+  army: 2 corps, 2 divisions on paper, 0.8 at strength
+    Union Defence Force (Permanent Force and Active Citizen Force) [inf] 1 div at 50% in Pretoria
+    Cape Command (the coast defences) [inf] 1 div at 30% in Cape Town
   fleets: none
   air groups: none
-  books (as the interface shows them, x100): income 1422.5 a month, upkeep 4, net 1418.5, treasury 0
+  books (as the interface shows them, x100): income 1049.2 a month, upkeep 3.2, net 1046, treasury 0
   at war with: GER; follows: UK; friends: none
-  abilities: The gold of the Rand; Armoured cars for the veld
+  abilities: The gold of the Rand; A dominion of the Crown
   paths: axis (no: You have given your word to the Allies.); allies (now); alone (no: An alliance, once joined, is not left.); found (no: You have given your word to the Allies.)
-  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 10; barred for another reason 10
+  League founders it could ask (1, all of Africa unless said): LBR (willing); of another part of the world: none
+  arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 9; barred for another reason 11
     corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
     corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The treasury cannot cover it.
-    corps:mot      Motorized corps (2 divisions) cost 4250, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
+    corps:mot      Motorized corps (2 divisions) cost 5000, 6 months  NO: Needs the technology Motorised infantry. Open Research to begin it.
     corps:art      Artillery corps (2 divisions) cost 6600, 5 months  NO: The treasury cannot cover it.
     corps:arm      Armoured corps (2 divisions) cost 6600, 7 months  NO: Needs the technology Tank arm. Open Research to begin it.
     corps:eng      Engineer corps (1 division) cost 1800, 3 months  NO: The treasury cannot cover it.
     para           Airborne corps (2 divisions) cost 4400, 6 months  NO: Needs the technology Airborne forces. Open Research to begin it.
     air:ftr        Fighter wing (100 fighters) cost 1200, 3 months  NO: The treasury cannot cover it.
-    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: The treasury cannot cover it.
+    air:bmr        Bomber wing (100 bombers) cost 1800, 4 months  NO: Needs an aircraft industry: a home province with 3 factories.
     ship:dd        Destroyer flotilla (4 destroyers) cost 1000, 8 months  NO: Needs a shipyard of level 1 in one of your home ports.
     ship:ss        Submarine flotilla (4 submarines) cost 800, 7 months  NO: Needs a shipyard of level 1 in one of your home ports.
     ship:tp        Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
@@ -35,22 +35,31 @@ South Africa (SAF), September 1939; part of the world: Africa; government: democ
     work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
     work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
     work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+    with Cape Town picked: ship:tp    Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    with Cape Town picked: work:yard  Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
   first month reached in 4 s
 --- month by month (the line is the day the player is up)
-  September 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Pretoria; treasury 1406.5 -> 606.5; orders in hand 1
-  September 1939  alive  provinces  24  corps  3 (1 divs)  treasury   606.5  net 1418.4/month  allies  at war with: GER  [0 s]
-  October 1939    alive  provinces  24  corps  3 (1.1 divs)  treasury  2012.5  net 1418.2/month  allies  at war with: GER  [4 s]
-  November 1939   alive  provinces  24  corps  3 (1.1 divs)  treasury    3418  net 1413.1/month  allies  at war with: GER  [2 s]
-  December 1939   alive  provinces  24  corps  3 (1.1 divs)  treasury    4818  net   1413/month  allies  at war with: GER  [2 s]
-  January 1940    alive  provinces  24  corps  3 (1.2 divs)  treasury  6217.4  net 1412.8/month  allies  at war with: GER  [2 s]
-  February 1940   alive  provinces  24  corps  3 (1.2 divs)  treasury  7616.3  net 1412.7/month  allies  at war with: GER  [2 s]
-  March 1940      alive  provinces  24  corps  3 (1.2 divs)  treasury  9014.7  net 1412.6/month  allies  at war with: GER  [5 s]
-  April 1940      alive  provinces  24  corps  3 (1.3 divs)  treasury 10412.5  net 1412.4/month  allies  at war with: GER  [3 s]
-  May 1940        alive  provinces  24  corps  3 (1.3 divs)  treasury 11809.7  net 1412.3/month  allies  at war with: GER  [5 s]
-  June 1940       alive  provinces  24  corps  3 (1.3 divs)  treasury 13206.3  net 1412.1/month  allies  at war with: GER  [5 s]
-  July 1940       alive  provinces  24  corps  3 (1.4 divs)  treasury 14602.3  net 1411.9/month  allies  at war with: GER  [5 s]
-  August 1940     alive  provinces  24  corps  3 (1.4 divs)  treasury 15997.6  net 1411.8/month  allies  at war with: GER  [4 s]
-  September 1940  alive  provinces  24  corps  3 (1.5 divs)  treasury 17392.3  net 1411.6/month  allies  at war with: GER  (end)
-    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
-    [note] saved at February 1940: 459 KB
-VERDICT SAF seed 7: PASS: started yes; order given (September 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 48 s
+  ways out of the country on September 1939 (sea lift 0, seaSupply true):
+    Union Defence Force (Permanent Force and Active Citizen Force) in Pretoria: marches to 35 provinces this month, 14 outside its own country (Gaberones, UK; Francistown, UK; Ghanzi, UK; ...); by sea to no port (it stands in no port)
+    Cape Command (the coast defences) in Cape Town: marches to 20 provinces this month, 2 outside its own country (Ghanzi, UK; Gaberones, UK); by sea to no port ("South Africa has no shipping to move an army by sea.")
+    by land in the end, over its own and its allies' ground from Pretoria: 197 provinces (UK 91, FRA 82, SAF 24); furthest Deir ez-Zor, 26 provinces off; on the map of Europe 31 (nearest Colomb-Bechar, 18 off)
+      frontiers that road comes to: POR at Lourenco Marques, 2 off; BEL at Elisabethville, 5 off; ITA at Kismayu, 11 off; ESP at Bata, 16 off; LBR at Monrovia, 21 off; SAU at Tabuk, 23 off; IRQ at Rutbah, 24 off; TUR at Adana, 26 off
+    by land in the end, over its own ground and UK's alone from Pretoria: 98 provinces (UK 74, SAF 24); furthest Palestine, 23 provinces off; on the map of Europe 13 (nearest Faiyum, 19 off)
+      frontiers that road comes to: POR at Lourenco Marques, 2 off; BEL at Elisabethville, 5 off; ITA at Kismayu, 11 off; FRA at Ndele, 13 off; SAU at Tabuk, 23 off; IRQ at Rutbah, 24 off
+  September 1939: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Pretoria; treasury 1036.4 -> 236.4; orders in hand 1
+  September 1939  alive  provinces  24  corps  2 (0.8 divs)  treasury   236.4  net 1045.9/month  allies  at war with: GER  [0 s]
+  October 1939    alive  provinces  24  corps  2 (0.8 divs)  treasury  1272.4  net 1045.8/month  allies  at war with: GER  [3 s]
+  November 1939   alive  provinces  24  corps  2 (0.9 divs)  treasury    2308  net 1040.7/month  allies  at war with: GER  [2 s]
+  December 1939   alive  provinces  24  corps  2 (0.9 divs)  treasury  3338.1  net 1040.6/month  allies  at war with: GER  [2 s]
+  January 1940    alive  provinces  24  corps  2 (0.9 divs)  treasury  4367.9  net 1040.5/month  allies  at war with: GER  [2 s]
+  February 1940   alive  provinces  24  corps  2 (1 divs)  treasury  5397.2  net 1040.4/month  allies  at war with: GER  [1 s]
+  March 1940      alive  provinces  24  corps  2 (1 divs)  treasury  6426.1  net 1040.2/month  allies  at war with: GER  [4 s]
+  April 1940      alive  provinces  24  corps  2 (1 divs)  treasury  7454.6  net 1040.1/month  allies  at war with: GER  [3 s]
+  May 1940        alive  provinces  24  corps  2 (1 divs)  treasury  8482.5  net   1040/month  allies  at war with: GER  [4 s]
+  June 1940       alive  provinces  24  corps  2 (1.1 divs)  treasury    9510  net 1039.9/month  allies  at war with: GER  [3 s]
+  July 1940       alive  provinces  24  corps  2 (1.1 divs)  treasury   10537  net 1039.7/month  allies  at war with: GER  [4 s]
+  August 1940     alive  provinces  24  corps  2 (1.1 divs)  treasury 11563.4  net 1039.6/month  allies  at war with: GER  [4 s]
+  September 1940  alive  provinces  24  corps  2 (1.2 divs)  treasury 12589.3  net 1039.5/month  allies  at war with: GER  (end)
+    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
+    [note] saved at February 1940: 475 KB
+VERDICT SAF seed 7: PASS: started yes; order given (September 1939); months played 12; save and load plays on the same; invariants broken 0; still standing; 42 s

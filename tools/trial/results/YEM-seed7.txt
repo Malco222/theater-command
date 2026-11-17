@@ -1,17 +1,18 @@
 === YEM, seed 7, 12 months, level colonel; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/pacific-seats.json
-Yemen (YEM), September 1939; part of the world: the Near East; government: authoritarian; stands: independent; quality 0.45, air 0, resilience 0.5, sea lift 0
+Yemen (YEM), September 1939; part of the world: the Middle East; government: authoritarian; stands: independent; quality 0.35, air 0, resilience 0.5, sea lift 0
   capital: Sanaa (province 990, held by YEM)
   provinces: holds 2, owns 2; at home 2, colonies 0; ports 1; factories 0; victory points 0; oilfields 0
   seas it stands on: Red Sea
   neighbours by land: SAU, UK
-  army: 1 corps, 1 divisions on paper, 0.4 at strength
-    The Imam's regular army [inf] 1 div at 40% in Sanaa
+  army: 1 corps, 1 divisions on paper, 0.5 at strength
+    The Imam's army and the tribal levies [inf] 1 div at 50% in Sanaa
   fleets: none
   air groups: none
-  books (as the interface shows them, x100): income 171.5 a month, upkeep 0.8, net 170.7, treasury 0
-  at war with: none; follows: nobody; friends: none
-  abilities: The highlands; Coffee and hides
+  books (as the interface shows them, x100): income 151.5 a month, upkeep 1, net 150.5, treasury 0
+  at war with: none; follows: nobody; friends: ITA
+  ability: The highlands
   paths: axis (open); allies (open); alone (now); found (open)
+  League founders it could ask (4, all of the Middle East unless said): AFG (willing), IRN (willing), SAU (willing), IRQ; of another part of the world: none
   arsenal (with the capital picked on the map): 20 offers; can order today 0; short of money only 6; barred for another reason 14
     corps:mtn      Mountain corps (2 divisions) cost 3400, 5 months  NO: The treasury cannot cover it.
     corps:inf      Infantry corps (3 divisions) cost 4800, 5 months  NO: The reserve has not the men: this takes 45,000 and 39,000 are left. 1,000 come of age each month.
@@ -33,23 +34,29 @@ Yemen (YEM), September 1939; part of the world: the Near East; government: autho
     work:aa        Anti-aircraft guns (level 1) cost 800, 2 months  NO: The treasury cannot cover it.
     work:field     Airfields (level 1) cost 1000, 3 months  NO: The treasury cannot cover it.
     work:fort      Fortifications (level 1) cost 2400, 4 months  NO: The treasury cannot cover it.
+    with Hodeida picked: ship:tp    Troopships (lift for one more corps a month) cost 1400, 6 months  NO: Needs a shipyard of level 1 in one of your home ports.
+    with Hodeida picked: work:yard  Shipyard (level 1) cost 2000, 8 months  NO: The treasury cannot cover it.
   first month reached in 5 s
 --- month by month (the line is the day the player is up)
-  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 165.9; at 170.7 a month that is 4 month(s) away
-  September 1939  alive  provinces   2  corps  1 (0.4 divs)  treasury   165.9  net  170.7/month  independent  at war with: none  [0 s]
-  October 1939    alive  provinces   2  corps  1 (0.4 divs)  treasury   331.7  net  170.7/month  independent  at war with: none  [4 s]
-  November 1939   alive  provinces   2  corps  1 (0.4 divs)  treasury   497.3  net  170.7/month  independent  at war with: none  [3 s]
-  December 1939   alive  provinces   2  corps  1 (0.5 divs)  treasury   662.7  net  170.6/month  independent  at war with: none  [2 s]
-  January 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Sanaa; treasury 828 -> 28; orders in hand 1
-  January 1940    alive  provinces   2  corps  1 (0.5 divs)  treasury      28  net  170.6/month  independent  at war with: none  [2 s]
-  February 1940   alive  provinces   2  corps  1 (0.5 divs)  treasury     193  net  170.6/month  independent  at war with: none  [2 s]
-  March 1940      alive  provinces   2  corps  1 (0.5 divs)  treasury   357.9  net  165.6/month  independent  at war with: none  [5 s]
-  April 1940      alive  provinces   2  corps  1 (0.5 divs)  treasury   517.5  net  165.5/month  independent  at war with: none  [3 s]
-  May 1940        alive  provinces   2  corps  1 (0.5 divs)  treasury     677  net  165.5/month  independent  at war with: none  [4 s]
-  June 1940       alive  provinces   2  corps  1 (0.5 divs)  treasury   836.2  net  165.5/month  independent  at war with: none  [4 s]
-  July 1940       alive  provinces   2  corps  1 (0.6 divs)  treasury   995.2  net  165.4/month  independent  at war with: none  [5 s]
-  August 1940     alive  provinces   2  corps  1 (0.6 divs)  treasury    1154  net  165.4/month  independent  at war with: none  [5 s]
-  September 1940  alive  provinces   2  corps  1 (0.6 divs)  treasury  1312.6  net  165.4/month  independent  at war with: none  (end)
-    [September 1939 after JAP] [note] crowd: 22 JAP corps stand in Tokyo (19 divisions)
-    [note] saved at February 1940: 455 KB
-VERDICT YEM seed 7: PASS: started yes; order given (January 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 48 s
+  ways out of the country on September 1939 (sea lift 0, seaSupply false):
+    The Imam's army and the tribal levies in Sanaa: marches to 1 provinces this month, 0 outside its own country; by sea to no port (it stands in no port)
+    by land in the end, over its own and its allies' ground from Sanaa: 2 provinces (YEM 2); furthest Hodeida, 1 provinces off; on the map of Europe 0
+      frontiers that road comes to: SAU at Abha, 1 off; UK at Aden, 1 off
+  September 1939: it can afford nothing today: the cheapest offer is Anti-aircraft guns at 800 against a treasury of 144.5; at 150.5 a month that is 5 month(s) away
+  September 1939  alive  provinces   2  corps  1 (0.5 divs)  treasury   144.5  net  150.5/month  independent  at war with: none  [0 s]
+  October 1939    alive  provinces   2  corps  1 (0.5 divs)  treasury   288.9  net  150.5/month  independent  at war with: none  [3 s]
+  November 1939   alive  provinces   2  corps  1 (0.5 divs)  treasury     433  net  150.4/month  independent  at war with: none  [2 s]
+  December 1939   alive  provinces   2  corps  1 (0.6 divs)  treasury   576.9  net  150.4/month  independent  at war with: none  [2 s]
+  January 1940    alive  provinces   2  corps  1 (0.6 divs)  treasury   720.5  net  150.4/month  independent  at war with: none  [2 s]
+  February 1940: order given: Anti-aircraft guns (level 1) for 800, due in 2 months at Sanaa; treasury 864 -> 64; orders in hand 1
+  February 1940   alive  provinces   2  corps  1 (0.6 divs)  treasury      64  net  150.3/month  independent  at war with: none  [2 s]
+  March 1940      alive  provinces   2  corps  1 (0.6 divs)  treasury   207.2  net  150.3/month  independent  at war with: none  [4 s]
+  April 1940      alive  provinces   2  corps  1 (0.6 divs)  treasury   350.1  net  145.3/month  independent  at war with: none  [4 s]
+  May 1940        alive  provinces   2  corps  1 (0.7 divs)  treasury   487.8  net  145.2/month  independent  at war with: none  [5 s]
+  June 1940       alive  provinces   2  corps  1 (0.7 divs)  treasury   625.2  net  145.2/month  independent  at war with: none  [4 s]
+  July 1940       alive  provinces   2  corps  1 (0.7 divs)  treasury   762.3  net  145.2/month  independent  at war with: none  [4 s]
+  August 1940     alive  provinces   2  corps  1 (0.7 divs)  treasury   899.2  net  145.1/month  independent  at war with: none  [4 s]
+  September 1940  alive  provinces   2  corps  1 (0.7 divs)  treasury  1035.7  net  145.1/month  independent  at war with: none  (end)
+    [September 1939 after JAP] [note] crowd: 24 JAP corps stand in Tokyo (21 divisions)
+    [note] saved at February 1940: 472 KB
+VERDICT YEM seed 7: PASS: started yes; order given (February 1940); months played 12; save and load plays on the same; invariants broken 0; still standing; 45 s
