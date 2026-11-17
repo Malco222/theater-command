@@ -2372,3 +2372,14 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .tc-carry { display: flex; align-items: center; height: 20px; }
 .tc-carry > span { display: flex; min-width: 16px; align-items: center; gap: 4px; padding: 0 7px; border-left: 1px solid var(--line); font: 700 12px/1 ui-monospace, 'Courier New', monospace; color: var(--ink); }
 .tc-carry > span:first-child { border-left: 0; padding-left: 0; }
+
+/* Version 84.2.6: the alarm, first in the tray (ruling 211(c)): an enemy army on his home ground, in red with the
+   warning sign, three sentences with the first in bold; and his guns left alone round an enemy's town (211(a)),
+   red while infantry or tanks of his can reach them this month, plain where none can. */
+.alert.home { border-right-color: var(--red); background: linear-gradient(90deg, rgba(92, 30, 22, .94), rgba(58, 22, 18, .94)); border-color: #8c3a2c; text-align: left; }
+.alert.home:hover { border-color: var(--red); }
+.alert.home .sign { color: #ffb19c; margin-right: 5px; }
+.alert.home b { color: #ffe3d8; font-weight: 600; }
+.alert.home .of { color: #e6a593; font-size: 11px; white-space: nowrap; }
+.alert.gunsalone { border-right-color: var(--red); }
+.alerts.inpane .alert.home, .alerts.inpane .alert.gunsalone { border-left-color: var(--red); }
