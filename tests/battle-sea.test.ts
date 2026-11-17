@@ -124,7 +124,7 @@ describe('the orders of the first slice', () => {
     const cv = piece(sim, 'att', 'cv'), foe = piece(sim, 'def', 'bb');
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(true);
     const off = events(sim).find((e) => e.what === 'ability')!;
-    expect(off.text).toBe('A carrier of Home Fleet flies off 24 bombers against a battleship of Battle Fleet.');
+    expect(off.text).toBe('A carrier of the Home Fleet flies off 24 bombers against a battleship of the Battle Fleet.');
     // Not ready again until its aircraft are back.
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(false);
     const str0 = foe.str;

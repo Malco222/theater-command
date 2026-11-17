@@ -3,9 +3,9 @@
 // browser page of its own, beside the land page, with no press on the campaign screen until the play version ships.
 //
 // Mouse: left picks (drag for a box, Shift adds), right orders (on the water to steer for it, on an enemy to engage it
-// or, for a carrier, to strike it; drag to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R withdraw the chosen
-// ships, Tab next piece, Esc drops the choice. A plain left click never gives an order, and Enter does nothing.
-// TODO(polish): every word here is a placeholder until the UI director and the design director pass it.
+// or, for a carrier, to strike it; drag to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R the chosen ships break
+// off, Tab next piece, Esc drops the choice. A plain left click never gives an order, and Enter does nothing.
+// The words are the UI director's and the design director's (reviews of 17 November, logs b368 and b370).
 
 import { createGame } from '../../campaign/game';
 import { sail, seaBattles } from '../../campaign/navy';
@@ -17,18 +17,31 @@ import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, Side } from '../core/types';
 import { closeWith, foughtOf, seaAhead, type SeaAhead } from '../sea/handoff';
 import { SEA } from '../sea/numbers';
-import { shipWords } from '../sea/result';
 import { SeaSim, type SeaLosses } from '../sea/sim';
 import { plainTicket, type PlainFleet } from '../sea/ticket';
-import type { SeaClass, SeaSpeed, SeaTicket, SeaUnit } from '../sea/types';
+import type { SeaClass, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from '../sea/types';
 import { toField, toScreen } from './draw';
-import { drawSea, live, shipSvg, takeEvents, type SeaScene } from './sea-draw';
+import { drawSea, live, shipSvg, sideColours, takeEvents, type SeaScene } from './sea-draw';
 
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
 const chanceOf = (t: SeaTicket): number => diceChance(t.reckoning.odds, t.reckoning.dice, t.reckoning.even);
+/** Facts in a row, each kept whole, as on the land page (battle.css .facts). */
+const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
+/** A list as English says it: "a, b and c". */
+const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+const CLASS_ONE: Record<SeaClass | 'ss', [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
+/** Ships by kind, a kind at 0 left out: ["1 battleship", "2 cruisers"]. */
+const shipBits = (s: Partial<Record<SeaClass | 'ss', number>>): string[] =>
+  (['bb', 'cv', 'ca', 'dd', 'ss'] as const).filter((c) => (s[c] ?? 0) > 0).map((c) => `${s[c]} ${CLASS_ONE[c][s[c] === 1 ? 0 : 1]}`);
+/** A number never parts from its noun (the UI director's fold rule). */
+const shipsKept = (s: Partial<Record<SeaClass, number>>): string => shipBits(s).map((b) => `<span class="nw">${esc(b)}</span>`).join(', ');
+/** A nation's people, for "you had lost 3 destroyers and the Germans 8". */
+const PEOPLE: Record<string, string> = { British: 'the British', French: 'the French', 'Vichy French': 'the Vichy French', Dutch: 'the Dutch', Irish: 'the Irish', Swiss: 'the Swiss', Polish: 'the Poles', Danish: 'the Danes', Swedish: 'the Swedes', Finnish: 'the Finns', Turkish: 'the Turks', Spanish: 'the Spanish', Enemy: 'the enemy', Your: 'you' };
+const people = (adj: string): string => PEOPLE[adj] ?? `the ${adj}s`;
+const DISPATCH_FOR = 8;
 
 /** An action the campaign is about to fight: the game it comes from, and the look-ahead's meeting and ticket. */
 interface FromCampaign { g: Game; ahead: SeaAhead; close: (g: Game) => void }
@@ -41,6 +54,7 @@ interface State {
   scene: SeaScene;
   guardUntil: number;
   dispatch: FieldEvent | null;
+  dispatchAge: number;
   asking: boolean;
   last: number;
   trayAt: number;
@@ -50,7 +64,7 @@ const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, asking: false, last: 0, trayAt: 0,
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, last: 0, trayAt: 0,
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -101,21 +115,30 @@ function showChooser(): void {
   const from = campaignAction(7);
   const t = from?.ahead.ticket;
   const staff = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
-  const fleetsLine = (tk: SeaTicket): string => `${tk.lines[0]?.value ?? ''}`;
+  /** Each side's ships on a line of its own. */
+  const sideShips = (fleets: { side: Side; ships: Partial<SeaShips> }[], side: Side): Partial<SeaShips> => {
+    const n: SeaShips = { bb: 0, cv: 0, ca: 0, dd: 0 };
+    for (const f of fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) n[c] += f.ships[c] ?? 0;
+    return n;
+  };
+  const names = (fleets: { side: Side; name: string }[], side: Side): string => esc(andList(fleets.filter((f) => f.side === side).map((f) => f.name)));
   app.innerHTML = `<div class="choose tc sea">
     <header class="chead"><div><div class="tc-label">Fleet actions · first slice</div><h1 class="tc-title-1">Choose an action to fight</h1></div></header>
     <div class="cbody">
-      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser is a piece of its own and destroyers sail in fours; the two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea, and you can hand the rest to the staff at any moment: what you have won stays won.</p></section>
-      <h2 class="tc-label shead">From the campaign · ${t ? esc(t.date) : ''}</h2>
+      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser sails alone, and destroyers sail in fours. The two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea, and you can hand the rest to the staff at any moment: what you have won stays won.</p></section>
+      <h2 class="tc-label shead">${facts(['From the campaign', ...(t ? [esc(t.date)] : [])])}</h2>
       <div class="offers">${t ? `<button class="tc-card is-press offer" data-from="1">
         <span class="otop"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data"><b>${odds(t.reckoning.odds)}</b> to 1</span></span>
-        <span class="tc-data omid">${esc(fleetsLine(t))}</span>
-        <span class="tc-data olow">${esc(t.place.fleets.filter((f) => f.side === 'att').map((f) => f.name).join(', '))} against ${esc(t.place.fleets.filter((f) => f.side === 'def').map((f) => f.name).join(', '))} · ${staff(chanceOf(t))}</span></button>` : '<p class="tc-data none">No fleet action is coming this month.</p>'}</div>
-      <h2 class="tc-label shead">Practice actions · nothing handed back</h2>
-      <div class="offers">${PRACTICE.map((p, i) => `<button class="tc-card is-press offer" data-practice="${i}">
+        <span class="tc-data omid"><span class="oside">${shipsKept(sideShips(t.place.fleets, 'att'))}</span><span class="oside">against ${shipsKept(sideShips(t.place.fleets, 'def'))}</span></span>
+        <span class="tc-data olow">${facts([`${names(t.place.fleets, 'att')} against ${names(t.place.fleets, 'def')}`, staff(chanceOf(t))])}</span></button>` : '<p class="tc-data none">No fleet action is coming this month.</p>'}</div>
+      <h2 class="tc-label shead">${facts(['Practice actions', 'Nothing goes back to the campaign'])}</h2>
+      <div class="offers">${PRACTICE.map((p, i) => {
+        const fl = [...p.att.map((f) => ({ ...f, side: 'att' as Side })), ...p.def.map((f) => ({ ...f, side: 'def' as Side }))];
+        return `<button class="tc-card is-press offer" data-practice="${i}">
         <span class="otop"><b class="tc-title-3">${esc(p.name)}</b><span class="tc-data"><b>${odds(p.odds)}</b> to 1</span></span>
         <span class="tc-data omid">${esc(p.about)}</span>
-        <span class="tc-data olow">${esc(p.att.map((f) => f.name).join(', '))} against ${esc(p.def.map((f) => f.name).join(', '))}</span></button>`).join('')}</div>
+        <span class="tc-data olow"><span class="oside">${shipsKept(sideShips(fl, 'att'))}</span><span class="oside">against ${shipsKept(sideShips(fl, 'def'))}</span><span class="oside">${names(fl, 'att')} against ${names(fl, 'def')}</span></span></button>`;
+      }).join('')}</div>
     </div></div>`;
   app.querySelector('[data-from]')?.addEventListener('click', () => { if (from) startBattle(from.ahead.ticket, from); });
   app.querySelectorAll<HTMLElement>('[data-practice]').forEach((el) => el.addEventListener('click', () => startBattle(practiceTicket(PRACTICE[Number(el.dataset.practice)]), null)));
@@ -137,14 +160,17 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   const sc = S.scene;
   sc.me = t.att.human ? 'att' : 'def';
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
+  sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false;
-  S.dispatch = { t: 0, what: 'contact', text: `Your fleet is at sea in the ${t.place.zoneName} and the enemy is in sight. The clock is stopped: give your orders, then press Space to begin.` };
+  S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
+  S.dispatchAge = 0;
   guard();
   const mine = t[sc.me], theirs = t[sc.me === 'att' ? 'def' : 'att'];
+  const fleetNames = (side: Side): string => esc(andList(t.place.fleets.filter((f) => f.side === side).map((f) => f.name)));
   app.innerHTML = `<div class="battle tc sea">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${esc(t.date)} · ${esc(t.lines[0]?.value ?? '')}</span></div>
+      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), `${fleetNames('att')} against ${fleetNames('def')}`])}</span></div>
       <div class="bclock"><span class="tc-label">Battle time</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)">Pause <span class="tc-key">Space</span></button>
@@ -153,8 +179,9 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's strength still afloat and fighting. The pale mark is where the campaign put it.">
-        <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
+        <div class="bends"><span>${esc(mine.adj)}</span><span>${esc(theirs.adj)}</span></div>
         <div class="btrack"><i id="balA"></i><i id="balD"></i><b id="balMark"></b></div>
+        <span id="ratio" class="tc-data bratio"></span>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands. What you have won stays won.">Hand it to the staff</button>
@@ -166,27 +193,32 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       <div class="dispatch tc-paper" id="dispatch"></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sea">Whole sea</button></div>
       <div class="seaspeed tc-paper" id="seaspeed" hidden><span class="tc-label">Speed</span><span class="tc-seg">${(['slow', 'cruise', 'flank'] as SeaSpeed[]).map((k) => `<button data-way="${k}">${SPEED_WORD[k]}</button>`).join('')}</span></div>
-      <div class="keys tc-data"><span>Left click: choose</span><span>Right click: steer for it, or engage an enemy (a carrier strikes it)</span><span>Right drag: form a line</span><span><span class="tc-key">H</span> hold</span><span><span class="tc-key">R</span> withdraw ship</span><span><span class="tc-key">Tab</span> next</span><span><span class="tc-key">Esc</span> drop choice</span></div>
     </div>
-    <footer class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, mine.color)).join('')}</footer>
+    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click: steer there, or engage an enemy', 'Right drag: form a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> break off', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down'])}</div>
+    <footer class="traywrap"><div class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, sc.colours![sc.me])).join('')}</div><button class="tmore is-left" id="tmoreL" hidden></button><button class="tmore" id="tmoreR" hidden></button></footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  el('balA').style.background = t.att.color; el('balD').style.background = t.def.color;
+  el('balA').style.background = sc.colours.att; el('balD').style.background = sc.colours.def;
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   fit(true);
+  frameFleets();
   wireBattle();
   updateTop(true);
   updateTray(true);
   S.last = now();
 }
 
-/** What a piece is, without its fleet: "4 destroyers", "Battleship". */
-const whatOf = (u: SeaUnit): string => (u.name.endsWith(`, ${u.extra.fleet}`) ? u.name.slice(0, -(u.extra.fleet.length + 2)) : u.name);
+/** What a piece is, without its fleet, with what it has lost: "4 destroyers", "3 of 4 destroyers", "Battleship". */
+const whatOf = (u: SeaUnit): string => {
+  const c = CLASS_ONE[u.extra.cls as SeaClass], n0 = u.extra.ships0, n = u.extra.ships;
+  if (n0 === 1) return c[0][0].toUpperCase() + c[0].slice(1);
+  return n < n0 ? `${n} of ${n0} ${c[1]}` : `${n0} ${c[1]}`;
+};
 
 function card(u: SeaUnit, color: string): string {
   return `<button class="tc-card is-press ucard" data-unit="${u.id}" title="${esc(u.name)}">
-    <span class="uhead">${shipSvg(u.extra.cls as SeaClass, color)}<span class="uwhat"><b>${esc(whatOf(u))}</b><small>${esc(u.extra.fleet)}</small></span></span>
+    <span class="uwhat"><b>${esc(whatOf(u))}</b><small>${shipSvg(u.extra.cls as SeaClass, color)}<span>${esc(u.extra.fleet)}</span></small></span>
     <span class="tc-meter" data-m="str"><span class="tc-label">Hull</span><i><b></b></i><span></span></span>
     <span class="tc-meter is-rest" data-m="mor"><span class="tc-label">Morale</span><i><b></b></i><span></span></span>
     <span class="ustate tc-data"></span></button>`;
@@ -204,21 +236,46 @@ function updateTray(force = false): void {
     if (!u) continue;
     el.classList.toggle('is-on', S.scene.sel.has(u.id));
     el.classList.toggle('is-off', !live(u));
-    const set = (m: string, v: number, cls: string): void => {
+    // A bar's colour follows the number it shows (the UI director, 9).
+    const set = (m: string, v: number, rest: boolean): void => {
       const box = el.querySelector<HTMLElement>(`[data-m="${m}"]`)!;
-      box.className = `tc-meter ${cls}`;
-      (box.querySelector('i b') as HTMLElement).style.width = `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
-      (box.querySelector('span:last-child') as HTMLElement).textContent = `${Math.round(v * 100)}`;
+      const shown = Math.round(Math.max(0, Math.min(1, v)) * 100);
+      box.className = `tc-meter ${rest ? 'is-rest' : shown < 35 ? 'is-low' : shown < 65 ? 'is-mid' : ''}`;
+      (box.querySelector('i b') as HTMLElement).style.width = `${shown}%`;
+      (box.querySelector('span:last-child') as HTMLElement).textContent = `${shown}`;
     };
-    set('str', u.str, u.str < 0.35 ? 'is-low' : u.str < 0.65 ? 'is-mid' : '');
-    set('mor', u.mor, 'is-rest');
+    set('str', u.str, false);
+    set('mor', u.mor, true);
+    const what = el.querySelector<HTMLElement>('.uwhat b')!, w = whatOf(u);
+    if (what.textContent !== w) what.textContent = w;
     const st = el.querySelector<HTMLElement>('.ustate')!;
     // Once the action is over nothing is under way: the card says so (the design director, b356, b368).
     const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) ? ACT_WORD[u.act] ?? '' : '';
-    const afloat = u.extra.ships0 > 1 && u.extra.ships < u.extra.ships0 ? ` · ${u.extra.ships} of ${u.extra.ships0} afloat` : '';
-    st.innerHTML = `<b>${STATE_WORD[u.state]}</b>${doing ? ` · ${doing}` : ''}${afloat}`;
+    // A narrow chip keeps the state in words and lets what the ship is doing go (it shows on the sea, and in the chip's
+    // title): the line is in the typed face, about 7.7 pixels a letter with its spacing.
+    const word = STATE_WORD[u.state], room = st.clientWidth || 999;
+    const html = `<b>${word}</b>${doing && (word.length + 3 + doing.length) * 7.7 <= room ? `<span class="act"> · ${doing}</span>` : ''}`;
+    if (st.innerHTML !== html) { st.innerHTML = html; el.title = `${u.name}: ${STATE_WORD[u.state]}${doing ? ` · ${doing}` : ''}`; }
     st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
+  trayMore();
+}
+
+/** Where the tray holds more ships than it shows, its edge fades and says how many: "2 more ▸" (the UI director, 8). */
+function trayMore(): void {
+  const tray = document.getElementById('tray'), L = document.getElementById('tmoreL'), R = document.getElementById('tmoreR');
+  if (!tray || !L || !R) return;
+  const box = tray.getBoundingClientRect();
+  let left = 0, right = 0;
+  for (const c of tray.querySelectorAll<HTMLElement>('[data-unit]')) {
+    const r = c.getBoundingClientRect();
+    if (r.left < box.left - 1) left++;
+    else if (r.right > box.right + 1) right++;
+  }
+  L.hidden = left === 0; R.hidden = right === 0;
+  const lt = `◂ ${left} more`, rt = `${right} more ▸`;
+  if (L.textContent !== lt) L.textContent = lt;
+  if (R.textContent !== rt) R.textContent = rt;
 }
 
 function updateTop(force = false): void {
@@ -243,7 +300,11 @@ function updateTop(force = false): void {
   strip.querySelectorAll<HTMLElement>('[data-way]').forEach((b) => b.classList.toggle('is-on', ways.size === 1 && ways.has(b.dataset.way as SeaSpeed)));
   if (force || S.dispatch) {
     const d = S.dispatch;
-    el('dispatch').innerHTML = d ? `<span class="tc-label">${mmss(d.t)}</span><span>${esc(d.text)}</span>` : '';
+    const box = el('dispatch');
+    const html = d ? `<span class="tc-label">${mmss(d.t)}</span><span>${esc(d.text)}</span>` : '';
+    if (box.innerHTML !== html) box.innerHTML = html;
+    // While the clock runs a dispatch fades a few seconds after it comes; while paused it stays, as on land.
+    box.classList.toggle('is-old', !!d && S.dispatchAge > DISPATCH_FOR);
   }
 }
 
@@ -257,6 +318,18 @@ function fit(first = false): void {
 }
 const SIZE = SEA.field.size;
 function whole(): void { S.scene.cam = { x: SIZE / 2, y: SIZE / 2, z: Math.min(S.scene.W / SIZE, (S.scene.H - 60) / SIZE) * 0.97 }; }
+/** Each action opens framed on the two fleets; WHOLE SEA stays a button (the art director, 1). */
+function frameFleets(): void {
+  const us = S.sim!.units.filter(live);
+  if (!us.length) { whole(); return; }
+  const pad = 1500;
+  const xs = us.map((u) => u.x), ys = us.map((u) => u.y);
+  const [ax, bx, ay, by] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
+  const c = S.scene.cam;
+  c.x = (ax + bx) / 2; c.y = (ay + by) / 2;
+  c.z = Math.max(minZoom(), Math.min(0.6, Math.min(S.scene.W / (bx - ax), (S.scene.H - 50) / (by - ay))));
+  clampCam();
+}
 function minZoom(): number { return Math.min(S.scene.W / SIZE, S.scene.H / SIZE) * 0.8; }
 function zoomAt(px: number, py: number, k: number): void {
   const c = S.scene.cam;
@@ -352,7 +425,7 @@ function wireBattle(): void {
     if (e.ctrlKey || notched) zoomAt(px, py, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
-  window.onresize = (): void => { if (S.screen !== 'choose') fit(); };
+  window.onresize = (): void => { if (S.screen !== 'choose') { fit(); trayMore(); } };
   app.querySelectorAll<HTMLElement>('[data-clock]').forEach((el) => el.addEventListener('click', () => { S.clock.set(Number(el.dataset.clock) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
@@ -364,6 +437,9 @@ function wireBattle(): void {
   app.querySelector('[data-act="wstay"]')!.addEventListener('click', () => { S.asking = false; updateTop(); });
   app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; give({ do: 'withdrawAll', side: sc.me }); });
   const tray = document.getElementById('tray')!;
+  tray.addEventListener('scroll', trayMore, { passive: true });
+  document.getElementById('tmoreR')!.addEventListener('click', () => { tray.scrollLeft += tray.clientWidth * 0.8; });
+  document.getElementById('tmoreL')!.addEventListener('click', () => { tray.scrollLeft -= tray.clientWidth * 0.8; });
   tray.addEventListener('click', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-unit]');
     if (!el) return;
@@ -447,13 +523,33 @@ function frame(): void {
   S.clock.advance(sim, dt);
   const v = sim.view(S.scene.me);
   takeEvents(S.scene, sim, v.events, t);
-  if (sim.t > 0 && S.dispatch?.t === 0 && !S.dispatch.unit) S.dispatch = { t: sim.t, what: 'contact', text: `The ${sim.ticket[S.scene.me].adj} fleet is under way.`, unit: -1 };
-  for (const e of v.events) if (e.text) S.dispatch = e;
+  // At the press of Space, one line so the wait has a meaning (the UI director, 6).
+  if (sim.t > 0 && S.dispatch?.t === 0 && !S.dispatch.unit) {
+    const m = minutesToRange(sim);
+    S.dispatch = m > 0 ? { t: sim.t, what: 'contact', text: `The fleets are closing: in range in about ${m === 1 ? 'a minute' : `${m} minutes`}.`, unit: -1 } : null;
+    S.dispatchAge = 0;
+  }
+  for (const e of v.events) if (e.text) { S.dispatch = e; S.dispatchAge = 0; }
+  if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
   drawSea(ctx, sim, S.scene);
   updateTop();
   updateTray();
   if (v.over && S.screen === 'battle') showAfter();
+}
+
+/** About how many minutes of battle time before the nearest guns of either side reach the other, at cruising speed. */
+function minutesToRange(sim: SeaSim): number {
+  let best = Infinity;
+  const us = sim.units.filter(live);
+  for (const a of us) for (const b of us) {
+    if (a.side !== S.scene.me || b.side === a.side) continue;
+    const A = SEA.classes[a.extra.cls as SeaClass], B = SEA.classes[b.extra.cls as SeaClass];
+    const reach = Math.max(a.extra.cls === 'cv' ? 0 : A.reach, b.extra.cls === 'cv' ? 0 : B.reach);
+    const close = (A.speed + B.speed) * SEA.speeds.cruise;
+    best = Math.min(best, (Math.hypot(a.x - b.x, a.y - b.y) - reach) / close);
+  }
+  return Number.isFinite(best) ? Math.round(best / 60) : 0;
 }
 
 // ---- After the action: what the campaign makes of it ------------------------------------------------------------------
@@ -470,8 +566,11 @@ function showAfter(): void {
   const sim = S.sim!, r = sim.over!;
   S.screen = 'after';
   guard();
+  // The after card is the one voice: the dispatch strip steps aside (the UI director, 3).
+  S.dispatch = null;
+  document.getElementById('dispatch')!.innerHTML = '';
   updateTray(true);
-  const t = sim.ticket, k = t.reckoning;
+  const t = sim.ticket;
   let rep: SeaReport | null = null, headline = '';
   if (S.from) {
     // The campaign closes the month with the field's result in place of the dice.
@@ -483,10 +582,28 @@ function showAfter(): void {
   }
   const won = rep ? rep.won === (S.scene.me === 'att') : r.winner === S.scene.me;
   const level = rep ? rep.level : r.level;
+  // The card's list, in the land and air cards' shape (the UI director's review, 2): the staff's line if it was handed
+  // over, who holds the sea, what went down in sight, and the ships that came home for repair.
   const x = r.extra as unknown as SeaLosses;
-  const burnt = (side: Side): number => t.place.fleets.filter((f) => f.side === side).reduce((n, f) => { const b = x.burnt[f.id]; return n + b.bb + b.cv + b.ca + b.dd; }, 0);
-  const homeLine = (side: Side): string => { const n = burnt(side); return n ? `${n} ${n === 1 ? 'ship' : 'ships'} of the ${t[side].adj} fleet came home burning.` : ''; };
-  const sides = rep ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} fleet</h3><ul>${rep![sd].map((s) => `<li><b>${esc(s.fleet)}</b> <span>lost ${esc(shipWords({ bb: s.sunk.bb, cv: s.sunk.cv, ca: s.sunk.ca, dd: s.sunk.dd }))}${s.sunk.ss ? `, ${s.sunk.ss} submarine${s.sunk.ss === 1 ? '' : 's'}` : ''}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
+  const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
+  const bySide = (side: Side, what: 'sunk' | 'burnt'): SeaShips => {
+    const n: SeaShips = { bb: 0, cv: 0, ca: 0, dd: 0 };
+    for (const f of t.place.fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) n[c] += x[what][f.id]?.[c] ?? 0;
+    return n;
+  };
+  const count = (n: SeaShips): number => n.bb + n.cv + n.ca + n.dd;
+  const lost = (side: Side): string => andList(shipBits(bySide(side, 'sunk'))) || 'none';
+  const staffLine = r.lines.find((l) => l.startsWith('The staff settled'));
+  const noneSunk = count(bySide(me, 'sunk')) + count(bySide(them, 'sunk')) === 0;
+  const lossLine = x.toDice
+    ? noneSunk ? 'Before you handed it to the staff, no ship had gone down on either side.' : `Before you handed it to the staff, you had lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`
+    : noneSunk ? 'No ship went down on either side.' : `You lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`;
+  const hm = count(bySide(me, 'burnt')), ht = count(bySide(them, 'burnt'));
+  const theirShips = (n: number): string => `${n} ${t[them].adj} ${n === 1 ? 'ship' : 'ships'}`;
+  const repairLine = hm && ht ? `${hm} of your ships came home for repair, and ${theirShips(ht)}.`
+    : hm ? `${hm} of your ships came home for repair.` : ht ? `${theirShips(ht)} came home for repair.` : '';
+  const list = [staffLine, r.lines[0], lossLine, repairLine].filter((l): l is string => !!l);
+  const sides = rep ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} fleet</h3><ul>${rep![sd].map((s) => `<li><b>${esc(s.fleet)}</b> <span>lost ${esc(andList(shipBits(s.sunk)) || 'no ships')}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
   const veil = document.createElement('div');
   veil.className = 'veil';
   veil.innerHTML = `<div class="after tc-paper" role="dialog" aria-label="Action result">
@@ -494,7 +611,7 @@ function showAfter(): void {
     <h2 class="tc-title-2">${esc(t.title)}</h2>
     <div class="verdict"><span class="tc-stamp ${won ? 'tc-stamp--won' : ''}">${esc(S.scene.me === 'att' ? level : level.replace('victory', 'X').replace('defeat', 'victory').replace('X', 'defeat'))}</span></div>
     ${headline ? `<p class="told"><b>${esc(headline)}</b></p>` : ''}
-    <h3 class="tc-label">On the water</h3><ul class="flines">${[...r.lines, homeLine('att'), homeLine('def')].filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+    <h3 class="tc-label">On the water</h3><ul class="flines">${list.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
     <h3 class="tc-label">Against the staff's reckoning</h3>
     <p class="dice">${esc(reckoned(won, S.scene.me === 'att' ? chanceOf(t) : 1 - chanceOf(t)))}${rep ? '' : ' A practice action hands nothing back.'}</p>
     ${sides}

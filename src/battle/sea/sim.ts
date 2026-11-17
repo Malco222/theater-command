@@ -437,19 +437,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
-      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
       for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - SEA.nerve.near);
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
-      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} of ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
     }
     if (u.extra.ships <= 0) {
       // A piece whose last ship went out of the fight burning has left the field; one whose last ship sank is gone.
       u.state = u.extra.sunk >= u.extra.ships0 || !(u.extra.burnt as number | undefined) ? 'gone' : 'withdrawn';
       u.str = u.state === 'gone' ? 0 : u.str;
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
-      const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} of ${u.extra.fleet}`;
+      const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} of the ${u.extra.fleet}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
     }
   }
@@ -466,7 +466,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!at) continue;
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from ${s.from} find ${this.told(at)}.`, extra: { count: s.count } });
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from the ${s.from} find ${this.told(at)}.`, extra: { count: s.count } });
     }
   }
 
@@ -576,10 +576,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   // ---- What the screens draw --------------------------------------------------------------------------------------
 
-  /** A piece in a sentence, by what it is and whose (log b348: no "the" before a fleet's own name): "a battleship of Home Fleet", "3 destroyers of Home Fleet". */
+  /** A piece in a sentence, by what it is and whose, the fleet taking "the" as English does (log b370): "a battleship of the Home Fleet", "3 destroyers of the Home Fleet". */
   private told(u: SeaUnit, start = false): string {
     const c = RULES_CLASSES[u.extra.cls as SeaClass], n = Math.max(1, u.extra.ships);
-    const s = n === 1 ? `a ${c.one} of ${u.extra.fleet}` : `${n} ${c.many} of ${u.extra.fleet}`;
+    const s = n === 1 ? `a ${c.one} of the ${u.extra.fleet}` : `${n} ${c.many} of the ${u.extra.fleet}`;
     return start ? s[0].toUpperCase() + s.slice(1) : s;
   }
 

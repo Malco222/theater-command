@@ -1,17 +1,51 @@
 /* The fleet action page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
    is scoped to .sea, so the field battle page never sees it. */
-.sea .btitle { flex: 0 1 460px; }
-.sea .btitle .tc-data { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sea .bends .tc-data { white-space: nowrap; }
+
+/* ---- The chooser ---- */
+.sea .nw { white-space: nowrap; }
 .sea .offer .otop .tc-data { white-space: nowrap; }
+.sea .offer .oside { display: block; }
 
-/* A piece's card: what it is, then its fleet underneath ("4 destroyers" / "Mediterranean Fleet"). */
+/* ---- The top bar: one row at 1280 and up (the UI director, 7) ---- */
+.sea.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.sea .bbar { flex-wrap: nowrap; gap: 12px; }
+.sea .btitle { flex: 1 1 220px; min-width: 0; }
+.sea .btitle .tc-title-3 { line-height: 22px; } /* wraps rather than cut (the fold rule) */
+.sea .bclock { flex: none; }
+.sea .bspeed { flex: none; }
+.sea .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
+.sea .bratio { font-size: 12px; line-height: 14px; color: var(--paper-200); text-align: center; white-space: nowrap; }
+.sea .bacts { flex: none; }
+@media (max-width: 1279px) { .sea .bbar { flex-wrap: wrap; } }
+
+/* ---- The tray: chips narrow to fit up to twelve at 1280; past that the row fades at its edge with "2 more ▸" ---- */
+.sea .traywrap { position: relative; min-width: 0; }
+.sea .tray { scrollbar-width: none; scroll-behavior: smooth; gap: 6px; }
+.sea .tray::-webkit-scrollbar { display: none; }
+.sea .ucard { flex: 1 0 0; min-width: 99px; max-width: 196px; width: auto; padding: 7px 8px; gap: 3px; }
 .sea .ucard .uwhat { display: grid; min-width: 0; }
-.sea .ucard .uwhat b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sea .ucard .uwhat small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sea .ucard .bsign { flex: none; width: 34px; height: 16px; }
+.sea .ucard .uwhat b { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard .uwhat small { display: flex; align-items: center; gap: 4px; min-width: 0; font: 400 12px/15px var(--font-typed); color: var(--text-muted); }
+.sea .ucard .uwhat small span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard .bsign { flex: none; width: 28px; height: 14px; }
+/* A meter's name and number on one line, its bar full width beneath, so a narrow chip keeps all three. */
+.sea .ucard .tc-meter { grid-template-columns: 1fr auto; grid-template-areas: "l n" "b b"; row-gap: 2px; column-gap: 6px; }
+.sea .ucard .tc-meter > .tc-label { grid-area: l; }
+.sea .ucard .tc-meter > i { grid-area: b; }
+.sea .ucard .tc-meter > span:last-child { grid-area: n; }
+.sea .ucard .ustate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard { container-type: inline-size; }
+/* The widths are the chip's inside: "3 of 4 destroyers" takes 114 pixels, an icon and "Home Fleet" 104. What the ship
+   is doing leaves the state line when it would not fit (sea-page.ts updateTray). */
+/* "3 of 4 destroyers" keeps its words: the name may take two lines, and every chip in the row keeps room for two. */
+@container (max-width: 115px) { .sea .ucard .uwhat b { white-space: normal; min-height: 32px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
+@container (max-width: 103px) { .sea .ucard .uwhat small .bsign { display: none; } }
+.sea .tmore { position: absolute; top: 1px; bottom: 0; right: 0; display: flex; align-items: center; padding: 0 12px 0 48px; border: 0; font: 700 12px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--brass-300); background: linear-gradient(90deg, rgba(23, 18, 13, 0), var(--desk-900) 45%); }
+.sea .tmore.is-left { right: auto; left: 0; padding: 0 48px 0 12px; background: linear-gradient(270deg, rgba(23, 18, 13, 0), var(--desk-900) 45%); }
+.sea .tmore[hidden] { display: none; }
+.sea .tmore:hover { color: var(--brass-100); }
 
-/* Speed for the chosen ships, over the field's lower left, above the keys. */
-.sea .seaspeed { position: absolute; left: 12px; bottom: 40px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+/* ---- Speed for the chosen ships, over the field's lower right, clear of the ports' names at the left ---- */
+.sea .seaspeed { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
 .sea .seaspeed[hidden] { display: none; }
 .sea .seaspeed .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
