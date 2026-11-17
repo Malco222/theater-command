@@ -20,6 +20,7 @@
 // data/campaign/government.json. The historical scenarios have none of this. Both interfaces read government()
 // and give the orders through turn.ts.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/government.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';

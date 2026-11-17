@@ -4,6 +4,7 @@
 
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
@@ -160,6 +161,9 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   };
   if (o.airborne) c.airborne = true;
   if (o.stay) c.stay = true;
+  // The fullest the row ever gets (the planner's paper 18, ruled 16:32Z on 17 November 2026): a garrison of a brigade
+  // is a row of one division that never fills past its own size, for player and computer alike.
+  if (o.est !== undefined && o.est < 1) c.full = o.est;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -3019,6 +3023,7 @@ function expeditions(g: Game, nat: string): void {
       g.supplyDirty = true;
     }
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
+    if (o.str !== undefined) c.str = o.str;
     if (o.from && !Array.isArray(o.from)) {
       // A formation put together where it stands, out of the army around it, is not itself broken up for the next one.
       const here = theatreName(reg) === o.from;
@@ -3162,6 +3167,8 @@ export function startPhase(g: Game, nat: string): void {
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;
     let reg = g.byName[row[5]];
+    // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
+    if (!reg) continue;
     if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
     if (!reg || !allied(g, nat, reg.ctrl)) continue;
     if (g.flags.open === 1 && row[3] !== 'fort') {
@@ -3169,7 +3176,9 @@ export function startPhase(g: Game, nat: string): void {
       if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
       reg = roomNear(g, nat, reg) ?? reg;
     }
-    addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
+    if (row[6]?.str !== undefined) c.str = row[6].str;
   }
   expeditions(g, nat);
   desertWorks(g, nat);
@@ -3223,7 +3232,7 @@ export function startPhase(g: Game, nat: string): void {
   // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
   const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.

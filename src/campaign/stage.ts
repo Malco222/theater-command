@@ -15,7 +15,9 @@
 
 import stage from '../../data/campaign/stage.json';
 
-const forced = (globalThis as { TC_FAR?: unknown }).TC_FAR;
+// A run outside the browser can be given the switch by its environment too: TC_FAR=1 node ... (the hash checks, a seat's trial).
+const G = globalThis as { TC_FAR?: unknown; process?: { env?: Record<string, string | undefined> } };
+const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;

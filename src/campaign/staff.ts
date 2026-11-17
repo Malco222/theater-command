@@ -10,6 +10,7 @@ import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
 import { openStores } from './resources';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';

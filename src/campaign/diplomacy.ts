@@ -4,6 +4,7 @@
 // own moves are events that fire only if their conditions still hold.
 // The numbers and the events live in data/campaign/diplomacy.json.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';

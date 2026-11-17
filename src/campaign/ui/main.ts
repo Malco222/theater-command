@@ -11,6 +11,7 @@ import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMa
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
 import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
+import '../far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import grandData from '../../../data/campaign/grand.json';
 import {
   DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, standersAt, standersLine, theWords, weather, whyNotEvacuate,

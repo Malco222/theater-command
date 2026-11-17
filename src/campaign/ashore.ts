@@ -14,6 +14,7 @@
 //   ours     the force as it would defend the place, the field corps of its side already within those marches, and
 //            the corps standing ready that the ships can bring in after it within the time.
 // The chance is ours / (ours + theirs). Nothing here changes the game: no flag is written and no dice are thrown.
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
 import { allied, atWar, corpsBase } from './game';
 import { corpsKnown, fogOn } from './intel';

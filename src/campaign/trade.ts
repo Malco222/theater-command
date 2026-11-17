@@ -5,6 +5,7 @@
 // Every number is in data/campaign/trade.json. In the history campaigns trade stays the flat sum of diplomacy.json.
 
 import data from '../../data/campaign/trade.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import diplomacyData from '../../data/campaign/diplomacy.json';
 import { civicSum } from './buildings';
 import { govMul } from './government';

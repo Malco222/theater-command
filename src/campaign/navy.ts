@@ -6,6 +6,7 @@
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
 import worldMap from '../generated/world-americas.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';

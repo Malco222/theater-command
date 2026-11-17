@@ -2,6 +2,7 @@
 // Everything lives in data/campaign/traits.json, one row per nation, so every version of the game reads the
 // same list. The rules here apply in the grand campaign only: a historical scenario never sees them.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/traits.json';
 import { turnToDate } from '../core/ticket';
 import { allied, atWar, headline } from './game';

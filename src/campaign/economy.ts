@@ -6,6 +6,7 @@ import { byHand } from './depth';
 import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';

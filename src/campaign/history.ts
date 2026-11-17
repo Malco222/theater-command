@@ -6,6 +6,7 @@
 // The numbers and the calendar live in data/campaign/history.json. What the dial does to who goes to war with whom
 // (the book's marks, the neutrals' ambitions) is in claims.ts.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/history.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';

@@ -9,6 +9,7 @@
 // courted, moved along the track or annexed by treaty.
 
 import data from '../../data/campaign/league.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import worldData from '../../data/campaign/world.json';
 import { hashString } from '../core/rng';
 import type { Game, Nation } from './types';
