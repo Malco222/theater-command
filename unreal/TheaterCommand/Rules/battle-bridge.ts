@@ -10,8 +10,9 @@
 //   1. its attack(ids, to) takes a third argument, fought?: number, and passes it on: orderAttack(s, sent, s.regions[to], fought)
 //   2. import { battleCalls } from './battle-bridge';   and in the TC object:   ...battleCalls({ game, attack }),
 // With no battle fought, nothing changes: attack(ids, to) rolls the dice as before.
-// Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, and passes it to
-// airAct(s, action, fought); and the TC object's line becomes
+// Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, passes it to
+// airAct(s, action, fought), and puts airAct's after on what it returns (after: air.after, the after card written
+// from what the campaign booked: { lines, level, groups }); and the TC object's line becomes
 //   ...battleCalls({ game, attack, raid: (k, t, ids, f) => act(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
 // With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
 //
