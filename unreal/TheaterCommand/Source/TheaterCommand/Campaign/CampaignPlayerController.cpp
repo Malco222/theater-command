@@ -2107,7 +2107,11 @@ void ACampaignPlayerController::PressAlarm()
 	{
 		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 		{
-			const FVector2D At = Map->GetData().Regions[Alarm.Region].Center;
+			// (Rules 84.3; the second Playtester's 84.2.6 find.) The place and where the paper says to right-click are
+			// both in view: the camera stands between them.
+			const FVector2D Place = Map->GetData().Regions[Alarm.Region].Center;
+			const FVector2D Click = Alarm.HelpRegion != INDEX_NONE && Map->GetData().Regions.IsValidIndex(Alarm.SendTo) ? Map->GetData().Regions[Alarm.SendTo].Center : Place;
+			const FVector2D At = (Place + Click) * 0.5;
 			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
 		}
 	}
@@ -2122,16 +2126,47 @@ const FGunsAlone* ACampaignPlayerController::GetGunsAlone(int32 Index) const
 
 void ACampaignPlayerController::PressGunsAlone(int32 Index)
 {
-	const FGunsAlone* Row = GetGunsAlone(Index);
-	if (!Row || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Row->Region))
+	const FGunsAlone* Shown = GetGunsAlone(Index);
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Shown || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Shown->Region) || FaceOff.bVisible || WarPrompt.bVisible)
 	{
 		return;
 	}
+	const FGunsAlone Row = *Shown; // (a copy: putting an army in hand reads the view again)
+	const FCampaignMapData& Data = Map->GetData();
 	// (Ruling 211(a) as passed at 16:54 UTC: a press centres the town.)
 	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	// (Rules 84.3; the Playtester's 84.2.6 find.) On a red row a press picks up the infantry or tanks of his that can
+	// reach the guns this month, not the guns, and the paper says the cure in one line, as the red home alarm does.
+	int32 Other = Row.Region;
+	if (Row.bRed && Data.Regions.IsValidIndex(Row.From) && PickUpArmyIn(Row.From))
+	{
+		Other = Row.From;
+		if (Row.HelpCorps.Num() > 0 && PickedCorps.ContainsByPredicate([&Row](int32 Id) { return Row.HelpCorps.Contains(Id); }))
+		{
+			PickedCorps.RemoveAll([&Row](int32 Id) { return !Row.HelpCorps.Contains(Id); });
+			RefreshOrders();
+		}
+		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+		// (the browser's words: a lone corps by its name, more than one as the army where they stand)
+		FString Who = FString::Printf(TEXT("The army at %s"), *Data.Regions[Row.From].Name);
+		if (PickedCorps.Num() == 1)
+		{
+			for (const FViewCorps& Unit : Session->GetView().Corps)
+			{
+				if (Unit.Id == PickedCorps[0])
+				{
+					Who = Unit.Name;
+					break;
+				}
+			}
+		}
+		Notify(FString::Printf(TEXT("%s is in hand. Right-click %s to send it."), *Who, *Data.Regions[Row.Region].Name), 9.0);
+	}
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
-		const FVector2D At = Map->GetData().Regions[Row->Region].Center;
+		// (Both the town and the army in hand are in view: the second Playtester's 84.2.6 find.)
+		const FVector2D At = (Data.Regions[Row.Region].Center + Data.Regions[Other].Center) * 0.5;
 		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
 	}
 }

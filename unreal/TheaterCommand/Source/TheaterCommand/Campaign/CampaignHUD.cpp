@@ -11138,7 +11138,8 @@ namespace
 		/**
 		 * (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own
 		 * row, in the rules' sentence. Red, in the alarm's dress, while infantry or tanks of his can reach the town this month;
-		 * plain where none can. A press centres the town.
+		 * plain where none can. A press centres the town; on a red row it also puts in hand the infantry or tanks that can
+		 * come (rules 84.3), and the paper says where to right-click.
 		 */
 		TSharedRef<SWidget> MakeGunsAlone(int32 Index)
 		{
