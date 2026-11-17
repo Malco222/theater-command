@@ -109,6 +109,8 @@ export interface SeaScene extends Scene {
   /** Carriers' strikes in the air: the target, and when they land (battle seconds). */
   inbound: { target: number; lands: number }[];
   colours?: Record<Side, string>;
+  /** The foot of what stands over the top of the sea (the dispatch, the warning), in pixels from its top. */
+  clearTop?: number;
 }
 
 /** How long an oil slick lies on the water, in battle seconds (the art director: fading over a few battle minutes). */
@@ -214,8 +216,8 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
   x.stroke();
   // Each side's edge, by which its ships leave for port: at the left end, clear of the dispatch (the UI director, 14).
   x.font = '700 12px "Courier Prime", monospace'; x.fillStyle = PENCIL; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
-  // The far edge's name sits below the dispatch strip, whose foot is about 50 pixels down.
-  x.fillText(`${sim.ticket.def.adj.toUpperCase()} PORTS`, Math.max(12, x0 + 10), Math.max(66, y0 + 18));
+  // The far edge's name sits below the dispatch strip, nothing over it (the UI director, sea-226 mend 2).
+  x.fillText(`${sim.ticket.def.adj.toUpperCase()} PORTS`, Math.max(12, x0 + 10), Math.max((s.clearTop ?? 50) + 16, y0 + 18));
   x.fillText(`${sim.ticket.att.adj.toUpperCase()} PORTS`, Math.max(12, x0 + 10), Math.min(H - 8, y1 - 8));
 
   const colour: Record<Side, string> = s.colours ?? { att: sim.ticket.att.color, def: sim.ticket.def.color };

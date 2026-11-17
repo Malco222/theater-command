@@ -62,6 +62,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private contactAt: number | null = null;
   /** Each fleet has been said to be near breaking off (ruling 226(3)): once a side. */
   private warned: Record<Side, boolean> = { att: false, def: false };
+  /** Battle time of the coasts' last raid. */
+  private lastAir = -Infinity;
   private readonly lastHit = new Map<number, number>();
   private readonly look = new Map<number, number>();
   /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
@@ -367,6 +369,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const near = this.steerFoe(u);
       const foe = tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
       if (foe) want = this.engage(u, foe);
+      // A carrier group that sees a battle line coming turns away and opens the range while it launches (b389): the
+      // carriers, and the screen with them unless the player has sent a ship at an enemy.
+      const away = this.groupEvasion(u, o.kind === 'attack' && !this.ai[u.side]);
+      if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); }
       // A beaten enemy is run down at full speed while there is time.
       if (this.broken && this.broken !== u.side && this.ai[u.side]) speed = C.speed * SEA.speeds.flank;
     }
@@ -389,6 +395,41 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.state = 'withdrawn';
       this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have broken off and make' : 'has broken off and makes'} for port.` });
     }
+  }
+
+  /** The course and speed of a carrier group turning away from a battle line, for a carrier or a ship of its screen
+   *  (within 'screen' metres of a carrier of its own side), or null when no battle line is near. */
+  private groupEvasion(u: SeaUnit, ordered: boolean): { course: number; speed: number } | null {
+    const speed = SEA.classes.cv.speed * SEA.evade.speed;
+    if (u.extra.cls === 'cv') { const h = this.evasion(u); return h === null ? null : { course: h, speed }; }
+    if (ordered || !SEA.evade.screen) return null;
+    let cv: SeaUnit | null = null, cd = SEA.evade.screen;
+    for (const c of this.units) {
+      if (c.side !== u.side || c.extra.cls !== 'cv' || !live(c) || c.state === 'routing') continue;
+      const d = dist(u.x, u.y, c.x, c.y);
+      if (d < cd) { cd = d; cv = c; }
+    }
+    if (!cv) return null;
+    const h = this.evasion(cv);
+    return h === null ? null : { course: h, speed };
+  }
+
+  /** The course a carrier takes away from the nearest enemy battleship within sight, or null when none is near. Along
+   *  the edge of the field when straight away would run it off. */
+  private evasion(u: SeaUnit): number | null {
+    let bb: SeaUnit | null = null, bd = SEA.evade.see;
+    for (const e of this.units) {
+      if (e.side === u.side || e.extra.cls !== 'bb' || !live(e) || e.state === 'routing') continue;
+      const d = dist(u.x, u.y, e.x, e.y);
+      if (d < bd) { bd = d; bb = e; }
+    }
+    if (!bb) return null;
+    const a = bearing(bb.x, bb.y, u.x, u.y), F = SEA.field, m = 1200, ahead = 2000;
+    for (const k of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+      const h = norm(a + k), x = u.x + Math.sin(h) * ahead, y = u.y + Math.cos(h) * ahead;
+      if (x > m && x < F.size - m && y > m && y < F.size - m) return h;
+    }
+    return norm(a + Math.PI / 2);
   }
 
   /** The course that brings a piece to its best range with its broadside to the enemy. */
@@ -517,6 +558,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.splash(at, weight, side);
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + weight;
       this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${this.told(at)}.` });
+      this.lastAir = this.t;
     }
   }
 
@@ -684,6 +726,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   /** Battle time the guns first reached an enemy, null before it. */
   get contactTime(): number | null { return this.contactAt; }
+
+  /** Nothing is happening yet: no gun has reached an enemy, no strike is in the air and no raid has just come in. The
+   *  screens run time fast while it holds, and again after an early strike has come and gone (ruling 226(1); the
+   *  design director, 20:18 UTC). Once the guns have met it never holds again. */
+  get quiet(): boolean { return this.contactAt === null && this.strikes.length === 0 && this.t - this.lastAir >= 10; }
 }
 
 const TAU = Math.PI * 2;

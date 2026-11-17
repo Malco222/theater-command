@@ -38,10 +38,11 @@ function honoured(name: string, att: PlainFleet[], def: PlainFleet[], air?: Part
       });
       const report = rows.map((r) => `${r.odds}: ${r.played.toFixed(2)} vs ${r.card.toFixed(2)}`).join('; ');
       const gap = rows.reduce((s, r) => s + (r.played - r.card), 0) / rows.length;
-      // OPEN (told to the design director, 2026-11-17): a battle line attacking carriers wins 0.13 above the card with
-      // the obvious order, where the computer on both sides already wins 0.08 above it. It is held to the fairness
-      // test's own limit for one odds (0.15) until she rules; every other case is held to a tenth.
-      expect(Math.abs(gap), report).toBeLessThanOrEqual(open === me ? 0.15 : 0.1);
+      // OPEN (b389, 2026-11-17): with the carriers' evasion the computer on both sides is within a tenth on every ground,
+      // and so is the obvious order, but for a battle line attacking carriers: 0.101 above the card (focused fire wins
+      // 8 of 20 at odds 0.9, where the card gives 0.22). Twelve settings of the evasion all left it at 0.10 to 0.13; the
+      // numbers are with the design director. Held to 0.11 until she rules; every other case is held to a tenth.
+      expect(Math.abs(gap), report).toBeLessThanOrEqual(open === me ? 0.11 : 0.1);
     }, 120_000);
   }
 }

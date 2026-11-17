@@ -18,6 +18,7 @@ export const SEA = seaData as unknown as {
   air: { every: number; share: number };
   pieces: { most: number };
   ai: { keep: number; beyond: number };
+  evade: { see: number; speed: number; screen: number };
 };
 
 /** The rules' classes: a ship's weight in a fleet action (power) and how readily it is sunk (tough: lower is tougher). */

@@ -65,7 +65,7 @@ interface State {
   handing: boolean;
   /** The clock's speed before a question stopped it, to go back to on KEEP FIGHTING. */
   resume: Speed;
-  /** Time runs fast until the fleets meet (ruling 226, 1). */
+  /** Nothing is happening yet, so time runs fast (ruling 226, 1). */
   closing: boolean;
   /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
   tag: { text: string; until: number } | null;
@@ -169,7 +169,8 @@ let ctx: CanvasRenderingContext2D;
 
 const CLASS_WORD: Record<SeaClass, string> = { bb: 'Battleship', cv: 'Carrier', ca: 'Cruiser', dd: 'Destroyers' };
 const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Breaking off', gone: 'Lost', withdrawn: 'Out of the fight' };
-const ACT_WORD: Record<string, string> = { idle: 'hove to', march: 'under way', run: 'at full speed', turn: 'turning', fight: 'in action', rout: 'making for port', down: '' };
+/** The card says the order, the moment it is given, paused or not; nothing when there is none (sea-226 mend 7). */
+const ORDER_WORD: Record<string, string> = { attack: 'engaging', move: 'steering', hold: 'holding', leave: 'breaking off' };
 const SPEED_WORD: Record<SeaSpeed, string> = { slow: 'Slow', cruise: 'Cruising', flank: 'Full speed' };
 
 function startBattle(t: SeaTicket, from: FromCampaign | null): void {
@@ -189,17 +190,17 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   app.innerHTML = `<div class="battle tc sea">
     <header class="bbar">
       <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), `${fleetNames('att')} against ${fleetNames('def')}`])}</span></div>
-      <div class="bclock" title="At ${mmss(t.limit)} the action is done, and the fleet that has had the better of it holds the sea."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
+      <div class="bclock" title="At ${mmss(t.limit)} the action is done, and the fleet with the better of it holds the sea."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="1" title="Normal speed (1)">×1 <span class="tc-key">1</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bbal bbreak" title="When a bar fills, that fleet breaks off and leaves the action.">
-        <span class="tc-label">How near to breaking</span>
-        <div class="brow"><span>${esc(mine.adj)}</span><i><b id="brkMe"></b></i></div>
-        <div class="brow"><span>${esc(theirs.adj)}</span><i><b id="brkThem"></b></i></div>
+      <div class="bbal" title="Each fleet's strength still afloat. The pale mark is where the campaign's card put it.">
+        <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
+        <div class="btrack"><i id="balMe"></i><i id="balThem"></i><b id="balMark"></b></div>
+        <div class="bbreak" title="When a bar fills, that fleet breaks off and leaves the action."><span class="bbar2"><i id="brkMe"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem"></i></span></div>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands.">Hand it to the staff</button>
@@ -209,7 +210,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       </div>
     </header>
     <div class="bfield"><canvas id="field"></canvas>
-      <div class="ftop"><div class="ftag" id="ftag" hidden></div><div class="fwarn" id="fwarn" hidden></div><div class="dispatch tc-paper" id="dispatch"></div></div>
+      <div class="ftag" id="ftag" hidden></div><div class="ftop"><div class="fwarn" id="fwarn" hidden></div><div class="dispatch tc-paper" id="dispatch"></div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sea">Whole sea</button></div>
       <div class="seaspeed tc-paper" id="seaspeed" hidden><span class="tc-label">Speed</span><span class="tc-seg">${(['slow', 'cruise', 'flank'] as SeaSpeed[]).map((k) => `<button data-way="${k}">${SPEED_WORD[k]}</button>`).join('')}</span></div>
     </div>
@@ -217,13 +218,17 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
     <footer class="traywrap"><div class="tray" id="tray"><button class="tc-card is-press tmore" id="tmoreL" hidden></button>${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, sc.colours![sc.me])).join('')}<button class="tc-card is-press tmore" id="tmoreR" hidden></button></div></footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  el('brkMe').style.background = sc.colours[sc.me]; el('brkThem').style.background = sc.colours[sc.me === 'att' ? 'def' : 'att'];
+  const ours = sc.colours[sc.me], theirsCol = sc.colours[sc.me === 'att' ? 'def' : 'att'];
+  el('brkMe').style.background = ours; el('brkThem').style.background = theirsCol;
+  el('balMe').style.background = ours; el('balThem').style.background = theirsCol;
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   fit(true);
   frameFleets();
   wireBattle();
   updateTop(true);
+  frameFleets();
+  sizeChips();
   updateTray(true);
   S.last = now();
 }
@@ -269,27 +274,56 @@ function updateTray(force = false): void {
     if (what.textContent !== w) what.textContent = w;
     const st = el.querySelector<HTMLElement>('.ustate')!;
     // Once the action is over nothing is under way: the card says so (the design director, b356, b368).
-    const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) ? ACT_WORD[u.act] ?? '' : '';
-    // A narrow chip keeps the state in words and lets what the ship is doing go (it shows on the sea, and in the chip's
-    // title): the line is in the typed face, about 7.7 pixels a letter with its spacing.
-    const word = STATE_WORD[u.state], room = st.clientWidth || 999;
-    const html = `<b>${word}</b>${doing && (word.length + 3 + doing.length) * 7.7 <= room ? `<span class="act"> · ${doing}</span>` : ''}`;
-    if (st.innerHTML !== html) { st.innerHTML = html; el.title = `${u.name}: ${STATE_WORD[u.state]}${doing ? ` · ${doing}` : ''}`; }
+    const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
+    // Where the line will not fit, the chip keeps the state in words and lets the order go (it shows in the chip's title).
+    const word = STATE_WORD[u.state];
+    const full = `<b>${word}</b>${doing ? `<span class="act"> · ${doing}</span>` : ''}`;
+    if (st.dataset.full !== full) {
+      st.dataset.full = full;
+      st.innerHTML = full;
+      if (doing && st.scrollWidth > st.clientWidth + 0.5) st.innerHTML = `<b>${word}</b>`;
+      el.title = `${u.name}: ${word}${doing ? ` · ${doing}` : ''}`;
+    }
     st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
   trayMore();
 }
 
+/** Every chip takes one width: the one that holds the longest name any of them can come to ("3 of 4 destroyers") on
+ *  one line, and a steady ship's "engaging" (sea-226 mend 4). Measured in the chips' own faces. */
+function sizeChips(): void {
+  const tray = document.getElementById('tray'), c = tray?.querySelector<HTMLElement>('[data-unit]');
+  if (!tray || !c) return;
+  const probe = (sel: string, html: string): number => {
+    const e = c.querySelector<HTMLElement>(sel)!, old = e.innerHTML;
+    e.innerHTML = html;
+    const w = e.scrollWidth;
+    e.innerHTML = old;
+    return w;
+  };
+  const names = new Set<string>();
+  for (const u of S.sim!.units) if (u.side === S.scene.me) {
+    const n0 = u.extra.ships0, cl = CLASS_ONE[u.extra.cls as SeaClass];
+    names.add(n0 === 1 ? cl[0] : `${n0 - 1} of ${n0} ${cl[1]}`);
+  }
+  let w = probe('.ustate', `<b>${STATE_WORD.steady}</b><span class="act"> · ${ORDER_WORD.attack}</span>`);
+  for (const n of names) w = Math.max(w, probe('.uwhat b', esc(n)));
+  const cs = getComputedStyle(c);
+  CHIP_W = Math.ceil(w + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth));
+  tray.style.setProperty('--chip', `${CHIP_W}px`);
+}
+
 /** The tray shows whole chips only (the UI director, round 2). Where it holds more ships than fit, a small card at its
  *  end says how many more and turns the page, and one at its start turns it back. The widths are sea.css's. */
-const CHIP_MIN = 99, MORE_W = 92, CHIP_GAP = 6;
+const MORE_W = 112, CHIP_GAP = 6;
+let CHIP_W = 140;
 function trayMore(): void {
   const tray = document.getElementById('tray'), L = document.getElementById('tmoreL'), R = document.getElementById('tmoreR');
   if (!tray || !L || !R) return;
   const chips = [...tray.querySelectorAll<HTMLElement>('[data-unit]')], n = chips.length;
   const cs = getComputedStyle(tray);
   const room = tray.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const fits = (k: number, l: boolean, r: boolean): boolean => k * CHIP_MIN + (k - 1) * CHIP_GAP + (Number(l) + Number(r)) * (MORE_W + CHIP_GAP) <= room + 0.5;
+  const fits = (k: number, l: boolean, r: boolean): boolean => k * CHIP_W + (k - 1) * CHIP_GAP + (Number(l) + Number(r)) * (MORE_W + CHIP_GAP) <= room + 0.5;
   const shown = (from: number): number => { let k = n - from; while (k > 1 && !fits(k, from > 0, from + k < n)) k--; return k; };
   let from = 0, k = n;
   if (!fits(n, false, false)) {
@@ -354,19 +388,33 @@ function updateTop(force = false): void {
   if (el('pauseWord').textContent !== pw) el('pauseWord').textContent = pw;
   // How near each fleet is to breaking off (ruling 226, 3): a bar a side in its colour, no numbers, no hidden threshold.
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
+  // The balance bar, as on land: the card's odds and the odds standing now, the attacker's to the defender's as the
+  // campaign counts them, and under it each side's share at those odds, ours from the left, with the card's mark.
+  // Now is the card's odds moved by what each side has lost, so before a shot the two agree (the coasts' aircraft
+  // are on the card and not on the field).
+  const k = sim.ticket.reckoning.odds, nowOdds = (k * (1 - sim.lostShare('att'))) / Math.max(1e-6, 1 - sim.lostShare('def'));
+  const share = (o: number): number => (me === 'att' ? o : 1) / (1 + o);
+  el('balMe').style.width = `${(share(nowOdds) * 100).toFixed(1)}%`;
+  el('balThem').style.width = `${((1 - share(nowOdds)) * 100).toFixed(1)}%`;
+  el('balMark').style.left = `${(share(k) * 100).toFixed(1)}%`;
+  const ratio = `Card ${odds(k)} to 1 · now ${odds(nowOdds)} to 1`;
+  if (el('ratio').textContent !== ratio) el('ratio').textContent = ratio;
   el('brkMe').style.width = `${(sim.nearBreak(me) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
   (el('wask') as HTMLElement).hidden = !S.asking;
   (el('sask') as HTMLElement).hidden = !S.handing;
   if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
+  // The foot of what stands over the top of the sea, so the far ports' name and the opening view keep clear of it.
+  const ftop = document.querySelector<HTMLElement>('.sea .ftop');
+  if (ftop && canvas) S.scene.clearTop = Math.max(50, ftop.getBoundingClientRect().bottom - canvas.getBoundingClientRect().top);
   // The tag at the top of the sea (ruling 226, 8 and 1): paused, or time running fast until the fleets meet, or a
   // moment's word as the clock starts. Not while a question stands: the question is the one voice then.
   const tagEl = el('ftag');
   let tag = '';
   if (!S.asking && !S.handing && !sim.over) {
     if (paused) tag = `Paused ${cap('Space')}`;
-    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the fleets meet`;
+    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the action begins`;
     else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
   }
   if (tagEl.innerHTML !== tag) tagEl.innerHTML = tag;
@@ -408,9 +456,12 @@ function frameFleets(): void {
   const pad = 1500;
   const xs = us.map((u) => u.x), ys = us.map((u) => u.y);
   const [ax, bx, ay, by] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
-  const c = S.scene.cam;
-  c.x = (ax + bx) / 2; c.y = (ay + by) / 2;
-  c.z = Math.max(minZoom(), Math.min(0.6, Math.min(S.scene.W / (bx - ax), (S.scene.H - 50) / (by - ay))));
+  // Nothing starts under a panel (the UI director, sea-226 mend 2): the fleets are framed in the sea below the
+  // dispatch strip and the far ports' name under it.
+  const c = S.scene.cam, top = (S.scene.clearTop ?? 50) + 28, foot = 16;
+  c.z = Math.max(minZoom(), Math.min(0.6, Math.min(S.scene.W / (bx - ax), (S.scene.H - top - foot) / (by - ay))));
+  c.x = (ax + bx) / 2;
+  c.y = (ay + by) / 2 + (top - foot) / 2 / c.z;
   clampCam();
 }
 function minZoom(): number { return Math.min(S.scene.W / SIZE, S.scene.H / SIZE) * 0.8; }
@@ -609,14 +660,13 @@ function frame(): void {
   S.last = t;
   S.scene.now = t;
   const sim = S.sim;
-  // Until the fleets meet, the core clock runs fast on its own, then drops back to the speed the player set (ruling 226, 1).
-  S.clock.rush = S.closing ? APPROACH : 1;
+  // Until the action begins, the core clock runs fast on its own, then drops back to the speed the player set; and
+  // again once an early strike has come and gone with nothing in contact or in the air (ruling 226, 1; 20:18 UTC).
+  S.clock.rush = sim.quiet ? APPROACH : 1;
   S.clock.advance(sim, dt);
-  if (S.closing && (sim.over || sim.contactTime !== null)) {
-    S.closing = false;
-    S.clock.rush = 1;
-    if (!sim.over) S.tag = { text: `The fleets meet · Running ×${S.clock.speed}`, until: t + 2.5 };
-  }
+  const quiet = !sim.over && sim.quiet;
+  if (S.closing && !quiet && !sim.over) S.tag = { text: `The action begins · Running ×${S.clock.speed}`, until: t + 2.5 };
+  S.closing = quiet;
   const v = sim.view(S.scene.me);
   takeEvents(S.scene, sim, v.events, t);
   // At the press of Space, one line so the wait has a meaning (the UI director, 6).
@@ -635,7 +685,7 @@ function frame(): void {
   if (v.over && S.screen === 'battle') showAfter();
 }
 
-/** How much faster time runs until the fleets meet: the long approach, about three battle minutes, passes in about
+/** How much faster time runs until the action begins: the long approach, about three battle minutes, passes in about
  *  twenty seconds at ×1. The approach itself stays as it is, since it is part of the fleets' balance (parity). */
 const APPROACH = 8;
 
@@ -718,7 +768,8 @@ function showAfter(): void {
   const theirShips = (n: number): string => `${n} ${t[them].adj} ${n === 1 ? 'ship' : 'ships'}`;
   const repairLine = hm && ht ? `${hm} of your ships came home for repair, and ${theirShips(ht)}.`
     : hm ? `${hm} of your ships came home for repair.` : ht ? `${theirShips(ht)} came home for repair.` : '';
-  const list = [staffLine, r.lines[0], lossLine, repairLine].filter((l): l is string => !!l);
+  // The staff's line, then the facts, then what stood before the hand-over (the UI director, sea-226 mend 6).
+  const list = (x.toDice ? [staffLine, r.lines[0], repairLine, lossLine] : [staffLine, r.lines[0], lossLine, repairLine]).filter((l): l is string => !!l);
   const sides = rep ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} fleet</h3><ul>${rep![sd].map((s) => `<li><b>${esc(s.fleet)}</b> <span>lost ${esc(andList(shipBits(s.sunk)) || 'no ships')}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
   const veil = document.createElement('div');
   veil.className = 'veil';
