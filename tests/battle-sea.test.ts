@@ -161,6 +161,20 @@ describe('the orders of the first slice', () => {
     expect(sim.over!.R).toBeLessThan(1);
   });
 
+  it('"what you had won stays won" only once the field has moved the hander\'s way by 5 points or more', () => {
+    for (const odds of [1.6, 2, 2.5]) {
+      const sim = battle(11, { odds });
+      const k = sim.ticket.reckoning.odds, share = (o: number): number => o / (1 + o);
+      const gain = (): number => share((k * (1 - sim.lostShare('att'))) / (1 - sim.lostShare('def'))) - share(k);
+      while (!sim.over && gain() < 0.05) sim.step();
+      if (sim.over) continue;
+      expect(sim.command({ do: 'dice' }, 'att')).toBe(true);
+      expect(sim.over!.lines).toContain('The staff settled the rest of the action in the North Sea from where it stood: what you had won stays won.');
+      return;
+    }
+    throw new Error('no action moved 5 points before it ended');
+  });
+
   it('one press hands the rest of the action to the dice, at the ratio then standing', () => {
     const sim = battle(11, { odds: 1.3 });
     run(sim, 300);
@@ -171,7 +185,8 @@ describe('the orders of the first slice', () => {
     const [lo, hi] = diceRange(1.3);
     expect(r.R).toBeGreaterThanOrEqual(Math.min(lo, 1));
     expect(r.R).toBeLessThanOrEqual(hi);
-    expect(r.lines).toContain('The staff settled the rest of the action in the North Sea from where it stood: what you had won stays won.');
+    // At 5:00 the field has moved the attacker's way by about 1 point, under the 5 the clause asks (20:51 UTC).
+    expect(r.lines).toContain('The staff settled the rest of the action in the North Sea from where it stood.');
     // The player never reads "dice" (log b348).
     expect(r.lines.join(' ')).not.toMatch(/dice/i);
     // Nothing is taken after the end.

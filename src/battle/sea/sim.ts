@@ -651,12 +651,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
           : `When the staff took over, the ${a} fleet had lost ${shipWords(sa)} and the ${d} fleet ${shipWords(sd)}.`,
     ];
     // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's three forms (ruling 226, 5): the
-    // whole action before a shot told; "what you had won stays won" only where the action had moved the hander's way
-    // from where the card put it, his enemy having lost a larger share than he had.
+    // whole action before a shot told; "what you had won stays won" only where the field had moved the hander's way by
+    // 5 points or more, his share of the balance at the hand-over against the card's (the design director, 20:51 UTC).
     if (toDice) {
       const zone = this.ticket.place.zoneName, by = this.handedBy ?? 'att';
+      const k = this.ticket.reckoning.odds, now = (k * (1 - this.lostShare('att'))) / Math.max(1e-6, 1 - this.lostShare('def'));
+      const share = (o: number): number => (by === 'att' ? o : 1) / (1 + o);
       lines.push(!this.fired() ? `The staff settled the whole action in the ${zone}: no shot had been fired.`
-        : this.lostShare(other(by)) > this.lostShare(by) ? `The staff settled the rest of the action in the ${zone} from where it stood: what you had won stays won.`
+        : share(now) - share(k) >= 0.05 ? `The staff settled the rest of the action in the ${zone} from where it stood: what you had won stays won.`
           : `The staff settled the rest of the action in the ${zone} from where it stood.`);
     }
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...(toDice ? { toDice } : {}) };
