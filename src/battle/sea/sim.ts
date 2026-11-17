@@ -16,12 +16,12 @@
 // Same ticket, same orders, same battle: every roll comes from the battle's own seeded stream.
 
 import { Rng } from '../../core/rng';
-import { bearing, clamp, dist, lineUp, turn, DT } from '../core';
+import { bearing, clamp, diceNow, dist, lineUp, turn, DT } from '../core';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, Side, Zone } from '../core/types';
 import { DICE, RULES_CLASSES, SEA } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
-import { none, seaLevel, seaRatio, shipWords, sunkCaps } from './result';
+import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -125,6 +125,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private weightOf(u: SeaUnit): number { return this.info.get(u.id)!.weight * u.extra.ships0 * (live(u) || u.state === 'withdrawn' ? u.str : 0); }
   private hullOf(u: SeaUnit): number { const p = this.info.get(u.id)!; return p.hull * u.extra.ships0; }
 
+  /** The order a piece is under, for the screens (undefined: it fights at will). */
+  orderOf(id: number): SeaOrder | undefined { return this.orders.get(id); }
+
   /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone. */
   lostShare(side: Side): number {
     let left = 0;
@@ -197,7 +200,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
       }
       case 'dice': {
         // One press hands the rest back to the dice, at the ratio then standing (ruling 217): on screen, HAND IT TO THE STAFF (log b348).
-        this.finish(this.leader(), 'time', true);
+        // The roll is the day's own luck, the rules' dice already thrown: pressed before a shot is fired, it books exactly
+        // what the campaign would have rolled, so handing it over is never worse than not fighting at all.
+        if (this.over) return false;
+        const k = this.ticket.reckoning;
+        const R = diceNow(k.odds, k.dice, { att: 1 - this.lostShare('att'), def: 1 - this.lostShare('def') }, (this.luck - k.dice[0]) / (k.dice[1] - k.dice[0]));
+        this.finish(R >= 1 ? 'att' : 'def', 'time', true, R);
         return true;
       }
       default:
@@ -216,7 +224,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     ab.winding = true;
     ab.ready = SEA.strike.every;
     this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight, from: cv.extra.fleet, count });
-    this.say({ what: 'ability', unit: cv.id, side: cv.side, text: `${cv.name} flies off a strike of ${count ? `${count} bombers` : 'its aircraft'} at ${foe.name}.`, extra: { key: 'strike', target: foe.id, count } });
+    this.say({ what: 'ability', unit: cv.id, side: cv.side, text: `${this.told(cv, true)} flies off ${count ? `${count} bombers` : 'its aircraft'} against ${this.told(foe)}.`, extra: { key: 'strike', target: foe.id, count } });
     return true;
   }
 
@@ -346,7 +354,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // Out by its own edge: gone home, to fight another day.
     if ((u.state === 'routing' || o.kind === 'leave') && (u.side === 'att' ? u.y < 300 : u.y > F.size - 300)) {
       u.state = 'withdrawn';
-      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${u.name} has broken off and makes for port.` });
+      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have broken off and make' : 'has broken off and makes'} for port.` });
     }
   }
 
@@ -456,7 +464,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!at) continue;
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.from}'s strike${s.count ? ` of ${s.count} bombers` : ''} finds ${at.name}.`, extra: { count: s.count } });
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from ${s.from} find ${this.told(at)}.`, extra: { count: s.count } });
     }
   }
 
@@ -473,7 +481,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const weight = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side);
       this.splash(at, weight, side);
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + weight;
-      this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${at.name}.` });
+      this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${this.told(at)}.` });
     }
   }
 
@@ -491,14 +499,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const N = SEA.nerve;
     if (this.t - (this.lastHit.get(u.id) ?? -1e9) > N.quiet) u.mor = Math.min(1, u.mor + N.mend * DT);
     if (u.state === 'routing') {
-      if (this.broken !== u.side && u.mor >= N.waver + 0.1) { u.state = 'steady'; this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${u.name} has rallied.` }); }
+      if (this.broken !== u.side && u.mor >= N.waver + 0.1) { u.state = 'steady'; this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have' : 'has'} rallied.` }); }
       return;
     }
     if (u.mor < N.break) {
       u.state = 'routing';
-      this.say({ what: 'routing', unit: u.id, side: u.side, text: `${u.name} breaks off and turns for home.` });
+      this.say({ what: 'routing', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'break off and turn' : 'breaks off and turns'} for home.` });
     } else if (u.mor < N.waver) {
-      if (u.state !== 'wavering') { u.state = 'wavering'; this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${u.name} is wavering.` }); }
+      if (u.state !== 'wavering') { u.state = 'wavering'; this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'are' : 'is'} wavering.` }); }
     } else if (u.state === 'wavering') u.state = 'steady';
   }
 
@@ -533,10 +541,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return (ld + 0.05) / (la + 0.05) >= 1 ? 'att' : 'def';
   }
 
-  private finish(winner: Side, how: FieldResult['how'], toDice = false): void {
+  private finish(winner: Side, how: FieldResult['how'], toDice = false, rolled?: number): void {
     if (this.over) return;
     const lost = { att: this.lostShare('att'), def: this.lostShare('def') };
-    const R = seaRatio(winner, lost, this.ticket.reckoning.odds);
+    const R = rolled ?? seaRatio(winner, lost, this.ticket.reckoning.odds);
     const crews: Record<Side, number> = { att: 0, def: 0 };
     for (const u of this.units) crews[u.side] += u.extra.sunk * SEA.classes[u.extra.cls as SeaClass].crew;
     const forces: FieldResult['forces'] = [];
@@ -546,9 +554,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
       forces.push({ corps: f.id, side: f.side, lost: w0 > 0 ? 1 - left / w0 : 0 });
     }
     const sunkOf = (side: Side): SeaShips => { const s = none(); for (const f of this.ticket.place.fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) s[c] += this.fleetLoss.sunk[f.id][c]; return s; };
+    const sa = sunkOf('att'), sd = sunkOf('def'), a = this.ticket.att.adj, d = this.ticket.def.adj;
     const lines = [
       `${this.adj(winner)} ships hold the ${this.ticket.place.zoneName}.`,
-      `${this.ticket.att.adj} losses: ${shipWords(sunkOf('att'))} sunk. ${this.ticket.def.adj} losses: ${shipWords(sunkOf('def'))} sunk.`,
+      // Handed to the staff, the rules sink the rest as they settle it, so this line says only what went down in sight.
+      !toDice ? `${a} losses: ${shipWords(sa)} sunk. ${d} losses: ${shipWords(sd)} sunk.`
+        : shipsIn(sa) + shipsIn(sd) === 0 ? 'No ship had gone down on either side when the staff took over.'
+          : `When the staff took over, the ${a} fleet had lost ${shipWords(sa)} and the ${d} fleet ${shipWords(sd)}.`,
     ];
     // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's words.
     if (toDice) lines.push(`The staff settled the rest of the action in the ${this.ticket.place.zoneName} from where it stood: what you had won stays won.`);
@@ -561,6 +573,16 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   // ---- What the screens draw --------------------------------------------------------------------------------------
+
+  /** A piece in a sentence, by what it is and whose (log b348: no "the" before a fleet's own name): "a battleship of Home Fleet", "3 destroyers of Home Fleet". */
+  private told(u: SeaUnit, start = false): string {
+    const c = RULES_CLASSES[u.extra.cls as SeaClass], n = Math.max(1, u.extra.ships);
+    const s = n === 1 ? `a ${c.one} of ${u.extra.fleet}` : `${n} ${c.many} of ${u.extra.fleet}`;
+    return start ? s[0].toUpperCase() + s.slice(1) : s;
+  }
+
+  /** More than one ship still afloat in the piece: the sentence takes a plural verb. */
+  private many(u: SeaUnit): boolean { return u.extra.ships > 1; }
 
   /** An event, placed where its unit is and with the sound that answers it (cues.ts), unless it names its own. */
   private say(e: Omit<FieldEvent, 't'>): void {
@@ -582,9 +604,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
             : u.extra.way > C.speed * SEA.speeds.cruise * 1.05 ? 'run' : 'march';
   }
 
-  view(as?: Side): BattleView<SeaUnit> {
+  /** Each side's ships still in the fight, as a share of both sides' weight at the start. */
+  balance(): Record<Side, number> {
     const total = this.weight0.att + this.weight0.def;
     const standing = (side: Side): number => this.units.reduce((n, u) => n + (u.side === side && live(u) ? this.weightOf(u) : 0), 0);
+    return { att: total > 0 ? standing('att') / total : 0, def: total > 0 ? standing('def') / total : 0 };
+  }
+
+  view(as?: Side): BattleView<SeaUnit> {
     const events = this.events;
     this.events = [];
     void as; // Everything at sea is in sight in the first slice: spotting and smoke wait for the polish pass (TODO(polish)).
@@ -592,7 +619,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       t: this.t,
       limit: this.ticket.limit,
       units: this.units.map((u) => ({ ...u, extra: { ...u.extra }, abilities: u.abilities?.map((a) => ({ ...a })) })),
-      balance: { att: total > 0 ? standing('att') / total : 0, def: total > 0 ? standing('def') / total : 0 },
+      balance: this.balance(),
       events,
       zones: this.zones.map((z) => ({ ...z })),
       ai: { ...this.ai },
