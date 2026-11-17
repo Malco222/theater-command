@@ -2164,6 +2164,21 @@ bool ACampaignPhotographer::TickTiming(float DeltaSeconds)
 		return true;
 	}
 	TimeClock += DeltaSeconds;
+	{
+		// ("-TheaterTimePan": the eye is carried round a small loop while the settings are timed, as a hand drags the map.
+		// The same loop for every setting: it is timed by the run's own clock, begun afresh with each.)
+		static const bool bPan = FParse::Param(FCommandLine::Get(), TEXT("TheaterTimePan"));
+		if (bPan)
+		{
+			if (const APlayerController* Player = GetWorld()->GetFirstPlayerController())
+			{
+				if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(Player->GetPawn()))
+				{
+					Eye->Pan(FVector2D(FMath::Sin(TimeClock * 1.05f), 0.6f * FMath::Cos(TimeClock * 1.05f)), DeltaSeconds);
+				}
+			}
+		}
+	}
 	if (TimeClock >= Settle)
 	{
 		++TimeFrames;
