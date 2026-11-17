@@ -13,7 +13,7 @@ import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
-  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
+  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather, whyNotEvacuate,
 } from '../game';
 import {
   beginEve, beginHuman, canOrder, candidates, current, declarable, gunsLeftAlone, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
@@ -3510,12 +3510,16 @@ function regionPane(): string {
   if (picked.length) {
     // An ally's corps in a joint army does not sail under the player's orders.
     const canShip = picked.some((c) => c.nat === me && shipTargets(g, c).length > 0);
-    const canEvac = picked.some((c) => c.nat === me && g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
-    const evacTo = canEvac ? refuge(g, picked[0], r) : null;
+    // EVACUATE BY SEA is offered from a port off home ground, and is off with the rule's own reason while no corps
+    // in hand could be lifted (the sea closed, no home left): never lit and silent (ruling 204(d)).
+    const evacAsk = picked.filter((c) => c.nat === me && g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
+    const canEvac = evacAsk.length > 0;
+    const evacWhy = canEvac && evacAsk.every((c) => whyNotEvacuate(g, c) !== null) ? whyNotEvacuate(g, evacAsk[0]) : null;
+    const evacTo = canEvac ? refuge(g, evacAsk[0], r) : null;
     // (The Rail move switch is gone, by the design director's ruling 118: both reaches show at once, a right-click on
     // blue ground takes the train, and inside the march's reach a march is never the worse way. What the trains will
     // do for the army in hand is said in one line on its own card: railLine.)
-    acts = `<div class="acts">${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? (byAir(picked) ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Drop these airborne troops on an enemy coast across one sea. They need no ships, and fight without heavy weapons.">Airborne assault</button>` : `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>`) : ''}${canEvac ? `<button class="btn small" data-act="evac" title="An emergency lift ${evacTo && !evacTo.cap ? `to ${esc(evacTo.name)}, the nearest haven still in friendly hands` : 'home'}. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>` : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
+    acts = `<div class="acts">${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? (byAir(picked) ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Drop these airborne troops on an enemy coast across one sea. They need no ships, and fight without heavy weapons.">Airborne assault</button>` : `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>`) : ''}${canEvac ? (evacWhy ? `<button class="btn small" data-act="evac" disabled title="${esc(evacWhy)}">Evacuate by sea</button>` : `<button class="btn small" data-act="evac" title="An emergency lift ${evacTo && !evacTo.cap ? `to ${esc(evacTo.name)}, the nearest haven still in friendly hands` : 'home'}. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>`) : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>${evacWhy ? whyOff(evacWhy) : ''}`;
   } else if (mineHere.some((c) => c.ap > 0)) {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
@@ -8731,8 +8735,22 @@ function onClick(e: MouseEvent): void {
     case 'bureau': orderBureau(g); refresh(); break;
     case 'court': { const h = g.headlines.length; orderCourt(g, t.dataset.nat!); ui.unread += g.headlines.length - h; refresh(); break; }
     case 'evac': {
-      for (const c of pickedCorps()) orderEvacuate(g, c);
-      ui.picked.clear(); refresh(); break;
+      // Each corps in hand is lifted or it is not, and the paper says which and why: the ones left stay in hand.
+      const cs = pickedCorps();
+      const from = cs.length ? g.regions[cs[0].reg].name : '';
+      const went: Corps[] = [], stayed: Corps[] = [];
+      let why = '';
+      for (const c of cs) {
+        const no = c.nat !== g.human ? `${c.name} is an ally's corps and does not sail under your orders.` : whyNotEvacuate(g, c);
+        if (orderEvacuate(g, c)) { went.push(c); ui.picked.delete(c.id); } else { stayed.push(c); why = why || no || `${c.name} cannot be given orders now.`; }
+      }
+      const names = (xs: Corps[]): string => andList(xs.map((c) => c.name));
+      if (went.length) {
+        const to = g.regions[went[0].reg].name;
+        ui.msg = `Lifted off from ${from} to ${to}: ${names(went)}. A quarter of ${went.length === 1 ? 'its' : 'their'} strength stayed on the beach.${stayed.length ? ` Still at ${from}: ${names(stayed)}. ${why}` : ''}`;
+        queueSave();
+      } else ui.msg = why || 'No corps is in hand to lift off.';
+      refresh(); break;
     }
     case 'report': ui.result = null; drawResult(); openModal({ kind: 'report', id, back: monthBack() }); break;
     case 'general': openModal({ kind: 'general', id }); break;
