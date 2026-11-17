@@ -1,6 +1,8 @@
 // Dead buttons (2026-11-17): a press either works or says its true reason. The page's buttons are checked on the
 // built page (ui-dead.cjs); here are the rules' own sentences that the page shows, each held to the rule it speaks for.
 import { describe, expect, it } from 'vitest';
+import { offers } from '../src/campaign/arsenal';
+import { orderCorps } from '../src/campaign/economy';
 import { createGame, evacuate, whyNotEvacuate } from '../src/campaign/game';
 import { closedTo } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -74,5 +76,38 @@ describe('Evacuate by sea says why not', () => {
         expect(evacuate(h, h.corps.find((x) => x.id === c.id)!), `${nat} at ${r.name}`).toBe(whyNotEvacuate(g, c) === null);
       }
     }
+  });
+});
+
+describe('Raise a lost corps again says why not', () => {
+  /** Germany in September 1939 with one infantry corps on the memorial wall and a full treasury. */
+  function withFallen(): { g: Game; id: number; cap: number } {
+    const g = playing('GER', 7);
+    const cap = g.nations.GER.capital;
+    const id = g.stories.fallen.length + 1;
+    g.stories.fallen.push({ id, nat: 'GER', name: 'Test Korps', kind: 'inf', divs: 3, turn: 1, reg: cap, how: 'destroyed', by: 'POL', born: 1, home: -1, xp: 0 } as Game['stories']['fallen'][number]);
+    g.nations.GER.pp = 9999;
+    return { g, id, cap };
+  }
+  const offer = (g: Game, cap: number) => offers(g, 'GER', cap).find((o) => o.key === 'corps:inf')!;
+
+  it('the arsenal gives no reason and the order is taken while the reserve has the men', () => {
+    const { g, id, cap } = withFallen();
+    expect(offer(g, cap).why).toBeNull();
+    expect(orderCorps(g, 'GER', 'inf', cap, id)?.revive).toBe(id);
+  });
+
+  it('the arsenal names the reserve of men when it is spent, and the order is refused', () => {
+    const { g, id, cap } = withFallen();
+    g.flags['mp:GER'] = 0;
+    expect(offer(g, cap).why).toMatch(/^The reserve has not the men/);
+    expect(orderCorps(g, 'GER', 'inf', cap, id)).toBeNull();
+  });
+
+  it('the arsenal names the treasury when the money is short', () => {
+    const { g, id, cap } = withFallen();
+    g.nations.GER.pp = 0;
+    expect(offer(g, cap).poor).toBe(true);
+    expect(orderCorps(g, 'GER', 'inf', cap, id)).toBeNull();
   });
 });

@@ -2873,6 +2873,18 @@ const offerKeep = (o: Offer): number => o.upkeep * (o.group !== 'works' && g.hum
 /** Money the only thing in the way of an order: how much is wanting. */
 const shortBy = (o: Offer): string => o.poor && g.human ? `${Math.max(1, Math.ceil((o.cost - g.nations[g.human].pp) * BUDGET.scale - 1e-6)).toLocaleString('en-US')} short` : '';
 
+/**
+ * Why a lost corps cannot be raised again now, in the arsenal's own words for a new corps of its kind (the reserve
+ * of men, the technology, the treasury at the price it truly costs); '' when it can. 'site' is where it would form up.
+ */
+function whyNoRevive(f: Fallen, site: number): string {
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  const o = arsenalOffers(g, site).find((x) => x.key === `corps:${f.kind}`);
+  if (!o) return 'No corps of this kind can be raised now.';
+  const short = shortBy(o);
+  return short ? `${short}: the treasury holds ${money(g.nations[g.human!].pp)}.` : o.why ?? '';
+}
+
 /** An offer as a full-width row in the Build tab: what it is, what it does, where it goes, and why not when it cannot be ordered. */
 function offerButton(o: Offer, quiet = false): string {
   const ok = humanUp(g) && o.why === null;
@@ -3647,7 +3659,9 @@ function buildPane(): string {
         const site = raiseSite(g, me, f.kind, ui.sel);
         if (site < 0) continue;
         const price = corpsCost(g, me, f.kind);
-        s += `<button class="buy" data-act="revive" data-id="${f.id}" ${mine && have >= price ? '' : 'disabled'}>${icon({ nat: me, kind: f.kind } as Corps)}<span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${fallenLine(f)} ${ribbons(f)}</small><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(g.regions[site].name)}</small></span><span class="cost${have >= price ? '' : ' short'}">${money(price)}</span></button>`;
+        // Lit only when the order would be taken: the reserve of men and the technology count as they do for any new corps, and the row says which.
+        const no = whyNoRevive(f, site);
+        s += `<button class="buy" data-act="revive" data-id="${f.id}" ${no ? 'disabled' : ''}>${icon({ nat: me, kind: f.kind } as Corps)}<span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${fallenLine(f)} ${ribbons(f)}</small><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(g.regions[site].name)}</small>${no ? `<small class="whyno">${esc(no)}</small>` : ''}</span><span class="cost${have >= price ? '' : ' short'}">${money(price)}</span></button>`;
       }
     }
     return s;
@@ -4366,11 +4380,14 @@ function fallenCard(f: Fallen): string {
   const at = site >= 0 ? g.regions[site] : null;
   const b = specOf(g, f.kind) ?? PRODUCTION.builds.inf;
   const have = Math.floor(n.pp);
+  // What it truly costs today (corpsCost), and the arsenal's own reason when it cannot be ordered.
+  const price = mine ? corpsCost(g, f.nat, f.kind) : b.cost;
+  const no = mine && at ? whyNoRevive(f, at.id) : '';
   let again = '';
   if (heir) again = `<div class="note"><b>Raised again.</b> A new ${esc(f.name)} carries the old colours. <button class="link" data-act="record" data-type="corps" data-id="${heir.id}">Its record ›</button></div>`;
   else if (f.heir !== undefined) again = '<div class="note"><b>Raised again, and lost again.</b> The name has been carried twice.</div>';
   else if (queued) again = '<div class="note"><b>Being raised again.</b> A new corps is forming under the old name.</div>';
-  else if (mine && b && at) again = `<h3>Raise it again</h3><button class="buy" data-act="revive" data-id="${f.id}" ${humanUp(g) && have >= b.cost ? '' : 'disabled'}>${icon({ nat: f.nat, kind: f.kind } as Corps)}<span class="grow"><b>Raise ${esc(f.name)} again</b><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small><small>The new corps carries the old colours${f.nick ? ', the name the army gave it' : ''} and ${Math.round(STORIES.legacy.xp * 100)}% of what the old corps knew above a green one.</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${money(b.cost)}</span></button>`;
+  else if (mine && b && at) again = `<h3>Raise it again</h3><button class="buy" data-act="revive" data-id="${f.id}" ${no ? 'disabled' : ''}>${icon({ nat: f.nat, kind: f.kind } as Corps)}<span class="grow"><b>Raise ${esc(f.name)} again</b><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small><small>The new corps carries the old colours${f.nick ? ', the name the army gave it' : ''} and ${Math.round(STORIES.legacy.xp * 100)}% of what the old corps knew above a green one.</small>${no ? `<small class="whyno">${esc(no)}</small>` : ''}</span><span class="cost${have >= price ? '' : ' short'}">${money(price)}</span></button>`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Memorial wall · ${n.adj} army</div><h2>${esc(f.name)}</h2>${f.nick ? `<div class="aka">${esc(capital(f.nick))}</div>` : ''}</header>
     <div class="body">
       <p class="lead"><b>${fallenLine(f)}</b>${by && by.id !== f.nat ? `, ${f.how === 'destroyed' ? 'by' : f.how === 'surrendered' ? 'to' : 'cut off by'} the ${esc(by.adj)} army` : ''}. ${f.divs} ${KIND[f.kind].label.toLowerCase()} division${f.divs > 1 ? 's' : ''}, raised ${date(f.born)}${f.home >= 0 ? ` at ${esc(g.regions[f.home].name)}` : ''}; ${esc(grade(f.xp).toLowerCase())} troops at the end.${f.general ? ` ${esc(f.general)} was with it.` : ''}</p>
@@ -8305,6 +8322,8 @@ function onClick(e: MouseEvent): void {
     case 'revive': {
       const f = fallenOf(g, id), at = f ? raiseSite(g, g.human!, f.kind, ui.sel) : -1;
       if (f && at >= 0 && orderBuildCorps(g, f.kind, at, f.id)) { ui.msg = `${f.name} will be raised again at ${g.regions[at].name}.`; queueSave(); if (ui.modal?.kind === 'fallen') openModal(null); }
+      // An order not taken says why (ruling 204(d)).
+      else ui.msg = !f ? 'That formation is no longer on the memorial wall.' : at < 0 ? 'There is no home ground left to raise troops on.' : whyNoRevive(f, at) || `${f.name} cannot be raised again now.`;
       refresh();
       break;
     }
