@@ -1142,7 +1142,7 @@ export function whyNotEscort(g: Game, f: Fleet, lane: string): string | null {
   const to = g.nations[rt.to];
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
   if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} feeds ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
-  if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `${cap(rt.name)} is not under attack: nobody is at war over it.`;
+  if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `Not under attack: nobody is at war over ${rt.name}.`;
   const stop = laneStopped(g, lane);
   if (stop) return `Nothing sails on ${rt.name} now. ${stop.why}`.trim();
   if (escortWorth(f.ships) <= 0) return `The ${f.name} has nothing that can guard a convoy: escorts are destroyers, carriers and cruisers.`;
