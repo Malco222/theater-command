@@ -8,7 +8,7 @@
 // meet, and once the fighting is done and the last head for home, the clock runs fast on its own (ruling 226, mark 1);
 // a question on the field stops it (b358). The words are the UI director's (3d-handoff.md section 4, ruling 226).
 
-import { afterCard, type AfterCard } from '../../campaign/airfought';
+import { afterCard, peopleOf, type AfterCard } from '../../campaign/airfought';
 import { launchRaid, planRaid, raidTargets, type RaidKind } from '../../campaign/airwar';
 import { createGame, setWar } from '../../campaign/game';
 import { startOpen } from '../../campaign/staff';
@@ -116,6 +116,18 @@ function chanceWords(p: number): string {
   return `the staff gives it about ${Math.round(p * 100)}%`;
 }
 
+/**
+ * What the raid is for and what makes it count, named on its card before the fight (the design director, b394): a
+ * raid is judged by what it was sent to do, so a raid that bombs well and misses what mattered is no surprise.
+ */
+function aimWords(t: FieldTicket<AirPlace>): string {
+  const P = t.place, them = peopleOf(t.def.adj);
+  if (P.mission === 'superiority') return `The aim: the sky over ${P.name}. The fight counts if your fighters still outweigh what the ${them} can put up.`;
+  if (P.reckon.value >= 1 || P.reckon.ruin > 0) return `The aim: the factories of ${P.name}. The raid counts if the harm the bombs do outweighs the aircraft it costs.`;
+  if (P.reckon.rail > 0) return `The aim: the rail yards of ${P.name}. The raid counts if the line is cut, or if the ${them} lose more aircraft than you.`;
+  return `The aim: ${P.name}, which has nothing the bombs can harm. The raid counts only if the ${them} lose more aircraft than you.`;
+}
+
 /** What kind of battle it is, for the top bar's subtitle: "an escorted day raid", "a fight for the sky", "a night raid". */
 function kindWords(t: FieldTicket<AirPlace>): string {
   if (t.place.mission === 'superiority') return 'a fight for the sky';
@@ -136,6 +148,7 @@ function showChooser(): void {
     return `<button class="tc-card is-press offer" data-raid="${i}">
         <span class="otop"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data ochance">${esc(chanceWords(p))}</span></span>
         <span class="tc-data omid">${facts([`You fly ${esc(sideWords(t, me))}`, `${esc(forceWords(t, me))} against ${esc(forceWords(t, foe))}`])}</span>
+        <span class="oaim">${esc(aimWords(t))}</span>
         <span class="tc-data olow">${facts([t.place.night ? 'By night' : 'By day', kind])}</span></button>`;
   };
   app.innerHTML = `<div class="choose tc air">
@@ -182,8 +195,8 @@ function startBattle(r: Raid): void {
         <button class="tc-btn tc-btn--sm" data-clock="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bnear" title="When a bar fills, that side breaks off and heads for home.">
-        <span class="tc-label">How near to breaking</span>
+      <div class="bnear" title="When a bar fills, that side breaks off and heads for home. It measures breaking off, not the raid's result.">
+        <span class="tc-label">How near to breaking off</span>
         <span class="nrow"><span class="nadj">${esc(mine.adj)}</span><span class="ntrack"><i id="nearMe"></i></span></span>
         <span class="nrow"><span class="nadj">${esc(theirs.adj)}</span><span class="ntrack"><i id="nearThem"></i></span></span>
       </div>

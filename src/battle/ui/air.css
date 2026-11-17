@@ -13,6 +13,7 @@
 .air .bclock .tc-label.is-run { color: var(--paper-300); }
 /* How near each side is to breaking off: a bar a side in its nation's colour, no numbers (ruling 226, mark 3). */
 .air .bnear { flex: 1 1 200px; min-width: 180px; max-width: 360px; display: grid; gap: 3px; }
+.air .bnear > .tc-label { white-space: nowrap; overflow: hidden; }
 .air .bnear .nrow { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; }
 .air .bnear .nadj { font: 700 11px/13px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .air .bnear .ntrack { display: block; height: 7px; border: 1px solid var(--line); border-radius: 2px; background: var(--desk-800); overflow: hidden; }
@@ -27,6 +28,7 @@
   .air .btitle { flex: 1 1 auto; }
   .air .btitle .tc-title-3 { font-size: 16px; line-height: 20px; white-space: nowrap; }
   .air .bnear { flex: 0 1 190px; min-width: 170px; }
+  .air .bnear > .tc-label { letter-spacing: .06em; }
   .air .bacts .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
 }
 
@@ -59,6 +61,7 @@
 .air .offer .otop b { flex: 1 1 auto; min-width: 0; }
 .air .offer .ochance { flex: none; margin-left: auto; white-space: nowrap; color: var(--paper-200); font-size: 13px; }
 .air .offer .omid .fact { white-space: normal; }
+.air .offer .oaim { display: block; margin-top: 2px; font-size: 15px; line-height: 1.4; color: var(--paper-200); text-wrap: pretty; }
 .air .since { margin: 0 0 12px; padding: 10px 14px; }
 .air .since ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
 .air .since li { font: 400 14px/20px var(--font-serif); color: var(--ink-900, #1d1610); }
