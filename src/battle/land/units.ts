@@ -53,6 +53,12 @@ export interface LandUnit extends UnitBase {
   keepFace: number | null;
   /** In contact this battle already (for the first-contact dispatch). */
   met: boolean;
+  /**
+   * Carried off by its army's break while it still stood: it falls back in order and reads so, never Routing, which
+   * belongs to the blocks that broke (the design director, after the slice 3 review). What it leaves behind on the
+   * field is counted as a runner's, as before, so the field's figures and the fairness tests do not move.
+   */
+  fellBack?: boolean;
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -150,14 +156,14 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
   const place = (row: LandUnit[], y: number, wings: boolean): void => {
     const gap = 40;
     if (wings) {
-      // Half on each wing, beyond the ends of the front line.
+      // Half on each wing, beyond the ends of the front line; where a wing would run off the field (a big army's long
+      // front), the row stands centred behind the line instead, so no two blocks are drawn up on top of each other.
       const span = (lines[0].length * (150 + gap)) / 2;
-      row.forEach((u, i) => {
-        const left = i % 2 === 0, k = Math.floor(i / 2);
-        u.x = cx + (left ? -1 : 1) * (span + 60 + k * (u.w + gap));
-        u.y = y;
-      });
-      return;
+      const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + gap)); });
+      if (row.every((u, i) => at[i] - u.w / 2 >= 10 && at[i] + u.w / 2 <= f.w - 10)) {
+        row.forEach((u, i) => { u.x = at[i]; u.y = y; });
+        return;
+      }
     }
     const width = row.reduce((s, u) => s + u.w + gap, -gap);
     let x = cx - width / 2;

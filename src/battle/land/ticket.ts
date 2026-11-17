@@ -4,7 +4,7 @@
 import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import { generalOf } from '../../campaign/commanders';
-import { assess, corpsBase, evenOdds, limitAttackers, men, worksOf } from '../../campaign/game';
+import { assess, corpsBase, evenOdds, limitAttackers, men, worksOf, type FieldBill } from '../../campaign/game';
 import { divisionsOf } from '../../campaign/armies';
 import { armyOf } from '../../campaign/joint';
 import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
@@ -64,12 +64,19 @@ export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket
   };
 }
 
+/**
+ * What the field cost, for the campaign's bill (ruling 226(6)): each corps' own share lost, so the side's bill falls on
+ * its corps as the field had it, and each side's share, so the after card's headline and its field line agree.
+ */
+export function fieldBill(result: FieldResult): FieldBill {
+  const corps: Record<number, number> = {};
+  for (const f of result.forces ?? []) corps[f.corps] = f.lost;
+  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective' };
+}
+
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */
 export function handBack(g: Game, corps: Corps[], target: Region, result: FieldResult): BattleReport | null {
-  // Each corps' bill falls as the field had it (ruling 226(6)): its own share lost on the field.
-  const split: Record<number, number> = {};
-  for (const f of result.forces ?? []) split[f.corps] = f.lost;
-  return orderAttack(g, corps, target, result.R, split);
+  return orderAttack(g, corps, target, result.R, fieldBill(result));
 }
 
 /** The odds the campaign would give this attack now, for a check that nothing moved between the ticket and the hand-back. */

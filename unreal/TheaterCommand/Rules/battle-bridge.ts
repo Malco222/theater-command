@@ -7,7 +7,9 @@
 // of the dice. The 3D game draws the pictures: the models, their walk and fire, the sounds the events name.
 //
 // Wiring (two lines in campaign-bridge.ts, for the 3D builder):
-//   1. its attack(ids, to) takes a third argument, fought?: number, and passes it on: orderAttack(s, sent, s.regions[to], fought)
+//   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
+//      passes them on: orderAttack(s, sent, s.regions[to], fought, field) (field: what the field cost each corps and
+//      each side, so the bill falls on the corps as the field had it and the after card agrees with the field, ruling 226(6))
 //   2. import { battleCalls } from './battle-bridge';   and in the TC object:   ...battleCalls({ game, attack }),
 // With no battle fought, nothing changes: attack(ids, to) rolls the dice as before.
 // Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, passes it to
@@ -19,17 +21,25 @@
 // The calls, on the same global object TC:
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, or null where there is no field battle to fight
 //   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once
-//   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set
+//   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
+//                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
+//                                   drops to the speed set (ruling 226(1)): say so on the field, "×4 until the armies
+//                                   meet", then "The armies meet · Running ×1" when view.contact turns to a time
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
+//   TC.battleChance()            -> { chance, contact }: the staff's chance now that the attack carries the ground, 0 to
+//                                   1, and whether the armies have met, for HAND IT TO THE STAFF's question (ruling
+//                                   226(5)); null where the battle has no such question (sea and air word their own)
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
 //                                   battle is over; null before that (after an air battle: what TC.act returns for the raid)
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'night', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //
-// A view: { t, limit, speed, units, balance, events, zones, ai, over }. Each unit: { id, side, kind, name, x, y, face,
+// A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }
+// (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)) and contact
+// (battle seconds of the first contact, null before it). Each unit: { id, side, kind, name, x, y, face,
 // str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does; each event's 'cue' is a one-shot, at its x and y. Sound names are the sound director's (sound-list.json).
@@ -55,7 +65,7 @@ import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { LOOPS } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
-import { goingIn, landTicket } from '../../../src/battle/land/ticket';
+import { fieldBill, goingIn, landTicket } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
 import { MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
@@ -66,6 +76,7 @@ import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
 import type { Game } from '../../../src/campaign/types';
+import type { FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
 import { endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
 import { SEA_LOOPS } from '../../../src/battle/sea/cues';
@@ -76,7 +87,7 @@ import { SeaSim, type SeaLosses } from '../../../src/battle/sea/sim';
 export interface BattleHooks {
   game: () => Game;
   /** The campaign bridge's own attack call; with 'fought', the field's R stands in for the dice. */
-  attack: (ids: number[], to: number, fought?: number) => unknown;
+  attack: (ids: number[], to: number, fought?: number, field?: FieldBill) => unknown;
   /** The campaign bridge's own raid order (act 'raid:kind:target:ids'); with 'fought', the air battle's losses stand in for the dice. */
   raid?: (kind: string, target: number, ids: number[], fought?: FoughtAir) => unknown;
 }
@@ -115,8 +126,15 @@ function unitOut(u: UnitBase): Record<string, unknown> {
 }
 
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
-  return { t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map(unitOut), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me };
+  return {
+    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map(unitOut), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
+    ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
+    ...(v.contact !== undefined ? { contact: v.contact } : {}),
+  };
 }
+
+/** Fast until the armies meet, then the speed the player set (ruling 226(1)); the browser page runs the same. */
+const RUSH = 4;
 
 export function battleCalls(h: BattleHooks) {
   let s: Session | null = null;
@@ -157,7 +175,7 @@ export function battleCalls(h: BattleHooks) {
       const sim = new LandBattle(t);
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the card.
       const going = goingIn(g, corps, target).map((c) => c.id);
-      const ses = begin(sim, (r) => h.attack(ids, to, r.R));
+      const ses = begin(sim, (r) => h.attack(ids, to, r.R, fieldBill(r)));
       const f = sim.field;
       return {
         field: { w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place },
@@ -166,6 +184,9 @@ export function battleCalls(h: BattleHooks) {
     },
     battleTick(seconds: number) {
       const ses = need();
+      const met = (ses.sim as Partial<LandBattle>).contactAt;
+      const sp = ses.clock.speed;
+      ses.clock.rush = met === null && sp > 0 && sp < RUSH ? RUSH / sp : 1;
       ses.clock.advance(ses.sim, seconds);
       return viewOut(ses, ses.sim.view(ses.me));
     },
@@ -182,6 +203,11 @@ export function battleCalls(h: BattleHooks) {
     battleView() {
       const ses = need();
       return viewOut(ses, ses.sim.view(ses.me));
+    },
+    battleChance() {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      return land ? { chance: Math.round(land.chanceNow() * 1000) / 1000, contact: land.contactAt !== null } : null;
     },
     battleEnd() {
       const ses = need();

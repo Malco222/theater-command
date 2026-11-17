@@ -518,7 +518,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       // will stand (LAND.spent): so a battle fought out costs about what the campaign bills for its result (b356).
       if (near >= 1) {
         this.broke[s] = true;
-        for (const u of left) this.rout(u);
+        // The blocks that broke are already running; the rest fall back in order with their army.
+        for (const u of left) { u.fellBack = true; u.order = { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h }; u.path = []; u.keepFace = null; u.engaged = undefined; }
         this.say({ what: 'broken', side: s, text: `The ${this.ticket[s].adj} army breaks.` });
         this.finish(other(s), 'rout');
         return;
@@ -531,7 +532,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   lostShares(): Record<Side, number> {
     const lost = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
       lost[u.side] += u.power0 * (1 - kept / u.str0);
     }
     return { att: lost.att / this.power.att, def: lost.def / this.power.def };
