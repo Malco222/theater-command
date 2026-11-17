@@ -478,6 +478,51 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		// (Rules 84.2.6; ruling 211(c).) The alarm that names the cure, as the rules read it.
+		const TArray<TSharedPtr<FJsonValue>>* Alarms = nullptr;
+		if (Object->TryGetArrayField(TEXT("alarms"), Alarms))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Alarms)
+			{
+				const TSharedPtr<FJsonObject>* Raised = nullptr;
+				if (Value->TryGetObject(Raised))
+				{
+					FHomeAlarm& Alarm = Out.Alarms.AddDefaulted_GetRef();
+					(*Raised)->TryGetStringField(TEXT("case"), Alarm.Case);
+					(*Raised)->TryGetNumberField(TEXT("region"), Alarm.Region);
+					(*Raised)->TryGetStringField(TEXT("by"), Alarm.By);
+					(*Raised)->TryGetStringArrayField(TEXT("lines"), Alarm.Lines);
+					(*Raised)->TryGetNumberField(TEXT("help"), Alarm.HelpRegion);
+					(*Raised)->TryGetNumberField(TEXT("to"), Alarm.SendTo);
+					(*Raised)->TryGetStringField(TEXT("hand"), Alarm.Hand);
+					const TArray<TSharedPtr<FJsonValue>>* Pick = nullptr;
+					if ((*Raised)->TryGetArrayField(TEXT("pick"), Pick))
+					{
+						for (const TSharedPtr<FJsonValue>& Id : *Pick)
+						{
+							Alarm.HelpCorps.Add(FMath::RoundToInt32(Id->AsNumber()));
+						}
+					}
+				}
+			}
+		}
+		// (Rules 84.2.6.) His own guns left alone round an enemy town, as the rules read it.
+		const TArray<TSharedPtr<FJsonValue>>* Lone = nullptr;
+		if (Object->TryGetArrayField(TEXT("alone"), Lone))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Lone)
+			{
+				const TSharedPtr<FJsonObject>* Row = nullptr;
+				if (Value->TryGetObject(Row))
+				{
+					FGunsAlone& Left = Out.Alone.AddDefaulted_GetRef();
+					(*Row)->TryGetNumberField(TEXT("region"), Left.Region);
+					(*Row)->TryGetStringField(TEXT("what"), Left.What);
+					(*Row)->TryGetBoolField(TEXT("red"), Left.bRed);
+					(*Row)->TryGetStringField(TEXT("line"), Left.Line);
+				}
+			}
+		}
 	}
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Civic = nullptr;
