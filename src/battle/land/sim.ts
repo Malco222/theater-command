@@ -582,14 +582,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   /**
    * The staff's line, in its three forms (the UI director's words for ruling 226(5)): before any contact, the whole
    * attack; after it, the rest, and "what you had won stays won" only where the field had moved the player's way from
-   * where the card put it.
+   * where the card put it, by five points of the balance or more.
    */
   private staffLine(): string {
     const where = this.ticket.place.name;
     if (this.contactAt === null) return `The staff settled the whole attack on ${where}: no shot had been fired.`;
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bal = this.standing(), tot = this.power.att + this.power.def;
-    const moved = (bal[me] / Math.max(1e-9, bal.att + bal.def)) > this.power[me] / tot + 1e-6;
+    // Moved his way by five points of the balance's share or more (the design director, 20:51): a point's drift is not a gain.
+    const moved = (bal[me] / Math.max(1e-9, bal.att + bal.def)) >= this.power[me] / tot + 0.05;
     return `The staff settled the rest of the attack on ${where} from where it stood${moved ? ': what you had won stays won' : ''}.`;
   }
 
