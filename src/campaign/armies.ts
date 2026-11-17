@@ -18,7 +18,7 @@ import data from '../../data/campaign/divisions.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
-import { allied, men } from './game';
+import { allied, atWar, men } from './game';
 import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
@@ -222,7 +222,26 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
   if (c.dead || g.human === null || c.nat !== g.human) return null;
   if (c.kind === 'fort') return FORT_NO_ORDERS;
   if (c.leave !== undefined) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
+  if (c.town !== undefined) return garrisonLine(g, [c]);
   return null;
+}
+/**
+ * The sentence for corps of one side that are inside a town, the same in both games, wherever they are asked to march
+ * or to attack (Version 84.2.4, on Brian's words of 2026-11-17: "if an enemy army is out of a city i couldnt attack
+ * them"). A garrison takes no marching orders, and the sentence names the cure: TAKE THE FIELD, or a sortie where an
+ * enemy army stands round the town. One corps is named; several are "They". The corps are of one province.
+ */
+export function garrisonLine(g: Game, cs: Corps[]): string {
+  const r = g.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
+  const who = one ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? 'in ' : ''}the garrison of ${town}` : `They are the garrison of ${town}`;
+  const shut = g.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g, u.nat, r.ctrl));
+  return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
+}
+/** Why the player's corps inside the town of a province take no marching orders, in the rules' sentence; null where he has none inside. */
+export function whyNotOrderGarrison(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  const cs = g.human === null || !r ? [] : (r.garr ?? []).filter((c) => c.nat === g.human && !c.dead);
+  return cs.length ? garrisonLine(g, cs) : null;
 }
 
 export function corpsCard(g: Game, c: Corps): CorpsCard {
