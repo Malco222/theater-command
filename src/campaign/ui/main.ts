@@ -2840,14 +2840,6 @@ function offerIcon(o: Offer): string {
 }
 
 const offerLabel = (o: Offer): string => (o.key === 'corps:arm' ? `${PRODUCTION.armourName[g.human!] ?? PRODUCTION.armourName._default} corps` : o.label);
-/**
- * An offer's words in the nation's own word for its tanks, as its row says it (the second Playtester's 84.2.6 find:
- * "as dear as an armoured corps" sat just above the "Armored corps" row): "an armored corps", "a panzer corps".
- */
-const offerBlurb = (o: Offer): string => o.blurb.replace(/\ban armoured corps\b/g, () => {
-  const w = (PRODUCTION.armourName[g.human!] ?? PRODUCTION.armourName._default).toLowerCase();
-  return `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w} corps`;
-});
 /** What an offer would cost to keep each month as things stand: forces cost half at peace, works the same always. */
 const offerKeep = (o: Offer): number => o.upkeep * (o.group !== 'works' && g.human && !g.nations[g.human].atWar.length ? BUDGET.upkeep.peace : 1);
 
@@ -2865,7 +2857,7 @@ function offerButton(o: Offer, quiet = false): string {
   const facts = line[0].toUpperCase() + line.slice(1);
   // An order the technology tree still holds back opens the tree at the technology it waits on.
   const act = o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : `disabled title="${esc(whyNot)}"`}`;
-  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(offerBlurb(o))}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${whyNot && !o.tech && !quiet ? `<small class="whyno">${esc(whyNot)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
+  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(o.blurb)}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${whyNot && !o.tech && !quiet ? `<small class="whyno">${esc(whyNot)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
 }
 
 /** An offer as a small card in a province: it can be ordered there only if this is where it would go. */
@@ -2885,7 +2877,7 @@ function offerCard(o: Offer, r: Region): string {
   // Money the only thing in the way: the card says how much is wanting.
   const short = shortBy(o);
   const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : short;
-  return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(offerBlurb(o))}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
+  return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
 
 /** A region's holdings as slots: industry, works, harbour, airfields and air defence. In the grand campaign each slot the player can build on is a button. */
@@ -2919,7 +2911,7 @@ function provinceSlots(r: Region): string {
     const o = list.find((x) => x.key === key);
     const cls = `slot${has ? ' has' : ''}${wide ? ' wide' : ''}`;
     if (o && o.at === r.id && (o.why === null || o.poor)) {
-      return `<button class="${cls} act" data-act="arsenal" data-key="${key}" ${humanUp(g) && o.why === null ? '' : 'disabled'} title="${shortBy(o) ? `${shortBy(o)}: the treasury holds ${money(g.nations[g.human!].pp)}. ` : o.why ? `${esc(o.why)} ` : humanUp(g) ? '' : 'It is not your month. '}${esc(offerBlurb(o))} Ready in ${months(o.months)}.${o.upkeep > 0 ? ` Each level costs ${cash(o.upkeep)} a month to man.` : ''}">${glyph}<b>${title}</b>${pips}<small>${text}</small><small class="do">${verb} · ${money(o.cost)}</small></button>`;
+      return `<button class="${cls} act" data-act="arsenal" data-key="${key}" ${humanUp(g) && o.why === null ? '' : 'disabled'} title="${shortBy(o) ? `${shortBy(o)}: the treasury holds ${money(g.nations[g.human!].pp)}. ` : o.why ? `${esc(o.why)} ` : humanUp(g) ? '' : 'It is not your month. '}${esc(o.blurb)} Ready in ${months(o.months)}.${o.upkeep > 0 ? ` Each level costs ${cash(o.upkeep)} a month to man.` : ''}">${glyph}<b>${title}</b>${pips}<small>${text}</small><small class="do">${verb} · ${money(o.cost)}</small></button>`;
     }
     return `<div class="${cls}"${o?.why ? ` title="${esc(o.why)}"` : ''}>${glyph}<b>${title}</b>${pips}<small>${text}</small></div>`;
   };
