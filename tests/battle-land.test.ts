@@ -294,7 +294,8 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
   });
 
   // Each practice ground's card is reckoned as the campaign's attack card would reckon those armies there (the design
-  // director, b400), and the plain attack wins about as often as that card says: 60 battles on each, within a tenth.
+  // director, b400), the defence sized to the ground so it is a contest (b406), and the plain attack wins about as often
+  // as that card says: 120 battles on each, within a tenth.
   it("a practice ground's card prices its ground the campaign's way (b400)", () => {
     const at = (p: PracticeGround): number => practiceReckoning(p).odds;
     const open = at({ terrain: 'plains' });
@@ -314,13 +315,29 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
       expect(t.place.terrain).toBe(p.terrain);
       expect(!!t.place.river).toBe(!!p.river);
       expect(t.place.fort).toBe(p.fort ?? 0);
+      // The defence on the field is the one the card reckoned: its divisions, its kind and its strength.
+      const def = t.def.forces;
+      expect(def.filter((f) => f.kind !== 'art').map((f) => f.divs)).toEqual(p.def ?? [3, 3]);
+      expect(def.filter((f) => f.kind === 'art').reduce((a, f) => a + f.divs, 0)).toBe(p.guns ?? 1);
+      for (const f of def) { expect(f.str).toBe(p.str ?? 0.9); if (f.kind !== 'art') expect(f.kind).toBe(p.kind ?? 'inf'); }
+      expect(def.reduce((a, f) => a + f.share, 0)).toBeCloseTo(1, 9);
+      // The attack is the same on every ground.
+      expect(t.att.forces.map((f) => [f.kind, f.divs, f.str])).toEqual(practiceTicket(PRACTICE_GROUNDS[0]).att.forces.map((f) => [f.kind, f.divs, f.str]));
+    }
+  });
+  it('every practice card is a contest: the staff gives it between 4 and 8 in 10 (the design director, b406)', () => {
+    for (const p of PRACTICE_GROUNDS) {
+      const k = practiceReckoning(p);
+      const c = diceChance(k.odds, k.dice);
+      expect(c).toBeGreaterThanOrEqual(0.4);
+      expect(c).toBeLessThanOrEqual(0.8);
     }
   });
   for (const p of PRACTICE_GROUNDS) {
     const key = `${p.terrain}${p.river ? ', a river crossing' : ''}${p.fort ? ', fortress works' : ''}`;
-    it(`the plain attack honours the practice card as shown: ${key} (mark 4, b400)`, () => {
+    it(`the plain attack honours the practice card as shown: ${key} (mark 4, b400, b406)`, () => {
       let won = 0, chance = 0;
-      for (let s = 1; s <= 60; s++) {
+      for (let s = 1; s <= 120; s++) {
         const t = practiceTicket(p, { seed: s * 7919 + 13, humanAtt: true });
         chance = diceChance(t.reckoning.odds, t.reckoning.dice);
         const b = new LandBattle(t);
@@ -329,7 +346,7 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
         runOut(b);
         if (b.over!.winner === 'att') won++;
       }
-      expect(Math.abs(won / 60 - chance)).toBeLessThanOrEqual(0.1);
+      expect(Math.abs(won / 120 - chance)).toBeLessThanOrEqual(0.1);
     }, 120000);
   }
 });

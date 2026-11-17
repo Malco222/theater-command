@@ -14,7 +14,7 @@ import { RATIO } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceReckoning, practiceTicket, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceTicket, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
@@ -119,13 +119,13 @@ function showChooser(): void {
   };
   // Each practice ground's card is reckoned as the campaign would reckon the two practice armies there (b400).
   const practice = (p: PracticeGround, i: number): string => {
-    const k = practiceReckoning(p);
+    const t = practiceTicket(p), k = t.reckoning;
     // The ground line in the campaign cards' own form, where the card's name does not already say it all.
     const ground = p.river || p.fort ? facts([TERRAIN_WORD[p.terrain], ...(p.river ? ['across a river'] : []), ...(p.fort ? [`fortress works, level ${p.fort}`] : [])]) : '';
     return `<button class="tc-card is-press offer ground" data-ground="${i}">
       <span class="otop"><b class="tc-title-3">${practiceName(p)}</b><span class="tc-data"><b>${odds(k.odds)}</b> to 1</span></span>
       ${ground ? `<span class="tc-data omid">${ground}</span>` : ''}
-      <span class="tc-data olow">${facts([staffSays(diceChance(k.odds, k.dice))])}</span></button>`;
+      <span class="tc-data olow">${facts([`${t.att.forces.length} corps against ${t.def.forces.length}`, staffSays(diceChance(k.odds, k.dice))])}</span></button>`;
   };
   app.innerHTML = `<div class="choose tc">
     <header class="chead"><div><div class="tc-label">Field battles · first slice</div><h1 class="tc-title-1">Choose a battle to fight</h1></div></header>
@@ -217,7 +217,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
         <button class="tc-btn tc-btn--sm" data-speed="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's strength still standing. The pale mark is where the attack card put it.">
-        <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Your army'}</span><span id="ratio" class="tc-data"></span><span>${S.offer ? esc(theirs.adj) : 'Their army'}</span></div>
+        <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Yours'}</span><span id="ratio" class="tc-data"></span><span>${S.offer ? esc(theirs.adj) : 'Theirs'}</span></div>
         <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
         <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>

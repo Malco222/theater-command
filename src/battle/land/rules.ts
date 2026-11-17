@@ -61,7 +61,7 @@ export const LAND = {
    * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
    * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
    */
-  hold: { take: { plains: 0.85, forest: 0.906, hills: 0.91, mountain: 1.237, marsh: 1.1, urban: 0.91, desert: 0.909 } as Record<string, number>, within: 300, river: 1.58, works: [1, 1.08, 1.13, 1.19] },
+  hold: { take: { plains: 0.85, forest: 0.906, hills: 0.91, mountain: 1.237, marsh: 1.07, urban: 0.91, desert: 0.909 } as Record<string, number>, within: 300, river: 1.58, works: [1, 1.08, 1.13, 1.19] },
   /** Dug in: the damage taken while it stays within this many metres of where it began. */
   dug: { take: 0.65, keep: 30 },
   nerve: {
