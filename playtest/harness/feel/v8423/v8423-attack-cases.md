@@ -23,6 +23,31 @@ Playtester, 2026-11-17, 16:30Z. Asked by the design director (15:50Z) on Brian's
 2. With an army in hand, a plain click on a green province marches it there, the same as a right-click. The hint names only the right-click ("On a touch screen, tap it"). I spent a whole army's month by clicking provinces to look at them. A question for the UI director, not a fault: should the hint say so, or should a plain click only look?
 3. On the eve of war the month's button reads FINISH DEPLOYMENT; my runner looked for END MONTH. Mine to mend.
 
+## On Version 84.2.4 (main b8889c9, pressed 16:38Z to 16:55Z, in the browser, in the cloud)
+
+The same eight lists and the click list, played again. All six cases still answer. What changed, each seen:
+
+1. **The winner stays in hand.** After "Relief of Pittsburgh" the side page reads "NO MOVES LEFT THIS MONTH. Right-click a friendly place and this army marches there by itself, starting next month", with no second pick-up, and the right-click on Cleveland answers "3 corps will march to Cleveland from next month, about a month." On 84.2.3 the army had to be picked up again first.
+2. **Case 5's sentence** is now "Third Army (2nd Division and 1st Cavalry Division) is the garrison of Tampico. Order it to take the field first. TAKE THE FIELD is on the page of Tampico.", from the right-click and from the click alike.
+3. **The hover box counts by the roll:** "Canadian army: 1 corps, 2 divisions at 93% strength"; "Mexican army: 1 corps, 1 division at 21% strength" (it read "0 divisions").
+4. **A flag takes its click.** By `flagclick.cjs` (a new game, the map centred on each of my flags at two zooms, widths 600 and 1,400, a real click on the middle of the flag's cloth):
+
+| Seat | Flags | Version 84.2.3: clicks that picked the army up | Version 84.2.4 |
+|---|---|---|---|
+| United States | 6 | 5 of 12. The other 7 opened the Air page: every flag at the far zoom, and Canal Zone at the opening zoom | 12 of 12 |
+| France | 21 | 40 of 42 (Lorraine at both zooms opened the Air page) | 42 of 42 |
+| Germany | 20 | 40 of 40 | 40 of 40 |
+| United Kingdom | 12 | 22 of 24 | 22 of 24 |
+| Soviet Union | 21 | 42 of 42 | 42 of 42 |
+| Italy | 15 | 30 of 30 | 30 of 30 |
+| Japan | 20 | 40 of 40 | 40 of 40 |
+
+Britain's two are Gibraltar's fortress garrison (a fortress, drawn with a flag): the click selects Gibraltar and picks up nothing, on both versions. A fortress does not march, so I count that as right.
+
+**Still as on 84.2.3:** a plain click on a green province marches an army in hand (ONE MEANING TO A PRESS comes by 84.3). The city badge is still not pressed (none stands beside an army of mine).
+
+Logs: `a8424` to `h8424` and `cm8424` in `/mnt/project-files/playtest/harness/feel/v8423/`; the flag count in `/mnt/project-files/playtest/harness/feel/results/v8424-flagclick.txt`.
+
 ## Files
 
 Step lists `attack8423-a` to `-h` and `clickmove`, and the logs of both versions: `/mnt/project-files/playtest/harness/feel/v8423/`. The runner has three new verbs for this: `point-province`, `order-mark` (a right-click on a pad or badge) and `set-moves`.

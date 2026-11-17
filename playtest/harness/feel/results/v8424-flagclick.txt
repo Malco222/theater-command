@@ -1,0 +1,16 @@
+flagclick.cjs, 2026-11-17 16:45Z to 16:55Z, cloud, a new game in each seat, 1,600 by 1,000, map widths 600 and 1,400.
+8423 France: 21 flags, 42 clicks, 40 picked the army up, 2 did not
+8424 France: 21 flags, 42 clicks, 42 picked the army up, 0 did not
+8423 Germany: 20 flags, 40 clicks, 40 picked the army up, 0 did not
+8424 Germany: 20 flags, 40 clicks, 40 picked the army up, 0 did not
+8423 United Kingdom: 12 flags, 24 clicks, 22 picked the army up, 2 did not
+8424 United Kingdom: 12 flags, 24 clicks, 22 picked the army up, 2 did not
+8423 Soviet Union: 21 flags, 42 clicks, 42 picked the army up, 0 did not
+8424 Soviet Union: 21 flags, 42 clicks, 42 picked the army up, 0 did not
+8423 Italy: 15 flags, 30 clicks, 30 picked the army up, 0 did not
+8424 Italy: 15 flags, 30 clicks, 30 picked the army up, 0 did not
+8423 Japan: 20 flags, 40 clicks, 40 picked the army up, 0 did not
+8424 Japan: 20 flags, 40 clicks, 40 picked the army up, 0 did not
+8423 United States: 6 flags, 12 clicks, 5 picked the army up, 7 did not (Canal Zone at width 600; all six at width 1,400: the Air page opened)
+8424 United States: 6 flags, 12 clicks, 12 picked the army up, 0 did not
+France on 8423: Lorraine at both widths opened the Air page. United Kingdom on both: Gibraltar's fortress garrison (selected, nothing in hand).
