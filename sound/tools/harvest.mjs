@@ -1,11 +1,11 @@
 // Gathers the real recordings a batch of sounds needs, on a machine that the archives will talk to.
 //
-//   node sound/tools/harvest.mjs <work-folder> [--only id,id] [--no-search]
+//   node sound/tools/harvest.mjs <work-folder> [--only id,id] [--no-search] [--gap 20]
 //
 // Reads sound/recordings/wanted.json. For each recording wanted it: fetches the file from Wikimedia Commons with its
 // licence checked (fetch_recording.mjs), measures it (vet.mjs), and copies its sound into the repository. A film
 // clip's sound track is lifted out untouched, so nothing is lost and the files stay small. It also runs the searches
-// listed there and saves what they find. Whole downloads stay in <work-folder>/raw. What goes into the repository:
+// listed there and saves what they find. It rests --gap seconds between downloads, so as not to lean on the archive. Whole downloads stay in <work-folder>/raw. What goes into the repository:
 // sound/recordings/sources.json (the licence log), audio/* (the sound), vet/*.json (the measurements),
 // search/*.json and harvest-report.md. Run it again at any time: files already fetched are not fetched twice.
 
@@ -21,6 +21,9 @@ const rec = path.join(here, '../recordings');
 const a = process.argv.slice(2), work = a[0];
 if (!work) { console.error('usage: node sound/tools/harvest.mjs <work-folder> [--only id,id] [--no-search]'); process.exit(1); }
 const only = a.includes('--only') ? a[a.indexOf('--only') + 1].split(',') : null;
+const gap = a.includes('--gap') ? +a[a.indexOf('--gap') + 1] : 20;
+const nap = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+let fetched = 0;
 const raw = path.join(work, 'raw');
 for (const d of [raw, path.join(rec, 'vet'), path.join(rec, 'audio'), path.join(rec, 'search')]) fs.mkdirSync(d, { recursive: true });
 const wanted = JSON.parse(fs.readFileSync(path.join(rec, 'wanted.json'), 'utf8'));
@@ -32,7 +35,9 @@ for (const w of wanted.recordings) {
   if (only && !only.includes(w.id)) continue;
   let row = log().find((r) => r.id === w.id);
   if (!row || !fs.existsSync(path.join(raw, row.file))) {
+    if (fetched++ && gap > 0) nap(gap * 1000);
     const f = node('fetch_recording.mjs', [w.title, '--id', w.id, '--for', w.for, '--raw', raw, '--note', w.note ?? '']);
+    if (f.stderr && f.status === 0) process.stdout.write(f.stderr);
     if (f.status !== 0) { console.log(`FAILED ${w.id}: ${(f.stderr || f.stdout).trim().split('\n').pop()}`); report.push(`| ${w.id} | ${w.for} | NOT FETCHED: ${(f.stderr || '').trim().split('\n').pop().replace(/\|/g, '/')} | | | | | |`); continue; }
     row = log().find((r) => r.id === w.id);
   }

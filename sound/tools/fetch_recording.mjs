@@ -44,8 +44,24 @@ if (!verdict.ok) { console.error(`${title}: REFUSED. Licence "${verdict.licence}
 fs.mkdirSync(raw, { recursive: true });
 const ext = path.extname(new URL(v.url).pathname).toLowerCase() || '.bin';
 const whole = path.join(raw, id + '.download' + ext);
-const r = spawnSync('curl', ['-sS', '--fail', '-L', '-m', '1800', '--retry', '3', '--retry-delay', '20', '-A', AGENT, '-o', whole, v.url], { encoding: 'utf8' });
-if (r.status !== 0) { console.error(`${title}: download failed: ${(r.stderr || '').trim()}`); process.exit(1); }
+// The archive's file server asks a busy client to pause ("429, retry after N seconds"). It is obeyed: wait as long
+// as it asks (at most 15 minutes a time), then try again, up to four times. Nothing is done to get round it.
+const nap = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const heads = whole + '.headers';
+let r;
+for (let go = 0; go < 5; go++) {
+  r = spawnSync('curl', ['-sS', '--fail', '-L', '-m', '1800', '-A', AGENT, '-D', heads, '-o', whole, v.url], { encoding: 'utf8' });
+  if (r.status === 0) break;
+  const h = fs.existsSync(heads) ? fs.readFileSync(heads, 'utf8') : '';
+  const status = +(h.match(/^HTTP\/\S+ (\d+)/gm)?.pop()?.split(' ')[1] ?? 0), after = +(h.match(/^retry-after: *(\d+)/im)?.[1] ?? 0);
+  if (status && status !== 429 && status < 500) break;
+  if (go === 4) break;
+  const wait = Math.min(900, Math.max(30, after || 60 * (go + 1)));
+  console.error(`${title}: the archive answered ${status} and asked for a pause; waiting ${wait} s (try ${go + 1} of 4)`);
+  nap(wait * 1000);
+}
+if (fs.existsSync(heads)) fs.unlinkSync(heads);
+if (r.status !== 0) { if (fs.existsSync(whole)) fs.unlinkSync(whole); console.error(`${title}: download failed: ${(r.stderr || '').trim()}`); process.exit(1); }
 const sha1 = crypto.createHash('sha1').update(fs.readFileSync(whole)).digest('hex');
 if (v.sha1 && sha1 !== v.sha1) { console.error(`${title}: the file fetched is not the file Commons describes (fingerprints differ)`); process.exit(1); }
 
