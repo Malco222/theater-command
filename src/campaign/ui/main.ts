@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -2285,6 +2285,20 @@ function orderAt(id: number): boolean {
     openModal({ kind: 'invade', on, target: id });
     return true;
   }
+  // Enemy ground with no army in its field: marching in is the order to take the place (ruling 175(c)). Where only
+  // the town's own guard will fight, the card comes first: the guard as the defender, the forecast, nothing ordered.
+  const meet = marchOutlook(g, picked, id);
+  if (meet && meet.meets === 'guard' && meet.outlook) { openModal({ kind: 'siege', mode: 'march', target: id, corps: meet.going, meet }); return true; }
+  return marchTo(id, picked, meet !== null && meet.meets === 'unknown');
+}
+
+/**
+ * Marches the corps picked to a province, with everything the map shows of it. `look` is set where the player's
+ * reports could not say what holds the town there: if it turns out to be its guard alone, the assault's card opens
+ * as the army arrives.
+ */
+function marchTo(id: number, picked: Corps[], look = false): boolean {
+  const r = g.regions[id];
   const h = g.headlines.length;
   const before = g.regions.map((x) => x.ctrl);
   const way = routeTo(id);
@@ -2307,6 +2321,8 @@ function orderAt(id: number): boolean {
   marchHide = arrived && way ? { reg: id, nat } : null;
   refresh();
   if (arrived && way) march(way.pts, nat, kind, id);
+  // The army came up to a town its reports could not see into, and found only the guard: the assault's card, with the odds.
+  if (look && arrived && !ui.modal && !whyNotStormTown(g, id) && townSiege(g, id)?.inside === 0) openModal({ kind: 'siege', mode: 'storm', target: id });
   // A march that took a fallen country's capital, or brought a nation down, is announced as soon as it is made.
   if (!ui.modal) { const next = nextCard(); if (next) openModal(next); }
   return true;
@@ -3118,19 +3134,21 @@ function siegeCard(): string {
   const r = g.regions[m.target];
   const me = g.human!;
   const out = m.mode === 'sally';
+  // The march on a town held by its guard alone (ruling 175(c)): the same card, before the army has moved.
+  const marching = m.mode === 'march';
   const v = townSiege(g, r.id);
-  const look = out ? sallyOutlook(g, r.id) : stormOutlook(g, r.id);
-  const shut = `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${out ? 'The sortie' : 'The assault'} · ${date(g.turn)}</div><h2>${esc(out ? `Sortie from ${townName(r)}` : `Assault on ${townName(r)}`)}</h2></header>`;
+  const look: Outlook | null = marching ? m.meet.outlook : out ? sallyOutlook(g, r.id) : stormOutlook(g, r.id);
+  const shut = `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${out ? 'The sortie' : marching ? 'The march and the assault' : 'The assault'} · ${date(g.turn)}</div><h2>${esc(out ? `Sortie from ${townName(r)}` : marching ? `March on ${townName(r)}` : `Assault on ${townName(r)}`)}</h2></header>`;
   if (!v || !look) return `${shut}<div class="body"><div class="empty">${esc((out ? whyNotSallyOut(g, r.id) : whyNotStormTown(g, r.id)) ?? 'Nothing can be ordered here now.')}</div></div><footer><button class="btn go" data-act="close">Close</button></footer>`;
-  const cands = out ? salliers(g, r, me) : stormCandidates(g, r.id);
-  const going = out ? cands : stormForce(g, cands, r);
+  const cands = marching ? g.corps.filter((c) => (m.corps as number[]).includes(c.id)) : out ? salliers(g, r, me) : stormCandidates(g, r.id);
+  const going = out || marching ? cands : stormForce(g, cands, r);
   const inSet = new Set(going.map((c) => c.id));
   const foes = out ? besiegers(g, r) : garrisonOf(r).filter((c) => !c.dead);
   const guard = !out && v.guard > 0 ? `<div class="ucard" title="Depot troops, police and militia: no match for an army, but behind walls they must still be beaten."><span class="utop">${ringIcon(g.nations[r.ctrl].color, 30)}</span><b>Town guard</b><span class="um">${v.guard.toFixed(1)} div · about ${num(guardMen(g, r))} men</span></div>` : '';
   const ours: Side = {
     nats: [me, ...new Set(going.filter((c) => c.nat !== me).map((c) => c.nat))], role: out ? 'coming out' : 'storming', who: leaderOf(going), men: going.reduce((s, c) => s + men(c), 0), corps: going.length, divs: rollDivs(going),
     cards: cands.map((c) => battleCard(c, { note: inSet.has(c.id) ? '' : 'Staff at its limit' })).join(''),
-    under: `<small class="fhelp">${out ? 'Every corps of the garrison fit to fight comes out.' : 'Every corps round the town goes in, from every side at once.'}</small>`,
+    under: `<small class="fhelp">${out ? 'Every corps of the garrison fit to fight comes out.' : marching ? 'These corps march in and go at the town as they arrive.' : 'Every corps round the town goes in, from every side at once.'}</small>`,
   };
   const foeNat = foes[0]?.nat ?? r.ctrl;
   const theirs: Side = {
@@ -3142,11 +3160,21 @@ function siegeCard(): string {
   const hasty = !out && look.lines.some((l) => l.label === 'A hasty assault');
   const note = out
     ? '<div class="note" style="margin-top:14px"><b>What follows.</b> Win, and the army round the town is driven off and the siege is raised. Lose, and the garrison goes back inside the weaker for it. One sortie a month from each town.</div>'
-    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}</div>`;
+    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}${marching ? marchChoice(m.meet as MarchOutlook) : ''}</div>`;
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
       ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${note}</div>
-    <footer><button class="btn" data-act="close" title="Call it off. Nothing is spent.">${out ? 'Stay inside' : 'Keep up the siege'}</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">${out ? 'Sally out' : 'Storm the town'}</button></footer>`;
+    <footer>${marching
+      ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent and nobody marches.">Stay where you are</button><button class="btn" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month, and next month the assault goes in made ready.">March in and lay siege</button><button class="btn go" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">March in and storm</button>`
+      : `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">${out ? 'Stay inside' : 'Keep up the siege'}</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">${out ? 'Sally out' : 'Storm the town'}</button>`}</footer>`;
+}
+
+/** The choice a march on a guarded town comes to: the assault as the army arrives, or the same assault next month made ready. */
+function marchChoice(meet: MarchOutlook): string {
+  const now = meet.outlook, later = meet.prepared;
+  if (!now || !later) return '';
+  const say = (o: Outlook): string => `${o.odds.toFixed(2)} to 1, about ${oddsPct(o.chance)}% to carry it`;
+  return ` <b>Only its town guard holds ${esc(meet.town)}: about ${num(meet.guardMen)} men, and no army.</b> Storm as you arrive: ${say(now)}. Or march in, lay the siege and storm next month made ready: ${say(later)}, if nothing else changes.`;
 }
 
 function regionPane(): string {
@@ -8227,6 +8255,25 @@ function onClick(e: MouseEvent): void {
     case 'storm': case 'sally': {
       // The card that plans it comes first: nothing is ordered until the player has seen the odds.
       if (g.regions[id]) openModal({ kind: 'siege', mode: act, target: id });
+      break;
+    }
+    case 'dotake': case 'domarch': {
+      // The march on a town held by its guard alone: in and at it, or in and round it.
+      const m = ui.modal;
+      if (!m || m.kind !== 'siege' || m.mode !== 'march') break;
+      const target = g.regions[m.target];
+      const corps = g.corps.filter((c) => (m.corps as number[]).includes(c.id));
+      if (act === 'domarch') { ui.modal = null; $('#veil').classList.remove('open'); if (marchTo(target.id, corps)) queueSave(); break; }
+      const h = g.headlines.length;
+      const before = g.regions.map((r) => r.ctrl);
+      const res = orderTake(g, corps, target.id);
+      ui.unread += g.headlines.length - h;
+      ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
+      if (res.report) ui.seenReports = g.reports.length;
+      selectRegion(target.id);
+      queueSave();
+      refresh();
+      openModal(res.report ? { kind: 'report', id: res.report.id } : null);
       break;
     }
     case 'dosiege': {

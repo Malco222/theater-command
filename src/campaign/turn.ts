@@ -49,7 +49,8 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
-import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { loadGame, saveGame } from './save';
 import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
@@ -857,11 +858,15 @@ export type { PocketView };
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
 export function townSiege(g: Game, region: number): SiegeView | null {
   const v = siegeView(g, region);
-  if (!v || g.human === null || !fogOn(g, g.human)) return v;
+  if (!v) return v;
   // Under the fog an enemy's garrison is counted only where the player's side stands round the town or has the province in full view.
   const r = g.regions[region];
-  if (allied(g, g.human, r.ctrl) || (v.by && allied(g, g.human, v.by)) || sightOf(g, g.human)[region] === SIGHT.full) return v;
-  return { ...v, inside: -1 };
+  const seen = g.human === null || !fogOn(g, g.human) || allied(g, g.human, r.ctrl) || (!!v.by && allied(g, g.human, v.by)) || sightOf(g, g.human)[region] === SIGHT.full;
+  if (!seen) return { ...v, inside: -1 };
+  // A town with no army in it, none in the country round it and nobody at its gates is held by its guard only: said first, with the men (ruling 175(c)).
+  if (v.inside !== 0 || v.guard <= 0 || v.by || r.units.some((c) => !c.dead)) return v;
+  const foe = g.human !== null && atWar(g, g.human, r.ctrl);
+  return { ...v, lines: [`No army holds ${v.town}: only its town guard, about ${menWord(guardMen(g, r))} men.${foe ? ' An army you march in goes at the town as it arrives.' : ''}`, ...v.lines] };
 }
 
 /** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
@@ -941,6 +946,103 @@ export function orderStorm(g: Game, region: number, corps?: Corps[]): BattleRepo
   const r = g.regions[region];
   if (!r || whyNotStormTown(g, region)) return null;
   return storm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
+}
+
+// ---- Marching in is the attack (ruling 175(c)) ----------------------------------------------------
+
+/** What an army ordered into an enemy province with no enemy corps in its field will meet there (the grand campaign). */
+export interface MarchOutlook {
+  region: number;
+  /** The town, and the size of the place in a word. */
+  town: string; size: TownSize; sizeWord: string;
+  /**
+   * 'open': nothing holds the place, and it falls with the move. 'gates': only its own guard holds it, and gives it
+   * up to this force without a fight: it falls with the move. 'guard': only its guard holds it, and will fight: the
+   * army goes at the town as it arrives. 'garrison': corps hold the town: the march closes round it and a siege
+   * begins. 'unknown': the player's reports do not say what is inside: the march finds out.
+   */
+  meets: 'open' | 'gates' | 'guard' | 'garrison' | 'unknown';
+  /** The town's own guard, in divisions' worth and in men: 0 where it has none. */
+  guard: number; guardMen: number;
+  /** The corps that make the march this month, of those offered. */
+  going: number[];
+  /** What it comes to, in a sentence. */
+  line: string;
+  /** Where the guard will fight: the assault as it will stand when the army arrives, off the march (a hasty one). Null otherwise. */
+  outlook: Outlook | null;
+  /** The same assault made ready: as it would stand next month, with the army round the town and nothing else changed. Null otherwise. */
+  prepared: Outlook | null;
+}
+
+const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
+
+/**
+ * What marching these corps into a province will meet, before anything is ordered: ordering an army onto enemy
+ * ground where no enemy corps stands is the order to take the place. Null where the march is no such thing: the
+ * ground is a friend's or a neutral's, an enemy army stands in its field (that is an attack), an army already
+ * stands round its town (the corps only join the siege), or none of the corps can get there this month. Where only
+ * the town's guard will fight, the forecast is read off a copy of the campaign on which the march has been made, so
+ * it is the assault exactly as it will be fought. Not for every square a pointer crosses: for the card.
+ */
+export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook | null {
+  const r = g.regions[to], me = g.human;
+  if (!r || me === null || !siegeRules(g) || current(g) !== me || onEve(g)) return null;
+  if (!atWar(g, me, r.ctrl) || hostileUnits(g, r, me).length || r.units.some((c) => !c.dead && atWar(g, c.nat, r.ctrl))) return null;
+  const able = corps.filter((c) => { if (!canOrder(g, c) || c.reg === to) return false; const e = reach(g, c).get(to); return !!e && !e.attack; });
+  if (!able.length) return null;
+  const v = townSiege(g, to);
+  if (!v) return null;
+  const base = { region: to, town: v.town, size: v.size, sizeWord: v.sizeWord, guard: v.guard, guardMen: guardMen(g, r), going: able.map((c) => c.id), outlook: null, prepared: null };
+  const guardWords = `its town guard, about ${menWord(base.guardMen)} men`;
+  if (v.inside < 0) return { ...base, meets: 'unknown', line: `Your reports do not say what holds ${v.town}${v.guard > 0 ? ` beside ${guardWords}` : ''}. Your army marches up to it and finds out.` };
+  if (v.inside > 0) return { ...base, meets: 'garrison', line: `${v.inside === 1 ? 'A corps holds' : `${v.inside} corps hold`} ${v.town}: your army closes round it and the siege begins.` };
+  if (!townHeld(g, r)) return { ...base, meets: 'open', line: `Nothing holds ${v.town}: ${r.name} is yours as your army marches in.` };
+  // Only the guard: the march is made on a copy of the campaign, and the copy says what follows.
+  const h = loadGame(saveGame(g));
+  if (!h) return null;
+  const hr = h.regions[to];
+  const there: number[] = [];
+  for (const c of able) { const hc = h.corps.find((x) => x.id === c.id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(c.id); }
+  if (!there.length) return null;
+  if (allied(h, me, hr.ctrl)) return { ...base, going: there, meets: 'gates', line: `Only ${guardWords}, holds ${v.town}, and against this force it opens its gates: ${r.name} is yours as your army marches in.` };
+  const outlook = stormOutlook(h, to);
+  // Made ready: the same army round the same town, with the month it came up behind it.
+  h.flags[`siege:${to}`] = h.turn - 1;
+  const prepared = stormOutlook(h, to);
+  return { ...base, going: there, meets: 'guard', outlook, prepared, line: `Only ${guardWords}, holds ${v.town}, and it will fight: your army goes at the town as it arrives.` };
+}
+
+/** What an order to take a place came to. */
+export interface TakeResult {
+  /** How many of the corps marched. */
+  moved: number;
+  /** The province is the player's side's: it fell with the move, or to the assault. */
+  fell: boolean;
+  /** The assault on the town, where one was made. */
+  report: BattleReport | null;
+  /** What still holds the town now that the army stands round it: null where the place has fallen, or nobody marched. */
+  stands: 'guard' | 'garrison' | null;
+}
+
+/**
+ * The order to take a place: marches the corps in, and where only the town's guard holds out, storms the town as
+ * they arrive (all the player's corps round it go in, as an assault's card shows). With `assault` false the army
+ * only marches in and lays the siege: the assault is then made ready, and can go in next month at full weight.
+ */
+export function orderTake(g: Game, corps: Corps[], to: number, assault = true): TakeResult {
+  const r = g.regions[to], me = g.human;
+  const none: TakeResult = { moved: 0, fell: false, report: null, stands: null };
+  if (!r || me === null) return none;
+  let moved = 0, arrived = 0;
+  for (const c of corps) if (canOrder(g, c) && orderMove(g, c, to) > 0) { moved++; if (c.reg === to) arrived++; }
+  if (!moved) return none;
+  if (!arrived) return { moved, fell: false, report: null, stands: null };
+  if (allied(g, me, r.ctrl)) return { moved, fell: true, report: null, stands: null };
+  const stands = garrisonOf(r).length ? 'garrison' : 'guard';
+  if (!assault || stands !== 'guard' || !siegeRules(g) || whyNotStormTown(g, to)) return { moved, fell: false, report: null, stands };
+  const report = orderStorm(g, to);
+  const fell = allied(g, me, r.ctrl);
+  return { moved, fell, report, stands: fell ? null : 'guard' };
 }
 
 /** Why the player's garrison cannot sally out against the army round its town, or null if it can. */
