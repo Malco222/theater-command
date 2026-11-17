@@ -412,6 +412,12 @@ struct FFaceOff
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
+	// (The UI director, 17 November.) The card shows exactly what was picked. Where that pick cannot go (guns or
+	// engineers alone, ruling 211(a)) this is the rules' sentence: it stands at the foot, there is no forecast, SEND
+	// THEM IN is not lit and takes no key, and CALL IT OFF is lit with Enter and Esc.
+	FText Alone;
+	/** The light and Enter are on CALL IT OFF: the verdict is a long shot or worse, or the pick cannot go at all. */
+	bool CallOffLit() const { return bLongShot || !Alone.IsEmpty(); }
 	bool bFavourSiege = false; // which order the forecast favours: that button is the lit one
 	FText NowLabel, NowSays, LaterLabel, LaterOdds, LaterSays;
 	float LaterBalance = 0.5f;

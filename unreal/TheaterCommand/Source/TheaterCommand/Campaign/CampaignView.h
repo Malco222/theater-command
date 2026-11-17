@@ -964,6 +964,9 @@ struct FAttackPreview
 	TArray<FString> Allies; // the allied countries whose corps march in the attack
 	FString Prize; // what taking the place is worth, in a sentence
 	FString Refused; // why the troops there may not be attacked at all (they stand on a neutral's ground): then nothing else is filled in
+	// (The UI director, 17 November.) Why the corps picked cannot go in by themselves (guns or engineers alone, ruling
+	// 211(a)), in the rules' sentence: the card still opens on them, with no forecast and this sentence at its foot.
+	FString Alone;
 	// (Rules 84.1; rulings 175(c), 177, 178.) A march onto enemy ground with no army in its field: what it meets
 	// ("open", "gates", "guard", "garrison", "unknown"), the rules' sentence for it, and the slip's and the card's
 	// words. Where the town's guard will fight (bForecast) the fields above carry the assault as the army arrives,

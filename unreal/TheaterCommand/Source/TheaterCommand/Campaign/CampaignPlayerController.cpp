@@ -7536,6 +7536,24 @@ namespace
 		return FString();
 	}
 
+	/**
+	 * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, on the card's odds line: at the
+	 * ends of the scale in words, never "about 100%" or "about 0%". The bridge says the row of everyone in reach the
+	 * same way (chanceTo).
+	 */
+	FString ChanceTo(const FString& Words, const FString& Place)
+	{
+		if (Words == TEXT("about 100%"))
+		{
+			return TEXT("your staff is sure of it");
+		}
+		if (Words == TEXT("about 0%"))
+		{
+			return TEXT("your staff gives it no chance");
+		}
+		return FString::Printf(TEXT("%s to take %s"), *Words, *Place);
+	}
+
 	FString StrengthLine(const TArray<FBattleUnit>& Units)
 	{
 		int32 Divisions = 0, Men = 0, Unknown = 0;
@@ -7594,7 +7612,8 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	const FAttackPreview Preview = Given ? *Given : Session->PreviewAttack(PickedCorps, RegionId, bOpening);
 	if (Preview.bValid && Preview.Attackers.Num() > 0)
 	{
-		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
+		// the two sides are drawn up (and where the pick cannot go, the card only turns over)
+		CampaignSounds::Play(this, Preview.Alone.IsEmpty() ? TEXT("drums") : TEXT("click"), 0.6f);
 	}
 	if (!Preview.Refused.IsEmpty())
 	{
@@ -7670,25 +7689,42 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? ForceName(Theirs, TheirTag) : TheirGeneral);
 	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
 	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
+	FaceOff.Alone = FText::FromString(Preview.Alone);
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (The UI director, 17 November.) The corps picked, as they were picked, and the men among them who could take
+		// the ground: none.
+		int32 Divisions = 0;
+		for (const FBattleUnit& Unit : Preview.Attackers)
+		{
+			Divisions += Unit.Divisions;
+		}
+		FaceOff.OurStrength = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  0 men taking ground"),
+			Preview.Attackers.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"))));
+	}
 	FaceOff.OurRoster = RosterOf(Preview.Attackers, false);
 	FaceOff.TheirRoster = RosterOf(Preview.Defenders, false);
 	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
 	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
 	FaceOff.Prize = FText::FromString(Preview.Prize);
-	if (Preview.bExact)
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (the pick cannot go: there is no forecast, and the foot says why)
+	}
+	else if (Preview.bExact)
 	{
 		FString Odds = Preview.Odds >= 1.0f
 			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
 			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f));
-		// (the chance is printed as 100 per cent only when the attack cannot fail)
+		// (the chance is "sure" only when the attack cannot fail, and said in words at the ends of the scale)
 		if (!Preview.ChanceWords.IsEmpty())
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place);
 		}
 		else if (Preview.ChancePct >= 0)
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePct), Place);
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 	}
@@ -7700,13 +7736,13 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 		if (!Preview.ChanceWords.IsEmpty())
 		{
 			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place);
 		}
 		else if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
 		{
-			Odds += Preview.ChancePctLow == Preview.ChancePctHigh
-				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
-				: FString::Printf(TEXT("  \u00B7  %d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place);
+			Odds += TEXT("  \u00B7  ") + (Preview.ChancePctLow == Preview.ChancePctHigh
+				? ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePctLow), Place)
+				: FString::Printf(TEXT("%d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place));
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 		// (Version 84: where WHAT YOU FACE says what is not scouted, it says it once. The staff's longer note stands
@@ -7908,7 +7944,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 			: FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Low), *Say(High));
 		if (!ChanceWords.IsEmpty())
 		{
-			Line += FString::Printf(TEXT("  \u00B7  %s to take %s"), *ChanceWords, *Town);
+			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town);
 		}
 		return FText::FromString(CampaignText::Phrases(Line));
 	};
@@ -8072,11 +8108,14 @@ void ACampaignPlayerController::SendOnlyPicked()
 	const double CardSince = FaceOffSince;
 	PickedCorps = PickedBeforeMass;
 	PickedBeforeMass.Reset();
+	// (The UI director, 17 November.) The card turns to exactly the corps picked. Where they cannot go by themselves
+	// (guns alone, ruling 211(a)) it still does: it shows them with no men to take the ground, says why at its foot,
+	// and offers everyone in reach again.
 	OpenFaceOff(RegionId);
 	if (FaceOffSince == CardSince)
 	{
-		// (Rules 84.2.5.) The rules refused the corps picked (guns alone, ruling 211(a)) and said why: the card still shows
-		// everyone going in, and the hand goes back to match it.
+		// (The rules refused the attack outright and said why on the paper: the card still shows everyone going in, and
+		// the hand goes back to match it.)
 		PickedCorps = Everyone;
 		PickedBeforeMass = PickedFirst;
 	}
@@ -8100,6 +8139,10 @@ void ACampaignPlayerController::ResolveAttack()
 	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved)
 	{
 		return;
+	}
+	if (!FaceOff.Alone.IsEmpty())
+	{
+		return; // (the UI director, 17 November: SEND THEM IN takes no press and no key while the pick cannot go)
 	}
 	const int32 RegionId = FaceOff.Region;
 	const bool bMarch = FaceOff.bMarch; // (rules 84.1: the army marches in and goes at the town as it arrives)
@@ -8278,9 +8321,9 @@ void ACampaignPlayerController::EndMonth()
 			{
 				CloseFaceOff(); // (the UI director, 17 November: CONTINUE takes Enter and Space)
 			}
-			else if (FaceOff.bLongShot && !FaceOff.bMarch && !FaceOff.bStorm)
+			else if (FaceOff.CallOffLit() && !FaceOff.bMarch && !FaceOff.bStorm)
 			{
-				// (the verdict is a long shot or worse: Enter is CALL IT OFF, and the paper line says so)
+				// (the verdict is a long shot or worse, or the pick cannot go: Enter is CALL IT OFF, and the paper line says so)
 				const FString Title = FaceOff.Title.ToString();
 				CloseFaceOff();
 				Notify(FString::Printf(TEXT("%s is called off. Nothing was spent."), *Title), 5.0);

@@ -33824,6 +33824,11 @@
   }
   var oddsPct = (p) => p >= 0.9995 ? 100 : p <= 5e-4 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100)));
   var chanceWords = (look) => look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`;
+  var endWords = (words) => words === "about 100%" ? "your staff is sure of it" : words === "about 0%" ? "your staff gives it no chance" : "";
+  var chanceTo = (look, place2) => {
+    const words = chanceWords(look);
+    return endWords(words) || `${words} to take ${place2}`;
+  };
   var roughMen = (n) => n < 100 ? "under 100" : (Math.round(n / 100) * 100).toLocaleString("en");
   function costLines(look) {
     if (!look?.cost) return [];
@@ -33842,9 +33847,8 @@
     const extra = everyone.filter((c) => !inSet.has(c.id)).length;
     const massed2 = extra ? attackOutlook(s, everyone, target) : null;
     if (!massed2 || odds !== null && massed2.odds <= odds * 1.02) return null;
-    const chance = chanceWords(massed2);
     return {
-      note: `${extra === 1 ? "One more corps stands" : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed2.odds.toFixed(2)} to 1` : `are ${massed2.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
+      note: `${extra === 1 ? "One more corps stands" : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed2.odds.toFixed(2)} to 1` : `are ${massed2.odds.toFixed(2)} to 1`}: ${chanceTo(massed2, target.name)}.`,
       ids: cands.map((c) => c.id)
     };
   }
@@ -33869,7 +33873,7 @@
     const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num5(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
     return {
       head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
-      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now it reads ${done.now}.` : ""}` : "",
+      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now) || `it reads ${done.now}`}.` : ""}` : "",
       probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : " THE LINE"}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
       bomb: v.bomb ? {
         label: "BOMB THE LINE",
@@ -33886,6 +33890,45 @@
       } : null
     };
   }
+  function barredCard(s, ids2, to, alone) {
+    const target = s.regions[to];
+    const picked = wouldAttack(s, ids2, to);
+    const mass2 = massNote(s, picked, to, null);
+    const foes = s.human ? hostileUnits(s, target, s.human).filter((u) => !u.dead) : [];
+    const named2 = (c) => {
+      const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${corpsNamed2(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+    };
+    return {
+      region: to,
+      alone,
+      exact: true,
+      attack: 0,
+      defence: 0,
+      odds: 0,
+      lo: 0,
+      hi: 0,
+      even: 1.2,
+      note: "",
+      lines: [],
+      face: [],
+      cost: [],
+      opened: "",
+      hasChance: false,
+      chanceWords: "",
+      tone: "",
+      verdict: "",
+      soften: null,
+      prize: prizeLine(s, to),
+      allies: [...new Set(picked.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))],
+      mass: mass2?.note ?? "",
+      massIds: mass2?.ids ?? [],
+      ids: picked.map((c) => c.id),
+      pickedIds: [],
+      attackers: picked.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      defenders: foes.map(named2)
+    };
+  }
   function preview(ids2, to, open = false, glance = false) {
     const s = game();
     let pickedIds = [];
@@ -33898,11 +33941,12 @@
       }
     }
     const alone = leadWhy(s, wouldAttack(s, ids2, to), to);
-    if (alone) return { region: to, refused: alone };
-    const corps = attackers(s, ids2, to);
+    if (alone && (open || glance)) return { region: to, refused: alone };
     const foeThere = !!s.human && s.regions[to].units.some((u) => !u.dead && atWar(s, s.human, u.nat));
     const refused = foeThere ? whyNotAttack(s, s.regions[to]) : "";
     if (refused) return { region: to, refused };
+    if (alone) return barredCard(s, ids2, to, alone);
+    const corps = attackers(s, ids2, to);
     const a = previewAttack(s, corps, s.regions[to]);
     if (!a) return null;
     const look = attackOutlook(s, corps, s.regions[to]);

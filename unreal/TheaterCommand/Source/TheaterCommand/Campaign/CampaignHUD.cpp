@@ -4587,7 +4587,9 @@ namespace
 									// The balance of strength between them.
 									+ SVerticalBox::Slot().AutoHeight().Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && (F->bMarch || F->bStorm) && !F->bResolved ? 6.0f : 20.0f, 0.0f, 0.0f); }))
 									[
+										// (a pick that cannot go has no forecast, and no bar: the UI director, 17 November)
 										SNew(SBox).HeightOverride(10.0f)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										[
 											SNew(SHorizontalBox)
 											+ SHorizontalBox::Slot()
@@ -4796,6 +4798,7 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 									[
@@ -4825,6 +4828,14 @@ namespace
 										]
 									]
 
+									// (The UI director, 17 November.) Why the pick cannot go, in the rules' sentence, over the foot: it
+									// stays in sight however the card scrolls, and SEND THEM IN carries it on its hover too.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 18.0f, 12.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
+									]
 									// What to do about it. (The foot stands at the right: CALL IT OFF, then the order.)
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 20.0f, 12.0f, 0.0f)
 									[
@@ -4843,7 +4854,7 @@ namespace
 										[
 											// (...and the light is on CALL IT OFF, which takes Enter as well as Esc.)
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4860,7 +4871,7 @@ namespace
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
 											// (the UI director, ruling 183: on the storm's card CALL IT OFF's place stays empty, with no dimmed button;
 											// and where the light is on CALL IT OFF, the lit one stands for it)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bStorm && !F->bResolved ? EVisibility::Hidden : F && F->bLongShot && !F->bResolved && !F->bMarch ? EVisibility::Collapsed : EVisibility::Visible; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bStorm && !F->bResolved ? EVisibility::Hidden : F && F->CallOffLit() && !F->bResolved && !F->bMarch ? EVisibility::Collapsed : EVisibility::Visible; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4889,7 +4900,7 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4909,12 +4920,16 @@ namespace
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.)
+											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.
+											// A pick that cannot go: it keeps its place dimmed, takes no click, and its hover says why.)
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty(); })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140))
+												.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && !F->Alone.IsEmpty() ? Faint : Cream); })
 											]
 										]
 										// (Rules 84.1; rulings 177(b) and 178(c).) Before a march on a guarded town: the two orders in the
