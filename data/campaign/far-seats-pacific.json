@@ -4,7 +4,8 @@
  "_sources": {
   "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is three of the record's. The historian has also drawn a set (19 rows, 60 divisions, one for four); the two are theirs to settle into one.",
   "every other corps, the fleets, the nation figures, each first ability and unit": "the historian, /mnt/project-files/historian/seats-209-pacific.json, with each figure's mark and source in seats-209-pacific.md",
-  "door texts, 'builtin' ability rows, the unit's cost, colours, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
+  "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
+  "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
  },
  "grand": {
   "nations": [
@@ -57,7 +58,7 @@
    "CHN": {
     "name": "China",
     "adj": "Chinese",
-    "color": "#b9c96a",
+    "color": "#4f9a8c",
     "quality": 0.45,
     "air": 4,
     "resilience": 0.97,
@@ -66,7 +67,7 @@
    "AUS": {
     "name": "Australia",
     "adj": "Australian",
-    "color": "#d9a15a",
+    "color": "#e0c63a",
     "quality": 0.9,
     "air": 7,
     "resilience": 0.9,
@@ -77,7 +78,7 @@
    "NZL": {
     "name": "New Zealand",
     "adj": "New Zealand",
-    "color": "#c98f7a",
+    "color": "#a3c94f",
     "quality": 0.9,
     "air": 1,
     "resilience": 0.9,
@@ -87,7 +88,7 @@
    "THA": {
     "name": "Thailand",
     "adj": "Thai",
-    "color": "#7fa6a0",
+    "color": "#b565b3",
     "quality": 0.5,
     "air": 3,
     "resilience": 0.2,
@@ -96,7 +97,7 @@
    "MAN": {
     "name": "Manchukuo",
     "adj": "Manchukuoan",
-    "color": "#c9a66b",
+    "color": "#cf9630",
     "quality": 0.4,
     "air": 0,
     "resilience": 0.2,
@@ -105,7 +106,7 @@
    "MGL": {
     "name": "Mongolia",
     "adj": "Mongolian",
-    "color": "#b98a7a",
+    "color": "#8478d8",
     "quality": 0.45,
     "air": 0,
     "resilience": 0.6,
