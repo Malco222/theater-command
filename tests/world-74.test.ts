@@ -112,12 +112,16 @@ describe('the wider world', () => {
     expect(canPass(g, key('caribbean'), key('panama'), 'UK')).toBe(true);
     expect(canPass(g, key('caribbean'), key('tehuantepec'), 'USA')).toBe(true);
     // The islands of the Atlantic stand alone on their seas.
+    // (An island's only neighbours are the cities cut from it: St John's, Gander and Corner Brook on Newfoundland.)
+    const ofIt = (name: string): number[] => (WORLD_MAP.regions as { of?: number }[]).map((r, i) => (r.of === g.byName[name].id ? WORLD_FIRST + i : -1)).filter((i) => i >= 0);
     for (const name of ['Newfoundland', 'Iceland', 'Greenland', 'Azores', 'Puerto Rico', 'Jamaica', 'Bahamas', 'Canary Islands']) {
-      expect(g.byName[name].nb, name).toEqual([]);
+      expect(g.byName[name].nb.filter((j) => !ofIt(name).includes(j)), name).toEqual([]);
       expect(g.byName[name].seas.length, name).toBeGreaterThan(0);
     }
     // The frontiers run where history drew them: the lakes and the 49th parallel, the Rio Grande, the Gulf of California.
-    const borders = (a: string, b: string): boolean => g.byName[a].nb.includes(g.byName[b].id);
+    // (Ground to ground: a province with the cities cut from it, since the cities version.)
+    const ground = (n: string): number[] => [g.byName[n].id, ...ofIt(n)];
+    const borders = (a: string, b: string): boolean => ground(a).some((x) => g.regions[x].nb.some((y) => ground(b).includes(y)));
     expect(borders('Detroit', 'Toronto')).toBe(true);
     expect(borders('Buffalo', 'Toronto')).toBe(true);
     expect(borders('Puget Sound', 'Vancouver')).toBe(true);
@@ -126,9 +130,13 @@ describe('the wider world', () => {
     expect(borders('Southern Baja', 'Sinaloa')).toBe(false);
     expect(lakesOf(g).map((l) => l.name)).toEqual(expect.arrayContaining(['Lake Superior', 'Lake Michigan', 'Lake Erie']));
     // Each lake carries what whoever draws the world in relief needs: its surface above the sea and its shore.
-    expect(Object.fromEntries(lakesOf(g).map((l) => [l.name.replace('Lake ', ''), l.level]))).toEqual({ Superior: 183, Michigan: 176, Huron: 176, Erie: 174, Ontario: 75, Winnipeg: 217 });
+    expect(Object.fromEntries(lakesOf(g).map((l) => [l.name.replace('Lake ', ''), l.level]))).toMatchObject({ Superior: 183, Michigan: 176, Huron: 176, Erie: 174, Ontario: 75, Winnipeg: 217 });
+    // The cities version brings the map builder's lakes of the Americas: 25 in all, Titicaca the highest.
+    expect(lakesOf(g).length).toBe(25);
+    expect(lakesOf(g).find((l) => l.name === 'Lake Titicaca')?.level).toBe(3812);
     for (const l of lakesOf(g)) {
-      expect(l.outline.length, l.name).toBeGreaterThan(20);
+      // (A small lake of the cities version, Okeechobee, is drawn in ten points.)
+      expect(l.outline.length, l.name).toBeGreaterThanOrEqual(8);
       const xs = l.outline.map((p) => p[0]), ys = l.outline.map((p) => p[1]);
       expect(l.x > Math.min(...xs) && l.x < Math.max(...xs) && l.y > Math.min(...ys) && l.y < Math.max(...ys), l.name).toBe(true);
     }
@@ -243,10 +251,14 @@ describe('the wider world', () => {
     expect(crossingsOf(g).length).toBe(CROSSINGS.length + WORLD_CROSSINGS.length);
     expect(crossingsOf(g).slice(0, CROSSINGS.length)).toEqual(CROSSINGS);
     expect(riversOf(g).slice(0, RIVERS.length)).toEqual(RIVERS);
-    expect(riversOf(g).slice(RIVERS.length).map((r) => r.name)).toEqual(['Mississippi', 'Missouri', 'Ohio', 'St Lawrence', 'Rio Grande', 'Columbia', 'Colorado',
+    // The great rivers first, then the cities version's 150 more (the Yukon, the Arkansas, the Snake...).
+    expect(riversOf(g).slice(RIVERS.length, RIVERS.length + 15).map((r) => r.name)).toEqual(['Mississippi', 'Missouri', 'Ohio', 'St Lawrence', 'Rio Grande', 'Columbia', 'Colorado',
       'Amazon', 'Madeira', 'Parana', 'Paraguay', 'Uruguay', 'Orinoco', 'Magdalena', 'Sao Francisco']);
+    expect(riversOf(g).length - RIVERS.length).toBe(165);
     const id = (name: string): number => g.byName[name].id;
-    const river = (a: string, b: string): string | null => { const c = crossingOf(id(a), id(b)); return c ? riverName(c) : null; };
+    // A province with the cities cut from it: since the cities version a river or a line may run from a city.
+    const ground = (n: string): number[] => [id(n), ...(WORLD_MAP.regions as { of?: number }[]).map((r, i) => (r.of === id(n) ? WORLD_FIRST + i : -1)).filter((i) => i >= 0)];
+    const river = (a: string, b: string): string | null => { for (const x of ground(a)) for (const y of ground(b)) { const c = crossingOf(x, y); if (c) return riverName(c); } return null; };
     expect(river('Illinois', 'Missouri')).toBe('Mississippi');
     expect(river('Rio Grande', 'Monterrey')).toBe('Rio Grande');
     expect(river('Kennebec', 'Quebec')).toBe('St Lawrence');
@@ -258,7 +270,7 @@ describe('the wider world', () => {
       expect(g.regions[c.a].nb).toContain(c.b);
     }
     // The transcontinental lines history built, and none where there was none.
-    const rail = (a: string, b: string): boolean => railsAt(id(a)).includes(id(b));
+    const rail = (a: string, b: string): boolean => ground(a).some((x) => railsAt(x).some((y) => ground(b).includes(y)));
     for (const [a, b] of [['Iowa', 'Nebraska'], ['Wyoming', 'Utah'], ['Kansas', 'New Mexico'], ['Northern Ontario', 'Winnipeg'], ['Sonora', 'Arizona'], ['Sonora', 'Sinaloa'], ['Guadalajara', 'Sinaloa'], ['New York', 'Philadelphia']]) expect(rail(a, b), `${a} to ${b}`).toBe(true);
     for (const [a, b] of [['Sonora', 'Baja California'], ['San Diego', 'Sonora'], ['Chihuahua', 'Sinaloa']]) expect(rail(a, b), `${a} to ${b}`).toBe(false);
     for (const name of ['Yukon', 'Mackenzie', 'Keewatin', 'Ungava', 'Labrador', 'Southern Baja', 'Iceland', 'Greenland']) expect(onNet(id(name)), name).toBe(false);
