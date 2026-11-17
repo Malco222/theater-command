@@ -301,6 +301,7 @@ float ACampaignMapActor::CoverAt(double InX, double Y) const
 
 void ACampaignMapActor::ShowWorksGoing(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWorksGoing);
 	// Works on order in a province: pairs, the province and what. A builder's yard stands there while they go up.
 	TMap<int32, int32> Now;
 	for (int32 K = 0; K + 1 < FromRules.Num(); K += 2)
@@ -528,6 +529,7 @@ void ACampaignMapActor::DrawVictorFlags()
 
 void ACampaignMapActor::ShowFrontLine(const TArray<FString>& Wars, const FString& Player)
 {
+	THEATER_SPEED_SCOPE(ShowFrontLine);
 	if (Wars == WarPairs && Player == WarPlayer && FrontLineMesh)
 	{
 		return;
@@ -706,6 +708,7 @@ void ACampaignMapActor::BuildFrontLine()
 
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWrecked);
 	// Factories that are not working: the province and how many. The towns are built again only when that changes
 	// (a raid that told, a saboteur, a works relaid): their wrecked works stand roofless, with cold stacks.
 	TMap<int32, int32> Now;
@@ -905,6 +908,7 @@ void ACampaignMapActor::UpdateSinkings()
 
 void ACampaignMapActor::ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn)
 {
+	THEATER_SPEED_SCOPE(ShowWrecks);
 	TArray<FWreckMark> Now = Wrecks;
 	{
 		// ("-TheaterWrecks=6:GER:bb,6:UK:ca" stands wrecks on the chart for a picture: the sea, whose, what class)
@@ -1287,6 +1291,7 @@ void ACampaignMapActor::SetPiecesShown(bool bShown)
 
 void ACampaignMapActor::ShowIdle(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowIdle);
 	// Only the smoke changes: the stacks stand as they are, and the plumes are drawn afresh every frame.
 	IdleIn.Reset();
 	IdleIn.Append(FromRules);
@@ -3120,6 +3125,7 @@ void ACampaignMapActor::BuildBorders()
 
 void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 {
+	THEATER_SPEED_SCOPE(SetLand);
 	Land = InLand;
 	bLandLaid = true;
 	bWorksShown = false;
@@ -3130,6 +3136,7 @@ void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 
 void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 {
+	THEATER_SPEED_SCOPE(ShowBuildings);
 	if (!BuildingsMesh || !Data.IsLoaded() || Works == ShownBuildings)
 	{
 		return;
@@ -3806,6 +3813,7 @@ FVector2D ACampaignMapActor::CutSpot(int32 RegionId) const
 
 void ACampaignMapActor::ShowCuts(const TArray<FViewCut>& Cuts)
 {
+	THEATER_SPEED_SCOPE(ShowCuts);
 	CutLamps.Reset();
 	for (const FViewCut& Cut : Cuts)
 	{
@@ -4339,6 +4347,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 
 void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut)
 {
+	THEATER_SPEED_SCOPE(ShowWorks);
 	if (bWorksShown && BridgesDown == ShownDown && RailsCut == ShownCut)
 	{
 		return;
@@ -5541,6 +5550,7 @@ void ACampaignMapActor::BuildWarRoom()
 
 void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 {
+	THEATER_SPEED_SCOPE(ShowCivic);
 	if (!Data.IsLoaded() || (CivicMesh && Civic == ShownCivic))
 	{
 		return;
@@ -5614,6 +5624,7 @@ void ACampaignMapActor::SetColourStrength(int32 Level)
 
 void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 {
+	THEATER_SPEED_SCOPE(ShowSieges);
 	if (Sieges == ShownSieges)
 	{
 		return;
@@ -5639,6 +5650,7 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 
 void ACampaignMapActor::ShowBombed(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowBombed);
 	TArray<int32> Pairs = FromRules;
 	{
 		// (for pictures: "-TheaterBombedAt=Katowice:hard;Krakow" stands a raid's smoke over those places as well)
@@ -5711,6 +5723,7 @@ void ACampaignMapActor::ShowBombed(const TArray<int32>& FromRules)
 
 void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 {
+	THEATER_SPEED_SCOPE(ShowWorksLeft);
 	TArray<int32> Left = FromRules;
 	{
 		// (for pictures: -TheaterWorksLeft=Province,Province stands empty fieldworks in those provinces as well)
@@ -5791,6 +5804,7 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 
 void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 {
+	THEATER_SPEED_SCOPE(ShowPrizes);
 	FString Signature;
 	for (const FPrizeMark& Mark : Marks)
 	{
@@ -5970,6 +5984,7 @@ void ACampaignMapActor::SetTownShadows(bool bCast)
 
 void ACampaignMapActor::SetTownPlots(bool bPlots)
 {
+	THEATER_SPEED_SCOPE(SetTownPlots);
 	if (bPlots != bTownPlots)
 	{
 		bTownPlots = bPlots;
@@ -6065,6 +6080,7 @@ bool ACampaignMapActor::GetAirfieldWorld(int32 RegionId, FVector& OutWorld) cons
 
 void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 {
+	THEATER_SPEED_SCOPE(ShowAirfieldSigns);
 	{
 		// Which airfields are in use: if that has changed, the airfields themselves are built again, the empty ones smaller.
 		TSet<int32> Used;
@@ -6261,6 +6277,7 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 
 void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 {
+	THEATER_SPEED_SCOPE(ShowScars);
 	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
 	{
 		return;
@@ -6800,6 +6817,7 @@ void ACampaignMapActor::BuildTowns()
 
 void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts)
 {
+	THEATER_SPEED_SCOPE(SetWarAtNight);
 	if (Fronts != FrontPairs || (Fronts.Num() > 0 && FrontFires.Num() == 0))
 	{
 		// Where the fires of each front burn: along the very frontier the two provinces share. They stand thick
@@ -8374,6 +8392,7 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
+	THEATER_SPEED_SCOPE(ShowArmies);
 	UWorld* World = GetWorld();
 	if (!World || !Data.IsLoaded() || HasParade())
 	{
@@ -9326,6 +9345,7 @@ void ACampaignMapActor::FogBeyond()
 
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners, const TArray<FCampaignView::FSiegePaint>& Sieges)
 {
+	THEATER_SPEED_SCOPE(SetHolders);
 	{
 		// ("-TheaterHold=Virginia:GER,Norfolk:GER" shows those provinces as held by another country, for a picture of
 		// occupied ground where the campaign has none: the rules know nothing of it.)
@@ -9781,6 +9801,7 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
 {
+	THEATER_SPEED_SCOPE(SetReach);
 	if (RailLight.Tracks.Num() + RailLight.Tint.Num() + RailLight.Bars.Num() + RailLight.Dots.Num() + RailLight.Ringed.Num() > 0)
 	{
 		SetRailLight(FRailLight()); // (the railway's light goes out with the reach it belongs to: whoever shows a reach lights it again)
@@ -9829,6 +9850,7 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 
 void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 {
+	THEATER_SPEED_SCOPE(ShowEnemyReach);
 	OrdersMesh->ClearMeshSection(9); // (a section of its own: the route to the province under the pointer is drawn and cleared in section 1)
 	if (EnemyReachMesh)
 	{
@@ -9923,6 +9945,7 @@ float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
 
 void ACampaignMapActor::SetSeason(int32 Turn)
 {
+	THEATER_SPEED_SCOPE(SetSeason);
 	// ("-TheaterSeason=5" on the command line holds the table at one month of the war, for a picture)
 	int32 Held = 0;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held))
@@ -10041,6 +10064,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 
 void ACampaignMapActor::SetTowns(const TArray<FTownInfo>& InTowns)
 {
+	THEATER_SPEED_SCOPE(SetTowns);
 	Towns.Reset();
 	Towns.SetNum(Data.Regions.Num());
 	for (const FTownInfo& Town : InTowns)
@@ -10079,6 +10103,7 @@ void ACampaignMapActor::ShowWealth(bool bOn)
 
 void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 {
+	THEATER_SPEED_SCOPE(ShowSides);
 	if (bOn == bSides && Standing == SideOf)
 	{
 		return;
@@ -10154,6 +10179,7 @@ void ACampaignMapActor::UpdateFlashes()
 
 void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
 {
+	THEATER_SPEED_SCOPE(ShowMud);
 	if (Regions == ShownMud)
 	{
 		return;
@@ -10263,6 +10289,7 @@ void ACampaignMapActor::UpdateClouds()
 
 void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int32>& Glimpsed)
 {
+	THEATER_SPEED_SCOPE(ShowShroud);
 	if (Unseen == ShownUnseen && Glimpsed == ShownGlimpsed)
 	{
 		return;
@@ -10385,6 +10412,7 @@ void ACampaignMapActor::UpdateFogFade(float DeltaSeconds)
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
 {
+	THEATER_SPEED_SCOPE(ShowFreeCapitals);
 	if (Capitals == ShownFree)
 	{
 		return;
@@ -10597,6 +10625,7 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 
 void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 {
+	THEATER_SPEED_SCOPE(ShowLanes);
 	if (!LanesMesh || !Data.IsLoaded())
 	{
 		return;
@@ -14140,6 +14169,7 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 
 void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 {
+	THEATER_SPEED_SCOPE(ShowAgents);
 	if (!GetWorld() || !Data.IsLoaded() || HasParade())
 	{
 		return;

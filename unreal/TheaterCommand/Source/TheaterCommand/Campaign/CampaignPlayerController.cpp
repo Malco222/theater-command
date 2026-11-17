@@ -6846,6 +6846,7 @@ bool ACampaignPlayerController::ClickGate(const FString& NameBegins)
 
 void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const
 {
+	THEATER_SPEED_SCOPE(HarnessDescribeScreen);
 	// The card or page on top, by its title.
 	if (FaceOff.bVisible) { OutOpen = FaceOff.Title.ToString() + (FaceOff.bResolved ? TEXT(" (the result)") : TEXT("")); }
 	else if (WarPrompt.bVisible) { OutOpen = WarPrompt.Title.ToString(); }
@@ -7062,6 +7063,7 @@ void ACampaignPlayerController::CloseWarPrompt()
 
 void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
+	THEATER_SPEED_SCOPE(ShowWar);
 	if (Map.IsValid())
 	{
 		if (!Map->HasLand())

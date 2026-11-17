@@ -4,6 +4,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -36,6 +37,7 @@ namespace
 		TEXT("(for measuring only: it changes the picture) 0 stops the trains throwing shadows."));
 
 	bool bLogging = false;
+	uint64 SlateBegan = 0; // (when Slate's tick began this frame, while logging)
 
 	struct FSlot
 	{
@@ -235,6 +237,55 @@ namespace TheaterSpeed
 			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = 0.0;
 			WindowFrames = WindowSlow = 0;
 			return;
+		}
+		// (Slate's tick, its laying out and painting of every panel, is timed from its own start and end.)
+		static bool bSlateHooked = false;
+		if (!bSlateHooked && FSlateApplication::IsInitialized())
+		{
+			bSlateHooked = true;
+			const int32 SlateSlot = SlotFor(TEXT("Slate"));
+			FSlateApplication::Get().OnPreTick().AddLambda([](float)
+			{
+				SlateBegan = bLogging ? FPlatformTime::Cycles64() : 0;
+			});
+			FSlateApplication::Get().OnPostTick().AddLambda([SlateSlot](float)
+			{
+				if (SlateBegan != 0)
+				{
+					AddTime(SlateSlot, FPlatformTime::Cycles64() - SlateBegan);
+					SlateBegan = 0;
+				}
+			});
+		}
+		// A long frame is named at once: every job that took a share of it, the longest first. (The jobs are counted
+		// from one start of the player's tick to the next, which is the frame just ended give or take its edges: a
+		// press's work can fall in the line before or the line after.)
+		{
+			uint64 Longest = 0;
+			for (const FSlot& Slot : Each)
+			{
+				Longest = FMath::Max(Longest, Slot.Frame);
+			}
+			if (DeltaSeconds > 0.1f || Ms(Longest) > 40.0)
+			{
+				TArray<const FSlot*> Heavy;
+				for (const FSlot& Slot : Each)
+				{
+					if (Ms(Slot.Frame) >= 0.5)
+					{
+						Heavy.Add(&Slot);
+					}
+				}
+				Heavy.Sort([](const FSlot& A, const FSlot& B) { return A.Frame > B.Frame; });
+				FString Jobs;
+				for (const FSlot* Slot : Heavy)
+				{
+					Jobs += FString::Printf(TEXT("%s%s %.1f"), Jobs.IsEmpty() ? TEXT("") : TEXT(", "), *Slot->Name, Ms(Slot->Frame));
+				}
+				UE_LOG(LogTheater, Display, TEXT("Speed: a long frame, %.0f ms (game %.1f, draw %.1f, graphics chip %.1f ms); its jobs in ms (inner jobs counted in their outer ones too): %s"),
+					DeltaSeconds * 1000.0, FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
+					Jobs.IsEmpty() ? TEXT("none of the timed jobs") : *Jobs);
+			}
 		}
 		// The frame just ended: its time, and each job's share of it.
 		for (FSlot& Slot : Each)

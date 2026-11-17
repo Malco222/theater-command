@@ -372,6 +372,7 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 		}
 	}
 	TheaterSpeed::NoteRulesCall(Function, FPlatformTime::Seconds() - Began, Known != nullptr);
+	THEATER_SPEED_SCOPE(RulesJson); // (reading the answer: a picture of the war is some 80,000 characters)
 	return FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ResultJson), OutObject) && OutObject.IsValid();
 }
 
@@ -435,6 +436,7 @@ namespace
 
 FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 {
+	THEATER_SPEED_SCOPE(ParseView);
 	FCampaignView Out;
 	Object->TryGetStringField(TEXT("rules"), Out.Rules);
 	Out.Turn = Object->GetIntegerField(TEXT("turn"));
