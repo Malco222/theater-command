@@ -20,6 +20,7 @@ import { decide, prospect, startOpen, type Op } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { whyNotLand } from '../src/campaign/navy';
 import { fieldCtrl } from '../src/campaign/siege';
+import { TRAITS, levyRule, traitLevy, traitRule, type Levy } from '../src/campaign/traits';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 const OPEN = openData as unknown as { ops: Record<string, Op[]>; temper: Record<string, unknown>; impatience: { after: number[] } };
@@ -396,5 +397,40 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     const chinese = g.regions.filter((r) => r.owner === 'CHN');
     if (!chinese.length) return; // main's chart until step 13
     for (const nm of Object.keys(L.spans)) expect(g.byName[nm]?.owner, nm).toBe('CHN');
+  });
+});
+
+describe('218: China\'s last levy in words that give no wrong count of men', () => {
+  // China's levy as the historian sized it, on the row the game counts at 15,000 men to a division: 6.5 divisions
+  // would read 98,000 men where the record's are about 470,000. The row asks for the divisions alone.
+  const china: Levy = { under: 32, spent: 0.5, men: 6.5, gap: 12, most: 3, words: 'divisions' };
+
+  it('gives the card the UI director\'s sentence, in the Soviet form, naming the divisions and no men', () => {
+    expect(levyRule(china)).toBe('With the enemy on its soil, its reserve of men all but spent and its army in the field under 32 divisions, it calls up every man fit to bear arms: men enough for 6.5 divisions, three times in a war at most and never twice within a year.');
+    expect(levyRule(china)).not.toMatch(/\d,\d{3}|million/);
+    // The Soviet card is as it was.
+    const sov = TRAITS.nations.SOV.traits.find((t) => t.levy)!;
+    expect(traitRule(sov)).toContain('it calls up every man fit to bear arms: 2.3 million more men, three times in a war at most and never twice within a year.');
+  });
+
+  it('gives the news the divisions and no men, and leaves the Soviet news as it was', () => {
+    const row = TRAITS.nations.SOV.traits.find((t) => t.levy)!;
+    const kept = row.levy!;
+    const pressed = (): Game => {
+      const g = startOpen(createGame(2, null));
+      for (const [a, b] of [['GER', 'SOV'], ['SOV', 'GER']]) if (!g.nations[a].atWar.includes(b)) g.nations[a].atWar.push(b);
+      g.regions.find((r) => r.owner === 'SOV' && r.ctrl === 'SOV' && !r.overseas && !r.cap)!.ctrl = 'GER';
+      g.flags['mp:SOV'] = 0;
+      return g;
+    };
+    try {
+      row.levy = { ...kept, men: 6.5, words: 'divisions' };
+      const g = pressed();
+      expect(traitLevy(g, 'SOV')).toBe(6.5);
+      expect(g.headlines[g.headlines.length - 1].text).toBe('The Soviet Union calls up every man fit to bear arms: men enough for 6.5 divisions.');
+    } finally { row.levy = kept; }
+    const g = pressed();
+    traitLevy(g, 'SOV');
+    expect(g.headlines[g.headlines.length - 1].text).toBe('The Soviet Union calls up every man fit to bear arms: 2.3 million more men for its armies.');
   });
 });
