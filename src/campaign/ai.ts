@@ -5,7 +5,7 @@
 
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { afloat, airAI, airFleetsOf, fieldRoom, km, rebaseAir, whyNotBase } from './air';
+import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
 import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
@@ -1281,6 +1281,8 @@ function ferry(g: Game, nat: string): void {
  * that it can cover the crossing its staff has its eye on (navalAI). And the air groups still at home, beyond the
  * 'air' kept there, are shipped one a month to the airfield of its side's nearest that harbour with room for them:
  * from there its air staff flies them as it flies any group based abroad (airAI: raids, and the sky over the beach).
+ * A command marked 'home' in air.json guards its own country and never follows the army (Version 84.2: America's
+ * First Air Force and the rest); the commands raised for the war overseas form at home and sail in their turn.
  */
 function follow(g: Game, nat: string, O: OverseasRules): void {
   const id = Object.keys(O.oceans).map((o) => g.flags[`st:base:${nat}:${o}`] ?? 0).find((x) => x > 0);
@@ -1300,7 +1302,7 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
     headline(g, 'event', `The ${f.name} crosses the ocean to ${to.name}: the ${n.adj} fleet goes where its army has gone, to cover the crossings still to come.`, nat, to.id);
   }
   if (O.air === undefined || g.flags[`fy:air:${nat}`] === g.turn) return;
-  const home = airFleetsOf(g, nat).filter((f) => !afloat(f) && beyondEurope(f.base)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
+  const home = airFleetsOf(g, nat).filter((f) => !afloat(f) && beyondEurope(f.base) && !homeCommand(f)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
   if (home.length <= O.air) return;
   for (const f of home) {
     let to: Region | null = null, bd = Infinity;

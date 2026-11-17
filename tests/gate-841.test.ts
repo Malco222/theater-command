@@ -222,12 +222,14 @@ describe('the gate its holder can shut', () => {
 
 // A unit that takes no orders says why (ruling 176(c)), on Brian's words of 2026-11-17: "there are troops you start
 // with in panama but you cant move them". The sentence is the rules' own, on the corps card for both games.
+// (Since Version 84.2 Panama's garrison is an infantry division he can move, ruling 176(d): tests/panama-842.test.ts.
+// Gibraltar's garrison and the Maginot sectors stay fortress troops.)
 describe('a unit that takes no orders says why', () => {
-  it('the Panama Canal Department is fortress troops, and says so', () => {
-    const g = seat('USA');
-    const zone = g.regions[g.gates[gateOf(g, /Panama/)].region];
-    const fort = zone.units.find((c) => c.nat === 'USA' && c.kind === 'fort')!;
-    expect(fort, 'the Canal Zone has its fortress troops').toBeDefined();
+  it("Gibraltar's garrison is fortress troops, and says so", () => {
+    const g = seat('UK');
+    const rock = g.regions[g.gates[gateOf(g, /Gibraltar/)].region];
+    const fort = rock.units.find((c) => c.nat === 'UK' && c.kind === 'fort')!;
+    expect(fort, 'Gibraltar has its fortress troops').toBeDefined();
     expect(canOrder(g, fort)).toBe(false);
     expect(whyNotOrder(g, fort)).toBe('Fortress troops man their works and do not move.');
     expect(whyNotOrder(g, fort)).toBe(FORT_NO_ORDERS);

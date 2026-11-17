@@ -347,6 +347,13 @@ export function bareLine(g: Game, c: Fleet): string {
   return all ? `Its wings are ashore: its carriers fight as empty carriers.` : `Part of its wings are ashore: its carriers fight at ${Math.round(deckWorth(g, c) * 100)}% of their worth until they are back aboard.`;
 }
 
+/** The same in few words, for where the card has one short line (the fleet's tray). */
+export function bareBrief(g: Game, c: Fleet): string {
+  if (!bareLine(g, c)) return '';
+  if (wingsOf(g, c.id).every((w) => w.est.ftr + w.est.bmr <= 0)) return 'Its wings are ashore: its carriers fight empty.';
+  return `${wingsAshore(g, c.id).length > 1 ? 'Wings are' : 'A wing is'} ashore: its carriers fight at ${Math.round(deckWorth(g, c) * 100)}%.`;
+}
+
 /** What a fleet's carriers are worth beside carriers with full wings: in a fleet action, with a convoy, hunting submarines. */
 export const deckWorth = (g: Game, c: Fleet): number => (carrierRules(g) && c.ships.cv > 0 ? CARRIERS.empty + (1 - CARRIERS.empty) * wingShare(g, c) : 1);
 
@@ -399,7 +406,7 @@ export function wingCards(g: Game, c: Fleet): WingCard[] {
     const away = w.flew === g.turn;
     const doing = away ? 'Flew its strike this month: back aboard next month'
       : w.mission === 'rest' ? 'Stood down to rest and refit'
-      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `Aboard in harbour at ${c.port}: on patrol over its fleet`)
+      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `In harbour at ${c.port}: on patrol over its fleet`)
       : 'Ranged on deck, ready for a strike';
     const short = est - n;
     return {

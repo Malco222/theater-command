@@ -29,7 +29,7 @@ import {
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateQuestion, orderGate, whyNotGate, whyNotOrder, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, verdictAt, verdictOf, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
@@ -68,7 +68,7 @@ import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../ca
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
-  km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
+  km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
@@ -90,7 +90,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -550,7 +550,9 @@ function boardWing(f: AirFleet, fleet: number): void {
 
 /** Where the picked group could be based this month: for a wing aboard, the airfields it could fly ashore to (ruling 175(b)). */
 const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : airBases(g, f));
-const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== undefined ? whyNotAshore(g, f, r) : whyNotBase(g, f, r));
+const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== undefined ? whyNotAshore(g, f, r) : whyNotMoveAir(g, f, r));
+/** What the page says of a base change just ordered: a wing flies ashore, a group moves, or (across an ocean) is shipped. */
+const movedLine = (name: string, deck: boolean, sea: boolean, to: string): string => (deck ? `${name} flies ashore to ${to}.` : sea ? `${name} is shipped across the ocean to the airfield at ${to}.` : `${name} moves to the airfield at ${to}.`);
 
 /** The reach of the picked air fleet, and where its next order could send it. */
 function airMarks(f: AirFleet): string {
@@ -1140,12 +1142,15 @@ function gateCard(id: number): string {
   const q = gateQuestion(g, id);
   if (!q) return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Sea gate</div><h2>${esc(gateViews(g)[id]?.name ?? '')}</h2></header><div class="body"><p>${esc(whyNotGate(g, id) ?? '')}</p></div><footer><button class="btn" data-act="close">Close</button></footer>`;
   const v = q.gate, shut = v.shutSince >= 0;
-  const rows = q.rows.map((r) => `<tr${r.own ? ' class="own"' : ''}><td><div class="gr">${chip(r.nat)}<b>${esc(r.own ? 'You' : r.name)}</b><small>${esc(r.what)}</small></div></td><td>${cash(-r.loss, true)}<small> a month</small></td></tr>`).join('');
+  // His own row stands first, with no figure where none of his trade runs through; the last row says whose money it adds up.
+  const rows = q.rows.map((r) => `<tr${r.own ? ' class="own"' : ''}><td><div class="gr">${chip(r.nat)}<b>${esc(r.own ? 'You' : r.name)}</b><small>${esc(r.what)}</small></div></td><td>${r.own && r.loss <= 0 ? '' : `${cash(-r.loss, true)}<small> a month</small>`}</td></tr>`).join('');
+  const others = q.rows.filter((r) => !r.own).length;
+  const sore = q.resent.length ? `<h3>${esc(q.resentHeading)}</h3><table class="ltab gatetab">${q.resent.map((r) => `<tr><td><div class="gr">${chip(r.nat)}<b>${esc(r.name)}</b></div></td><td><small>${esc(r.line)}</small></td></tr>`).join('')}</table><p class="sub">${esc(q.resentNote)}</p>` : '';
   return `<header class="gatehead"><button class="x" data-act="close" aria-label="Close">×</button>
     ${flagIcon(v.holder, natColor(v.holder), 60, 'gflag')}<div class="grow"><div class="kick">${esc(q.label)}</div><h2>${esc(q.question)}</h2></div><span class="gstate ${shut ? 'shut' : 'open'}">${shut ? 'Shut' : 'Open'}</span></header>
     <div class="body"><p class="lead">${esc(q.lead)}</p>
     <h3>${esc(q.heading)}</h3>
-    ${q.rows.length ? `<table class="ltab gatetab">${rows}${q.rows.length > 1 ? `<tr class="sum"><td>All told</td><td>${cash(-q.total, true)}<small> a month</small></td></tr>` : ''}</table>` : `<p class="sub">${esc(q.none)}</p>`}</div>
+    <table class="ltab gatetab">${rows}${others > 1 ? `<tr class="sum"><td>${esc(q.sumLabel)}</td><td>${cash(-q.others, true)}<small> a month</small></td></tr>` : ''}</table>${others ? '' : `<p class="sub">${esc(q.none)}</p>`}${sore}</div>
     <footer><button class="btn" data-act="close">${esc(q.no)}</button><button class="btn go" data-act="gateorder" data-id="${id}" data-shut="${shut ? 0 : 1}">${esc(q.yes)}</button></footer>`;
 }
 /** A click on a gate's plate, or on its line in the sea's panel: its holder gets the question, anyone else what pointing says. */
@@ -1513,6 +1518,8 @@ function heldCorps(): Corps[] {
   if (!humanUp(g)) return [];
   return g.corps.filter((c) => ui.picked.has(c.id) && canOrder(g, c) && c.kind !== 'fort');
 }
+/** Once corps have been ordered away: the rules' sentence if that left a gate the player holds to its guard (ruling 176(d)), or ''. */
+const gateGone = (left: GateLeft | null): string => (left && ![...g.regions[left.region].units, ...(g.regions[left.region].garr ?? [])].some((c) => !c.dead && allied(g, g.human!, c.nat)) ? left.line : '');
 /** The army looked at is the player's own and none of it takes orders (fortress troops, corps sent home): the rules' sentence for it, or ''. */
 function idleInHand(): string {
   if (ui.sel < 0 || !g.human || !humanUp(g) || ui.tab !== 'region' || ui.picked.size) return '';
@@ -1535,9 +1542,9 @@ function rightClickElse(id: number, x: number, y: number): boolean {
   }
   const af = ui.tab === 'air' && !ui.airMode && !(ui.raid && ui.raid !== 'menu') ? myAir() : null;
   if (af) {
-    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name;
-    if (why) ui.msg = `${name} cannot ${deck ? 'fly ashore' : 'move'} to ${r.name}. ${why}`;
-    else if (orderAirBase(g, af.id, id)) { ui.msg = deck ? `${name} flies ashore to ${r.name}.` : `${name} moves to the airfield at ${r.name}.`; if (airWar(g)) ui.field = id; }
+    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name, sea = overOcean(af, r);
+    if (why) ui.msg = `${name} cannot ${deck ? 'fly ashore' : sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
+    else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); if (airWar(g)) ui.field = id; }
     refresh();
     return true;
   }
@@ -1687,15 +1694,17 @@ function hintText(): string {
     return `The rings show how far ${f.name} reaches: fighters inside the gold ring, bombers inside the pale one.`;
   }
   if (ui.land) return byAir(pickedCorps()) ? 'Airborne assault: click a red coast to see the odds.' : 'Landing from the sea: click a red coast to see the odds.';
-  if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
-  if (ui.ship) return 'Sea transport: click any blue port, or pick one from the list beside the map. It takes the whole month.';
+  // The last corps in the province of a gate the player holds, in hand: what leaving would mean, before any order (ruling 176(d)).
+  const leaving = pickedCorps().length ? gateLeft(g, pickedCorps())?.ifLine ?? '' : '', lead = leaving ? `${leaving} ` : '';
+  if (ui.rail) return `${lead}Rail move: click any blue region. It takes the whole month.`;
+  if (ui.ship) return `${lead}Sea transport: click any blue port, or pick one from the list beside the map. It takes the whole month.`;
   // (A finger has no right button, and on a small screen a long hint lies over the provinces it speaks of.)
-  if (pickedCorps().length) return fingers()
+  if (pickedCorps().length) return lead + (fingers()
     ? `Tap green to march, red to attack.${trainTo.size ? ' Press and hold blue to go by rail.' : ''}${invasions(g, pickedCorps()).size ? ' Amber is a country at peace with you.' : ''}`
     : invasions(g, pickedCorps()).size
     ? `Right-click a green region to march there${trainTo.size ? ', a red one to plan an attack, or a blue one to go there by rail, which takes the whole month' : ', or a red one to plan an attack'}. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.`
     : trainTo.size ? 'Right-click a green region to march there, a red one to plan an attack, or a blue one to go there by rail, which takes the whole month.'
-    : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
+    : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.');
   // An army that takes no orders at all says why, in the rules' sentence (ruling 176(c)).
   if (idleInHand()) return idleInHand();
   // An army with no move left, in hand: what it can still be given (Version 82).
@@ -2157,14 +2166,14 @@ function drawFleetTray(f: Fleet): void {
     ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
     : '';
   const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>
-    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare">${esc(card.bare)}</small>` : ''}</div>`;
+    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare" title="${esc(card.bare)}">${WARN_SIGN}${esc(card.bareBrief)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
     ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
-  const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop"><b>${esc(w.name)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
+  const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
   el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
@@ -2390,6 +2399,7 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
   const lead = [...picked].sort((a, b) => KIND[b.kind].atk * b.divs - KIND[a.kind].atk * a.divs)[0];
   const nat = lead.nat, kind = lead.kind;
   let moved = 0;
+  const leftGate = gateLeft(g, picked);
   for (const c of picked) if (orderMove(g, c, id) > 0) moved++;
   if (!moved) {
     // A full province next door: one corps can still change places with a corps there, in one order.
@@ -2397,6 +2407,7 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     if (one && g.regions[one.reg].nb.includes(id) && !hasRoom(g, r, one) && swapChoices(g, one, id).length) { openModal({ kind: 'swap', corps: one.id, target: id }); return true; }
     return false;
   }
+  if (gateGone(leftGate)) ui.msg = gateGone(leftGate);
   ui.unread += g.headlines.length - h;
   ui.flash = g.regions.filter((x, i) => x.ctrl !== before[i]).map((x) => x.id);
   ui.sel = id;
@@ -3159,7 +3170,9 @@ function siegeBlock(r: Region): string {
       : `Whoever holds ${esc(v.town)} holds the province.`;
     head = `<div class="sghead plain"><span class="grow"><b>The key to ${esc(r.name)}</b><small>${say}</small></span></div>`;
   }
-  const lines = v.by ? v.lines.slice(1).map((l) => `<p>${esc(l)}</p>`).join('') : '';
+  // An enemy town held by its guard alone: the fact that decides the march, said where he reads how the town falls.
+  const only = v.by ? null : guardOnly(g, r.id);
+  const lines = v.by ? v.lines.slice(1).map((l) => `<p>${esc(l)}</p>`).join('') : only?.march ? `<p class="sgonly">${esc(`${only.head}: ${only.march[0].toLowerCase()}${only.march.slice(1)}`)}</p>` : '';
   // Who is inside: the player's own corps one by one, anyone else's as an army.
   let inside = '';
   if (mine) inside += myGarrison(g, r.id).map((c) => garrisonRow(c, up)).join('');
@@ -3193,7 +3206,10 @@ function siegeBlock(r: Region): string {
 }
 
 /** What the staff says of a battle before it is ordered: the verdict, the balance (a band where the enemy is not fully known) and the Battle Ticket. */
-function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: string, sure: string, scout: Region | null): string {
+function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: string, sure: string, scout: Region | null, extra: { head?: string; second?: string } = {}): string {
+  // Where a card carries two forecasts, the first is headed by its button's words and the second stands straight under it, above the ticket.
+  const top = extra.head ? `<h3 class="blockhead">${esc(extra.head)}</h3>` : '';
+  const under = extra.second ?? '';
   const at = (odds: number): number => (100 * odds) / (1 + odds);
   const need = at(look.even).toFixed(1);
   const takes = look.even.toFixed(look.even === 1.2 ? 1 : 2);
@@ -3201,15 +3217,15 @@ function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: 
   // The verdict is the rules' own line (verdictOf), so that the 3D table prints the same words.
   const say = verdictOf(look, sure === 'Victory' ? 'storm' : 'sortie');
   if (!look.exact) {
-    return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
+    return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance ${what}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
-      <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
+      <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>${under}
       <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scout ? scoutButton(scout) : ''}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   }
-  return `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
+  return `${top}<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance ${what}</span></div>
     <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
-    <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>
+    <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>${under}
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
 }
 
@@ -3249,6 +3265,8 @@ function siegeCard(): string {
   const theirs: Side = {
     nats: foes.length ? [...new Set(foes.map((c) => c.nat))] : [r.ctrl], role: out ? 'round the town' : 'inside the town', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + (out ? 0 : guardMen(g, r)), corps: foes.length, divs: rollDivs(foes) + (out ? 0 : Math.round(v.guard * 10) / 10),
     ...(look.exact ? {} : { menText: '?', divsText: '?' }),
+    // A town no army holds is named for what does hold it (the UI director's review of 84.1, point 6).
+    ...(!out && !foes.length && v.inside === 0 && v.guard > 0 ? { guardOf: v.town } : {}),
     cards: foes.map((c) => (kn(c) === 'exact' ? battleCard(c) : foeCard(c))).join('') + guard,
     under: out ? '' : `<small class="fhelp">Behind the walls of ${esc(v.town)}: ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, with ${Math.round(v.broken * 100)}% of the works broken down` : ''}.</small>`,
   };
@@ -3265,10 +3283,12 @@ function siegeCard(): string {
   const made = marching ? (m.meet as MarchOutlook).prepared : choice?.prepared ?? null;
   const waits = marching ? (m.meet as MarchOutlook).ifSiege : choice?.ifWait ?? '';
   const second = (marching || choice) && (made || waits)
-    ? `<div class="waitblock"><h3>${marching ? 'Lay siege first' : 'Keep up the siege'}${made ? ' <small>the same storm next month, made ready</small>' : ''}</h3>${made ? balanceOnly(made, g.nations[me].color, g.nations[foeNat].color, `to carry ${esc(v.town)}`) : ''}<p>${esc(made && marching ? waits : made ? 'Nothing is risked this month, if nothing else changes.' : waits)}</p></div>` : '';
+    ? `<div class="waitblock"><h3 class="blockhead">${marching ? 'Lay siege first' : 'Keep up the siege'}${made ? ' <small>the same storm next month, made ready</small>' : ''}</h3>${made ? balanceOnly(made, g.nations[me].color, g.nations[foeNat].color, `to carry ${esc(v.town)}`) : ''}<p>${esc(made && marching ? waits : made ? 'Nothing is risked this month, if nothing else changes.' : waits)}</p></div>` : '';
+  // The first block is headed by its button's words, so the two forecasts can be told apart at a glance.
+  const firstHead = marching ? 'Send them in · a hasty assault as you arrive' : `Send them in · ${hasty ? 'a hasty assault' : 'the assault, made ready'}`;
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
-      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${second}${note}</div>
+      ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r, second ? { head: firstHead, second } : {})}${note}</div>
     <footer>${marching
       ? `<button class="btn" data-act="close" title="Nothing is spent and nobody marches.">Call it off</button><button class="btn${stormLit ? ' go' : ''}" data-act="dotake" title="The army marches in and goes at the town as it arrives. Settled at once from the Battle Ticket.">Send them in</button><button class="btn${stormLit ? '' : ' go'}" data-act="domarch" title="The army marches in and closes round the town. Nothing is risked this month. The storm is yours to order next month from the siege, made ready.">Lay siege first</button>`
       : out ? `<button class="btn" data-act="close" title="Call it off. Nothing is spent.">Stay inside</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="dosiege" title="Settle it at once from the Battle Ticket">Sally out</button>`
@@ -5435,6 +5455,11 @@ function airWarMarks(): string {
   return out;
 }
 
+/** A small sign in the ink of the line it stands in: a carrier for a wing aboard, an aircraft for one ashore. */
+const inkSign = (key: string, px = 17): string => `<svg class="inksign" width="${px}" height="${Math.round(px * 0.75)}" viewBox="-1 -3 28 21" aria-hidden="true"><path d="${ORDER_SIGN[key] ?? ORDER_SIGN.ftr}"/></svg>`;
+/** The warning sign, in plain ink: something the player ordered is costing him, and can be taken back. */
+const WARN_SIGN = '<svg class="inksign warn" width="13" height="12" viewBox="0 0 16 15" aria-hidden="true"><path d="M8 1.6 15 13.6H1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.6M8 11.2v.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 /** One air group as a row: its kind, its name and command, where it is, what it is doing, and how fit it is. */
 function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   const tags: string[] = [];
@@ -5447,9 +5472,9 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   const el = canOrder ? 'button' : 'div';
   const ldr = x.leader ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(x.leader)} <span class="lvl" title="Level ${x.level} air commander">${x.level}</span></span>` : '';
   return `<${el} class="corps fleet grp${canOrder && ui.air === x.id ? ' pick' : ''}" ${canOrder ? `data-act="airfleet" data-id="${x.id}"` : ''}>
-    ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
+    ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${x.ashore >= 0 ? ' <span class="tag">Carrier wing</span>' : ''}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''}${x.ship >= 0 && whose ? ` · aboard the ${esc(x.baseName)}` : ''} · reach ${num(x.range)} km</span>
-    ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${esc(x.where)}${x.ashore >= 0 ? ` <span class="tag">Carrier wing</span>${x.fleetName ? ` of the ${esc(x.fleetName)}` : ''}` : ''}</span>` : ''}
+    ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${inkSign(x.ship >= 0 ? 'cv' : 'ftr')}${esc(x.where)}${x.ashore >= 0 && x.fleetName ? ` · of the ${esc(x.fleetName)}` : ''}</span>` : ''}
     <span class="meta">${esc(x.doing)}</span>
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
@@ -5478,8 +5503,13 @@ function groupOrders(x: GroupRow): string {
     const ss = searchOptionsFor(g, x.id).slice(0, 8);
     body = `<p class="sub" style="margin:8px 0 6px">Click a ringed sea on the map, or pick one here. A search adds to what your ships and coastal aircraft already see there. It is this group's one reconnaissance flight of the month.</p>${ss.map((o) => `<button class="pickrow" data-act="searchpick" data-zone="${o.zone}"><span class="grow"><b>${esc(o.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${o.km > 0 ? `${num(o.km)} km · ` : ''}${esc(o.word)}${o.reported ? ` · ${o.reported} force${o.reported === 1 ? '' : 's'} reported, not identified` : ''}</span></span>${o.searched ? '<span class="tag">Searched this month</span>' : ''}</button>`).join('') || '<div class="empty">No sea is in its reach.</div>'}`;
   } else if (ui.airMode === 'base') {
-    const bases = airGroupBases(g, x.id).filter((b) => !b.why).slice(0, 8);
-    body = `<p class="sub" style="margin:8px 0 6px">${deck ? `Click a blue province on the map, or pick the airfield it flies ashore to: the one of the harbour its fleet lies in, or a friendly one on the sea it is in. The move costs ${pctOf(AIR.ready.move)} readiness.` : `Click a blue province on the map, or pick one of the nearest airfields. Settling in costs ${pctOf(AIR.ready.move)} readiness. Where there is no airfield, an engineer corps can lay one out in a month.`}</p>${bases.map((b) => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`).join('') || `<div class="empty">${deck ? 'No friendly airfield is in reach of its fleet.' : 'No other airfield is in reach.'}</div>`}`;
+    const every = airGroupBases(g, x.id);
+    const bases = every.filter((b) => !b.why && !b.sea).slice(0, 8);
+    // Across an ocean a land group goes by sea, one group a month (ruling 133(b)): the fields it could be shipped to, or why none.
+    const over = every.filter((b) => b.sea && !b.why).slice(0, 4), barred = every.find((b) => b.sea && b.why);
+    const pick = (b: typeof every[number]): string => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`;
+    const bySea = over.length ? `<p class="sub oversea" style="margin:10px 0 6px">Across the ocean, by sea: one group a month, to a field with room for all of it.</p>${over.map(pick).join('')}` : barred ? `<p class="sub oversea" style="margin:10px 0 6px">${LOCK} Across the ocean, by sea: ${esc(barred.why ?? '')}</p>` : '';
+    body = `<p class="sub" style="margin:8px 0 6px">${deck ? `Click a blue province on the map, or pick the airfield it flies ashore to: the one of the harbour its fleet lies in, or a friendly one on the sea it is in. The move costs ${pctOf(AIR.ready.move)} readiness.` : `Click a blue province on the map, or pick one of the nearest airfields. Settling in costs ${pctOf(AIR.ready.move)} readiness. Where there is no airfield, an engineer corps can lay one out in a month.`}</p>${bases.map((b) => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`).join('') || `<div class="empty">${deck ? 'No friendly airfield is in reach of its fleet.' : 'No other airfield is in reach.'}</div>`}${deck ? '' : bySea}`;
   } else if (ui.airMode === 'scout') {
     const ts = raidTargetsFor(g, 'recon', x.id).slice(0, 8);
     body = `<p class="sub" style="margin:8px 0 6px">Click a marked province on the map, or pick one of the nearest. ${AIRWAR_RECON} aircraft go; fighters on patrol there may bring some down.</p>${ts.map((t) => `<button class="pickrow" data-act="scoutpick" data-id="${t.id}"><span class="grow"><b>${esc(t.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(t.km)} km · ${esc(t.what)}</span></span></button>`).join('') || '<div class="empty">Nothing in its reach is hidden from you.</div>'}`;
@@ -5562,7 +5592,7 @@ function airWarPane(me: string): string {
     const a = byRegion.get(b);
     const here = groups.filter((x) => x.base === b && x.ship < 0);
     const used = here.reduce((t, x) => t + x.aircraft, 0);
-    out += `<div class="afield${ui.field === b ? ' pick' : ''}"><button class="afhead" data-act="airfield" data-id="${b}"><b>${esc(g.regions[b].name)}</b><span>${a ? `${esc(a.word)} · ${num(used)} of ${num(a.holds)} aircraft` : 'No airfield'}</span>${a?.crowded ? '<span class="tag bad">Crowded</span>' : ''}</button>
+    out += `<div class="afield${ui.field === b ? ' pick' : ''}"><button class="afhead" data-act="airfield" data-id="${b}"><b>${esc(g.regions[b].name)}</b><span>${a ? `${esc(a.word)} · ${num(used)} of ${num(a.holds)} aircraft` : 'No airfield'}</span>${a?.crowded ? '<span class="tag bad">Crowded</span>' : ''}</button>${ui.field === b && airfieldAt(g, b)?.aboard ? `<p class="sub afaboard" style="margin:2px 0 6px">${esc(airfieldAt(g, b)!.aboard)}</p>` : ''}
       ${here.map((x) => groupRowHtml(x, order) + (order && ui.air === x.id ? groupOrders(x) : '')).join('')}</div>`;
   }
   const empty = fields.filter((a) => a.side === 'own' && !bases.includes(a.region));
@@ -6446,6 +6476,8 @@ function scenarioCard(): string {
 // ---- The face-off: two armies drawn up against each other, before the battle and after it ----
 
 interface Side {
+  /** The town whose guard alone stands on this side: the head names the guard, and no corps are counted. */
+  guardOf?: string;
   /** Said in place of the numbers of men and divisions where they are only an estimate. */
   menText?: string;
   divsText?: string;
@@ -6470,9 +6502,10 @@ function sidePanel(o: Side, cls: string): string {
   const n = g.nations[o.nats[0]];
   const head = o.who
     ? `<span class="seal" style="background:${n.color}">${esc(initialsOf(o.who.name))}</span><span class="grow"><b>${esc(o.who.name)}</b><small>${esc(adjs(o.nats))} army ${o.role} · level ${o.who.level} general</small>${o.who.traits.length ? `<span class="tags">${traitTags(o.who)}</span>` : ''}</span>`
+    : o.guardOf ? `<span class="seal guard">${ringIcon(n.color, 40)}</span><span class="grow"><b>Town guard of ${esc(o.guardOf)}</b><small>Depot troops, police and militia · no army inside</small></span>`
     : `<span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(adjs(o.nats))} army</b><small>${o.role[0].toUpperCase() + o.role.slice(1)}${o.who === null && o.corps ? ' · no general in command' : ''}</small></span>`;
   return `<div class="fside ${cls}" style="--side:${n.color}"><div class="fhead">${head}</div>
-    <div class="fnum"><span><b>${o.menText ?? num(o.men)}</b><small>men</small></span><span><b>${o.divsText ?? num(o.divs)}</b><small>division${o.divs === 1 && !o.divsText ? '' : 's'}</small></span><span><b>${o.corps}</b><small>corps</small></span></div>${o.under ?? ''}
+    <div class="fnum"><span><b>${o.menText ?? num(o.men)}</b><small>men</small></span><span><b>${o.divsText ?? num(o.divs)}</b><small>division${o.divs === 1 && !o.divsText ? '' : 's'}</small></span>${o.guardOf ? '' : `<span><b>${o.corps}</b><small>corps</small></span>`}</div>${o.under ?? ''}
     <div class="fcards">${o.cards}</div></div>`;
 }
 
@@ -8095,9 +8128,9 @@ function onClick(e: MouseEvent): void {
     case 'basepick': {
       const f = myAir();
       if (!f) break;
-      const why = whyNotBaseFor(f, g.regions[id]);
-      if (why) ui.msg = `${f.name} cannot move to ${g.regions[id].name}. ${why}`;
-      else { orderAirBase(g, f.id, id); ui.airMode = ''; ui.field = id; }
+      const why = whyNotBaseFor(f, g.regions[id]), sea = overOcean(f, g.regions[id]), deck = f.ship !== undefined, name = f.name;
+      if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${g.regions[id].name}. ${why}`;
+      else if (orderAirBase(g, f.id, id)) { ui.msg = movedLine(name, deck, sea, g.regions[id].name); ui.airMode = ''; ui.field = id; }
       refresh(); break;
     }
     case 'mission': {
@@ -8528,9 +8561,9 @@ function onRegion(id: number): void {
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'base') {
-      const why = whyNotBaseFor(af, r);
-      if (why) ui.msg = `${af.name} cannot move to ${r.name}. ${why}`;
-      else { orderAirBase(g, af.id, id); ui.airMode = ''; if (airWar(g)) ui.field = id; }
+      const why = whyNotBaseFor(af, r), sea = overOcean(af, r), deck = af.ship !== undefined, name = af.name;
+      if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
+      else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); ui.airMode = ''; if (airWar(g)) ui.field = id; }
     } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
     else if (ui.airMode === 'search') ui.msg = 'A search needs a sea: click one of the ringed seas.';
     else if (ui.airMode === 'scout') {
@@ -8581,7 +8614,9 @@ function onRegion(id: number): void {
   }
   if (picked.length && (ui.rail || ui.ship)) {
     if (ui.ship) { shipPicked(id); return; }
+    const leftGate = gateLeft(g, picked);
     for (const c of picked) orderRail(g, c, id);
+    if (gateGone(leftGate)) ui.msg = gateGone(leftGate);
     selectRegion(id);
     ui.picked.clear();
     ui.tab = 'region';
@@ -8614,12 +8649,13 @@ function orderOrMarch(id: number): boolean {
 
 /** Sends the army in hand to a province by rail: there this month, the whole month spent. False if no corps of it could go. */
 function sendByTrain(id: number, held: Corps[]): boolean {
+  const leftGate = gateLeft(g, held);
   const went = held.filter((c) => orderRail(g, c, id));
   if (!went.length) return false;
   const place = g.regions[id].name, left = held.length - went.length;
   selectRegion(id);
   ui.picked.clear();
-  ui.msg = `${went.length === 1 ? `${went[0].name} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}`;
+  ui.msg = `${went.length === 1 ? `${went[0].name} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}${gateGone(leftGate) ? ` ${gateGone(leftGate)}` : ''}`;
   refresh();
   return true;
 }
@@ -8669,13 +8705,14 @@ function shipPicked(id: number): void {
   const picked = pickedCorps();
   const to = g.regions[id];
   let sailed = 0;
+  const leftGate = gateLeft(g, picked);
   for (const c of picked) if (orderShip(g, c, id)) sailed++;
   if (!sailed) {
     ui.msg = (picked[0] && whyNotShip(g, picked[0], to)) || `Nothing can be shipped to ${to.name} this month.`;
     refresh();
     return;
   }
-  ui.msg = `${sailed === 1 ? 'One corps has sailed' : `${sailed} corps have sailed`} to ${to.name}. The voyage is ${sailed === 1 ? 'its' : 'their'} whole month.`;
+  ui.msg = `${sailed === 1 ? 'One corps has sailed' : `${sailed} corps have sailed`} to ${to.name}. The voyage is ${sailed === 1 ? 'its' : 'their'} whole month.${gateGone(leftGate) ? ` ${gateGone(leftGate)}` : ''}`;
   queueSave();
   selectRegion(id);
   ui.picked.clear();
@@ -8937,4 +8974,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, crowded: () => `${namesCrowded} (${namesMoved} moved)`, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };
+(window as any).theater = { game: () => g, ui, crowded: () => `${namesCrowded} (${namesMoved} moved)`, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), war: (a: string, b: string) => { setWar(g, a, b); refresh(); }, shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };
