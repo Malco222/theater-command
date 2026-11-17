@@ -183,8 +183,8 @@ describe('the army sent across the ocean', () => {
       // Never a shore the enemy holds: the ocean run puts nobody ashore against a defence.
       expect(p.units.some((u) => atWar(g, 'USA', u.nat))).toBe(false);
     }
-    // The harbour where the army is built up is one Britain holds. (In this war since the support weapons came in
-    // it is Sardinia, which the British took the month before: the nearest of them to an enemy shore.)
+    // The harbour where the army is built up is one Britain holds. (In this war since Version 84 it is Gibraltar,
+    // which the staff reckons the better placed of Britain's harbours that winter.)
     expect(run.to[0].ctrl).toBe('UK');
   });
 
@@ -212,7 +212,10 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      const g = at(JAN_42);
+      // January 1943: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // than the staff will bear. (In January 1942, since Version 84 moved the wars, that harbour is Gibraltar, and no
+      // enemy is at work on the way to it.)
+      const g = at(JAN_43);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];
