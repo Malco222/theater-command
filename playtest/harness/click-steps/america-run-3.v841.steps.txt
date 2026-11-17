@@ -26,7 +26,7 @@ press	BACK ABOARD	says-why
 # a month later: one wing back aboard, the other moved inland and then asked back aboard
 end-month		card
 close
-open-page	Air	does
+open-page	Air	
 select-unit	Atlantic Squadron carrier fighters	does
 press	BACK ABOARD	does
 select-unit	Atlantic Squadron strike wing	does
@@ -40,7 +40,7 @@ end-month		card
 close
 end-month		card
 close
-open-page	Air	does
+open-page	Air	
 select-unit	Atlantic Squadron strike wing	does
 press-each	page
 # --- B. The Panama Canal: shut and opened by its holder, from the map and from the sea beside it.
@@ -85,10 +85,12 @@ open-page	Air	does
 select-unit	Atlantic Squadron strike wing	does
 press	SCOUT FROM THE AIR	says-why
 press	SEARCH A SEA	says-why
+open-page	Region
 select-province	Washington	does
-press	Build a factory	says-why
-press	Build works	says-why
-press	Build the shipyard	says-why
+press	Build a factory	says short
+press	Works No works	says short
+select-province	Norfolk	does
+press-each	page
 press	Treasury	card
 press	CALL THEM UP NOW	says-why
 close

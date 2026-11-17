@@ -9,6 +9,7 @@ click-mark	airfield Norfolk	says No air group
 select-unit	Atlantic Squadron carrier fighters	does
 order-province	Norfolk	says flies ashore
 press	BACK ABOARD	says-why
+open-page	Region
 # A3. Marching into ground no corps defends: needs a war, so it is in run 2. Here: a neutral neighbour asks first.
 select-province	North Texas
 order-province	West Texas	moves
@@ -37,18 +38,21 @@ select-province	Chicago	does
 order-province	Detroit	moves
 select-province	San Francisco	does
 order-province	San Joaquin	moves
+# with an army in hand, a click on the fleet's piece should pick the fleet up (dead on Version 84.1)
+select-unit	Atlantic Squadron	says Atlantic Squadron In harbour
+restore	start
 select-unit	Atlantic Squadron	does
 # a fleet in hand: a right click on a sea (armies march by a right click), then the game's own way, a click on a ringed sea
 order-sea	Eastern Seaboard	says-why
-select-sea	Eastern Seaboard	moves
+select-sea	Eastern Seaboard	says-why
 select-sea	Caribbean Sea
 select-sea	Gulf of Panama
 press-each	tray
 open-page	Air
 select-unit	Atlantic Squadron strike wing	does
 press	PLAN A STRIKE WITH IT	says-why
-press	SCOUT FROM THE AIR	does
-press	SEARCH A SEA	does
+press	SCOUT FROM THE AIR	says-why
+press	SEARCH A SEA	says-why
 restore	start
 # --- C. Every page, and every button on it.
 open-page	Build	does

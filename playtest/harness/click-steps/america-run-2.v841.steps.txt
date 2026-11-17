@@ -27,11 +27,10 @@ order-province	Toronto	card
 press	Declare war	card
 close
 snapshot	war
-select-province	Detroit	does
 order-province	Toronto	card
 press-each	card
 close
-select-province	Detroit	does
+select-province	Detroit	
 order-province	Toronto	card
 press	SEND THEM IN	does
 close
@@ -41,8 +40,13 @@ select-province	Detroit	does
 order-province	Toronto	card
 press	LAY SIEGE FIRST	does
 close
+check-province	Toronto	holder CAN
 select-province	Toronto	does
 press	STORM THE TOWN	card
-press	STORM THE TOWN	does
+press-each	card
+close
+select-province	Toronto	
+press	STORM THE TOWN	card
+press	SEND THEM IN	does
 close
 check-province	Toronto	holder USA
