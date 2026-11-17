@@ -151,6 +151,45 @@ describe('a great offensive in a war already on', () => {
   });
 });
 
+describe('219: the record\'s raids as dated choices in 216(a)\'s form, with no new code', () => {
+  // A raid made up for the test: Germany's in month 3 against France, a great choice that declares on nobody, beside
+  // the dated blow of month 30 that makes the front wait (as Japan's raids of 1939 to 1941 stand beside ichigo).
+  const raid = (over: Partial<Op> = {}): Op => ({ id: 'r219', name: 'A raid', if: ['war:GER,FRA', 'alive:FRA'], from: 1, to: 10, prep: 0, chance: 0.3, push: 1, ...over });
+  function month3(op: Op): Game {
+    withBlow(blow(), 30);
+    OPEN.ops.GER = [OPEN.ops.GER[0], op, ...OPEN.ops.GER.slice(1)];
+    H.dates.GER.r219 = 3;
+    H.theatre['GER:r219'] = 't215';
+    const g = westEmpty(grand(2, null, 1));
+    g.turn = 3;
+    // (Poland's front left out of it: a general offensive there would keep the army busy.)
+    delete g.flags['st:on:GER:POL'];
+    g.flags['st:rest:GER:POL'] = 99;
+    decide(g, 'GER');
+    return g;
+  }
+  afterEach(() => { delete H.dates.GER.r219; delete H.theatre['GER:r219']; });
+
+  it('goes in its month and opens the offensive on the front it names, though another dated choice holds that front waiting', () => {
+    const g = month3(raid());
+    expect(g.flags['st:done:GER:r219']).toBe(3);
+    expect(g.flags['st:on:GER:FRA']).toBe(3);
+    expect(g.flags['st:push:GER']).toBe(3);
+  });
+
+  it('as a side operation opens no offensive at all', () => {
+    const side = month3(raid({ side: true }));
+    expect(side.flags['st:done:GER:r219']).toBe(3);
+    expect(side.flags['st:on:GER:FRA']).toBeUndefined();
+  });
+
+  it('as a side operation with odds asked of it is never taken: it has no front to weigh them on', () => {
+    const odds = month3(raid({ side: true, ratio: 0.8 }));
+    expect(odds.flags['st:done:GER:r219']).toBeUndefined();
+    expect(odds.flags['st:on:GER:FRA']).toBeUndefined();
+  });
+});
+
 describe('215(c): the record\'s line', () => {
   // A line made up for the test on Poland's ground: Germany may hold the western strip from the first day, take Lodz
   // in months 2 and 3 only, and Kielce from month 5 to 8 in an offensive; Warsaw is never his.
