@@ -251,10 +251,10 @@
    ],
    [
     "CHN",
-    "34th Army Group (Sian)",
+    "34th Army Group (Tungkwan)",
     "inf",
     2,
-    "Sian",
+    "Tungkwan",
     {
      "xp": 0.1,
      "str": 0.6
@@ -286,8 +286,19 @@
     "CHN",
     "5th War Area (the Nanyang basin)",
     "inf",
-    2,
+    1,
     "Nanyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "Shantung-Kiangsu War Area (north Kiangsu)",
+    "inf",
+    1,
+    "Yencheng",
     {
      "xp": 0.15,
      "str": 0.6
@@ -298,7 +309,7 @@
     "31st Army Group",
     "inf",
     1,
-    "Nanyang",
+    "Chumatien",
     {
      "xp": 0.15,
      "str": 0.6
@@ -308,8 +319,30 @@
     "CHN",
     "5th War Area (Hupeh)",
     "inf",
-    3,
+    1,
     "Siangyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area (northern Anhwei)",
+    "inf",
+    1,
+    "Fowyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area: 21st Army Group (the Tapieh mountains)",
+    "inf",
+    1,
+    "Macheng",
     {
      "xp": 0.15,
      "str": 0.6
@@ -330,8 +363,20 @@
     "CHN",
     "River Defence Army (Ichang and the gorges)",
     "inf",
-    3,
+    2,
     "Ichang",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "River Defence Army (Shasi)",
+    "inf",
+    1,
+    "Shasi",
     {
      "xp": 0.15,
      "str": 0.6,
@@ -376,7 +421,7 @@
     "19th Army Group (facing Nanchang)",
     "inf",
     2,
-    "Kanchow",
+    "Linchwan",
     {
      "xp": 0.1,
      "str": 0.5
@@ -398,7 +443,7 @@
     "3rd War Area: 32nd Army Group",
     "inf",
     2,
-    "Chuchow",
+    "Shangjao",
     {
      "xp": 0.15,
      "str": 0.6
@@ -497,10 +542,10 @@
    ],
    [
     "CHN",
-    "16th Army Group (Kwangsi): Liuchow",
+    "16th Army Group (Kwangsi): Wuchow",
     "inf",
     1,
-    "Liuchow",
+    "Wuchow",
     {
      "xp": 0.1,
      "str": 0.5
@@ -522,8 +567,19 @@
     "CHN",
     "9th War Area, second line",
     "inf",
-    2,
+    1,
     "Hengyang",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area, second line (southern Kiangsi)",
+    "inf",
+    1,
+    "Ningtu",
     {
      "xp": 0.1,
      "str": 0.5
