@@ -142,7 +142,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
       const soft = ui.some((u) => u.verb === 'key'); const again = async (hard) => { if (hard && !soft) { await page.evaluate((text) => { localStorage.clear(); localStorage.setItem('tc-watch', '0'); localStorage.setItem('tc-ask-end', '0'); localStorage.setItem('theater-command-save-v1', text); }, base); await page.reload(); await page.waitForSelector('#card'); await page.evaluate(() => { try { window.theater.continueGame(); } catch (err) {} }); await page.waitForTimeout(2000); } await closeAll(); for (const u of ui) await play(u); if (soft && !(await veil())) { await page.keyboard.press('Escape'); await page.waitForTimeout(2500); for (const u of ui) await play(u); } };
       for (const btn of list) {
         n++; errors = [];
-        const a = await look('');
+        await page.evaluate(() => { try { const th = window.theater; if (th && th.ui && th.ui.msg) { th.ui.msg = ''; if (th.refresh) th.refresh(); } } catch (e) {} }); const a = await look('');
         const at = await pressNth(sel, btn);
         const sub = { ...s, verb: 'press', target: btn.txt || btn.act, expect: '' };
         if (!at) { await record(n, sub, a, a, 'MISSING', 'the button was there and is gone', ` [${btn.act || 'no act'} in ${s.target}]`); await again(true); continue; }
@@ -156,7 +156,8 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
       continue;
     }
     n++; errors = [];
-    const a = await look(/province|sea/.test(s.verb) ? s.target : '');
+    // the game's last words are wiped before each step, so that the same reason given twice is heard the second time
+    await page.evaluate(() => { try { const th = window.theater; if (th && th.ui && th.ui.msg) { th.ui.msg = ''; if (th.refresh) th.refresh(); } } catch (e) {} }); const a = await look(/province|sea/.test(s.verb) ? s.target : '');
     let note = '';
     try { note = await play(s); } catch (err) { note = `the runner failed: ${String(err.message || err).slice(0, 160)}`; }
     const b = await look(/province|sea/.test(s.verb) ? s.target : '');
@@ -169,7 +170,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
     if (['start', 'load', 'restore'].includes(s.verb)) trail = [];
     else if (s.verb === 'close') { const i = trail.findIndex((u) => u.card); if (i >= 0) trail = trail.slice(0, i); }
     else if (s.verb === 'end-month') trail = opened ? [{ verb: 'key', target: 'r', expect: '', card: true }] : [];
-    else if (a.game !== b.game) { trail = trail.filter((u) => u.verb === 'open-page' && !u.card).slice(-1); if (b.hand) trail.push({ verb: 'select-province', target: b.hand, expect: '' }); }
+    else if (a.game !== b.game) { const unit = [...trail].reverse().find((u) => u.verb === 'select-unit' && !u.card); trail = trail.filter((u) => u.verb === 'open-page' && !u.card).slice(-1); if (b.hand) trail.push({ verb: 'select-province', target: b.hand, expect: '' }); else if (unit) trail.push({ verb: 'select-unit', target: unit.target, expect: '' }); }
     else if (['select-province', 'select-sea', 'select-unit', 'open-page', 'press', 'click-mark', 'order-province', 'order-sea', 'key'].includes(s.verb) && verdict !== 'MISSING' && verdict !== 'DEAD') {
       if (s.verb === 'open-page' && !opened) trail = trail.filter((u) => u.verb !== 'open-page' || u.card);
       trail.push({ ...s, card: opened });

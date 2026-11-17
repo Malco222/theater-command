@@ -30,19 +30,19 @@ restore	start
 # --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
 select-unit	1st Squadron	does
 order-sea	Ionian Sea	says-why
-select-sea	Tyrrhenian Sea	moves
+select-sea	Tyrrhenian Sea	says-why
 select-sea	Adriatic Sea	
 press-each	tray
 restore	start
 select-unit	2nd Squadron	does
 order-sea	Tyrrhenian Sea	says-why
-select-sea	Western Mediterranean	moves
+select-sea	Western Mediterranean	says-why
 select-sea	Ionian Sea	
 press-each	tray
 restore	start
 select-unit	Submarine Command	does
 order-sea	Tyrrhenian Sea	says-why
-select-sea	Western Mediterranean	moves
+select-sea	Western Mediterranean	says-why
 select-sea	Ionian Sea	
 press-each	tray
 restore	start

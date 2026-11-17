@@ -234,6 +234,10 @@ export interface Plan {
   onLook?: (g: Game, options: { r: any; cands: any[]; odds: number; out: any }[], pass: number) => void;
   /** Version 58: attack only where the attack card gives this chance or better (default off: the odds alone decide). */
   minChance?: number;
+  /** Ruling 186's watch: from this turn on, one reconnaissance flight a month over the named province, by the first group that can fly it. */
+  recon?: { from: number; over: string };
+  /** Ruling 186's watch: from this turn on, keep an agent on watch in the named province (one is sent, or recruited and sent, when none stands there). */
+  agentAt?: { from: number; at: string };
   /** Version 58: keep this many artillery corps for every ten field corps, ordered ahead of everything else (default off: no guns are bought). */
   guns?: number;
   /** Version 58: bring up to two artillery corps into an attack in place of the weakest corps from the same province, where the card then gives a better chance (default off: the staff's own picker, which takes the strongest and leaves the guns behind). */
@@ -357,10 +361,38 @@ function cabinetMoves(run: Run, plan: Plan): void {
   }
 }
 
+/** Ruling 186's watch: a reconnaissance flight a month over a named province, and an agent kept on watch there. */
+function watchMoves(run: Run, plan: Plan, row: MonthRow): void {
+  if (!plan.recon && !plan.agentAt) return;
+  const g = run.g, me = run.me, X = T as any;
+  const place = (name: string) => g.regions.find((r) => r.name === name);
+  if (plan.recon && g.turn >= plan.recon.from && g.nations[me].atWar.length) {
+    const r = place(plan.recon.over);
+    let flown = '', why = '';
+    if (r) for (const f of ((g as any).airFleets ?? []) as any[]) {
+      if (f.nat !== me || f.dead || (f.ftr ?? 0) + (f.bmr ?? 0) <= 0) continue;
+      const res = X.orderScout(g, f.id, r.id);
+      if (res?.ok) { flown = f.name; break; }
+      why = why || res?.text || '';
+    }
+    row.notes.push(flown ? `recon over ${plan.recon.over} by ${flown}` : `no recon over ${plan.recon.over}${why ? ': ' + why : ''}`);
+  }
+  if (plan.agentAt && g.turn >= plan.agentAt.from) {
+    const r = place(plan.agentAt.at);
+    const mine = (((g as any).intel?.agents ?? []) as any[]).filter((a) => a.nat === me);
+    if (r && !mine.some((a) => a.reg === r.id)) {
+      let a = mine.find((x) => X.whyNotSendAgent?.(g, x.id, r.id) === null);
+      if (!a) a = X.orderRecruitAgent?.(g) ?? undefined;
+      if (a && X.orderSendAgent?.(g, a.id, r.id)) row.notes.push(`agent ${a.name} sent to ${plan.agentAt.at}`);
+    }
+  }
+}
+
 export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   const g = run.g, me = run.me;
   plan.first?.(g, run);
   if (plan.idle) { plan.each?.(g, run); return; }
+  watchMoves(run, plan, row);
   cabinetMoves(run, plan);
   menMoves(run, plan);
   const minOdds = plan.minOdds ?? 1.5;

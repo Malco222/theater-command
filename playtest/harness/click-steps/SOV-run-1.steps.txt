@@ -34,17 +34,17 @@ restore	start
 # --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
 select-unit	Baltic Fleet	does
 order-sea	Gulf of Finland	says-why
-select-sea	Baltic Sea	moves
+select-sea	Baltic Sea	says-why
 press-each	tray
 restore	start
 select-unit	Black Sea Fleet	does
 order-sea	Black Sea	says-why
-select-sea	Aegean Sea	moves
+select-sea	Aegean Sea	says-why
 press-each	tray
 restore	start
 select-unit	Northern Fleet	does
 order-sea	Barents Sea	says-why
-select-sea	Norwegian Sea	moves
+select-sea	Norwegian Sea	says-why
 press-each	tray
 restore	start
 # --- C. Every air group once.

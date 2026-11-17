@@ -34,7 +34,7 @@ const [nat = 'USA', when = '1939-09', seedS = '25'] = process.argv.slice(2);
   const edge = moving.find((a) => a.neutral); if (edge) { p('select-province', edge.name, 'does'); p('order-province', edge.neutral, 'card'); p('press-each', 'card'); p('close'); p('restore', 'start'); }
   for (const a of forts.slice(0, 2)) { out.push('# a fortress garrison: it moves, or the game says it never marches'); p('select-province', a.name, 'does'); if (a.own || a.neutral) p('order-province', a.own || a.neutral, 'says-why'); }
   out.push('# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.');
-  for (const fl of f.fleets.slice(0, 4)) { p('select-unit', fl.name, 'does'); if (fl.sea) p('order-sea', fl.sea, 'says-why'); fl.next.forEach((z, i) => p('select-sea', z, i === 0 ? 'moves' : '')); p('press-each', 'tray'); p('restore', 'start'); }
+  for (const fl of f.fleets.slice(0, 4)) { p('select-unit', fl.name, 'does'); if (fl.sea) p('order-sea', fl.sea, 'says-why'); fl.next.forEach((z, i) => p('select-sea', z, i === 0 ? (f.wars.length ? 'moves' : 'says-why') : '')); p('press-each', 'tray'); p('restore', 'start'); }
   out.push('# --- C. Every air group once.');
   if (f.groups.length) p('open-page', 'Air', 'does');
   for (const a of f.groups.slice(0, 4)) { p('select-unit', a.name, 'does'); if (a.wing && f.port) p('order-province', f.port, 'does'); p('press-each', 'page'); p('restore', 'start'); p('open-page', 'Air'); }

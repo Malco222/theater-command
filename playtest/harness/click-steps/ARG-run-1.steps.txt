@@ -22,7 +22,7 @@ restore	start
 # --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
 select-unit	Sea Fleet	does
 order-sea	River Plate	says-why
-select-sea	Santos Bight	moves
+select-sea	Santos Bight	says-why
 select-sea	Argentine Sea	
 press-each	tray
 restore	start
