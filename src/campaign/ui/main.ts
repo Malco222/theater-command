@@ -1654,6 +1654,62 @@ function rightClickElse(id: number, x: number, y: number): boolean {
   if (idle) { ui.msg = idle; refresh(); return true; }
   return false;
 }
+/**
+ * Why a right-click on the map gave no order, for the paper line (the grid of 2026-11-17: a right-click that orders
+ * nothing said nothing; ruling 204(d), the words passed by the UI director). `id` is the province under the
+ * pointer or -1, `z` the sea under it or -1. '' where there is nothing to say.
+ */
+function noOrderLine(id: number, z: number): string {
+  const me = g.human;
+  if (!me || (id < 0 && z < 0)) return '';
+  // A fleet in hand keeps to the sea (a right-click on a sea has already sent it there).
+  const fl = ui.tab === 'navy' ? myFleet() : null;
+  if (fl) return id >= 0 ? `The ${fl.name} keeps to the sea: click a ringed sea to send it there.` : '';
+  // An air group in hand flies from land, and a carrier's wing from its fleet.
+  const af = ui.tab === 'air' ? myAir() : null;
+  if (af) return id >= 0 ? '' : af.ship !== undefined ? `The ${af.name} goes where its fleet goes: pick the fleet up to move it.` : `The ${af.name} is based on land: right-click a province with an airfield to move it there.`;
+  // An army in hand, with a move left or with none (on the province's page, where it shows as in hand).
+  const hand = ui.tab !== 'region' ? [] : pickedCorps().length ? pickedCorps() : heldCorps();
+  if (hand.length) {
+    const who = hand.length === 1 ? hand[0].name : 'The army', here = g.regions[hand[0].reg];
+    if (id >= 0) return id === here.id ? `${who} is already at ${here.name}.` : '';
+    // The crossing is named by the buttons the army's orders truly show where it stands.
+    const ways = [hand.some((c) => c.nat === me && shipTargets(g, c).length > 0) ? 'SHIP BY SEA' : '', lands.length ? (byAir(hand) ? 'AIRBORNE ASSAULT' : 'INVADE BY SEA') : ''].filter(Boolean);
+    return `${who} cannot march onto the sea. ${ways.length ? `To cross it, use ${ways.join(' or ')} on the army's card.` : here.port ? 'No crossing is open to it from this port this month.' : 'An army crosses the sea from a port: march it to one first.'}`;
+  }
+  // An army that takes no orders at all says why, in the rules' sentence (ruling 176(c)).
+  return idleInHand() || 'Nothing is in hand. Click one of your armies or fleets first, then right-click where it should go.';
+}
+
+/**
+ * The last word of a right-click that nothing else answered. Where the map is choosing what a click chooses (a port
+ * to ship to, a beach, a place to build, a target, a new base), the right-click chooses it as the click does;
+ * otherwise the paper says why nothing was ordered. Never a card he did not ask for (ruling 207(g)).
+ */
+function noOrderSaid(id: number, x: number, y: number): void {
+  if (ui.modal || !g.human || !humanUp(g) || passing) return;
+  // (Something on the way here has already answered: its line stands.)
+  if (id >= 0 && ui.msg) { refresh(); return; }
+  const p = mapPoint(x, y), z = id < 0 ? seaAt(p.x, p.y, g) : -1;
+  if (id < 0 && z < 0) return;
+  const fl = ui.tab === 'navy' ? myFleet() : null;
+  const airPick = ui.tab === 'air' && (!!ui.airMode || (!!ui.raid && ui.raid !== 'menu'));
+  const agent = ui.tab === 'spies' && ui.spySend && ui.spy >= 0;
+  if (id >= 0) {
+    // On land every such choice is the click's own.
+    if (ui.land || ui.ship || ui.tab === 'build' || airPick || agent || (fl && (ui.rebase || shellAt.includes(id)))) { onRegion(id); return; }
+  } else if (airPick || (fl && ui.rebase)) { onSea(z); return; }
+  // On a sea a click would put the army down, so these say what the choice wants instead.
+  else if (ui.ship || ui.land || ui.tab === 'build' || agent) {
+    ui.msg = ui.ship ? 'Troops are shipped to a port: click any blue port, or pick one from the list.'
+      : ui.land ? 'A landing needs a coast: click a red coast to see the odds.'
+      : agent ? 'An agent is sent to a province: click one on the map.' : 'Nothing is built at sea: click one of your own provinces.';
+    refresh();
+    return;
+  }
+  const line = noOrderLine(id, z);
+  if (line) { ui.msg = line; refresh(); }
+}
 /** True when the army in hand has no move left this month: all it can be given is a march that is kept. */
 const spentInHand = (): boolean => heldCorps().length > 0 && !pickedCorps().length;
 /** Where no order comes with a place: the modes in which a click on the map means something else. */
@@ -9505,7 +9561,9 @@ function wireMap(): void {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
     if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id)) { if (pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } else noOrderSaid(id, e.clientX, e.clientY); } }
+    // A right-click on the sea, or one that ordered nothing, still answers (ruling 204(d)).
+    else if (humanUp(g)) noOrderSaid(id, e.clientX, e.clientY);
   });
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
