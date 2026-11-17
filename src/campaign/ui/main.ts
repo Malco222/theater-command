@@ -1654,6 +1654,8 @@ function rightClickElse(id: number, x: number, y: number): boolean {
   if (idle) { ui.msg = idle; refresh(); return true; }
   return false;
 }
+/** An air group's name as it opens a sentence: "The Pursuit Brigade", "The 1st Fighter Group", but "No. 11 Group", "Jagdgeschwader 2", "I Bomber Command" (the UI director's care, 2026-11-17). Every fleet's name takes "The". */
+const theGroup = (name: string): string => (/^(No\. |[IVXLC]+ )|\d$/.test(name) ? name : `The ${name}`);
 /**
  * Why a right-click on the map gave no order, for the paper line (the grid of 2026-11-17: a right-click that orders
  * nothing said nothing; ruling 204(d), the words passed by the UI director). `id` is the province under the
@@ -1667,7 +1669,7 @@ function noOrderLine(id: number, z: number): string {
   if (fl) return id >= 0 ? `The ${fl.name} keeps to the sea: click a ringed sea to send it there.` : '';
   // An air group in hand flies from land, and a carrier's wing from its fleet.
   const af = ui.tab === 'air' ? myAir() : null;
-  if (af) return id >= 0 ? '' : af.ship !== undefined ? `The ${af.name} goes where its fleet goes: pick the fleet up to move it.` : `The ${af.name} is based on land: right-click a province with an airfield to move it there.`;
+  if (af) return id >= 0 ? '' : af.ship !== undefined ? `${theGroup(af.name)} goes where its fleet goes: pick the fleet up to move it.` : `${theGroup(af.name)} is based on land: right-click a province with an airfield to move it there.`;
   // An army in hand, with a move left or with none (on the province's page, where it shows as in hand).
   const hand = ui.tab !== 'region' ? [] : pickedCorps().length ? pickedCorps() : heldCorps();
   if (hand.length) {
