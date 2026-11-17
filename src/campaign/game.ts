@@ -700,6 +700,12 @@ export function frontage(r: Region): number {
  * which brings ruling 146's second fix forward and widens it: in Brian's own campaign one Canadian artillery corps
  * stormed Buffalo and Pittsburgh and took Washington by itself).
  */
+/**
+ * Ground of a country of the Americas that joined the Axis by its courting (ruling 223(c), diplomacy.ts): it keeps
+ * its own small army, and no computer-run country ships a corps to its harbours or bases an air group on its fields.
+ */
+export const thornGround = (g: Game, r: Region, nat: string): boolean => nat !== r.owner && nat !== g.human && g.flags[`americas:in:${r.owner}`] !== undefined;
+
 export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
 /** The sentence wherever guns are sent forward alone (ruling 146). */
 export const GUNS_ALONE = 'Guns cannot take ground alone. Send infantry or tanks in with them.';

@@ -90,7 +90,7 @@ import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
 import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
-import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
+import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, forceWords, hasRoom, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
@@ -4960,11 +4960,14 @@ function trackPane(list: Nation[]): string {
   for (const n of rows) {
     const pos = 50 + Math.max(-100, Math.min(100, n.opinion)) / 2;
     let btn = '';
-    if (me && mine && courtable(n) && humanUp(g)) {
+    // (Ruling 223(d): while the Axis courts a neutral of the Americas, the United States courts it back at no cost,
+    // even before it has joined the Allies.)
+    const free = !!me && freeCourt(g, me.id, n.id);
+    if (me && (mine || free) && courtable(n) && humanUp(g)) {
       const c = canCourt(g, me.id, n.id);
-      const k = receptive(n, mine);
+      const k = receptive(n, mine ?? 'allies');
       const word = k >= 1.3 ? 'Receptive' : k >= 0.8 ? 'Open to offers' : k >= 0.5 ? 'Wary' : 'Very hard to move';
-      btn = `<button class="btn small" data-act="court" data-nat="${n.id}" ${c.ok ? '' : 'disabled'} title="${esc(c.ok ? word : c.why)}">Court</button>`;
+      btn = `<button class="btn small" data-act="court" data-nat="${n.id}" ${c.ok ? '' : 'disabled'} title="${esc(c.ok ? (free ? `${word}. No cost while the Axis courts it.` : word) : c.why)}">${free ? 'Court back' : 'Court'}</button>`;
     }
     const frs = friendsOf(n.id).filter((f) => g.nations[f.nat]?.alive);
     out += `<div class="trk"${frs.length ? ` title="Friends of ${esc(theName(n.id))}: ${esc(frs.map((f) => `${theName(f.nat)} (${f.why})`).join('; '))}"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>${standLabel(n)}</small>${btn}${frs.length ? `<small class="frs">Friends: ${esc(listOf(frs.map((f) => theName(f.nat))))}</small>` : ''}
