@@ -403,4 +403,7 @@ export const RULED_GROUND = {
   ...ground('desert', 'Girishk, Hofuf'),
   // Ruling 215 (17 November), on the historian's word: the Loushan pass on the road from Kweiyang to Chungking.
   Tsunyi: 'mountain',
+  // The design director's log b340 (17 November), on the map fact-checker's word: the Yellow River's flood of June 1938
+  // to 1947 lay across eastern Honan and northern Anhwei as marsh, the front line until 1944. Fowyang is its heart.
+  Fowyang: 'marsh',
 };

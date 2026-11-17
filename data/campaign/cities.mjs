@@ -2091,6 +2091,9 @@ export const CITY_NO_RAIL = [
   // was never built; Villahermosa's came in 1950 (the Yucatan was a rail island); Santa Cruz's in 1955, so Camiri had
   // none; the Rio-Bahia link by Conquista in 1950; the Huancayo line ended at Huancavelica, short of Ayacucho.
   'Liuchow', 'Tushan', 'Tamsag Bulak', 'Villahermosa', 'Camiri', 'Conquista', 'Ayacucho',
+  // The historian (17 November 2026): no line reached Socorro; the Tabriz line was only begun in 1939 and reached
+  // Zanjan, beyond Qazvin, by 1942.
+  'Socorro', 'Qazvin',
 ];
 // Lines laid by hand, each a chain of neighbouring provinces, and lines struck.
 export const CITY_RAIL_LINES = [
@@ -2168,6 +2171,14 @@ export const CITY_RAIL_LINES = [
   ['Campeche', 'Yucatan'],
   // The Peking-Mukden main line along the coast by Tangshan and Shanhaikwan (now Tangshan's) into Chinchow.
   ['Tientsin', 'Tangshan', 'Chinchow'],
+  // Colombia (the historian): the Northern line from Bogota to Barbosa (Tunja), the Girardot and Tolima-Huila lines to
+  // Neiva (1937), and the Caldas line from Manizales to the Pacific line (Cali). Bogota's system and the Pacific's
+  // met only over the Quindio (1949); Medellin's line ran to the Magdalena at Puerto Berrio, Santander's from Puerto
+  // Wilches, and the river joined them.
+  ['Bogota', 'Tunja'], ['Bogota', 'Neiva'], ['Cali', 'Manizales'],
+  // The Tachira line, from Encontrados on the lake's southern shore up to San Cristobal (closed 1955): kept, since
+  // striking Maracaibo to Barquisimeto took it with it.
+  ['Maracaibo', 'San Cristobal'],
 ];
 export const CITY_RAIL_CUT = [
   ['Monclova', 'Chihuahua'], // the line from Monterrey to Chihuahua ran by Torreon
@@ -2192,4 +2203,9 @@ export const CITY_RAIL_RELAID = [
   // The main line into Manchukuo ran along the coast by Shanhaikwan, not through Jehol: the line from Peiping to
   // Chengteh reached only Huairou in 1938 (opened through in 1960).
   ['Jehol', 'Tientsin'], ['Jehol', 'Peiping'],
+  // The historian (17 November 2026): Colombia's systems were not joined; the Borzya-Bayan Tumen line was not yet
+  // working in September 1939 (Zhukov's army was supplied by lorry from Borzya); no line joined Maracaibo to
+  // Barquisimeto.
+  ['Bogota', 'Medellin'], ['Bogota', 'Cali'], ['Bogota', 'Santander'], ['Medellin', 'Santander'], ['Barranquilla', 'Santander'],
+  ['Choibalsan', 'Dauria'], ['Maracaibo', 'Barquisimeto'],
 ];
