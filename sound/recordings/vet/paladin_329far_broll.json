@@ -1,0 +1,122 @@
+[
+ {
+  "file": "paladin_329far_broll.mka",
+  "format": "vorbis 48000 Hz 2 ch 79 kbps",
+  "seconds": 97.7,
+  "read": [
+   0,
+   97.7
+  ],
+  "fromFilm": false,
+  "peakDb": 1.1,
+  "lufs": -17.4,
+  "loudestMomentLufs": -9.3,
+  "floorDb": -37.1,
+  "rangeDb": 25.7,
+  "topKhz": 16,
+  "bands": {
+   "sub": -20.2,
+   "low": -3.6,
+   "lowmid": -4.3,
+   "mid": -10.4,
+   "presence": -18.1,
+   "air": -22.4
+  },
+  "stereo": 0.82,
+  "talk": 0.37,
+  "events": 10,
+  "firstEvents": [
+   {
+    "at": 52.805,
+    "db": -13.1
+   },
+   {
+    "at": 56.51,
+    "db": -23.3
+   },
+   {
+    "at": 57.235,
+    "db": -8.1
+   },
+   {
+    "at": 60.75,
+    "db": -21.3
+   },
+   {
+    "at": 62.25,
+    "db": -10.3
+   },
+   {
+    "at": 64.75,
+    "db": -23
+   },
+   {
+    "at": 70.38,
+    "db": -8.9
+   },
+   {
+    "at": 71.99,
+    "db": -13.2
+   },
+   {
+    "at": 78.595,
+    "db": -12.5
+   },
+   {
+    "at": 83.065,
+    "db": -8.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 57.235,
+    "db": -8.1
+   },
+   {
+    "at": 70.38,
+    "db": -8.9
+   },
+   {
+    "at": 83.065,
+    "db": -8.9
+   },
+   {
+    "at": 62.25,
+    "db": -10.3
+   },
+   {
+    "at": 78.595,
+    "db": -12.5
+   },
+   {
+    "at": 52.805,
+    "db": -13.1
+   },
+   {
+    "at": 71.99,
+    "db": -13.2
+   },
+   {
+    "at": 60.75,
+    "db": -21.3
+   },
+   {
+    "at": 64.75,
+    "db": -23
+   },
+   {
+    "at": 56.51,
+    "db": -23.3
+   }
+  ],
+  "steady": {
+   "from": 89,
+   "to": 97,
+   "wobbleDb": 0.36
+  },
+  "flags": [
+   "LOW RATE: vorbis at 79 kbps",
+   "NOISY: the quietest moments sit at -37 dB (no clean silence between events)"
+  ]
+ }
+]

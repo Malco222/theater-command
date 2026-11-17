@@ -1,0 +1,87 @@
+[
+ {
+  "file": "explosions_ls100155.ogg",
+  "format": "vorbis 44100 Hz 2 ch 160 kbps",
+  "seconds": 10,
+  "read": [
+   0,
+   10
+  ],
+  "fromFilm": false,
+  "peakDb": 0.9,
+  "lufs": -14.1,
+  "loudestMomentLufs": -11.2,
+  "floorDb": -50.2,
+  "rangeDb": 42.6,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -18,
+   "low": -10,
+   "lowmid": -1.1,
+   "mid": -10.6,
+   "presence": -27.4,
+   "air": -42.8
+  },
+  "stereo": 0.89,
+  "talk": 0.37,
+  "events": 6,
+  "firstEvents": [
+   {
+    "at": 0.26,
+    "db": -16.2
+   },
+   {
+    "at": 1.21,
+    "db": -1.6
+   },
+   {
+    "at": 2.33,
+    "db": -1
+   },
+   {
+    "at": 2.93,
+    "db": -1.1
+   },
+   {
+    "at": 4.105,
+    "db": -1.8
+   },
+   {
+    "at": 4.98,
+    "db": -0.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 4.98,
+    "db": -0.9
+   },
+   {
+    "at": 2.33,
+    "db": -1
+   },
+   {
+    "at": 2.93,
+    "db": -1.1
+   },
+   {
+    "at": 1.21,
+    "db": -1.6
+   },
+   {
+    "at": 4.105,
+    "db": -1.8
+   },
+   {
+    "at": 0.26,
+    "db": -16.2
+   }
+  ],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 6.42
+  },
+  "flags": []
+ }
+]

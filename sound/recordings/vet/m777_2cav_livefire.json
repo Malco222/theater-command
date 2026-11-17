@@ -1,0 +1,65 @@
+[
+ {
+  "file": "m777_2cav_livefire.mka",
+  "format": "opus 48000 Hz 2 ch 105 kbps",
+  "seconds": 30.4,
+  "read": [
+   0,
+   30.3
+  ],
+  "fromFilm": false,
+  "peakDb": 3.4,
+  "lufs": -8.8,
+  "loudestMomentLufs": -0.3,
+  "floorDb": -20.6,
+  "rangeDb": 16.9,
+  "topKhz": 16,
+  "bands": {
+   "sub": -18.3,
+   "low": -6,
+   "lowmid": -7,
+   "mid": -5.7,
+   "presence": -8.4,
+   "air": -15.1
+  },
+  "stereo": 1,
+  "talk": 0.28,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 14.525,
+    "db": -4.4
+   },
+   {
+    "at": 15.725,
+    "db": -3.1
+   },
+   {
+    "at": 25.57,
+    "db": -3
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 25.57,
+    "db": -3
+   },
+   {
+    "at": 15.725,
+    "db": -3.1
+   },
+   {
+    "at": 14.525,
+    "db": -4.4
+   }
+  ],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 1.1
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -21 dB (no clean silence between events)"
+  ]
+ }
+]

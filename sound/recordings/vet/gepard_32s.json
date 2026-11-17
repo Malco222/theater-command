@@ -1,0 +1,58 @@
+[
+ {
+  "file": "gepard_32s.mka",
+  "format": "opus 48000 Hz 2 ch 72 kbps",
+  "seconds": 32,
+  "read": [
+   0,
+   32
+  ],
+  "fromFilm": false,
+  "peakDb": -16.5,
+  "lufs": -34.3,
+  "loudestMomentLufs": -31.2,
+  "floorDb": -42.1,
+  "rangeDb": 10.2,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -31.2,
+   "low": -8,
+   "lowmid": -4.2,
+   "mid": -4,
+   "presence": -14.1,
+   "air": -23.5
+  },
+  "stereo": 1,
+  "talk": 0.19,
+  "events": 2,
+  "firstEvents": [
+   {
+    "at": 10.5,
+    "db": -26.8
+   },
+   {
+    "at": 28.975,
+    "db": -25.1
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 28.975,
+    "db": -25.1
+   },
+   {
+    "at": 10.5,
+    "db": -26.8
+   }
+  ],
+  "steady": {
+   "from": 4,
+   "to": 12,
+   "wobbleDb": 0.76
+  },
+  "flags": [
+   "LOW RATE: opus at 72 kbps",
+   "NOISY: the quietest moments sit at -42 dB (no clean silence between events)"
+  ]
+ }
+]

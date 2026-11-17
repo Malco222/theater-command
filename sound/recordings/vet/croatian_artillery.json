@@ -1,0 +1,63 @@
+[
+ {
+  "file": "croatian_artillery.mka",
+  "format": "opus 48000 Hz 2 ch 131 kbps",
+  "seconds": 45.4,
+  "read": [
+   0,
+   45.3
+  ],
+  "fromFilm": false,
+  "peakDb": -1.7,
+  "lufs": -7.6,
+  "loudestMomentLufs": -2,
+  "floorDb": -72.8,
+  "rangeDb": 65.7,
+  "topKhz": 16,
+  "bands": {
+   "sub": -27.4,
+   "low": -17.7,
+   "lowmid": -7.7,
+   "mid": -3.1,
+   "presence": -6.3,
+   "air": -11.2
+  },
+  "stereo": 1,
+  "talk": 0.11,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 13.745,
+    "db": -23.8
+   },
+   {
+    "at": 20.815,
+    "db": -6.8
+   },
+   {
+    "at": 32.595,
+    "db": -6.8
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 20.815,
+    "db": -6.8
+   },
+   {
+    "at": 32.595,
+    "db": -6.8
+   },
+   {
+    "at": 13.745,
+    "db": -23.8
+   }
+  ],
+  "steady": {
+   "from": 8.5,
+   "to": 16.5,
+   "wobbleDb": 4.19
+  },
+  "flags": []
+ }
+]

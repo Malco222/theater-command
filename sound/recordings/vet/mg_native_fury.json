@@ -1,0 +1,49 @@
+[
+ {
+  "file": "mg_native_fury.mka",
+  "format": "opus 48000 Hz 2 ch 126 kbps",
+  "seconds": 27,
+  "read": [
+   0,
+   27
+  ],
+  "fromFilm": false,
+  "peakDb": 3.3,
+  "lufs": -8.4,
+  "loudestMomentLufs": 1.1,
+  "floorDb": -33.1,
+  "rangeDb": 31.1,
+  "topKhz": 16,
+  "bands": {
+   "sub": -29.7,
+   "low": -5.8,
+   "lowmid": -7.6,
+   "mid": -3.6,
+   "presence": -10.6,
+   "air": -15.4
+  },
+  "stereo": 0.61,
+  "talk": 0.06,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 25.91,
+    "db": -1.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 25.91,
+    "db": -1.9
+   }
+  ],
+  "steady": {
+   "from": 16.5,
+   "to": 24.5,
+   "wobbleDb": 1.38
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -33 dB (no clean silence between events)"
+  ]
+ }
+]

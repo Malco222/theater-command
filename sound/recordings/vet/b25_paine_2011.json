@@ -1,0 +1,65 @@
+[
+ {
+  "file": "b25_paine_2011.mka",
+  "format": "vorbis 44100 Hz 2 ch 114 kbps",
+  "seconds": 86.7,
+  "read": [
+   0,
+   86.7
+  ],
+  "fromFilm": false,
+  "peakDb": 3.2,
+  "lufs": -3.8,
+  "loudestMomentLufs": 0.1,
+  "floorDb": -120,
+  "rangeDb": 114.1,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -26.9,
+   "low": -12.9,
+   "lowmid": -8.4,
+   "mid": -6,
+   "presence": -4.2,
+   "air": -7.8
+  },
+  "stereo": 0.95,
+  "talk": 0.27,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 2.355,
+    "db": -16.4
+   },
+   {
+    "at": 4.325,
+    "db": -11.4
+   },
+   {
+    "at": 4.67,
+    "db": -11
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 4.67,
+    "db": -11
+   },
+   {
+    "at": 4.325,
+    "db": -11.4
+   },
+   {
+    "at": 2.355,
+    "db": -16.4
+   }
+  ],
+  "steady": {
+   "from": 15.5,
+   "to": 23.5,
+   "wobbleDb": 0.21
+  },
+  "flags": [
+   "LOW RATE: vorbis at 114 kbps"
+  ]
+ }
+]

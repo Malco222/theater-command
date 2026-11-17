@@ -1,0 +1,67 @@
+[
+ {
+  "file": "explosions_ls100152.ogg",
+  "format": "vorbis 44100 Hz 2 ch 160 kbps",
+  "seconds": 7.1,
+  "read": [
+   0,
+   7.1
+  ],
+  "fromFilm": false,
+  "peakDb": 0.3,
+  "lufs": -15.9,
+  "loudestMomentLufs": -13.4,
+  "floorDb": -53.2,
+  "rangeDb": 41.5,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -29.6,
+   "low": -9.1,
+   "lowmid": -1.2,
+   "mid": -9.8,
+   "presence": -32.4,
+   "air": -45.2
+  },
+  "stereo": 0.94,
+  "talk": 0.35,
+  "events": 4,
+  "firstEvents": [
+   {
+    "at": 0.61,
+    "db": -5.8
+   },
+   {
+    "at": 1.575,
+    "db": -5.2
+   },
+   {
+    "at": 2.72,
+    "db": -5.9
+   },
+   {
+    "at": 3.345,
+    "db": -6.6
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 1.575,
+    "db": -5.2
+   },
+   {
+    "at": 0.61,
+    "db": -5.8
+   },
+   {
+    "at": 2.72,
+    "db": -5.9
+   },
+   {
+    "at": 3.345,
+    "db": -6.6
+   }
+  ],
+  "steady": null,
+  "flags": []
+ }
+]

@@ -1,0 +1,79 @@
+[
+ {
+  "file": "cannon_130mm_finnish.mka",
+  "format": "opus 48000 Hz 2 ch 89 kbps",
+  "seconds": 30.9,
+  "read": [
+   0,
+   30.9
+  ],
+  "fromFilm": false,
+  "peakDb": 6.8,
+  "lufs": -5.3,
+  "loudestMomentLufs": 0.1,
+  "floorDb": -54.7,
+  "rangeDb": 51.8,
+  "topKhz": 16,
+  "bands": {
+   "sub": -21.9,
+   "low": -7.1,
+   "lowmid": -3.9,
+   "mid": -5.3,
+   "presence": -12.4,
+   "air": -20.4
+  },
+  "stereo": 0.66,
+  "talk": 0.28,
+  "events": 5,
+  "firstEvents": [
+   {
+    "at": 2.875,
+    "db": -1.2
+   },
+   {
+    "at": 5.565,
+    "db": -4.5
+   },
+   {
+    "at": 14.59,
+    "db": -1.2
+   },
+   {
+    "at": 18.405,
+    "db": -3
+   },
+   {
+    "at": 23.57,
+    "db": -4.5
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 2.875,
+    "db": -1.2
+   },
+   {
+    "at": 14.59,
+    "db": -1.2
+   },
+   {
+    "at": 18.405,
+    "db": -3
+   },
+   {
+    "at": 5.565,
+    "db": -4.5
+   },
+   {
+    "at": 23.57,
+    "db": -4.5
+   }
+  ],
+  "steady": {
+   "from": 6,
+   "to": 14,
+   "wobbleDb": 4.86
+  },
+  "flags": []
+ }
+]

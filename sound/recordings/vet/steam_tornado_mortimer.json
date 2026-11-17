@@ -1,0 +1,49 @@
+[
+ {
+  "file": "steam_tornado_mortimer.mka",
+  "format": "vorbis 44100 Hz 2 ch 99 kbps",
+  "seconds": 38,
+  "read": [
+   0,
+   38
+  ],
+  "fromFilm": false,
+  "peakDb": 0.5,
+  "lufs": -7.5,
+  "loudestMomentLufs": -3.7,
+  "floorDb": -120,
+  "rangeDb": 114.3,
+  "topKhz": 16,
+  "bands": {
+   "sub": -10.3,
+   "low": -5.5,
+   "lowmid": -13.5,
+   "mid": -2.9,
+   "presence": -14.9,
+   "air": -35.5
+  },
+  "stereo": 1,
+  "talk": 0.19,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 4.385,
+    "db": -11.2
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 4.385,
+    "db": -11.2
+   }
+  ],
+  "steady": {
+   "from": 17.5,
+   "to": 25.5,
+   "wobbleDb": 0.93
+  },
+  "flags": [
+   "LOW RATE: vorbis at 99 kbps"
+  ]
+ }
+]
