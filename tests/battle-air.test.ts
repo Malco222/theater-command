@@ -139,6 +139,11 @@ describe('what the player decides', () => {
     expect(s.over).not.toBeNull();
     for (const u of s.units) expect(u.n0 - u.n).toBeGreaterThanOrEqual(sofar.get(u.id)!);
     expect(s.over!.lines[0]).toContain('The staff settled the rest of the raid on Alsace');
+    // The after card splits the bill (the design director, 18:39Z): what was fought before the press, then the staff's part.
+    const before = s.over!.lines.find((l) => l.startsWith('Before you handed it over:'));
+    expect(before).toBeTruthy();
+    expect(s.over!.lines.some((l) => l.startsWith('The staff settled the rest:'))).toBe(true);
+    expect(s.over!.lines.indexOf(before!)).toBeLessThan(s.over!.lines.findIndex((l) => l.startsWith('The staff settled the rest:')));
     expect(s.outcome().dropped).toBeGreaterThan(0);
   });
 

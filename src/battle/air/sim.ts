@@ -42,6 +42,8 @@ export class AirSim implements BattleSim<AirUnit> {
   private scrambled = false;
   private gaveUp: Side | null = null;
   private toStaff = false;
+  /** Each side's losses when the player handed the rest to the staff, for the after card. */
+  private before: { att: { ftr: number; bmr: number }; def: { ftr: number; bmr: number } } | null = null;
   private flakT: number;
   /** The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber, the bombers' own guns. */
   private law = { D: 0, B: 0, ePer: 0, guns: 0, met: 0 };
@@ -572,6 +574,8 @@ export class AirSim implements BattleSim<AirUnit> {
    */
   private settleNow(): void {
     if (this.over) return;
+    const lost = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
+    this.before = { att: { ftr: lost('att', 'ftr'), bmr: lost('att', 'bmr') }, def: { ftr: lost('def', 'ftr'), bmr: 0 } };
     const live = this.units.filter(flying);
     const inPlay = (v: AirUnit): boolean => !away(v);
     for (const u of live) {
@@ -625,12 +629,18 @@ export class AirSim implements BattleSim<AirUnit> {
       : lost.def > lost.att ? 'att' : 'def';
     const R = fieldRatio(winner, lost);
     const count = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
-    const attLine = `${this.ticket.att.adj} losses: ${count('att', 'ftr')} fighters${bombers0 ? `, ${count('att', 'bmr')} bombers` : ''}.`;
-    const defLine = `${this.ticket.def.adj} losses: ${count('def', 'ftr')} fighters.`;
+    const losses = (n: (s: Side, k: 'ftr' | 'bmr') => number): string => {
+      const attLine = `${this.ticket.att.adj} losses: ${n('att', 'ftr')} fighters${bombers0 ? `, ${n('att', 'bmr')} bombers` : ''}.`;
+      const defLine = `${this.ticket.def.adj} losses: ${n('def', 'ftr')} fighters.`;
+      // The player's own side first, whichever side he is (the UI director, 18:28Z).
+      return (this.ticket.def.human && !this.ticket.att.human ? [defLine, attLine] : [attLine, defLine]).join(' ');
+    };
+    const B = this.before;
     const lines = [
       bombers0 > 0 ? `${out.dropped} of ${bombers0} bombers dropped on ${this.place.name}${out.jettisoned ? `; ${out.jettisoned} jettisoned their bombs` : ''}.` : `The fight for the sky over ${this.place.name}.`,
-      // The player's own side first, whichever side he is (the UI director, 18:28Z).
-      (this.ticket.def.human && !this.ticket.att.human ? [defLine, attLine] : [attLine, defLine]).join(' '),
+      // Handed to the staff partway (the design director, 18:39Z): say which losses were fought and which the staff
+      // settled, so the card never reads against the campaign's bill.
+      ...(B ? [`Before you handed it over: ${losses((s, k) => B[s][k])}`, `The staff settled the rest: ${losses((s, k) => count(s, k) - B[s][k])}`] : [losses(count)]),
     ];
     this.over = {
       winner, how, seconds: this.t, lost,

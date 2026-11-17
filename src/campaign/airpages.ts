@@ -21,6 +21,7 @@ import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
   raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
+import type { FoughtAir } from './airfought';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
 export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
@@ -306,7 +307,7 @@ export function airPage(g: Game, id: string, region = -1): Page | null {
 }
 
 /** Something pressed on one of those pages. Null if the action is not one of the air war's. */
-export function airAct(g: Game, action: string): AirActResult | null {
+export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResult | null {
   if (!airWar(g) || !g.human) return null;
   const part = action.split(':');
   if (part[0] === 'raid' && isKind(part[1]) && part.length >= 4) {
@@ -314,7 +315,8 @@ export function airAct(g: Game, action: string): AirActResult | null {
     const first = g.airFleets.find((f) => f.id === list[0]);
     const from = first ? groupAt(g, first) : null;
     const h0 = g.headlines.length;
-    const rep = orderRaid(g, kind, target, list);
+    // A raid fought out as an air battle (src/battle/air) is paid with what the battle reports, inside the dice's run.
+    const rep = orderRaid(g, kind, target, list, fought);
     if (!rep) return { ok: false, note: previewRaid(g, kind, target, list).why ?? 'That raid cannot be flown now.' };
     // A strike at sea is drawn to the sea it was fought over, a raid on land to its province.
     const p = rep.zone >= 0 ? g.seas[rep.zone] : g.regions[target];
