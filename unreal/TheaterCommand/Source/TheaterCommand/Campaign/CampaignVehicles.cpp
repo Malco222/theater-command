@@ -1756,14 +1756,19 @@ int32 FMiniatureMesh::YearOf(const FString& Tag, int32 Branch)
 FString FMiniatureMesh::MainTankOf(const FString& Tag)
 {
 	const int32 Reached = YearOf(Tag, 0);
-	if (Tag == TEXT("GER")) return Reached >= 1944 ? TEXT("Panther") : Reached >= 1943 ? TEXT("Tiger") : TEXT("PanzerIV");
-	if (Tag == TEXT("SOV")) return Reached >= 1944 ? TEXT("T34-85") : TEXT("T34");
-	if (Tag == TEXT("USA")) return TEXT("Sherman");
+	// (The art director's unit table after the historian's realism audit, items 6, 7 and 8, 17 November 2026: each army
+	// in the year its line tank came, rounded to a year. Germany's is never the Tiger: a heavy unit keeps that.)
+	if (Tag == TEXT("GER")) return Reached >= 1944 ? TEXT("Panther") : TEXT("PanzerIV");
+	if (Tag == TEXT("SOV")) return Reached >= 1944 ? FString(TEXT("T34-85")) : Reached >= 1941 ? FString(TEXT("T34")) : TEXT("LightTank:") + Tag;
+	if (Tag == TEXT("USA")) return Reached >= 1942 ? FString(TEXT("Sherman")) : TEXT("LightTank:") + Tag;
 	if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR")) return TEXT("CharB1");
 	if (Tag == TEXT("ITA")) return TEXT("M13");
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Type97");
 	if (Tag == TEXT("POL")) return TEXT("7TP");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Matilda");
+	// (Britain and the Commonwealth: the Matilda, then America's Sherman from 1943, shared by the record. Australia's armour
+	// fought in Matildas to the war's end.)
+	if (Tag == TEXT("AUS")) return TEXT("Matilda");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1943 ? TEXT("Sherman") : TEXT("Matilda");
 	// (The medium tank from the month the country holds the tree's medium tanks, which the rules send as a design
 	// year of 1942; in a history campaign with no tree, from January 1942. Until then the light tank. A country that
 	// goes on to heavy tanks keeps the medium tank.)

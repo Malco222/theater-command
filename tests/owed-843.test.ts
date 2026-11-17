@@ -28,7 +28,7 @@ describe('home ground still in enemy hands with no troops in it keeps its row (b
     expect(row.lines[0]).toBe('Buffalo, on your home ground, is still in Canadian hands, with no troops in it.');
     expect(row.lines[1]).toBe('');
     expect(row.lines[2]).toMatch(/^(.+ can march in and take it back (this month|in \d+ months?, by (rail|road))\.|No army of yours can reach it\. A new corps takes \d+ months?\.)$/);
-    if (row.help) expect(row.hand).toMatch(/ is in hand\. Right-click .+ to (march in|send it)\.$/);
+    if (row.help) expect(row.hand).toMatch(/ is in hand\. (Right-click .+ to (march in|send it|send it on towards Buffalo)|It can march into Buffalo next month)\.$/);
     // Every row with an enemy army comes first.
     const firstEmpty = all.findIndex((a) => a.case === 'empty');
     expect(all.slice(firstEmpty).every((a) => a.case === 'empty')).toBe(true);

@@ -75,7 +75,7 @@
    "cloth_name": "as built",
    "tank": {
     "src": "own",
-    "model": "PanzerIV, Tiger 1943, Panther 1944"
+    "model": "PanzerIV, Panther 1944"
    },
    "gun": {
     "src": "own",
@@ -129,7 +129,8 @@
    "cloth_name": "as built",
    "tank": {
     "src": "own",
-    "model": "Matilda"
+    "model": "Matilda, Sherman 1943",
+    "from_1943_of": "USA"
    },
    "gun": {
     "src": "own",
@@ -141,7 +142,7 @@
    },
    "fighter": {
     "src": "own",
-    "model": "Hurricane, Spitfire 1941"
+    "model": "Hurricane, Spitfire 1940"
    },
    "bomber": {
     "src": "own",
@@ -183,7 +184,7 @@
    "cloth_name": "as built",
    "tank": {
     "src": "own",
-    "model": "Sherman"
+    "model": "LightTank, Sherman 1942"
    },
    "gun": {
     "src": "own",
@@ -195,7 +196,7 @@
    },
    "fighter": {
     "src": "own",
-    "model": "Warhawk, Mustang 1943"
+    "model": "Warhawk, Mustang 1944"
    },
    "bomber": {
     "src": "own",
@@ -237,7 +238,7 @@
    "cloth_name": "as built",
    "tank": {
     "src": "own",
-    "model": "T34, T34-85 1944"
+    "model": "LightTank, T34 1941, T34-85 1944"
    },
    "gun": {
     "src": "own",
@@ -249,7 +250,7 @@
    },
    "fighter": {
     "src": "own",
-    "model": "Yak"
+    "model": "Fighter, Yak 1942"
    },
    "bomber": {
     "src": "generic",
@@ -626,8 +627,9 @@
    "cloth_name": "as built",
    "tank": {
     "src": "shared",
-    "model": "Matilda",
-    "of": "UK"
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
    },
    "gun": {
     "src": "shared",
@@ -640,7 +642,7 @@
    },
    "fighter": {
     "src": "shared",
-    "model": "Hurricane, Spitfire 1941",
+    "model": "Hurricane, Spitfire 1940",
     "of": "UK"
    },
    "bomber": {
@@ -702,7 +704,7 @@
    },
    "fighter": {
     "src": "shared",
-    "model": "Hurricane, Spitfire 1941",
+    "model": "Hurricane, Spitfire 1940",
     "of": "UK"
    },
    "bomber": {
@@ -750,8 +752,9 @@
    "cloth_name": "as built",
    "tank": {
     "src": "shared",
-    "model": "Matilda",
-    "of": "UK"
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
    },
    "gun": {
     "src": "shared",
@@ -764,7 +767,7 @@
    },
    "fighter": {
     "src": "shared",
-    "model": "Hurricane, Spitfire 1941",
+    "model": "Hurricane, Spitfire 1940",
     "of": "UK"
    },
    "bomber": {
@@ -812,8 +815,9 @@
    "cloth_name": "as built",
    "tank": {
     "src": "shared",
-    "model": "Matilda",
-    "of": "UK"
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
    },
    "gun": {
     "src": "shared",
@@ -826,7 +830,7 @@
    },
    "fighter": {
     "src": "shared",
-    "model": "Hurricane, Spitfire 1941",
+    "model": "Hurricane, Spitfire 1940",
     "of": "UK"
    },
    "bomber": {
@@ -874,8 +878,9 @@
    "cloth_name": "as built",
    "tank": {
     "src": "shared",
-    "model": "Matilda",
-    "of": "UK"
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
    },
    "gun": {
     "src": "shared",
@@ -888,7 +893,7 @@
    },
    "fighter": {
     "src": "shared",
-    "model": "Hurricane, Spitfire 1941",
+    "model": "Hurricane, Spitfire 1940",
     "of": "UK"
    },
    "bomber": {
@@ -3441,6 +3446,489 @@
    },
    "hull": "5E666A",
    "hull_name": "dark grey"
+  },
+  "THA": {
+   "name": "Thailand",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "6F7450",
+   "cloth_name": "jungle olive",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "marking": [
+    "C8102E",
+    "1F3F8F",
+    "F2EEE2"
+   ],
+   "marking_words": "red, blue, white",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "MAN": {
+   "name": "Manchukuo",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "cap",
+    "of": "JAP"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "6C6444",
+   "paint_name": "brown olive",
+   "marking": [
+    "F2C200",
+    "C8102E",
+    "1F3F8F"
+   ],
+   "marking_words": "yellow, red, blue",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "MGL": {
+   "name": "Mongolia",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "soviet",
+    "of": "SOV"
+   },
+   "cloth": "6E7B6A",
+   "cloth_name": "grey-green",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "60664A",
+   "paint_name": "olive green",
+   "marking": [
+    "C8102E",
+    "F2C200",
+    "C8102E"
+   ],
+   "marking_words": "red, yellow, red",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "AFG": {
+   "name": "Afghanistan",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "747A7E",
+   "cloth_name": "slate grey",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "6C6444",
+   "paint_name": "brown olive",
+   "marking": [
+    "1A1A1A",
+    "C8102E",
+    "1E7A3C"
+   ],
+   "marking_words": "black, red, green",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "NEP": {
+   "name": "Nepal",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "6F7450",
+   "cloth_name": "jungle olive",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "marking": [
+    "1F3F8F",
+    "C8102E",
+    "F2EEE2"
+   ],
+   "marking_words": "blue, red, white",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "SAU": {
+   "name": "Saudi Arabia",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "6C6444",
+   "paint_name": "brown olive",
+   "marking": [
+    "1E7A3C",
+    "F2EEE2",
+    "1E7A3C"
+   ],
+   "marking_words": "green, white, green",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "YEM": {
+   "name": "Yemen",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "9A8A62",
+   "paint_name": "sand",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "red, white, red",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "LBR": {
+   "name": "Liberia",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "paint": "60664A",
+   "paint_name": "olive green",
+   "marking": [
+    "C8102E",
+    "1F3F8F",
+    "F2EEE2"
+   ],
+   "marking_words": "red, blue, white",
+   "battleship": {
+    "src": "generic",
+    "model": "GenericBattleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "GenericCruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
   }
  }
 }

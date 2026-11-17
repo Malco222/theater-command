@@ -1851,6 +1851,17 @@ type Look = NonNullable<ReturnType<typeof attackOutlook>>;
  */
 const chanceWords = (look: Look): string => (look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%`
   : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`);
+/**
+ * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, said: at the ends of the scale in
+ * words, never "about 100%" or "about 0%". The card's own odds line says it the same way (ChanceTo in the controller).
+ */
+// (Rules 84.3.1: the browser's endSaid, word for word.) `named` where the line has already named the staff.
+const endWords = (words: string, named = false): string => (words === 'about 100%' ? (named ? 'they are sure of it' : 'your staff is sure of it')
+  : words === 'about 0%' ? (named ? 'they give it no chance' : 'your staff gives it no chance') : '');
+const chanceTo = (look: Look, place: string): string => {
+  const words = chanceWords(look);
+  return endWords(words) || `${words} to take ${place}`;
+};
 /** Men to the nearest hundred, for a forecast that is not exact. */
 const roughMen = (n: number): string => (n < 100 ? 'under 100' : (Math.round(n / 100) * 100).toLocaleString('en'));
 /**
@@ -1880,9 +1891,8 @@ function massNote(s: Game, corps: Corps[], to: number, odds: number | null): { n
   const extra = everyone.filter((c) => !inSet.has(c.id)).length;
   const massed = extra ? attackOutlook(s, everyone, target) : null;
   if (!massed || (odds !== null && massed.odds <= odds * 1.02)) return null;
-  const chance = chanceWords(massed);
   return {
-    note: `${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
+    note: `${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chanceTo(massed, target.name)}.`,
     ids: cands.map((c) => c.id),
   };
 }
@@ -1908,7 +1918,7 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
   return {
     head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.',
-    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now it reads ${done.now}.` : ''}` : '',
+    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ''}` : '',
     probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : ' THE LINE'}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
     bomb: v.bomb ? {
       label: 'BOMB THE LINE', ok: !v.bomb.why,
@@ -1916,6 +1926,33 @@ function softenRow(s: Game, corps: Corps[], to: number) {
       open: v.bomb.why ? '' : `plan:line:${to}:${(() => { try { return weighRaid(s, 'line', to).picked.join('.'); } catch { return ''; } })()}`,
       text: v.bomb.why ?? `${v.bomb.groups === 1 ? 'One air group' : `${v.bomb.groups} air groups`} with ${num(v.bomb.bombers)} bombers can reach it, and should take about ${mo(v.bomb.wear)} off the fieldworks. ${v.bomb.verdict}. The planner shows what will meet them.`,
     } : null,
+  };
+}
+
+/**
+ * (The UI director, 17 November, on the 3D replay of v8425 C.) The card always shows exactly what the player picked,
+ * never the whole army. Where that pick cannot go (guns or engineers alone, ruling 211(a)), the attacking side shows
+ * the corps picked and no men to take the ground, there is no forecast, `alone` is the rules' sentence for the foot,
+ * and the row of everyone in reach stays as the way to mend the pick.
+ */
+function barredCard(s: Game, ids: number[], to: number, alone: string) {
+  const target = s.regions[to];
+  const picked = wouldAttack(s, ids, to);
+  const mass = massNote(s, picked, to, null);
+  const foes = s.human ? hostileUnits(s, target, s.human).filter((u) => !u.dead) : [];
+  const named = (c: Corps) => {
+    const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
+    return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
+      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${corpsNamed(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
+        : { id: c.id, nat: c.nat, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+  };
+  return {
+    region: to, alone, exact: true, attack: 0, defence: 0, odds: 0, lo: 0, hi: 0, even: 1.2, note: '', lines: [], face: [], cost: [], opened: '',
+    hasChance: false, chanceWords: '', tone: '', verdict: '', soften: null, prize: prizeLine(s, to),
+    allies: [...new Set(picked.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))],
+    mass: mass?.note ?? '', massIds: mass?.ids ?? [], ids: picked.map((c) => c.id), pickedIds: [] as number[],
+    attackers: picked.map((c) => ({ id: c.id, name: corpsNamed(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+    defenders: foes.map(named),
   };
 }
 
@@ -1932,15 +1969,17 @@ function preview(ids: number[], to: number, open = false, glance = false) {
     const best = mine.length ? openingForce(s, mine, s.regions[to]) : null;
     if (best?.widened) { pickedIds = mine.map((c) => c.id); ids = best.corps.map((c) => c.id); }
   }
-  // (Rules 84.2.5; ruling 211(a).) Guns open no attack alone: the rules' sentence, where no fighting corps goes in with them.
+  // (Rules 84.2.5; ruling 211(a).) Guns open no attack alone: the rules' sentence, where no fighting corps goes in with
+  // them. Where the order opens the card (or the pointer asks for the odds) that is all there is to say.
   const alone = leadWhy(s, wouldAttack(s, ids, to), to);
-  if (alone) return { region: to, refused: alone };
-  const corps = attackers(s, ids, to);
+  if (alone && (open || glance)) return { region: to, refused: alone };
   // (Version 55) Enemy troops standing on the ground of a country the player is not at war with cannot be attacked
   // until war is declared on that country: the rules say why, and the game tells the player instead of the odds.
   const foeThere = !!s.human && s.regions[to].units.some((u) => !u.dead && atWar(s, s.human!, u.nat));
   const refused = foeThere ? whyNotAttack(s, s.regions[to]) : '';
   if (refused) return { region: to, refused };
+  if (alone) return barredCard(s, ids, to, alone);
+  const corps = attackers(s, ids, to);
   const a = previewAttack(s, corps, s.regions[to]);
   if (!a) return null;
   // Where the defenders are not all identified, the odds are a band and the ticket leaves out what is not known.

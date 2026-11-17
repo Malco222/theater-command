@@ -129,6 +129,10 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
 	Opening.bCanReturn = Rules->IsRunning();
+	if (bShow && !Opening.bVisible)
+	{
+		DoorSince = FPlatformTime::Seconds();
+	}
 	Opening.bVisible = bShow;
 	++Opening.Revision;
 }
@@ -872,13 +876,13 @@ void ACampaignPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACampaignPlayerController::WheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACampaignPlayerController::WheelDown);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
-	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
-	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::EscapeKey);
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EnterKey);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceKey);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
-	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
+	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::TabKey); // (rules 84.3.2: through the key guard)
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
@@ -2574,6 +2578,58 @@ void ACampaignPlayerController::ToggleEffects()
 	SaveOptions();
 }
 
+void ACampaignPlayerController::EnterKey()
+{
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The map's own Enter never takes the press that put a card
+	// down, nor one hurried after it: Enter on CALL IT OFF or Esc, and a second Enter at once, opened the question
+	// before the month's end. A card put down by the mouse leaves it free.
+	const bool bCardUp = IsCardUp();
+	if (!bCardUp && !bScripted && FPlatformTime::Seconds() - KeyShutAt < 0.5)
+	{
+		return;
+	}
+	bEnterByKey = true;
+	EndMonth();
+	bEnterByKey = false;
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds();
+	}
+}
+
+void ACampaignPlayerController::EscapeKey()
+{
+	const bool bCardUp = IsCardUp();
+	Escape();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::SpaceKey()
+{
+	const bool bCardUp = IsCardUp();
+	SpaceBar();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::TabKey()
+{
+	// (Rules 84.3.2; the second playtester's check of 84.3.1.) Tab on the question before the month's end is its SHOW ME
+	// and puts the question down by a key: the map's own Enter then waits the guard's half second, so Tab and a hurried
+	// Enter never end the month the question was asked about.
+	const bool bCardUp = IsCardUp();
+	NextArmy();
+	if (bCardUp && !IsCardUp())
+	{
+		KeyShutAt = FPlatformTime::Seconds();
+	}
+}
+
 void ACampaignPlayerController::SpaceBar()
 {
 	if (FaceOff.bVisible && FaceOff.bResolved && !bScripted)
@@ -3668,6 +3724,178 @@ void ACampaignPlayerController::DismissAnnouncement()
 	}
 }
 
+void ACampaignPlayerController::FrameReachSoon()
+{
+	if (bScripted || bWatching || ArmyRegion == INDEX_NONE)
+	{
+		FrameReachFor = INDEX_NONE;
+		return;
+	}
+	FrameReachFor = ArmyRegion;
+	FrameReachFrom = FPlatformTime::Seconds() + 0.15; // (the tray is laid out a frame after the army is in hand)
+	FrameReachUntil = FPlatformTime::Seconds() + 3.0;
+}
+
+void ACampaignPlayerController::FrameReach()
+{
+	THEATER_SPEED_SCOPE(FrameReach); // (the code checker's pre-check: the search below grows with the panels, four loops deep)
+	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	if (!Eye || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(ArmyRegion) || Width <= 0 || Height <= 0 || FrameOnScreen.Num() == 0)
+	{
+		return;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	const FVector2D Screen(Width, Height);
+	TArray<FBox2D> Panels;
+	for (const FBox2D& Each : FrameOnScreen)
+	{
+		Panels.Add(FBox2D(Each.Min - FVector2D(8.0, 8.0), Each.Max + FVector2D(8.0, 8.0)));
+	}
+
+	// The ground in question, on the screen: the army's own province and every one it can reach, each with room round it.
+	TArray<int32> Places;
+	Places.Add(ArmyRegion);
+	for (const FReachRegion& Each : Reach)
+	{
+		Places.AddUnique(Each.Region);
+	}
+	const double Room = 56.0, Touch = 20.0;
+	FBox2D Ground(ForceInit);
+	bool bHidden = false;
+	for (const int32 Place : Places)
+	{
+		if (!Data.Regions.IsValidIndex(Place))
+		{
+			continue;
+		}
+		const FVector2D At = Data.Regions[Place].Center;
+		FVector2D Spot;
+		if (!ProjectWorldLocationToScreen(Map->MapToWorld(At.X, At.Y), Spot) || Spot.X < -Screen.X || Spot.X > 2.0 * Screen.X || Spot.Y < -Screen.Y || Spot.Y > 2.0 * Screen.Y)
+		{
+			continue; // (behind the eye, or round the world's seam: not framed)
+		}
+		Ground += FBox2D(Spot - FVector2D(Room, Room), Spot + FVector2D(Room, Room));
+		const FBox2D Near(Spot - FVector2D(Touch, Touch), Spot + FVector2D(Touch, Touch));
+		for (const FBox2D& Panel : Panels)
+		{
+			if (Panel.Intersect(Near))
+			{
+				bHidden = true; // (under a panel)
+			}
+		}
+	}
+	if (!Ground.bIsValid || !bHidden)
+	{
+		return; // (none of it is under a panel: the map stays where the player put it)
+	}
+
+	// The open map: of the stretches of the screen no panel covers, the one the ground fits best, and of those that
+	// fit, the one it need travel least to reach.
+	TArray<double> Xs = { 0.0, Screen.X }, Ys = { 0.0, Screen.Y };
+	for (const FBox2D& Panel : Panels)
+	{
+		Xs.AddUnique(FMath::Clamp(Panel.Min.X, 0.0, Screen.X));
+		Xs.AddUnique(FMath::Clamp(Panel.Max.X, 0.0, Screen.X));
+		Ys.AddUnique(FMath::Clamp(Panel.Min.Y, 0.0, Screen.Y));
+		Ys.AddUnique(FMath::Clamp(Panel.Max.Y, 0.0, Screen.Y));
+	}
+	Xs.Sort();
+	Ys.Sort();
+	const FVector2D Need = Ground.GetSize(), Middle = Ground.GetCenter();
+	// (how far the ground's middle must move to lie in an open stretch: nowhere, if it is inside already)
+	auto ShiftInto = [&Need, &Middle](const FBox2D& Open, bool bFits) -> FVector2D
+	{
+		if (!bFits)
+		{
+			return Open.GetCenter() - Middle;
+		}
+		const FVector2D Low = Open.Min + Need * 0.5, High = Open.Max - Need * 0.5;
+		return FVector2D(FMath::Clamp(Middle.X, Low.X, High.X), FMath::Clamp(Middle.Y, Low.Y, High.Y)) - Middle;
+	};
+	FBox2D Best(ForceInit);
+	double BestFit = 0.0, BestTravel = 0.0;
+	for (int32 Left = 0; Left < Xs.Num(); ++Left)
+	{
+		for (int32 Right = Left + 1; Right < Xs.Num(); ++Right)
+		{
+			for (int32 Top = 0; Top < Ys.Num(); ++Top)
+			{
+				for (int32 Bottom = Top + 1; Bottom < Ys.Num(); ++Bottom)
+				{
+					const FBox2D Open(FVector2D(Xs[Left], Ys[Top]), FVector2D(Xs[Right], Ys[Bottom]));
+					const FVector2D Size = Open.GetSize();
+					if (Size.X < 160.0 || Size.Y < 160.0)
+					{
+						continue;
+					}
+					bool bClear = true;
+					for (const FBox2D& Panel : Panels)
+					{
+						if (Panel.Min.X < Open.Max.X - 0.5 && Panel.Max.X > Open.Min.X + 0.5 && Panel.Min.Y < Open.Max.Y - 0.5 && Panel.Max.Y > Open.Min.Y + 0.5)
+						{
+							bClear = false;
+							break;
+						}
+					}
+					if (!bClear)
+					{
+						continue;
+					}
+					const double Fit = FMath::Min(1.0, FMath::Min(Size.X / FMath::Max(Need.X, 1.0), Size.Y / FMath::Max(Need.Y, 1.0)));
+					const double Travel = ShiftInto(Open, Fit >= 0.999).Size();
+					if (Fit > BestFit + 0.01 || (Fit > BestFit - 0.01 && Travel < BestTravel))
+					{
+						Best = Open;
+						BestFit = Fit;
+						BestTravel = Travel;
+					}
+				}
+			}
+		}
+	}
+	if (!Best.bIsValid || BestFit <= 0.0)
+	{
+		return;
+	}
+
+	// Where the ground would rest: inside the open stretch, moved no further than it must be. Where it does not fit,
+	// the eye goes back a little (never past the height a campaign opens at), and the ground is centred there.
+	const double Ratio = Eye->MaxDistance / FMath::Max(Eye->MinDistance, 1.0f);
+	const float Zoom = Eye->GetZoom();
+	float NewZoom = Zoom;
+	if (BestFit < 0.999)
+	{
+		NewZoom = FMath::Min(Zoom + static_cast<float>(FMath::Loge(FMath::Min(1.0 / BestFit, 1.6)) / FMath::Loge(Ratio)), FMath::Max(Zoom, 0.62f));
+	}
+	const double Scale = FMath::Pow(Ratio, static_cast<double>(NewZoom - Zoom)); // (how much further every pixel reaches on the table)
+	const FVector2D Shift = ShiftInto(Best, BestFit >= 0.999); // (where the ground's middle should come to, from where it is, on the screen)
+	auto OnTable = [this](const FVector2D& At, FVector& Out) -> bool
+	{
+		FVector Origin, Direction;
+		return DeprojectScreenPositionToWorld(static_cast<float>(At.X), static_cast<float>(At.Y), Origin, Direction) && RayOnTable(Origin, Direction, Out);
+	};
+	FVector GroundAt, GoalAt;
+	if (!OnTable(Middle, GroundAt) || !OnTable(Middle + Shift, GoalAt))
+	{
+		return;
+	}
+	// (The table under the screen's middle is the eye's focus. A point the ground should come to lies, after the move,
+	// at the focus plus its old offset from the focus, stretched by however far the eye went back.)
+	const FVector Focus = Eye->GetFocus();
+	const FVector Goal = GroundAt - (GoalAt - Focus) * Scale;
+	if (FVector::Dist2D(Goal, Focus) < 1.0 && NewZoom == Zoom)
+	{
+		return;
+	}
+	Eye->GoTo(FVector(Goal.X, Goal.Y, 0.0), NewZoom, false);
+	// (item 4: the view moved under a pointer that did not)
+	float PointerX = 0.0f, PointerY = 0.0f;
+	TipHushedAt = GetMousePosition(PointerX, PointerY) ? FVector2D(PointerX, PointerY) : LastMouse;
+	bTipHushed = true;
+}
+
 void ACampaignPlayerController::NextArmy()
 {
 	FCampaignSession* Session = GetSession();
@@ -3715,7 +3943,13 @@ void ACampaignPlayerController::NextArmy()
 	{
 		const FVector2D At = Map->GetData().Regions[Next].Center;
 		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+		// (The UI director's 84.3 check, item 4.) The view moves under a pointer that has not: the hover box goes until
+		// the pointer moves again, so it never names a place the pointer was not put on.
+		float PointerX = 0.0f, PointerY = 0.0f;
+		TipHushedAt = GetMousePosition(PointerX, PointerY) ? FVector2D(PointerX, PointerY) : LastMouse;
+		bTipHushed = true;
 	}
+	FrameReachSoon(); // (item 3: once the view has come to rest)
 }
 
 void ACampaignPlayerController::Escape()
@@ -3961,6 +4195,20 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			CampaignSounds::Play(this, TEXT("tick"), 1.0f, 0.7f);
 		}
 		bButtonDown = bDown;
+		// (The UI director's 84.3 check, item 3.) A right-click that lands on a panel never reaches the map, so it is
+		// noted here, as the screen saw it, and answered with a line below.
+		const bool bRightDown = Slate.GetPressedMouseButtons().Contains(EKeys::RightMouseButton);
+		if (bRightDown && !bSlateRightDown)
+		{
+			bRightPressOnPanel = bPointerOverPanel;
+			RightPanelPress = Slate.GetCursorPos();
+		}
+		else if (!bRightDown && bSlateRightDown && bRightPressOnPanel)
+		{
+			bRightPressOnPanel = false;
+			bPanelRightClick = bPointerOverPanel && FVector2D::Distance(Slate.GetCursorPos(), RightPanelPress) <= 6.0;
+		}
+		bSlateRightDown = bRightDown;
 	}
 
 	// The standing choices are read once, when everything in the room is there to be told of them.
@@ -4112,6 +4360,28 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	const bool bBusy = IsTableBusy();
 
+	// (The UI director's 84.3 check, item 3.) An army picked up by a hand: once the view is still and its tray is laid out,
+	// the map is framed so the ground it can reach lies clear of the tray, the chips and every other panel. A press that
+	// becomes a carry, a turn of the view or an order given first leaves the map where it is.
+	{
+		const FVector CameraSpot = PlayerCameraManager ? PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+		const bool bViewStill = FVector::DistSquared(CameraSpot, LastCameraSpot) < 1.0;
+		LastCameraSpot = CameraSpot;
+		if (FrameReachFor != INDEX_NONE)
+		{
+			const double Now = FPlatformTime::Seconds();
+			if (FrameReachFor != ArmyRegion || bHandOrdered || bScripted || bWatching || bDragging || bTurning || Now > FrameReachUntil)
+			{
+				FrameReachFor = INDEX_NONE;
+			}
+			else if (!bBusy && !bLeftHeld && !bRightHeld && Now >= FrameReachFrom && bViewStill)
+			{
+				FrameReachFor = INDEX_NONE;
+				FrameReach();
+			}
+		}
+	}
+
 	// (Ruling 205(c).) The first night of a campaign says once, on the paper line, that it is night and which key holds
 	// the hour: Brian took the night for the fog of war (17 November 2026).
 	if (!bNightTold && !bScripted && !bBusy)
@@ -4148,6 +4418,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bRightHeld = true;
 		bTurning = false;
 		RightPressPosition = Mouse;
+		bRightGameOnPanel = bPointerOverPanel; // (item 3: an order never goes through a panel to ground the player cannot see)
 	}
 	if (bRightHeld && IsInputKeyDown(EKeys::RightMouseButton) && bHaveMouse)
 	{
@@ -4161,9 +4432,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			Eye->TiltBy(static_cast<float>(-MouseDelta.Y) * 0.2f);
 		}
 	}
+	// (The UI director's 84.3 check, item 3.) A right-click on a panel, with something in hand to send: the line names the
+	// place beneath, and how to reach it.
+	if (bPanelRightClick)
+	{
+		bPanelRightClick = false;
+		if (!bBusy && !bScripted && (ArmyRegion != INDEX_NONE || FleetInHand != INDEX_NONE || AgentInHand != INDEX_NONE))
+		{
+			const FCampaignMapData& Data = Map->GetData();
+			const int32 Sea = (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE;
+			const FString Place = Data.Seas.IsValidIndex(Sea) ? Data.Seas[Sea].Name : Data.Regions.IsValidIndex(AimedRegion) ? Data.Regions[AimedRegion].Name : FString();
+			if (!Place.IsEmpty())
+			{
+				Notify(FString::Printf(TEXT("%s lies under this panel: move the map, then right-click it."), *Place), 6.0);
+			}
+		}
+	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && !bBusy)
+		if (!bTurning && !bBusy && !bRightGameOnPanel)
 		{
 			// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
 			RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
@@ -4440,8 +4727,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		const FCampaignRegion& Staged = Map->GetData().Regions[StagedHover];
 		ProjectWorldLocationToScreen(Map->MapToWorld(Staged.Centroid.X, Staged.Centroid.Y), StagedPointer);
 	}
+	// (The UI director's 84.3 check, item 4: after Tab has moved the view, no box until the pointer itself moves.)
+	if (bTipHushed && bHaveMouse && FVector2D::DistSquared(Mouse, TipHushedAt) > 9.0)
+	{
+		bTipHushed = false;
+	}
 	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
-	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : AimedRegion;
+	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
 	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : bStagedTip ? (bStagedField ? StagedHover : INDEX_NONE) : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
@@ -4780,7 +5072,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			ProjectWorldLocationToScreen(Map->MapToWorld(Middle.X, Middle.Y), StagedPointer);
 		}
 		const int32 Sea = bStagedSea ? StagedSea
-			: (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel) ? SeaNear(PointerMap) : INDEX_NONE;
+			: (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel && !bTipHushed) ? SeaNear(PointerMap) : INDEX_NONE;
 		if (Sea != FleetHoverSea)
 		{
 			FleetHoverSea = Sea;
@@ -4850,7 +5142,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (Ruling 86.) The pointer on a gate's mark: who holds it, and whether the player's ships may pass, in the
 	// words of that gate's own rule. Its box takes the place of whatever lies under the mark.
 	{
-		const int32 OnGate = StagedGate != INDEX_NONE ? StagedGate : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : GateUnder(Mouse);
+		const int32 OnGate = StagedGate != INDEX_NONE ? StagedGate : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : GateUnder(Mouse);
 		const FCampaignSession* Told = GetSession();
 		const FViewGate* Shown = (Told && OnGate != INDEX_NONE) ? Told->GetView().Gates.FindByPredicate([OnGate](const FViewGate& Each) { return Each.Id == OnGate; }) : nullptr;
 		if (Shown)
@@ -4928,6 +5220,7 @@ bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 		{
 			return false;
 		}
+		FrameReachSoon(); // (the UI director's 84.3 check, item 3: a press that becomes a carry never moves the map; see PlayerTick)
 		// The army answers: boots, hooves, lorries or tracks.
 		TArray<FString> Kinds;
 		for (const FViewCorps& Unit : Piece->GetCorps())
@@ -7536,6 +7829,25 @@ namespace
 		return FString();
 	}
 
+	/**
+	 * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, on the card's odds line: at the
+	 * ends of the scale in words, never "about 100%" or "about 0%". The bridge says the row of everyone in reach the
+	 * same way (chanceTo), and both follow the browser's endSaid (Rules 84.3.1): bNamed where the line has already
+	 * named the staff ("The staff's estimate: ...").
+	 */
+	FString ChanceTo(const FString& Words, const FString& Place, bool bNamed = false)
+	{
+		if (Words == TEXT("about 100%"))
+		{
+			return bNamed ? TEXT("they are sure of it") : TEXT("your staff is sure of it");
+		}
+		if (Words == TEXT("about 0%"))
+		{
+			return bNamed ? TEXT("they give it no chance") : TEXT("your staff gives it no chance");
+		}
+		return FString::Printf(TEXT("%s to take %s"), *Words, *Place);
+	}
+
 	FString StrengthLine(const TArray<FBattleUnit>& Units)
 	{
 		int32 Divisions = 0, Men = 0, Unknown = 0;
@@ -7594,7 +7906,8 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	const FAttackPreview Preview = Given ? *Given : Session->PreviewAttack(PickedCorps, RegionId, bOpening);
 	if (Preview.bValid && Preview.Attackers.Num() > 0)
 	{
-		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
+		// the two sides are drawn up (and where the pick cannot go, the card only turns over)
+		CampaignSounds::Play(this, Preview.Alone.IsEmpty() ? TEXT("drums") : TEXT("click"), 0.6f);
 	}
 	if (!Preview.Refused.IsEmpty())
 	{
@@ -7670,25 +7983,42 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? ForceName(Theirs, TheirTag) : TheirGeneral);
 	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
 	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
+	FaceOff.Alone = FText::FromString(Preview.Alone);
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (The UI director, 17 November.) The corps picked, as they were picked, and the men among them who could take
+		// the ground: none.
+		int32 Divisions = 0;
+		for (const FBattleUnit& Unit : Preview.Attackers)
+		{
+			Divisions += Unit.Divisions;
+		}
+		FaceOff.OurStrength = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  0 men taking ground"),
+			Preview.Attackers.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"))));
+	}
 	FaceOff.OurRoster = RosterOf(Preview.Attackers, false);
 	FaceOff.TheirRoster = RosterOf(Preview.Defenders, false);
 	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
 	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
 	FaceOff.Prize = FText::FromString(Preview.Prize);
-	if (Preview.bExact)
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (the pick cannot go: there is no forecast, and the foot says why)
+	}
+	else if (Preview.bExact)
 	{
 		FString Odds = Preview.Odds >= 1.0f
 			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
 			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f));
-		// (the chance is printed as 100 per cent only when the attack cannot fail)
+		// (the chance is "sure" only when the attack cannot fail, and said in words at the ends of the scale)
 		if (!Preview.ChanceWords.IsEmpty())
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place);
 		}
 		else if (Preview.ChancePct >= 0)
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePct), Place);
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 	}
@@ -7700,13 +8030,13 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 		if (!Preview.ChanceWords.IsEmpty())
 		{
 			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place, /*bNamed*/ true);
 		}
 		else if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
 		{
-			Odds += Preview.ChancePctLow == Preview.ChancePctHigh
-				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
-				: FString::Printf(TEXT("  \u00B7  %d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place);
+			Odds += TEXT("  \u00B7  ") + (Preview.ChancePctLow == Preview.ChancePctHigh
+				? ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePctLow), Place, /*bNamed*/ true)
+				: FString::Printf(TEXT("%d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place));
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 		// (Version 84: where WHAT YOU FACE says what is not scouted, it says it once. The staff's longer note stands
@@ -7908,7 +8238,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 			: FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Low), *Say(High));
 		if (!ChanceWords.IsEmpty())
 		{
-			Line += FString::Printf(TEXT("  \u00B7  %s to take %s"), *ChanceWords, *Town);
+			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town, /*bNamed*/ !bExact); // (the estimate's line names the staff)
 		}
 		return FText::FromString(CampaignText::Phrases(Line));
 	};
@@ -8072,11 +8402,14 @@ void ACampaignPlayerController::SendOnlyPicked()
 	const double CardSince = FaceOffSince;
 	PickedCorps = PickedBeforeMass;
 	PickedBeforeMass.Reset();
+	// (The UI director, 17 November.) The card turns to exactly the corps picked. Where they cannot go by themselves
+	// (guns alone, ruling 211(a)) it still does: it shows them with no men to take the ground, says why at its foot,
+	// and offers everyone in reach again.
 	OpenFaceOff(RegionId);
 	if (FaceOffSince == CardSince)
 	{
-		// (Rules 84.2.5.) The rules refused the corps picked (guns alone, ruling 211(a)) and said why: the card still shows
-		// everyone going in, and the hand goes back to match it.
+		// (The rules refused the attack outright and said why on the paper: the card still shows everyone going in, and
+		// the hand goes back to match it.)
 		PickedCorps = Everyone;
 		PickedBeforeMass = PickedFirst;
 	}
@@ -8100,6 +8433,10 @@ void ACampaignPlayerController::ResolveAttack()
 	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved)
 	{
 		return;
+	}
+	if (!FaceOff.Alone.IsEmpty())
+	{
+		return; // (the UI director, 17 November: SEND THEM IN takes no press and no key while the pick cannot go)
 	}
 	const int32 RegionId = FaceOff.Region;
 	const bool bMarch = FaceOff.bMarch; // (rules 84.1: the army marches in and goes at the town as it arrives)
@@ -8247,18 +8584,36 @@ void ACampaignPlayerController::CloseFaceOff()
 void ACampaignPlayerController::EndMonth()
 {
 	FCampaignSession* Session = GetSession();
-	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with the
-	// question before a war or a landing up, the key never ends the month behind the card: it puts the card away.)
+	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with a card up
+	// the key never ends the month behind it: it presses the card's lit button, below.)
 	if (Opening.bVisible && Opening.AskKind != 0)
 	{
 		AnswerBegin(false);
 		return;
 	}
+	// (The UI director's 84.3 check, item 6.) On the door Enter is BEGIN AS ..., its lit button, once the door has been
+	// up for half a second. Where a campaign is saved, that asks first, and the question's lit answer keeps it.
+	if (Opening.bVisible && bEnterByKey && !bScripted)
+	{
+		if (CanBeginByKey() && FPlatformTime::Seconds() - DoorSince > 0.5)
+		{
+			AskToBegin(1);
+		}
+		return;
+	}
+	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away.)
+	if (Document.bValid && bEnterByKey && !bScripted)
+	{
+		return;
+	}
 	if (WarPrompt.bVisible && !bScripted)
 	{
-		if (WarPrompt.IsOrder())
+		if (!WarPrompt.IsWarQuestion())
 		{
 			// (The design director, 17 November: Enter marches. He asked for the card himself; not in its first half second.)
+			// (The UI director, 17 November, in place of ruling 138(1)'s words: as in the browser, Enter gives the lit
+			// order on the landing and the gate cards too, and Esc puts them away. Those orders can be changed again before
+			// the month ends. Before a declaration of war, which cannot be taken back, Enter is NOT NOW, below.)
 			if (FPlatformTime::Seconds() - WarPromptSince > 0.5)
 			{
 				ConfirmWar();
@@ -8278,9 +8633,9 @@ void ACampaignPlayerController::EndMonth()
 			{
 				CloseFaceOff(); // (the UI director, 17 November: CONTINUE takes Enter and Space)
 			}
-			else if (FaceOff.bLongShot && !FaceOff.bMarch && !FaceOff.bStorm)
+			else if (FaceOff.CallOffLit() && !FaceOff.bMarch && !FaceOff.bStorm)
 			{
-				// (the verdict is a long shot or worse: Enter is CALL IT OFF, and the paper line says so)
+				// (the verdict is a long shot or worse, or the pick cannot go: Enter is CALL IT OFF, and the paper line says so)
 				const FString Title = FaceOff.Title.ToString();
 				CloseFaceOff();
 				Notify(FString::Printf(TEXT("%s is called off. Nothing was spent."), *Title), 5.0);
@@ -8330,6 +8685,14 @@ void ACampaignPlayerController::EndMonth()
 	{
 		if (FPlatformTime::Seconds() - EndAsk.Since < 0.5)
 		{
+			return;
+		}
+		if (bEnterByKey)
+		{
+			// (Rules 84.3.1; the UI director's ruling of 17 November, one rule for every card: Enter presses the lit
+			// button, and the lit button is the safe one.) On the question Enter is SHOW ME, as Tab is: a double Enter
+			// shows the armies and never ends the month. END THE MONTH takes a click.
+			AnswerEndAsk(true);
 			return;
 		}
 		EndAsk.bVisible = false;

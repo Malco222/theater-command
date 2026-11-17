@@ -4587,7 +4587,9 @@ namespace
 									// The balance of strength between them.
 									+ SVerticalBox::Slot().AutoHeight().Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && (F->bMarch || F->bStorm) && !F->bResolved ? 6.0f : 20.0f, 0.0f, 0.0f); }))
 									[
+										// (a pick that cannot go has no forecast, and no bar: the UI director, 17 November)
 										SNew(SBox).HeightOverride(10.0f)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										[
 											SNew(SHorizontalBox)
 											+ SHorizontalBox::Slot()
@@ -4796,6 +4798,7 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 									[
@@ -4825,6 +4828,14 @@ namespace
 										]
 									]
 
+									// (The UI director, 17 November.) Why the pick cannot go, in the rules' sentence, over the foot: it
+									// stays in sight however the card scrolls, and SEND THEM IN carries it on its hover too.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 18.0f, 12.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
+									]
 									// What to do about it. (The foot stands at the right: CALL IT OFF, then the order.)
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 20.0f, 12.0f, 0.0f)
 									[
@@ -4843,7 +4854,7 @@ namespace
 										[
 											// (...and the light is on CALL IT OFF, which takes Enter as well as Esc.)
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4860,7 +4871,7 @@ namespace
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
 											// (the UI director, ruling 183: on the storm's card CALL IT OFF's place stays empty, with no dimmed button;
 											// and where the light is on CALL IT OFF, the lit one stands for it)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bStorm && !F->bResolved ? EVisibility::Hidden : F && F->bLongShot && !F->bResolved && !F->bMarch ? EVisibility::Collapsed : EVisibility::Visible; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bStorm && !F->bResolved ? EVisibility::Hidden : F && F->CallOffLit() && !F->bResolved && !F->bMarch ? EVisibility::Collapsed : EVisibility::Visible; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseFaceOff(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4889,7 +4900,7 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -4909,12 +4920,16 @@ namespace
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.)
+											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.
+											// A pick that cannot go: it keeps its place dimmed, takes no click, and its hover says why.)
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
-											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->bLongShot ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty(); })
+											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Cream)
+												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140))
+												.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && !F->Alone.IsEmpty() ? Faint : Cream); })
 											]
 										]
 										// (Rules 84.1; rulings 177(b) and 178(c).) Before a march on a guarded town: the two orders in the
@@ -5044,7 +5059,12 @@ namespace
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseDocument(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Cream)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Cream)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), Cream)] // (item 6: the way out shows its key)
 											]
 										]
 									]
@@ -5732,7 +5752,8 @@ namespace
 					]
 
 					// (Rulings 88 and 90.) The question at the month's end: a small card over a half-dark veil. SHOW ME is the
-					// brass one (Tab); END THE MONTH ends it (Enter); and a tick stops the asking.
+					// brass one and takes Enter (and Tab); END THE MONTH ends it, with a click only (Rules 84.3.1: Enter
+					// presses the lit button, and the lit button is the safe one); and a tick stops the asking.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
@@ -5788,7 +5809,7 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.ToolTipText(FText::FromString(TEXT("Goes to the first of them. (Tab)")))
+											.ToolTipText(FText::FromString(TEXT("Goes to the first of them. (Enter)")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(true); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -5796,21 +5817,16 @@ namespace
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("SHOW ME"))).Font(Font(TEXT("Bold"), 12, 220)).ColorAndOpacity(DeskInk)
 												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), DeskInk)]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), DeskInk)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth()
 										[
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
-											.ToolTipText(FText::FromString(TEXT("Ends the month as it stands. (Enter)")))
+											.ToolTipText(FText::FromString(TEXT("Ends the month as it stands.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(false); } return FReply::Handled(); })
 											[
-												SNew(SHorizontalBox)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("END THE MONTH"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
-												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Muted)]
+												SNew(STextBlock).Text(FText::FromString(TEXT("END THE MONTH"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
 											]
 										]
 									]
@@ -5939,11 +5955,32 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 22.0f, 0.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
+										// (The UI director's 84.3 check, item 6: one rule for every card. Enter presses the lit button,
+										// and on a question the lit button is the safe one: before a declaration of war NOT NOW is lit and
+										// takes Enter and Esc, and the declaration takes a click. The order cards, the landing and the
+										// gate keep their order lit, and Enter gives it, as in the browser (the UI director, 17 November,
+										// in place of ruling 138(1)'s words). The way out always shows ESC. The places never change:
+										// only the light moves.)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											// (Ruling 138(1): the safe answer carries the brass only where an answer destroys something, as
-											// on the save card. Before a war or a landing the order keeps the brass, as it always had.)
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsWarQuestion() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseWarPrompt(); } return FReply::Handled(); })
+											[
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Cancel : FText::GetEmpty(); })
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().IsWarQuestion() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseWarPrompt(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -5952,18 +5989,13 @@ namespace
 													SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
 													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Cancel : FText::GetEmpty(); })
 												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
-												[
-													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsOrder() ? EVisibility::Visible : EVisibility::Collapsed; })
-													[
-														KeyCap(TEXT("ESC"), Muted)
-													]
-												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), Muted)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().IsWarQuestion() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmWar(); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -5974,12 +6006,19 @@ namespace
 												]
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
-													// (the approach order is given with Enter: its key cap says so)
-													SNew(SBox).Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsOrder() ? EVisibility::Visible : EVisibility::Collapsed; })
-													[
-														KeyCap(TEXT("ENTER"), BrightBrass)
-													]
+													// (the lit order is given with Enter, the landing's and the gate's as well: its key cap says so)
+													KeyCap(TEXT("ENTER"), BrightBrass)
 												]
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().IsWarQuestion() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmWar(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Cream)
+												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Confirm : FText::GetEmpty(); })
 											]
 										]
 									]
@@ -6019,7 +6058,12 @@ namespace
 											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bCanReturn ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseMenu(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("BACK TO THE WAR"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("BACK TO THE WAR"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
@@ -6103,7 +6147,14 @@ namespace
 											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerBegin(false); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("KEEP IT"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												// (the UI director's 84.3 check, item 6: the lit, safe answer shows both its keys)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("KEEP IT"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
@@ -6143,6 +6194,27 @@ namespace
 						FrameRects.Add(Rect);
 					}
 				}
+			}
+			// (The UI director's 84.3 check, item 3.) And for the hand that frames an army's reach clear of them: the same pieces,
+			// in the viewport's own pixels, which is how the map's places are put on the screen.
+			if (Controller.IsValid())
+			{
+				FVector2D ViewSize(0.0, 0.0);
+				if (GEngine && GEngine->GameViewport)
+				{
+					GEngine->GameViewport->GetViewportSize(ViewSize);
+				}
+				const FVector2D Local = AllottedGeometry.GetLocalSize();
+				TArray<FBox2D> OnScreen;
+				if (Local.X > 1.0 && Local.Y > 1.0 && ViewSize.X > 1.0 && ViewSize.Y > 1.0)
+				{
+					const FVector2D Scale(ViewSize.X / Local.X, ViewSize.Y / Local.Y);
+					for (const FSlateRect& Rect : FrameRects)
+					{
+						OnScreen.Add(FBox2D(AllottedGeometry.AbsoluteToLocal(FVector2D(Rect.Left, Rect.Top)) * Scale, AllottedGeometry.AbsoluteToLocal(FVector2D(Rect.Right, Rect.Bottom)) * Scale));
+					}
+				}
+				Controller->SetFrameOnScreen(MoveTemp(OnScreen));
 			}
 			// The adviser's steps, ticked as they are done.
 			if (Controller.IsValid() && AdviserSteps.IsValid() && Controller->GetAdviser().Revision != ShownAdviser)
@@ -8173,7 +8245,12 @@ namespace
 					.ToolTipText(FText::FromString(TEXT("Puts the report away. Enter does the same, and R opens it again.")))
 					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ClosePage(); } return FReply::Handled(); })
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("GIVE ORDERS"))).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Ink)
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("GIVE ORDERS"))).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Ink)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Ink)] // (item 6: the lit button shows its key)
 					]
 				]
 			];
@@ -11698,8 +11775,14 @@ namespace
 						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
-							.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
+							// (the UI director's 84.3 check, item 6: the door's lit button takes Enter, and says so)
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
+								.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
 						]
 					];
 				}

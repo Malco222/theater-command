@@ -1832,6 +1832,7 @@ FAttackPreview ReadPreview(const TSharedPtr<FJsonObject>& Object, int32 RegionId
 		return Out; // the troops there stand on a neutral's ground: no attack until war is declared on it
 	}
 	Out.bValid = true;
+	Object->TryGetStringField(TEXT("alone"), Out.Alone); // (the pick cannot go: the card shows it, and says why)
 	{
 		double Even = 1.2;
 		Object->TryGetNumberField(TEXT("even"), Even);
