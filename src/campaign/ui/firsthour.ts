@@ -163,7 +163,8 @@ function tipDue(id: string): void {
   if (id === 'kept' && !isDone(book, 'march')) return;
   book.tips.push(id);
   save();
-  tip = { id, turn: g.turn, acts: -1 };
+  // (The order that brought it is already counted: the next one puts it away.)
+  tip = { id, turn: g.turn, acts: 0 };
 }
 
 // ---- The month card --------------------------------------------------------------------------------------------
@@ -240,9 +241,10 @@ function onDesk(): { kind: 'lesson' | 'tip' | 'closing'; lesson?: Lesson; id: st
   const g = page.game();
   if (quiet() || !lessonsOn(g, book) || opening) return null;
   if (stamped) { const l = LESSONS.find((x) => x.id === stamped!.id); if (l) return { kind: 'lesson', lesson: l, id: l.id }; }
-  if (tip && tip.acts < 1 && tip.turn === g.turn) return { kind: 'tip', id: tip.id };
-  tip = null;
   const l = currentLesson(g, book, moment());
+  if (!(tip && tip.acts < 1 && tip.turn === g.turn)) tip = null;
+  // (A lesson that comes only with the month card goes before a tip, which waits until the card is put down.)
+  else if (!(l?.due === 'card' && monthCardOpen())) return { kind: 'tip', id: tip.id };
   // (Lesson 1 lies on the card itself and nowhere else.)
   if (l && l.id !== 'month') return { kind: 'lesson', lesson: l, id: l.id };
   if (!l && closingOwed(g, book)) return { kind: 'closing', id: CLOSING.id };
@@ -268,7 +270,11 @@ function noteHtml(d: NonNullable<ReturnType<typeof onDesk>>, slip: boolean): str
 }
 const closingWords = (): string => lessonWords(page.game(), { ...LESSONS[0], text: CLOSING.text, deed: '' }, 'browser').text;
 
-/** Draws the note in the panel, or as the slip beside an open card, and its pointer. */
+/**
+ * Draws the note in the panel, or as the slip beside an open card. Where it stands and what it points at are measured
+ * on the next frame, never here: a measure in the middle of the page's redraw makes the browser lay the whole map out
+ * again then and there (ui-v82l, "one redraw of the page").
+ */
 function redraw(): void {
   if (!page) return;
   document.querySelectorAll('.fh-note').forEach((e) => e.remove());
@@ -287,20 +293,21 @@ function redraw(): void {
       const el = veil.lastElementChild as HTMLElement;
       el.classList.add('fh-slip');
       arrive(el, d.id);
-      placeSlip();
     }
   }
   if (!d) lastDrawn = '';
-  aim(d);
+  due = { d };
 }
+/** The redraw's measuring, waiting for the next frame. */
+let due: { d: ReturnType<typeof onDesk> } | null = null;
+let toTop = false;
 /** A note slides in the first time it is drawn, and stays still after. */
 function arrive(el: HTMLElement, id: string): void {
   if (lastDrawn === id) return;
   el.classList.add('fh-in');
   lastDrawn = id;
-  // (A new note in a panel scrolled down: the panel goes back to its top, where the note is.)
-  const pane = el.parentElement;
-  if (pane?.id === 'pane' && pane.scrollTop > 0) pane.scrollTop = 0;
+  // (A new note in a panel scrolled down: the panel goes back to its top, where the note is, on the next frame.)
+  if (el.parentElement?.id === 'pane') toTop = true;
 }
 /** The slip stands in the card's left margin, never on the card: where the margin is too narrow, there is none. */
 function placeSlip(): void {
@@ -356,14 +363,17 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
   const ground = (cls: string): typeof aimAt => {
     const from = document.querySelector(`#units .army.chosen[data-nat="${g.human}"]`)?.getBoundingClientRect();
     const at: [number, number] | null = from ? [from.left + from.width / 2, from.top + from.height / 2] : null;
-    let best: typeof aimAt = null, bestD = Infinity;
-    for (const e of document.querySelectorAll<SVGGeometryElement>(`#marks path.mk.${cls}`)) {
+    // (Nearest first by its box, and the first with an open spot is taken: a spot is sought by asking the page what
+    // stands at each point, and asking it of every lit province each time the page is drawn costs a frame.)
+    const near = [...document.querySelectorAll<SVGGeometryElement>(`#marks path.mk.${cls}`)].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { e, d: at ? Math.hypot(r.left + r.width / 2 - at[0], r.top + r.height / 2 - at[1]) : 0 };
+    }).sort((a, b) => a.d - b.d);
+    for (const { e } of near) {
       const spot = openSpot(e);
-      if (!spot) continue;
-      const d = at ? Math.hypot(spot.x - at[0], spot.y - at[1]) : 0;
-      if (d < bestD) { best = { el: e, map: true, spot: spot.user }; bestD = d; }
+      if (spot) return { el: e, map: true, spot: spot.user };
     }
-    return best;
+    return null;
   };
   const flag = (reg: number): typeof aimAt => { const e = vis(q(`#units .army[data-reg="${reg}"][data-nat="${g.human}"]`)); return e ? { el: e, map: true } : null; };
   const tab = (t: string): Element | null => vis(q(`#tabs [data-tab="${t}"]`));
@@ -436,7 +446,13 @@ function hidePointer(): void {
 
 /** Each frame: the pointer follows its thing as the page scrolls and the map moves. */
 function follow(): void {
-  if (aimAt) {
+  if (due) {
+    const { d } = due;
+    due = null;
+    if (toTop) { toTop = false; const pane = $('#pane'); if (pane && pane.scrollTop > 0) pane.scrollTop = 0; }
+    placeSlip();
+    aim(d);
+  } else if (aimAt) {
     if (!aimAt.el.isConnected) aim(onDesk());
     else drawPointer();
   }
