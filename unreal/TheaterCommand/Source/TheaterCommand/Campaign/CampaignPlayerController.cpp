@@ -1600,9 +1600,10 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2100.0f, 4400.0f), FVector2f(0.0f, 0.6f), Distance);
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
-	auto OnScreen = [this](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every letter: see TheaterSpeed)
+	auto OnScreen = [this, &OneView](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
 	{
-		return ProjectWorldLocationToScreen(Map->SurfacePoint(MapPoint.X, MapPoint.Y, Lift), OutScreen, false);
+		return OneView.Project(Map->SurfacePoint(MapPoint.X, MapPoint.Y, Lift), OutScreen);
 	};
 	const float Provinces = FMath::GetMappedRangeValueClamped(FVector2f(6500.0f, 8500.0f), FVector2f(0.8f, 0.0f), Distance);
 	for (const ACampaignMapActor::FMapWord& Word : Map->GetMapWords())
@@ -1699,6 +1700,7 @@ void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 	{
 		return;
 	}
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every point: see TheaterSpeed)
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
 	const FVector Up = PlayerCameraManager->GetCameraRotation().Quaternion().GetUpVector();
@@ -1707,7 +1709,7 @@ void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 		FVector Middle;
 		double Radius = 0.0;
 		FVector2D At, Top;
-		if (Piece && Piece->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle, At, false) && ProjectWorldLocationToScreen(Middle + Up * Radius, Top, false)
+		if (Piece && Piece->GetColours(Middle, Radius) && OneView.Project(Middle, At) && OneView.Project(Middle + Up * Radius, Top)
 			&& At.X > -60.0 && At.X < Width + 60.0 && At.Y > -60.0 && At.Y < Height + 60.0)
 		{
 			// (the cloth, and the strength plate that hangs under it)
@@ -1727,6 +1729,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 	{
 		return;
 	}
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every point: see TheaterSpeed)
 	// Capitals from any distance, towns from the middle distance, every place worth having closer in, and what
 	// each place is worth only close up: the table is never papered over with plates.
 	const float Distance = Eye->GetDistance();
@@ -1746,7 +1749,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			continue;
 		}
 		FVector2D Screen;
-		if (!ProjectWorldLocationToScreen(Spot.World + Toward * Spot.Reach, Screen, false)
+		if (!OneView.Project(Spot.World + Toward * Spot.Reach, Screen)
 			|| Screen.X < -120.0 || Screen.X > Width + 120.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 		{
 			continue;
@@ -1777,7 +1780,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		}
 		const FVector2D Place = Data.Regions[SealAt].Center;
 		FVector2D Screen;
-		if (ProjectWorldLocationToScreen(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen, false)
+		if (OneView.Project(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen)
 			&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
 		{
 			FTownPlate& Seal = Out.AddDefaulted_GetRef();
@@ -1827,7 +1830,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		{
 			FVector World;
 			FVector2D Screen;
-			if (Field.Groups <= 0 || !Map->GetAirfieldWorld(Field.Region, World) || !ProjectWorldLocationToScreen(World, Screen, false)
+			if (Field.Groups <= 0 || !Map->GetAirfieldWorld(Field.Region, World) || !OneView.Project(World, Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1850,7 +1853,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		{
 			const AArmyPiece* Fleet = Pair.Value;
 			FVector2D Screen;
-			if (!Fleet || !Fleet->IsAtAnchor() || Fleet->IsHidden() || !ProjectWorldLocationToScreen(Fleet->GetRestLocation(), Screen, false)
+			if (!Fleet || !Fleet->IsAtAnchor() || Fleet->IsHidden() || !OneView.Project(Fleet->GetRestLocation(), Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1887,7 +1890,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		for (const FViewGate& Gate : View.Gates)
 		{
 			FVector2D Screen;
-			if (!ProjectWorldLocationToScreen(Map->MapToWorld(Gate.At.X, Gate.At.Y, 0.0), Screen, false)
+			if (!OneView.Project(Map->MapToWorld(Gate.At.X, Gate.At.Y, 0.0), Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1914,7 +1917,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			FVector Middle;
 			double Radius = 0.0;
 			FVector2D Screen;
-			if (Crowd.Key->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle + Right * Radius * 0.95, Screen, false)
+			if (Crowd.Key->GetColours(Middle, Radius) && OneView.Project(Middle + Right * Radius * 0.95, Screen)
 				&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
 			{
 				FTownPlate& Count = Out.AddDefaulted_GetRef();

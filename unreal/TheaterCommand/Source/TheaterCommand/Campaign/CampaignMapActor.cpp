@@ -2152,6 +2152,7 @@ bool ACampaignMapActor::LandTileHasLand(const FLandSheet& Sheet, int32 Level, in
 
 UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY)
 {
+	THEATER_SPEED_SCOPE(BuildLandTile);
 	const FCampaignTerrain& Shape = *Sheet.Shape;
 	const FIntPoint Size = Sheet.Sizes[Level];
 	const TArray<float>& Heights = Sheet.Heights[Level];
@@ -2714,11 +2715,19 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			// (well offshore its sea is the coarse sheet's own, so that its edge cannot be found in open water)
 			Sheet->Paint.CoarseSea = &WorldPaint;
 			Sheet->Paint.CoarseShape = &WorldTerrain;
-			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale]()
+			// (Speed: tc.Speed.FineAside.) Its pictures and their smaller copies are made there too, for the haze as it
+			// lies now; the frame that dresses it takes them where they are still what it would make itself.
+			const bool bAside = TheaterSpeed::FineAside();
+			TSet<int32> Haze = bAside ? HazeSet : TSet<int32>();
+			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale, bAside, HazeThen = MoveTemp(Haze)]()
 			{
 				const double Apron = 36.0;
 				Sheet->Shape.BuildOver(*Map, Box.Min.X - Apron, Box.Min.Y - Apron, Box.GetSize().X + 2.0 * Apron, Box.GetSize().Y + 2.0 * Apron, 1.5, true);
 				Sheet->Paint.Build(*Map, Sheet->Shape, Scale);
+				if (bAside)
+				{
+					PrepareFineSheet(*Sheet, HazeThen);
+				}
 				Sheet->bBuilt = true;
 			});
 		}
@@ -2782,11 +2791,65 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 	}
 }
 
+void ACampaignMapActor::PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& Haze)
+{
+	// (On the thread that modelled the sheet.) Every picture DressFineSheet makes, from the same pixels, in the same
+	// size and kind: keep the two lists the same. One that does not match is made in the frame, as before.
+	const FCampaignGround& Painted = Sheet.Paint;
+	auto Ahead = [&Sheet](const TCHAR* Name, const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour)
+	{
+		CampaignTextures::MakeLevels(Wide, High, Pixels, bColour, Sheet.Ahead.FindOrAdd(FName(Name)));
+	};
+	Ahead(TEXT("Lie"), Painted.Lie, Painted.NX, Painted.NY, false);
+	Ahead(TEXT("Ground"), Painted.Ground, Painted.NX, Painted.NY, true);
+	Ahead(TEXT("Tint"), Painted.Tint, Painted.NX, Painted.NY, true);
+	Ahead(TEXT("Relief"), Painted.Relief, Painted.NX, Painted.NY, false);
+	Ahead(TEXT("Masks"), Painted.Masks, Painted.NX, Painted.NY, false);
+	Ahead(TEXT("Cover"), Painted.Cover, Painted.NX, Painted.NY, false);
+	{
+		// (the staff's paper over what nobody of the player's can see there: as DressFineSheet lays it, for this haze)
+		TArray<FColor> Fogged;
+		Fogged.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
+		if (Haze.Num() > 0 && Sheet.Shape.Region.Num() == Fogged.Num())
+		{
+			for (int32 Index = 0; Index < Fogged.Num(); ++Index)
+			{
+				const int32 Id = Painted.PaintedRegion(Index, Sheet.Shape);
+				if (Id >= 0 && Haze.Contains(Id))
+				{
+					Fogged[Index].R = 255;
+				}
+			}
+			SoftenFog(Fogged, Painted.NX, Painted.NY, Sheet.Shape.Cell);
+		}
+		Ahead(TEXT("Fog"), Fogged, Painted.NX, Painted.NY, false);
+		Sheet.FogFor = Haze;
+	}
+	if (Painted.Occupied.Num() == Painted.NX * Painted.NY)
+	{
+		Ahead(TEXT("Occupied"), Painted.Occupied, Painted.NX, Painted.NY, true);
+	}
+	if (Painted.Wet.Num() == Painted.WetNX * Painted.WetNY && Painted.Wet.Num() > 0)
+	{
+		Ahead(TEXT("Wet"), Painted.Wet, Painted.WetNX, Painted.WetNY, false);
+		Ahead(TEXT("WetInk"), Painted.WetInk, Painted.NX, Painted.NY, true);
+	}
+	Ahead(TEXT("Water"), Painted.Water, Painted.WaterNX, Painted.WaterNY, true);
+	Ahead(TEXT("Shore"), Painted.Surf, Painted.WaterNX, Painted.WaterNY, false);
+}
+
 void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 {
+	THEATER_SPEED_SCOPE(DressFineSheet);
 	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
 	{
-		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, *FString::Printf(TEXT("Fine%s_%d_%d"), Name, Sheet.Key.X, Sheet.Key.Y));
+		// (Speed.) Made with the sheet where that is still this very picture: the same size and kind, and the same pixels
+		// at full size, which the repaint of ground that changed hands may have changed since. Otherwise made here.
+		const FName Called(*FString::Printf(TEXT("Fine%s_%d_%d"), Name, Sheet.Key.X, Sheet.Key.Y));
+		const CampaignTextures::FLevels* Ready = Sheet.Ahead.Find(FName(Name));
+		UTexture2D* Made = Ready && Ready->Fits(Wide, High, bColour, Pixels)
+			? CampaignTextures::CreateFromLevels(*Ready, false, Called)
+			: CampaignTextures::Create(Wide, High, Pixels, bColour, false, Called);
 		Sheet.Kept.Add(Made);
 		FineKeep.Add(Made);
 		return Made;
@@ -2814,6 +2877,14 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Masks"), Picture(Painted.Masks, Painted.NX, Painted.NY, false, TEXT("Masks")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Cover"), Picture(Painted.Cover, Painted.NX, Painted.NY, false, TEXT("Cover")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Lie"), Lie);
+	const CampaignTextures::FLevels* FogAhead = Sheet.Ahead.Find(FName(TEXT("Fog")));
+	if (FogAhead && FogAhead->Each.Num() > 0 && Sheet.FogFor.Num() == HazeSet.Num() && Sheet.FogFor.Includes(HazeSet))
+	{
+		// (Speed.) Laid with the sheet, for the haze as it lies now.
+		Sheet.FogPicture = Picture(FogAhead->Each[0], Painted.NX, Painted.NY, false, TEXT("Fog"));
+		Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Sheet.FogPicture);
+	}
+	else
 	{
 		// (the staff's paper over what nobody of the player's can see there, as it stands now)
 		TArray<FColor> Fogged;
@@ -2862,10 +2933,13 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.Land.Sink = 0.03;
 	LevelLand(Sheet.Land);
 	Sheet.bDressed = true;
+	Sheet.Ahead.Empty();
+	Sheet.FogFor.Empty();
 }
 
 void ACampaignMapActor::StandFineSheet(FFineSheet& Sheet)
 {
+	THEATER_SPEED_SCOPE(StandFineSheet);
 	Sheet.Land.bHidden = false;
 	for (const auto& Tile : Sheet.Land.Tiles)
 	{
@@ -2950,6 +3024,7 @@ void ACampaignMapActor::DropFineSheet(FFineSheet& Sheet)
 
 void ACampaignMapActor::RetileWorld(const FBox2D& Changed)
 {
+	THEATER_SPEED_SCOPE(RetileWorld);
 	// Every tile of the coarse sheet that touches the box is stood up afresh, at once: with the hole, or without it.
 	const FCampaignTerrain& Shape = WorldTerrain;
 	TArray<uint64> Again;
@@ -3968,6 +4043,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 	// under 4 px; the one at the end of the route under the pointer grows to 7.4.
 	// (What may cover a station dot or a guard tab is gathered once, as boxes on the screen.)
 	const APlayerController* Viewer = World->GetFirstPlayerController();
+	const TheaterSpeed::FEye OneView(Viewer); // (the view worked out once for all these points: see TheaterSpeed)
 	int32 ViewWide = 0, ViewHigh = 0;
 	if (Viewer)
 	{
@@ -3991,7 +4067,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			for (int32 Corner = 0; Corner < 8 && bAll; ++Corner)
 			{
 				FVector2D Screen;
-				bAll = Viewer->ProjectWorldLocationToScreen(Origin + Extent * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), Screen, false);
+				bAll = OneView.Project(Origin + Extent * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), Screen);
 				Box += Screen;
 			}
 			if (bAll)
@@ -4005,7 +4081,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 		for (const FPlateSpot& Plate : PlateSpots)
 		{
 			FVector2D Screen;
-			if (Viewer->ProjectWorldLocationToScreen(Plate.World + Toward * Plate.Reach, Screen, false))
+			if (OneView.Project(Plate.World + Toward * Plate.Reach, Screen))
 			{
 				const double HalfWide = (Plate.Name.Len() * 4.0 + 16.0) * PerPixel;
 				Covers.Add(FBox2D(FVector2D(Screen.X - HalfWide, Screen.Y - 2.0 * PerPixel), FVector2D(Screen.X + HalfWide, Screen.Y + 26.0 * PerPixel)));
@@ -4049,7 +4125,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			auto Covered = [&](double Along, double Margin)
 			{
 				FVector2D Screen;
-				if (!Viewer || !Viewer->ProjectWorldLocationToScreen(Stands(Along), Screen, false))
+				if (!Viewer || !OneView.Project(Stands(Along), Screen))
 				{
 					return false;
 				}
@@ -4196,7 +4272,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 					double Score = (bWanted ? 300.0 : 0.0) + 0.2 * Length;
 					// (never under a town's plate, nor over an army's piece or its flag: the next track, or the other side)
 					FVector2D OnView;
-					if (Viewer && Viewer->ProjectWorldLocationToScreen(At, OnView, false))
+					if (Viewer && OneView.Project(At, OnView))
 					{
 						const double ClearWide = (HalfWide + 3.0) * PerPixel, ClearHigh = (HalfHigh + 3.0) * PerPixel;
 						for (const FBox2D& Box : Covers)
@@ -4270,7 +4346,7 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			auto Hidden = [&](const FVector& Point)
 			{
 				FVector2D Screen;
-				if (!Viewer || !Viewer->ProjectWorldLocationToScreen(Point, Screen, false))
+				if (!Viewer || !OneView.Project(Point, Screen))
 				{
 					return false;
 				}
@@ -12253,6 +12329,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			FCampaignMeshBuffers GlowFire;
 			const float GlowNight = FMath::Clamp(Moon, 0.0f, 1.0f) * (1.0f - GetPaper());
 			const APlayerController* GlowWatcher = World->GetFirstPlayerController();
+			const TheaterSpeed::FEye OneView(GlowWatcher); // (the view worked out once for all these points: see TheaterSpeed)
 			const FLinearColor GlowHeart(FColor(255, 108, 38)), GlowRed(FColor(170, 34, 14));
 			auto GlowInked = [](const FLinearColor& Colour, float Alpha)
 			{
@@ -12305,7 +12382,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						for (int32 Corner = 0; Corner < 8 && bAll; ++Corner)
 						{
 							FVector2D OnScreen;
-							bAll = GlowWatcher->ProjectWorldLocationToScreen(BoundsAt + BoundsOut * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), OnScreen, false);
+							bAll = OneView.Project(BoundsAt + BoundsOut * FVector(Corner & 1 ? 1.0 : -1.0, Corner & 2 ? 1.0 : -1.0, Corner & 4 ? 1.0 : -1.0), OnScreen);
 							Shape += OnScreen;
 						}
 						if (bAll)
@@ -12317,7 +12394,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				auto KeptOff = [&](const FVector& Point) -> float
 				{
 					FVector2D OnScreen;
-					if (Spared.Num() == 0 || !GlowWatcher->ProjectWorldLocationToScreen(Point, OnScreen, false))
+					if (Spared.Num() == 0 || !OneView.Project(Point, OnScreen))
 					{
 						return 1.0f;
 					}

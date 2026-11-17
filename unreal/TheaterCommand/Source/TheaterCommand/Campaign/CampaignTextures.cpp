@@ -228,24 +228,98 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A new picture of this size and kind, with no pixels in it yet. */
+	UTexture2D* NewPicture(int32 Width, int32 Height, bool bColour, bool bTile, const FName& Name)
+	{
+		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8, Name);
+		if (!Texture)
+		{
+			return nullptr;
+		}
+		Texture->SRGB = bColour;
+		Texture->Filter = TF_Trilinear;
+		Texture->AddressX = bTile ? TA_Wrap : TA_Clamp;
+		Texture->AddressY = bTile ? TA_Wrap : TA_Clamp;
+		Texture->NeverStream = true;
+		Texture->CompressionSettings = bColour ? TC_Default : TC_VectorDisplacementmap; // the second means: plain numbers, left alone
+		return Texture;
+	}
+}
+
 UTexture2D* CampaignTextures::Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name)
 {
 	if (Width <= 0 || Height <= 0 || Pixels.Num() != Width * Height)
 	{
 		return nullptr;
 	}
-	UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8, Name);
+	UTexture2D* Texture = NewPicture(Width, Height, bColour, bTile, Name);
 	if (!Texture)
 	{
 		return nullptr;
 	}
-	Texture->SRGB = bColour;
-	Texture->Filter = TF_Trilinear;
-	Texture->AddressX = bTile ? TA_Wrap : TA_Clamp;
-	Texture->AddressY = bTile ? TA_Wrap : TA_Clamp;
-	Texture->NeverStream = true;
-	Texture->CompressionSettings = bColour ? TC_Default : TC_VectorDisplacementmap; // the second means: plain numbers, left alone
 	Fill(Texture, Pixels, Width, Height, bColour);
+	return Texture;
+}
+
+bool CampaignTextures::FLevels::Fits(int32 InWidth, int32 InHeight, bool bInColour, const TArray<FColor>& Pixels) const
+{
+	return Width == InWidth && Height == InHeight && bColour == bInColour && Each.Num() > 0 && Each.Num() == Sizes.Num()
+		&& Each[0].Num() == Pixels.Num() && FMemory::Memcmp(Each[0].GetData(), Pixels.GetData(), static_cast<SIZE_T>(Pixels.Num()) * sizeof(FColor)) == 0;
+}
+
+void CampaignTextures::MakeLevels(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, FLevels& Out)
+{
+	// (Level by level as Fill makes them: the same halving, from the same full-size pixels.)
+	Out = FLevels();
+	if (Width <= 0 || Height <= 0 || Pixels.Num() != Width * Height)
+	{
+		return;
+	}
+	Out.Width = Width;
+	Out.Height = Height;
+	Out.bColour = bColour;
+	TArray<FColor> Level = Pixels, Smaller;
+	int32 W = Width, H = Height;
+	for (;;)
+	{
+		Out.Sizes.Add(FIntPoint(W, H));
+		if (W == 1 && H == 1)
+		{
+			Out.Each.Add(MoveTemp(Level));
+			break;
+		}
+		int32 SmallerW = 0, SmallerH = 0;
+		Halve(Level, W, H, bColour, Smaller, SmallerW, SmallerH);
+		Out.Each.Add(MoveTemp(Level));
+		Level = MoveTemp(Smaller);
+		W = SmallerW;
+		H = SmallerH;
+	}
+}
+
+UTexture2D* CampaignTextures::CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name)
+{
+	if (Levels.Each.Num() == 0 || Levels.Each.Num() != Levels.Sizes.Num())
+	{
+		return nullptr;
+	}
+	UTexture2D* Texture = NewPicture(Levels.Width, Levels.Height, Levels.bColour, bTile, Name);
+	if (!Texture)
+	{
+		return nullptr;
+	}
+	FTexturePlatformData* Platform = Texture->GetPlatformData();
+	for (int32 Mip = 0; Mip < Levels.Each.Num(); ++Mip)
+	{
+		if (!Platform->Mips.IsValidIndex(Mip))
+		{
+			Platform->Mips.Add(new FTexture2DMipMap(Levels.Sizes[Mip].X, Levels.Sizes[Mip].Y, 1));
+		}
+		WriteLevel(Platform->Mips[Mip], Levels.Each[Mip]);
+	}
+	Texture->UpdateResource();
 	return Texture;
 }
 
