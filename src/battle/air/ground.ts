@@ -27,7 +27,7 @@ export interface AirGround {
 }
 
 /** How far beyond the board the ground is kept, in metres, so the edges never show a cut. */
-const MARGIN = 25_000;
+const MARGIN = 50_000;
 /** The finest a line is kept, in metres: a point nearer than this to the last is dropped. */
 const FINE = 400;
 

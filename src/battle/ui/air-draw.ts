@@ -11,7 +11,7 @@ import type { BattleView, FieldEvent, Side } from '../core/types';
 import { SKY } from '../air/book';
 import type { AirSim } from '../air/sim';
 import type { AirUnit } from '../air/types';
-import { toScreen, type Scene } from './draw';
+import { toField, toScreen, type Scene } from './draw';
 
 const BRASS = '#e0b872';
 const ALARM = '#c4553f';
@@ -262,13 +262,19 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
   // By night the ground goes under a deep blue wash, and the aircraft cast no shadows on it.
   const night = sim.place.night;
   if (night) { x.fillStyle = 'rgba(6,10,26,.62)'; x.fillRect(x0, y0, x1 - x0, yg - y0); }
-  // Under the board's left corner, clear of the raid, which comes in along the lower edge and fans out where it forms up.
-  x.font = '700 11px "Courier Prime", monospace'; x.fillStyle = 'rgba(241,233,212,.45)'; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
-  const airfields = `${sim.ticket.att.adj.toUpperCase()} AIRFIELDS`, came = sim.place.from ?? 'land';
-  const from = `FROM ${came === 'sea' ? 'THE SEA' : came === 'both' ? `${airfields} AND THE SEA` : airfields} ↑`, fw = x.measureText(from).width;
-  const raiders = sim.units.filter((u) => u.side === 'att');
-  const [rx] = toScreen(s, raiders.reduce((t, u) => t + u.homeX, 0) / Math.max(1, raiders.length), 0);
-  x.fillText(from, Math.max(8, Math.min(Math.max(x0, 8) + 2, rx - 150 - fw)), y1 + 16 <= H - 4 ? y1 + 16 : y1 - 6);
+  // Where the raid comes from, wholly on the drawn country, at its foot under the formations' start (the UI director,
+  // b384 review 3, 20:47Z): fixed to the ground under the lowest of the raiders as they formed up, so it never sits on
+  // them and stays where they came from as they fly on.
+  const fromLabel = (p: [number, number]): void => {
+    x.font = '700 11px "Courier Prime", monospace'; x.fillStyle = 'rgba(241,233,212,.55)'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    const airfields = `${sim.ticket.att.adj.toUpperCase()} AIRFIELDS`, came = sim.place.from ?? 'land';
+    const from = `FROM ${came === 'sea' ? 'THE SEA' : came === 'both' ? `${airfields} AND THE SEA` : airfields} ↑`, fw = x.measureText(from).width;
+    const [a, b] = toScreen(s, p[0], p[1]);
+    x.fillText(from, Math.max(x0 + 8 + fw / 2, Math.min(x1 - 8 - fw / 2, a)), Math.min(b, yg - 8));
+  };
+  // Settled once the battle starts; until then it follows the formations as they fan out where they form up.
+  const fromAt = sim.t > 0 ? FROM_AT.get(sim) : undefined;
+  if (fromAt) fromLabel(fromAt);
 
   const T = SKY.target;
   const [tx, ty] = toScreen(s, T.x, T.y);
@@ -443,6 +449,17 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
     }
   }
 
+  if (!fromAt) {
+    const raiders = sim.units.filter((u) => u.side === 'att' && rads.has(u.id));
+    if (raiders.length) {
+      const low = Math.max(...raiders.map((u) => at(u)[1] + rads.get(u.id)!)) + 16;
+      const mid = raiders.reduce((t, u) => t + at(u)[0], 0) / raiders.length;
+      const p = toField(s, mid, low);
+      FROM_AT.set(sim, p);
+      fromLabel(p);
+    }
+  }
+
   // A stack's labels: a column beside it, the player's own first, each tied to its group by a fine line (the UI director,
   // newcomer review 8: labels never overprint).
   x.font = '700 12px "Courier Prime", monospace'; x.textBaseline = 'middle';
@@ -532,8 +549,11 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
   x.restore();
 }
 
+/** Where each battle's FROM ... label stands, in field metres, as it stood when the battle started. */
+const FROM_AT = new WeakMap<AirSim, [number, number]>();
+
 /** How far below the board's lower edge the camera goes and the country is drawn (as far as ground.ts cuts it): the formations fan out there as they form up. */
-export const SOUTH = -25_000;
+export const SOUTH = -45_000;
 
 /** The height bands as the player reads them (the UI director: LOW, MIDDLE, HIGH). */
 export const BAND_WORD = ['LOW', 'MIDDLE', 'HIGH'] as const;

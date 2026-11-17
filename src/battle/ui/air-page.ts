@@ -53,7 +53,7 @@ interface State {
   trayAt: number;
   /** After the campaign books the raid: each of the player's groups' aircraft as booked, which the tray then shows. */
   booked: Map<number, number> | null;
-  /** The balance bar's pale mark: his side's share when the formations set out. */
+  /** The balance bar's pale mark: his side's chance on the raid card, where it stood when the formations set out. */
   mark: number;
   /** The staff's chance now, for the balance bar's top line, and when it was last reckoned (real seconds). */
   now: { p: number; at: number } | null;
@@ -213,7 +213,7 @@ function startBattle(r: Raid): void {
         <button class="tc-btn tc-btn--sm" data-clock="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bbal" title="Each side's strength still in the air. The pale mark is where it stood when the formations set out.">
+      <div class="bbal" title="The staff's chance, as the fight stands now. The pale mark is where it stood when the formations set out.">
         <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
         <div class="btrack"><i id="balMe" style="background:${mine.color}"></i><i id="balThem" style="background:${theirs.color}"></i><b id="balMark"></b></div>
         <div class="bbreak" title="When a bar fills, that side breaks off and heads for home. Who breaks off first does not decide the raid: its aim does."><span class="bbar2"><i id="nearMe" style="background:${mine.color}"></i></span><span class="tc-label">How near to breaking off</span><span class="bbar2 is-theirs"><i id="nearThem" style="background:${theirs.color}"></i></span></div>
@@ -240,8 +240,7 @@ function startBattle(r: Raid): void {
     <footer class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, mine.color)).join('')}</footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  const b0 = sim.balance();
-  S.mark = b0[sc.me] / Math.max(1e-6, b0.att + b0.def);
+  S.mark = sc.me === 'att' ? t.place.chance : 1 - t.place.chance;
   S.now = null;
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
@@ -327,16 +326,16 @@ function updateTop(force = false): void {
   el('cstate').classList.toggle('is-run', !stopped);
   el('pword').textContent = S.clock.paused ? 'Paused' : 'Pause';
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
-  // The top bar in land's form (the UI director, b384 review 2): each side's strength still in the air, his from the
-  // left; over it the card's chance and the staff's now, reckoned as the hand-over question reckons it, twice a second
-  // and always when stopped; under it how near each side is to breaking off, his from the left, no numbers (mark 3).
+  // The top bar in land's form (the UI director, b384 review 2 and 20:47Z): over the bar the card's chance and the
+  // staff's now, reckoned as the hand-over question reckons it, twice a second and always when stopped; the bar fills
+  // with that same chance from his end, the pale mark at the card's; under it how near each side is to breaking off,
+  // his from the left, no numbers (mark 3).
   const me = S.scene.me, foe: Side = me === 'att' ? 'def' : 'att';
-  const bal = sim.balance(), share = bal[me] / Math.max(1e-6, bal.att + bal.def);
-  el('balMe').style.width = `${(share * 100).toFixed(1)}%`;
-  el('balThem').style.width = `${((1 - share) * 100).toFixed(1)}%`;
-  el('balMark').style.left = `${(S.mark * 100).toFixed(1)}%`;
   const mineOf = (p: number): number => (me === 'att' ? p : 1 - p);
   if (!S.now || stopped || force || now() - S.now.at >= 0.5) S.now = { p: mineOf(sim.staffChance()), at: now() };
+  el('balMe').style.width = `${(S.now.p * 100).toFixed(1)}%`;
+  el('balThem').style.width = `${((1 - S.now.p) * 100).toFixed(1)}%`;
+  el('balMark').style.left = `${(S.mark * 100).toFixed(1)}%`;
   const pc = (p: number): string => (p >= 0.995 ? 'sure' : p <= 0.005 ? 'no chance' : `about ${Math.round(p * 100)}%`);
   const line = `Card ${pc(mineOf(sim.place.chance))} · now ${pc(S.now.p)}`;
   if (el('ratio').textContent !== line) el('ratio').textContent = line;
@@ -403,7 +402,7 @@ function fit(first = false): void {
  * above the field's, so the raid forming up under it, fanned out and ringed when picked up, stays clear of the orders
  * strip (some 56 pixels) with room to spare.
  */
-const FREE = { top: 56, foot: 160 };
+const FREE = { top: 56, foot: 190 };
 // The whole sky in the field's free part, the raid and FROM ... AIRFIELDS above the orders strip, so the strip never
 // covers the player's own groups (the design director, b384(f); the UI director, newcomer review 2).
 function whole(): void {
