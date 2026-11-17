@@ -302,6 +302,21 @@ def build_flag():
     # bleached: a faded black-white-red read as Poland's white and red. Its wear is told by its shape, and by soot,
     # which the cloth's own points carry as their colour: white where the cloth is clean.)
     cloth = lerp(m, (picture, "RGB"), vector(m, "Faded", (0.1, 0.09, 0.07, 1.0), -700, 180), scalar(m, "Fade", 0.0, -700, 260), -450, 60)
+    # (Ruling 154; the art director's review of the haze.) The flag of an army only glimpsed through the haze: a
+    # quarter of its colour is drained ("Drain") and a tenth of the haze's own colour lies over it ("Veiled", toward
+    # "Veil"). Her rule is worked on the colours as they are seen, so the cloth is taken to the screen's own measure
+    # for it and back again.
+    seen = node(m, unreal.MaterialExpressionPower, -450, 600, const_exponent=0.4545)
+    connect(cloth, "", seen, "Base")
+    seen_weights = node(m, unreal.MaterialExpressionConstant3Vector, -450, 760, constant=unreal.LinearColor(0.299, 0.587, 0.114, 0.0))
+    seen_grey = node(m, unreal.MaterialExpressionDotProduct, -300, 700)
+    connect(seen, "", seen_grey, "A")
+    connect(seen_weights, "", seen_grey, "B")
+    veiled = lerp(m, lerp(m, seen, seen_grey, scalar(m, "Drain", 0.0, -300, 860), -150, 650),
+                  vector(m, "Veil", (0.47, 0.5, 0.53, 1.0), -150, 860), scalar(m, "Veiled", 0.0, -150, 960), 0, 700)
+    unseen = node(m, unreal.MaterialExpressionPower, 150, 700, const_exponent=2.2)
+    connect(veiled, "", unseen, "Base")
+    cloth = unseen
     cloth = times(m, cloth, node(m, unreal.MaterialExpressionVertexColor, -700, -150), -300, 0)
     to_property(cloth, "", unreal.MaterialProperty.MP_BASE_COLOR)
     glow = node(m, unreal.MaterialExpressionMultiply, -350, 300)
@@ -998,6 +1013,11 @@ def build_land():
     shaded = times(m, times(m, drained, vector(m, "HazeCast", (0.92, 1.0, 1.07, 1.0), 1000, -2450), 1200, -2300), scalar(m, "HazeDark", 0.67, 1200, -2450), 1400, -2300)
     haze_place = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, 0, -2900), 200, -2900, r=True, g=True, b=False, a=False)
 
+    # (The art director's review of the haze as built, 16 November 2026.) A wisp is twice as long as it was and a
+    # quarter deeper, about 400 by 150 px from where he plays. The broad wisps and the fine travel one way at one pace,
+    # about 5 px a second, the fine riding on the broad: at two paces the veil stirred in place and did not travel.
+    # Its run from pocket to wisp is drawn in, so that it reads as haze and not as cloud, which is the weather's sign:
+    # a floor of haze lies over the pockets ("HazeFloor"), and the wisps rise out of it more gently.
     def wisps(long, deep, speed, x, y):
         """The slow unevenness of the waves' picture, read long (east and west) and low, and drifting eastward."""
         east = node_from(m, unreal.MaterialExpressionComponentMask, haze_place, x, y, r=False, g=True, b=False, a=False)
@@ -1006,9 +1026,10 @@ def build_land():
         connect(pair(m, times(m, east, 1.0 / long, x + 180, y), times(m, north, 1.0 / deep, x + 180, y + 120), x + 340, y), "", drift, "Coordinate")
         return (picture(m, "Waves", drift, x + 700, y, numbers=True), "A")
 
-    veil = plus(m, times(m, wisps(1800.0, 660.0, 7.0, 0, -2700), 0.68, 1000, -2700), times(m, wisps(640.0, 250.0, 11.0, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
-    wisp = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, veil, -0.4, 1350, -2900), 3.6, 1500, -2900), 1650, -2900)
-    wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.4, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
+    veil = plus(m, times(m, wisps(4000.0, 830.0, 7.3, 0, -2700), 0.68, 1000, -2700), times(m, wisps(1420.0, 312.0, 7.3, 0, -3100), 0.32, 1000, -3100), 1200, -2900)
+    wisp = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, veil, -0.34, 1350, -2900), 2.6, 1500, -2900), 1650, -2900)
+    wisp = lerp(m, scalar(m, "HazeFloor", 0.55, 1650, -3300), 1.0, wisp, 1720, -3250)
+    wisp = times(m, lerp(m, scalar(m, "HazeFlat", 0.72, 1650, -3050), wisp, scalar(m, "HazeWispy", 1.0, 1650, -3150), 1800, -2950), scalar(m, "HazeWisps", 0.38, 1800, -3100), 1950, -2950)
     hazed = lerp(m, shaded, vector(m, "HazeColour", (0.21, 0.24, 0.27, 1.0), 1800, -2600), wisp, 2100, -2500)
     c = lerp(m, c, hazed, fog, 2250, -1500)
     c = lerp(m, c, sheet, paper, 2400, -600)

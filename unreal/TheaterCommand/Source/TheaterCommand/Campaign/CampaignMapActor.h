@@ -131,6 +131,8 @@ public:
 	void SetWatchEdge(int32 RegionId);
 	/** Where the Nth of the agents' pieces stands on the table, in the map's own measure: for the photographer's eye. */
 	bool GetAgentSpot(int32 Index, FVector2D& OutSpot) const;
+	/** The agent in hand: where the foot of his base is just now, and how tall he stands. False with none in hand, or from so high that he is a sign. */
+	bool GetAgentInHandStand(FVector& OutFoot, double& OutHigh) const;
 
 	/** The piece that holds this corps, if it is on the table. */
 	AArmyPiece* FindPieceOfCorps(int32 CorpsId) const;
@@ -186,7 +188,7 @@ public:
 
 	/** The cloth a nation's standards are cut from: its flag, readable from either side. Null if the flag material is missing. */
 	/** A nation's flag for the cloth of a standard; Wear 1 is the faded flag of a battered army, 2 of one nearly spent. */
-	UMaterialInterface* GetFlagMaterial(const FString& Tag, int32 Wear = 0);
+	UMaterialInterface* GetFlagMaterial(const FString& Tag, int32 Wear = 0, bool bGlimpsed = false);
 
 	/** The paint the pieces are moulded in: each point of a piece carries its own colour. */
 	UMaterialInterface* GetPieceMaterial() const { return PieceMaterial; }
@@ -1050,6 +1052,8 @@ private:
 	int32 TreeLook = 0;
 	float WinterHard = 0.0f;
 	float RiversDrawnFor = -1.0f;
+	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
+	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
 	/** How deep the snow lies at a place on the map (0 to 1) when the winter is this hard. */
 	static float SnowLying(const FVector2D& Place, float Hard);
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands

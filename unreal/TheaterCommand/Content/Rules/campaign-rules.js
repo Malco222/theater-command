@@ -32230,7 +32230,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const up = humanUp(s) && !onEve(s);
     const here = s.regions[region];
     const rows = room2.agents.map((a) => {
-      const whySend = here ? whyNotSendAgent(s, a.id, region) : "Close this, click a province on the map, and open the room again.";
+      const whySend = here ? whyNotSendAgent(s, a.id, region) : "Pick the agent up on the map and right-click where he should go; or click a province on the map and open the room again.";
       const buttons = a.missions.map((m) => ({
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
@@ -32256,7 +32256,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
       ],
       sections: [
-        { heading: "YOUR AGENTS", text: rows.length ? here ? `The province selected on the map is ${here.name}: an agent can be sent there.` : "To send an agent somewhere, close this, click the province on the map, and open the room again." : "The service has no agents yet. Recruit one above.", rows },
+        { heading: "YOUR AGENTS", text: rows.length ? here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : "Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there." : "The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.", rows },
         { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] }
       ]
     };

@@ -546,8 +546,13 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	FMiniatureMesh Staff;
 	if (bGlimpsed)
 	{
-		// (ruling 154: the pole is gone before it reaches the ground: it thins away to nothing over its lower part)
-		Staff.Pillar(FVector(0.0, 0.0, PoleHeight * 0.3), 0.02 * U, 0.2 * U, PoleHeight * 0.7, IronPaint, 8);
+		// (Ruling 154; the art director's review of the agent piece.) The pole is gone before it reaches the ground: it
+		// runs whole to just under its tag and thins away to nothing a little below it, on any ground. (It thinned over
+		// most of its length, and from close to it still read as a pole standing on whatever lay at its foot.)
+		const double TagHigh = FMath::Min(FlagHeight * 0.56, 2.7 * U);
+		const double UnderTag = PoleHeight - FlagHeight - 0.65 * U - TagHigh - 0.4 * U;
+		Staff.Pillar(FVector(0.0, 0.0, UnderTag), 0.2 * U, 0.2 * U, PoleHeight - UnderTag, IronPaint, 8);
+		Staff.Pillar(FVector(0.0, 0.0, UnderTag - 2.4 * U), 0.02 * U, 0.2 * U, 2.4 * U, IronPaint, 8);
 	}
 	else
 	{
@@ -556,7 +561,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Staff.Ball(FVector(0.0, 0.0, PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
 	const double Hoist = 0.2 * U; // where the cloth begins, just clear of the pole
 	const FVector FlagAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
-	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag, What == 0 ? FlagWear : 0))
+	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag, What == 0 ? FlagWear : 0, bGlimpsed))
 	{
 		// The cloth is a sheet with a slow ripple in it that grows toward the free end, as a flag hangs in a light
 		// air. Pieces are turned so that the viewer looks along their +X: the cloth faces back along -X, the pole

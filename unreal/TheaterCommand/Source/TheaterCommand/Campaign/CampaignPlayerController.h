@@ -702,6 +702,8 @@ public:
 	const FViewAgent* GetAgentInHand() const;
 	/** The foot of his card: how he is sent, or the rules' own reason why he cannot be just now. */
 	FString GetAgentHint() const;
+	/** Where the agent in hand stands on the screen, as a box round him with six pixels to spare: the pointer's box hangs clear of it. False with none in hand. */
+	bool GetAgentInHandBox(FBox2D& OutBox) const;
 	bool PickUpAgent(int32 AgentId);
 	/** Takes in hand the agent standing in a province (the photographer's way in). */
 	bool PickUpAgentIn(int32 RegionId);

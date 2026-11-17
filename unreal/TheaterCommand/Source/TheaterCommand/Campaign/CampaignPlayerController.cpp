@@ -2579,6 +2579,22 @@ FString ACampaignPlayerController::GetAgentHint() const
 	return !Agent->Stuck.IsEmpty() ? Agent->Stuck : FString(TEXT("Right-click where the agent should go, or drag him there: a month on the road. Esc puts him down."));
 }
 
+bool ACampaignPlayerController::GetAgentInHandBox(FBox2D& OutBox) const
+{
+	FVector Foot = FVector::ZeroVector;
+	double High = 0.0;
+	FVector2D Low, Crown;
+	if (AgentInHand == INDEX_NONE || !Map.IsValid() || !Map->GetAgentInHandStand(Foot, High)
+		|| !ProjectWorldLocationToScreen(Foot, Low) || !ProjectWorldLocationToScreen(Foot + FVector(0.0, 0.0, High), Crown))
+	{
+		return false;
+	}
+	// (his base is about half as wide on the screen as he is tall, and the near half of it lies under his feet)
+	const double Tall = FMath::Abs(Low.Y - Crown.Y);
+	OutBox = FBox2D(FVector2D(Low.X - 0.5 * Tall - 6.0, FMath::Min(Low.Y, Crown.Y) - 6.0), FVector2D(Low.X + 0.5 * Tall + 6.0, FMath::Max(Low.Y, Crown.Y) + 0.3 * Tall + 6.0));
+	return true;
+}
+
 bool ACampaignPlayerController::PickUpAgent(int32 AgentId)
 {
 	FCampaignSession* Session = GetSession();

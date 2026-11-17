@@ -3033,7 +3033,10 @@ namespace
 						{
 							GEngine->GameViewport->GetViewportSize(Size);
 						}
-						const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+						// (The screen's units to a pixel of the window: this screen's own scale, and the engine's for the window's
+						// size on top of it. In a window that is not 1,080 high the two differ, and by the first alone the box
+						// stood off from the pointer: in the pictures' window, 7 parts in 100 up and to the left.)
+						const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
 						const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
 						// Kept on the screen, and out from under the column down its right side: to the left of the pointer
 						// when the tip would not fit between the pointer and that column. (The proving round of release 1:
@@ -3054,7 +3057,21 @@ namespace
 							return FMargin(AnchorLeft, Under + High > Tall - 8.0f ? static_cast<float>(Mark.Min.Y) - 6.0f - High : Under, 0.0f, 0.0f);
 						}
 						const float Left = static_cast<float>(At.X) + 18.0f + Wide > Width - 262.0f ? FMath::Max(static_cast<float>(At.X) - Wide - 14.0f, 8.0f) : static_cast<float>(At.X) + 18.0f;
-						return FMargin(Left, static_cast<float>(At.Y) + 20.0f, 0.0f, 0.0f);
+						float Top = static_cast<float>(At.Y) + 20.0f;
+						// (The art director's review of the agent piece: the pointer's box covered him while he was in hand. It
+						// hangs clear of him: under him, or over him where there is no room under.)
+						FBox2D Held(ForceInit);
+						if (Controller.IsValid() && Controller->GetAgentInHandBox(Held))
+						{
+							const float BoxHigh = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().Y) : 60.0f;
+							const float ScreenHigh = static_cast<float>(Size.Y) / Scale;
+							const FBox2D Him(Held.Min / Scale, Held.Max / Scale);
+							if (Left < Him.Max.X && Left + Wide > Him.Min.X && Top < Him.Max.Y && Top + BoxHigh > Him.Min.Y)
+							{
+								Top = static_cast<float>(Him.Max.Y) + 8.0f + BoxHigh > ScreenHigh - 8.0f ? static_cast<float>(Him.Min.Y) - 8.0f - BoxHigh : static_cast<float>(Him.Max.Y) + 8.0f;
+							}
+						}
+						return FMargin(Left, Top, 0.0f, 0.0f);
 					}))
 					[
 						SAssignNew(HoverTipBox, SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))

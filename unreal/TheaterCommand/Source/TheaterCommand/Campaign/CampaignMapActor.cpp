@@ -1390,14 +1390,35 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	// (Tuned by measure on Paris from playing height, 16 November 2026: France in view stood at 121 of brightness; the
 	// brief's two thirds is about 81, with the pockets near 55 and the wisps near 101. The paint's 0.4 comes out as
 	// two thirds on the screen, since the lens lifts dark paint.)
-	static float HazeDark = 0.4f, HazeDrain = 0.5f, HazeWisps = 0.34f;
-	static FLinearColor HazeDay(0.17f, 0.19f, 0.22f), HazeNight(0.26f, 0.3f, 0.43f);
+	// (The art director's review of the haze as built, 16 November 2026. Mend 1: the hazed ground was ash, (88, 91, 91);
+	// it takes a cold slate cast, laid on the paint stronger than it is seen, since the lamp is warm. Mend 2: a floor
+	// of haze over the pockets, and gentler wisps. Mend 5: by night the haze added blue where it should take it away:
+	// there the ground is drained further, its cast is turned warm against the moon's blue, and the wisps are grey.
+	// "-TheaterHazeCast=r,g,b,r,g,b" tries other casts by day and by night; "-TheaterHazeFloor=0.4,0.5" another floor
+	// and another drain by night.)
+	// (Measured on France from Orleans at playing height, as she measures it, 17 November: the hazed ground's mean
+	// went from (77, 78, 78) with a colour of 3 to a cold slate with a colour near 12; the pockets from 0.58 of the
+	// middle to 0.69, the quarters from 0.82 and 1.15 to 0.88 and 1.11, the palest wisps from 1.33 to 1.22. By night
+	// unseen ground went from (16, 32, 63), bluer than the ground in view, to (27, 39, 52).)
+	static float HazeDark = 0.33f, HazeDrain = 0.5f, HazeWisps = 0.34f, HazeFloor = 0.55f, HazeDrainNight = 0.75f;
+	static FLinearColor HazeDay(0.13f, 0.165f, 0.21f), HazeNight(0.24f, 0.22f, 0.17f);
+	static FLinearColor HazeCastDay(0.79f, 1.0f, 1.22f), HazeCastNight(1.0f, 0.95f, 0.6f);
 	static bool bHazeRead = false;
 	if (!bHazeRead)
 	{
 		bHazeRead = true;
 		FString Asked;
 		TArray<FString> Bits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeCast="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 6)
+		{
+			HazeCastDay = FLinearColor(FCString::Atof(*Bits[0]), FCString::Atof(*Bits[1]), FCString::Atof(*Bits[2]));
+			HazeCastNight = FLinearColor(FCString::Atof(*Bits[3]), FCString::Atof(*Bits[4]), FCString::Atof(*Bits[5]));
+		}
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeFloor="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 2)
+		{
+			HazeFloor = FCString::Atof(*Bits[0]);
+			HazeDrainNight = FCString::Atof(*Bits[1]);
+		}
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHaze="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 3)
 		{
 			HazeDark = FCString::Atof(*Bits[0]);
@@ -1412,7 +1433,9 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	}
 	// (by night the same paint came out at 57% of ground in view, where two thirds is asked: it is lifted a little there)
 	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * 1.35f, Moon));
-	LandScalar(TEXT("HazeDrain"), HazeDrain);
+	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
+	LandScalar(TEXT("HazeFloor"), HazeFloor);
+	LandVector(TEXT("HazeCast"), FMath::Lerp(HazeCastDay, HazeCastNight, Moon));
 	LandScalar(TEXT("HazeWisps"), HazeWisps);
 	LandVector(TEXT("HazeColour"), FMath::Lerp(HazeDay, HazeNight, Moon));
 	LandScalar(TEXT("HazeWispy"), 1.0f - FMath::SmoothStep(7000.0f, 13000.0f, CameraDistance));
@@ -1703,13 +1726,13 @@ UTexture2D* ACampaignMapActor::GetFlagTexture(const FString& Tag)
 	return Texture;
 }
 
-UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag, int32 Wear)
+UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag, int32 Wear, bool bGlimpsed)
 {
 	if (!FlagMaterial)
 	{
 		return nullptr;
 	}
-	const FString Key = Wear > 0 ? FString::Printf(TEXT("%s|w%d"), *Tag, Wear) : Tag;
+	const FString Key = (Wear > 0 ? FString::Printf(TEXT("%s|w%d"), *Tag, Wear) : Tag) + (bGlimpsed ? TEXT("|glimpsed") : TEXT(""));
 	if (TObjectPtr<UMaterialInstanceDynamic>* Found = FlagMaterials.Find(Key))
 	{
 		return *Found;
@@ -1719,6 +1742,9 @@ UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag, int32
 	Instance->SetScalarParameterValue(TEXT("Glow"), 0.5f * (1.0f - 0.4f * GetMoonlight()));
 	// (a battered army's flag is dirtied a very little, and a spent one's a little more: never bleached)
 	Instance->SetScalarParameterValue(TEXT("Fade"), Wear >= 2 ? 0.2f : Wear == 1 ? 0.1f : 0.0f);
+	// (ruling 154: at a glimpse the cloth is drained a quarter, with a tenth of the haze's colour over it)
+	Instance->SetScalarParameterValue(TEXT("Drain"), bGlimpsed ? 0.25f : 0.0f);
+	Instance->SetScalarParameterValue(TEXT("Veiled"), bGlimpsed ? 0.1f : 0.0f);
 	FlagMaterials.Add(Key, Instance);
 	return Instance;
 }
@@ -4328,6 +4354,12 @@ void ACampaignMapActor::BuildWaterways()
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
+	// (The art director's review of the haze: a river under the haze stayed lit, and by night it was the brightest
+	// thing on the hazed map. Under the haze the water and its banks are darker, still blue: by day to about
+	// (48, 74, 96), by night to about (40, 58, 84).)
+	RiversHazedFor = HazeSet;
+	bRiversNightFor = NightNow > 0.5f;
+	const FVector RiverHaze = bRiversNightFor ? FVector(0.47, 0.54, 0.63) : FVector(0.7, 0.66, 0.72);
 	const double Lift = 0.1;
 	// The course of each river as it is laid, before any is drawn: so that one that runs into another can be ended
 	// at the other's bank.
@@ -4584,7 +4616,12 @@ void ACampaignMapActor::BuildWaterways()
 			const FLinearColor EdgeLeft_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 + 0.5 * ToNorthWest)), EdgeRight_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 - 0.5 * ToNorthWest));
 			const FColor MarginLeft = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeLeft_, BankIce, Frozen), Brown).ToFColor(true);
 			const FColor MarginRight = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeRight_, BankIce, Frozen), Brown).ToFColor(true);
-			const FColor Inks[5] = { MarginLeft, Bank, Midstream, Bank, MarginRight };
+			const bool bUnderHaze = HazeSet.Num() > 0 && HazeSet.Contains(Data.FindRegionAt(Path[K].X, Path[K].Y));
+			auto Hazed = [bUnderHaze, &RiverHaze](const FColor& Paint)
+			{
+				return bUnderHaze ? FColor(static_cast<uint8>(Paint.R * RiverHaze.X), static_cast<uint8>(Paint.G * RiverHaze.Y), static_cast<uint8>(Paint.B * RiverHaze.Z), Paint.A) : Paint;
+			};
+			const FColor Inks[5] = { Hazed(MarginLeft), Hazed(Bank), Hazed(Midstream), Hazed(Bank), Hazed(MarginRight) };
 			int32 Here[5];
 			for (int32 P = 0; P < 5; ++P)
 			{
@@ -6865,6 +6902,10 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		return;
 	}
 	ShownNight = Night;
+	if (RiverMesh && Land.Rivers.Num() > 0 && HazeSet.Num() > 0 && (NightNow > 0.5f) != bRiversNightFor)
+	{
+		BuildWaterways(); // (a river under the haze is darker still by night)
+	}
 	ApplyPaperLight();
 	PaperShown = -1.0f; // (the margin's paper takes the hour's light too)
 	// The land's own shading follows the light of the hour: a warm sun and cool shade by day (the lit tones a tenth
@@ -10059,6 +10100,13 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int
 	GlimpsedSet = TSet<int32>(Glimpsed);
 	HazeSet = UnseenSet.Union(GlimpsedSet); // (ruling 154: the haze stays over ground he only glimpses, at the same depth)
 	bMiniStale = true;
+	if (RiverMesh && Land.Rivers.Num() > 0 && (RiversHazedFor.Num() != HazeSet.Num() || !RiversHazedFor.Includes(HazeSet)))
+	{
+		// (a river is darker under the haze: where the haze has moved, the rivers are drawn again)
+		const double Began = FPlatformTime::Seconds();
+		BuildWaterways();
+		UE_LOG(LogTheater, Log, TEXT("The rivers drawn again under the haze in %.2f s"), FPlatformTime::Seconds() - Began);
+	}
 	OrdersMesh->ClearMeshSection(6);
 	// Ground nobody of the player's can see is the staff's own paper map (art fix 11): the land's material draws
 	// it so, and what stands on it is drawn rather than coloured, wherever this picture says. A pixel to each
@@ -13112,14 +13160,17 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 	{
 		if (Piece && Piece->IsArmy() && Piece->GetRegionId() == RegionId)
 		{
-			Keep.Emplace(WorldToMap(Piece->GetRestLocation()), 9.0);
+			// (The art director's review of the piece: his seat, and a caught mark's, is at least 30 pixels from the foot
+			// of any flag's pole. The pole stands 5.6 units from the middle of its base, on whichever side the eye puts it.)
+			Keep.Emplace(WorldToMap(Piece->GetRestLocation()), 10.5);
 			bArmyHere = true;
 		}
 	}
 	if (!bArmyHere)
 	{
-		Keep.Emplace(WorldToMap(ArmySpot(RegionId, 0)), 9.0); // (where an army would stand, if one comes)
+		Keep.Emplace(WorldToMap(ArmySpot(RegionId, 0)), 10.5); // (where an army would stand, if one comes)
 	}
+	const int32 ArmiesKept = Keep.Num();
 	if (const FVector2D* Field = AirfieldSpots.Find(RegionId))
 	{
 		Keep.Emplace(*Field, 6.5);
@@ -13183,10 +13234,12 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 				{
 					continue;
 				}
-				double Room = FVector2D::Distance(FVector2D(X, Y), Region.Center) - Town;
-				for (const TPair<FVector2D, double>& Thing : Keep)
+				// (Among a city's outer houses sooner than under a flag: a base at the foot of an army's pole was taken
+				// for the flag's own. The roofs count for half, and an army's base for three units more than it is wide.)
+				double Room = 0.5 * (FVector2D::Distance(FVector2D(X, Y), Region.Center) - Town);
+				for (int32 Kept = 0; Kept < Keep.Num(); ++Kept)
 				{
-					Room = FMath::Min(Room, FVector2D::Distance(FVector2D(X, Y), Thing.Key) - Thing.Value);
+					Room = FMath::Min(Room, FVector2D::Distance(FVector2D(X, Y), Keep[Kept].Key) - Keep[Kept].Value - (Kept < ArmiesKept ? 3.0 : 0.0));
 				}
 				if (Room > BestScore)
 				{
@@ -13395,6 +13448,20 @@ bool ACampaignMapActor::GetAgentSpot(int32 Index, FVector2D& OutSpot) const
 	}
 	OutSpot = WorldToMap(AgentStands[Index].Rest);
 	return true;
+}
+
+bool ACampaignMapActor::GetAgentInHandStand(FVector& OutFoot, double& OutHigh) const
+{
+	for (const FAgentStand& Stand : AgentStands)
+	{
+		if (!Stand.bMark && Stand.Id == AgentInHand && Stand.Holder && bAgentFigures && bPiecesShown)
+		{
+			OutFoot = Stand.Holder->GetComponentLocation();
+			OutHigh = AgentHigh();
+			return true;
+		}
+	}
+	return false;
 }
 
 int32 ACampaignMapActor::AgentAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance) const
