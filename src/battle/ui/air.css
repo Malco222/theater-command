@@ -61,6 +61,8 @@
 .air .offer .otop b { flex: 1 1 auto; min-width: 0; }
 .air .offer .ochance { flex: none; margin-left: auto; white-space: nowrap; color: var(--paper-200); font-size: 13px; }
 .air .offer .omid .fact { white-space: normal; }
+/* Which side he flies, and what each side sends up: two lines on every card (the UI director, 21:25Z). */
+.air .offer .omid .fact { flex-basis: 100%; }
 .air .offer .oaim { display: block; margin-top: 2px; font-size: 15px; line-height: 1.4; color: var(--paper-200); text-wrap: pretty; }
 .air .since { margin: 0 0 12px; padding: 10px 14px; }
 .air .since ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }

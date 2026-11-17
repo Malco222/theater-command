@@ -28,6 +28,14 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 /** A row of facts with the kit's dots between them, wrapping between facts and never inside one. */
 const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
+/**
+ * Places English names with "the" (the UI director, 21:25Z: "the Ruhr"), wherever the name runs in a sentence: "The
+ * air battle over the Ruhr", "3% of the Ruhr's output". The map's label stays RUHR. A mend in the page until the
+ * campaign carries its own flag for such places.
+ */
+const THE = ['Ruhr', 'Rhineland', 'Saar', 'Palatinate', 'Crimea', 'Caucasus', 'Ukraine', 'Balkans', 'Netherlands'];
+const THE_RX = new RegExp(`(^|[^\\w])(?<![Tt]he )(${THE.join('|')})\\b`, 'g');
+const withThe = (text: string): string => text.replace(THE_RX, (_m, pre: string, name: string) => `${pre}${pre === '' ? 'The' : 'the'} ${name}`);
 /** A number never parts from its noun (the UI director, air review 11). */
 const NB = '\u00a0';
 /** How fast the clock runs on its own while nothing can be decided: before the formations meet, and after the fighting. */
@@ -196,9 +204,9 @@ function showChooser(): void {
     const p = me === 'att' ? t.place.chance : 1 - t.place.chance;
     const kind = t.place.mission === 'superiority' ? 'a fight for the sky' : t.att.forces.some((f) => f.kind !== 'bmr') ? 'an escorted raid' : 'a raid without escort';
     return `<button class="tc-card is-press offer" data-raid="${i}">
-        <span class="otop"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data ochance">${esc(chanceWords(p))}</span></span>
+        <span class="otop"><b class="tc-title-3">${esc(withThe(t.title))}</b><span class="tc-data ochance">${esc(chanceWords(p))}</span></span>
         <span class="tc-data omid">${facts([`You fly ${esc(sideWords(t, me))}`, `${esc(forceWords(t, me))} against ${esc(forceWords(t, foe))}`])}</span>
-        <span class="oaim">${esc(aimWords(t))}</span>
+        <span class="oaim">${esc(withThe(aimWords(t)))}</span>
         <span class="tc-data olow">${facts([t.place.night ? 'By night' : 'By day', kind])}</span></button>`;
   };
   // An enemy group's line says how many of what it has left rise against the raids offered now (the UI director, b384
@@ -252,7 +260,7 @@ function startBattle(r: Raid): void {
   const mine = t[sc.me], theirs = t[sc.me === 'att' ? 'def' : 'att'];
   app.innerHTML = `<div class="battle tc air">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${titleWords(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(kindWords(t))])}</span></div>
+      <div class="btitle"><b class="tc-title-3">${titleWords(withThe(t.title))}</b><span class="tc-data">${facts([esc(t.date), esc(kindWords(t))])}</span></div>
       <div class="bclock"><span class="tc-label" id="cstate">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)"><span id="pword">Paused</span> <span class="tc-key">Space</span></button>
@@ -420,7 +428,7 @@ function updateTop(force = false): void {
   el('faim').hidden = !!sim.over;
   if (!sim.over) {
     const slip = aimSlip(sim);
-    (['aimWhat', 'aimNow', 'aimLost'] as const).forEach((id, i) => { const x = el(id); if (x.textContent !== slip[i]) x.textContent = slip[i]; x.hidden = !slip[i]; });
+    (['aimWhat', 'aimNow', 'aimLost'] as const).forEach((id, i) => { const x = el(id), w = withThe(slip[i]); if (x.textContent !== w) x.textContent = w; x.hidden = !w; });
   }
   // The orders strip shows only what the groups in hand can take (the UI director, newcomer review 1): height for all,
   // the escort's for fighters while his bombers fly, the hunt for fighters, the bombs for bombers still carrying them.
@@ -439,7 +447,7 @@ function updateTop(force = false): void {
   el('jett').hidden = bmr.length === 0;
   if (force || S.dispatch) {
     const d = S.dispatch;
-    el('dispatch').innerHTML = d ? `<span class="tc-label">${mmss(d.t)}</span><span>${esc(d.text)}</span>` : '';
+    el('dispatch').innerHTML = d ? `<span class="tc-label">${mmss(d.t)}</span><span>${esc(withThe(d.text))}</span>` : '';
   }
 }
 
@@ -791,10 +799,10 @@ function showAfter(): void {
   veil.className = 'veil';
   veil.innerHTML = `<div class="after tc-paper" role="dialog" aria-label="Raid result">
     <div class="tc-label kick">${sky ? 'Battle result' : 'Raid result'} · ${esc(t.date)}</div>
-    <h2 class="tc-title-2">${esc(t.title)}</h2>
+    <h2 class="tc-title-2">${esc(withThe(t.title))}</h2>
     <div class="verdict"><span class="tc-stamp ${won ? 'tc-stamp--won' : ''}">${esc(level)}</span></div>
-    ${rep && rep.result && (sky || (rep.dropped ?? 0) > 0) ? `<p class="told"><b>${esc(never00(rep.result))}</b></p>` : ''}
-    <h3 class="tc-label">In the air</h3><ul class="flines">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+    ${rep && rep.result && (sky || (rep.dropped ?? 0) > 0) ? `<p class="told"><b>${esc(withThe(never00(rep.result)))}</b></p>` : ''}
+    <h3 class="tc-label">In the air</h3><ul class="flines">${lines.map((l) => `<li>${esc(withThe(l))}</li>`).join('')}</ul>
     ${card?.reckoning ? `<h3 class="tc-label">Against the staff's reckoning</h3><p class="dice">${esc(card.reckoning)}</p>` : ''}
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
