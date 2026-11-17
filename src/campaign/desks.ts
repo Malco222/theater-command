@@ -92,7 +92,7 @@ const orderWords = (g: Game, b: Build): string =>
 export function boughtAir(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number>; forming: Record<Wing, number> } {
   const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
   for (const f of airFleetsOf(g, nat)) {
-    if (f.ship !== undefined) continue;
+    if (f.ship !== undefined || f.ashore !== undefined) continue;
     for (const w of ['ftr', 'bmr'] as Wing[]) { const x = f.extra?.[w] ?? 0; over[w] += x; base[w] += Math.max(0, f.est[w] - x); }
   }
   for (const b of g.nations[nat].queue) if (b.what === 'air' && (b.item === 'ftr' || b.item === 'bmr')) { forming[b.item] += 1; over[b.item] += b.count ?? ARSENAL.air[b.item].count; }
@@ -537,8 +537,11 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
       return all.length ? `${all.length} of ${mostAgents(nat)} agents: ${out} abroad, ${all.length - out} at home.` : `No agents yet. The service can run ${mostAgents(nat)}.`;
     }
     case 'air': {
+      // Carrier wings are counted apart: they are aboard their fleets, at no airfield (ruling 176(b)).
       const all = airFleetsOf(g, nat), flew = all.filter((f) => f.flew === g.turn).length;
-      return all.length ? `${all.length} air group${all.length === 1 ? '' : 's'}: ${flew} flew this month.` : 'No air groups.';
+      const wings = all.filter((f) => f.ship !== undefined).length, land = all.length - wings;
+      const count = [land ? `${land} air group${land === 1 ? '' : 's'} on airfields` : '', wings ? `${wings} carrier wing${wings === 1 ? '' : 's'} aboard ${wings === 1 ? 'its fleet' : 'their fleets'}` : ''].filter(Boolean).join(' and ');
+      return all.length ? `${count}: ${flew} flew this month.` : 'No air groups.';
     }
     case 'navy': {
       const all = fleetsOf(g, nat), sea = all.filter((f) => atSea(f)).length;

@@ -197,6 +197,51 @@ function seaRoute(g: Game, a: string, b: string, ctx: TradeCtx): TradeRoute {
   return { way: 'sea', seas, lost: Math.min(TRADE.sea.most, (1 - safe) * TRADE.sea.loss), keeps: farWorth(seas.length) };
 }
 
+// ---- What a shut gate costs the trade that ran through it (Version 84.1; ruling 176(e)) ---------------
+
+export interface GateTradeRow {
+  nat: string;
+  name: string;
+  /** The countries (by id) its trade with stops, and those its trade with goes the long way round. */
+  stops: string[];
+  round: string[];
+  /** What it loses a month by it, its own commerce counted. */
+  loss: number;
+}
+const crosses = (seas: number[], a: number, b: number): boolean => seas.some((z, k) => k > 0 && ((seas[k - 1] === a && z === b) || (seas[k - 1] === b && z === a)));
+/**
+ * Every country whose agreements run through a gate, with what each loses a month when its holder shuts it: the
+ * way the goods take with the gate open against the way they find with it shut. 'open' and 'shut' are one game
+ * with the gate open and with it shut (one of them an exact copy), so nothing here changes either. The greatest
+ * loser first.
+ */
+export function gateTrade(open: Game, shut: Game, gate: number): GateTradeRow[] {
+  const gt = open.gates[gate];
+  if (!gt || !tradeRules(open)) return [];
+  const co: TradeCtx = new Map(), cs: TradeCtx = new Map();
+  const pays = (g: Game, d: TradeDeal, r: TradeRoute): number => (r.way === 'none' ? 0 : dealWorth(g, d.a, d.b, r.keeps) * (1 - r.lost));
+  const rows = new Map<string, GateTradeRow>();
+  for (const d of open.trade) {
+    if (!can(open.nations[d.a]) || !can(open.nations[d.b]) || atWar(open, d.a, d.b)) continue;
+    const ro = tradeRoute(open, d.a, d.b, co);
+    if (ro.way !== 'sea' || !crosses(ro.seas, gt.a, gt.b)) continue;
+    const rs = tradeRoute(shut, d.a, d.b, cs);
+    const less = pays(open, d, ro) - pays(shut, d, rs);
+    if (less <= 1e-9) continue;
+    for (const [me, them] of [[d.a, d.b], [d.b, d.a]]) {
+      const row = rows.get(me) ?? rows.set(me, { nat: me, name: open.nations[me].name, stops: [], round: [], loss: 0 }).get(me)!;
+      (rs.way === 'none' ? row.stops : row.round).push(them);
+      row.loss += less * (1 + civicSum(open, me).trade) * govMul(open, me, 'trade');
+    }
+  }
+  return [...rows.values()].sort((x, y) => y.loss - x.loss || (x.nat < y.nat ? -1 : 1));
+}
+/** A nation's own agreements, looked at again now: the way the goods go, and what gets through. */
+export function refreshTrade(g: Game, nat: string): void {
+  const ctx: TradeCtx = new Map();
+  for (const d of dealsOf(g, nat)) refresh(g, d, ctx);
+}
+
 // ---- Who will sign ----------------------------------------------------------------------------------
 
 const side = (n: Nation): number => { const b = bloc(n); return b === 'axis' ? 1 : b === 'allies' ? -1 : 0; };
