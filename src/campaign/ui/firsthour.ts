@@ -457,11 +457,14 @@ function drawPointer(): void {
   p.style.display = '';
   p.style.left = `${r.left}px`; p.style.top = `${r.top}px`; p.style.width = `${r.width}px`; p.style.height = `${r.height}px`;
   p.firstElementChild!.classList.toggle('tc-pointer--lg', r.width >= 60 && r.height >= 60);
+  // (It breathes out 4 px a side: the scale that takes its frame, 9 px clear, to 13.)
+  p.style.setProperty('--fh-s', ((Math.min(r.width, r.height) + 26) / (Math.min(r.width, r.height) + 18)).toFixed(3));
 }
 
 /**
  * On the map the pointer is drawn on the ground, under every piece, flag and plate (the art director's brief,
- * section 3): four brass clamps in the map's own layers, just under the pieces, 6 px clear of the thing.
+ * section 3): four brass clamps in the map's own layers, just under the pieces, 6 px clear of the thing. It does not
+ * breathe there: nothing that moves by itself is drawn on the map's own drawing (84.2.1's standing rule).
  * A province is pointed at by a frame 44 px square at its middle.
  */
 function mapPointer(r: DOMRect, spot?: DOMPoint): void {
@@ -478,7 +481,7 @@ function mapPointer(r: DOMRect, spot?: DOMPoint): void {
   const d = `M${a.x} ${a.y + arm}V${a.y}H${a.x + arm}M${b.x - arm} ${a.y}H${b.x}V${a.y + arm}M${b.x} ${b.y - arm}V${b.y}H${b.x - arm}M${a.x + arm} ${b.y}H${a.x}V${b.y - arm}`;
   let gEl: Element | null = document.getElementById('fhground');
   if (!gEl) { gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g'); gEl.id = 'fhground'; units.parentNode!.insertBefore(gEl, units); }
-  gEl.innerHTML = `<g class="fh-breathe"><path class="fh-case" d="${d}" stroke-width="${(6 * px).toFixed(3)}"/><path class="fh-arm" d="${d}" stroke-width="${(3 * px).toFixed(3)}"/></g>`;
+  gEl.innerHTML = `<path class="fh-case" d="${d}" stroke-width="${(6 * px).toFixed(3)}"/><path class="fh-arm" d="${d}" stroke-width="${(3 * px).toFixed(3)}"/>`;
 }
 
 // ---- The Guide -------------------------------------------------------------------------------------------------

@@ -73,9 +73,10 @@
 @keyframes fh-in-side { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 @keyframes fh-thump { 0% { opacity: 0; transform: rotate(-6deg) scale(1.7); } 70% { opacity: 1; transform: rotate(-6deg) scale(.96); } 100% { transform: rotate(-6deg) scale(1); } }
 
-/* the pointer: four brass corner clamps round the one thing a note points at, 6 clear of it, breathing 4 px over 2 s */
+/* the pointer: four brass corner clamps round the one thing a note points at, 6 clear of it, breathing 4 px over 2 s
+   (by a scale the page works out for its size, which the browser does without redrawing what lies under it) */
 #fhpointer { position: fixed; z-index: 40; pointer-events: none; }
-.tc-pointer { --arm: 12px; --pb: var(--brass-300); --pc: rgba(14, 11, 8, .9); position: absolute; inset: -9px; pointer-events: none; background-repeat: no-repeat; filter: drop-shadow(0 0 5px rgba(224, 184, 114, .75)); animation: fh-breathe 2s ease-in-out infinite;
+.tc-pointer { --arm: 12px; --pb: var(--brass-300); --pc: rgba(14, 11, 8, .9); position: absolute; inset: -9px; pointer-events: none; background-repeat: no-repeat; filter: drop-shadow(0 0 5px rgba(224, 184, 114, .75)); animation: fh-breathe 2s ease-in-out infinite; will-change: transform;
   background-image: linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)),
     linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc));
   background-position: left 1.5px top 1.5px, left 1.5px top 1.5px, right 1.5px top 1.5px, right 1.5px top 1.5px, left 1.5px bottom 1.5px, left 1.5px bottom 1.5px, right 1.5px bottom 1.5px, right 1.5px bottom 1.5px,
@@ -83,13 +84,12 @@
   background-size: calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px),
     calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px); }
 .tc-pointer--lg { --arm: 16px; }
-@keyframes fh-breathe { 0%, 100% { inset: -9px; } 50% { inset: -13px; } }
-/* on the map: drawn on the ground, under every piece, flag and plate */
+@keyframes fh-breathe { 0%, 100% { transform: none; } 50% { transform: scale(var(--fh-s, 1.08)); } }
+/* on the map: drawn on the ground, under every piece, flag and plate. It stands still there: nothing that moves by
+   itself is drawn on the map's own drawing (the standing rule of 84.2.1: one moving mark redraws the whole map) */
 #fhground { pointer-events: none; }
 #fhground .fh-case { fill: none; stroke: rgba(14, 11, 8, .9); stroke-linecap: square; }
-#fhground .fh-arm { fill: none; stroke: #e0b872; stroke-linecap: square; filter: drop-shadow(0 0 2px rgba(224, 184, 114, .8)); }
-#fhground .fh-breathe { transform-box: fill-box; transform-origin: center; animation: fh-breathe-g 2s ease-in-out infinite; }
-@keyframes fh-breathe-g { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+#fhground .fh-arm { fill: none; stroke: #e0b872; stroke-linecap: square; }
 /* while the pointer stands, every other lit thing holds still: one thing moves at a time */
 body.has-pointer .btn.go.lit, body.has-pointer .freeme, body.has-pointer .sgi, body.has-pointer .dirmark circle { animation-play-state: paused; }
 
@@ -145,5 +145,5 @@ body.has-pointer .btn.go.lit, body.has-pointer .freeme, body.has-pointer .sgi, b
 @media (max-width: 620px) { .card header.fh-band { grid-template-columns: 1fr; } .fh-door { grid-column: 1; grid-row: auto; margin-top: 10px; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fh-in, .fh-slip.fh-in, .tc-note .tc-stamp, .tc-pointer, #fhground .fh-breathe, .fh-door.is-lit { animation: none; }
+  .fh-in, .fh-slip.fh-in, .tc-note .tc-stamp, .tc-pointer, .fh-door.is-lit { animation: none; }
 }
