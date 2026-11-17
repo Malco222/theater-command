@@ -268,6 +268,7 @@ export const PACIFIC_REGIONS = [
   ['Rangoon', 16.85, 96.15, 'UK', 'plains', 2, 0, { port: 1, col: 1 }],
   ['Moulmein', 16.5, 97.75, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Mergui', 12.5, 98.85, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Prome', 18.82, 95.3, 'UK', 'plains', 0, 0, { port: 1, col: 1 }],
   ['Toungoo', 18.94, 96.43, 'UK', 'forest', 0, 0, { col: 1 }],
   ['Yenangyaung', 20.46, 94.87, 'UK', 'plains', 0, 0, { col: 1, oil: 1 }],
   ['Mandalay', 21.98, 96.08, 'UK', 'plains', 1, 0, { col: 1 }],
@@ -555,7 +556,7 @@ export const FAR_RAIL_CUT = [
   // No line ran from Annam or Cambodia into Siam's north-east, from Saigon to Phnom Penh, or from Siam into Burma
   // before 1943.
   ['Vinh', 'Udon'], ['Saigon', 'Phnom Penh'], ['Battambang', 'Korat'], ['Bangkok', 'Moulmein'], ['Chiang Mai', 'Toungoo'], ['Phitsanulok', 'Moulmein'], ['Phitsanulok', 'Udon'], ['Phitsanulok', 'Korat'],
-  ['Kota Bharu', 'Penang'], ['Ipoh', 'Kuantan'], ['Kuantan', 'Kuala Lumpur'], ['Loyang', 'Nanyang'], ['Nanyang', 'Sian'], ['Rockhampton', 'Charleville'],
+  ['Prome', 'Toungoo'], ['Prome', 'Yenangyaung'], ['Kota Bharu', 'Penang'], ['Ipoh', 'Kuantan'], ['Kuantan', 'Kuala Lumpur'], ['Loyang', 'Nanyang'], ['Nanyang', 'Sian'], ['Rockhampton', 'Charleville'],
 ];
 
 /** How large an islet is drawn: half its width and half its height in map units (a unit is 2.8 km north to south). */
