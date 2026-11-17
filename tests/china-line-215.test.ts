@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import china from '../data/campaign/china-line.json';
-import { ringJudgement } from '../src/campaign/ai';
+import { lineGiveBack, ringJudgement } from '../src/campaign/ai';
 import { addCorps, allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { inLine, lineBinds, lineLeaves, lineShut, lines, type Line } from '../src/campaign/line';
@@ -337,6 +337,63 @@ describe('215(c): the record\'s line', () => {
     expect(lineLeaves(g, 'POL', at(g, 'Warsaw'), 4)).toBe(false);
   });
 
+  it('sends raid ground back when its months are over, to whoever held it before, once none of the invader\'s side stands on it (ruling 219)', () => {
+    drawn();
+    /** Lodz taken from Poland in the raid of months 2 and 3, and nobody on it. */
+    const raided = (h: Game, t: number): Region => {
+      const r = at(h, 'Lodz');
+      for (const c of [...r.units]) removeCorps(h, c);
+      r.ctrl = 'GER'; r.prev = 'POL'; r.since = 2; h.supplyDirty = true;
+      h.turn = t;
+      return r;
+    };
+    // Inside the raid's months it stays.
+    const during = grand(2, null, 1);
+    raided(during, 3);
+    expect(lineGiveBack(during, 'GER')).toEqual([]);
+    expect(at(during, 'Lodz').ctrl).toBe('GER');
+    // After them, not while a corps of the invader's side stands there.
+    const g = grand(2, null, 1);
+    const lodz = raided(g, 4);
+    const stays = addCorps(g, 'GER', 'Test Corps', 'inf', 2, lodz.id, {});
+    expect(lineGiveBack(g, 'GER')).toEqual([]);
+    removeCorps(g, stays);
+    // With nobody there it goes back to Poland, and ground the line still gives the invader does not.
+    at(g, 'Poznan').ctrl = 'GER';
+    for (const c of [...at(g, 'Poznan').units]) removeCorps(g, c);
+    expect(lineGiveBack(g, 'GER').map((r) => r.name)).toEqual(['Lodz']);
+    expect(lodz.ctrl).toBe('POL');
+    expect(at(g, 'Poznan').ctrl).toBe('GER');
+    expect(lineGiveBack(g, 'GER')).toEqual([]);
+  });
+
+  it('never hands back a player\'s ground, or to a player, and nothing at all when the player is either country', () => {
+    drawn();
+    const raided = (h: Game, holder = 'GER', prev = 'POL'): Region => {
+      const r = at(h, 'Lodz');
+      for (const c of [...r.units]) removeCorps(h, c);
+      r.ctrl = holder; r.prev = prev; h.turn = 4; h.supplyDirty = true;
+      return r;
+    };
+    // The player's Germany, or the player's Poland: the line binds nobody, and nothing goes back.
+    for (const human of ['GER', 'POL']) {
+      const g = grand(2, human, 1);
+      const r = raided(g);
+      expect(lineGiveBack(g, 'GER')).toEqual([]);
+      expect(r.ctrl).toBe('GER');
+    }
+    // A player on the invader's side holds the ground: it is his, and it stays his.
+    const svk = grand(2, 'SVK', 1);
+    const r = raided(svk, 'SVK');
+    expect(lineGiveBack(svk, 'GER')).toEqual([]);
+    expect(r.ctrl).toBe('SVK');
+    // Whoever held it before is the player: it goes back to the invaded country's computer, never to him.
+    const fra = grand(2, 'FRA', 1);
+    const f = raided(fra, 'GER', 'FRA');
+    expect(lineGiveBack(fra, 'GER').map((x) => x.name)).toEqual(['Lodz']);
+    expect(f.ctrl).toBe('POL');
+  });
+
   it('holds in a war nobody plays: the invader\'s army takes nothing beyond the line and leaves a raid when its months are over', () => {
     drawn();
     const g = grand(2, null, 1);
@@ -344,8 +401,8 @@ describe('215(c): the record\'s line', () => {
       runTurnAI(g);
       const t = g.turn - 1;
       const off = g.regions.filter((r) => r.owner === 'POL' && r.ctrl === 'GER' && !inLine(g, test, r, t)).map((r) => r.name);
-      // (Lodz may still be his the month after the raid's last until Poland walks back in: nothing is handed over.)
-      expect(off.filter((nm) => nm !== 'Lodz'), `month ${t}`).toEqual([]);
+      // (A raid's ground goes back the month after its last, once his corps have left it: ruling 219.)
+      expect(off, `month ${t}`).toEqual([]);
       expect(g.corps.some((c) => !c.dead && c.nat === 'GER' && g.regions[c.reg].owner === 'POL' && !inLine(g, test, g.regions[c.reg], t + 1) && g.regions[c.reg].name !== 'Lodz'), `month ${t}`).toBe(false);
       if (t >= 3) expect(g.corps.filter((c) => !c.dead && c.nat === 'GER' && c.kind !== 'fort' && g.regions[c.reg].name === 'Lodz').map((c) => c.name), `month ${t}`).toEqual([]);
     }
@@ -390,6 +447,10 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     expect(L.spans.Ichang).toEqual([{ from: 10, to: 72, kind: 'lasting' }]);
     expect(L.spans.Ningpo).toEqual([{ from: 20, to: 72, kind: 'lasting' }]);
     expect(L.spans.Tushan).toEqual([{ from: 64, to: 64, kind: 'ichigo' }]);
+    // Ruling 219: the ceiling holds to the end of the record's spans in August 1945, so the 1944 ground whose span
+    // ends in 1945 goes back as in the record; only the floor lifts at month 69.
+    expect(L.until).toBe(Math.max(...all.flatMap(([, s]) => s.map((x) => x.to))));
+    expect(all.some(([, s]) => s.some((x) => x.kind === 'ichigo' && x.to > L.floor.until && x.to < L.until))).toBe(true);
   });
 
   it('names only China\'s provinces, where the chart has China', () => {

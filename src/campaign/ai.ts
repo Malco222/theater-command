@@ -21,9 +21,9 @@ import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, front
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
-import { lineAny, lineLeaves, lineShut } from './line';
+import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -489,10 +489,11 @@ function mainCampaign(g: Game, nat: string): void {
 /**
  * By the book, when a raid's months are over its corps go back inside the record's line (ruling 215(c)): every corps
  * of the invader's side standing on ground the line leaves out in month `t` marches for the nearest ground of its own
- * side's inside the line. Nothing is handed over: the place stays its holder's until the other side walks back in.
+ * side's inside the line. At the start of the month the ground they have left goes back (ruling 219, lineGiveBack).
  */
 function lineHome(g: Game, nat: string, t: number): void {
   if (!lineAny(g, nat)) return;
+  if (t === g.turn) lineGiveBack(g, nat);
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead || c.kind === 'fort' || !lineLeaves(g, nat, g.regions[c.reg], t)) continue;
     if (c.town !== undefined && !takeField(g, c)) continue;
@@ -512,6 +513,18 @@ function lineHome(g: Game, nat: string, t: number): void {
       if (!next || !moveTo(g, c, next)) break;
     }
   }
+}
+
+/**
+ * Raids go back (ruling 219): ground beyond the record's line this month with nobody of the invader's side left on it
+ * returns to whoever held it before the raid, as the record's withdrawals did: as if his army had walked back in, so
+ * the province changes hands by the rules a march into an empty province follows (siege.ts, arrive). Computer against
+ * computer only. Returns the provinces that went back.
+ */
+export function lineGiveBack(g: Game, nat: string): Region[] {
+  const back: Region[] = [];
+  for (const { r, to } of lineGives(g, nat, g.turn)) if (arrive(g, r, to)) back.push(r);
+  return back;
 }
 
 /**
