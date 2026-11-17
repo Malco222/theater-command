@@ -40,7 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
-  dominions?: Record<string, { of: string[]; answers: number }>;
+  dominions?: Record<string, { of: string[]; answers: number; since?: Record<string, number> }>;
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
@@ -78,6 +78,15 @@ export function patronOf(nat: string): string | null {
 }
 
 /** The share of the time a mother country answers when war is made on a dominion of hers: 0.6 for Britain (Brian's rule of 17 November 2026). */
+/**
+ * The declare card's row for a dominion's mother country, first among its friends (the UI director's words, 17 November
+ * 2026): "The mother country: Canada has been a dominion since 1867." Display only: the tie moves no opinion.
+ */
+export function motherLine(patron: string, nat: string, name: string): string {
+  const since = WORLD.dominions?.[patron]?.since?.[nat];
+  return since ? `The mother country: ${name} has been a dominion since ${since}.` : `The mother country: ${name} is a dominion.`;
+}
+
 export function answersOf(patron: string): number {
   return WORLD.dominions?.[patron]?.answers ?? 0;
 }
@@ -202,7 +211,7 @@ export function worldMonth(g: Game): void {
       const E = g.nations[e];
       if (!E?.alive || n.atWar.includes(e) || allied(g, id, e)) continue;
       setWar(g, id, e);
-      headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
+      headline(g, 'war', `${theName(n, true)} is at war with ${theName(E)}, beside ${theName(M)}.`, id);
     }
   }
   // A campaign saved before ruling 211(b): the roll for a war somebody made on a dominion is made as the month

@@ -3,7 +3,7 @@
     "what": "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
     "nations": "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
     "home": "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
-    "dominions": "A mother country may stand by each of her dominions ('of'), one way only (ruling 211(b) as Brian changed it on 17 November 2026): when a country at peace with her makes war on a dominion, while the two stand in the same alliance, she answers 'answers' of the time (0.6: six times in ten) and stays out the rest. One roll for each such war, made when it is declared; the same in every year, at every stop of the dial and at every difficulty. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
+    "dominions": "A mother country may stand by each of her dominions ('of'), one way only (ruling 211(b) as Brian changed it on 17 November 2026): when a country at peace with her makes war on a dominion, while the two stand in the same alliance, she answers 'answers' of the time (0.6: six times in ten) and stays out the rest. 'since' is the year each became a dominion, said on the declare card's row for the mother country (display only). One roll for each such war, made when it is declared; the same in every year, at every stop of the dial and at every difficulty. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
     "follow": "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
     "corps": "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
     "fleets": "Fleets in home waters on the first day, in the form of navy.json.",
@@ -46,7 +46,7 @@
     "USA": { "align": "leaning_allies" }
   },
   "follow": { "CAN": "UK" },
-  "dominions": { "UK": { "of": ["CAN", "AUS", "NZL", "SAF"], "answers": 0.6 } },
+  "dominions": { "UK": { "of": ["CAN", "AUS", "NZL", "SAF"], "answers": 0.6, "since": { "CAN": 1867, "AUS": 1901, "NZL": 1907, "SAF": 1910 } } },
   "corps": [
     ["USA", "First Army", "inf", 2, "New York", { "xp": 0.05, "str": 0.5 }],
     ["USA", "Washington garrison", "inf", 1, "Washington", { "xp": 0.05, "str": 0.6, "hold": 1 }],

@@ -170,8 +170,21 @@ export function theName(n: Nation, start = false): string {
   return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
+/**
+ * The countries whose names take their article wherever they follow another word, and "The" at the head of a line
+ * ("against the United States", "The United States against Canada": the UI director's words for ruling 211(f)).
+ * Every line of news passes through it, so no line has to remember; "a Soviet Union that ..." is left as written.
+ */
+const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands)\b/g;
+export function theWords(text: string): string {
+  return text.replace(ARTICLED, (_m, pre: string, name: string, at: number) => {
+    const head = /(^|[.!?]\s+)$/.test(text.slice(0, at + pre.length));
+    return `${pre}${head ? 'The' : 'the'} ${name}`;
+  });
+}
+
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
-  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind, nat, region, ...tag });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind, nat, region, ...tag });
 }
 
 /**
@@ -197,7 +210,7 @@ export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
-  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
 }
 
 /** Routine news of a computer-run nation's month, kept back for one line when the month closes. */
@@ -232,7 +245,7 @@ export function foldNews(g: Game, nat: string): void {
   if (!mine.length) return;
   const shown = mine.slice(0, 6);
   const more = mine.length - shown.length;
-  headline(g, 'info', `The month in the air and at sea, ${g.nations[nat].name}: ${shown.join('; ')}${more > 0 ? `; and ${more} more of the same` : ''}.`, nat);
+  headline(g, 'info', `The month in the air and at sea, ${theName(g.nations[nat])}: ${shown.join('; ')}${more > 0 ? `; and ${more} more of the same` : ''}.`, nat);
 }
 
 // ---- Who stands where ---------------------------------------------------------------
@@ -1873,6 +1886,10 @@ export function capture(g: Game, r: Region, nat: string): void {
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
+  // And in whose turn of the month it fell, so that the alarm can tell a fall the player has seen from one since he
+  // last ended his month (danger.ts homeAlarms; the design director's ruling of 17 November, by the order of play).
+  // Read by nothing that moves a die.
+  g.flags[`fellP:${r.id}`] = g.phase;
   moraleCapital(g, r, old);
   r.prev = old;
   g.supplyDirty = true;
@@ -2140,6 +2157,21 @@ export function roomForAll(g: Game, to: Region, corps: Corps[]): boolean {
 }
 
 /**
+ * How an order's words name the corps it moves (the UI director's "one voice", 84.2.6): a lone corps by its name;
+ * every corps of its nation in the field of the province where the first stands as its army ("the American army",
+ * or "Patton's army" where a general commands one of them, the senior first); a part of it as "2 corps of the
+ * American army". `many` is for a plural verb.
+ */
+export function forceWords(g: Game, corps: Corps[]): { who: string; many: boolean } {
+  if (corps.length === 1) return { who: corps[0].name, many: false };
+  const lead = corps[0], adj = g.nations[lead.nat]?.adj ?? '';
+  const all = g.regions[lead.reg].units.filter((c) => !c.dead && c.kind !== 'fort' && c.nat === lead.nat);
+  const gens = corps.map((c) => generalOf(g, c)).filter((x): x is NonNullable<typeof x> => !!x && x.status === 'active').sort((a, b) => b.level - a.level || a.id - b.id);
+  const army = gens.length ? `${gens[0].name.split(' ').pop()}'s army` : `the ${adj} army`;
+  return all.every((c) => corps.includes(c)) ? { who: army, many: false } : { who: `${corps.length} corps of ${gens.length ? army : `the ${adj} army`}`, many: true };
+}
+
+/**
  * Why no train will take an army in hand to a province (the design director's ruling 116): an army is never split by
  * surprise, so if one corps cannot ride, nobody rides. Null where every corps can and there is room for them all.
  * Where some can and some cannot, the sentence names the corps that cannot, so that the player can leave them behind
@@ -2153,7 +2185,14 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
     return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
   }
   const no = whys[first]!;
-  if (whys.every(Boolean)) return no;
+  if (whys.every(Boolean)) {
+    // (Where none can ride for want of a whole month, it is said once of the army: "No train for the American army
+    // this month: it has spent part of its month, ...", the one voice of 84.2.6.)
+    if (corps.length < 2 || !whys.every((w) => w!.code === 'spent' && w!.line.startsWith('No train for '))) return no;
+    const { who, many } = forceWords(g, corps);
+    const rest = no.line.slice(no.line.indexOf(' this month:'));
+    return { ...no, line: `No train for ${who}${many ? rest.replace(': it has spent part of its month', ': they have spent part of their month').replace(': short of fuel, it has', ': short of fuel, they have').replace(', and it has less', ', and they have less') : rest}` };
+  }
   const names = corps.filter((_, i) => whys[i]).map((c) => c.name);
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   // (Its own reason follows as an aside: the sentence that leads is about the army.)
@@ -2422,12 +2461,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (cap) { cap.cap = true; V.capital = cap.id; }
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
-    headline(g, 'fall', `${X.name} capitulates to ${g.nations[by].name}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
+    headline(g, 'fall', `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
   }
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
-    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${X.name} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
+    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
   X.atWar = [];
