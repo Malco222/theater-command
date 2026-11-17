@@ -74,8 +74,11 @@ press-each	page
 # --- C. Things that cannot be done now say why.
 restore	start
 select-province	Canal Zone	does
-order-province	Panama City	says Fortress troops
-order-province	Chiriqui	says Fortress troops
+# Version 84.2: the Canal's division can march, so a neutral neighbour brings the question of war, not the fortress troops' refusal. Shut it each time.
+order-province	Panama City	card
+close
+order-province	Chiriqui	card
+close
 press-each	tray
 open-page	Navy	does
 select-unit	Atlantic Fleet	does
