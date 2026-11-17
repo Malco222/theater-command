@@ -399,12 +399,14 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
   const mine = (id: number): boolean => allied(g, nat, g.regions[id].ctrl) && !g.regions[id].units.some((u) => !u.dead && atWar(g, u.nat, nat));
   const goals = [...(mine(target) ? [target] : []), ...t.nb.filter(mine)];
   if (!all.length) return null;
-  // Hops over the land from the province, for the nearest armies by road.
+  // Hops over the land from the province, for the nearest armies by road. (24 since the cities version: the chart of
+  // the Americas with its cities takes about twice the steps over the same ground, and the help from across the
+  // continent, the army round Vancouver for Pittsburgh in Brian's December 1940, lies 14 steps off.)
   const hops = new Map<number, number>([[target, 0]]);
   const q = [target];
   for (let i = 0; i < q.length; i++) {
     const d = hops.get(q[i])!;
-    if (d >= 12) continue;
+    if (d >= 24) continue;
     for (const j of g.regions[q[i]].nb) if (!hops.has(j)) { hops.set(j, d + 1); q.push(j); }
   }
   for (const h of all) h.hops = hops.get(h.region) ?? 99;

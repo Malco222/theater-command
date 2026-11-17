@@ -8123,6 +8123,7 @@ function startTour(): void {
   dropTour();
   ui.modal = null;
   $('#veil').classList.remove('open');
+  cardDrawn(null);
   tour = { card, stops, i: 0, timer: 0, view: { ...ui.view } };
   ui.sel = -1; ui.picked.clear();
   tourStep();
@@ -8573,7 +8574,7 @@ function onClick(e: MouseEvent): void {
         const idle = frontIdle(g).length;
         if (idle) { openModal({ kind: 'askend', n: idle, at: performance.now() }); break; }
       }
-      if (ui.modal?.kind === 'askend') { ui.modal = null; $('#veil').classList.remove('open'); }
+      if (ui.modal?.kind === 'askend') { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); }
       const since: Since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
       // The plate turns to the month that is coming as the press lands (ruling 204).
       const coming = onEve(g) ? '' : date(g.turn + 1);
@@ -8596,7 +8597,7 @@ function onClick(e: MouseEvent): void {
       if (standArmy(g, a.reg, on)) { ui.msg = on ? `The army at ${g.regions[a.reg].name} stands where it is this month.` : `The army at ${g.regions[a.reg].name} waits for orders again.`; queueSave(); }
       refresh(); break;
     }
-    case 'askshow': { ui.modal = null; $('#veil').classList.remove('open'); ui.roundSeen = []; ui.picked.clear(); ui.sel = -1; goNextArmy(); break; }
+    case 'askshow': { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); ui.roundSeen = []; ui.picked.clear(); ui.sel = -1; goNextArmy(); break; }
     case 'asktick': { setAskPref(!askPref()); if (ui.modal?.kind === 'askend') openModal(ui.modal); break; }
     case 'setask': { setAskPref(t.dataset.on === '1'); if (ui.modal?.kind === 'level') { const keep = $('#card').scrollTop; openModal({ kind: 'level' }); $('#card').scrollTop = keep; } else refresh(); break; }
     case 'stopmarch': {
@@ -9227,7 +9228,7 @@ function onClick(e: MouseEvent): void {
       if (!m || m.kind !== 'siege' || m.mode !== 'march') break;
       const target = g.regions[m.target];
       const corps = g.corps.filter((c) => (m.corps as number[]).includes(c.id));
-      if (act === 'domarch') { ui.modal = null; $('#veil').classList.remove('open'); if (marchTo(target.id, corps)) queueSave(); break; }
+      if (act === 'domarch') { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); if (marchTo(target.id, corps)) queueSave(); break; }
       const h = g.headlines.length;
       const before = g.regions.map((r) => r.ctrl);
       const was = beforeBattle(m.look ?? null, 'storm', target.id);
@@ -9315,6 +9316,11 @@ let shutByKey = false;
 /** When the result slip last came up on the map. */
 let slipAt = 0;
 const cardKey = (m: NonNullable<typeof ui.modal>): string => `${m.kind}:${m.target ?? m.id ?? m.region ?? ''}`;
+/**
+ * Told every time a card goes up or comes down. A card put down by hand (`ui.modal = null` outside openModal) must
+ * call it with null too: else the guard keeps the old card, and the same question asked again keeps its old time, so a
+ * hurried Enter answers it at once (the second playtester's check of 84.3.1: SHOW ME, then Enter three times).
+ */
 function cardDrawn(m: typeof ui.modal): void {
   const same = !!m && !!guardedCard && cardKey(m) === cardKey(guardedCard);
   if (m === guardedCard || same) { guardedCard = m; return; }

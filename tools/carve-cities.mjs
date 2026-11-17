@@ -392,9 +392,43 @@ export function carveCities(chart) {
 
   // Ground given by ruling (CITY_GIVE), after the checks above, which hold the chart as cut: the part of the strip
   // that lies in one province goes to the other, and the two become neighbours.
-  const given = [];
+  const given = [], givenAfter = [];
   {
     const named = new Map([...rows.values()].map((r) => [r.name, r]));
+    // The grid is moved with the ground, so that borders and coasts the gift makes or ends can be read off it after:
+    // two that now meet where they did not become neighbours (Juneau and Ketchikan, whose new ground meets on the
+    // mainland), and a province that gave all its shore away no longer stands on that sea.
+    const touched = new Set(CITY_GIVE.flatMap(([f, t]) => [named.get(f)?.id, named.get(t)?.id]).filter((id) => id !== undefined));
+    const meets = () => {
+      const m = new Map();
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        const a = regionAt2[r * COLS + c];
+        if (a < 0) continue;
+        for (const b of [regionAt2[r * COLS + (c + 1) % COLS], r + 1 < ROWS ? regionAt2[(r + 1) * COLS + c] : -1]) {
+          if (b < 0 || a === b || !(touched.has(a) || touched.has(b))) continue;
+          const k = key(a, b);
+          m.set(k, (m.get(k) ?? 0) + 1);
+        }
+      }
+      return m;
+    };
+    const shores = () => {
+      const m = new Map();
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        const zone = zoneAt[r * COLS + c];
+        if (zone < 0) continue;
+        for (const [dx, dy] of STEPS) {
+          const rr = r + dy;
+          if (rr < 0 || rr >= ROWS) continue;
+          const id = regionAt2[rr * COLS + (c + dx + COLS) % COLS];
+          if (!touched.has(id)) continue;
+          const k = `${id}:${zone}`;
+          m.set(k, (m.get(k) ?? 0) + 1);
+        }
+      }
+      return m;
+    };
+    const meetBefore = meets(), shoreBefore = shores();
     for (const [fromName, toName, shape] of CITY_GIVE) {
       const a = named.get(fromName), b = named.get(toName);
       if (!a || !b) { warn(`! no province called ${!a ? fromName : toName} to give ground`); continue; }
@@ -406,19 +440,49 @@ export function carveCities(chart) {
         left = clean(polygonClipping.difference(a.polys.map(closed), strip));
         grown = take.length ? clean(polygonClipping.union(b.polys.map(closed), take.map(closed))) : b.polys;
       } catch (e) { warn(`! could not give ground from ${fromName} to ${toName}: ${e.message}`); continue; }
+      // The two shapes together keep their area, within a unit or (for a long fjord coast, whose points are rounded
+      // and trimmed again) a twentieth of one per cent.
       const area = take.reduce((t, q) => t + sizeOf(q), 0);
       const before = a.polys.reduce((t, q) => t + sizeOf(q), 0) + b.polys.reduce((t, q) => t + sizeOf(q), 0);
       const after = left.reduce((t, q) => t + sizeOf(q), 0) + grown.reduce((t, q) => t + sizeOf(q), 0);
       const seeded = left.some((q) => inPoly(q, a.x, a.y)) && grown.some((q) => inPoly(q, b.x, b.y));
-      if (!take.length || !seeded || Math.abs(before - after) > 1) { warn(`! ground from ${fromName} to ${toName} not given: ${Math.round(area)} square units, seeds ${seeded ? 'kept' : 'lost'}, area ${before.toFixed(1)} to ${after.toFixed(1)}`); continue; }
+      if (!take.length || !seeded || Math.abs(before - after) > Math.max(1, before * 0.0005)) { warn(`! ground from ${fromName} to ${toName} not given: ${Math.round(area)} square units, seeds ${seeded ? 'kept' : 'lost'}, area ${before.toFixed(1)} to ${after.toFixed(1)}`); continue; }
       a.polys = left; b.polys = grown;
+      for (const q of take) for (const j of cellsOf(q)) if (regionAt2[j] === a.id) regionAt2[j] = b.id;
       if (!a.nb.includes(b.id) && !joins2.some(([p, q]) => (p === a.id && q === b.id) || (p === b.id && q === a.id))) {
         if (family(a.id) === family(b.id)) { a.nb.push(b.id); b.nb.push(a.id); a.nb.sort((p, q) => p - q); b.nb.sort((p, q) => p - q); }
         else { joins2.push(family(a.id) < family(b.id) ? [a.id, b.id] : [b.id, a.id]); joins2.sort((p, q) => p[0] - q[0] || p[1] - q[1]); }
       }
       given.push(`${Math.round(area)} square units of ${fromName} to ${toName}`);
     }
-    check2([...rows.values()].every((r) => r.nb.every((j) => rows.get(j)?.nb.includes(r.id))), `ground given by ruling (${given.length}): ${given.join(', ') || 'none'}; every border still written on both sides`);
+    const isNb = (a, b) => rows.get(a)?.nb.includes(b) || joins2.some(([p, q]) => (p === a && q === b) || (p === b && q === a));
+    const meetAfter = meets();
+    for (const [k, n] of [...meetAfter].sort((p, q) => p[0] - q[0])) {
+      const a = Math.floor(k / 10000), b = k % 10000;
+      if (n < BORDER || (meetBefore.get(k) ?? 0) >= BORDER || !rows.has(a) || !rows.has(b) || isNb(a, b)) continue;
+      if (family(a) === family(b)) { rows.get(a).nb.push(b); rows.get(b).nb.push(a); rows.get(a).nb.sort((p, q) => p - q); rows.get(b).nb.sort((p, q) => p - q); }
+      else { joins2.push(family(a) < family(b) ? [a, b] : [b, a]); joins2.sort((p, q) => p[0] - q[0] || p[1] - q[1]); }
+      givenAfter.push(`${rows.get(a).name} and ${rows.get(b).name} now meet`);
+    }
+    const shoreAfter = shores();
+    for (const id of touched) {
+      const r = rows.get(id);
+      for (const zone of [...r.seas]) {
+        if ((shoreAfter.get(`${id}:${zone}`) ?? 0) > 0) continue;
+        r.seas = r.seas.filter((z) => z !== zone);
+        zones2[zone].coast = zones2[zone].coast.filter((x) => x !== id);
+        givenAfter.push(`${r.name} no longer on the ${zones2[zone].name}`);
+        if (r.flags.port && !r.seas.length) warn(`! ${r.name} is a port with no sea after the ground it gave`);
+      }
+      for (const [k2, n] of shoreAfter) {
+        const [who, zone] = k2.split(':').map(Number);
+        if (who !== id || n < 8 || (shoreBefore.get(k2) ?? 0) >= 8 || r.seas.includes(zone)) continue;
+        r.seas = [...r.seas, zone].sort((p, q) => p - q);
+        zones2[zone].coast = [...zones2[zone].coast, id].sort((p, q) => p - q);
+        givenAfter.push(`${r.name} now on the ${zones2[zone].name}`);
+      }
+    }
+    check2([...rows.values()].every((r) => r.nb.every((j) => rows.get(j)?.nb.includes(r.id))), `ground given by ruling (${given.length}): ${given.join(', ') || 'none'}${givenAfter.length ? `; ${givenAfter.join(', ')}` : ''}; every border still written on both sides`);
   }
 
   const stages2 = [...stages, stages[stages.length - 1] + cities.length];

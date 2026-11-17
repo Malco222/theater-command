@@ -7,6 +7,7 @@ import mapData from '../src/generated/campaign-map.json';
 import { allied, atWar, capitulate, capture, createGame, removeCorps } from '../src/campaign/game';
 import { BUDGET, provinceYield } from '../src/campaign/economy';
 import { saveGame } from '../src/campaign/save';
+import { beyondEurope } from '../src/campaign/world';
 import { startOpen } from '../src/campaign/staff';
 import { TOWNS, prizeOf, prizesInReach, townAt, townName, townSite, townSize, townsOf, worthOf } from '../src/campaign/towns';
 import { prize, prizesNear, townIn, towns } from '../src/campaign/turn';
@@ -37,11 +38,18 @@ describe('the town data', () => {
   });
 
   it('gives every province a place of its own: no two share a name, and no town is called after another province', () => {
-    const names = g.regions.map(townName);
-    expect(new Set(names).size).toBe(g.regions.length);
+    // One pair across the ocean since the cities version, and only that one: the Midlands' chief town and the city of
+    // Alabama are both Birmingham. The UI director's rule (ui-style-guide.md, Words, 17 November 2026): a twin is
+    // allowed only an ocean apart, and only where no line or list shows the two without a country beside them; where a
+    // real fuller name exists (Santiago de Cuba) it is used instead. Both stay plain "Birmingham".
+    const OVERSEAS_TWINS = new Set(['Birmingham']);
+    const names = g.regions.map(townName).filter((n) => !OVERSEAS_TWINS.has(n));
+    expect(new Set(names).size).toBe(names.length);
+    expect(g.regions.length - names.length).toBe(2);
     for (const r of g.regions) {
       const other = g.byName[townName(r)];
-      expect(!other || other === r, `${r.name}: ${townName(r)}`).toBe(true);
+      const twins = OVERSEAS_TWINS.has(townName(r)) && !!other && beyondEurope(other) !== beyondEurope(r);
+      expect(!other || other === r || twins, `${r.name}: ${townName(r)}`).toBe(true);
     }
   });
 

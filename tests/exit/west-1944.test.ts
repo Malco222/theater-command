@@ -83,7 +83,7 @@ function history(seed: number): Run {
   }
   const told = (re: RegExp): number => g.headlines.find((h) => h.turn >= APR_44 && re.test(h.text))?.turn ?? 0;
   run.news = {
-    fortitude: told(/phantom army/), wall: told(/mined and staked/), british: told(/British troops land at Normandy from the sea/), american: told(/American troops land at Cotentin from the sea/),
+    fortitude: told(/phantom army/), wall: told(/mined and staked/), british: told(/British troops land at Normandy from the sea/), american: told(/American troops land at the Cotentin from the sea/),
     dday: told(/D-Day, 6 June 1944/), patton: told(/Third Army becomes operational/), dragoon: told(/American troops land at Marseille from the sea/), paris: told(/Paris is free/),
     brussels: told(/Brussels is free/), student: told(/First Parachute Army/), westWall: told(/put the West Wall back in order/), ffi: told(/France has freed itself/),
     arnhem: told(/Market Garden has failed/), aachen: told(/Aachen has surrendered/), secret: told(/two panzer armies in secret/), bulge: told(/calling it the Bulge/), closed: told(/The Bulge is gone/),
