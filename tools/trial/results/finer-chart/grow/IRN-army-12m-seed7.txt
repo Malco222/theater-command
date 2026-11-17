@@ -1,0 +1,15 @@
+=== grow IRN, seed 7, 12 months, aim army; seats files: /mnt/project-files/far-side-seats/globe/globe-seats.json, /mnt/project-files/far-side-seats/pacific/next/japan-standin-seats.json, /mnt/project-files/far-side-seats/pacific/next/pacific-seats.json
+  first day: corps 7, divisions 9 on paper and 4.6 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men in the pool for 3.4 divisions; income 330.4 a month
+    April 1940: Engineer corps (1 division) for 1800, due July 1940
+    never on offer: corps:mot: Needs the technology Motorised infantry. Open Research to begin it.
+    never on offer: corps:arm: Needs the technology Tank arm. Open Research to begin it.
+    never on offer: para: Needs the technology Airborne forces. Open Research to begin it.
+    never on offer: corps:inf: The reserve has not the men: this takes 45,000 and 19,000 are left. 0 come of age each month.
+    never on offer: corps:mtn: The reserve has not the men: this takes 30,000 and 19,000 are left. 0 come of age each month.
+    never on offer: corps:art: The reserve has not the men: this takes 30,000 and 19,000 are left. 0 come of age each month.
+  September 1940: corps 8, divisions 10 on paper and 7.8 at strength; air groups 0 (0 fighters, 0 bombers); ships 2 (2 dd); shipyard level 0; factories 1 (1 in its best province); men left in the pool for 0.4 divisions; treasury 1276.7; spent 1800; still on order: nothing
+    [October 1939 after JAP] [note] crowd: 8 JAP corps stand in Tokyo (5 divisions)
+    [December 1939 after JAP] [note] crowd: 14 JAP corps stand in Tokyo (9 divisions)
+    [April 1940 after JAP] [note] China fights on with its capital Chungking in JAP hands
+    [July 1940 after JAP] [note] crowd: 18 JAP corps stand in Tokyo (14 divisions)
+GROWN IRN army seed 7 to September 1940: divisions 9 -> 10 on paper (4.6 -> 7.8 at strength); aircraft 0 -> 0; ships 2 -> 2; shipyard 0 -> 0; factories 1 -> 1; orders 1; invariants broken 0; standing

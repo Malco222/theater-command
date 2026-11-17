@@ -128,6 +128,13 @@ section 9 of the paper): `results/grow-216/` (aim `none` is a player who passes)
 `results/year-216/`, and South Africa with the factory bound to September 1941 and 1942 in `results/grow-215/`.
 The refusal for want of men rounds the monthly class to thousands, so a class of 0.017 reads "0 come of age each month".
 
+**On the map builder's finer chart** (acc796a: 1,686 provinces beyond Europe, China cut to 133; South Africa 28, Iran 28,
+Afghanistan 12, Saudi Arabia 12). Built with `globe-seats.json` and the Pacific seat builder's files for this chart
+(`pacific/next/`, copied over the live ones at the move). `src/campaign/save.ts` carries the Pacific seat builder's
+TRIAL mend `garrison-order-save.patch` (a garrison's order is saved; without it every seat fails "the save plays on
+the same" from the spring of 1940 on this chart). All eight globe seats pass the year; printouts and the soldier's
+runs in `results/finer-chart/`.
+
 `watch` plays with nobody at the controls and prints, for each country, the months in which something changed
 (wars, alignment, provinces, corps, news that names it): the computer's path when nobody leads it.
 

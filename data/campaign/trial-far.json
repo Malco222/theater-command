@@ -3,8 +3,10 @@
  "held": {
   "Amoy": "JAP",
   "Anking": "JAP",
+  "Anyang": "JAP",
   "Canton": "JAP",
   "Chefoo": "JAP",
+  "Gambela": "UK",
   "Haichow": "JAP",
   "Hainan": "JAP",
   "Hangchow": "JAP",
@@ -14,6 +16,8 @@
   "Kalgan": "JAP",
   "Kiukiang": "JAP",
   "Linfen": "JAP",
+  "Lintsing": "JAP",
+  "Lishih": "JAP",
   "Nanchang": "JAP",
   "Nanking": "JAP",
   "Paoting": "JAP",
@@ -21,8 +25,10 @@
   "Peiping": "JAP",
   "Pengpu": "JAP",
   "Shanghai": "JAP",
+  "Shangtu": "JAP",
   "Shihkiachwang": "JAP",
   "Silingol": "JAP",
+  "Sintai": "JAP",
   "Sinyang": "JAP",
   "Suiyuan": "JAP",
   "Swatow": "JAP",
@@ -32,7 +38,9 @@
   "Tientsin": "JAP",
   "Tsinan": "JAP",
   "Tsingtao": "JAP",
-  "Wuhu": "JAP"
+  "Tungkun": "JAP",
+  "Wuhu": "JAP",
+  "Yochow": "JAP"
  },
  "capitals": {
   "IRN": "Tehran",
