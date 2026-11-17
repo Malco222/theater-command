@@ -1958,6 +1958,12 @@ export const CITY_GROUPS = [
   ['Alabama', [
     ['Birmingham', 33.52, -86.81, 'urban', 0, 0, {}],
   ]],
+  // Western Samoa (Upolu and Savaii), New Zealand's mandate from 1920, which the chart handed over folded into
+  // America's Samoa; Tutuila and Pago Pago stay America's (the Pacific planner, 17 November 2026). The owner is the
+  // clerk's row; the small islands go whole to the nearer seed.
+  ['Samoa', [
+    ['Apia', -13.9, -171.76, 'hills', 0, 0, { port: 1, col: 1 }], // Apia itself (-13.83) is on the shore; the seed is inland on Upolu
+  ]],
 ];
 
 // Which seas a city stands on where the count of water squares misleads: name -> [sea keys].
@@ -1965,6 +1971,9 @@ export const CITY_SHORES = {};
 
 // A crossing over a strait ('links') whose end is now one particular piece of a province that was cut: [a, b] by name.
 export const CITY_LINKS = [];
+
+// The Alaska panhandle's mainland strip as the 1903 award drew it, with the sea beside it (see CITY_GIVE).
+const PANHANDLE = [[54.72, -130.62], [55.05, -130.2], [55.45, -130.05], [55.92, -130.02], [56.13, -130.1], [56.4, -130.55], [56.58, -131.1], [56.7, -131.8], [56.72, -132.12], [57.09, -132.36], [57.45, -132.65], [57.85, -133.05], [58.25, -133.35], [58.65, -133.7], [59.0, -134.2], [59.33, -134.95], [59.62, -135.15], [59.69, -135.29], [59.8, -135.5], [59.6, -136.0], [59.45, -136.37], [59.2, -136.75], [58.9, -137.5], [59.35, -138.5], [60.32, -139.07], [60.31, -140.46], [60.29, -140.93], [60.31, -141.0], [59.0, -141.0], [56.0, -137.0], [54.6, -133.5], [54.6, -130.75]];
 
 // Ground given by ruling from one province to another on the chart with the cities: [from, to, the ground as
 // [lat, lon] points]. Only the part of it that lies in 'from' moves.
@@ -1974,6 +1983,15 @@ export const CITY_GIVE = [
   // The strip between it and the wall, from the Old Dragon's Head on the sea north to Chiumenkou, goes to Tangshan,
   // which then touches Chinchow (the map fact-checker; the design director, 17 November 2026).
   ['Chinchow', 'Tangshan', [[39.9, 119.6], [39.93, 119.8], [39.967, 119.797], [40.01, 119.785], [40.06, 119.765], [40.12, 119.72], [40.14, 119.6]]],
+  // The Alaska panhandle's mainland strip, the United States' by the award of 1903: up the Portland Canal to Hyder,
+  // along the Coast Mountains by the Stikine, the Taku, the White and Chilkoot passes and the Chilkat, then by Mt
+  // Fairweather and Mt Hubbard to Mt St Elias and the 141st meridian. The chart handed over drew it Canada's, which
+  // left Juneau and Ketchikan islands with no land beside them (the Pacific planner, 17 November 2026). What lay in
+  // Whitehorse goes to Juneau (Skagway, Haines, Glacier Bay, Yakutat), and the sliver of Watson Lake's by the Stikine
+  // too; what lay in Prince Rupert to Ketchikan.
+  ['Whitehorse', 'Juneau', PANHANDLE],
+  ['Prince Rupert', 'Ketchikan', PANHANDLE],
+  ['Watson Lake', 'Juneau', PANHANDLE],
 ];
 
 // Straits laid on the chart with the cities (Brian's ruling of 17 November: straits to Europe's level everywhere):
@@ -2056,7 +2074,8 @@ export const CITY_RIVER_ADD = [
 // city is joined to the net by its easiest border unless it is named here (no railway in 1939).
 export const CITY_NO_RAIL = [
   // Canada's north and the Gulf's north shore: the Alaska Highway of 1942 was a road, and the mines flew or shipped.
-  'Sept-Iles', 'Fort Chimo', 'Fort Nelson', 'Watson Lake', 'Whitehorse', 'Dawson City', 'Yellowknife', 'Port Radium',
+  // (Whitehorse is not here: the White Pass and Yukon Route ran to it from Skagway, laid by hand below.)
+  'Sept-Iles', 'Fort Chimo', 'Fort Nelson', 'Watson Lake', 'Dawson City', 'Yellowknife', 'Port Radium',
   // Latin America: ports and river towns the railways of 1939 did not reach.
   'Acapulco', 'Bluefields', 'Cap-Haitien', 'Pucallpa', 'Iquitos', 'Leticia', 'Pasto', 'Esmeraldas', 'Puerto La Cruz', 'Maturin', 'Coro',
   'Georgetown', 'Paramaribo', 'Cayenne', 'Tefe', 'Manaus', 'Santarem', 'Macapa', 'Belem', 'Porto Velho', 'Rio Branco', 'Cuiaba',
@@ -2197,6 +2216,8 @@ export const CITY_RAIL_LINES = [
   // Pacific, Toledo to Columbus the Hocking Valley. The Cincinnati Southern into Kentucky by Lexington, kept by name
   // since Louisville's urban ground changed which way the net runs.
   ['Austin', 'San Antonio'], ['Cincinnati', 'Kentucky'],
+  // The White Pass and Yukon Route, Skagway to Whitehorse (1900), now that Skagway is Juneau's again.
+  ['Juneau', 'Whitehorse'],
   // Colombia (the historian): the Northern line from Bogota to Barbosa (Tunja), the Girardot and Tolima-Huila lines to
   // Neiva (1937), and the Caldas line from Manizales to the Pacific line (Cali). Bogota's system and the Pacific's
   // met only over the Quindio (1949); Medellin's line ran to the Magdalena at Puerto Berrio, Santander's from Puerto
