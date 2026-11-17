@@ -49,7 +49,9 @@ interface Snap {
   g: Game; turn: number; up: boolean; reports: number; air: number; queue: Set<number>;
   /** The corps in hand, where each stood, and where each could march this month. */
   hand: { id: number; reg: number; reach: Set<number>; rail: Set<number> }[];
-  kept: Set<string>; siege: boolean; cuts: number;
+  kept: Set<string>; cuts: number;
+  /** The month he last had open (-1 for none yet), and whether a siege of his stood then. */
+  upTurn: number; siegeUp: boolean;
 }
 
 function save(): void {
@@ -107,9 +109,10 @@ function readDeeds(): void {
   const s = snap;
   const up = !!me && humanUp(g) && !onEve(g);
   if (s && s.g === g && me && lessonsOn(g, book)) {
-    if (s.up && g.turn > s.turn) {
-      // The month turned: a siege standing as it was handed over earns lesson 7; then the month's end.
-      if (s.siege) lessonDone('siege', {});
+    if (s.upTurn >= 0 && g.turn > s.upTurn) {
+      // The month turned since his own was last open: a siege standing as he handed it over earns lesson 7; then
+      // the month's end. (While the other nations move the page is drawn many times with nobody at the controls.)
+      if (s.siegeUp) lessonDone('siege', {});
       lessonDone('end', {});
       if (tip && tip.turn < g.turn) tip = null;
     } else if (up && g.turn === s.turn) {
@@ -144,7 +147,10 @@ function readDeeds(): void {
   const hand = up && page.ui.tab === 'region' ? page.held().map((c) => ({ id: c.id, reg: c.reg, reach: new Set([...reach(g, c)].filter(([id, x]) => id !== c.reg && !x.attack).map(([id]) => id)), rail: railReach(g, c) })) : [];
   snap = {
     g, turn: g.turn, up, reports: g.reports.length, air: g.airReports.length, queue: new Set((me ? g.nations[me]?.queue ?? [] : []).map((b) => b.id)),
-    hand, kept: new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:'))), siege: up && siegeOf(g) !== null, cuts: cutsOf(g),
+    hand, kept: new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:'))), cuts: cutsOf(g),
+    // (His own month as it last stood open, carried through the other nations' moves.)
+    upTurn: up ? g.turn : s && s.g === g && g.turn >= s.upTurn ? s.upTurn : -1,
+    siegeUp: up ? siegeOf(g) !== null : s && s.g === g ? s.siegeUp : false,
   };
 }
 /** How many of the player's provinces have their railway cut by bombers where no guns stood: the moment of the tip that says so. */
@@ -379,7 +385,8 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
       const beside = g.regions.find((r) => r.units.some((c) => c.nat === me && c.ap > 0 && !c.dead) && r.nb.some((k) => g.regions[k].units.some((u) => g.nations[me].atWar.includes(u.nat))));
       return flag(beside?.id ?? at);
     }
-    case 'end': return pick(vis(q('#alerts .nextarmy')) ?? q('#barbtns [data-act="end"]'));
+    // (END MONTH, the deed: the art director's picture of the browser game. The note names NEXT ARMY on its way.)
+    case 'end': return pick(q('#barbtns [data-act="end"]'));
     case 'city': {
       const s = siegeOf(g);
       const storm = vis(q('#pane [data-act="storm"]'));
