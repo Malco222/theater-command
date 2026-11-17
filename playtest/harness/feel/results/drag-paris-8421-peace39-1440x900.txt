@@ -1,0 +1,5 @@
+window 1440 by 900; endless marks 0, on sheets: 
+Paris, as it is                width 240  marks in view  0  things in view  107  dragged: 24 a second on average (lowest round 24), middle picture 60 a second, 43% of pictures slow
+Paris, as it is                width 760  marks in view  0  things in view  384  dragged: 29 a second on average (lowest round 29), middle picture 60 a second, 41% of pictures slow
+Paris, marks stopped           width 240  marks in view  0  things in view  107  dragged: 23 a second on average (lowest round 23), middle picture 60 a second, 45% of pictures slow
+Paris, marks stopped           width 760  marks in view  0  things in view  384  dragged: 27 a second on average (lowest round 27), middle picture 60 a second, 44% of pictures slow

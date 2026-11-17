@@ -1,0 +1,5 @@
+window 1600 by 1000; endless marks 16, on sheets: mapfx
+on a mark, marks turning       width 240  marks in view  1  things in view   39  dragged: 18 a second on average (lowest round 18), middle picture 15 a second, 59% of pictures slow
+on a mark, marks turning       width 760  marks in view  8  things in view  378  dragged: 11 a second on average (lowest round 11), middle picture 12 a second, 77% of pictures slow
+same view, marks stopped       width 240  marks in view  0  things in view   39  dragged: 23 a second on average (lowest round 20), middle picture 60 a second, 48% of pictures slow
+same view, marks stopped       width 760  marks in view  0  things in view  378  dragged: 12 a second on average (lowest round 11), middle picture 12 a second, 75% of pictures slow

@@ -1,0 +1,3 @@
+window 1600 by 1000; marks that never stop: 0 (none)
+the capital, no marks anywhere     width  240  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 15)   dragged 20 (slow ones 9)
+the capital, no marks anywhere     width  760  marks in view  0  still 60 (slow ones 60)   pointer crossing 60 (slow ones 15)   dragged 60 (slow ones 15)

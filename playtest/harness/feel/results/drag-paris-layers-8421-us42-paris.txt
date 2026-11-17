@@ -1,0 +1,6 @@
+window 1600 by 1000; endless marks 16, on sheets: mapfx
+Paris, as it is                width 240  marks in view  3  things in view  111  dragged: 18 a second on average (lowest round 18), middle picture 20 a second, 60% of pictures slow
+Paris, as it is                width 760  marks in view  5  things in view  387  dragged: 22 a second on average (lowest round 21), middle picture 20 a second, 58% of pictures slow
+Paris, marks stopped           width 240  marks in view  0  things in view  111  dragged: 19 a second on average (lowest round 19), middle picture 20 a second, 58% of pictures slow
+Paris, marks stopped           width 760  marks in view  0  things in view  387  dragged: 24 a second on average (lowest round 23), middle picture 20 a second, 51% of pictures slow
+layers at width 760: all shown 21 a second; without each: rails(56) 30, rivers(162) 24, towns(1777) 24, lanes(24) 23, bridges(700) 23, seas(315) 22, sieges(38) 22, fleets(860) 22, mapfx(26) 22, occ(127) 21, fog(341) 21, labels(4003) 21, units(1270) 21, regs(576) 20, gates(90) 20, fx(4) 19

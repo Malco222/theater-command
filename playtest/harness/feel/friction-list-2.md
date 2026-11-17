@@ -15,20 +15,36 @@ Pictures: `/mnt/project-files/playtest/feel/pictures/america-1942-*.png`. Tables
 
 ## The top three
 
-### 1. The map in a big war runs at a quarter of its speed, all the time
+### 1. Turning marks made the map stutter even when nothing moved (mended in Version 84.2.1)
 
-| America, March 1942, dragging the map | pictures a second |
-|---|---|
-| as it is, a turning ring in view | 15 to 20 (slow ones 9) |
-| as it is, no ring in view | 30 |
-| the same save with the rings and the flicker switched off | 60 |
-| September 1939, at peace | 60 |
+**Corrected 14:45Z.** This item first read "the map in a big war runs at a quarter of its speed", 15 pictures a
+second dragged against 60. That figure was my yardstick's fault: the "middle picture" rate flips between 60 and
+15 when the share of slow pictures crosses one half. Counted again by steadier measures:
 
-Sixteen marks never stop on that map: nine rings on capitals that can be freed, two siege rings, five fires. Each
-one makes the browser paint the whole map again for every picture, like redrawing the whole chalkboard to move one
-magnet. In a 1942 war there is always one somewhere, so the whole campaign runs like this, not only one bad month.
-**Traced and with the rules builder, who has the mend built as Version 84.2.1** (the marks go on a sheet of their
-own). I count it again there, a mark in view and not, both window sizes.
+| with turning marks in view, nothing moving | Version 84.2 | Version 84.2.1 |
+|---|---|---|
+| America, March 1942 (8 marks in view) | 30 a second | 60 |
+| the pointer crossing that view | 20 | 60 |
+| Germany, December 1939 (the directive ring in view) | 8 | 30 |
+| the pointer crossing that view | 7 | 20 |
+
+| dragging over Paris, pictures made over the time of the drag | near | middle |
+|---|---|---|
+| Version 84.2, America March 1942 | 14 | 17 |
+| Version 84.2.1, the same | 18 | 22 |
+| Version 84.2.1, every mark stopped | 19 | 24 |
+| September 1939, at peace (both versions) | 22 to 23 | 28 to 30 |
+
+Sixteen marks never stop on the 1942 map: nine rings on capitals that can be freed, two siege rings, five fires.
+In view, each made the browser paint the whole map again for every picture, like redrawing the whole chalkboard
+because one magnet is spinning. Version 84.2.1 moves them to a sheet of their own: the stutter standing still is
+gone for America and much less for Germany, and the drag gains a quarter. War is still 18% (near) to 27% (middle)
+slower than peace in the drag.
+
+**What this machine cannot tell.** Moving only the map's view box, with no script at all, makes 9 to 15 pictures a
+second here at peace and at war, and sliding the drawn map by a transform 9 to 19: a cloud machine has no graphics
+card. Whether the drag is smooth on a real computer has to be counted on one. Tables:
+`/mnt/project-files/playtest/harness/feel/results/` (`drag-*`, `mapspeed-*`).
 
 ### 2. The month's end: three seconds of the map moving with nothing to read
 

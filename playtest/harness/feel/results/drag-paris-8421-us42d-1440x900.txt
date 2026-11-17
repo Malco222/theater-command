@@ -1,0 +1,16 @@
+window 1440 by 900; endless marks 16, on sheets: mapfx
+Paris, as it is                width 240  marks in view  3  things in view  112  dragged: 19 a second on average (lowest round 18), middle picture 20 a second, 53% of pictures slow
+Paris, as it is                width 760  marks in view  5  things in view  393  dragged: 22 a second on average (lowest round 22), middle picture 20 a second, 52% of pictures slow
+Paris, marks stopped           width 240  marks in view  0  things in view  112  dragged: 23 a second on average (lowest round 20), middle picture 60 a second, 45% of pictures slow
+node:internal/process/promises:394
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+mouse.move: Target page, context or browser has been closed
+    at drag (/tmp/claude-0/-home-user/e1c93ea1-094d-53b5-a3e2-a01a878cea53/scratchpad/pt/dragtest.cjs:17:87)
+    at async row (/tmp/claude-0/-home-user/e1c93ea1-094d-53b5-a3e2-a01a878cea53/scratchpad/pt/dragtest.cjs:21:173)
+    at async /tmp/claude-0/-home-user/e1c93ea1-094d-53b5-a3e2-a01a878cea53/scratchpad/pt/dragtest.cjs:24:200 {
+  log: []
+}
+
+Node.js v22.23.4
