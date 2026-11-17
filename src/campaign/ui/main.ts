@@ -64,6 +64,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
+import { nearX, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
@@ -518,9 +519,9 @@ function airBaseMarks(): string {
     const b = f.ship !== undefined ? groupAt(g, f) : g.regions[f.base];
     const t = f.mission === 'strike' ? g.seas[f.target] : g.regions[f.target];
     if (!t) continue;
-    const ty = f.mission === 'strike' ? t.y + 9 : t.y;
+    const ty = f.mission === 'strike' ? t.y + 9 : t.y, tx = nearX(g, t.x, b.x);
     const c = g.nations[f.nat].color;
-    out += `<path class="airline under" d="M${b.x} ${b.y}L${t.x} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${t.x} ${ty}" stroke="${c}"/><circle class="airhit" cx="${t.x}" cy="${ty}" r="3.4" fill="${c}"/>`;
+    out += `<path class="airline under" d="M${b.x} ${b.y}L${tx} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${tx} ${ty}" stroke="${c}"/><circle class="airhit" cx="${tx}" cy="${ty}" r="3.4" fill="${c}"/>`;
   }
   // Under the fog of war an airfield is seen but not what flies from it.
   const hidden = new Set(airWar(g) && g.human ? airfieldsSeen(g).filter((a) => a.groups < 0).map((a) => a.region) : []);
@@ -594,7 +595,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g>
+          <g id="world"><g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g></g><use id="wrapw" class="wrapcopy" href="#world" display="none"/><use id="wrape" class="wrapcopy" href="#world" display="none"/>
         </svg>
         <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g id="fxmarks"></g><g id="fxcover"></g><g id="ghost"></g></svg>
         <div class="hint" id="hint"></div>
@@ -1757,7 +1758,8 @@ function keptRoad(): string {
     const ids = [c.reg, ...m.road], k = ids.join('-');
     if (seen.has(k)) continue;
     seen.add(k);
-    const d = `M${ids.map((id) => `${g.regions[id].x} ${g.regions[id].y}`).join('L')}`, end = g.regions[m.to];
+    const way = unwrapPts(ids.map((id) => [g.regions[id].x, g.regions[id].y]));
+    const d = `M${way.map((p) => `${p[0]} ${p[1]}`).join('L')}`, end = { x: way[way.length - 1][0], y: way[way.length - 1][1] };
     out += `<path class="road under" d="${d}"/><path class="road kept" d="${d}"/><circle class="roadring" cx="${end.x}" cy="${end.y}" r="4.2"/>`;
   }
   return out;
@@ -2454,7 +2456,7 @@ function routeTo(id: number): { pts: [number, number][]; cost: number; ap: numbe
     for (let at = id; at >= 0 && at !== rc.from; at = rc.map.get(at)?.prev ?? -1) ids.unshift(at);
     ids.unshift(rc.from);
     // The slowest corps sets the pace: its road is the one shown.
-    if (!best || end.cost > best.cost) best = { pts: ids.map((k) => [g.regions[k].x, g.regions[k].y]), cost: end.cost, ap: rc.ap, attack: end.attack };
+    if (!best || end.cost > best.cost) best = { pts: unwrapPts(ids.map((k) => [g.regions[k].x, g.regions[k].y])), cost: end.cost, ap: rc.ap, attack: end.attack };
   }
   return best;
 }
@@ -2502,13 +2504,14 @@ function routeLine(id: number): void {
       const k = far > ring ? (far - ring) / far : 0;
       pts[pts.length - 1] = [px + (spot.x - px) * k, py + (spot.y - py) * k];
     }
+    unwrapPts(pts);
     const [ax, ay] = pts[pts.length - 2], [bx, by] = pts[pts.length - 1];
     const line = `M${pts.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('L')}`;
     $('#route').innerHTML = `<path class="road under" d="${line}"/><path class="road train" d="${line}"/><path class="roadhead train" transform="translate(${bx} ${by}) rotate(${(Math.atan2(by - ay, bx - ax) * 180 / Math.PI).toFixed(1)})" d="M4 0L-5 -4.6L-2.6 0L-5 4.6Z"/>`;
     return;
   }
   if (!way && marchPlan && marchPlan.plan.ok && !marchPlan.plan.now) {
-    const pts = [marchPlan.lead.reg, ...marchPlan.plan.road].map((k) => [g.regions[k].x, g.regions[k].y]);
+    const pts = unwrapPts([marchPlan.lead.reg, ...marchPlan.plan.road].map((k) => [g.regions[k].x, g.regions[k].y]));
     const [ex, ey] = pts[pts.length - 1];
     $('#route').innerHTML = `<path class="road under" d="M${pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/><path class="road kept" d="M${pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/><circle class="roadring" cx="${ex}" cy="${ey}" r="4.2"/>`;
     return;
@@ -2822,7 +2825,7 @@ function goNextArmy(): void {
   const svg = $('#map');
   const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
   const here = ui.sel >= 0 ? g.regions[ui.sel] : null;
-  const nx = nextArmy(g, ui.roundSeen, here ? { x: here.x, y: here.y } : { x: ui.view.x + ui.view.w / 2, y: ui.view.y + (ui.view.w * tall) / 2 });
+  const nx = nextArmy(g, ui.roundSeen, here ? { x: here.x, y: here.y } : { x: ui.view.x + ui.view.w / 2, y: ui.view.y + (ui.view.w * tall) / 2 }, wrapSpan(g));
   if (!nx.army) { ui.msg = 'Every army has its orders.'; refresh(); return; }
   ui.roundSeen = nx.seen;
   const id = nx.army.reg, all = armyRound(g).length;
@@ -2897,10 +2900,10 @@ function followHomeAlarm(): void {
   // tray along its foot (the second Playtester's 84.2.6 find: Cleveland lay under the tray).
   const svg = $('#map');
   const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
-  const A = g.regions[a.region], B = a.help ? g.regions[a.help.to] : A;
-  const span = Math.max(Math.abs(A.x - B.x), Math.abs(A.y - B.y) / Math.max(0.1, tall));
+  const A = g.regions[a.region], B = a.help ? g.regions[a.help.to] : A, bx = nearX(g, B.x, A.x);
+  const span = Math.max(Math.abs(A.x - bx), Math.abs(A.y - B.y) / Math.max(0.1, tall));
   const w = Math.min(1400, Math.max(Math.min(ui.view.w, 700), span * 2.4));
-  glide({ x: (A.x + B.x) / 2 - w / 2, y: (A.y + B.y) / 2 - w * tall * 0.4, w });
+  glide({ x: (A.x + bx) / 2 - w / 2, y: (A.y + B.y) / 2 - w * tall * 0.4, w });
 }
 
 /**
@@ -2924,10 +2927,10 @@ function followGunsAlone(): void {
   refresh();
   const svg = $('#map');
   const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
-  const A = g.regions[a.region], B = g.regions[a.from];
-  const span = Math.max(Math.abs(A.x - B.x), Math.abs(A.y - B.y) / Math.max(0.1, tall));
+  const A = g.regions[a.region], B = g.regions[a.from], bx = nearX(g, B.x, A.x);
+  const span = Math.max(Math.abs(A.x - bx), Math.abs(A.y - B.y) / Math.max(0.1, tall));
   const w = Math.min(1400, Math.max(Math.min(ui.view.w, 700), span * 2.4));
-  glide({ x: (A.x + B.x) / 2 - w / 2, y: (A.y + B.y) / 2 - w * tall * 0.4, w });
+  glide({ x: (A.x + bx) / 2 - w / 2, y: (A.y + B.y) / 2 - w * tall * 0.4, w });
 }
 
 /** Goes where an alert points: the next place on its list, or the tab that deals with it. */
@@ -4003,6 +4006,7 @@ function tradeCard(nat: string): string {
 
 /** A line through points, eased into a curve. */
 function easedPath(p: [number, number][]): string {
+  p = unwrapPts(p.map((q) => [q[0], q[1]] as [number, number]));
   let d = `M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
   for (let i = 0; i < p.length - 1; i++) {
     const a = p[i - 1] ?? p[i], b = p[i], c = p[i + 1], e = p[i + 2] ?? c;
@@ -7167,7 +7171,7 @@ function placeResult(): void {
   if (!ui.result) return;
   const el = $('#rslip'), wrap = $('#mapwrap').getBoundingClientRect(), rect = $('#map').getBoundingClientRect();
   const at = spotOf(ui.result.region), k = Math.max(1, rect.width) / ui.view.w;
-  const x = rect.left - wrap.left + (at.x - ui.view.x) * k, y = rect.top - wrap.top + (at.y - ui.view.y) * k;
+  const x = rect.left - wrap.left + (nearX(g, at.x, ui.view.x + ui.view.w / 2) - ui.view.x) * k, y = rect.top - wrap.top + (at.y - ui.view.y) * k;
   const w = el.offsetWidth, h = el.offsetHeight;
   const left = Math.max(8, Math.min(wrap.width - w - 8, x - w / 2)), top = Math.max(46, Math.min(wrap.height - h - 8, y - h - 14 * k - 10));
   el.style.left = `${left.toFixed(0)}px`;
@@ -7614,7 +7618,7 @@ function laneMarks(): string {
   let out = '';
   for (const l of seaLanes(g)) {
     if (l.state === 'idle' || l.path.length < 2) continue;
-    const p = l.path;
+    const p = unwrapPts(l.path.map((q) => [q[0], q[1]] as [number, number]));
     let d = `M${p[0][0]} ${p[0][1]}`;
     for (let i = 0; i < p.length - 1; i++) {
       const a = p[i - 1] ?? p[i], b = p[i], c = p[i + 1], e = p[i + 2] ?? c;
@@ -8180,7 +8184,8 @@ function nextMonth(): void {
 /** The view that takes in these regions with some room round them. */
 function viewFor(ids: number[]): { x: number; y: number; w: number } {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (const id of ids) { const r = g.regions[id]; x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x); y1 = Math.max(y1, r.y); }
+  const from = ids.length ? g.regions[ids[0]].x : 0;
+  for (const id of ids) { const r = g.regions[id], x = nearX(g, r.x, from); x0 = Math.min(x0, x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, x); y1 = Math.max(y1, r.y); }
   const svg = $('#map');
   const a = svg.clientHeight / Math.max(1, svg.clientWidth);
   const w = Math.max(420, x1 - x0 + 260, (y1 - y0 + 240) / a);
@@ -8198,6 +8203,8 @@ let glideToken = 0;
 /** Moves the map to a new view smoothly, as a camera would travel, instead of jumping there. */
 function glide(to: { x: number; y: number; w: number }, ms = 340): void {
   const from = { ...ui.view };
+  // (Round the world, the short way: a view a world's width away is the same view.)
+  to = { ...to, x: nearX(g, to.x + to.w / 2, from.x + from.w / 2) - to.w / 2 };
   const token = ++glideToken;
   const t0 = performance.now();
   const step = (now: number): void => {
@@ -8223,7 +8230,8 @@ function focusOnPoint(x: number, y: number): void {
 function mapPoint(cx: number, cy: number): { x: number; y: number } {
   const rect = $('#map').getBoundingClientRect();
   const k = ui.view.w / Math.max(1, rect.width);
-  return { x: ui.view.x + (cx - rect.left) * k, y: ui.view.y + (cy - rect.top) * k };
+  const x = ui.view.x + (cx - rect.left) * k, round = wrapSpan(g);
+  return { x: round > 0 ? g.x0 + ((((x - g.x0) % round) + round) % round) : x, y: ui.view.y + (cy - rect.top) * k };
 }
 
 /** The order a fleet will sail under when it is sent to a sea: the work it is doing, or its usual duty. Escorting is given by lane, not by sea. */
@@ -9598,7 +9606,7 @@ function keepMarches(id: number, held: Corps[]): boolean {
   const moved = lead.reg !== from;
   if (moved) { ui.sel = lead.reg; ui.picked = new Set(go.filter((p) => p.c.reg === lead.reg).map((p) => p.c.id)); ui.tab = 'region'; }
   const at = road.indexOf(lead.reg);
-  const pts: [number, number][] = moved && at >= 0 ? [from, ...road.slice(0, at + 1)].map((k) => [g.regions[k].x, g.regions[k].y]) : [];
+  const pts: [number, number][] = moved && at >= 0 ? unwrapPts([from, ...road.slice(0, at + 1)].map((k) => [g.regions[k].x, g.regions[k].y] as [number, number])) : [];
   marchHide = pts.length > 1 ? { reg: lead.reg, nat: lead.nat } : null;
   queueSave();
   refresh();
@@ -9656,6 +9664,25 @@ function shipPorts(): string {
 
 // ---- Moving around the map ----------------------------------------------------------------
 
+/** Where the pointer is across the map, as a share of its width (null while it is off the map): the view keeps that point on the map itself. */
+let pointerAt: number | null = null;
+
+/** One copy of the map beyond the seam: shown, a world's width east or west, while the view reaches past the edge. */
+function showCopy(sel: string, on: boolean, dx: number): void {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  if (!on) { if (el.getAttribute('display') !== 'none') el.setAttribute('display', 'none'); return; }
+  el.setAttribute('transform', `translate(${dx} 0)`);
+  el.removeAttribute('display');
+}
+
+/** Points of a line laid one after another the short way round the world, so a line across the seam is drawn across it. */
+function unwrapPts<T extends number[]>(pts: T[]): T[] {
+  if (wrapSpan(g) <= 0) return pts;
+  for (let i = 1; i < pts.length; i++) pts[i][0] = nearX(g, pts[i][0], pts[i - 1][0]);
+  return pts;
+}
+
 /** How far the map can be drawn back: the whole of Europe, or the whole of the wider chart. */
 const widest = (): number => Math.max(2100, Math.min(5400, g.width + 400));
 
@@ -9665,12 +9692,23 @@ function applyView(): void {
   const v = ui.view;
   v.w = Math.max(150, Math.min(widest(), v.w));
   const h = v.w * a;
-  // The chart's west edge is at 0 on the map of Europe, and far to the left of it on the wider world.
-  v.x = Math.max(g.x0 - 200, Math.min(g.x0 + g.width + 200 - v.w, v.x));
+  // The chart's west edge is at 0 on the map of Europe, and far to the left of it on the wider world. Where the chart
+  // goes all the way round the world (the far stage) it has no edge east or west: the map runs on across the seam at
+  // 141 W, the far end of the world drawn again beyond it (the copies of the map, 'wrapw' and 'wrape'). The view is
+  // kept so that the point under the pointer (else the middle of the map) is on the map itself, never on a copy, so
+  // every click and every name under the pointer is the map's own; the copy it stands on instead looks the same.
+  const round = wrapSpan(g);
+  if (round > 0) {
+    const ax = v.x + (pointerAt ?? 0.5) * v.w;
+    if (ax >= g.x0 + round) v.x -= round;
+    else if (ax < g.x0) v.x += round;
+  } else v.x = Math.max(g.x0 - 200, Math.min(g.x0 + g.width + 200 - v.w, v.x));
   // The map ends in the Sahara: there is nothing to scroll to below it.
   v.y = Math.max(-200, Math.min(g.height - h, v.y));
   const box = `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`;
   svg.setAttribute('viewBox', box);
+  showCopy('#wrape', round > 0 && v.x + v.w > g.x0 + round, round);
+  showCopy('#wrapw', round > 0 && v.x < g.x0, -round);
   $('#mapfx').setAttribute('viewBox', box);
   placeResult();
   svg.classList.toggle('near', v.w < 600);
@@ -9691,6 +9729,20 @@ function applyView(): void {
   svg.classList.toggle('ob1', v.w < 700);
   svg.classList.toggle('ob2', v.w >= 700 && v.w < 900);
   svg.classList.toggle('ob3', v.w >= 900 && v.w < 1200);
+}
+
+/**
+ * Where the map goes round the world: the pointer stands at this share of the map's width, and if what lies under it
+ * is a copy of the map beyond the seam, the view steps a world's width to the map itself (nothing on the screen moves).
+ */
+function keepUnder(cx: number, rect: DOMRect): boolean {
+  pointerAt = Math.max(0, Math.min(1, (cx - rect.left) / Math.max(1, rect.width)));
+  const round = wrapSpan(g);
+  if (round <= 0) return false;
+  const x = ui.view.x + pointerAt * ui.view.w;
+  if (x < g.x0 + round && x >= g.x0) return false;
+  applyView();
+  return true;
 }
 
 function zoomBy(f: number, cx?: number, cy?: number): void {
@@ -9749,6 +9801,7 @@ function wireMap(): void {
   const flagFirst = (): boolean => ui.tab !== 'air' && ui.tab !== 'navy';
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    keepUnder(e.clientX, svg.getBoundingClientRect());
     const id = regionAt(e.clientX, e.clientY);
     if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
     // While SHIP BY SEA or INVADE BY SEA is choosing a place, a right-click is the same choice as a click (noOrderSaid
@@ -9758,6 +9811,7 @@ function wireMap(): void {
     else if (humanUp(g)) noOrderSaid(id, e.clientX, e.clientY);
   });
   svg.addEventListener('pointerdown', (e) => {
+    keepUnder(e.clientX, svg.getBoundingClientRect());
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     held = false;
     clearTimeout(hold);
@@ -9776,6 +9830,7 @@ function wireMap(): void {
   });
   svg.addEventListener('pointermove', (e) => {
     const rect = svg.getBoundingClientRect();
+    const stepped = keepUnder(e.clientX, rect);
     if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 2) {
       const [p, q] = [...pts.values()];
@@ -9790,8 +9845,8 @@ function wireMap(): void {
       if (moved) { const k = ui.view.w / rect.width; ui.view.x = start.vx - dx * k; ui.view.y = start.vy - dy * k; applyView(); }
       return;
     }
-    // Hover: say what is under the cursor.
-    const el = (e.target as Element).closest?.('[data-id]') as HTMLElement | null;
+    // Hover: say what is under the cursor (after a step round the world, what is under it now).
+    const el = ((stepped ? document.elementFromPoint(e.clientX, e.clientY) : e.target) as Element | null)?.closest?.('[data-id]') as HTMLElement | null;
     const tip = $('#tip');
     if (e.pointerType !== 'mouse') { tip.style.display = 'none'; return; }
     drawRoute(el && el.classList.contains('reg') ? Number(el.dataset.id) : -1);
@@ -9937,7 +9992,7 @@ function wireMap(): void {
   };
   svg.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') sayAgain(e.clientX, e.clientY); });
   svg.addEventListener('contextmenu', (e) => sayAgain(e.clientX, e.clientY));
-  svg.addEventListener('pointerleave', () => { $('#tip').style.display = 'none'; drawRoute(-1); });
+  svg.addEventListener('pointerleave', () => { pointerAt = null; $('#tip').style.display = 'none'; drawRoute(-1); });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0016), e.clientX, e.clientY); }, { passive: false });
 }
 

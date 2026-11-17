@@ -11,7 +11,9 @@
  */
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-americas.json';
+import americasMap from '../generated/world-americas.json';
+import wholeMap from '../generated/world-whole.json';
+import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, landFactor, provinceYield } from './economy';
@@ -19,6 +21,9 @@ import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldYield, resRules } from './resources';
 import { whyNoReturn, whyNotFreedBy } from './liberation';
+
+/** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
+const worldMap = FAR_STAGE ? wholeMap : americasMap;
 
 export const TOWNS = data as unknown as {
   sizes: { city: { vp: number; fac: number }; town: { vp: number } };

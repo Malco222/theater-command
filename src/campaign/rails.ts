@@ -16,7 +16,9 @@
 // from the player's railhead.
 
 import railData from '../generated/campaign-rails.json';
-import worldRails from '../generated/world-americas-rails.json';
+import americasRails from '../generated/world-americas-rails.json';
+import wholeRails from '../generated/world-whole-rails.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/railways.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
@@ -40,7 +42,7 @@ export const RAILWAYS = data as unknown as {
 /** The lines of the map of Europe. */
 export const RAIL_LINKS: RailLink[] = (railData as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 /** Those of the wider world (tools/build-rails.mjs world), whose provinces are numbered on from Europe's. */
-export const WORLD_RAIL_LINKS: RailLink[] = (worldRails as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+export const WORLD_RAIL_LINKS: RailLink[] = ((FAR_STAGE ? wholeRails : americasRails) as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 const ALL_LINKS: RailLink[] = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
 /** The lines on a game's map: Europe's, and the wider world's where the campaign is played on it. */
 export const railLinks = (g: Game): RailLink[] => (g.flags.world === 1 ? ALL_LINKS : RAIL_LINKS);

@@ -12,7 +12,9 @@
 // cannot cross.
 
 import riverData from '../generated/campaign-rivers.json';
-import worldRivers from '../generated/world-americas-rivers.json';
+import americasRivers from '../generated/world-americas-rivers.json';
+import wholeRivers from '../generated/world-whole-rivers.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
@@ -43,7 +45,7 @@ export const CROSSINGS: Crossing[] = (riverData as unknown as { crossings: numbe
  * Those of the wider world (tools/build-rivers.mjs world). Its provinces are numbered on from Europe's and its
  * rivers follow Europe's in the list, so a crossing is found by its two provinces on either map.
  */
-const WIDE = worldRivers as unknown as { rivers: River[]; crossings: number[][] };
+const WIDE = (FAR_STAGE ? wholeRivers : americasRivers) as unknown as { rivers: River[]; crossings: number[][] };
 const ALL_RIVERS: River[] = [...RIVERS, ...WIDE.rivers];
 export const WORLD_CROSSINGS: Crossing[] = WIDE.crossings.map(([a, b, river, x, y]) => ({ a, b, river: river + RIVERS.length, x, y }));
 const ALL_CROSSINGS: Crossing[] = [...CROSSINGS, ...WORLD_CROSSINGS];

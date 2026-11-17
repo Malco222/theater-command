@@ -3,6 +3,7 @@
 // The plan only sets intentions. Every region still has to be won under the same rules
 // the player uses, so history can come out differently.
 
+import { mapDist } from './wrap';
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
@@ -1363,7 +1364,7 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
   const base = id ? g.regions[id - 1] : null;
   if (!base || !allied(g, nat, base.ctrl)) return;
   const n = g.nations[nat];
-  const far = (r: Region): number => Math.hypot(r.x - base.x, r.y - base.y);
+  const far = (r: Region): number => mapDist(g, r.x, r.y, base.x, base.y);
   for (const f of fleetsOf(g, nat)) {
     if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships)) continue;
     let to: Region | null = null;

@@ -21,6 +21,7 @@ import { mayJoin, stopDef, stopOf } from './history';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
+import { mapDist2 } from './wrap';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -591,7 +592,7 @@ function withdraw(g: Game, nat: string, from: Region): void {
     let best: Region | null = null, bd = 1e12;
     for (const r of g.regions) {
       if (r.owner !== nat || r.ctrl !== nat || r.units.length >= STACK) continue;
-      const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2;
+      const d = mapDist2(g, r.x, r.y, from.x, from.y);
       if (d < bd) { bd = d; best = r; }
     }
     if (best) relocate(g, c, best); else removeCorps(g, c);
