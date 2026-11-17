@@ -4,6 +4,7 @@
  "_sources": {
   "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is four of the record's. The rows are the planner's places with the historian's weights, checked by the historian at 15:32Z.",
   "every other corps, the fleets, the nation figures, each first ability and unit": "the historian, /mnt/project-files/historian/seats-209-pacific.json, with each figure's mark and source in seats-209-pacific.md",
+  "commanders.names": "the clerk, /mnt/project-files/map-tables/officer-names-208b-world.json, unchanged",
   "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
   "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
  },
@@ -966,6 +967,178 @@
    "NZL": "democracy",
    "CHN": "oneparty",
    "MGL": "oneparty"
+  }
+ },
+ "commanders": {
+  "names": {
+   "CHN": {
+    "first": [
+     "Wang",
+     "Li",
+     "Chang",
+     "Liu",
+     "Chen",
+     "Yang",
+     "Huang",
+     "Chao",
+     "Wu",
+     "Chou",
+     "Hsu",
+     "Sun"
+    ],
+    "last": [
+     "Te-ming",
+     "Yung-fu",
+     "Chih-hua",
+     "Kuo-liang",
+     "Wen-pin",
+     "Hai-ching",
+     "Shou-ming",
+     "Tsu-yin",
+     "Chen-hsi",
+     "Pao-shan",
+     "Ming-te",
+     "Shih-lin",
+     "Hsin-chih",
+     "Chung-hsin",
+     "Kuang-hsien",
+     "Hsiao-wu",
+     "Tien-chi",
+     "Feng-chih",
+     "Lien-fang",
+     "Han-chang"
+    ]
+   },
+   "AUS": {
+    "first": [
+     "William",
+     "Lionel",
+     "Thomas",
+     "Reginald",
+     "Norman",
+     "Leslie",
+     "Albert",
+     "Harold"
+    ],
+    "last": [
+     "Ward",
+     "Brown",
+     "Taylor",
+     "Walker",
+     "Spencer",
+     "Murray",
+     "Hayes",
+     "Pearce",
+     "Barnes",
+     "Morgan",
+     "Dunn",
+     "Cameron"
+    ]
+   },
+   "NZL": {
+    "first": [
+     "Donald",
+     "Robert",
+     "David",
+     "Alexander",
+     "Hugh",
+     "Leonard",
+     "Keith",
+     "Rangi"
+    ],
+    "last": [
+     "Wallace",
+     "Thomson",
+     "Anderson",
+     "Kerr",
+     "Cunningham",
+     "Reid",
+     "Morrison",
+     "Hunter",
+     "Gray",
+     "Young",
+     "Tamihana",
+     "Paora"
+    ]
+   },
+   "THA": {
+    "first": [
+     "Somchai",
+     "Prasert",
+     "Chalerm",
+     "Sombat",
+     "Boonchu",
+     "Sanan",
+     "Wichai",
+     "Chamnan"
+    ],
+    "last": [
+     "Suwannarat",
+     "Thongdee",
+     "Srisawat",
+     "Chaiwong",
+     "Wongsakul",
+     "Rattanaphon",
+     "Sukprasert",
+     "Kaewmanee",
+     "Jantarasuk",
+     "Phromma",
+     "Boonmee",
+     "Intharawong"
+    ]
+   },
+   "MAN": {
+    "first": [
+     "Kuan",
+     "Tung",
+     "Fu",
+     "Lang",
+     "Kao",
+     "Han",
+     "Yu",
+     "Tsui"
+    ],
+    "last": [
+     "Te-lin",
+     "Hung-sheng",
+     "Chi-wu",
+     "Shu-tang",
+     "Wen-hai",
+     "Yung-an",
+     "Pao-lin",
+     "Chih-yuan",
+     "Kuo-chen",
+     "Tien-fu",
+     "Ching-hsiang",
+     "En-ho"
+    ]
+   },
+   "MGL": {
+    "first": [
+     "Dorjiin",
+     "Batyn",
+     "Gombyn",
+     "Luvsangiin",
+     "Tserengiin",
+     "Dashiin",
+     "Sodnomyn",
+     "Namsrain"
+    ],
+    "last": [
+     "Ochir",
+     "Tsend",
+     "Jamts",
+     "Lkhagva",
+     "Puntsag",
+     "Dashdorj",
+     "Tseveen",
+     "Togtokh",
+     "Purev",
+     "Chimed",
+     "Sanj",
+     "Nyam"
+    ]
+   }
   }
  },
  "relations": {

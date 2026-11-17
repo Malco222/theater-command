@@ -133,6 +133,18 @@ describe('the rows as they wait', () => {
     }
   });
 
+  it("gives every seat the clerk's two name lists for its officers, in the form commanders.json has", () => {
+    expect(Object.keys(S.commanders.names)).toEqual(SIX);
+    for (const id of SIX) {
+      const { first, last } = S.commanders.names[id];
+      expect(first.length, id).toBeGreaterThanOrEqual(6);
+      expect(last.length, id).toBeGreaterThanOrEqual(6);
+      expect(new Set([...first, ...last]).size, id).toBe(first.length + last.length);
+      // A name list draws officers nobody has heard of: none is a man on a fleet's row.
+      for (const f of S.world.fleets) for (const part of f.admiral.split(' ')) expect(last, `${id} ${part}`).not.toContain(part);
+    }
+  });
+
   it('binds the two dominions as Canada is bound, and the two clients by a row of their own', () => {
     expect(W.follow.CAN).toBe('UK');
     expect(S.world.follow).toEqual({ AUS: 'UK', NZL: 'UK' });
