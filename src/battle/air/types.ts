@@ -106,6 +106,8 @@ export interface AirPlace {
   worth: Record<Side, number>;
   /** What the raid card forecast: aircraft each side should lose, and bombers that should get through. */
   forecast: { foe: number; ftr: number; bmr: number; through: number; bomberLoss: number };
+  /** The raid card's chance of success (forecastAir's 'success'), for the after card's reckoning line. */
+  chance: number;
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */
@@ -114,7 +116,10 @@ export interface AirPlace {
 
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
-  groups: { id: number; side: Side; lostFtr: number; lostBmr: number; back: number }[];
+  /** Each campaign group: what it lost, its downed fighter pilots who fly again, and the aircraft it sent up. */
+  groups: { id: number; side: Side; lostFtr: number; lostBmr: number; back: number; flewFtr: number; flewBmr: number }[];
+  /** The raid card's chance of success, for the after card's reckoning line. */
+  chance: number;
   /** Bombers that dropped on the target, and bombers that jettisoned and turned back. */
   dropped: number;
   jettisoned: number;

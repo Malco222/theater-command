@@ -12,7 +12,7 @@ import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 import { runOut } from '../src/battle/core/clock';
 import { SKY } from '../src/battle/air/book';
-import { AirSim, airBattle, peopleOf } from '../src/battle/air/sim';
+import { AirSim, airBattle, peopleOf, subjectOf, told } from '../src/battle/air/sim';
 import { airHandBack, airTicket, foughtAir } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
@@ -261,6 +261,9 @@ describe('handed to the staff (the design director, log b368): the rules\' own d
         expect(booked(rep), `seed ${seed}`).toBe(booked(dice));
         expect(rep.result).toBe(dice.result);
         expect(rep.level).toBe(dice.level);
+        // Nothing had fallen before the press: the sea card's form (the UI director, air review 2).
+        const card = afterCard(b, rep, foughtAir(s.outcome()));
+        expect(card.lines[card.lines.length - 1]).toBe('Before you handed it to the staff, no aircraft had fallen on either side.');
       }
     });
   }
@@ -297,8 +300,38 @@ describe('handed to the staff (the design director, log b368): the rules\' own d
         expect(card.lines[card.lines.length - 1]).toMatch(/^Before you handed it to the staff, you had lost /);
         expect(card.lines.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
         expect(card.groups.length).toBe(rep.att.length + rep.def.length);
+        // The roster counts what flew, as the top bar did, in one form on both sides (the design director, 19:29Z).
+        for (const x of card.groups) {
+          const row = rep[x.side].find((y) => y.fleet === x.name)!;
+          const flew = s.units.filter((u) => u.corps === row.id).reduce((n, u) => n + u.n0, 0);
+          expect(x.flew).toBe(flew);
+          expect(x.words).toBe(`lost ${x.lostFtr + x.lostBmr || 'none'} of the ${flew} that flew`);
+        }
+        // One reckoning line, against the chance the raid card gave, in the land and sea cards' words.
+        expect(card.reckoning).toMatch(/^(As the staff expected|As the staff feared|You did better than the staff expected|You did worse than the staff expected|Better than the staff expected|Worse than the staff expected): they /);
+        expect(card.reckoning).not.toMatch(/dice/);
       }
     }
+  });
+});
+
+describe('the dispatches\' grammar (the UI director, air review 10)', () => {
+  it('a group named as a plural takes a plural verb; a carrier\'s fighters are the fleet\'s', () => {
+    expect(subjectOf('Home Fleet carrier fighters')).toEqual({ who: "The Home Fleet's carrier fighters", whom: "the Home Fleet's carrier fighters", many: true });
+    expect(told('Home Fleet carrier fighters', '{N} [is|are] in a fight.')).toBe("The Home Fleet's carrier fighters are in a fight.");
+    expect(told('Jagdgeschwader 4', '{N} [is|are] in a fight.')).toBe('Jagdgeschwader 4 is in a fight.');
+    expect(told('No. 11 Group', '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.')).toBe('No. 11 Group breaks: it jettisons its bombs and turns for home.');
+    expect(told('Home Fleet strike wing', '{N} [lands|land].')).toBe('Home Fleet strike wing lands.');
+  });
+
+  it('every dispatch in a battle reads without a bracket or a stray brace', () => {
+    const { ticket } = raid('GER', 'bomb', 'Alsace');
+    const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
+    runOut(s);
+    for (const e of s.history()) if (e.text) expect(e.text).not.toMatch(/[[\]{}|]/);
+    expect(s.outcome().chance).toBe(ticket.place.chance);
+    expect(ticket.place.chance).toBeGreaterThan(0);
+    expect(ticket.place.chance).toBeLessThan(1);
   });
 });
 

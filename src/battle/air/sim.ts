@@ -26,6 +26,23 @@ const flying = (u: AirUnit): boolean => !off(u) && u.job.do !== 'wait';
 /** A group that has broken off or turned for home: it runs, and does not fight back. */
 const away = (u: AirUnit): boolean => u.job.do === 'home' || u.state === 'routing';
 
+/**
+ * A group's name as the subject of a dispatch, and whether it takes a plural verb (the UI director, air review 10):
+ * "Jagdgeschwader 4 is in a fight", but "The Home Fleet's carrier fighters are in a fight". 'whom' is the name inside
+ * a sentence.
+ */
+export function subjectOf(name: string): { who: string; whom: string; many: boolean } {
+  const m = /^(.+?) (carrier [a-z]+s)$/.exec(name);
+  if (m) return { who: `The ${m[1]}'s ${m[2]}`, whom: `the ${m[1]}'s ${m[2]}`, many: true };
+  return { who: name, whom: name, many: /(^| )[a-z]+s$/.test(name) };
+}
+
+/** A line about a group, its verbs agreeing with the name: told(name, '{N} [is|are] in a fight.'). */
+export function told(name: string, text: string): string {
+  const s = subjectOf(name);
+  return text.replace(/\{N\}/g, s.who).replace(/\[([^|\]]*)\|([^\]]*)\]/g, (_, one: string, many: string) => (s.many ? many : one));
+}
+
 export class AirSim implements BattleSim<AirUnit> {
   readonly domain = 'air' as const;
   readonly ticket: FieldTicket<AirPlace>;
@@ -207,7 +224,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.job.do !== 'wait') continue;
       u.job = { do: 'patrol', x: SKY.target.x, y: SKY.target.y };
       u.band = 0; u.to = 1; u.alt = SKY.bands.alt[0];
-      this.say('air:scramble', u, `${u.name} is scrambled late and climbs to meet the raid.`, undefined, C.scramble);
+      this.say('air:scramble', u, told(u.name, '{N} [is|are] scrambled late and [climbs|climb] to meet the raid.'), undefined, C.scramble);
     }
     this.think('def', true);
   }
@@ -279,7 +296,7 @@ export class AirSim implements BattleSim<AirUnit> {
       u.fuel -= dt * (u.contacts.length ? SKY.fuel.fight : 1);
       if (u.fuel <= 0 && u.job.do !== 'home') {
         u.fuel = 0; u.job = { do: 'home' };
-        this.say('air:bingo', u, `${u.name} is short of fuel and turns for home.`, undefined, C.bingo);
+        this.say('air:bingo', u, told(u.name, '{N} [is|are] short of fuel and [turns|turn] for home.'), undefined, C.bingo);
       }
     }
     // The bombing run.
@@ -288,7 +305,7 @@ export class AirSim implements BattleSim<AirUnit> {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
-          this.say('air:bombs', u, `${u.name} bombs ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          this.say('air:bombs', u, `${told(u.name, '{N} [bombs|bomb]')} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
         }
       }
     }
@@ -321,11 +338,11 @@ export class AirSim implements BattleSim<AirUnit> {
           const lo = hi === a ? d : a;
           hi.bounce = SKY.edge.bounceFor; hi.band = lo.band; hi.to = lo.band; hi.alt = SKY.bands.alt[lo.band];
           lo.mor = clamp01(lo.mor - SKY.morale.bounced);
-          this.say('air:bounce', hi, `${hi.name} dives on ${lo.name} from above.`, { on: lo.id });
+          this.say('air:bounce', hi, `${told(hi.name, '{N} [dives|dive] on')} ${subjectOf(lo.name).whom} from above.`, { on: lo.id });
         }
         for (const x of [a, d]) if (!(before.get(x.id)?.size)) {
           x.luck = this.rng.range(1 - SKY.wear.luck, 1 + SKY.wear.luck);
-          this.say('contact', x, `${x.name} is in a fight.`, undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
+          this.say('contact', x, told(x.name, '{N} [is|are] in a fight.'), undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
         }
       }
     }
@@ -421,7 +438,7 @@ export class AirSim implements BattleSim<AirUnit> {
       u.vig = u.kit0 > 0 ? (u.kit.ftr + u.kit.bmr) / u.kit0 : 1;
       if (u.vig < SKY.spent && u.job.do !== 'home') {
         u.job = { do: 'home' };
-        this.say('air:spent', u, `${u.name} has fought itself out and breaks off for home.`);
+        this.say('air:spent', u, told(u.name, '{N} [has|have] fought [itself|themselves] out and [breaks|break] off for home.'));
       }
     }
     // The guns round the target.
@@ -454,7 +471,7 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Morale, leaving the board, and the end of a group. */
   private settle(u: AirUnit, dt: number): void {
     if (u.bounce > 0) u.bounce = Math.max(0, u.bounce - dt);
-    if (u.n <= 0) { this.state(u, 'gone', `${u.name} is wiped out.`); return; }
+    if (u.n <= 0) { this.state(u, 'gone', told(u.name, '{N} [is|are] wiped out.')); return; }
     u.str = u.n / u.n0;
     if (!u.contacts.length) u.mor = Math.min(SKY.morale.base + SKY.morale.ready, u.mor + SKY.morale.mend * dt);
     const was = u.state;
@@ -462,17 +479,17 @@ export class AirSim implements BattleSim<AirUnit> {
       // One notice for one event (the UI director, 18:28Z): the break says the bombs went too.
       const dump = u.air === 'bmr' && !u.dropped && !u.jettisoned;
       if (dump) u.jettisoned = true;
-      this.state(u, 'routing', dump ? `${u.name} breaks: it jettisons its bombs and turns for home.` : `${u.name} breaks off and heads for home.`);
+      this.state(u, 'routing', dump ? told(u.name, '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.') : told(u.name, '{N} [breaks|break] off and [heads|head] for home.'));
       u.job = { do: 'home' };
-    } else if (was !== 'routing' && u.mor < SKY.morale.wavering && was !== 'wavering') this.state(u, 'wavering', `${u.name} is wavering.`);
-    else if (was === 'wavering' && u.mor >= SKY.morale.wavering + 0.05) this.state(u, 'steady', `${u.name} steadies.`, 'rallied');
+    } else if (was !== 'routing' && u.mor < SKY.morale.wavering && was !== 'wavering') this.state(u, 'wavering', told(u.name, '{N} [is|are] wavering.'));
+    else if (was === 'wavering' && u.mor >= SKY.morale.wavering + 0.05) this.state(u, 'steady', told(u.name, '{N} [steadies|steady].'), 'rallied');
     // For the models: what it is doing, and whom it is fighting.
     u.engaged = u.contacts[0];
     u.act = u.job.do === 'wait' ? 'idle' : u.state === 'routing' ? 'rout' : u.contacts.length ? 'fight' : 'march';
     // Off the board: a raider past its own edge, a defender down at its airfield.
     if (u.job.do === 'home' || (u.job.do === 'route' && (u.dropped || u.jettisoned))) {
       const gone = u.side === 'att' ? u.y <= 0 : dist(u.x, u.y, u.homeX, u.homeY) <= 1_500;
-      if (gone) this.state(u, 'withdrawn', u.side === 'att' ? `${u.name} is clear of the fight and heads for home.` : `${u.name} lands.`);
+      if (gone) this.state(u, 'withdrawn', u.side === 'att' ? told(u.name, '{N} [is|are] clear of the fight and [heads|head] for home.') : told(u.name, '{N} [lands|land].'));
     }
   }
 
@@ -544,7 +561,7 @@ export class AirSim implements BattleSim<AirUnit> {
       }
       case 'air:jettison': {
         const us = mine(c.units).filter((u) => u.air === 'bmr' && !u.dropped && !u.jettisoned);
-        for (const u of us) { u.jettisoned = true; u.job = { do: 'home' }; this.say('air:jettison', u, `${u.name} jettisons its bombs and turns for home.`, { n: u.n }); }
+        for (const u of us) { u.jettisoned = true; u.job = { do: 'home' }; this.say('air:jettison', u, told(u.name, '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
         return us.length > 0;
       }
       default: return false;
@@ -552,7 +569,7 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   private goHome(u: AirUnit): void {
-    if (u.air === 'bmr' && !u.dropped && !u.jettisoned && u.side === 'att') { u.jettisoned = true; this.say('air:jettison', u, `${u.name} jettisons its bombs and turns for home.`, { n: u.n }); }
+    if (u.air === 'bmr' && !u.dropped && !u.jettisoned && u.side === 'att') { u.jettisoned = true; this.say('air:jettison', u, told(u.name, '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
     u.job = { do: 'home' };
   }
 
@@ -632,14 +649,15 @@ export class AirSim implements BattleSim<AirUnit> {
   outcome(): AirOutcome {
     const groups = new Map<number, AirOutcome['groups'][number]>();
     for (const u of this.units) {
-      const row = groups.get(u.corps) ?? { id: u.corps, side: u.side, lostFtr: 0, lostBmr: 0, back: 0 };
-      if (u.air === 'ftr') row.lostFtr += u.n0 - u.n; else row.lostBmr += u.n0 - u.n;
+      const row = groups.get(u.corps) ?? { id: u.corps, side: u.side, lostFtr: 0, lostBmr: 0, back: 0, flewFtr: 0, flewBmr: 0 };
+      if (u.air === 'ftr') { row.lostFtr += u.n0 - u.n; row.flewFtr += u.n0; } else { row.lostBmr += u.n0 - u.n; row.flewBmr += u.n0; }
       row.back += u.back;
       groups.set(u.corps, row);
     }
     const att = this.units.filter((u) => u.side === 'att' && u.air === 'bmr');
     return {
-      groups: [...groups.values()], dropped: att.reduce((s, u) => s + u.dropped, 0), jettisoned: att.reduce((s, u) => s + (u.jettisoned ? u.n : 0), 0),
+      groups: [...groups.values()], chance: this.place.chance,
+      dropped: att.reduce((s, u) => s + u.dropped, 0), jettisoned: att.reduce((s, u) => s + (u.jettisoned ? u.n : 0), 0),
       ...(this.staff ? { staff: this.staff } : {}),
     };
   }

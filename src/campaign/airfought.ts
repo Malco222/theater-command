@@ -28,6 +28,10 @@ export interface FoughtAir {
    * 'away' are bombers still in the air that had turned back without bombing.
    */
   staff?: { rest: { foe: number; ftr: number; bmr: number }; away: number };
+  /** By campaign air group id: the fighters and bombers it sent up into the battle, for the after card's roster. */
+  flew?: Record<number, { ftr: number; bmr: number }>;
+  /** The raid card's chance of success, for the after card's reckoning line. */
+  chance?: number;
 }
 
 /** The dice's run either side of the expected figure: fly()'s own luck (AIR.combat.luck). */
@@ -102,14 +106,34 @@ export function afterWords(w: {
     return [f ? `${f} ${f === 1 ? 'fighter' : 'fighters'}` : '', k ? `${k} ${k === 1 ? 'bomber' : 'bombers'}` : ''].filter(Boolean).join(' and ');
   };
   const mine0 = w.before ? what(w.before, w.me) || 'none' : '';
+  const theirs0 = w.before ? what(w.before, foe) : '';
   return [
     ...(w.staff ? [`The staff settled the rest of the ${w.sky ? 'fight for the sky over' : 'raid on'} ${w.place} from where it stood: what you had won stays won.`] : []),
     // Whose bombers (18:50Z): his own, or the raiders' by their adjective when he defends.
     ...(w.bombers > 0 ? [`${w.dropped} of ${w.me === 'att' ? 'your ' : ''}${w.bombers} ${w.me === 'att' ? '' : `${w.adj.att} `}bombers dropped their bombs on ${w.place}${w.jettisoned ? `, and ${w.jettisoned} jettisoned theirs` : ''}.`] : []),
     ...(w.bill ? [`The ${w.sky ? `fight for the sky over ${w.place}` : 'raid'} cost you ${what(w.bill, w.me) || 'nothing'}, and the ${them} lost ${what(w.bill, foe) || 'none'}.`] : []),
     // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
-    ...(w.before ? [`Before you handed it to the staff, you had lost ${mine0}${mine0.includes(' and ') ? ',' : ''} and the ${them} ${what(w.before, foe) || 'none'}.`] : []),
+    // Nothing down on either side yet: the sea card's form (the UI director, air review 2).
+    ...(w.before ? [mine0 === 'none' && !theirs0 ? 'Before you handed it to the staff, no aircraft had fallen on either side.'
+      : `Before you handed it to the staff, you had lost ${mine0}${mine0.includes(' and ') ? ',' : ''} and the ${them} ${theirs0 || 'none'}.`] : []),
   ];
+}
+
+/**
+ * How the raid went against the chance the raid card gave it: the land and sea cards' one line under AGAINST THE
+ * STAFF'S RECKONING (the UI director, air review 1; the design director, 19:29Z). No dice on the player's page.
+ */
+export function reckoned(carried: boolean, chance: number): string {
+  if (chance >= 0.995) return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
+  if (chance <= 0.005) return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
+  const p = `they gave you about ${Math.round(chance * 100)}% to win it.`;
+  if (carried) return chance < 0.5 ? `You did better than the staff expected: ${p}` : `As the staff expected: ${p}`;
+  return chance >= 0.5 ? `You did worse than the staff expected: ${p}` : `As the staff feared: ${p}`;
+}
+
+/** A roster row: what a group lost of what it sent up, one form for every row (the design director, 19:29Z). */
+export function rosterWords(lost: number, flew: number): string {
+  return `lost ${lost === 0 ? 'none' : lost} of the ${flew} that flew`;
 }
 
 /** The after card of a raid fought out as an air battle, written from what the campaign booked. */
@@ -117,8 +141,13 @@ export interface AfterCard {
   lines: string[];
   /** The verdict as the player reads it (the report's own is the raider's). */
   level: VictoryLevel;
-  /** The groups' cards at the card's foot: each group's end, as booked. */
-  groups: { name: string; side: 'att' | 'def'; ftr: number; bmr: number; lostFtr: number; lostBmr: number }[];
+  /** The one line under AGAINST THE STAFF'S RECKONING, when the battle handed back the raid card's chance. */
+  reckoning?: string;
+  /**
+   * The groups' cards at the card's foot: each group's end, as booked. 'flew' are the aircraft it sent up into the
+   * battle (what the top bar counted), and 'words' its row: "lost 25 of the 175 that flew".
+   */
+  groups: { name: string; side: 'att' | 'def'; ftr: number; bmr: number; lostFtr: number; lostBmr: number; flew?: number; words: string }[];
 }
 
 const FLIP: Record<VictoryLevel, VictoryLevel> = {
@@ -142,6 +171,16 @@ export function afterCard(g: Game, rep: AirReport, fought: FoughtAir): AfterCard
     bill: { att: { ftr: sum(rep.att, 'lostFtr'), bmr: sum(rep.att, 'lostBmr') }, def: { ftr: sum(rep.def, 'lostFtr'), bmr: sum(rep.def, 'lostBmr') } },
     before: fought.staff ? { att: { ftr: had(rep.att, 'ftr'), bmr: had(rep.att, 'bmr') }, def: { ftr: had(rep.def, 'ftr'), bmr: had(rep.def, 'bmr') } } : null,
   });
-  const card = (side: 'att' | 'def') => (x: AirReport['att'][number]) => ({ name: x.fleet, side, ftr: x.ftr, bmr: x.bmr, lostFtr: x.lostFtr, lostBmr: x.lostBmr });
-  return { lines, level: me === 'att' ? rep.level : FLIP[rep.level], groups: [...rep.att.map(card('att')), ...rep.def.map(card('def'))] };
+  const card = (side: 'att' | 'def') => (x: AirReport['att'][number]) => {
+    const up = x.id !== undefined ? fought.flew?.[x.id] : undefined;
+    const flew = up ? up.ftr + up.bmr : undefined;
+    return { name: x.fleet, side, ftr: x.ftr, bmr: x.bmr, lostFtr: x.lostFtr, lostBmr: x.lostBmr, flew, words: rosterWords(x.lostFtr + x.lostBmr, flew ?? x.ftr + x.bmr) };
+  };
+  // The raid card's chance was the raider's: a defender reads the other side of it.
+  const won = me === 'att' ? rep.won : !rep.won;
+  const reckoning = fought.chance !== undefined ? reckoned(won, me === 'att' ? fought.chance : 1 - fought.chance) : undefined;
+  return {
+    lines, level: me === 'att' ? rep.level : FLIP[rep.level], ...(reckoning ? { reckoning } : {}),
+    groups: [...rep.att.map(card('att')), ...rep.def.map(card('def'))],
+  };
 }

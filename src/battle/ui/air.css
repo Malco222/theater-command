@@ -1,8 +1,15 @@
 /* The air battle page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
    is scoped to .air, so the field and sea pages never see it. */
-.air .btitle { flex: 0 1 460px; }
-.air .btitle .tc-data { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.air .bends .tc-data { white-space: nowrap; }
+
+/* ---- The top bar: one row at 1280 and up; the title and its subtitle wrap rather than cut (the UI director, air 8) ---- */
+.air.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.air .bbar { flex-wrap: nowrap; gap: 12px; }
+.air .btitle { flex: 1 1 220px; min-width: 0; }
+.air .btitle .tc-title-3 { line-height: 22px; }
+.air .bclock, .air .bspeed, .air .bacts { flex: none; }
+.air .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
+.air .bratio { font-size: 12px; line-height: 14px; color: var(--paper-200); text-align: center; white-space: nowrap; }
+@media (max-width: 1279px) { .air .bbar { flex-wrap: wrap; } }
 
 /* A group's card: its name, then what it flies underneath ("Kampfgeschwader 5" / "Bombers"). */
 .air .ucard { min-width: 216px; }

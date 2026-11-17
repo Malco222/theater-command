@@ -25,6 +25,10 @@ import { toField, toScreen } from './draw';
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+/** A row of facts with the kit's dots between them, wrapping between facts and never inside one. */
+const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
+/** A number never parts from its noun (the UI director, air review 11). */
+const NB = '\u00a0';
 
 /** A raid the campaign is about to fly: the game it comes from, and what the raid card picked. */
 interface Raid { g: Game; nat: string; kind: RaidKind; target: number; ids: number[]; ticket: FieldTicket<AirPlace> }
@@ -40,13 +44,15 @@ interface State {
   asking: boolean;
   last: number;
   trayAt: number;
+  /** After the campaign books the raid: each of the player's groups' aircraft as booked, which the tray then shows. */
+  booked: Map<number, number> | null;
 }
 
 const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, raid: null, clock: new Clock(),
   scene: { cam: { x: SKY.w / 2, y: SKY.h / 2, z: 0.008 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], at: null },
-  guardUntil: 0, dispatch: null, asking: false, last: 0, trayAt: 0,
+  guardUntil: 0, dispatch: null, asking: false, last: 0, trayAt: 0, booked: null,
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -78,7 +84,14 @@ function raidOf(i: number): Raid | null {
 function forceWords(t: FieldTicket<AirPlace>, side: Side): string {
   const n = (k: string): number => t[side].forces.filter((f) => (k === 'bmr' ? f.kind === 'bmr' : f.kind !== 'bmr')).reduce((s, f) => s + f.men, 0);
   const f = n('ftr'), b = n('bmr');
-  return [b ? `${b} bombers` : '', f ? `${f} fighters` : ''].filter(Boolean).join(' and ') || 'nothing';
+  return [b ? `${b}${NB}bombers` : '', f ? `${f}${NB}fighters` : ''].filter(Boolean).join(' and ') || 'nothing';
+}
+
+/** What kind of battle it is, for the top bar's subtitle: "an escorted day raid", "a fight for the sky", "a night raid". */
+function kindWords(t: FieldTicket<AirPlace>): string {
+  if (t.place.mission === 'superiority') return 'a fight for the sky';
+  if (t.place.night) return 'a night raid';
+  return t.att.forces.some((f) => f.kind !== 'bmr') ? 'an escorted day raid' : 'a day raid';
 }
 
 function showChooser(): void {
@@ -115,12 +128,14 @@ function startBattle(r: Raid): void {
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.at = null;
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false;
-  S.dispatch = { t: 0, what: 'contact', text: `Your raid is formed up and heading for ${t.place.name}. The clock is stopped: give your orders, then press Space to begin.` };
+  S.booked = null;
+  // One sentence (the UI director, air review 6).
+  S.dispatch = { t: 0, what: 'contact', text: `${t.place.mission === 'superiority' ? 'Your fighters are formed up' : 'Your raid is formed up'} and heading for ${t.place.name}: give your orders, then press Space to begin.` };
   guard();
   const mine = t[sc.me], theirs = t[sc.me === 'att' ? 'def' : 'att'];
   app.innerHTML = `<div class="battle tc air">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${esc(t.date)} · ${esc(forceWords(t, 'att'))} against ${esc(forceWords(t, 'def'))}</span></div>
+      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(kindWords(t))])}</span></div>
       <div class="bclock"><span class="tc-label">Battle time</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)">Pause <span class="tc-key">Space</span></button>
@@ -129,8 +144,9 @@ function startBattle(r: Raid): void {
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's aircraft still in the fight, against both at the start.">
-        <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
+        <div class="bends"><span>${esc(mine.adj)}</span><span>${esc(theirs.adj)}</span></div>
         <div class="btrack"><i id="balA"></i><i id="balD"></i></div>
+        <span id="ratio" class="tc-data bratio"></span>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands. What you have won stays won.">Hand it to the staff</button>
@@ -147,7 +163,7 @@ function startBattle(r: Raid): void {
         <button class="tc-btn tc-btn--sm tc-btn--grave" id="jett" data-act="jettison">Jettison the bombs</button>
       </div>
     </div>
-    <div class="keys tc-data"><div class="facts"><span><span class="fact">Left click: choose</span><span class="fact">Right click an enemy group: attack it</span><span class="fact">Right click the sky: patrol there</span><span class="fact"><span class="tc-key">H</span> hold</span><span class="fact"><span class="tc-key">R</span> break off</span><span class="fact"><span class="tc-key">Tab</span> next group</span><span class="fact"><span class="tc-key">Esc</span> drop the choice</span></span></div></div>
+    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click an enemy group: attack it', 'Right click the sky: patrol there', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> break off', '<span class="tc-key">Tab</span> next group', '<span class="tc-key">Esc</span> put down'])}</div>
     <footer class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, mine.color)).join('')}</footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
@@ -187,13 +203,15 @@ function updateTray(force = false): void {
       (box.querySelector('i b') as HTMLElement).style.width = `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
       (box.querySelector('span:last-child') as HTMLElement).textContent = text;
     };
-    const share = u.n / Math.max(1, u.n0);
-    set('str', share, `${u.n}`, share < 0.35 ? 'is-low' : share < 0.65 ? 'is-mid' : '');
+    // Once the campaign has booked the raid, the tray shows what it booked (the UI director, air review 4).
+    const n = S.booked?.get(u.id) ?? u.n;
+    const share = n / Math.max(1, u.n0);
+    set('str', share, `${n}`, share < 0.35 ? 'is-low' : share < 0.65 ? 'is-mid' : '');
     set('mor', u.mor, `${Math.round(u.mor * 100)}`, 'is-rest');
     const st = el.querySelector<HTMLElement>('.ustate')!;
     const doing = live(u) ? ACT_WORD[u.act] ?? '' : '';
     const height = live(u) && u.act !== 'idle' ? ` · ${BAND_WORD[u.band]}${u.to !== u.band ? ` to ${BAND_WORD[u.to]}` : ''}` : '';
-    const bombs = u.air === 'bmr' ? (u.dropped ? ' · bombed' : u.jettisoned ? ' · jettisoned' : '') : u.fuel < u.fuel0 * 0.2 && live(u) ? ' · short of fuel' : '';
+    const bombs = u.air === 'bmr' ? (u.dropped ? ' · bombs gone' : u.jettisoned ? ' · jettisoned' : '') : u.fuel < u.fuel0 * 0.2 && live(u) ? ' · short of fuel' : '';
     st.innerHTML = `<b>${STATE_WORD[u.state]}</b>${doing ? ` · ${doing}` : ''}${height}${bombs}`;
     st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
@@ -480,11 +498,29 @@ function showAfter(): void {
   const level = card ? card.level : r.level;
   const won = level.includes('victory');
   const sky = sim.place.mission === 'superiority';
-  const sides = card ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} ${sd === 'att' ? 'raid' : 'fighters'}</h3><ul>${card.groups.filter((x) => x.side === sd).map((x) => {
-    const lost = [x.lostFtr ? `${x.lostFtr} ${x.lostFtr === 1 ? 'fighter' : 'fighters'}` : '', x.lostBmr ? `${x.lostBmr} ${x.lostBmr === 1 ? 'bomber' : 'bombers'}` : ''].filter(Boolean).join(' and ');
-    const left = [x.ftr ? `${x.ftr - x.lostFtr} fighters` : '', x.bmr ? `${x.bmr - x.lostBmr} bombers` : ''].filter(Boolean).join(' and ');
-    return `<li><b>${esc(x.name)}</b> <span>${lost ? `lost ${lost}` : 'lost none'} · ${left} left</span></li>`;
-  }).join('')}</ul></div>`).join('')}</div>` : '';
+  // The after card is the one voice: the dispatch strip steps aside (the UI director, air review 5).
+  S.dispatch = null;
+  document.getElementById('dispatch')!.innerHTML = '';
+  // The tray takes the booked counts: each group's booked losses shared over its formations by what each sent up.
+  if (rep) {
+    S.booked = new Map();
+    for (const x of [...rep.att, ...rep.def]) {
+      for (const kind of ['ftr', 'bmr'] as const) {
+        const us = sim.units.filter((u) => u.corps === x.id && u.air === kind);
+        const up = us.reduce((s, u) => s + u.n0, 0);
+        let left = kind === 'ftr' ? x.lostFtr : x.lostBmr;
+        us.forEach((u, i) => {
+          const share = i === us.length - 1 ? left : Math.round(((kind === 'ftr' ? x.lostFtr : x.lostBmr) * u.n0) / Math.max(1, up));
+          left -= share;
+          S.booked!.set(u.id, Math.max(0, u.n0 - share));
+        });
+      }
+    }
+    updateTray(true);
+  }
+  // The roster: what each group lost of what it sent up, the same form on both sides (the design director, 19:29Z).
+  const sides = card ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} ${sd === 'att' ? (sky ? 'fighters' : 'raid') : 'fighters'}</h3><ul>${card.groups.filter((x) => x.side === sd).map((x) =>
+    `<li><b>${esc(x.name)}</b> <span>${esc(x.words)}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
   const veil = document.createElement('div');
   veil.className = 'veil';
   veil.innerHTML = `<div class="after tc-paper" role="dialog" aria-label="Raid result">
@@ -493,6 +529,7 @@ function showAfter(): void {
     <div class="verdict"><span class="tc-stamp ${won ? 'tc-stamp--won' : ''}">${esc(level)}</span></div>
     ${rep ? `<p class="told"><b>${esc(rep.result)}</b></p>` : ''}
     <h3 class="tc-label">In the air</h3><ul class="flines">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+    ${card?.reckoning ? `<h3 class="tc-label">Against the staff's reckoning</h3><p class="dice">${esc(card.reckoning)}</p>` : ''}
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
   </div>`;

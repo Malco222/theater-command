@@ -101,6 +101,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     gunLoss: a.gunLoss,
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
     forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+    chance: fc.success,
     starts,
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
   };
@@ -129,12 +130,14 @@ function force(f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): Forc
 
 /** What a fought raid hands back to the rules (launchRaid's `fought`): each campaign group's losses, and the bombs dropped. */
 export function foughtAir(o: AirOutcome): FoughtAir {
-  const lost: FoughtAir['lost'] = {};
+  const lost: FoughtAir['lost'] = {}, flew: NonNullable<FoughtAir['flew']> = {};
   for (const gr of o.groups) {
     const row = (lost[gr.id] ??= { ftr: 0, bmr: 0, back: 0 });
     row.ftr += gr.lostFtr; row.bmr += gr.lostBmr; row.back += gr.back;
+    const up = (flew[gr.id] ??= { ftr: 0, bmr: 0 });
+    up.ftr += gr.flewFtr; up.bmr += gr.flewBmr;
   }
-  return { lost, dropped: o.dropped, jettisoned: o.jettisoned, ...(o.staff ? { staff: o.staff } : {}) };
+  return { lost, dropped: o.dropped, jettisoned: o.jettisoned, flew, chance: o.chance, ...(o.staff ? { staff: o.staff } : {}) };
 }
 
 /**
