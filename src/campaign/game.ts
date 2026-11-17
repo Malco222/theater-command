@@ -171,7 +171,25 @@ export function theName(n: Nation, start = false): string {
 }
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
-  g.headlines.push({ turn: g.turn, week: g.week, text, kind, nat, region, ...tag });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind, nat, region, ...tag });
+}
+
+/**
+ * The week a line of news is dated (display only: no rule reads it). Each nation's month counts its weeks from the
+ * first, so a nation that moves after the player dated its news before his own battles of the same month: Canada's
+ * guns closing round Cleveland read week 2, after the relief of Pittsburgh in week 4 (ruling 211(f)). Once the
+ * player's month is over, news is dated no earlier than the last week his own news reached. g.week, the battles'
+ * weeks and the week a country fell, which the rules read, are left as they were.
+ */
+export function newsWeek(g: Game): number {
+  const me = g.human, at = me ? g.order.indexOf(me) : -1, reached = g.flags.newsweek ?? 0, month = (g.turn - 1) * 4;
+  // The player's own month: his news keeps its own weeks, and the furthest of them is noted (saved with the game).
+  if (at >= 0 && g.phase === at && g.flags.eve !== 1) { g.flags.newsweek = Math.max(reached > month ? reached : 0, month + g.week); return g.week; }
+  if (at < 0 || g.phase <= at) return g.week;
+  // After it: the furthest week his news reached, or his battles did.
+  let floor = reached > month ? reached - month : 0;
+  for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn === g.turn; i--) if (g.reports[i].attNat === me) floor = Math.max(floor, g.reports[i].week);
+  return Math.max(g.week, floor);
 }
 
 /** The two tags on news of fighting (Version 80, display only): the arm that fought, and who had the better and the worse of it. */
@@ -179,7 +197,7 @@ export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
-  g.headlines.push({ turn: g.turn, week: g.week, text, kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
 }
 
 /** Routine news of a computer-run nation's month, kept back for one line when the month closes. */
