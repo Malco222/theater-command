@@ -1,0 +1,10 @@
+load	out/click/us42d.save.txt
+select-province	Wales
+order-province	West Country
+end-month
+select-province	West Country
+order-province	Cotentin
+press	Invade by sea
+select-province	Cotentin
+press	LAND THE TROOPS
+close
