@@ -499,6 +499,7 @@ private:
 		UProceduralMeshComponent* Sea = nullptr;
 		TMap<FName, CampaignTextures::FLevels> Ahead; // (speed) its pictures with their smaller copies, made on the thread that modelled it
 		TSet<int32> FogFor; // (speed) the haze its fog picture among them was made for
+		FBox2D HoldersChanged = FBox2D(ForceInit); // (speed: tc.Speed.HoldersLock) ground that changed hands while it was being modelled, painted again before it is dressed
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
 	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
@@ -535,8 +536,8 @@ private:
 	float GroundAt(double X, double Y) const;
 	/** How much of the ground at a place is land, anywhere in the world: 0 open sea, 0.5 the shoreline, 1 well inland. */
 	float CoverAt(double X, double Y) const;
-	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets. */
-	void RepaintBeyond(const FBox2D& Changed);
+	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets (or on Only, alone). */
+	void RepaintBeyond(const FBox2D& Changed, FFineSheet* Only = nullptr);
 	/** The staff's paper over ground beyond the map's own box that nobody of the player's can see. */
 	void FogBeyond();
 	// A setting of the land's or the sea's paint goes to every sheet's copy of it.

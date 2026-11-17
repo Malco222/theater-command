@@ -14,7 +14,8 @@ class APlayerController;
  * The log: "-TheaterSpeedLog" on the command line, or "tc.Speed.Log 1" at the console, writes a few lines every
  * five seconds: the frames a second, the worst frame and how many went over 33 ms, the game, draw and graphics
  * chip times, how long each of the map's jobs took a frame, and every call into the rules with what it cost. Every
- * thirty seconds it adds a count of what is drawn: how many parts, how many throw shadows, and the largest meshes.
+ * thirty seconds it adds a count of what is drawn: how many parts, how many throw shadows, and the largest meshes;
+ * and of what was on screen in that moment, kind by kind (land tiles, town squares, the pieces' parts and so on).
  *
  * The same jobs are also timed for Unreal's own frame recorder ("-csvCaptureFrames=600", or "csvprofile start" and
  * "csvprofile stop" at the console), in its "Theater" columns, beside the engine's own game, draw and chip times.
@@ -30,6 +31,15 @@ class APlayerController;
  *                         all their points. 0: the controller works the whole view out again for every point, as before.
  *   tc.Speed.FineAside    1 (default): the smaller copies of a fine sheet's pictures are made on the thread that models
  *                         the sheet, not in the frame that dresses it. 0: in that frame, as before.
+ *   tc.Speed.StillMeshes  1 (default): the hand-built models that are made once and then left alone (the ground's
+ *                         tiles, the towns, the trees, the world's lines and works, the pieces' flags and turf) are
+ *                         drawn through Unreal's kept drawing orders (UTheaterStillMesh). 0: their drawing orders are
+ *                         made again every frame, for every pass and every shadow, as before.
+ *   tc.Speed.HoldersLock  1 (default): ground changing hands no longer waits for the world's fine sheets that are still
+ *                         being modelled on other threads (up to two seconds on the press, in America). Their few reads
+ *                         of whose each province is are kept apart from the change by a lock held for a moment, and a
+ *                         sheet that was in the making has the ground that changed painted again before it is shown.
+ *                         0: the change waits for every sheet in the making to be finished, as before.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -55,6 +65,40 @@ namespace TheaterSpeed
 	bool TrainShadows();
 	bool OneEye();
 	bool FineAside();
+	bool StillMeshes(); // (on any thread)
+	bool HoldersLock();
+
+	/**
+	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed
+	 * only on the game thread, in ACampaignMapActor::SetHolders, and read on the threads that model the world's fine
+	 * sheets as well. A reader stands an FHoldersRead while it reads them (its tables of who holds what, a moment's
+	 * work, not the painting that follows); the change stands an FHoldersChange while it writes them. On the game
+	 * thread a reader takes nothing, as nothing can change them there while it reads.
+	 */
+	struct FHoldersRead
+	{
+		FHoldersRead();
+		~FHoldersRead() { Release(); }
+		/** Done reading, before the end of the block. */
+		void Release();
+		FHoldersRead(const FHoldersRead&) = delete;
+		FHoldersRead& operator=(const FHoldersRead&) = delete;
+
+	private:
+		bool bHeld = false;
+	};
+	struct FHoldersChange
+	{
+		/** Only where some sheet is being modelled: otherwise there is nobody to keep out. */
+		explicit FHoldersChange(bool bNeeded);
+		~FHoldersChange() { Release(); }
+		void Release();
+		FHoldersChange(const FHoldersChange&) = delete;
+		FHoldersChange& operator=(const FHoldersChange&) = delete;
+
+	private:
+		bool bHeld = false;
+	};
 
 	/**
 	 * The eye's view, worked out once and then used for as many points as are wanted: the same answer, to the bit, as
@@ -105,5 +149,5 @@ namespace TheaterSpeed
 /** Times the rest of the block, under a name: in the speed log, and in the frame recorder's "Theater" columns. */
 #define THEATER_SPEED_SCOPE(Name) \
 	CSV_SCOPED_TIMING_STAT(Theater, Name); \
-	static const int32 PREPROCESSOR_JOIN(TheaterSpeedSlot_, __LINE__) = TheaterSpeed::SlotFor(TEXT(#Name)); \
-	const TheaterSpeed::FScope PREPROCESSOR_JOIN(TheaterSpeedScope_, __LINE__)(PREPROCESSOR_JOIN(TheaterSpeedSlot_, __LINE__))
+	static const int32 UE_JOIN(TheaterSpeedSlot_, __LINE__) = TheaterSpeed::SlotFor(TEXT(#Name)); \
+	const TheaterSpeed::FScope UE_JOIN(TheaterSpeedScope_, __LINE__)(UE_JOIN(TheaterSpeedSlot_, __LINE__))

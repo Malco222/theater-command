@@ -1,6 +1,8 @@
 #include "Campaign/TheaterSpeed.h"
 
 #include "TheaterCommand.h"
+#include "CoreGlobals.h" // (IsInGameThread)
+#include "Campaign/TheaterStillMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/GameViewportClient.h"
@@ -10,6 +12,7 @@
 #include "SceneView.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ScopeRWLock.h" // (FRWLock)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ProceduralMeshComponent.h"
@@ -42,9 +45,17 @@ namespace
 	TAutoConsoleVariable<int32> CVarOneEye(
 		TEXT("tc.Speed.OneEye"), 1,
 		TEXT("1 works out the eye's view once for all the names and plates laid over the map; 0 works it out again for every point, as before."));
+	TAutoConsoleVariable<int32> CVarStillMeshes(
+		TEXT("tc.Speed.StillMeshes"), 1,
+		TEXT("1 draws the hand-built models that are made once and left alone (the ground, towns, trees, the lines on the map) through Unreal's kept drawing orders; 0 makes their drawing orders again every frame, as before."));
+	TAutoConsoleVariable<int32> CVarHoldersLock(
+		TEXT("tc.Speed.HoldersLock"), 1,
+		TEXT("1 lets ground change hands without waiting for the world's fine sheets still being modelled (a sheet in the making has the change painted in before it is shown); 0 waits for them, as before."));
 	TAutoConsoleVariable<int32> CVarFineAside(
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
+
+	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
 	bool bLogging = false;
 	uint64 SlateBegan = 0; // (when Slate's tick began this frame, while logging)
@@ -88,7 +99,13 @@ namespace
 		return FPlatformTime::ToMilliseconds64(Cycles);
 	}
 
-	/** What is drawn: every part of the world that is registered and shown, how many throw shadows, and the largest meshes. */
+	/**
+	 * What is drawn: every part of the world that is registered and shown, how many throw shadows, and the largest
+	 * meshes. Then what was on screen in that moment (drawn in the last quarter of a second), kind by kind: a kind is
+	 * the owner's class and the part's name without its number ("CampaignMapActor.LandTile", "ArmyPiece.Cloth"). Each
+	 * section of a hand-built model is one drawing order per pass; a still one's are kept from frame to frame, the others'
+	 * are made again every frame.
+	 */
 	void Census(UWorld* World)
 	{
 		struct FEntry
@@ -99,9 +116,22 @@ namespace
 			int32 Sections = 0;
 			bool bShadow = false;
 		};
+		struct FKind
+		{
+			int32 Parts = 0;
+			int32 Sections = 0;
+			int32 Shadowed = 0;
+			int64 Triangles = 0;
+			bool bStill = false;
+			bool bMesh = false;
+		};
 		TArray<FEntry> Meshes;
+		TMap<FString, FKind> Kinds;
 		int32 Parts = 0, Shown = 0, Shadowed = 0, Instanced = 0, Instances = 0;
 		int64 Points = 0, Triangles = 0, ShadowTriangles = 0;
+		int32 OnScreen = 0, OnScreenShadowed = 0, OnScreenMeshes = 0, OnScreenStill = 0, OnScreenSections = 0, StillSections = 0, DrawnOffScreen = 0;
+		const double Now = World->GetTimeSeconds();
+		const bool bStillOn = TheaterSpeed::StillMeshes();
 		for (TObjectIterator<UPrimitiveComponent> It; It; ++It)
 		{
 			UPrimitiveComponent* Part = *It;
@@ -117,6 +147,18 @@ namespace
 			++Shown;
 			const bool bShadow = Part->CastShadow != 0;
 			Shadowed += bShadow ? 1 : 0;
+			const bool bOnScreen = Now - Part->GetLastRenderTimeOnScreen() <= 0.25;
+			DrawnOffScreen += !bOnScreen && Now - Part->GetLastRenderTime() <= 0.25 ? 1 : 0;
+			FKind* Kind = nullptr;
+			if (bOnScreen)
+			{
+				++OnScreen;
+				OnScreenShadowed += bShadow ? 1 : 0;
+				const FString Key = FString::Printf(TEXT("%s.%s"), Part->GetOwner() ? *Part->GetOwner()->GetClass()->GetName() : TEXT("-"), *Part->GetFName().GetPlainNameString());
+				Kind = &Kinds.FindOrAdd(Key);
+				++Kind->Parts;
+				Kind->Shadowed += bShadow ? 1 : 0;
+			}
 			if (UProceduralMeshComponent* Mesh = Cast<UProceduralMeshComponent>(Part))
 			{
 				FEntry Entry;
@@ -125,7 +167,7 @@ namespace
 				for (int32 Index = 0; Index < Mesh->GetNumSections(); ++Index)
 				{
 					const FProcMeshSection* Section = Mesh->GetProcMeshSection(Index);
-					if (Section && Section->bSectionVisible)
+					if (Section && Section->bSectionVisible && Section->ProcIndexBuffer.Num() > 0)
 					{
 						Entry.Points += Section->ProcVertexBuffer.Num();
 						Entry.Triangles += Section->ProcIndexBuffer.Num() / 3;
@@ -135,6 +177,18 @@ namespace
 				Points += Entry.Points;
 				Triangles += Entry.Triangles;
 				ShadowTriangles += bShadow ? Entry.Triangles : 0;
+				if (Kind)
+				{
+					const bool bStill = bStillOn && Mesh->IsA<UTheaterStillMesh>();
+					Kind->bMesh = true;
+					Kind->bStill = bStill;
+					Kind->Sections += Entry.Sections;
+					Kind->Triangles += Entry.Triangles;
+					++OnScreenMeshes;
+					OnScreenStill += bStill ? 1 : 0;
+					OnScreenSections += Entry.Sections;
+					StillSections += bStill ? Entry.Sections : 0;
+				}
 				if (Entry.Points > 0)
 				{
 					Meshes.Add(MoveTemp(Entry));
@@ -155,6 +209,29 @@ namespace
 			UE_LOG(LogTheater, Display, TEXT("Speed census:   %s: %d points, %d triangles, %d section%s%s"),
 				*Each.Name, Each.Points, Each.Triangles, Each.Sections, Each.Sections == 1 ? TEXT("") : TEXT("s"), Each.bShadow ? TEXT(", throws shadows") : TEXT(""));
 		}
+		UE_LOG(LogTheater, Display, TEXT("Speed census, on screen: %d parts (%d throwing shadows); %d hand-built with %d sections, %d of them still with %d sections; %d more drawn only off screen (into a shadow)"),
+			OnScreen, OnScreenShadowed, OnScreenMeshes, OnScreenSections, OnScreenStill, StillSections, DrawnOffScreen);
+		TArray<TPair<FString, FKind>> ByKind;
+		for (const TPair<FString, FKind>& Each : Kinds)
+		{
+			ByKind.Emplace(Each.Key, Each.Value);
+		}
+		ByKind.Sort([](const TPair<FString, FKind>& A, const TPair<FString, FKind>& B)
+		{
+			return A.Value.Sections != B.Value.Sections ? A.Value.Sections > B.Value.Sections : A.Value.Parts > B.Value.Parts;
+		});
+		FString Line;
+		for (int32 Index = 0; Index < FMath::Min(ByKind.Num(), 24); ++Index)
+		{
+			const FKind& Each = ByKind[Index].Value;
+			Line += FString::Printf(TEXT("%s%s %d"), Line.IsEmpty() ? TEXT("") : TEXT("; "), *ByKind[Index].Key, Each.Parts);
+			if (Each.bMesh)
+			{
+				Line += FString::Printf(TEXT(" (%d sections, %lldk triangles%s)"), Each.Sections, (Each.Triangles + 500) / 1000, Each.bStill ? TEXT(", still") : TEXT(""));
+			}
+			Line += Each.Shadowed > 0 ? FString::Printf(TEXT(" [%d throw shadows]"), Each.Shadowed) : FString();
+		}
+		UE_LOG(LogTheater, Display, TEXT("Speed census, on screen by kind: %s"), *Line);
 	}
 }
 
@@ -198,6 +275,53 @@ namespace TheaterSpeed
 	bool FineAside()
 	{
 		return CVarFineAside.GetValueOnGameThread() != 0;
+	}
+
+	bool StillMeshes()
+	{
+		// (read where a mesh's proxy is made, which may be off the game thread)
+		return CVarStillMeshes.GetValueOnAnyThread() != 0;
+	}
+
+	bool HoldersLock()
+	{
+		return CVarHoldersLock.GetValueOnGameThread() != 0;
+	}
+
+	FHoldersRead::FHoldersRead()
+		: bHeld(!IsInGameThread())
+	{
+		if (bHeld)
+		{
+			HoldersGuard.ReadLock();
+		}
+	}
+
+	void FHoldersRead::Release()
+	{
+		if (bHeld)
+		{
+			HoldersGuard.ReadUnlock();
+			bHeld = false;
+		}
+	}
+
+	FHoldersChange::FHoldersChange(bool bNeeded)
+		: bHeld(bNeeded)
+	{
+		if (bHeld)
+		{
+			HoldersGuard.WriteLock();
+		}
+	}
+
+	void FHoldersChange::Release()
+	{
+		if (bHeld)
+		{
+			HoldersGuard.WriteUnlock();
+			bHeld = false;
+		}
 	}
 
 	FEye::FEye(const APlayerController* InPlayer)
@@ -275,6 +399,16 @@ namespace TheaterSpeed
 
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
+		// (a change of tc.Speed.StillMeshes is seen at once: every still mesh's proxy is made again, of the kind now asked for)
+		{
+			static int32 StillWas = -1;
+			const int32 StillNow = CVarStillMeshes.GetValueOnGameThread();
+			if (StillWas != -1 && StillNow != StillWas)
+			{
+				UTheaterStillMesh::RemakeAll();
+			}
+			StillWas = StillNow;
+		}
 		static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterSpeedLog"));
 		const bool bWas = bLogging;
 		bLogging = bAsked || CVarSpeedLog.GetValueOnGameThread() != 0;

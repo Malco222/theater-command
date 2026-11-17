@@ -5,6 +5,7 @@
 #include "Campaign/CampaignClimate.h"
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/CampaignTerrain.h"
+#include "Campaign/TheaterSpeed.h"
 #include "TheaterCommand.h"
 #include "Async/ParallelFor.h"
 #include "Misc/CommandLine.h"
@@ -2116,6 +2117,9 @@ int32 FCampaignGround::PaintedRegion(int32 Index, const FCampaignTerrain& Terrai
 
 void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 I0, int32 J0, int32 I1, int32 J1)
 {
+	// (Speed: a fine sheet's thread reads whose each province is here while ground may change hands: held until the
+	// two tables of it below are made, and no longer.)
+	TheaterSpeed::FHoldersRead Reading;
 	// Each nation's colour and how much wash it needs, looked up once per region.
 	TArray<FSeen> RegionStain;
 	TArray<float> RegionBoost;
@@ -2184,6 +2188,7 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 			UE_LOG(LogTheater, Display, TEXT("Stripe of %s (%s holding %s): snow %.2f, mixed %.2f"), *Region.Name, *Region.Owner, *Region.Lawful, Snow, Share);
 		}
 	}
+	Reading.Release();
 	if (Occupied.Num() != Tint.Num())
 	{
 		Occupied.Init(FColor(0, 0, 0, 0), Tint.Num());
