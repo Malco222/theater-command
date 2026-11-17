@@ -7,7 +7,7 @@ import { createGame, evacuate, whyNotEvacuate } from '../src/campaign/game';
 import { closedTo } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { EVE_NO_RAID, beginEve, beginHuman, endEve, humanUp, onEve, orderRaid, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 /** A grand campaign with the player's first month open, as the game's own screen would have it. */
@@ -109,5 +109,44 @@ describe('Raise a lost corps again says why not', () => {
     g.nations.GER.pp = 0;
     expect(offer(g, cap).poor).toBe(true);
     expect(orderCorps(g, 'GER', 'inf', cap, id)).toBeNull();
+  });
+});
+
+describe('No raid flies on the eve of war', () => {
+  /** Poland in September 1939, on the eve: Germany strikes before Poland's first month comes round. */
+  function eve(): Game {
+    const g = startOpen(createGame(7, 'POL'));
+    expect(beginEve(g)).toBe(true);
+    return g;
+  }
+
+  it('the menu offers no raid and says why, the scouts apart', () => {
+    const g = eve();
+    expect(onEve(g)).toBe(true);
+    for (const menu of [raidMenu(g), raidMenuOne(g)]) {
+      const raids = menu.filter((k) => k.key !== 'recon');
+      expect(raids.length).toBeGreaterThan(0);
+      expect(raids.every((k) => k.targets === 0 && k.why === EVE_NO_RAID)).toBe(true);
+      expect(raids.every((k) => raidTargetsFor(g, k.key).length === 0)).toBe(true);
+    }
+  });
+
+  it('a raid ordered all the same is refused, files no report and rolls no dice', () => {
+    const g = eve();
+    const base = g.airFleets.find((f) => f.nat === 'POL' && f.bmr > 0)!;
+    const target = g.regions.find((r) => r.ctrl === 'GER' && r.nb.some((j) => g.regions[j].ctrl === 'POL'))!;
+    expect(previewRaid(g, 'bomb', target.id, [base.id]).why).toBe(EVE_NO_RAID);
+    const before = saveGame(g);
+    expect(orderRaid(g, 'bomb', target.id, [base.id])).toBeNull();
+    expect(saveGame(g)).toBe(before);
+  });
+
+  it('the first month after the eve has its raids again', () => {
+    const g = eve();
+    endEve(g);
+    for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+    beginHuman(g);
+    expect(onEve(g)).toBe(false);
+    expect(raidMenu(g).every((k) => k.why !== EVE_NO_RAID)).toBe(true);
   });
 });

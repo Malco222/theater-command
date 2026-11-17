@@ -1671,27 +1671,39 @@ export function orderGroupJob(g: Game, id: number, key: string): boolean {
 /** The airfields one of the player's air groups could move to, nearest first. orderAirBase() moves it. */
 export const airGroupBases = (g: Game, id: number): BaseOption[] => groupBases(g, id, g.human);
 
+/**
+ * The eve of war has no shot fired, so the player's planner has no raid to offer on it: every kind but the scouts'
+ * photographs is refused with this sentence, in the menu, in the targets, in the plan and in the order itself.
+ * (Only a player has an eve, so no war the computer fights alone is touched.)
+ */
+export const EVE_NO_RAID = 'It is the eve of war: no raid flies until the first shot is fired.';
+const eveRaid = (g: Game, kind: RaidKind): boolean => onEve(g) && kind !== 'recon';
+const eveMenu = (g: Game, menu: RaidKindView[]): RaidKindView[] => (onEve(g) ? menu.map((k) => (k.key === 'recon' ? k : { ...k, targets: 0, why: EVE_NO_RAID })) : menu);
+
 /** The raid planner's menu: each kind of raid and how many targets are in reach this month. */
-export const raidMenu = (g: Game): RaidKindView[] => raidKinds(g, g.human);
+export const raidMenu = (g: Game): RaidKindView[] => eveMenu(g, raidKinds(g, g.human));
 
 /** The same menu with a bombing raid named once, by day or by night (the design director's ruling 117, point 6). */
-export const raidMenuOne = (g: Game): RaidKindView[] => raidKindsOne(g, g.human);
+export const raidMenuOne = (g: Game): RaidKindView[] => eveMenu(g, raidKindsOne(g, g.human));
 
 /** Every target for one kind of raid, nearest first. With `lead`, only those that one of the player's groups can fly against. */
-export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => raidTargets(g, kind, g.human, lead);
+export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => (eveRaid(g, kind) ? [] : raidTargets(g, kind, g.human, lead));
 
 /**
  * A raid weighed up before it is ordered: who could fly it, who is going, what will meet it, the chance of success,
  * the losses to expect and what meeting up is worth. Leave `ids` out for the staff's proposal.
  */
-export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => planRaid(g, kind, target, ids, g.human);
+export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => {
+  const p = planRaid(g, kind, target, ids, g.human);
+  return eveRaid(g, kind) ? { ...p, why: EVE_NO_RAID } : p;
+};
 
 /** A bombing raid by day and by night, side by side, for the raid card (ruling 107(d)). Null for any other kind of raid. */
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
 export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) ? launchRaid(g, kind, target, ids, g.human) : null;
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
 }
 
 /**
