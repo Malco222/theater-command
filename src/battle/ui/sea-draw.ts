@@ -95,6 +95,8 @@ export function takeEvents(s: SeaScene, sim: SeaSim, events: FieldEvent[], realN
 /** The smallest a ship is drawn, in pixels, by class, so that a whole fleet reads at the widest view (the art director: a sign before it is a size). */
 const MIN_LEN: Record<SeaClass, number> = { bb: 20, cv: 20, ca: 16, dd: 12 };
 const MIN_BEAM: Record<SeaClass, number> = { bb: 5.4, cv: 5.4, ca: 4.2, dd: 3.2 };
+/** The width of our ships' ink rim and of the paper line inside it, each, in pixels. */
+const RIM = 0.75;
 
 /** One hull, centred on the origin and pointing up the screen (north), with its class's marks. */
 function hull(x: CanvasRenderingContext2D, cls: SeaClass, L: number, B: number, fill: string, inner: string | null): void {
@@ -108,11 +110,16 @@ function hull(x: CanvasRenderingContext2D, cls: SeaClass, L: number, B: number, 
     x.lineTo(B * 0.32, L / 2); x.lineTo(-B * 0.32, L / 2); x.lineTo(-B / 2, L * 0.28);
     x.quadraticCurveTo(-B / 2, -L * 0.18, 0, -L / 2);
   }
-  x.fillStyle = fill; x.fill();
   // Every hull keeps a dark ink rim, so a pale navy never sinks into the pale sea; ours carry a pale line inside it
-  // (amber when wavering, red when breaking off), theirs the ink alone, so the sides read without colour.
+  // (amber when wavering, red when breaking off), theirs the ink alone, so the sides read without colour. Ours are
+  // drawn outside the hull, each line as thin as the other, and the fill laid over their inner halves, so the nation's
+  // colour keeps the hull's whole beam: at least half the width a destroyer shows (the art director, round 2).
   x.strokeStyle = INK;
-  if (inner) { x.lineWidth = 2.6; x.stroke(); x.lineWidth = 0.9; x.strokeStyle = inner; x.stroke(); } else { x.lineWidth = 1.3; x.stroke(); }
+  if (inner) {
+    x.lineWidth = 2 * (RIM + RIM); x.stroke();
+    x.lineWidth = 2 * RIM; x.strokeStyle = inner; x.stroke();
+    x.fillStyle = fill; x.fill();
+  } else { x.fillStyle = fill; x.fill(); x.lineWidth = 1.3; x.stroke(); }
   // The class's marks: a battleship's turrets fore and aft, a cruiser's, a carrier's island and deck line.
   x.fillStyle = 'rgba(241,233,212,.85)';
   const dot = (yy: number, r: number): void => { x.beginPath(); x.arc(0, yy, r, 0, Math.PI * 2); x.fill(); };
@@ -182,7 +189,7 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
     x.strokeStyle = 'rgba(138,107,59,.75)'; x.lineWidth = 1.2;
     x.beginPath(); x.arc(cx, cy, C.best * cam.z, 0, Math.PI * 2); x.stroke();
     x.setLineDash([5, 6]); x.beginPath(); x.arc(cx, cy, C.reach * cam.z, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
-    ringWord(x, 'BEST', cx, cy - C.best * cam.z);
+    ringWord(x, 'BEST RANGE', cx, cy - C.best * cam.z);
     ringWord(x, 'REACH', cx, cy - C.reach * cam.z);
   }
 
@@ -211,21 +218,30 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
     } else { x.beginPath(); x.arc(ex, ey, held ? 2.8 : 2.2, 0, Math.PI * 2); x.fill(); }
   }
 
-  // Oil where ships went down: a small ragged dark slick about a hull long, fading over a few battle minutes.
+  // Oil where ships went down: an irregular blot about a hull long, a few soft round shapes overlapping along the ship's
+  // last course, no point, each a little different, dark at low strength, fading over a few battle minutes (the art
+  // director, round 2: one pointed shape read as a fin, or another ship).
   for (const m of s.marks) {
     if (m.kind !== 'sunk') continue;
     const k = (sim.t - m.bt) / SLICK_FOR;
     const [a, b] = toScreen(s, m.x, m.y);
     const len = Math.max(14, 200 * cam.z);
-    x.fillStyle = `rgba(30,32,34,${0.32 * (1 - k)})`;
-    x.save(); x.translate(a, b); x.rotate((m.face ?? 0) + 0.3);
-    x.beginPath();
-    for (let i = 0; i < 9; i++) {
-      const an = (i / 9) * Math.PI * 2, wob = 0.75 + 0.25 * Math.sin(i * 2.7 + m.bt);
-      const px = Math.sin(an) * len * 0.22 * wob, py = -Math.cos(an) * len * 0.5 * wob;
-      if (i) x.lineTo(px, py); else x.moveTo(px, py);
+    const seed = m.x * 0.0137 + m.y * 0.0071 + m.bt * 0.37;
+    const rnd = (i: number): number => { const v = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453; return v - Math.floor(v); };
+    const n = 3 + Math.floor(rnd(0) * 3);
+    const alpha = 0.2 * (1 - k);
+    x.save(); x.translate(a, b); x.rotate(m.face ?? 0);
+    for (let i = 0; i < n; i++) {
+      const along = ((i + 0.5) / n - 0.5) * len * 0.6 + (rnd(i + 1) - 0.5) * len * 0.1;
+      const across = (rnd(i + 11) - 0.5) * len * 0.16;
+      const r = len * (0.24 + 0.12 * rnd(i + 21));
+      const g = x.createRadialGradient(across, along, 0, across, along, r);
+      g.addColorStop(0, `rgba(30,32,34,${alpha})`);
+      g.addColorStop(0.55, `rgba(30,32,34,${alpha * 0.75})`);
+      g.addColorStop(1, 'rgba(30,32,34,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(across, along, r, 0, Math.PI * 2); x.fill();
     }
-    x.closePath(); x.fill(); x.restore();
+    x.restore();
   }
 
   // Wakes first, under every hull.

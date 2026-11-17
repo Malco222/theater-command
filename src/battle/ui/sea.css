@@ -9,8 +9,16 @@
 /* ---- The top bar: one row at 1280 and up (the UI director, 7) ---- */
 .sea.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
 .sea .bbar { flex-wrap: nowrap; gap: 12px; }
-.sea .btitle { flex: 1 1 220px; min-width: 0; }
-.sea .btitle .tc-title-3 { line-height: 22px; } /* wraps rather than cut (the fold rule) */
+.sea .btitle { flex: 1 1 auto; min-width: 0; }
+.sea .btitle .tc-title-3 { line-height: 24px; } /* wraps rather than cut (the fold rule) */
+/* Under 1440 the title takes the type scale's next size down (the prose size, bold) so it holds one line, and keeps
+   its line height, so the bar is one height at every width (the UI director, round 2). */
+@media (max-width: 1439px) { .sea .btitle .tc-title-3 { font-size: 15px; } }
+/* The same: under 1440 the clock's buttons drop their key letters, so the date and the fleets hold one line beside the
+   title. Space, the key the opening dispatch asks for, joins the keys band below the sea; 1, 2 and 3 stay in the
+   buttons' tooltips (the band holds one line at 1280 with one more key, not two). */
+@media (max-width: 1439px) { .sea .bspeed .tc-key { display: none; } }
+@media (min-width: 1440px) { .sea .keys .fact:has(.knarrow) { display: none; } }
 .sea .bclock { flex: none; }
 .sea .bspeed { flex: none; }
 .sea .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
@@ -18,10 +26,11 @@
 .sea .bacts { flex: none; }
 @media (max-width: 1279px) { .sea .bbar { flex-wrap: wrap; } }
 
-/* ---- The tray: chips narrow to fit up to twelve at 1280; past that the row fades at its edge with "2 more ▸" ---- */
+/* ---- The tray: chips narrow to fit up to twelve at 1280; past that the row shows whole chips only, and a small card
+   at its end says "9 more ▸" and turns the page (the UI director, round 2). sea-page.ts trayMore counts with these
+   widths: a chip at least 99 pixels, the more card 92, the gap 6. ---- */
 .sea .traywrap { position: relative; min-width: 0; }
-.sea .tray { scrollbar-width: none; scroll-behavior: smooth; gap: 6px; }
-.sea .tray::-webkit-scrollbar { display: none; }
+.sea .tray { overflow: hidden; gap: 6px; }
 .sea .ucard { flex: 1 0 0; min-width: 99px; max-width: 196px; width: auto; padding: 7px 8px; gap: 3px; }
 .sea .ucard .uwhat { display: grid; min-width: 0; }
 .sea .ucard .uwhat b { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -40,8 +49,7 @@
 /* "3 of 4 destroyers" keeps its words: the name may take two lines, and every chip in the row keeps room for two. */
 @container (max-width: 115px) { .sea .ucard .uwhat b { white-space: normal; min-height: 32px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
 @container (max-width: 103px) { .sea .ucard .uwhat small .bsign { display: none; } }
-.sea .tmore { position: absolute; top: 1px; bottom: 0; right: 0; display: flex; align-items: center; padding: 0 12px 0 48px; border: 0; font: 700 12px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--brass-300); background: linear-gradient(90deg, rgba(23, 18, 13, 0), var(--desk-900) 45%); }
-.sea .tmore.is-left { right: auto; left: 0; padding: 0 48px 0 12px; background: linear-gradient(270deg, rgba(23, 18, 13, 0), var(--desk-900) 45%); }
+.sea .tmore { flex: none; width: 92px; display: grid; place-items: center; padding: 6px 4px; font: 700 12px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; text-align: center; white-space: nowrap; color: var(--brass-300); }
 .sea .tmore[hidden] { display: none; }
 .sea .tmore:hover { color: var(--brass-100); }
 

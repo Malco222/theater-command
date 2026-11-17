@@ -58,13 +58,17 @@ interface State {
   asking: boolean;
   last: number;
   trayAt: number;
+  /** The tray's page: the first chip it shows, how many it shows, and the choice it last turned to. */
+  trayFrom: number;
+  trayShown: number;
+  traySel: string;
 }
 
 const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, last: 0, trayAt: 0,
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -194,8 +198,8 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sea">Whole sea</button></div>
       <div class="seaspeed tc-paper" id="seaspeed" hidden><span class="tc-label">Speed</span><span class="tc-seg">${(['slow', 'cruise', 'flank'] as SeaSpeed[]).map((k) => `<button data-way="${k}">${SPEED_WORD[k]}</button>`).join('')}</span></div>
     </div>
-    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click: steer there, or engage an enemy', 'Right drag: form a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> break off', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down'])}</div>
-    <footer class="traywrap"><div class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, sc.colours![sc.me])).join('')}</div><button class="tmore is-left" id="tmoreL" hidden></button><button class="tmore" id="tmoreR" hidden></button></footer>
+    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click: steer there, or engage an enemy', 'Right drag: form a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> break off', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>'])}</div>
+    <footer class="traywrap"><div class="tray" id="tray"><button class="tc-card is-press tmore" id="tmoreL" hidden></button>${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, sc.colours![sc.me])).join('')}<button class="tc-card is-press tmore" id="tmoreR" hidden></button></div></footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
   el('balA').style.background = sc.colours.att; el('balD').style.background = sc.colours.def;
@@ -261,19 +265,40 @@ function updateTray(force = false): void {
   trayMore();
 }
 
-/** Where the tray holds more ships than it shows, its edge fades and says how many: "2 more ▸" (the UI director, 8). */
+/** The tray shows whole chips only (the UI director, round 2). Where it holds more ships than fit, a small card at its
+ *  end says how many more and turns the page, and one at its start turns it back. The widths are sea.css's. */
+const CHIP_MIN = 99, MORE_W = 92, CHIP_GAP = 6;
 function trayMore(): void {
   const tray = document.getElementById('tray'), L = document.getElementById('tmoreL'), R = document.getElementById('tmoreR');
   if (!tray || !L || !R) return;
-  const box = tray.getBoundingClientRect();
-  let left = 0, right = 0;
-  for (const c of tray.querySelectorAll<HTMLElement>('[data-unit]')) {
-    const r = c.getBoundingClientRect();
-    if (r.left < box.left - 1) left++;
-    else if (r.right > box.right + 1) right++;
+  const chips = [...tray.querySelectorAll<HTMLElement>('[data-unit]')], n = chips.length;
+  const cs = getComputedStyle(tray);
+  const room = tray.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const fits = (k: number, l: boolean, r: boolean): boolean => k * CHIP_MIN + (k - 1) * CHIP_GAP + (Number(l) + Number(r)) * (MORE_W + CHIP_GAP) <= room + 0.5;
+  const shown = (from: number): number => { let k = n - from; while (k > 1 && !fits(k, from > 0, from + k < n)) k--; return k; };
+  let from = 0, k = n;
+  if (!fits(n, false, false)) {
+    // The last page starts where it is full.
+    let lastFrom = 1;
+    while (lastFrom < n - 1 && !fits(n - lastFrom, true, false)) lastFrom++;
+    from = Math.max(0, Math.min(S.trayFrom, lastFrom));
+    // A ship newly picked up on the sea, or by Tab, brings its page into view.
+    const sel = [...S.scene.sel].join(',');
+    if (sel !== S.traySel) {
+      S.traySel = sel;
+      const at = chips.findIndex((c) => S.scene.sel.has(Number(c.dataset.unit)));
+      if (at >= 0 && (at < from || at >= from + shown(from))) {
+        from = Math.min(at, lastFrom);
+        while (from > 0 && from + shown(from) > at + 1 && from - 1 + shown(from - 1) > at) from--;
+        from = Math.min(from, lastFrom);
+      }
+    }
+    k = shown(from);
   }
-  L.hidden = left === 0; R.hidden = right === 0;
-  const lt = `◂ ${left} more`, rt = `${right} more ▸`;
+  S.trayFrom = from; S.trayShown = k;
+  chips.forEach((c, i) => { const d = i < from || i >= from + k ? 'none' : ''; if (c.style.display !== d) c.style.display = d; });
+  L.hidden = from === 0; R.hidden = from + k >= n;
+  const lt = `◂ ${from} more`, rt = `${n - from - k} more ▸`;
   if (L.textContent !== lt) L.textContent = lt;
   if (R.textContent !== rt) R.textContent = rt;
 }
@@ -437,9 +462,9 @@ function wireBattle(): void {
   app.querySelector('[data-act="wstay"]')!.addEventListener('click', () => { S.asking = false; updateTop(); });
   app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; give({ do: 'withdrawAll', side: sc.me }); });
   const tray = document.getElementById('tray')!;
-  tray.addEventListener('scroll', trayMore, { passive: true });
-  document.getElementById('tmoreR')!.addEventListener('click', () => { tray.scrollLeft += tray.clientWidth * 0.8; });
-  document.getElementById('tmoreL')!.addEventListener('click', () => { tray.scrollLeft -= tray.clientWidth * 0.8; });
+  S.trayFrom = 0; S.traySel = '';
+  document.getElementById('tmoreR')!.addEventListener('click', () => { S.trayFrom += S.trayShown; trayMore(); });
+  document.getElementById('tmoreL')!.addEventListener('click', () => { S.trayFrom = Math.max(0, S.trayFrom - S.trayShown); trayMore(); });
   tray.addEventListener('click', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-unit]');
     if (!el) return;
@@ -538,16 +563,19 @@ function frame(): void {
   if (v.over && S.screen === 'battle') showAfter();
 }
 
-/** About how many minutes of battle time before the nearest guns of either side reach the other, at cruising speed. */
+/** About how many minutes on the battle clock before the nearest guns of either side reach the other: the gap closed
+ *  at the speed each ship then has set, held ships closing at none (the design director: it never disagrees with the
+ *  clock on screen). */
 function minutesToRange(sim: SeaSim): number {
   let best = Infinity;
   const us = sim.units.filter(live);
+  const way = (u: SeaUnit): number => (sim.orderOf(u.id)?.kind === 'hold' ? 0 : SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds[u.extra.speed as SeaSpeed]);
   for (const a of us) for (const b of us) {
     if (a.side !== S.scene.me || b.side === a.side) continue;
     const A = SEA.classes[a.extra.cls as SeaClass], B = SEA.classes[b.extra.cls as SeaClass];
     const reach = Math.max(a.extra.cls === 'cv' ? 0 : A.reach, b.extra.cls === 'cv' ? 0 : B.reach);
-    const close = (A.speed + B.speed) * SEA.speeds.cruise;
-    best = Math.min(best, (Math.hypot(a.x - b.x, a.y - b.y) - reach) / close);
+    const close = way(a) + way(b);
+    if (close > 0) best = Math.min(best, (Math.hypot(a.x - b.x, a.y - b.y) - reach) / close);
   }
   return Number.isFinite(best) ? Math.round(best / 60) : 0;
 }
@@ -595,9 +623,11 @@ function showAfter(): void {
   const lost = (side: Side): string => andList(shipBits(bySide(side, 'sunk'))) || 'none';
   const staffLine = r.lines.find((l) => l.startsWith('The staff settled'));
   const noneSunk = count(bySide(me, 'sunk')) + count(bySide(them, 'sunk')) === 0;
+  // Fought to the end, the campaign's headline is the one bill of losses (the UI director, round 2): the line says them
+  // only where there is no headline, as in practice. Handed to the staff, it says what went down before, which differs.
   const lossLine = x.toDice
     ? noneSunk ? 'Before you handed it to the staff, no ship had gone down on either side.' : `Before you handed it to the staff, you had lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`
-    : noneSunk ? 'No ship went down on either side.' : `You lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`;
+    : headline ? '' : noneSunk ? 'No ship went down on either side.' : `You lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`;
   const hm = count(bySide(me, 'burnt')), ht = count(bySide(them, 'burnt'));
   const theirShips = (n: number): string => `${n} ${t[them].adj} ${n === 1 ? 'ship' : 'ships'}`;
   const repairLine = hm && ht ? `${hm} of your ships came home for repair, and ${theirShips(ht)}.`
