@@ -17,7 +17,7 @@ import * as danger from '../../src/campaign/danger';
 import { armyCard } from '../../src/campaign/armies';
 import { addCorps, capture, createGame, moveCorps, relocate, removeCorps } from '../../src/campaign/game';
 import { setFog } from '../../src/campaign/intel';
-import { loadGame } from '../../src/campaign/save';
+import { loadGame, saveGame } from '../../src/campaign/save';
 import { besieged, whyNotStorm } from '../../src/campaign/siege';
 import { startOpen } from '../../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../../src/campaign/turn';
@@ -57,7 +57,9 @@ const canadians = (g: Game, where: string, name = 'Test Canadian infantry') => {
 function reachLine(g: Game, a: HomeAlarm): string {
   const cap = g.nations.USA.capital;
   const names = a.reach.map((id) => (id === cap ? `${g.regions[id].name}, your capital` : g.regions[id].name));
-  return `Next month it can reach ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`}.`;
+  // (Two corps are "they": "2 Canadian corps stand at Buffalo, on your home ground. Next month they can reach ...".)
+  const they = /^\d+ /.test(a.lines[0]);
+  return `Next month ${they ? 'they' : 'it'} can reach ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`}.`;
 }
 
 describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, December 1940", () => {
@@ -67,14 +69,17 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
     const all = alarms(g);
     expect(all.length).toBe(1);
     const a = all[0];
-    expect(a.case).toBe('stands');
+    expect(a.case).toBe('taken');
     expect(a.region).toBe(at(g, 'Buffalo').id);
     expect(a.by).toBe('CAN');
-    // Buffalo was stormed as November opened (turn 15, week 1), before he last ended a month: December reads
-    // "stands at" (the design director, 17:22Z: "has taken" only for a town that fell since he last ended a month).
+    // Buffalo fell in Canada's own phase of November (turn 15), after he had ended his November month: Canada moves
+    // after the United States in the order of play, and the save's November news runs his month (his corps closing
+    // round Vancouver) before Buffalo's storm. December is the first month he sees it, so it reads "has taken"
+    // (the design director, 18:14Z, log b340: counted by the order of play, not by the calendar month).
     expect(at(g, 'Buffalo').since).toBe(15);
     expect(g.turn).toBe(16);
-    expect(said(a)[0]).toBe('A Canadian corps of guns stands at Buffalo, on your home ground.');
+    expect(g.order.indexOf('CAN')).toBeGreaterThan(g.order.indexOf('USA'));
+    expect(said(a)[0]).toBe('A Canadian corps of guns has taken Buffalo.');
   });
 
   it('nearest help: the army round Vancouver, by rail, in the game\'s own count of months', () => {
@@ -83,18 +88,21 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
     const a = alarms(g)[0];
     expect(a.help).not.toBeNull();
     expect(a.help!.region).toBe(at(g, 'Vancouver').id);
-    expect(a.help!.rail).toBe(true);
+    // The game's own count (the rules builder, 84.2.6): no train leaves Vancouver this month, for its line is Canada's
+    // and his army stands on enemy ground there (railReachFor is empty), so the help marches, and the march to
+    // Pittsburgh rides the railways' costs: "2 months by road", which is what a right-click on Pittsburgh orders.
+    expect(a.help!.rail).toBe(false);
     // The time to reach the province where the enemy stands (the design director, 17:22Z). Model 1 says "1 month";
     // planMarch to Pittsburgh next door counts 2 with this month. The row must say the reading's own figure.
     expect([1, 2]).toContain(a.help!.months);
     const last = said(a)[said(a).length - 1];
-    expect(last).toBe(`Nearest help: the army round Vancouver, ${a.help!.months} ${a.help!.months === 1 ? 'month' : 'months'} by rail.`);
+    expect(last).toBe(`Nearest help: the army round Vancouver, ${a.help!.months} ${a.help!.months === 1 ? 'month' : 'months'} by ${a.help!.rail ? 'rail' : 'road'}.`);
   });
 
   it('guns alone reach none of his ground next month (84.2.5, 211(a)), so the row leaves its second sentence out', () => {
-    // Confirmed by the design director at 17:22Z: "A Canadian corps of guns stands at Buffalo, on your home ground.
-    // Nearest help: the army round Vancouver, 1 month by rail." The row is still red. Model 1's "Next month it can
-    // reach Pittsburgh" was written from the trace, before guns were held back.
+    // Confirmed by the design director at 17:22Z: the row is still red, with two sentences, the enemy and the help
+    // (its first sentence "has taken Buffalo" in December, 18:14Z). Model 1's "Next month it can reach Pittsburgh"
+    // was written from the trace, before guns were held back.
     const g = brian();
     setFog(g, false);
     const a = alarms(g)[0];
@@ -112,12 +120,22 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
     expect(card.known).not.toBe('full');
     expect(card.unidentified).toBe(card.corpsCount);
     const first = said(alarms(g)[0])[0];
-    expect(first).toMatch(/^A Canadian .+ stands at Buffalo, on your home ground\.$/);
+    expect(first).toMatch(/^A Canadian .+ ha(s|ve) taken Buffalo\.$/);
     expect(first).not.toMatch(/guns|artillery|infantry|tanks|armour|engineers/);
     // Lifted, the fog hides nothing, and the hover box and the row both name the guns.
     setFog(g, false);
     expect(armyCard(g, at(g, 'Buffalo').id, 'CAN', 'USA')!.known).toBe('full');
-    expect(said(alarms(g)[0])[0]).toBe('A Canadian corps of guns stands at Buffalo, on your home ground.');
+    expect(said(alarms(g)[0])[0]).toBe('A Canadian corps of guns has taken Buffalo.');
+  });
+
+  it('from January on, Buffalo "stands at": he has seen it fall', () => {
+    const g = brian();
+    setFog(g, false);
+    g.turn += 1;
+    const a = alarms(g).find((x) => x.region === at(g, 'Buffalo').id)!;
+    expect(a).toBeDefined();
+    expect(a.case).toBe('stands');
+    expect(said(a)[0]).toBe('A Canadian corps of guns stands at Buffalo, on your home ground.');
   });
 
   it('only his home ground raises the alarm: the Mexican armies on Mexican ground he holds raise none', () => {
@@ -133,6 +151,8 @@ describe.skipIf(waiting)('84.2.6 the alarm (ruling 211(c)): what the enemy can r
   it('a fighting corps on his home ground names the towns it can reach next month, his own towns only, the capital first', () => {
     const g = brian();
     setFog(g, false);
+    // January, when Buffalo "stands" (it "has taken" Buffalo in December, the month he first sees it fallen).
+    g.turn += 1;
     canadians(g, 'Buffalo');
     const a = alarms(g).find((x) => x.region === at(g, 'Buffalo').id)!;
     expect(a).toBeDefined();
@@ -141,7 +161,8 @@ describe.skipIf(waiting)('84.2.6 the alarm (ruling 211(c)): what the enemy can r
     for (const id of a.reach) expect(g.regions[id].owner).toBe('USA');
     const cap = g.nations.USA.capital;
     if (a.reach.includes(cap)) expect(a.reach[0]).toBe(cap);
-    expect(said(a)[0]).toMatch(/Canadian .+ stands at Buffalo, on your home ground\.$/);
+    // Two corps, the guns and the infantry: "2 Canadian corps stand at Buffalo" (words, section 1: {Who} by its count).
+    expect(said(a)[0]).toMatch(/Canadian .+ stands? at Buffalo, on your home ground\.$/);
     expect(said(a)[1]).toContain('Pittsburgh');
     if (a.reach.length <= 2) expect(said(a)[1]).toBe(reachLine(g, a));
   });
@@ -194,6 +215,56 @@ describe.skipIf(waiting)('84.2.6 the alarm (ruling 211(c)): what the enemy can r
     expect(a).toBeDefined();
     expect(a.case).toBe('taken');
     expect(said(a)[0]).toMatch(/Canadian .+ has taken Cleveland\.$/);
+  });
+
+  // "Has taken": a town that fell since he last ended his month, counted by the order of play, not by the calendar
+  // month (the design director, 18:14Z, log b340). Each case sets the phase in which the town falls, then turns to
+  // his own phase of the month in question.
+  const fallsIn = (g: Game, town: string, phaseOf: string): Region => {
+    const T = at(g, town);
+    for (const u of [...T.units]) relocate(g, u, at(g, 'Washington'));
+    const mine = g.phase;
+    g.phase = g.order.indexOf(phaseOf);
+    capture(g, T, 'CAN');
+    g.phase = mine;
+    canadians(g, town);
+    return T;
+  };
+  const caseAt = (g: Game, T: Region): HomeAlarm['case'] | undefined => alarms(g).find((x) => x.region === T.id)?.case;
+
+  it('a town a country that moves after him takes reads "has taken" in his next month, then "stands at"', () => {
+    const g = brian();
+    setFog(g, false);
+    expect(g.order.indexOf('CAN')).toBeGreaterThan(g.order.indexOf('USA'));
+    // Canada's phase of December, after he has ended his month.
+    const C = fallsIn(g, 'Cleveland', 'CAN');
+    g.turn += 1;
+    expect(caseAt(g, C)).toBe('taken');
+    expect(said(alarms(g).find((x) => x.region === C.id)!)[0]).toMatch(/^A Canadian .+ ha(s|ve) taken Cleveland\.$/);
+    g.turn += 1;
+    expect(caseAt(g, C)).toBe('stands');
+    expect(said(alarms(g).find((x) => x.region === C.id)!)[0]).toMatch(/^A Canadian .+ stands? at Cleveland, on your home ground\.$/);
+  });
+
+  it('the reading survives his save: saved and loaded in his next month, the town still reads "has taken"', () => {
+    const g = brian();
+    setFog(g, false);
+    const C = fallsIn(g, 'Cleveland', 'CAN');
+    g.turn += 1;
+    const back = loadGame(saveGame(g))!;
+    expect(back).not.toBeNull();
+    setFog(back, false);
+    expect(caseAt(back, at(back, 'Cleveland'))).toBe('taken');
+    expect(at(back, 'Cleveland').since).toBe(C.since);
+  });
+
+  it('a town that falls in his own phase (as his month opens, to hunger) he has seen: the next month it stands', () => {
+    const g = brian();
+    setFog(g, false);
+    const C = fallsIn(g, 'Cleveland', 'USA');
+    expect(caseAt(g, C)).toBe('taken');
+    g.turn += 1;
+    expect(caseAt(g, C)).toBe('stands');
   });
 
   it('several at once: the one nearest his capital comes first', () => {
