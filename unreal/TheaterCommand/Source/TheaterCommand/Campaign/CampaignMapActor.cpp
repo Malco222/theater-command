@@ -13158,17 +13158,32 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 	bool bArmyHere = false;
 	for (const AArmyPiece* Piece : Pieces)
 	{
-		if (Piece && Piece->IsArmy() && Piece->GetRegionId() == RegionId)
+		if (!Piece || !Piece->IsArmy())
 		{
-			// (The art director's review of the piece: his seat, and a caught mark's, is at least 30 pixels from the foot
-			// of any flag's pole. The pole stands 5.6 units from the middle of its base, on whichever side the eye puts it.)
-			Keep.Emplace(WorldToMap(Piece->GetRestLocation()), 10.5);
-			bArmyHere = true;
+			continue;
+		}
+		// (The art director's review of the piece: his seat, and a caught mark's, is at least 30 pixels from the foot
+		// of any flag's pole. The pole stands 5.6 units from the middle of its base, on whichever side the eye puts it.
+		// A neighbouring province's army counts too: it may stand just over the border.)
+		const FVector2D Stands = WorldToMap(Piece->GetRestLocation());
+		if (Piece->GetRegionId() == RegionId || (Stands.X > Region.Bounds.Min.X - 24.0 && Stands.X < Region.Bounds.Max.X + 24.0 && Stands.Y > Region.Bounds.Min.Y - 24.0 && Stands.Y < Region.Bounds.Max.Y + 24.0))
+		{
+			Keep.Emplace(Stands, 10.5);
+			bArmyHere |= Piece->GetRegionId() == RegionId;
 		}
 	}
 	if (!bArmyHere)
 	{
 		Keep.Emplace(WorldToMap(ArmySpot(RegionId, 0)), 10.5); // (where an army would stand, if one comes)
+	}
+	// (Nor behind a flag: from where he plays, a standard's pole, its tag and its cloth hang over the ground north of
+	// its base, and a seat there is hidden by them. The ground from four units to twenty north of each base is kept
+	// clear, a little to the west of it for the pole and to the east for the cloth.)
+	for (int32 Army = Keep.Num() - 1; Army >= 0; --Army)
+	{
+		const FVector2D Base = Keep[Army].Key;
+		Keep.Emplace(Base + FVector2D(-2.5, -8.0), 4.5);
+		Keep.Emplace(Base + FVector2D(-0.5, -14.0), 7.0);
 	}
 	const int32 ArmiesKept = Keep.Num();
 	if (const FVector2D* Field = AirfieldSpots.Find(RegionId))
@@ -13223,28 +13238,41 @@ FVector2D ACampaignMapActor::AgentSpot(int32 RegionId, int32 Slot, int32 Count) 
 			BestSpot = Spot;
 		}
 	}
-	if (BestScore < -1.0e8)
+	if (BestScore < 500.0)
 	{
-		// A city that fills its province: the open ground farthest from everything he must stand clear of.
-		for (double Y = Region.Bounds.Min.Y; Y <= Region.Bounds.Max.Y; Y += 1.5)
+		// Nowhere beside the town is clear: a city that fills its province, or one crowded with armies. Every point of
+		// its ground is weighed, and the one that trespasses least is taken. On an army's base counts most; then the
+		// airfield; then behind a flag; and among a city's outer houses hardly at all, though not in its middle.
+		// (A base at the foot of an army's pole was taken for the flag's own, and a figure on a base for its soldier.)
+		const int32 BasesKept = ArmiesKept / 3; // (each base brought two more places with it: behind its pole, and behind its cloth)
+		double Least = 1.0e18;
+		for (double Y = Region.Bounds.Min.Y; Y <= Region.Bounds.Max.Y; Y += 1.25)
 		{
-			for (double X = Region.Bounds.Min.X; X <= Region.Bounds.Max.X; X += 1.5)
+			for (double X = Region.Bounds.Min.X; X <= Region.Bounds.Max.X; X += 1.25)
 			{
-				if (Data.FindRegionAt(X, Y) != RegionId || GroundAt(X, Y) <= 0.0f)
+				bool bStands = true; // (his whole base on this province's dry ground)
+				for (const FVector2D& Rim : { FVector2D(0.0, 0.0), FVector2D(2.2, 0.0), FVector2D(-2.2, 0.0), FVector2D(0.0, 2.2), FVector2D(0.0, -2.2) })
+				{
+					bStands &= Data.FindRegionAt(X + Rim.X, Y + Rim.Y) == RegionId && GroundAt(X + Rim.X, Y + Rim.Y) > 0.0f;
+				}
+				if (!bStands)
 				{
 					continue;
 				}
-				// (Among a city's outer houses sooner than under a flag: a base at the foot of an army's pole was taken
-				// for the flag's own. The roofs count for half, and an army's base for three units more than it is wide.)
-				double Room = 0.5 * (FVector2D::Distance(FVector2D(X, Y), Region.Center) - Town);
+				const FVector2D Here(X, Y);
+				double Cost = FMath::Max(0.0, 0.75 * Town - FVector2D::Distance(Here, Region.Center)) + 0.01 * FVector2D::Distance(Here, Region.Centroid);
 				for (int32 Kept = 0; Kept < Keep.Num(); ++Kept)
 				{
-					Room = FMath::Min(Room, FVector2D::Distance(FVector2D(X, Y), Keep[Kept].Key) - Keep[Kept].Value - (Kept < ArmiesKept ? 3.0 : 0.0));
+					const double Short = Keep[Kept].Value - FVector2D::Distance(Here, Keep[Kept].Key);
+					if (Short > 0.0)
+					{
+						Cost += Short * (Kept < BasesKept ? 4.0 : Kept < ArmiesKept ? 1.5 : 2.0);
+					}
 				}
-				if (Room > BestScore)
+				if (Cost < Least)
 				{
-					BestScore = Room;
-					BestSpot = FVector2D(X, Y) + FVector2D(3.5 * (Slot - 0.5 * (Count - 1)), 0.0);
+					Least = Cost;
+					BestSpot = Here + FVector2D(3.5 * (Slot - 0.5 * (Count - 1)), 0.0);
 				}
 			}
 		}
@@ -13258,12 +13286,13 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	{
 		return;
 	}
+	// (his place depends on the armies that stand on his ground and round it: their number there, and all told)
 	auto ArmiesIn = [this](int32 RegionId)
 	{
 		int32 Standing = 0;
 		for (const AArmyPiece* Piece : Pieces)
 		{
-			Standing += Piece && Piece->GetRegionId() == RegionId ? 1 : 0;
+			Standing += Piece && Piece->GetRegionId() == RegionId ? 1000 : Piece ? 1 : 0;
 		}
 		return Standing;
 	};
