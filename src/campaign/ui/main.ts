@@ -9607,7 +9607,9 @@ function wireMap(): void {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
     if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id)) { if (pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } else noOrderSaid(id, e.clientX, e.clientY); } }
+    // While SHIP BY SEA or INVADE BY SEA is choosing a place, a right-click is the same choice as a click (noOrderSaid
+    // hands it to onRegion): it is never "out of reach" for the march (the code checker's find, 2026-11-17).
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id)) { if (pickedCorps().length && id !== ui.sel && !ui.ship && !ui.land) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } else noOrderSaid(id, e.clientX, e.clientY); } }
     // A right-click on the sea, or one that ordered nothing, still answers (ruling 204(d)).
     else if (humanUp(g)) noOrderSaid(id, e.clientX, e.clientY);
   });
