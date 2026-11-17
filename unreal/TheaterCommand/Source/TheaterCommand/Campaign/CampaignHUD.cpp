@@ -6488,7 +6488,7 @@ namespace
 										+ SVerticalBox::Slot().AutoHeight()
 										[
 											SNew(STextBlock).Text(FText::FromString(Name.Replace(TEXT(" corps"), TEXT("")))).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Option.bEnabled ? Cream : Muted)
-											.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+											.AutoWrapText(true) // (no order is cut mid-word: a long name takes a second line)
 										]
 										+ SVerticalBox::Slot().AutoHeight()
 										[
@@ -6533,13 +6533,16 @@ namespace
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
+										// (Ruling of 17:16 UTC, 17 November: no order row is cut mid-word. The name and the reason
+										// wrap, and the row grows to hold them: "It goes into the town as its garrison: it fig..." was cut.)
 										SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Option.bEnabled ? Cream : Faint)
-										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										.AutoWrapText(true)
 									]
-									+ SVerticalBox::Slot().AutoHeight()
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Option.bEnabled ? Muted : Faint)
-										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										// (its facts are parted by dots, "2 divisions · costs 1,200 · ready in 3 months": check 19,
+										// a fold falls at a dot and the dot goes)
+										SNew(SPhraseText).Face(Font(TEXT("Regular"), 9)).Ink(Option.bEnabled ? Muted : Faint).Guess(340.0f)
 										.Text(FText::FromString(Option.bEnabled || Option.Why.IsEmpty() ? Option.Detail : Option.Why))
 									]
 								]
@@ -7370,7 +7373,8 @@ namespace
 					]
 					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted)
+						// (no order row is cut mid-word, and a fold falls at a dot and the dot goes: check 19)
+						SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(360.0f)
 						.Text_Lambda([Way]()
 						{
 							const FApproachRow* Row = Way();
@@ -8175,7 +8179,8 @@ namespace
 					TSharedRef<SHorizontalBox> Under = SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis).ToolTipText(FText::FromString(Card.Foot))
+							// (no line is cut mid-word: where it must be cut, it is cut after a whole word)
+							SNew(SWordLine).Words(Card.Foot).Face(Font(TEXT("Regular"), 11)).Ink(Muted).ToolTipText(FText::FromString(Card.Foot))
 						];
 					if (bMore)
 					{
@@ -8518,11 +8523,11 @@ namespace
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(Seat.Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(bCan ? Cream : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Seat.Name).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint) // (cut after a whole word where it must be)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Where).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint)
 					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
@@ -8659,7 +8664,7 @@ namespace
 				}
 				Whose->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWordLine).Words(Under).Face(Font(TEXT("Regular"), 11)).Ink(Cream) // (cut after a whole word where it must be)
 				];
 				Print->AddSlot().VAlign(VAlign_Bottom)
 				[
@@ -8811,7 +8816,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(9.0f, 0.0f, 0.0f, 5.0f)
 							[
-								SNew(STextBlock).Text(FText::FromString(Way.Verdict)).Font(Serif(TEXT("Bold"), 11)).ColorAndOpacity(Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+								SNew(SWordLine).Words(Way.Verdict).Face(Serif(TEXT("Bold"), 11)).Ink(Cream) // (cut after a whole word where it must be)
 							]
 						];
 						Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[RaidMeter(Way.Success, BrightBrass, 4.0f)];
@@ -8871,7 +8876,7 @@ namespace
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 2.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(Way.Hits[K].Value)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bDim ? Faint : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										SNew(SWordLine).Words(Way.Hits[K].Value).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted) // (cut after a whole word where it must be)
 									]
 								];
 							}
@@ -10681,7 +10686,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).AutoWrapText(true) // (no order is cut mid-word)
 									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
@@ -10756,7 +10761,7 @@ namespace
 								SNew(SHorizontalBox)
 								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 								[
-									SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bFree ? Muted : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bFree ? Muted : Cream).AutoWrapText(true) // (no name is cut mid-word)
 									.Text(FText::FromString(bFree ? FString(TEXT("Free plot")) : Plot.Level > 0 ? Plot.Label : Plot.Name))
 								]
 								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Pips]
