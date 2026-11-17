@@ -52,6 +52,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly lostShips: Record<Side, SeaShips> = { att: none(), def: none() };
   private readonly weight0: Record<Side, number> = { att: 0, def: 0 };
   private readonly breakAt: Record<Side, number>;
+  /** The side that handed the action to the staff, if one did. */
+  private handedBy: Side | null = null;
   /** The luck of the day, the rules' own run of the dice (0.8 to 1.2): the attacker fights at it and the defender at its inverse. */
   readonly luck: number;
   private broken: Side | null = null;
@@ -135,6 +137,26 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return this.weight0[side] > 0 ? 1 - left / this.weight0[side] : 0;
   }
 
+  /** How near a side is to breaking off, from 0 to 1: what it has lost against what it breaks at (ruling 226, 3: no
+   *  hidden thresholds, so the screens show this as it is). */
+  nearBreak(side: Side): number {
+    if (this.broken === side) return 1;
+    return Math.max(0, Math.min(1, this.lostShare(side) / this.breakAt[side]));
+  }
+
+  /** Whether any shot has told yet on either side. */
+  fired(): boolean { return this.lostShare('att') + this.lostShare('def') > 0; }
+
+  /** The staff's chance for the attacker were the rest handed to them now: the dice's run at the ratio then standing,
+   *  as the staff reckon it (the day's own luck, which settles it, is not theirs to know). */
+  handChance(): number {
+    const k = this.ticket.reckoning, [d0, d1] = k.dice;
+    if (k.odds * d1 < 1) return 0;
+    if (k.odds * d0 >= 1) return 1;
+    const now = (k.odds * Math.max(1e-6, 1 - this.lostShare('att'))) / Math.max(1e-6, 1 - this.lostShare('def'));
+    return clamp((d1 - 1 / now) / (d1 - d0), 0, 1);
+  }
+
   // ---- Orders ------------------------------------------------------------------------------------------------
 
   command(c: Command | SeaCommand, by: Side): boolean {
@@ -203,6 +225,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
         // The roll is the day's own luck, the rules' dice already thrown: pressed before a shot is fired, it books exactly
         // what the campaign would have rolled, so handing it over is never worse than not fighting at all.
         if (this.over) return false;
+        this.handedBy = by;
         const k = this.ticket.reckoning;
         const R = diceNow(k.odds, k.dice, { att: 1 - this.lostShare('att'), def: 1 - this.lostShare('def') }, (this.luck - k.dice[0]) / (k.dice[1] - k.dice[0]));
         this.finish(R >= 1 ? 'att' : 'def', 'time', true, R);
@@ -253,7 +276,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const o = this.orders.get(u.id);
       if (o?.kind === 'attack') {
         const foe = this.byId.get(o.target);
-        if (!foe || !live(foe)) this.orders.delete(u.id);
+        // An order to attack lapses when its target is gone or has broken off: the ship goes back to fighting at will
+        // rather than chasing a beaten enemy across the sea.
+        if (!foe || !live(foe) || foe.state === 'routing') this.orders.delete(u.id);
       }
       // A carrier with no strike ordered sends one whenever its aircraft are ready, at the heaviest enemy within the field.
       if (u.extra.cls === 'cv' && steady(u)) {
@@ -332,7 +357,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     } else if (o.kind === 'hold') {
       speed = 0;
     } else {
-      const foe = o.kind === 'attack' ? this.byId.get(o.target) ?? null : this.steerFoe(u);
+      // An order to attack sets what the guns fire on whenever it is in reach. The ship keeps with the fight as its
+      // captain would, engaging the enemy nearest it, and steers for the target only when that lies well beyond the
+      // fight: sending every ship at one point drew the line into a knot the enemy fought around (ruling 226, 4).
+      const tgt = o.kind === 'attack' ? this.byId.get(o.target) ?? null : null;
+      const near = this.steerFoe(u);
+      const foe = tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
       if (foe) want = this.engage(u, foe);
       // A beaten enemy is run down at full speed while there is time.
       if (this.broken && this.broken !== u.side && this.ai[u.side]) speed = C.speed * SEA.speeds.flank;
@@ -464,7 +494,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const foe = this.byId.get(s.target);
       const at = foe && live(foe) ? foe : this.heaviest(other(s.side));
       if (!at) continue;
-      this.splash(at, s.weight, s.side);
+      this.splash(at, s.weight, s.side, true);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
       this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from the ${s.from} find ${this.told(at)}.`, extra: { count: s.count } });
     }
@@ -488,11 +518,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   /** A strike's weight shared over the target and the ships within the strike's radius of it, by their weight. */
-  private splash(at: SeaUnit, weight: number, by: Side): void {
+  private splash(at: SeaUnit, weight: number, by: Side, even = false): void {
     const hit = this.units.filter((e) => e.side !== by && live(e) && dist(e.x, e.y, at.x, at.y) <= SEA.strike.radius);
     const total = hit.reduce((n, e) => n + this.output(e) + (e.id === at.id ? this.output(e) : 0), 0);
     if (total <= 0) return;
-    for (const e of hit) this.wear(e, weight * (this.output(e) + (e.id === at.id ? this.output(e) : 0)) / total);
+    for (const e of hit) {
+      const share = weight * (this.output(e) + (e.id === at.id ? this.output(e) : 0)) / total;
+      // A carrier's strike takes the same weight out of the fight whatever it falls on, wear in proportion to the
+      // ship's hull, so where the player sends it is a choice of which ships to cripple, not a trick (ruling 226, 4).
+      const p = this.info.get(e.id)!;
+      this.wear(e, even ? (share * p.hull) / (p.weight * SEA.fire.hull) : share);
+    }
   }
 
   // ---- Nerve ------------------------------------------------------------------------------------------------------
@@ -564,8 +600,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
         : shipsIn(sa) + shipsIn(sd) === 0 ? 'No ship had gone down on either side when the staff took over.'
           : `When the staff took over, the ${a} fleet had lost ${shipWords(sa)} and the ${d} fleet ${shipWords(sd)}.`,
     ];
-    // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's words.
-    if (toDice) lines.push(`The staff settled the rest of the action in the ${this.ticket.place.zoneName} from where it stood: what you had won stays won.`);
+    // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's three forms (ruling 226, 5): the
+    // whole action before a shot told; "what you had won stays won" only where the action had moved the hander's way
+    // from where the card put it, his enemy having lost a larger share than he had.
+    if (toDice) {
+      const zone = this.ticket.place.zoneName, by = this.handedBy ?? 'att';
+      lines.push(!this.fired() ? `The staff settled the whole action in the ${zone}: no shot had been fired.`
+        : this.lostShare(other(by)) > this.lostShare(by) ? `The staff settled the rest of the action in the ${zone} from where it stood: what you had won stays won.`
+          : `The staff settled the rest of the action in the ${zone} from where it stood.`);
+    }
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...(toDice ? { toDice } : {}) };
     this.over = {
       winner, how, seconds: this.t, lost, men: crews, R, level: seaLevel(R), lines, forces,

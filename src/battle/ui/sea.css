@@ -19,10 +19,31 @@
    buttons' tooltips (the band holds one line at 1280 with one more key, not two). */
 @media (max-width: 1439px) { .sea .bspeed .tc-key { display: none; } }
 @media (min-width: 1440px) { .sea .keys .fact:has(.knarrow) { display: none; } }
+/* The hint line folds once under 1440, before "Arrows" (the fold rule: the dot at the fold goes). */
+.sea .keys .kbreak { display: none; flex-basis: 100%; height: 0; }
+@media (max-width: 1439px) { .sea .keys .kbreak { display: block; } }
 .sea .bclock { flex: none; }
 .sea .bspeed { flex: none; }
 .sea .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
-.sea .bratio { font-size: 12px; line-height: 14px; color: var(--paper-200); text-align: center; white-space: nowrap; }
+/* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
+.sea .bclock .tc-label { color: var(--paper-300); }
+.sea .bclock .tc-label.is-paused { color: var(--brass-300); }
+/* How near to breaking (ruling 226, 3): a bar a side in its nation's colour, no numbers; a full bar is a fleet broken. */
+.sea .bbreak { gap: 0; }
+.sea .bbreak > .tc-label { font-size: 11px; line-height: 14px; white-space: nowrap; }
+.sea .brow { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; height: 14px; }
+.sea .brow > span { font: 700 11px/14px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--paper-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .brow > i { display: block; height: 8px; border: 1px solid var(--line); border-radius: 2px; background: rgba(226, 215, 188, .2); overflow: hidden; }
+.sea .brow > i > b { box-shadow: inset -1px 0 0 var(--paper-200); }
+.sea .brow > i > b { display: block; height: 100%; width: 0; transition: width .3s; }
+
+/* ---- The top of the sea: the clock's tag, our fleet's warning, then the dispatch, stacked at the centre ---- */
+.sea .ftop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 1; }
+.sea .ftop .dispatch { position: static; transform: none; max-width: 100%; }
+.sea .ftag { display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 2px; background: var(--paper-100); color: var(--ink-900, #2d241a); font: 700 12px/16px var(--font-typed); letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
+.sea .ftag .tc-key { opacity: 1; letter-spacing: .04em; }
+.sea .ftag[hidden], .sea .fwarn[hidden] { display: none; }
+.sea .fwarn { padding: 6px 14px; border-radius: 2px; background: var(--amber); color: #2a1a06; font: 700 14px/20px var(--font-serif); box-shadow: 0 2px 8px rgba(0, 0, 0, .45); text-align: center; }
 .sea .bacts { flex: none; }
 @media (max-width: 1279px) { .sea .bbar { flex-wrap: wrap; } }
 

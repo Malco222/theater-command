@@ -17,7 +17,7 @@ export const SEA = seaData as unknown as {
   strike: { windup: number; every: number; share: number; radius: number };
   air: { every: number; share: number };
   pieces: { most: number };
-  ai: { keep: number };
+  ai: { keep: number; beyond: number };
 };
 
 /** The rules' classes: a ship's weight in a fleet action (power) and how readily it is sunk (tough: lower is tougher). */

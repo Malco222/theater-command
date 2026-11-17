@@ -30,6 +30,11 @@ const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
 const chanceOf = (t: SeaTicket): number => diceChance(t.reckoning.odds, t.reckoning.dice, t.reckoning.even);
 /** Facts in a row, each kept whole, as on the land page (battle.css .facts). */
 const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
+const cap = (k: string): string => `<span class="tc-key">${k}</span>`;
+/** The hint line, in the UI director's words (ruling 226, 9): one line at 1440 and up, folding once before "Arrows"
+ *  under that, where "Space pause" joins it because the clock's buttons drop their key caps there. */
+const KEYS = facts(['Click or drag a box: pick up', 'Right-click: steer there, or engage an enemy', 'Right-drag: form a line', `${cap('H')} hold`, `${cap('R')} break off`, `${cap('Tab')} next`, `${cap('Esc')} put down`, 'Arrows or two-finger drag: look round', `<span class="knarrow">${cap('Space')} pause</span>`])
+  .replace('<span class="fact">Arrows', '<span class="kbreak"></span><span class="fact">Arrows');
 /** A list as English says it: "a, b and c". */
 const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const CLASS_ONE: Record<SeaClass | 'ss', [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
@@ -56,6 +61,16 @@ interface State {
   dispatch: FieldEvent | null;
   dispatchAge: number;
   asking: boolean;
+  /** HAND IT TO THE STAFF's question is standing (ruling 226, 5). */
+  handing: boolean;
+  /** The clock's speed before a question stopped it, to go back to on KEEP FIGHTING. */
+  resume: Speed;
+  /** Time runs fast until the fleets meet (ruling 226, 1). */
+  closing: boolean;
+  /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
+  tag: { text: string; until: number } | null;
+  /** The warnings at three quarters of the way to breaking off: ours stands while it holds, theirs is said once. */
+  warned: Record<'me' | 'them', boolean>;
   last: number;
   trayAt: number;
   /** The tray's page: the first chip it shows, how many it shows, and the choice it last turned to. */
@@ -68,7 +83,7 @@ const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, tag: null, warned: { me: false, them: false }, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -166,7 +181,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false;
+  S.asking = false; S.handing = false; S.closing = true; S.tag = null; S.warned = { me: false, them: false };
   S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   guard();
@@ -175,34 +190,35 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   app.innerHTML = `<div class="battle tc sea">
     <header class="bbar">
       <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), `${fleetNames('att')} against ${fleetNames('def')}`])}</span></div>
-      <div class="bclock"><span class="tc-label">Battle time</span><span class="tc-data" id="time">0:00</span></div>
+      <div class="bclock" title="At ${mmss(t.limit)} the action is done, and the fleet that has had the better of it holds the sea."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
-        <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)">Pause <span class="tc-key">Space</span></button>
+        <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="1" title="Normal speed (1)">×1 <span class="tc-key">1</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bbal" title="Each side's strength still afloat and fighting. The pale mark is where the campaign put it.">
-        <div class="bends"><span>${esc(mine.adj)}</span><span>${esc(theirs.adj)}</span></div>
-        <div class="btrack"><i id="balA"></i><i id="balD"></i><b id="balMark"></b></div>
-        <span id="ratio" class="tc-data bratio"></span>
+      <div class="bbal bbreak" title="When a bar fills, that fleet breaks off and leaves the action.">
+        <span class="tc-label">How near to breaking</span>
+        <div class="brow"><span>${esc(mine.adj)}</span><i><b id="brkMe"></b></i></div>
+        <div class="brow"><span>${esc(theirs.adj)}</span><i><b id="brkThem"></b></i></div>
       </div>
       <div class="bacts">
-        <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands. What you have won stays won.">Hand it to the staff</button>
+        <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands.">Hand it to the staff</button>
         <button class="tc-btn tc-btn--grave" data-act="withdraw">Withdraw</button>
-        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="Withdraw the fleet?"><p>Withdraw the fleet? The action ends and the sea is theirs.</p><div class="wbtns"><button class="tc-btn" data-act="wgo">Withdraw</button><button class="tc-btn tc-btn--primary" data-act="wstay">Stay</button></div></div>
+        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="Withdraw the fleet?"><p>Withdraw the fleet? The action ends and the sea is theirs.</p><div class="wbtns"><button class="tc-btn" data-act="wgo">Withdraw</button><button class="tc-btn tc-btn--primary" data-act="wstay">Keep fighting</button></div></div>
+        <div class="wask tc-paper" id="sask" hidden role="alertdialog" aria-label="Hand the action to the staff?"><p id="saskText"></p><div class="wbtns"><button class="tc-btn" data-act="sgo">Hand it over</button><button class="tc-btn tc-btn--primary" data-act="sstay">Keep fighting</button></div></div>
       </div>
     </header>
     <div class="bfield"><canvas id="field"></canvas>
-      <div class="dispatch tc-paper" id="dispatch"></div>
+      <div class="ftop"><div class="ftag" id="ftag" hidden></div><div class="fwarn" id="fwarn" hidden></div><div class="dispatch tc-paper" id="dispatch"></div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sea">Whole sea</button></div>
       <div class="seaspeed tc-paper" id="seaspeed" hidden><span class="tc-label">Speed</span><span class="tc-seg">${(['slow', 'cruise', 'flank'] as SeaSpeed[]).map((k) => `<button data-way="${k}">${SPEED_WORD[k]}</button>`).join('')}</span></div>
     </div>
-    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click: steer there, or engage an enemy', 'Right drag: form a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> break off', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>'])}</div>
+    <div class="keys tc-data">${KEYS}</div>
     <footer class="traywrap"><div class="tray" id="tray"><button class="tc-card is-press tmore" id="tmoreL" hidden></button>${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, sc.colours![sc.me])).join('')}<button class="tc-card is-press tmore" id="tmoreR" hidden></button></div></footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  el('balA').style.background = sc.colours.att; el('balD').style.background = sc.colours.def;
+  el('brkMe').style.background = sc.colours[sc.me]; el('brkThem').style.background = sc.colours[sc.me === 'att' ? 'def' : 'att'];
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   fit(true);
@@ -303,20 +319,63 @@ function trayMore(): void {
   if (R.textContent !== rt) R.textContent = rt;
 }
 
+/** HAND IT TO THE STAFF's question, with the staff's chance now (the UI director's words, ruling 226, 5). */
+function handQuestion(sim: SeaSim): string {
+  const p = S.scene.me === 'att' ? sim.handChance() : 1 - sim.handChance();
+  const chance = p >= 0.995 ? 'They are sure of it.' : p <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(p * 100)}% to win the action.`;
+  return sim.fired() ? `Hand the action to the staff? They settle the rest at once, from where it stands now. ${chance}`
+    : `Hand the action to the staff? No shot has been fired: they settle the whole action at once. ${chance}`;
+}
+
+/** Puts a question to the player and stops the clock while it stands; the answer that changes nothing starts it again. */
+function ask(which: 'asking' | 'handing'): void {
+  if (S.asking || S.handing) return;
+  S.resume = S.clock.speed === 0 ? 0 : S.clock.speed;
+  S.clock.set(0);
+  S[which] = true;
+  guard(); updateTop();
+  document.querySelector<HTMLElement>(which === 'handing' ? '[data-act="sstay"]' : '[data-act="wstay"]')?.focus();
+}
+function keepFighting(): void {
+  if (!S.asking && !S.handing) return;
+  S.asking = false; S.handing = false;
+  if (S.resume !== 0) S.clock.set(S.resume);
+  updateTop();
+}
+
 function updateTop(force = false): void {
   const sim = S.sim!;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
   el('time').textContent = `${mmss(sim.t)} of ${mmss(sim.ticket.limit)}`;
-  // Each side's weight still afloat and fighting, as a share of both at the start.
-  const v = sim.balance();
-  const share = v.att / Math.max(1e-6, v.att + v.def);
-  el('balA').style.width = `${(share * 100).toFixed(1)}%`;
-  el('balD').style.width = `${((1 - share) * 100).toFixed(1)}%`;
-  const k = sim.ticket.reckoning;
-  el('balMark').style.left = `${((100 * k.odds) / (1 + k.odds)).toFixed(1)}%`;
-  el('ratio').textContent = `card ${odds(k.odds)} · now ${odds(v.att / Math.max(1e-6, v.def))} to 1`;
+  // The clock says what it is doing (ruling 226, 8): PAUSED or RUNNING over the time, the first segment Paused when lit.
+  const paused = S.clock.speed === 0, state = el('clockState');
+  const sw = paused ? 'Paused' : 'Running';
+  if (state.textContent !== sw) { state.textContent = sw; state.classList.toggle('is-paused', paused); }
+  const pw = paused ? 'Paused' : 'Pause';
+  if (el('pauseWord').textContent !== pw) el('pauseWord').textContent = pw;
+  // How near each fleet is to breaking off (ruling 226, 3): a bar a side in its colour, no numbers, no hidden threshold.
+  const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
+  el('brkMe').style.width = `${(sim.nearBreak(me) * 100).toFixed(1)}%`;
+  el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
   (el('wask') as HTMLElement).hidden = !S.asking;
+  (el('sask') as HTMLElement).hidden = !S.handing;
+  if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
+  // The tag at the top of the sea (ruling 226, 8 and 1): paused, or time running fast until the fleets meet, or a
+  // moment's word as the clock starts. Not while a question stands: the question is the one voice then.
+  const tagEl = el('ftag');
+  let tag = '';
+  if (!S.asking && !S.handing && !sim.over) {
+    if (paused) tag = `Paused ${cap('Space')}`;
+    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the fleets meet`;
+    else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
+  }
+  if (tagEl.innerHTML !== tag) tagEl.innerHTML = tag;
+  tagEl.hidden = !tag;
+  // Ours at three quarters of the way to breaking off: a line in amber that stands until it passes.
+  const warn = !sim.over && sim.nearBreak(me) >= 0.75 && sim.nearBreak(me) < 1;
+  el('fwarn').hidden = !warn;
+  if (warn && !el('fwarn').textContent) el('fwarn').textContent = 'Your fleet is near breaking off: pull back the worn, or hand it to the staff.';
   // The speed strip shows for the ships in hand, lit at the speed they all share.
   const ids = chosen();
   const strip = el('seaspeed');
@@ -451,16 +510,20 @@ function wireBattle(): void {
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
   window.onresize = (): void => { if (S.screen !== 'choose') { fit(); trayMore(); } };
-  app.querySelectorAll<HTMLElement>('[data-clock]').forEach((el) => el.addEventListener('click', () => { S.clock.set(Number(el.dataset.clock) as Speed); updateTop(); }));
+  app.querySelectorAll<HTMLElement>('[data-clock]').forEach((el) => el.addEventListener('click', () => setClock(Number(el.dataset.clock) as Speed)));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
   }));
   app.querySelectorAll<HTMLElement>('[data-way]').forEach((el) => el.addEventListener('click', () => { give({ do: 'sea:speed', units: chosen(), speed: el.dataset.way as SeaSpeed }); updateTop(); }));
-  app.querySelector('[data-act="dice"]')!.addEventListener('click', () => { give({ do: 'dice' }); });
-  app.querySelector('[data-act="withdraw"]')!.addEventListener('click', () => { S.asking = true; guard(); updateTop(); });
-  app.querySelector('[data-act="wstay"]')!.addEventListener('click', () => { S.asking = false; updateTop(); });
-  app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; give({ do: 'withdrawAll', side: sc.me }); });
+  // HAND IT TO THE STAFF and WITHDRAW each ask once, the clock stopped while the question stands; KEEP FIGHTING, the
+  // default, and Esc answer no (ruling 226, 5).
+  app.querySelector('[data-act="dice"]')!.addEventListener('click', () => ask('handing'));
+  app.querySelector('[data-act="sstay"]')!.addEventListener('click', keepFighting);
+  app.querySelector('[data-act="sgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.handing = false; give({ do: 'dice' }); });
+  app.querySelector('[data-act="withdraw"]')!.addEventListener('click', () => ask('asking'));
+  app.querySelector('[data-act="wstay"]')!.addEventListener('click', keepFighting);
+  app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; give({ do: 'withdrawAll', side: sc.me }); keepFighting(); });
   const tray = document.getElementById('tray')!;
   S.trayFrom = 0; S.traySel = '';
   document.getElementById('tmoreR')!.addEventListener('click', () => { S.trayFrom += S.trayShown; trayMore(); });
@@ -500,19 +563,21 @@ function orderAt(px: number, py: number): void {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); return; }
+  // Esc answers a standing question at once, guard or not: it is the answer that changes nothing.
+  if (e.key === 'Escape' && (S.asking || S.handing)) { keepFighting(); return; }
   if (now() < S.guardUntil) { if (e.key === 'Tab' || e.key === ' ') e.preventDefault(); return; }
   if (S.screen !== 'battle' || !S.sim) return;
   const sc = S.scene, sim = S.sim;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const pan = 120 / sc.cam.z;
   switch (key) {
-    case ' ': e.preventDefault(); S.clock.toggle(); break;
-    case '1': S.clock.set(1); break;
-    case '2': S.clock.set(2); break;
-    case '3': S.clock.set(4); break;
+    case ' ': e.preventDefault(); setClock('toggle'); break;
+    case '1': setClock(1); break;
+    case '2': setClock(2); break;
+    case '3': setClock(4); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
-    case 'Escape': if (S.asking) S.asking = false; else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
+    case 'Escape': if (S.asking || S.handing) keepFighting(); else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
     case 'Tab': {
       e.preventDefault();
       const mine = sim.units.filter((u) => u.side === sc.me && orderable(u));
@@ -545,7 +610,19 @@ function frame(): void {
   S.last = t;
   S.scene.now = t;
   const sim = S.sim;
-  S.clock.advance(sim, dt);
+  // Until the fleets meet, time runs fast on its own, then drops back to the speed the player set (ruling 226, 1).
+  S.clock.advance(sim, S.closing ? dt * APPROACH : dt);
+  if (S.closing && (sim.over || gunsMeet(sim))) {
+    S.closing = false;
+    if (!sim.over) S.tag = { text: `The fleets meet · Running ×${S.clock.speed}`, until: t + 2.5 };
+  }
+  // Theirs at three quarters of the way to breaking off: one dispatch (ruling 226, 3).
+  const them: Side = S.scene.me === 'att' ? 'def' : 'att';
+  if (!S.warned.them && !sim.over && sim.nearBreak(them) >= 0.75 && sim.nearBreak(them) < 1) {
+    S.warned.them = true;
+    S.dispatch = { t: sim.t, what: 'sea:warn', text: `The ${sim.ticket[them].adj} fleet is near breaking off.`, unit: -1 };
+    S.dispatchAge = 0;
+  }
   const v = sim.view(S.scene.me);
   takeEvents(S.scene, sim, v.events, t);
   // At the press of Space, one line so the wait has a meaning (the UI director, 6).
@@ -561,6 +638,30 @@ function frame(): void {
   updateTop();
   updateTray();
   if (v.over && S.screen === 'battle') showAfter();
+}
+
+/** How much faster time runs until the fleets meet: the long approach, about three battle minutes, passes in about
+ *  twenty seconds at ×1. The approach itself stays as it is, since it is part of the fleets' balance (parity). */
+const APPROACH = 8;
+
+/** Whether the guns of either side have an enemy in reach yet. */
+function gunsMeet(sim: SeaSim): boolean {
+  const us = sim.units.filter(live);
+  for (const a of us) {
+    if (a.extra.cls === 'cv') continue;
+    const reach = SEA.classes[a.extra.cls as SeaClass].reach;
+    for (const b of us) if (b.side !== a.side && Math.hypot(a.x - b.x, a.y - b.y) <= reach) return true;
+  }
+  return false;
+}
+
+/** Sets the clock, and as it starts from stopped says so for a moment: "RUNNING ×2" (ruling 226, 8). */
+function setClock(to: Speed | 'toggle'): void {
+  if (S.asking || S.handing) return;
+  const was = S.clock.speed;
+  if (to === 'toggle') S.clock.toggle(); else S.clock.set(to);
+  if (was === 0 && S.clock.speed > 0) S.tag = { text: `Running ×${S.clock.speed}`, until: now() + 2 };
+  updateTop();
 }
 
 /** About how many minutes on the battle clock before the nearest guns of either side reach the other: the gap closed
@@ -622,11 +723,12 @@ function showAfter(): void {
   const count = (n: SeaShips): number => n.bb + n.cv + n.ca + n.dd;
   const lost = (side: Side): string => andList(shipBits(bySide(side, 'sunk'))) || 'none';
   const staffLine = r.lines.find((l) => l.startsWith('The staff settled'));
+  const noShot = !!staffLine && staffLine.endsWith('no shot had been fired.');
   const noneSunk = count(bySide(me, 'sunk')) + count(bySide(them, 'sunk')) === 0;
   // Fought to the end, the campaign's headline is the one bill of losses (the UI director, round 2): the line says them
   // only where there is no headline, as in practice. Handed to the staff, it says what went down before, which differs.
   const lossLine = x.toDice
-    ? noneSunk ? 'Before you handed it to the staff, no ship had gone down on either side.' : `Before you handed it to the staff, you had lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`
+    ? noShot ? '' : noneSunk ? 'Before you handed it to the staff, no ship had gone down on either side.' : `Before you handed it to the staff, you had lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`
     : headline ? '' : noneSunk ? 'No ship went down on either side.' : `You lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`;
   const hm = count(bySide(me, 'burnt')), ht = count(bySide(them, 'burnt'));
   const theirShips = (n: number): string => `${n} ${t[them].adj} ${n === 1 ? 'ship' : 'ships'}`;

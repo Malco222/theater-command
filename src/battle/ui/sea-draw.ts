@@ -31,31 +31,73 @@ const unlin = (v: number): number => Math.round(255 * Math.max(0, Math.min(1, v 
 const fLab = (t: number): number => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
 const fInv = (t: number): number => (t ** 3 > 216 / 24389 ? t ** 3 : (116 * t - 16) / (24389 / 27));
 const WHITE = [0.95047, 1, 1.08883];
-function toLab(hex: string): [number, number, number] {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const [r, g, b] = [lin((n >> 16) & 255), lin((n >> 8) & 255), lin(n & 255)];
-  const X = (0.4124 * r + 0.3576 * g + 0.1805 * b) / WHITE[0], Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / WHITE[2];
+const rgbOf = (hex: string): [number, number, number] => { const n = parseInt(hex.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+function labOf([R, G, B]: [number, number, number]): [number, number, number] {
+  const [r, g, b] = [lin(R), lin(G), lin(B)];
+  const X = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / WHITE[0], Y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b, Z = (0.0193339 * r + 0.119192 * g + 0.9503041 * b) / WHITE[2];
   const [fx, fy, fz] = [fLab(X), fLab(Y), fLab(Z)];
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
+const toLab = (hex: string): [number, number, number] => labOf(rgbOf(hex));
 function fromLab([L, a, b]: [number, number, number]): string {
   const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
   const [X, Y, Z] = [fInv(fx) * WHITE[0], fInv(fy), fInv(fz) * WHITE[2]];
-  const r = 3.2406 * X - 1.5372 * Y - 0.4986 * Z, g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z, bl = 0.0557 * X - 0.204 * Y + 1.057 * Z;
+  const r = 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z, g = -0.969266 * X + 1.8760108 * Y + 0.041556 * Z, bl = 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z;
   return `#${[unlin(r), unlin(g), unlin(bl)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+/** CIEDE2000, the difference between two colours as an eye sees it. */
+function de2000(c1: [number, number, number], c2: [number, number, number]): number {
+  const [L1, a1, b1] = labOf(c1), [L2, a2, b2] = labOf(c2);
+  const rad = Math.PI / 180, deg = 180 / Math.PI;
+  const Cb = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cb ** 7 / (Cb ** 7 + 25 ** 7)));
+  const a1p = (1 + G) * a1, a2p = (1 + G) * a2;
+  const C1p = Math.hypot(a1p, b1), C2p = Math.hypot(a2p, b2);
+  const h1p = ((Math.atan2(b1, a1p) * deg) % 360 + 360) % 360, h2p = ((Math.atan2(b2, a2p) * deg) % 360 + 360) % 360;
+  const dLp = L2 - L1, dCp = C2p - C1p;
+  let dhp = h2p - h1p;
+  if (C1p * C2p === 0) dhp = 0; else if (dhp > 180) dhp -= 360; else if (dhp < -180) dhp += 360;
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp / 2) * rad);
+  const Lbp = (L1 + L2) / 2, Cbp = (C1p + C2p) / 2;
+  const hbp = C1p * C2p === 0 ? h1p + h2p : Math.abs(h1p - h2p) <= 180 ? (h1p + h2p) / 2 : h1p + h2p < 360 ? (h1p + h2p + 360) / 2 : (h1p + h2p - 360) / 2;
+  const T = 1 - 0.17 * Math.cos((hbp - 30) * rad) + 0.24 * Math.cos(2 * hbp * rad) + 0.32 * Math.cos((3 * hbp + 6) * rad) - 0.2 * Math.cos((4 * hbp - 63) * rad);
+  const dth = 30 * Math.exp(-(((hbp - 275) / 25) ** 2));
+  const Rc = 2 * Math.sqrt(Cbp ** 7 / (Cbp ** 7 + 25 ** 7));
+  const Sl = 1 + (0.015 * (Lbp - 50) ** 2) / Math.sqrt(20 + (Lbp - 50) ** 2), Sc = 1 + 0.045 * Cbp, Sh = 1 + 0.015 * Cbp * T;
+  const Rt = -Math.sin(2 * dth * rad) * Rc;
+  return Math.sqrt((dLp / Sl) ** 2 + (dCp / Sc) ** 2 + (dHp / Sh) ** 2 + Rt * (dCp / Sc) * (dHp / Sh));
+}
+
+/** How a colour looks to a deuteranope or a protanope (Viénot, Brettel and Mollon). */
+const CVD: Record<'deutan' | 'protan', number[][]> = {
+  deutan: [[0.29275, 0.70725, 0], [0.29275, 0.70725, 0], [-0.02234, 0.02234, 1]],
+  protan: [[0.11238, 0.88762, 0], [0.11238, 0.88762, 0], [0.00401, -0.00401, 1]],
+};
+function seenBy(rgb: [number, number, number], k: 'deutan' | 'protan'): [number, number, number] {
+  const l = rgb.map(lin);
+  return CVD[k].map((row) => unlin(row[0] * l[0] + row[1] * l[1] + row[2] * l[2])) as [number, number, number];
+}
+/** The least of the three differences: to a normal eye, a deuteranope's and a protanope's. */
+const leastApart = (A: [number, number, number], B: [number, number, number]): number =>
+  Math.min(de2000(A, B), de2000(seenBy(A, 'deutan'), seenBy(B, 'deutan')), de2000(seenBy(A, 'protan'), seenBy(B, 'protan')));
+
 /**
- * The two sides' fills for one battle: each nation's own colour, except that where the two lie within 20 L* of each
- * other the lighter is raised until they stand 20 apart, so a red-green colour-blind eye still tells them apart
- * (Britain's brick and Italy's green come to #b5574a and about #86b789).
+ * The two sides' fills for one battle (the art director's side colour rule, shared with the land page): each nation's
+ * own colour, unless the pair stands under 20 apart (CIEDE2000) to a normal eye, a deuteranope or a protanope; then the
+ * lighter is raised in L* only, half a step at a time, until all three are 20 or more. Britain against Germany keeps
+ * #b5574a and #59616b; Italy against Britain comes to #92c495; France against Germany to #5f84c7.
  */
 export function sideColours(att: string, def: string): Record<Side, string> {
-  const A = toLab(att), D = toLab(def);
-  const gap = 20 - Math.abs(A[0] - D[0]);
-  if (gap <= 0) return { att, def };
-  if (A[0] >= D[0]) return { att: fromLab([Math.min(96, A[0] + gap), A[1], A[2]]), def };
-  return { att, def: fromLab([Math.min(96, D[0] + gap), D[1], D[2]]) };
+  const A = rgbOf(att), D = rgbOf(def);
+  if (leastApart(A, D) >= 20) return { att, def };
+  const attLighter = labOf(A)[0] >= labOf(D)[0];
+  const [L, a, b] = labOf(attLighter ? A : D), other = attLighter ? D : A;
+  for (let dL = 0.5; dL <= 40; dL += 0.5) {
+    const c = fromLab([L + dL, a, b]);
+    if (leastApart(rgbOf(c), other) >= 20) return attLighter ? { att: c, def } : { att, def: c };
+  }
+  return { att, def };
 }
 
 /** A mark on the water that fades: a ship going down, a strike landing, a raid. 'at' is real seconds, 'bt' battle seconds. */
