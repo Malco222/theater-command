@@ -1381,6 +1381,7 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .inksign { flex: none; fill: currentColor; vertical-align: -2px; margin-right: 5px; }
 .inksign.warn { vertical-align: -1.5px; margin-right: 4px; }
 .fleet .meta + .meta.wingat { color: var(--ink); }
+.corps .nm .tag { display: inline-block; white-space: nowrap; vertical-align: 1px; }
 .balance .doubt { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; background: repeating-linear-gradient(115deg, rgba(244, 238, 218, .5) 0 3px, rgba(244, 238, 218, .12) 3px 7px); box-shadow: 0 0 0 1px rgba(244, 238, 218, .65); pointer-events: none; }
 
 .btn.scoutnow { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 2px; }

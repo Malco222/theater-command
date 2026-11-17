@@ -223,6 +223,8 @@ export interface AirfieldCard {
   note: string;
   /** How it can be made, or made larger. */
   build: string;
+  /** The note's last sentence by itself, or '': carriers lying in the harbour here keep their aircraft aboard (ruling 176(b)). */
+  aboard: string;
   /** The fog of war hides what flies from here. */
   hidden: boolean;
   rows: GroupRow[];
@@ -236,7 +238,7 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const build = built < E
     ? `An engineer corps standing here can ${field ? 'enlarge it' : 'lay one out'} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.`
     : 'It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.';
-  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, hidden: false, rows: [] };
+  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
   const hidden = field.groups < 0;
   const rows = hidden ? [] : g.airFleets.filter((f) => f.base === region && !afloat(f) && flying(f)).map((f) => groupRow(g, f, viewer));
   const used = rows.reduce((s, x) => s + x.aircraft, 0);
@@ -245,7 +247,7 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const aboard = inPort.length ? ` The aircraft of the ${inPort.length === 1 ? inPort[0].name : inPort.map((c) => c.name).join(' and the ')}, in harbour here, are aboard ${inPort.length === 1 ? 'its' : 'their'} carriers.` : '';
   const note = `${field.word}: it has room for ${num(field.holds)} aircraft${hidden ? '. What flies from here is not known: scout it from the air, or put an agent on watch'
     : `, and ${used > 0 ? `${num(used)} are based here` : 'none are based here'}${field.crowded ? `. It is crowded: only ${pct(field.holds / used)} of each group can fly` : ''}`}.${aboard}`;
-  return { region, name: r.name, field, note, build, hidden, rows };
+  return { region, name: r.name, field, note, build, aboard: aboard.trim(), hidden, rows };
 }
 
 // ---- Standing orders ----------------------------------------------------------------------------------
