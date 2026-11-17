@@ -21,7 +21,7 @@ import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
+  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -279,15 +279,16 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
       ? { key: 'patrol', label: 'Stand ready for a strike', on: idle, why: gone, forecast: `Ranged on deck aboard ${home}. Its strike aircraft reach every coast of the sea the fleet is in, ${num(R.bmr)} km inland from it, and the seas next to it: plan a strike whenever a fleet is found or a harbour is in reach.` }
       : { key: 'patrol', label: 'Support the armies', on: idle, why: gone, forecast: `Stands ready at ${home}. Its bombers reach ${num(R.bmr)} km: plan a raid for it whenever there is a target worth the losses.` });
   } else {
-    const under = g.regions.filter((r) => allied(g, r.ctrl, f.nat) && cover(kmTo(g, f, r.id), R.ftr) > 0).length;
+    // The provinces whose own ground it guards (ruling 225): its country's, and an ally's where it is based there or next door by land.
+    const under = g.regions.filter((r) => guardsLand(g, f, r.id, r.ctrl) && cover(kmTo(g, f, r.id), R.ftr) > 0).length;
     out.push(deck
       ? {
         key: 'patrol', label: 'Cover the fleet', on: idle && !with_, why: gone,
-        forecast: `Meets any raid on the ships in the sea its fleet is in, and any raid on coasts within ${num(R.ftr)} km of it. It also keeps the enemy's coastal bombers off the fleet month by month. About ${num(f.ftr)} fighters can go up.`,
+        forecast: `Meets any raid on the ships in the sea its fleet is in or the harbour it lies in, and any raid on troops on coasts within ${num(R.ftr)} km of it. It also keeps the enemy's coastal bombers off the fleet month by month. About ${num(f.ftr)} fighters can go up.`,
       }
       : {
         key: 'patrol', label: 'Patrol the sky', on: idle && !with_, why: gone,
-        forecast: `Meets any raid within ${num(R.ftr)} km of ${home}, at full effect to ${far}: ${plural(under, 'friendly province')} under its cover. About ${num(f.ftr * crowding(g, f))} fighters can go up.`,
+        forecast: `Meets any raid within ${num(R.ftr)} km of ${home}, at full effect to ${far}: on troops and ships anywhere in that reach, and on the towns and works of ${plural(under, 'province')} it guards. About ${num(f.ftr * crowding(g, f))} fighters can go up.`,
       });
     const bombers = airFleetsOf(g, f.nat).filter((b) => b.id !== f.id && kindOf(b) !== 'ftr' && b.bmr > 0 && apart(g, f, b) <= R.ftr);
     for (const b of bombers) {

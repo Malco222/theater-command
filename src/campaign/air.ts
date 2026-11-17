@@ -261,12 +261,53 @@ export function skyOver(g: Game, region: number): string | null {
   return atWar(g, s.nat, g.regions[region].ctrl) ? s.nat : null;
 }
 
-/** The fighters that would come up over a region against this nation: every enemy fleet left to defend, as far as its range and airfields allow. */
+/** True where two provinces border by land, with no water between: neighbours on the map that no short crossing joins. */
+const landBorder = (g: Game, a: number, b: number): boolean => g.regions[a]?.nb.includes(b) === true && !g.links.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+
+/** True for a carrier wing whose fleet lies in harbour in this province. */
+const inHarbour = (g: Game, f: AirFleet, region: number): boolean => { const c = carrierOf(g, f); return !!c && !atSea(c) && c.base === region; };
+
+/**
+ * Whether a fighter group comes up over a province held by `holder` against a raid on the land itself: its towns,
+ * works, rails and airfields, and the sky over them (ruling 225). Home defence is national: the holder's own groups
+ * come up, and an ally's only where it is based on ground the holder controls or on ground that borders the province
+ * by land, with no water between (no strait counts). France's groups at Lille do not cover Kent across the Channel;
+ * they do cover Brussels, and a British group based in France covers France. Carrier fighters stay with their fleet:
+ * over land they come up only over the harbour it lies in.
+ */
+export function guardsLand(g: Game, f: AirFleet, region: number, holder: string): boolean {
+  if (!allied(g, f.nat, holder)) return false;
+  if (f.ship !== undefined) return inHarbour(g, f, region);
+  return f.nat === holder || g.regions[f.base]?.ctrl === holder || landBorder(g, f.base, region);
+}
+
+/** Whether a fighter group comes up over a sea (ruling 225): carrier fighters only over the sea their fleet is in; land-based groups as their range allows. */
+export function guardsSea(g: Game, f: AirFleet, zone: number): boolean {
+  if (f.ship === undefined) return true;
+  const c = carrierOf(g, f);
+  return !!c && atSea(c) && c.zone === zone;
+}
+
+/**
+ * Whether an enemy fighter group comes up against a raid of this kind (ruling 225, with the historian's note: Fighter
+ * Command over Arras, Calais and Dunkirk). A raid on troops is met by any enemy fighter in reach, whoever holds the
+ * ground, carrier fighters off the coast too; a raid on ships, at sea or in a harbour, by any land-based fighter in
+ * reach and by the carrier fighters of the fleets in that sea or that harbour; a raid on the land itself by the
+ * groups that guard that ground (guardsLand).
+ */
+function comesUp(g: Game, f: AirFleet, m: AirMission, target: number, zone: number): boolean {
+  if (m === 'ground' || m === 'line') return true;
+  if (m === 'strike' || m === 'fleet') return guardsSea(g, f, zone);
+  if (m === 'harbour') return f.ship === undefined || inHarbour(g, f, target);
+  return guardsLand(g, f, target, g.regions[target].ctrl);
+}
+
+/** The fighters that would come up over a region against this nation: every enemy group left to defend that guards it (guardsLand), as far as its range and airfields allow. */
 export function fightersOver(g: Game, region: number, against: string): number {
   const holder = g.regions[region].ctrl;
   let n = 0;
   for (const f of g.airFleets) {
-    if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, against) || !allied(g, f.nat, holder)) continue;
+    if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
     n += f.ftr * cover(kmTo(g, f, region), reach(f).ftrRange) * crowding(g, f);
   }
   return n;
@@ -917,11 +958,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       if (c && atWar(g, nat, c.nat)) { out.radar = c; break; }
     }
   } else out.radar = radarAt(g, g.regions[target]);
-  // A raid on troops is met by every enemy fighter in reach, whoever holds the ground the troops stand on.
-  const holder = sea || m === 'ground' || m === 'line' ? null : g.regions[target].ctrl;
+  // Who comes up is comesUp()'s (ruling 225): over troops and ships any enemy fighter in reach, over the land itself the
+  // groups that guard that ground, and carrier fighters only where their fleet is.
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, nat)) continue;
-    if (holder && !allied(g, f.nat, holder)) continue;
+    if (!comesUp(g, f, m, target, zone)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     let w = cover(d, reach(f).ftrRange) * crowding(g, f);
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
