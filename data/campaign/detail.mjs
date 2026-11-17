@@ -242,6 +242,13 @@ export const RIVER_INTO = {
  * of the Woods at Kenora (Rat Portage), the Santiago leaves Lake Chapala at Ocotlan.
  */
 export const RIVER_FROM_LAKE = { 'San Juan': 'Lake Nicaragua', Semliki: 'Lake Edward', Winnipeg: 'Lake of the Woods', Santiago: 'Lake Chapala' };
+/**
+ * Where a river's foot meets a river at the edge of the map of Europe, which the chart cannot see: a place ([lat,
+ * lon]) the course ends at, or a river of the chart it ends on (the art director, 17 November 2026). The Middle Volga
+ * ends where the map of Europe's Volga begins on its eastern edge; the Kama falls into the Volga below Kazan, on the
+ * chart's own reach of it.
+ */
+export const RIVER_MEET = { 'Middle Volga': [52.5, 47.0013], Kama: 'Middle Volga' };
 
 /** Rivers that run dry for part of the year: drawn as a broken line. */
 export const RIVER_SEASONAL = ['Barwon', 'Gila', 'Fitzroy', 'Ord', 'Victoria', 'Mitchell', 'Desaguadero', 'Atrek', 'Hari Rud', 'Konche', 'Shara Muren', 'Webi Shebeli', 'Atbara', 'Darling', 'Lachlan', 'Limpopo', 'Tarim'];

@@ -17,7 +17,7 @@
 //  - Two knots of a course under a unit apart are one: the browser draws a curve through them, and a short leg
 //    between long ones makes a hook.
 import { REAL_COURSES, MORE_RIVERS } from '../data/campaign/more-rivers.mjs';
-import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT, RIVER_FROM_LAKE } from '../data/campaign/detail.mjs';
+import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT, RIVER_FROM_LAKE, RIVER_MEET } from '../data/campaign/detail.mjs';
 
 const K = Math.cos((50 * Math.PI) / 180) * 40;
 const NEAR = 0.28;
@@ -231,6 +231,34 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     const to = waterOf(r.into, r.pts[r.pts.length - 1]);
     if (to && to.d > 0.5) { const p = [r2(to.p[0]), r2(to.p[1])]; r.pts.push(p); r.ll.push(llOf(p)); runOn.push({ name: r.name, by: Math.round(to.d) }); }
   }
+  // A foot that meets a river at the edge of the map of Europe (RIVER_MEET): cut where the course comes nearest the
+  // place and ended there; or ended on the line of the river of the chart it falls into.
+  const met = [];
+  for (const [name, to] of Object.entries(RIVER_MEET)) {
+    const r = rivers.find((v) => v.name === name), o = typeof to === 'string' ? rivers.find((v) => v.name === to) : null;
+    if (!r || (typeof to === 'string' && !o)) { console.warn('bad river meeting in detail.mjs', name, to); continue; }
+    if (o) {
+      const foot = r.pts[r.pts.length - 1], n = nearestOn(o.pts, foot[0], foot[1]);
+      if (n.d > 25) { console.warn('river meeting too far', name, to, Math.round(n.d)); continue; }
+      const p = [r2(n.p[0]), r2(n.p[1])];
+      if (n.d < 1.5) { r.pts[r.pts.length - 1] = p; r.ll[r.ll.length - 1] = llOf(p); } else { r.pts.push(p); r.ll.push(llOf(p)); }
+      r.into = to;
+      met.push({ name, to, by: Math.round(n.d * 10) / 10 });
+    } else {
+      // (The course is left at the knot within 40 units of the place from which it turns least to reach it.)
+      const [lat, lon] = to, p = [r2((lon + 11) * K), r2((71.4 - lat) * 40)];
+      let best = null;
+      for (let i = 1; i < r.pts.length; i++) {
+        const a = r.pts[i - 1], b = r.pts[i], d = Math.hypot(p[0] - b[0], p[1] - b[1]);
+        if (d > 40) continue;
+        const t = Math.abs(((Math.atan2(p[1] - b[1], p[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0])) * 180) / Math.PI + 540) % 360 - 180;
+        if (!best || Math.abs(t) < best.t - 1e-9 || (Math.abs(Math.abs(t) - best.t) < 1e-9 && d < best.d)) best = { i, t: Math.abs(t), d };
+      }
+      if (!best) { console.warn('river meeting too far', name); continue; }
+      r.pts = [...r.pts.slice(0, best.i + 1), p]; r.ll = [...r.ll.slice(0, best.i + 1), llOf(p)];
+      met.push({ name, to: `${lat}, ${lon}`, by: Math.round(best.d * 10) / 10 });
+    }
+  }
   // Two knots under a unit apart: the one between is dropped (the head and the foot stay).
   for (const r of rivers) {
     const keep = [0], n = r.pts.length - 1, gap = (i, j) => Math.hypot(r.pts[i][0] - r.pts[j][0], r.pts[i][1] - r.pts[j][1]);
@@ -278,5 +306,5 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); } else adrift.push(row);
   }
   for (const r of rivers) { delete r.box; delete r.real; }
-  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, adrift, toMouth };
+  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, met, adrift, toMouth };
 }
