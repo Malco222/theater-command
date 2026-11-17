@@ -32219,7 +32219,7 @@
       } : null
     };
   }
-  function preview(ids2, to, open = false) {
+  function preview(ids2, to, open = false, glance = false) {
     const s = game();
     let pickedIds = [];
     if (open) {
@@ -32263,7 +32263,7 @@
       tone: look ? verdictOf(look).tone : "",
       verdict: look ? verdictOf(look).word : "",
       // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
-      soften: softenRow(s, corps, to),
+      soften: glance ? null : softenRow(s, corps, to),
       // (Version 84; rulings 149(d), 164(f) and 174) WHAT YOU FACE: a sign and a sentence for each thing the defence will
       // do to what he brings, four at most, and one more for what is not scouted. Empty in a history campaign.
       face: (look?.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown }))

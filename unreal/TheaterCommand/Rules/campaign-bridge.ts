@@ -1918,7 +1918,10 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   };
 }
 
-function preview(ids: number[], to: number, open = false) {
+// (Speed, second round.) `glance` is the pointer's tip, which reads only the odds: it leaves out the row that offers to
+// soften the line first, which asks after every air group that could fly at it and was nineteen parts in twenty of the
+// time this took. The attack card never asks with `glance`, and gets the whole answer as before.
+function preview(ids: number[], to: number, open = false, glance = false) {
   const s = game();
   // (Version 63) The card opens on the best attack to be had: everyone the roads will carry, where that beats the
   // corps picked. It says so, and gives back the corps that were picked so one button can return to them.
@@ -1960,7 +1963,7 @@ function preview(ids: number[], to: number, open = false) {
     chanceWords: look ? chanceWords(look) : '', cost: costLines(look), ids, opened, pickedIds,
     tone: look ? verdictOf(look).tone : '', verdict: look ? verdictOf(look).word : '',
     // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
-    soften: softenRow(s, corps, to),
+    soften: glance ? null : softenRow(s, corps, to),
     // (Version 84; rulings 149(d), 164(f) and 174) WHAT YOU FACE: a sign and a sentence for each thing the defence will
     // do to what he brings, four at most, and one more for what is not scouted. Empty in a history campaign.
     face: (look?.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown })),

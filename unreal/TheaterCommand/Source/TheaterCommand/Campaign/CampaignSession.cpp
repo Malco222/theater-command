@@ -1699,10 +1699,13 @@ namespace
 	FAttackPreview ReadMarch(const TSharedPtr<FJsonObject>& Object, int32 RegionId);
 }
 
-FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening)
+FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bGlance)
 {
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false")), Object))
+	const FString Arguments = bGlance
+		? FString::Printf(TEXT("[[%s],%d,%s,true]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false"))
+		: FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false"));
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), Arguments, Object))
 	{
 		return FAttackPreview(); // also what comes back when the rules answer null: there is nobody there to attack
 	}

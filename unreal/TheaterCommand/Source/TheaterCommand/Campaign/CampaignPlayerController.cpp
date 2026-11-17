@@ -4519,7 +4519,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						else
 						{
 							// The odds at a glance, before anything is ordered: as the staff reckon them from what is known.
-							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion);
+							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion, false, /*bGlance*/ true); // (the odds alone: see PreviewAttack)
 							auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
 							if (!Glance.Refused.IsEmpty())
 							{
