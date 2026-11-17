@@ -90,6 +90,20 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   const whole = Math.min(W / b.field.w, H / b.field.h);
   const near = Math.max(0, Math.min(1, (cam.z / whole - 1.4) / 0.8));
   if (near > 0) { x.globalAlpha = near; x.drawImage(field.detail, fx, fy, fw, fh); x.globalAlpha = 1; }
+  // Bunkers: the campaign map's notched block in ink, no fill, held at its whole-field size from there inward with
+  // the same thin stroke, as a label is (the art director, slice 2).
+  if (field.forts.length) {
+    const k = 7 * Math.min(cam.z, whole);
+    x.strokeStyle = INK; x.lineWidth = 0.5 * k; x.lineJoin = 'miter'; x.lineCap = 'butt';
+    for (const [mx, my] of field.forts) {
+      const [X, Y] = toScreen(s, mx, my);
+      if (X < -6 * k || Y < -6 * k || X > W + 6 * k || Y > H + 6 * k) continue;
+      x.beginPath();
+      x.moveTo(X - 3 * k, Y + 2.5 * k); x.lineTo(X - 3 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 0.8 * k);
+      x.lineTo(X + 1.2 * k, Y - 0.8 * k); x.lineTo(X + 1.2 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y + 2.5 * k);
+      x.stroke();
+    }
+  }
 
   // Where each side drew up: a faint ruled band, only while the battle has not started.
   if (b.t < DT) {
