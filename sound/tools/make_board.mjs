@@ -72,7 +72,7 @@ if (realDir) {
     files.push({ path: `audio/real_${s.name}.mp3` });
   }
 }
-// The battle pack, stamped as "battle_" and its name, grouped by who or what makes the sound.
+// The battle pack, stamped as "pack_" and its name (not "battle_": the first set has a battle_loop of its own), grouped by who or what makes the sound.
 const GROUPS = [['The rifleman and the machine gunner', /^(rifle_shot|lmg_burst|machine_gun)/], ['Explosions', /^(grenade|shell_|shells_|bomb_stick)/],
   ['The tank', /^tank_/], ['The sea', /^(ship_|sea_)/], ['The air', /^(fighter|plane_|dive|flak_light)/], ['Under a fight', /./]];
 const battle = [];
@@ -83,8 +83,8 @@ if (battleDir) {
     const from = s.sources.map((x) => `${x.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '')} (${x.licence}${x.credit ? ', credit ' + x.credit : ''})`).join('; ');
     const g = GROUPS.findIndex(([, re]) => re.test(s.name));
     battle.push({ n: s.name, t: s.title ?? s.name, s: s.seconds, lp, a: s.about, on: s.battle ?? '', g, src: from + '. Wikimedia Commons.', w: shape(path.join(battleDir, s.name + '.wav'), 120), old: have.has(s.name) ? 1 : 0, oldlp: loopOf(s.name) });
-    fs.copyFileSync(path.join(battleMp3, s.name + '.mp3'), path.join(out, 'audio', `battle_${s.name}.mp3`));
-    files.push({ path: `audio/battle_${s.name}.mp3` });
+    fs.copyFileSync(path.join(battleMp3, s.name + '.mp3'), path.join(out, 'audio', `pack_${s.name}.mp3`));
+    files.push({ path: `audio/pack_${s.name}.mp3` });
   }
   battle.sort((a, b) => a.g - b.g);
 }

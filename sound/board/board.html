@@ -348,7 +348,7 @@ function paint(name) {
 }
 function tally() {
   let g = 0, f = 0, c = 0;
-  const counted = [...hosts.keys()].filter((name) => !(DATA.real || []).length || name.startsWith('real_') || name.startsWith('battle_'));
+  const counted = [...hosts.keys()].filter((name) => !(DATA.real || []).length || name.startsWith('real_') || name.startsWith('pack_'));
   for (const name of counted) { const k = get(name).mark; if (k === 'good') g++; else if (k === 'fix') f++; else if (k === 'cut') c++; }
   const all = counted.length;
   $('#t-done').textContent = g + f + c; $('#t-all').textContent = all; $('#t-good').textContent = g; $('#t-fix').textContent = f; $('#t-cut').textContent = c;
@@ -412,7 +412,7 @@ if (BATTLE.length) {
       const box = el('div', 'bgroup'); box.appendChild(el('h3', '', (DATA.groups || [])[s.g] || ''));
       const grid = el('div', 'scenes'); box.appendChild(grid); $('#battle').appendChild(box); groups.set(s.g, grid);
     }
-    const id = 'battle_' + s.n;
+    const id = 'pack_' + s.n;
     const card = el('article', 'scene real'); hosts.set(id, card);
     const head = el('div', 'head');
     const play = el('button', 'play big'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Play: ' + s.t);
