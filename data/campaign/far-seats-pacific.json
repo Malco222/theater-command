@@ -5,6 +5,7 @@
   "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is four of the record's. The rows are the planner's places with the historian's weights, checked by the historian at 15:32Z.",
   "every other corps, the fleets, the nation figures, each first ability and unit": "the historian, /mnt/project-files/historian/seats-209-pacific.json, with each figure's mark and source in seats-209-pacific.md",
   "commanders.names": "the clerk, /mnt/project-files/map-tables/officer-names-208b-world.json, unchanged",
+  "setup-1939.formations": "the historian's dated rows for Australia's territories (seats-209-pacific.json, arrivals_aus_territories), less the optional one",
   "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
   "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
  },
@@ -1193,6 +1194,48 @@
    [
     "CHN",
     "MAN"
+   ]
+  ]
+ },
+ "setup-1939": {
+  "formations": [
+   [
+    20,
+    "AUS",
+    "Lark Force (2/22nd Battalion)",
+    "inf",
+    1,
+    "Rabaul",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    19,
+    "AUS",
+    "49th Battalion (Port Moresby)",
+    "inf",
+    1,
+    "Port Moresby",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    29,
+    "AUS",
+    "30th Brigade (39th and 53rd Battalions)",
+    "inf",
+    1,
+    "Port Moresby",
+    {
+     "xp": 0,
+     "str": 0.2
+    }
    ]
   ]
  }

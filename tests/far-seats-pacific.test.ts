@@ -12,7 +12,7 @@ import grandData from '../data/campaign/grand.json';
 import leagueData from '../data/campaign/league.json';
 import worldData from '../data/campaign/world.json';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
-import { atWar, bloc, createGame, declareWar, moveCorps } from '../src/campaign/game';
+import { atWar, bloc, createGame, declareWar, moveCorps, startPhase } from '../src/campaign/game';
 import { pathOptions } from '../src/campaign/league';
 import { startOpen } from '../src/campaign/staff';
 import { eliteRule, traitRule } from '../src/campaign/traits';
@@ -163,6 +163,25 @@ describe('the rows as they wait', () => {
     // China is at war with Japan from the first day (ruling 197), and Manchukuo with China beside Japan.
     expect(S.setup.wars).toEqual([['CHN', 'JAP'], ['CHN', 'MAN']]);
   });
+
+  it('carries the garrisons of Australia\'s territories as dated rows that do not hold up its arsenal', () => {
+    // The historian's rows, in setup-1939's form: [turn, nation, name, kind, divisions, province, options].
+    const rows = S['setup-1939'].formations;
+    expect(rows.map((r: any) => [r[0], r[5]])).toEqual([[20, 'Rabaul'], [19, 'Port Moresby'], [29, 'Port Moresby']]);
+    for (const [turn, nat, name, kind, divs, , o] of rows) {
+      expect(nat, name).toBe('AUS');
+      expect(turn, name).toBeGreaterThan(1);
+      expect(Object.keys(KIND), name).toContain(kind);
+      // A battalion or a brigade: one division on paper at the floor of strength, never a full one.
+      expect(divs, name).toBe(1);
+      expect(o.str, name).toBe(0.2);
+      expect(Object.keys(o).every((k) => ['xp', 'str', 'hold'].includes(k)), name).toBe(true);
+    }
+    // They are 'formations' and never 'reinforcements': a computer-run country orders nothing new until its last
+    // 'reinforcements' row has come (economy.ts lastScheduled), and a row of January 1942 would idle Australia's
+    // arsenal for twenty-eight months.
+    expect((S['setup-1939'] as any).reinforcements).toBeUndefined();
+  });
 });
 
 // ---- Step 13: the Pacific's map is attached, and the client's mend is in world.ts -------------------------------
@@ -183,6 +202,20 @@ describe.skip('the seats on the map (step 13)', () => {
       const mine = g.corps.filter((c) => c.nat === id && !c.dead);
       expect(mine.length, id).toBe(corps.filter((c) => c[0] === id).length);
       for (const c of mine) expect(g.regions[c.reg].ctrl, `${id} ${c.name}`).toBe(id);
+    }
+  });
+
+  it('lands the garrisons of Australia\'s territories in their month and place, each thin and never a full division', () => {
+    // As main stands a dated row's strength is not read (game.ts startPhase, addCorps): each lands at full strength.
+    const g = grand();
+    const rows = [...S['setup-1939'].formations].sort((a: any, b: any) => a[0] - b[0]);
+    for (const [turn, , name, , , at, o] of rows) {
+      g.turn = turn;
+      startPhase(g, 'AUS');
+      const c = g.corps.find((x) => x.nat === 'AUS' && x.name === name);
+      expect(c, name).toBeDefined();
+      expect(g.regions[c!.reg].name, name).toBe(at);
+      expect(c!.str, name).toBeLessThan(o.str + 0.2);
     }
   });
 
