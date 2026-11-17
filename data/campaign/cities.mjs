@@ -1212,7 +1212,7 @@ export const CITY_GROUPS = [
     ['Yencheng', 33.39, 120.12, 'plains', 0, 0, {}],
   ]],
   ['Nanchang', [
-    ['Fuchow', 27.97, 116.36, 'plains', 0, 0, {}],
+    ['Linchwan', 27.97, 116.36, 'plains', 0, 0, {}], // Fuchow's county town: the historian's form, beside Foochow
   ]],
   ['Pengpu', [
     ['Fowyang', 32.9, 115.82, 'plains', 0, 0, {}],
@@ -1931,6 +1931,12 @@ export const CITY_GROUPS = [
   ['Changsha', [
     ['Yochow', 29.37, 113.1, 'plains', 0, 0, {}],
   ]],
+  // Tungkun, on the Canton-Kowloon railway behind Hong Kong's frontier: Japan's from late 1938 (the frontier closed
+  // at Shumchun in August 1939), the 38th Division's road in 1941. Under the 700 floor (about 450), waived on the
+  // historian's word so that Hong Kong touches it.
+  ['Canton', [
+    ['Tungkun', 23.02, 113.75, 'plains', 0, 0, {}],
+  ]],
 ];
 
 // Which seas a city stands on where the count of water squares misleads: name -> [sea keys].
@@ -2013,6 +2019,7 @@ export const CITY_NO_RAIL = [
   // China: the west, the south-west and the coast south of the Yangtze had no line in 1939 (Tienshui's came in 1945).
   'Chefoo', 'Tienshui', 'Yulin', 'Wuyuan', 'Turfan', 'Aksu', 'Yarkand', 'Chuguchak', 'Anhsi', 'Changyeh', 'Liangchow', 'Shigatse',
   'Sichang', 'Kiating', 'Suifu', 'Wanhsien', 'Tsunyi', 'Lungchow', 'Tali', 'Changteh', 'Wenchow', 'Nanping', 'Fuchin', 'Tsetserleg',
+  'Waichow', // the Canton-Kowloon line ran west of it, by Tungkun
   // Soviet Asia: the line to the Lena came in 1951 and Nukus's in 1955; the Pechora line to Ukhta ran through
   // country the chart gives no line.
   'Ust-Kut', 'Igarka', 'Altan Bulak', 'Seymchan', 'Markovo', 'Przhevalsk', 'Nukus', 'Ukhta',
@@ -2035,7 +2042,7 @@ export const CITY_NO_RAIL = [
   // Socorro.
   // China: the hill and mountain towns round Szechwan, the coast of Kiangsu, the south and the far north had no line in
   // September 1939 (Kutsing's came in 1941; the lines to Kingyang and Pingliang were never built).
-  'Shasi', 'Enshih', 'Macheng', 'Yencheng', 'Fuchow', 'Fowyang', 'Pengshui', 'Mienyang', 'Sungpan', 'Lishih', 'Wuchow',
+  'Shasi', 'Enshih', 'Macheng', 'Yencheng', 'Linchwan', 'Fowyang', 'Pengshui', 'Mienyang', 'Sungpan', 'Lishih', 'Wuchow',
   'Ningtu', 'Kweihsien', 'Poseh', 'Pichieh', 'Kingyang', 'Kwangyuan', 'Ankang', 'Fusung', 'Lintung', 'Kangnung', 'Shangtu',
   'Pingliang', 'Minhsien', 'Kutsing', 'Hweitseh', 'Szemao', 'Likiang', 'Mienning',
   // Asia: the Burma Railway to Kanchanaburi came in 1942 and the Persian line to Kashan in 1949.
