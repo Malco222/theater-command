@@ -12,7 +12,9 @@
 // Longitudes are written as an atlas writes them, east positive: the tool counts them eastward from today's west
 // edge (141 W), so Hawaii and Alaska lie at the far east end of the chart, beside the America they belong to.
 //
-// The seed is the province's centre, and the rules measure every distance from it (air.ts, km). An island group is
+// The seed is the province's centre, and the rules measure every distance from it (air.ts, km). The places the
+// Pacific planner measured its flights between (rulings 181 and 184) are seeded on the planner's own points, or
+// the nearest land to them: move one and a raid history flew may fall out of reach. An island group is
 // seeded on the airfield that matters, as the Pacific planner's table has it (ruling 181): the Ellice group at
 // Nanumea, the eastern Marshalls at Maloelap, Formosa's south by Takao.
 //
@@ -93,16 +95,16 @@ export const PACIFIC_REGIONS = [
   ['Kushiro', 43.1, 144.3, 'JAP', 'forest', 0, 0, { port: 1 }],
   ['Aomori', 40.75, 140.8, 'JAP', 'forest', 0, 0, { port: 1 }],
   ['Akita', 39.72, 140.15, 'JAP', 'hills', 0, 0, { port: 1, oil: 1 }],
-  ['Sendai', 38.27, 140.8, 'JAP', 'plains', 1, 0, { port: 1 }],
+  ['Sendai', 38.27, 140.87, 'JAP', 'plains', 1, 0, { port: 1 }],
   ['Niigata', 37.85, 139.1, 'JAP', 'plains', 1, 0, { port: 1 }],
-  ['Tokyo', 35.72, 139.65, 'JAP', 'urban', 6, 3, { port: 1, cap: 1 }],
+  ['Tokyo', 35.68, 139.7, 'JAP', 'urban', 6, 3, { port: 1, cap: 1 }],
   ['Yokohama', 35.4, 139.58, 'JAP', 'urban', 2, 1, { port: 1, fort: [2, 'USA', 'UK'] }],
   ['Nagano', 36.65, 138.19, 'JAP', 'mountain', 0, 0, {}],
   ['Shizuoka', 35.0, 138.38, 'JAP', 'hills', 1, 0, { port: 1 }],
-  ['Nagoya', 35.18, 136.95, 'JAP', 'urban', 2, 2, { port: 1 }],
+  ['Nagoya', 35.15, 136.9, 'JAP', 'urban', 2, 2, { port: 1 }],
   ['Kanazawa', 36.56, 136.7, 'JAP', 'hills', 0, 0, { port: 1 }],
   ['Kyoto', 35.01, 135.77, 'JAP', 'urban', 2, 0, { port: 1, fort: [1, 'USA', 'UK', 'SOV'] }],
-  ['Osaka', 34.69, 135.5, 'JAP', 'urban', 3, 4, { port: 1, fort: [1, 'USA', 'UK'] }],
+  ['Osaka', 34.7, 135.5, 'JAP', 'urban', 3, 4, { port: 1, fort: [1, 'USA', 'UK'] }],
   ['Okayama', 34.7, 133.92, 'JAP', 'hills', 0, 0, { port: 1 }],
   ['Hiroshima', 34.42, 132.46, 'JAP', 'hills', 2, 1, { port: 1, fort: [1, 'USA', 'UK'] }],
   ['Shimonoseki', 34.08, 131.05, 'JAP', 'hills', 0, 0, { port: 1, fort: [2, 'USA', 'UK', 'SOV'] }],
@@ -110,7 +112,7 @@ export const PACIFIC_REGIONS = [
   ['Fukuoka', 33.59, 130.45, 'JAP', 'hills', 2, 2, { port: 1 }],
   ['Nagasaki', 32.88, 129.98, 'JAP', 'hills', 2, 1, { port: 1, fort: [1, 'USA', 'UK'] }],
   ['Kumamoto', 32.8, 130.78, 'JAP', 'hills', 0, 0, { port: 1 }],
-  ['Kagoshima', 31.65, 130.48, 'JAP', 'hills', 1, 0, { port: 1 }],
+  ['Kagoshima', 31.6, 130.55, 'JAP', 'hills', 1, 0, { port: 1 }],
   // The Kuriles' two harbours, the fleet's in the south and the army's in the north, and Japan's half of Sakhalin.
   ['Etorofu', 45.0, 147.7, 'JAP', 'hills', 0, 0, { port: 1 }],
   ['Paramushiro', 50.38, 155.75, 'JAP', 'hills', 0, 0, { port: 1 }],
@@ -185,7 +187,7 @@ export const PACIFIC_REGIONS = [
   ['Nanning', 22.82, 108.32, 'CHN', 'hills', 0, 0, {}],
   // Free China's west.
   ['Chungking', 29.56, 106.55, 'CHN', 'hills', 4, 1, { cap: 1 }],
-  ['Chengtu', 30.66, 104.07, 'CHN', 'plains', 1, 0, {}],
+  ['Chengtu', 30.67, 104.07, 'CHN', 'plains', 1, 0, {}],
   ['Kweiyang', 26.65, 106.63, 'CHN', 'hills', 0, 0, {}],
   ['Kunming', 25.04, 102.72, 'CHN', 'hills', 1, 0, {}],
   ['Paoshan', 25.11, 99.17, 'CHN', 'mountain', 0, 0, {}],
@@ -283,7 +285,7 @@ export const PACIFIC_REGIONS = [
   ['Kuantan', 3.85, 103.1, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Kuala Lumpur', 3.14, 101.69, 'UK', 'forest', 1, 0, { port: 1, col: 1 }],
   ['Johore', 2.03, 103.32, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Singapore', 1.36, 103.82, 'UK', 'urban', 3, 1, { port: 1, col: 1, depot: 1, fort: [2, 'JAP'] }],
+  ['Singapore', 1.35, 103.82, 'UK', 'urban', 3, 1, { port: 1, col: 1, depot: 1, fort: [2, 'JAP'] }],
   // ---- British Borneo.
   ['Kuching', 1.45, 110.4, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Brunei', 4.6, 114.7, 'UK', 'forest', 0, 0, { port: 1, col: 1, oil: 1 }],
@@ -295,7 +297,7 @@ export const PACIFIC_REGIONS = [
   ['Pakanbaru', 0.53, 101.45, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Padang', -0.7, 100.6, 'NED', 'mountain', 0, 0, { port: 1, col: 1 }],
   ['Djambi', -1.6, 103.6, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Palembang', -2.99, 104.76, 'NED', 'forest', 1, 0, { port: 1, col: 1, oil: 1 }],
+  ['Palembang', -2.98, 104.75, 'NED', 'forest', 1, 0, { port: 1, col: 1, oil: 1 }],
   ['Oosthaven', -5.1, 105.2, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   // Java, with Madura.
   ['Batavia', -6.3, 106.85, 'NED', 'plains', 3, 0, { port: 1, col: 1, fort: [1, 'JAP'] }],
@@ -310,24 +312,24 @@ export const PACIFIC_REGIONS = [
   // Borneo. Tarakan's island goes with the shore behind it.
   ['Pontianak', 0.1, 109.8, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Bandjermasin', -3.2, 114.9, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Balikpapan', -1.0, 116.7, 'NED', 'forest', 1, 0, { port: 1, col: 1, oil: 1 }],
+  ['Balikpapan', -1.24, 116.74, 'NED', 'forest', 1, 0, { port: 1, col: 1, oil: 1 }],
   ['Tarakan', 3.3, 117.0, 'NED', 'forest', 0, 0, { port: 1, col: 1, oil: 1 }],
   // Celebes and the Moluccas. Ceram and Buru go with Ambon.
   ['Makassar', -5.0, 119.7, 'NED', 'hills', 1, 0, { port: 1, col: 1 }],
   ['Kendari', -3.9, 122.2, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Palu', -1.3, 120.1, 'NED', 'mountain', 0, 0, { port: 1, col: 1 }],
   ['Menado', 1.2, 124.8, 'NED', 'hills', 0, 0, { port: 1, col: 1 }],
-  ['Ambon', -3.63, 128.12, 'NED', 'hills', 0, 0, { port: 1, col: 1 }],
+  ['Ambon', -3.7, 128.2, 'NED', 'hills', 0, 0, { port: 1, col: 1 }],
   // Netherlands New Guinea.
   ['Vogelkop', -0.9, 132.3, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Sarmi', -2.1, 138.8, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Hollandia', -2.65, 140.5, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Hollandia', -2.53, 140.72, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Mimika', -4.5, 136.9, 'NED', 'marsh', 0, 0, { port: 1, col: 1 }],
   ['Merauke', -8.0, 140.3, 'NED', 'marsh', 0, 0, { port: 1, col: 1 }],
   // ---- The Philippines. Clark Field lies in Lingayen's province, not Manila's (ruling 184); Corregidor is
   // Bataan's chief place. Samar goes with Leyte, Negros with its nearer neighbour.
   ['Aparri', 17.6, 121.7, 'USA', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Lingayen', 15.95, 120.35, 'USA', 'plains', 1, 0, { port: 1, col: 1 }],
+  ['Lingayen', 16.0, 120.3, 'USA', 'plains', 1, 0, { port: 1, col: 1 }],
   ['Manila', 14.6, 121.0, 'USA', 'urban', 3, 0, { port: 1, col: 1 }],
   ['Bataan', 14.6, 120.45, 'USA', 'hills', 0, 0, { port: 1, col: 1, fort: [3, 'JAP'] }],
   ['Legaspi', 13.3, 123.6, 'USA', 'hills', 0, 0, { port: 1, col: 1 }],
@@ -337,22 +339,22 @@ export const PACIFIC_REGIONS = [
   ['Panay', 11.0, 122.5, 'USA', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Palawan', 9.85, 118.65, 'USA', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Del Monte', 8.3, 124.8, 'USA', 'hills', 0, 0, { port: 1, col: 1 }],
-  ['Davao', 7.1, 125.55, 'USA', 'forest', 1, 0, { port: 1, col: 1 }],
+  ['Davao', 7.07, 125.6, 'USA', 'forest', 1, 0, { port: 1, col: 1 }],
   ['Zamboanga', 7.3, 122.2, 'USA', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Jolo', 6.0, 121.1, 'USA', 'forest', 0, 0, { port: 1, col: 1 }],
   // ---- Papua and the mandated territory of New Guinea. Wewak lies between Madang and Hollandia; New Ireland
   // goes with Rabaul; Kerema's is the Gulf of Papua and the Fly, so that Lae's coasts are its own two.
-  ['Port Moresby', -9.4, 147.25, 'AUS', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Port Moresby', -9.45, 147.2, 'AUS', 'hills', 1, 0, { port: 1, col: 1 }],
   ['Milne Bay', -10.2, 150.1, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Buna', -8.75, 148.3, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Lae', -6.65, 146.95, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Madang', -5.3, 145.7, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
-  ['Wewak', -3.7, 143.6, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Buna', -8.67, 148.4, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Lae', -6.73, 147.0, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Madang', -5.23, 145.74, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Wewak', -3.55, 143.63, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
   ['Kerema', -7.5, 145.0, 'AUS', 'marsh', 0, 0, { port: 1, col: 1 }],
-  ['Rabaul', -4.4, 152.0, 'AUS', 'forest', 1, 0, { port: 1, col: 1 }],
+  ['Rabaul', -4.25, 152.12, 'AUS', 'forest', 1, 0, { port: 1, col: 1 }],
   ['Cape Gloucester', -5.6, 148.8, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
   // ---- Australia and New Zealand.
-  ['Darwin', -12.7, 131.1, 'AUS', 'plains', 1, 0, { port: 1 }],
+  ['Darwin', -12.44, 130.92, 'AUS', 'plains', 1, 0, { port: 1 }],
   ['Wyndham', -15.8, 128.3, 'AUS', 'hills', 0, 0, { port: 1 }],
   ['Broome', -18.0, 122.6, 'AUS', 'desert', 0, 0, { port: 1 }],
   ['Port Hedland', -20.7, 118.8, 'AUS', 'desert', 0, 0, { port: 1 }],
@@ -366,10 +368,10 @@ export const PACIFIC_REGIONS = [
   ['Tennant Creek', -19.65, 134.19, 'AUS', 'desert', 0, 0, { port: 1 }],
   ['Cloncurry', -20.7, 140.5, 'AUS', 'plains', 0, 0, { port: 1 }],
   ['Cape York', -13.95, 143.2, 'AUS', 'forest', 0, 0, { port: 1 }],
-  ['Townsville', -19.4, 146.7, 'AUS', 'plains', 1, 0, { port: 1 }],
+  ['Townsville', -19.26, 146.8, 'AUS', 'plains', 1, 0, { port: 1 }],
   ['Rockhampton', -23.4, 150.4, 'AUS', 'plains', 0, 0, { port: 1 }],
   ['Charleville', -26.4, 146.25, 'AUS', 'plains', 0, 0, {}],
-  ['Brisbane', -27.5, 152.9, 'AUS', 'plains', 2, 0, { port: 1 }],
+  ['Brisbane', -27.47, 153.03, 'AUS', 'plains', 2, 0, { port: 1 }],
   ['Broken Hill', -31.95, 141.47, 'AUS', 'desert', 0, 0, {}],
   ['Sydney', -33.85, 150.95, 'AUS', 'urban', 3, 2, { port: 1 }],
   ['Canberra', -35.28, 149.13, 'AUS', 'hills', 2, 0, { port: 1, cap: 1 }],

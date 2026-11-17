@@ -1,5 +1,6 @@
-// Judges a chart by the count of seas between bases and by the reach of bombers over passed strongholds: the Pacific
-// planner's test on paper (data/campaign/far-reach.json), counted on the chart as the rules count.
+// Judges a chart by the count of seas between bases, by the reach of bombers over passed strongholds and by the
+// flights history flew: the Pacific planner's tests on paper (data/campaign/far-reach.json), counted and measured
+// on the chart as the rules do.
 //
 //   node tools/check-reach.mjs [--file=world-next.json] [--quiet]
 //
@@ -73,7 +74,18 @@ for (const [name, want] of Object.entries(T.coasts ?? {})) {
   if (!ok) fails++;
   if (!ok || !quiet) lines.push(`${ok ? 'ok  ' : 'FAIL'} ${r.name} stands on ${has.join(', ') || 'no sea'}${ok ? '' : ` (must be ${must.join(', ')})`}`);
 }
+// Each flight the planner measured falls on the chart as it fell on paper, at every reach tried (ruling 184).
+let flights = 0;
+const fall = (d, reach, kind) => (d > reach ? 'out of reach' : kind === 'fighters' && d > 0.6 * reach ? 'in part' : kind === 'fighters' ? 'in full' : 'within reach');
+for (const [from, to, paper, kind, reaches] of T.flights ?? []) {
+  const d = km(from, to);
+  if (d === null) { if (!quiet) lines.push(`wait ${from} to ${to}: not drawn yet`); continue; }
+  flights++;
+  const off = reaches.filter((r) => fall(d, r, kind) !== fall(paper, r, kind));
+  if (off.length) fails++;
+  if (off.length || !quiet) lines.push(`${off.length ? 'FAIL' : 'ok  '} ${from} to ${to}: ${Math.round(d)} km on the chart, ${paper} on paper${off.map((r) => `; at ${r} ${fall(d, r, kind)}, on paper ${fall(paper, r, kind)}`).join('')}`);
+}
 console.log(lines.join('\n'));
-console.log(`\n${T.within.length + T.beyond.length} counts of seas, ${T.passed.length - waiting} of ${T.passed.length} passed strongholds and ${coastsJudged} of ${Object.keys(T.coasts ?? {}).length} coasts judged: ${fails ? `${fails} FAIL` : 'all pass'}.`);
+console.log(`\n${T.within.length + T.beyond.length} counts of seas, ${T.passed.length - waiting} of ${T.passed.length} passed strongholds, ${coastsJudged} of ${Object.keys(T.coasts ?? {}).length} coasts and ${flights} of ${(T.flights ?? []).length} flights judged: ${fails ? `${fails} FAIL` : 'all pass'}.`);
 if (undrawn.size) console.log(`Not drawn yet, judged on a stand-in sea: ${[...undrawn].join(', ')}.`);
 process.exitCode = fails ? 1 : 0;
