@@ -1,0 +1,103 @@
+# America, run 1: September 1939, at peace. Step file version 1 (see README.md). Columns: VERB <tab> TARGET <tab> EXPECT
+start	USA 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Brian's five finds of 2026-11-17. Words as of Version 84.1, where each is answered.
+# A1. An airfield never shows or names aircraft unless an air group stands there.
+point-at	airfield Norfolk	says-why
+click-mark	airfield Norfolk	says No air group
+# A2. The carrier's planes can be sent ashore and back (a new order, ruling 175).
+select-unit	Atlantic Squadron carrier fighters	does
+order-province	Norfolk	says flies ashore
+press	BACK ABOARD	says-why
+open-page	Region
+# A3. Marching into ground no corps defends: needs a war, so it is in run 2. Here: a neutral neighbour asks first.
+select-province	North Texas
+order-province	West Texas	moves
+order-province	Chihuahua	card
+close
+# A4. The troops in Panama: a fortress garrison. Either it moves, or the game says it never marches.
+select-province	Canal Zone
+order-province	Panama City
+# Version 84.2: the Canal's division can march, so a neutral neighbour brings the question of war. Shut it.
+close
+order-province	Chiriqui
+# Version 84.2: the Canal's division can march, so a neutral neighbour brings the question of war. Shut it.
+close
+# A5. The canal: its holder can close it and open it again.
+point-at	gate Panama Canal	says-why
+click-mark	gate Panama Canal	card
+press	SHUT THE GATE	says is shut
+click-mark	gate Panama Canal	card
+press	OPEN THE GATE	does
+restore	start
+# --- B. Every unit once.
+select-province	Washington	does
+order-province	Norfolk	moves
+order-province	Philadelphia	moves
+press	Stand and dig in	says-why
+press	Fall back	does
+select-province	New York	does
+press-each	tray
+select-province	Chicago	does
+order-province	Detroit	moves
+select-province	San Francisco	does
+order-province	San Joaquin	moves
+# with an army in hand, a click on the fleet's piece should pick the fleet up (dead on Version 84.1)
+select-unit	Atlantic Squadron	says Atlantic Squadron In harbour
+restore	start
+select-unit	Atlantic Squadron	does
+# a fleet in hand: a right click on a sea (armies march by a right click), then the game's own way, a click on a ringed sea
+order-sea	Eastern Seaboard	says-why
+select-sea	Eastern Seaboard	says-why
+select-sea	Caribbean Sea
+select-sea	Gulf of Panama
+press-each	tray
+open-page	Air
+select-unit	Atlantic Squadron strike wing	does
+press	PLAN A STRIKE WITH IT	says-why
+press	SCOUT FROM THE AIR	says-why
+press	SEARCH A SEA	says-why
+restore	start
+# --- C. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+open-page	Research	does
+press-each	page
+open-page	Air	does
+press-each	page
+open-page	Navy	does
+press-each	page
+open-page	Powers	does
+press-each	page
+open-page	Spies	does
+press-each	page
+open-page	Staff	does
+press-each	page
+open-page	Cabinet	card
+press-each	card
+close
+press	Treasury	card
+press-each	card
+close
+open-page	News	does
+open-page	Battles	does
+open-page	Generals	does
+press-each	page
+open-page	Honours	does
+# --- D. Every province card of his own country, and one of each neighbour's.
+select-province	Washington	does
+press-each	page
+select-province	Canal Zone	does
+press-each	page
+select-province	Panama City	does
+close
+select-province	Toronto	does
+select-province	Chihuahua	does
+# --- E. Three months ended by the game's own button, the month card read each time.
+restore	start
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card
