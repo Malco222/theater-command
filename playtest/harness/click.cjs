@@ -120,14 +120,15 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
   const endMonthNew = async () => {
     const st = () => page.evaluate(() => { const th = window.theater, g = th.game(); const open = document.querySelector('#veil')?.classList.contains('open'); const card = document.querySelector('#card'); const end = document.querySelector('#barbtns [data-act="end"]'); const t = (e, n = 80) => (e ? (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, n) : ''); return { turn: g.turn, open, kind: open && th.ui.modal ? th.ui.modal.kind : '', head: open ? t(card, 70) : '', words: open ? ((card.innerText || '').trim().match(/\S+/g) || []).length : 0, px: open ? card.scrollHeight : 0, btns: open ? [...card.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 1).map((b) => t(b, 40)) : [], endOff: !end || end.disabled, endWords: t(end, 40), hint: t(document.querySelector('#hint'), 60) }; });
     if (await veil()) { const go = await findButton('GIVE ORDERS', '#card'); if (go) { await page.mouse.click(go.x, go.y); await page.waitForTimeout(400); } await closeAll(); }
-    const s0 = await st(); const b = await findButton('END MONTH', '#barbtns'); if (!b) return 'no END MONTH button';
+    const s0 = await st(); let deploy = false; let b = await findButton('END MONTH', '#barbtns'); if (!b) { b = await findButton('FINISH DEPLOYMENT', '#barbtns'); deploy = !!b; } if (!b) return 'no END MONTH button'; // on the eve of war the button reads FINISH DEPLOYMENT, and the month's number does not change when it is pressed
     const before = clicks; await page.mouse.click(b.x, b.y); const t0 = Date.now(); let last = ''; let quiet = 0; const seen = []; let turned = 0;
     for (;;) {
       await page.waitForTimeout(300); const s = await st(); const sec = (Date.now() - t0) / 1000;
-      if (!turned && s.turn > s0.turn) turned = sec;
+      if (!turned && (s.turn > s0.turn || (deploy && /END MONTH/i.test(s.endWords)))) turned = sec;
       const key = `${s.turn}|${s.open}|${s.kind}|${s.head.slice(0, 40)}|${s.endWords}|${s.endOff}`;
       if (key !== last) { last = key; seen.push(`${sec.toFixed(1)}s ${s.open ? `card "${s.kind}" ${s.head.slice(0, 50)} (${s.words} words, ${s.px}px)` : `no card, end button "${s.endWords}"${s.endOff ? ' off' : ''}`}`); quiet = 0; }
-      if (s.turn > s0.turn && !s.open && !s.endOff && /END MONTH/i.test(s.endWords)) { quiet++; if (quiet >= 4) { lastExtra = `month over in ${turned.toFixed(1)}s; giving orders again after ${(sec - 0.9).toFixed(1)}s and ${clicks - before} presses; screens: ${seen.join(' >> ')}`; return ''; } continue; }
+      if ((s.turn > s0.turn || (deploy && sec > 1)) && !s.open && !s.endOff && /END MONTH/i.test(s.endWords)) { quiet++; if (quiet >= 4) { lastExtra = `month over in ${turned.toFixed(1)}s; giving orders again after ${(sec - 0.9).toFixed(1)}s and ${clicks - before} presses; screens: ${seen.join(' >> ')}`; return ''; } continue; }
+      if (!s.open && !s.endWords && sec > 3 && await page.evaluate(() => [...document.querySelectorAll('#barbtns button')].some((x) => /NEXT MONTH/i.test(x.innerText || '')))) { lastExtra = `the nation has fallen: the game is now watched, with NEXT MONTH; screens: ${seen.join(' >> ')}`; return ''; } // a fallen nation's player watches the war go on
       if (s.open) {
         const go = ['END THE MONTH', 'END MONTH', 'YES', 'GIVE ORDERS', 'CONTINUE', 'SKIP', 'CLOSE', 'OK', '×'].find((w) => s.btns.some((x) => x.toLowerCase().startsWith(w.toLowerCase())));
         await page.waitForTimeout(600); const btn = go ? await findButton(go, '#card') : null; if (btn && !btn.off) await page.mouse.click(btn.x, btn.y); else await page.keyboard.press('Escape');
@@ -234,7 +235,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
       }
       continue;
     }
-    n++; errors = [];
+    n++; errors = []; if (process.env.TC_TRACE) console.error(`${new Date().toISOString().slice(11, 19)} step ${n}: ${s.verb} ${s.target || ''}`);
     // the game's last words are wiped before each step, so that the same reason given twice is heard the second time
     await page.evaluate(() => { try { const th = window.theater; if (th && th.ui && th.ui.msg) { th.ui.msg = ''; if (th.refresh) th.refresh(); } } catch (e) {} }); const a = await look(/province|sea/.test(s.verb) ? s.target : '');
     let note = ''; lastExtra = ''; lastBelow = 0; const c0 = clicks; if (NEW) await takeFeel();

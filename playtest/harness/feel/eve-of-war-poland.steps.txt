@@ -1,0 +1,9 @@
+# Version 84.2.3, case 6 (the eve of war) as Poland in September 1939, and the staging of case 2: corps put inside their towns, the month ended.
+press	Poland
+press	1939 The war begins
+press	Supreme command
+press	BEGIN THE CAMPAIGN
+watch	4
+close
+end-month
+end-month
