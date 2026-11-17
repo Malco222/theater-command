@@ -4796,6 +4796,20 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	const FVector2D Looking = WorldToMap(CameraFocus);
 	// From far off the trains are too small to see, and are put away.
 	const bool bNear = CameraDistance < 9000.0f;
+	// (Speed: "tc.Speed.TrainShadows", for measuring only. A thing that throws a shadow and moves has the shadows round
+	// it drawn again every frame, with everything else that throws one there.)
+	const bool bTrainShadows = TheaterSpeed::TrainShadows();
+	if (bTrainShadows != bTrainShadowsCast)
+	{
+		bTrainShadowsCast = bTrainShadows;
+		for (FTrain& Each : Trains)
+		{
+			if (Each.Mesh)
+			{
+				Each.Mesh->SetCastShadow(bTrainShadows);
+			}
+		}
+	}
 
 	// The trains running: each along its link, and on to another when it arrives.
 	for (int32 Index = Trains.Num() - 1; Index >= 0; --Index)
@@ -5011,7 +5025,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		Train.FlakLevel = 0;
 		MakeUpTrain(Train, StartRegion);
 	}
-	Train.Mesh->SetCastShadow(true);
+	Train.Mesh->SetCastShadow(TheaterSpeed::TrainShadows()); // ("tc.Speed.TrainShadows 0" is for measuring only)
 	Train.Mesh->SetVisibility(false); // until its first place on the line is set, at the next frame
 	Train.Mesh->SetVisibility(true);
 	Train.Mesh->SetRelativeLocation(SurfacePointOver(Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.X, Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.Y, 0.2));
@@ -11693,20 +11707,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// only across its rim. With one ring a puff was thick at its very middle alone, a third as thick as it was meant
 	// taken all over, and smoke built of such puffs was a haze of thin streaks.)
 	const int32 MaxPuffs = 2400, Rim = 8, PerPuff = 2 * Rim + 1; // (room for the columns over bombed places, which are dense)
-	if (!bSmokeMade)
+	// The mesh on the graphics chip, with room for so many puffs (the first so many of SmokeVertices: see the end).
+	auto MakeSmokeSection = [&](int32 Room, const TArray<FVector>& Points, const TArray<FColor>& Colours)
 	{
-		// The mesh is made once, with room for every puff; after that only its points and colours change.
-		bSmokeMade = true;
-		SmokeVertices.Init(FVector::ZeroVector, MaxPuffs * PerPuff);
-		// (two far corners to begin with, so that the mesh is never thought too small to draw)
-		SmokeVertices[1] = FVector(-20000.0, -20000.0, 0.0);
-		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
-		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
 		TArray<int32> Triangles;
-		Triangles.Reserve(MaxPuffs * Rim * 18);
-		for (int32 Puff = 0; Puff < MaxPuffs; ++Puff)
+		Triangles.Reserve(Room * Rim * 18);
+		for (int32 Each = 0; Each < Room; ++Each)
 		{
-			const int32 First = Puff * PerPuff;
+			const int32 First = Each * PerPuff;
 			// (both faces of every triangle, so that a puff shows whichever way it is wound to the eye)
 			auto Both = [&Triangles](int32 A, int32 B, int32 C)
 			{
@@ -11722,9 +11730,21 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 		TArray<FVector> Normals;
-		Normals.Init(FVector::UpVector, SmokeVertices.Num());
-		SmokeMesh->CreateMeshSection(0, SmokeVertices, Triangles, Normals, TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>(), false);
+		Normals.Init(FVector::UpVector, Points.Num());
+		SmokeMesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 		SmokeMesh->SetMaterial(0, HighlightMaterial);
+		SmokeRoom = Room;
+	};
+	if (!bSmokeMade)
+	{
+		// The mesh is made once, with room for every puff; after that only its points and colours change.
+		bSmokeMade = true;
+		SmokeVertices.Init(FVector::ZeroVector, MaxPuffs * PerPuff);
+		// (two far corners to begin with, so that the mesh is never thought too small to draw)
+		SmokeVertices[1] = FVector(-20000.0, -20000.0, 0.0);
+		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
+		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
+		MakeSmokeSection(MaxPuffs, SmokeVertices, SmokeColours);
 		SmokeMesh->SetCastShadow(false);
 	}
 
@@ -12825,7 +12845,61 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			SmokeColours[First + K] = FColor(0, 0, 0, 0);
 		}
 	}
-	SmokeMesh->UpdateMeshSection(0, SmokeVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>());
+
+	// (Speed, 17 November 2026; "tc.Speed.SmokeTrim".) Every point of all 2,400 puffs was sent to the graphics chip
+	// every frame, some forty thousand, when a few hundred puffs are in the air from playing height. Only the puffs in
+	// use are sent now, with room kept in steps of 300 (let down only after two seconds with fewer, so that it is not
+	// made again and again), and two points more that are no puff's: the corners of all the puffs, folded ones too,
+	// so that the mesh's bounds are what they always were and it is sorted among the see-through things as before.
+	// The puffs are the same puffs in the same order, so the picture is the same. At 0, all of them, as before.
+	int32 Wanted = MaxPuffs;
+	if (TheaterSpeed::SmokeTrim())
+	{
+		const int32 Step = 300;
+		Wanted = FMath::Clamp(FMath::DivideAndRoundUp(FMath::Max(Puff, 1), Step) * Step, Step, MaxPuffs);
+		if (Wanted < SmokeRoom && ++SmokeRoomSpare < 120)
+		{
+			Wanted = SmokeRoom;
+		}
+		else if (Wanted >= SmokeRoom)
+		{
+			SmokeRoomSpare = 0;
+		}
+	}
+	if (Wanted == MaxPuffs)
+	{
+		if (SmokeRoom != MaxPuffs)
+		{
+			MakeSmokeSection(MaxPuffs, SmokeVertices, SmokeColours);
+		}
+		else
+		{
+			SmokeMesh->UpdateMeshSection(0, SmokeVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>());
+		}
+		return;
+	}
+	const int32 Sent = Wanted * PerPuff;
+	SmokeSentVertices.SetNumUninitialized(Sent + 2);
+	SmokeSentColours.SetNumUninitialized(Sent + 2);
+	FMemory::Memcpy(SmokeSentVertices.GetData(), SmokeVertices.GetData(), Sent * sizeof(FVector));
+	FMemory::Memcpy(SmokeSentColours.GetData(), SmokeColours.GetData(), Sent * sizeof(FColor));
+	FBox Whole(ForceInit);
+	for (const FVector& Point : SmokeVertices)
+	{
+		Whole += Point;
+	}
+	SmokeSentVertices[Sent] = Whole.Min;
+	SmokeSentVertices[Sent + 1] = Whole.Max;
+	SmokeSentColours[Sent] = FColor(0, 0, 0, 0);
+	SmokeSentColours[Sent + 1] = FColor(0, 0, 0, 0);
+	if (Wanted != SmokeRoom)
+	{
+		MakeSmokeSection(Wanted, SmokeSentVertices, SmokeSentColours);
+	}
+	else
+	{
+		SmokeMesh->UpdateMeshSection(0, SmokeSentVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeSentColours, TArray<FProcMeshTangent>());
+	}
 }
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
