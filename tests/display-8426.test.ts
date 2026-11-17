@@ -99,7 +99,7 @@ describe("a dominion's mother country, first among its friends on the declare ca
 describe('the guns rule where he reads it first (log b357)', () => {
   it("the arsenal's Artillery and Engineer rows say they cannot take ground without infantry or tanks", () => {
     const blurb = (k: string): string => (ARSENAL as unknown as { land: Record<string, { blurb: string }> }).land[k].blurb;
-    expect(blurb('art')).toBe('Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as an armoured corps.');
+    expect(blurb('art')).toBe('Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as a corps of tanks.');
     expect(blurb('eng')).toMatch(/A poor fighter on its own, and it cannot take ground without infantry or tanks\.$/);
   });
 
