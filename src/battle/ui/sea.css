@@ -67,7 +67,3 @@
 .sea .seaspeed { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
 .sea .seaspeed[hidden] { display: none; }
 .sea .seaspeed .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
-
-/* The break bars' track at the art director's value (sea-226): lighter than the desk so a dark nation's fill (Germany's
-   grey stands 20 apart from it) still reads, with the inset paper edge keeping its shape. */
-.sea .bbar2 { background: rgba(226, 215, 188, .15); box-shadow: inset 0 0 0 1px rgba(226, 215, 188, .12); }
