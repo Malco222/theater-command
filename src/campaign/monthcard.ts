@@ -841,6 +841,17 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       Object.assign(row, { tag: 'HELD', tone: 'good', picture: 'town', line: `The siege of ${town} is raised.`, head: `The siege of ${town} is raised`, theirs: by ?? null });
       if (by) row.join = { word: 'against', name: theName(g.nations[by]) };
     }
+    // A siege laid on a town of his side's with no battle in the field (the Playtester's 84.2.6 find): BESIEGED by
+    // the besieger, amber, as the battle's own row says it ("Cleveland BESIEGED by Canada. Canadian troops close round
+    // the town."), never a nameless LOST while the town holds.
+    const laid = h.arm === 'land' && h.region !== undefined && / troops close round [^:]+: .+ is under siege\b/.test(h.text);
+    if (laid && bad && h.won && g.nations[h.won]) {
+      Object.assign(row, { tag: 'BESIEGED', tone: 'warn', picture: 'town', line: `${g.nations[h.won].adj} troops close round the town.`, head: `${row.place} is besieged`, theirs: h.won });
+    }
+    // (A row on land that names the other side says it by name, with the tag's own word.)
+    if (h.arm === 'land' && !row.join && row.theirs && g.nations[row.theirs] && (row.tag === 'WON' || row.tag === 'LOST' || row.tag === 'BESIEGED')) {
+      row.join = { word: row.tag === 'BESIEGED' ? 'by' : 'against', name: theName(g.nations[row.theirs]) };
+    }
     const escorts = /^The escorts of (?:the )?(.+?) sinks? /.exec(h.text);
     if (escorts && ships) row.line = `Sunk by escorts of the ${escorts[1]}.`;
     const arms = /^Cut off and out of supply, (.+?) lays? down (?:its|their) arms(?: at ([^:.]+))?(?:: (?:.+?, )?([\d,]+) men)?\./.exec(h.text);

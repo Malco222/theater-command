@@ -609,6 +609,7 @@ button.buy:hover { border-color: var(--brass); }
 .frow b { display: block; font-size: 13.5px; }
 .frow small { color: var(--ink-2); font-size: 11.5px; }
 .frow .stand { white-space: nowrap; }
+.frow .grow { flex: 1; min-width: 0; }
 .follows { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); }
 .follows li { margin: 0 0 5px; }
 .follows b { color: var(--ink); }

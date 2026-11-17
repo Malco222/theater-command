@@ -17,7 +17,7 @@ import carrierData from '../../data/campaign/carriers.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
-import { clamp } from '../core/math';
+import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, routineNews, worksOf } from './game';
 import { techMul, techNotes } from './research';
@@ -1151,7 +1151,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     raid(g, nat, r.ctrl, nation);
     // The air war: a province with no industry has no output to stop, and the raid is judged on its railway alone.
     value += airWar(g) && r.fac <= 0 ? 0 : cut * 1000;
-    result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : '';
+    // (No line where no bombs fell.)
+    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
@@ -1218,7 +1219,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
     shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
-    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${(worst[1] * 100).toFixed(1)}% of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
+    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.
