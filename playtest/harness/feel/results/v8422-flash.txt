@@ -1,0 +1,65 @@
+The province-capture flash, counted 2026-11-17 15:10Z to 15:20Z on a cloud machine (no graphics card), nothing else running.
+Save america-march-1942.save.txt, window 1,600 by 1,000. flashcount.cjs: ui.flash set to two provinces in view, refresh(), pictures made in the 2.4 s after; three rounds each.
+Standing still is judged on this machine. The drag is not (design director, 14:48Z): its rows are for the record only.
+
+== Version 8421, helsinki ==
+window 1600 by 1000; looking at Helsinki; the flash is laid on Helsinki and Estonia
+still, no flash          width 240  marks in view  1  pictures 138 / 139 / 137 in 2.41 / 2.42 / 2.40 s = 57 / 58 / 57 a second;  over 34 ms: 2 / 2 / 2;  worst 96 / 86 / 100 ms;  flash shapes at start 0, at end 0
+still, the flash         width 240  marks in view  1  pictures 64 / 67 / 76 in 2.41 / 2.40 / 2.42 s = 27 / 28 / 31 a second;  over 34 ms: 15 / 15 / 14;  worst 244 / 242 / 160 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 240  marks in view  1  pictures 57 / 46 / 57 in 2.73 / 2.61 / 2.49 s = 21 / 18 / 23 a second;  over 34 ms: 29 / 28 / 27;  worst 148 / 148 / 118 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 240  marks in view  1  pictures 30 / 32 / 28 in 2.79 / 2.72 / 2.71 s = 11 / 12 / 10 a second;  over 34 ms: 24 / 25 / 24;  worst 180 / 163 / 175 ms;  flash shapes at start 2, at end 0
+still, no flash          width 760  marks in view  4  pictures 139 / 138 / 140 in 2.41 / 2.40 / 2.40 s = 58 / 57 / 58 a second;  over 34 ms: 2 / 2 / 2;  worst 67 / 95 / 61 ms;  flash shapes at start 0, at end 0
+still, the flash         width 760  marks in view  4  pictures 72 / 68 / 61 in 2.41 / 2.40 / 2.40 s = 30 / 28 / 25 a second;  over 34 ms: 15 / 16 / 15;  worst 123 / 156 / 143 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 760  marks in view  4  pictures 44 / 39 / 49 in 2.73 / 2.60 / 2.54 s = 16 / 15 / 19 a second;  over 34 ms: 29 / 28 / 29;  worst 179 / 179 / 157 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 760  marks in view  4  pictures 27 / 30 / 29 in 2.72 / 2.78 / 2.76 s = 10 / 11 / 10 a second;  over 34 ms: 24 / 26 / 24;  worst 158 / 177 / 211 ms;  flash shapes at start 2, at end 0
+
+== Version 8421, mark ==
+window 1600 by 1000; looking at @mark; the flash is laid on Belgrade and Vojvodina
+still, no flash          width 240  marks in view  1  pictures 137 / 134 / 136 in 2.40 / 2.40 / 2.41 s = 57 / 56 / 56 a second;  over 34 ms: 3 / 2 / 2;  worst 84 / 124 / 113 ms;  flash shapes at start 0, at end 0
+still, the flash         width 240  marks in view  1  pictures 64 / 61 / 71 in 2.40 / 2.41 / 2.41 s = 27 / 25 / 29 a second;  over 34 ms: 14 / 15 / 14;  worst 232 / 208 / 170 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 240  marks in view  1  pictures 57 / 58 / 57 in 2.72 / 2.54 / 2.61 s = 21 / 23 / 22 a second;  over 34 ms: 28 / 29 / 32;  worst 160 / 100 / 113 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 240  marks in view  1  pictures 26 / 26 / 27 in 2.73 / 2.78 / 2.70 s = 10 / 9 / 10 a second;  over 34 ms: 22 / 22 / 24;  worst 264 / 202 / 154 ms;  flash shapes at start 2, at end 0
+still, no flash          width 760  marks in view  8  pictures 135 / 136 / 138 in 2.40 / 2.41 / 2.40 s = 56 / 56 / 58 a second;  over 34 ms: 2 / 2 / 2;  worst 99 / 101 / 67 ms;  flash shapes at start 0, at end 0
+still, the flash         width 760  marks in view  8  pictures 81 / 77 / 78 in 2.41 / 2.41 / 2.41 s = 34 / 32 / 32 a second;  over 34 ms: 16 / 14 / 16;  worst 115 / 179 / 122 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 760  marks in view  8  pictures 37 / 34 / 35 in 2.83 / 2.53 / 2.82 s = 13 / 13 / 12 a second;  over 34 ms: 27 / 28 / 27;  worst 207 / 193 / 184 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 760  marks in view  8  pictures 26 / 28 / 26 in 2.89 / 2.68 / 2.70 s = 9 / 10 / 10 a second;  over 34 ms: 25 / 25 / 23;  worst 191 / 164 / 200 ms;  flash shapes at start 2, at end 0
+
+== Version 8422, helsinki ==
+window 1600 by 1000; looking at Helsinki; the flash is laid on Helsinki and Estonia
+still, no flash          width 240  marks in view  1  pictures 138 / 138 / 138 in 2.41 / 2.41 / 2.40 s = 57 / 57 / 57 a second;  over 34 ms: 2 / 2 / 2;  worst 90 / 84 / 91 ms;  flash shapes at start 0, at end 0
+still, the flash         width 240  marks in view  1  pictures 128 / 130 / 134 in 2.41 / 2.41 / 2.41 s = 53 / 54 / 56 a second;  over 34 ms: 5 / 5 / 3;  worst 112 / 98 / 83 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 240  marks in view  1  pictures 52 / 57 / 57 in 2.65 / 2.52 / 2.70 s = 20 / 23 / 21 a second;  over 34 ms: 30 / 28 / 28;  worst 108 / 186 / 162 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 240  marks in view  1  pictures 48 / 51 / 52 in 2.62 / 2.67 / 2.65 s = 18 / 19 / 20 a second;  over 34 ms: 29 / 29 / 31;  worst 187 / 124 / 107 ms;  flash shapes at start 2, at end 0
+still, no flash          width 760  marks in view  4  pictures 137 / 140 / 137 in 2.41 / 2.41 / 2.41 s = 57 / 58 / 57 a second;  over 34 ms: 2 / 2 / 2;  worst 99 / 67 / 96 ms;  flash shapes at start 0, at end 0
+still, the flash         width 760  marks in view  4  pictures 137 / 139 / 138 in 2.40 / 2.41 / 2.40 s = 57 / 58 / 57 a second;  over 34 ms: 2 / 2 / 2;  worst 91 / 80 / 108 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 760  marks in view  4  pictures 46 / 45 / 52 in 2.67 / 2.78 / 2.71 s = 17 / 16 / 19 a second;  over 34 ms: 32 / 30 / 29;  worst 156 / 202 / 148 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 760  marks in view  4  pictures 48 / 42 / 46 in 2.68 / 2.61 / 2.71 s = 18 / 16 / 17 a second;  over 34 ms: 29 / 29 / 32;  worst 153 / 152 / 176 ms;  flash shapes at start 2, at end 0
+
+== Version 8422, mark ==
+window 1600 by 1000; looking at @mark; the flash is laid on Belgrade and Vojvodina
+still, no flash          width 240  marks in view  1  pictures 137 / 136 / 137 in 2.41 / 2.41 / 2.42 s = 57 / 56 / 57 a second;  over 34 ms: 2 / 2 / 2;  worst 89 / 104 / 104 ms;  flash shapes at start 0, at end 0
+still, the flash         width 240  marks in view  1  pictures 129 / 129 / 130 in 2.41 / 2.41 / 2.40 s = 54 / 53 / 54 a second;  over 34 ms: 4 / 5 / 4;  worst 126 / 112 / 101 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 240  marks in view  1  pictures 51 / 53 / 44 in 2.64 / 2.58 / 2.67 s = 19 / 21 / 17 a second;  over 34 ms: 25 / 26 / 29;  worst 130 / 169 / 145 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 240  marks in view  1  pictures 56 / 49 / 48 in 2.67 / 2.64 / 2.63 s = 21 / 19 / 18 a second;  over 34 ms: 27 / 29 / 29;  worst 115 / 128 / 123 ms;  flash shapes at start 2, at end 0
+still, no flash          width 760  marks in view  8  pictures 136 / 137 / 137 in 2.41 / 2.41 / 2.41 s = 56 / 57 / 57 a second;  over 34 ms: 2 / 2 / 4;  worst 120 / 99 / 65 ms;  flash shapes at start 0, at end 0
+still, the flash         width 760  marks in view  8  pictures 136 / 138 / 137 in 2.41 / 2.41 / 2.40 s = 57 / 57 / 57 a second;  over 34 ms: 3 / 2 / 3;  worst 98 / 79 / 81 ms;  flash shapes at start 2, at end 0
+dragged, no flash        width 760  marks in view  8  pictures 31 / 34 / 32 in 2.52 / 2.54 / 2.52 s = 12 / 13 / 13 a second;  over 34 ms: 24 / 28 / 25;  worst 177 / 162 / 160 ms;  flash shapes at start 0, at end 0
+dragged, the flash       width 760  marks in view  8  pictures 32 / 34 / 32 in 3.06 / 2.86 / 2.69 s = 10 / 12 / 12 a second;  over 34 ms: 25 / 27 / 25;  worst 214 / 189 / 209 ms;  flash shapes at start 2, at end 0
+
+== Does it still show and fade (flashlook.cjs, Helsinki, width 240) ==
+Version 8421
+175 ms: 2 shapes, strength 0.9, animations 1
+461 ms: 2 shapes, strength 0.768, animations 1
+829 ms: 2 shapes, strength 0.550, animations 1
+1322 ms: 2 shapes, strength 0.306, animations 1
+1803 ms: 2 shapes, strength 0.118, animations 1
+2153 ms: 2 shapes, strength 0.030, animations 1
+2402 ms: 0 shapes
+Version 8422
+127 ms: 2 shapes, strength 0.9, animations 0
+404 ms: 2 shapes, strength 0.66, animations 0
+803 ms: 2 shapes, strength 0.45, animations 0
+1302 ms: 2 shapes, strength 0.27, animations 0
+1802 ms: 2 shapes, strength 0.12, animations 0
+2154 ms: 0 shapes
+2404 ms: 0 shapes
