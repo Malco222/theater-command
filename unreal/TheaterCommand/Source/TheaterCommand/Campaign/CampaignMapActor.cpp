@@ -730,8 +730,11 @@ void ACampaignMapActor::BuildFrontLine()
 			}
 		}
 	}
-	Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
-	Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+	{
+		THEATER_SPEED_SCOPE(FrontLineCommit);
+		Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
+		Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+	}
 	FrontLineMesh->SetMeshSectionVisible(1, false);
 	FrontLineFar = 0;
 	UE_LOG(LogTheater, Log, TEXT("The front line: %d stretches of the player's own fronts, %d of others' (%d wars)"), Mine, Theirs, WarPairs.Num() / 2);
@@ -1443,7 +1446,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	// unseen ground went from (16, 32, 63), bluer than the ground in view, to (27, 39, 52).)
 	static float HazeDark = 0.33f, HazeDrain = 0.5f, HazeWisps = 0.34f, HazeFloor = 0.55f, HazeDrainNight = 0.75f;
 	static FLinearColor HazeDay(0.13f, 0.165f, 0.21f), HazeNight(0.24f, 0.22f, 0.17f);
-	static FLinearColor HazeCastDay(0.79f, 1.0f, 1.22f), HazeCastNight(1.0f, 0.95f, 0.6f);
+	static FLinearColor HazeCastDay(0.79f, 1.0f, 1.22f), HazeCastNight(0.68f, 0.95f, 0.80f); // (ruling 205(a): the moon's light is less blue now, so the haze's own cast by night gives up its red to keep the fog the colour it was built)
 	static bool bHazeRead = false;
 	if (!bHazeRead)
 	{
@@ -1475,7 +1478,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	// (by night the same paint came out at 57% of ground in view, where two thirds is asked: it is lifted a little there)
 	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * ACampaignEnvironment::MoonLook().Haze, Moon)); // (ruling 205(a): the fog by night stays as built while the ground in view is lifted)
 	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
-	LandScalar(TEXT("HazeFloor"), HazeFloor);
+	LandScalar(TEXT("HazeFloor"), HazeFloor * FMath::Lerp(1.0f, ACampaignEnvironment::MoonLook().HazeFloor, Moon)); // (ruling 205(a): by night the floor comes down with the share, so the fog stays as dark as it was built)
 	{
 		// How far the haze has travelled, in the table's units: the game's clock times its pace, 7.3 units a second,
 		// about five pixels a second from where he plays (the art director: never over eight). It goes about twenty
@@ -3250,9 +3253,12 @@ void ACampaignMapActor::BuildBorders()
 	{
 		BorderAcrossFor = Data.Regions.Num();
 	}
-	Buffers.Commit(BorderMesh, 0, InkMaterial);
-	Faint.Commit(BorderMesh, 1, ProvinceInk);
-	FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
+	{
+		THEATER_SPEED_SCOPE(BordersCommit); // (how much of the lines' cost is handing them to the graphics chip)
+		Buffers.Commit(BorderMesh, 0, InkMaterial);
+		Faint.Commit(BorderMesh, 1, ProvinceInk);
+		FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
+	}
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
 }
 

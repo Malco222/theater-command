@@ -87,6 +87,10 @@ const ACampaignEnvironment::FMoonLook& ACampaignEnvironment::MoonLook()
 				Kept.Sun = FLinearColor(Number(11), Number(12), Number(13));
 				Kept.Shade = FLinearColor(Number(14), Number(15), Number(16));
 			}
+			if (Parts.Num() >= 18)
+			{
+				Kept.HazeFloor = Number(17);
+			}
 		}
 	}
 	return Kept;
