@@ -310,14 +310,19 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
       if (blocked(g, c, r, a)) continue; // tanks and the steepest ground, wheels and a river with its bridges down
-      const step = moveCost(g, c, r, a);
-      const left = c.ap - ca;
-      if (left <= 0 || left < Math.min(step, 4)) continue;
-      const cost = ca + step;
+      // An attack on the province next door takes one move of the month, whatever the ground would cost to march
+      // over: the battle charges one, and the attack's card and its order ask only for a move left. So the gate
+      // below is for a march alone, and an army that has come up with a move in hand is shown its attack (Version
+      // 84.2.3: Brian's find of 2026-11-17, traced by the code checker. Before it, such an army had no red on
+      // the map and no word of an attack under the pointer, though a click still opened the card).
       if (hostileUnits(g, r, c.nat).length) {
         if (a === c.reg && !out.has(j)) out.set(j, { cost: 1, prev: a, attack: true });
         continue;
       }
+      const step = moveCost(g, c, r, a);
+      const left = c.ap - ca;
+      if (left <= 0 || left < Math.min(step, 4)) continue;
+      const cost = ca + step;
       if (!hasRoom(g, r, c)) continue;
       const old = out.get(j);
       if (old && old.cost <= cost) continue;
