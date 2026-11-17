@@ -303,6 +303,8 @@ export interface Corps extends Storied {
   /** Id of the general in command, if the corps has one. */
   general: number | null;
   hold: boolean;
+  /** A garrison row marked to stay (ruling 221, H): a general offensive's release does not take its hold away. */
+  stay?: boolean;
   dyle: string | null;
   supplied: boolean;
   fought: boolean;

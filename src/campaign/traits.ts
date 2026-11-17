@@ -44,9 +44,11 @@ export interface Trait {
   /**
    * The last levy (Version 68): with the enemy on its soil, its reserve of men under 'spent' of what it opened with
    * and its army in the field under 'under' divisions, 'men' divisions' worth of men join the reserve; 'most' times in
-   * a campaign and never twice within 'gap' months.
+   * a campaign and never twice within 'gap' months. 'words': 'divisions' where the game's count of men to a division
+   * would print a wrong figure (China's thin divisions, ruling 218): the card and the news then name the divisions and
+   * no figure of men.
    */
-  levy?: { under: number; spent: number; men: number; gap: number; most: number };
+  levy?: Levy;
   cost?: { what: string[]; mul: number };
   sealift?: number;
   alert?: boolean;
@@ -54,6 +56,9 @@ export interface Trait {
   fleet?: number;
   seaLoss?: number;
 }
+
+/** The last levy's numbers (Version 68): see Trait.levy. */
+export interface Levy { under: number; spent: number; men: number; gap: number; most: number; words?: 'divisions' }
 
 /** A nation's special formation, raised from the arsenal like any corps. */
 export interface Elite {
@@ -302,7 +307,7 @@ export function traitLevy(g: Game, nat: string): number {
   levyMen(g, nat, L.men);
   g.flags[`lv:${nat}`] = count + 1;
   g.flags[`lvt:${nat}`] = g.turn;
-  headline(g, 'event', `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+  headline(g, 'event', `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${L.words === 'divisions' ? `${levyBrings(L)}.` : `${levyBrings(L)} for its armies.`}`, nat);
   return L.men;
 }
 
@@ -372,6 +377,17 @@ function fightWords(x: { attack?: number; defence?: number; when?: When }, who: 
 
 const TIMES: Record<number, string> = { 3: 'three', 4: 'four', 5: 'five' };
 
+/** What a levy brings, in words: men at the game's count, or the divisions alone where the row asks for it. */
+const levyBrings = (L: Levy): string => (L.words === 'divisions' ? `men enough for ${+L.men.toFixed(1)} divisions` : `${menWords(L.men * MEN_PER_DIV)} more men`);
+
+/**
+ * The last levy in plain words, as the card gives it. A row the game already has in its rules ('builtin') carries its
+ * words by hand in 'rule', and a levy on such a row ends that text with this sentence (tests/traits.test.ts).
+ */
+export function levyRule(L: Levy): string {
+  return `With the enemy on its soil, its reserve of men all but spent and its army in the field under ${L.under} divisions, it calls up every man fit to bear arms: ${levyBrings(L)}, ${L.most === 1 ? 'once' : L.most === 2 ? 'twice' : `${TIMES[L.most] ?? L.most} times`} in a war at most and never twice within ${L.gap === 12 ? 'a year' : `${L.gap} months`}.`;
+}
+
 /**
  * What an ability does, in plain words worked out from its numbers, so the words and the rule cannot drift apart.
  * 'scale' turns production points into the money the player sees (BUDGET.scale).
@@ -387,7 +403,7 @@ export function traitRule(t: Trait, scale = 100): string {
   if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? 'double' : `${t.oil} times as much`}.`);
   if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
   if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? 'faster' : 'slower'}.`);
-  if (t.levy) out.push(`With the enemy on its soil, its reserve of men all but spent and its army in the field under ${t.levy.under} divisions, it calls up every man fit to bear arms: ${menWords(t.levy.men * MEN_PER_DIV)} more men, ${t.levy.most === 1 ? 'once' : t.levy.most === 2 ? 'twice' : `${TIMES[t.levy.most] ?? t.levy.most} times`} in a war at most and never twice within ${t.levy.gap === 12 ? 'a year' : `${t.levy.gap} months`}.`);
+  if (t.levy) out.push(levyRule(t.levy));
   if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct(t.cost.mul)} ${t.cost.mul < 1 ? 'less' : 'more'}.`);
   if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? 'one more corps' : `${t.sealift} more corps`} a month.`);
   if (t.alert) out.push('No enemy gets the surprise of the first month against it.');

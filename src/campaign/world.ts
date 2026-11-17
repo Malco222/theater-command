@@ -41,7 +41,7 @@ export const WORLD = data as unknown as {
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
   dominions?: Record<string, { of: string[]; answers: number }>;
-  corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
+  corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number; stay?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
   warWork: Record<string, number>;
