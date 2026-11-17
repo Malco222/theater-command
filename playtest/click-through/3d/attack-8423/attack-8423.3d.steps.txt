@@ -1,0 +1,77 @@
+# THE 3D BUILDER'S COPY of attack-8423.steps.txt (17 November 2026, unreal dbf90f7, rules 84.2.3). Changes from the playtester's list, each marked (3D):
+#  - one 'start' step first: the hook lays the table by beginning a campaign, then opens the save over it;
+#  - AUTO-RESOLVE is SEND THEM IN on the 3D attack card;
+#  - SALLY OUT is the province order 'Sally out from <town>' under ORDERS on the province's card (a click on the town's ground opens it);
+#  - with an army in hand a left click on ground in reach takes two clicks in 3D (the first offers, the second sends): the second is added.
+start	USA 1939-09	
+# Version 84.2.3's six attack cases, for the 3D game (the hook). Playtester, 2026-11-17.
+# Brian, 14:58Z: "if an enemy army is out of a city i couldnt attack them".
+# Each case opens a saved game made in the browser build of 84.2.3 (the rules' own save text, beside this file).
+# The browser's answers are in /mnt/project-files/playtest/feel/v8423-attack-cases.md. Only the 84.1 verbs are used.
+# Wanted back for every step: what the game said or did, and a picture. Where the 3D game uses other words for a
+# button, press the one that does the same job and note the word.
+#
+# --- HIS OWN CASE FIRST: his save a month on. The army came back to Cleveland with ONE move each; the Canadian guns stand round Pittsburgh.
+load	brian-january-1941-army-at-cleveland.save.txt
+select-province	Cleveland
+order-province	Pittsburgh	card
+press	SEND THEM IN	does
+close
+check-province	Pittsburgh	holder USA
+# --- CASE 3: a mark under the pointer. The same save: a click on Pittsburgh's airfield sign with the army in hand next door plans the attack.
+load	brian-january-1941-army-at-cleveland.save.txt
+select-province	Cleveland
+click-mark	airfield Pittsburgh	
+# (3D) the second click sends
+click-mark	airfield Pittsburgh	card
+close
+# --- CASE 1: one move left, the enemy next door on ground a march could not afford (the Tampico army with 1 move, the Mexican army in Guadalajara's hills).
+load	case1-one-move-left.save.txt
+select-province	Tampico
+order-province	Guadalajara	card
+close
+# --- CASE 4: no move left. A right-click and a click on the enemy next door each say why.
+load	case4-no-move-left.save.txt
+select-province	Tampico
+order-province	Guadalajara	says-why
+select-province	Tampico
+select-province	Guadalajara	says-why
+# --- CASE 5: all inside a town (Third Army inside Tampico, Fourth Army gone to Monterrey), the enemy next door.
+load	case5-all-inside-tampico.save.txt
+select-province	Tampico
+order-province	Guadalajara	says-why
+select-province	Tampico
+select-province	Guadalajara	says-why
+# --- CASE 2: his corps inside a town, the enemy round it (Poland, September 1939: Army Modlin in Mlawa, Narew Group in Bialystok).
+load	case2-poland-september-1939-besieged.save.txt
+select-province	Mlawa	says-why
+select-province	Mlawa	card
+close
+select-province	Bialystok
+order-province	Bialystok	card
+# (3D) the sortie is a province order: a click on the town's ground opens the province's card, ORDERS, then the order
+click-mark	Bialystok	
+press	ORDERS	
+press	Sally out	does
+close
+select-province	Bialystok
+order-province	Bialystok	says-why
+# --- CASE 6: the eve of war (Poland, 31 August 1939: Army Pomorze, the German army at Elbing).
+load	case6-poland-eve-of-war.save.txt
+select-province	Pomorze
+order-province	Elbing	says-why
+select-province	Pomorze
+select-province	Elbing	says-why
+# --- HIS SAVE AS HE LEFT IT (December 1940): the cure from the start. One order brings the army back by rail; next month it relieves Pittsburgh.
+load	brian-save-usa-1940-12-turn16.json
+select-province	Vancouver
+order-province	Pittsburgh	moves
+end-month
+# (3D) the month's report card is the first thing after the month ends: Esc puts it away
+key	esc	
+select-province	Cleveland
+order-province	Pittsburgh	card
+press	SEND THEM IN	does
+close
+check-province	Pittsburgh	holder USA
+
