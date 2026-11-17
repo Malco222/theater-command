@@ -1788,6 +1788,17 @@ FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 Regi
 	return CorpsIds.Num() == 0 ? FAttackResult() : Fight(TEXT("attack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId));
 }
 
+FString FCampaignSession::GarrisonWhy(int32 RegionId)
+{
+	FString Why;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("garrisonWhy"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("why"), Why);
+	}
+	return Why;
+}
+
 FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId)
 {
 	FApproachPlan Plan;
@@ -1816,7 +1827,13 @@ FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int3
 			Row->TryGetNumberField(TEXT("left"), Way.Left);
 			Row->TryGetBoolField(TEXT("attack"), Way.bAttack);
 			Row->TryGetStringField(TEXT("arrive"), Way.Arrive);
-			Row->TryGetStringField(TEXT("how"), Way.How);
+			{
+				// (The UI director, check 19: the ground by its label, "open country", never the rules' key "plains".)
+				FString River, Ground;
+				Row->TryGetStringField(TEXT("riverWords"), River);
+				Row->TryGetStringField(TEXT("ground"), Ground);
+				Way.How = River + TEXT(" \u00B7 ") + FCampaignMapData::TerrainLabel(Ground).ToLower();
+			}
 			Row->TryGetStringField(TEXT("says"), Way.Says);
 			const TArray<TSharedPtr<FJsonValue>>* Road = nullptr;
 			if (Row->TryGetArrayField(TEXT("road"), Road))

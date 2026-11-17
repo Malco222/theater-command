@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6a7de6e 2026-11-17. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4dc8b40 2026-11-17. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -16916,7 +16916,19 @@
     if (c.dead || g2.human === null || c.nat !== g2.human) return null;
     if (c.kind === "fort") return FORT_NO_ORDERS;
     if (c.leave !== void 0) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
+    if (c.town !== void 0) return garrisonLine(g2, [c]);
     return null;
+  }
+  function garrisonLine(g2, cs) {
+    const r = g2.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
+    const who = one ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? "in " : ""}the garrison of ${town}` : `They are the garrison of ${town}`;
+    const shut = g2.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g2, u.nat, r.ctrl));
+    return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one ? "it" : "them"} to take the field first.`;
+  }
+  function whyNotOrderGarrison(g2, region) {
+    const r = g2.regions[region];
+    const cs = g2.human === null || !r ? [] : (r.garr ?? []).filter((c) => c.nat === g2.human && !c.dead);
+    return cs.length ? garrisonLine(g2, cs) : null;
   }
   function corpsCard(g2, c) {
     const battles = c.rec?.battles ?? 0, won = c.rec?.won ?? 0;
@@ -20553,6 +20565,7 @@
     flownRaids: () => flownRaids,
     foldChoicesAt: () => foldChoicesAt,
     foreignBooks: () => foreignBooks,
+    garrisonLine: () => garrisonLine,
     garrisonsAt: () => garrisonsAt,
     gateLeft: () => gateLeft,
     gateQuestion: () => gateQuestion,
@@ -20744,6 +20757,7 @@
     whyNotOrderDecree: () => whyNotOrderDecree,
     whyNotOrderDomination: () => whyNotOrderDomination,
     whyNotOrderEarlyClass: () => whyNotOrderEarlyClass,
+    whyNotOrderGarrison: () => whyNotOrderGarrison,
     whyNotOrderPromise: () => whyNotOrderPromise,
     whyNotOrderResearch: () => whyNotOrderResearch,
     whyNotRecruitAgent: () => whyNotRecruitAgent,
@@ -28612,6 +28626,7 @@
     const r = g2.regions[to];
     if (!r || !g2.human || !humanUp(g2)) return "No orders can be given now.";
     if (!canOrder(g2, c)) return `${c.name} takes no orders this month.`;
+    if (c.town !== void 0) return garrisonLine(g2, [c]);
     if (onEve(g2)) return "On the eve of war every army stays where it is placed.";
     if (to === c.reg) return `${c.name} is there already.`;
     if (atWar(g2, c.nat, r.ctrl)) return c.ap > 0 ? "A march is never kept onto enemy ground: an attack is planned in the month it is made, with the odds in front of you." : "No moves left this month. An attack is planned in the month it is made.";
@@ -32222,12 +32237,13 @@
           }
         })() : "";
         const arrive3 = attack2 ? `${left} move${left === 1 ? "" : "s"} left on arrival: you can attack this month` : left > 0 ? `${left} move${left === 1 ? "" : "s"} left on arrival, but the way in from there is barred to this army this month` : "No move left on arrival: the attack waits for next month";
-        const how = `${river ? `across the ${river.replace(/^the /i, "")}${down ? ", bridges down" : ""}` : "no river"} · ${r.terrain}`;
+        const riverWords = river ? `across the ${river.replace(/^the /i, "")}${down ? ", bridges down" : ""}` : "no river";
+        const how = `${riverWords} · ${r.terrain}`;
         const says = !enemy ? "" : meets === "open" ? `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.` : `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.`;
         const first2 = going.slice().sort((a, b) => a.m.get(j).cost - b.m.get(j).cost)[0];
         const road = [];
         for (let at = j; at !== first2.c.reg && at >= 0 && road.length < 32; at = first2.m.get(at)?.prev ?? -1) road.unshift(at);
-        rows.push({ id: j, name: r.name, cost, left, attack: attack2, river, down, ground: r.terrain, enemy, arrive: arrive3, how, says, road });
+        rows.push({ id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy, arrive: arrive3, how, says, road });
       }
       rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || (a.enemy ? 1 : 0) - (b.enemy ? 1 : 0) || a.id - b.id);
       if (rows.length) return { ok: true, name: target.name, rows: rows.slice(0, 4), none: "" };
@@ -32248,6 +32264,13 @@
       return out;
     } catch {
       return out;
+    }
+  }
+  function garrisonWhy(region) {
+    try {
+      return { why: whyNotOrderGarrison(game(), region) ?? "" };
+    } catch {
+      return { why: "" };
     }
   }
   function takeOutlook(ids2, to) {
@@ -35971,6 +35994,7 @@ ${standing5}`,
     gateOrder,
     gateLeft: gateLeftOf,
     approach,
+    garrisonWhy,
     endMonth
   };
 })();

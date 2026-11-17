@@ -172,6 +172,7 @@ FStepPlayer::FSeen FStepPlayer::Look(ACampaignPlayerController& Player, int32 Re
 {
 	FSeen Seen;
 	Player.DescribeScreen(Seen.Open, Seen.Words, Seen.Hand);
+	Seen.Notices = Player.StepNotices();
 	if (FCampaignSession* Session = Player.GetSession())
 	{
 		Seen.Digest = Session->StepDigest(RegionId, Player.StepPicked(), Player.StepFleet(), Seen.Stamp, Seen.Holder);
@@ -668,13 +669,17 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		Words = Player.GetHoverTip().ToString();
 	}
-	const bool bSaid = bSaidWhy || (bPointing ? !Words.IsEmpty() : (!After.Words.IsEmpty() && After.Words != Before.Words));
+	// (a sentence put on the paper line during the step is an answer, though it be the sentence that already stood there)
+	const bool bSpoke = After.Notices != Before.Notices;
+	const bool bSaid = bSaidWhy || bSpoke || (bPointing ? !Words.IsEmpty() : (!After.Words.IsEmpty() && After.Words != Before.Words));
 	const FString Verdict = bError ? TEXT("ERROR") : bMissing ? TEXT("MISSING") : bMute ? TEXT("MUTE") : bChanged ? TEXT("DID") : bSaid ? TEXT("SAID WHY") : TEXT("DEAD");
 	// What the step expected of the game.
 	FString Pass = TEXT("null");
 	const FString Expect = Step.Expect;
 	if (Expect == TEXT("does")) { Pass = Verdict == TEXT("DID") ? TEXT("true") : TEXT("false"); }
-	else if (Expect == TEXT("says-why")) { Pass = Verdict == TEXT("SAID WHY") ? TEXT("true") : TEXT("false"); }
+	// ("says-why": nothing in the game changes and words say why. On this table a click on a place also looks at it, so
+	// a card of the place may open beside the words: the game itself must be as it was.)
+	else if (Expect == TEXT("says-why")) { Pass = (Verdict == TEXT("SAID WHY") || (bSaid && !bError && !bMissing && After.Bare == Before.Bare)) ? TEXT("true") : TEXT("false"); }
 	else if (Expect == TEXT("moves")) { Pass = After.Hand != Before.Hand && After.Bare != Before.Bare ? TEXT("true") : TEXT("false"); }
 	else if (Expect.StartsWith(TEXT("holder"))) { Pass = After.Holder == Expect.Mid(6).TrimStartAndEnd() ? TEXT("true") : TEXT("false"); }
 	else if (Expect.StartsWith(TEXT("says ")))
@@ -707,9 +712,9 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 	const FString Smooth = FString::Printf(TEXT("\"act_ms\":%.0f,\"first_ms\":%s,\"settled_ms\":%s,\"wait_ms\":%.0f,\"fps_low\":%.1f,\"fps_mid\":%.1f,\"game_ms\":%.1f,\"draw_ms\":%.1f,\"chip_ms\":%.1f,\"on_screen\":%s,\"screens\":[%s]"),
 		ActMs, FirstMs < 0.0 ? TEXT("null") : *FString::Printf(TEXT("%.0f"), FirstMs), LastMs < 0.0 ? TEXT("null") : *FString::Printf(TEXT("%.0f"), LastMs), SinceAct * 1000.0,
 		Longest > 0.0f ? 1.0f / Longest : 0.0f, Middle > 0.0f ? 1.0f / Middle : 0.0f, GameMs / FrameCount, DrawMs / FrameCount, ChipMs / FrameCount, OnScreen < 0 ? TEXT("null") : OnScreen > 0 ? TEXT("true") : TEXT("false"), *Came);
-	const FString Line = FString::Printf(TEXT("{\"n\":%d,\"line\":%d,\"verb\":%s,\"target\":%s,\"expect\":%s,\"hand\":%s,\"open\":%s,\"words\":%s,\"before\":%s,\"after\":%s,\"verdict\":%s,\"pass\":%s,\"note\":%s,%s,\"picture\":%s}\n"),
+	const FString Line = FString::Printf(TEXT("{\"n\":%d,\"line\":%d,\"verb\":%s,\"target\":%s,\"expect\":%s,\"hand\":%s,\"open\":%s,\"words\":%s,\"before\":%s,\"after\":%s,\"verdict\":%s,\"said\":%s,\"pass\":%s,\"note\":%s,%s,\"picture\":%s}\n"),
 		Logged, Step.Line, *Quote(Step.bSweep ? FString(TEXT("press-each: press")) : Step.Verb), *Quote(Step.Target), *Quote(Step.Expect), *Quote(After.Hand), *Quote(After.Open), *Quote(Words),
-		Before.Digest.IsEmpty() ? TEXT("null") : *Before.Digest, After.Digest.IsEmpty() ? TEXT("null") : *After.Digest, *Quote(Verdict), *Pass, *Quote(Note), *Smooth, *Quote(Picture));
+		Before.Digest.IsEmpty() ? TEXT("null") : *Before.Digest, After.Digest.IsEmpty() ? TEXT("null") : *After.Digest, *Quote(Verdict), bSaid ? TEXT("true") : TEXT("false"), *Pass, *Quote(Note), *Smooth, *Quote(Picture));
 	FFileHelper::SaveStringToFile(Line, *FPaths::Combine(Folder, TEXT("steps.jsonl")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 	FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, Picture), true, false);
 	UE_LOG(LogTheater, Display, TEXT("Steps: %d (line %d) %s %s: %s%s"), Logged, Step.Line, *Step.Verb, *Step.Target, *Verdict, Pass == TEXT("false") ? TEXT("  ** NOT AS EXPECTED **") : TEXT(""));

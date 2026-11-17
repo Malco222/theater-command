@@ -58,7 +58,7 @@ import {
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
-  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotSallyOut, sallyOutlook, orderSally,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -1897,7 +1897,7 @@ const noArmy = <T extends { label: string; value: string }>(lines: T[]): T[] => 
 function approach(ids: number[], to: number) {
   const s = game();
   const target = s.regions[to];
-  type Row = { id: number; name: string; cost: number; left: number; attack: boolean; river: string; down: boolean; ground: string; enemy: boolean; arrive: string; how: string; says: string; road: number[] };
+  type Row = { id: number; name: string; cost: number; left: number; attack: boolean; river: string; riverWords: string; down: boolean; ground: string; enemy: boolean; arrive: string; how: string; says: string; road: number[] };
   const out = { ok: false, name: target?.name ?? '', rows: [] as Row[], none: '' };
   const me = s.human;
   try {
@@ -1931,13 +1931,15 @@ function approach(ids: number[], to: number) {
       const arrive = attack ? `${left} move${left === 1 ? '' : 's'} left on arrival: you can attack this month`
         : left > 0 ? `${left} move${left === 1 ? '' : 's'} left on arrival, but the way in from there is barred to this army this month`
           : 'No move left on arrival: the attack waits for next month';
-      const how = `${river ? `across the ${river.replace(/^the /i, '')}${down ? ', bridges down' : ''}` : 'no river'} \u00B7 ${r.terrain}`;
+      // (its river in words; the ground goes by its key, and each game prints its own label for it: "open country")
+      const riverWords = river ? `across the ${river.replace(/^the /i, '')}${down ? ', bridges down' : ''}` : 'no river';
+      const how = `${riverWords} \u00B7 ${r.terrain}`;
       const says = !enemy ? '' : meets === 'open' ? `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.` : `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.`;
       // The road there, as the first corps that can go would march it.
       const first = going.slice().sort((a, b) => a.m.get(j)!.cost - b.m.get(j)!.cost)[0];
       const road: number[] = [];
       for (let at = j; at !== first.c.reg && at >= 0 && road.length < 32; at = first.m.get(at)?.prev ?? -1) road.unshift(at);
-      rows.push({ id: j, name: r.name, cost, left, attack, river, down, ground: r.terrain, enemy, arrive, how, says, road });
+      rows.push({ id: j, name: r.name, cost, left, attack, river, riverWords, down, ground: r.terrain, enemy, arrive, how, says, road });
     }
     rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || (a.enemy ? 1 : 0) - (b.enemy ? 1 : 0) || a.id - b.id);
     if (rows.length) return { ok: true, name: target.name, rows: rows.slice(0, 4), none: '' };
@@ -1956,6 +1958,11 @@ function approach(ids: number[], to: number) {
       : `An army attacks from the province next door, and nothing beside ${target.name} can be reached this month.`;
     return out;
   } catch { return out; }
+}
+
+/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; '' where he has none there. */
+function garrisonWhy(region: number) {
+  try { return { why: whyNotOrderGarrison(game(), region) ?? '' }; } catch { return { why: '' }; }
 }
 
 function takeOutlook(ids: number[], to: number) {
@@ -5413,4 +5420,4 @@ function find(name: string) {
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, endMonth };

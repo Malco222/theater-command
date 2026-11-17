@@ -180,7 +180,7 @@ namespace
 	const FLinearColor InkSoft = FLinearColor(FColor::FromHex(TEXT("5B4A38")));
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
 	const FLinearColor Binding = FLinearColor(FColor::FromHex(TEXT("7A2F22")));
-	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12"))).CopyWithNewOpacity(0.93f);
+	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12"))); // (the UI director, check 19: every panel's fill is solid; only the veil is see-through)
 	const FLinearColor DoorBrass = FLinearColor(FColor::FromHex(TEXT("C9A55A")));
 	const FLinearColor PillBrass = FLinearColor(FColor::FromHex(TEXT("B8934D")));
 

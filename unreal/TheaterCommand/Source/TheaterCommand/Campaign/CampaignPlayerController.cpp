@@ -5293,9 +5293,30 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 		SelectRegion(Target);
 		return;
 	}
+	// (Rules 84.2.3, "no press on an enemy army goes unanswered"; the playtester's cases 4 to 6.) With an army in hand
+	// that cannot attack the enemy army clicked: the click still looks at the place, and the paper line says why no
+	// attack was planned, in the words the right button gives.
+	FString WhyNot;
+	if (ArmyRegion != INDEX_NONE && Target != INDEX_NONE && Target != ArmyRegion && !bByRail && !bBySea && !WhyNoAttackOn(Target).IsEmpty())
+	{
+		WhyNot = GarrisonSays();
+		if (WhyNot.IsEmpty() && bHandSpent)
+		{
+			const FMarchPlan& KeptWay = PlanFor(Target);
+			WhyNot = KeptWay.Line.IsEmpty() ? FString(TEXT("No moves left this month.")) : KeptWay.Line;
+		}
+		if (WhyNot.IsEmpty())
+		{
+			WhyNot = WhyNoAttackOn(Target);
+		}
+	}
 	// Anywhere else: look at that territory. If one of the player's armies is there it is picked up; if not,
 	// whatever was in hand is put down.
 	SelectRegion(Target);
+	if (!WhyNot.IsEmpty())
+	{
+		Notify(WhyNot, 9.0);
+	}
 	if (!PickUpArmyIn(Target))
 	{
 		PutDownArmy();
@@ -5482,6 +5503,13 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens.
 		Tray.HintLead = FText::FromString(TEXT("No moves left this month."));
 		Tray.Hint = FText::FromString(TEXT("Right-click a friendly place and they march there from next month."));
+		// (The playtester's run of 17 November: a garrison always reads "no moves", and was promised a march here.)
+		const FString Garrison = GarrisonSays();
+		if (!Garrison.IsEmpty())
+		{
+			Tray.HintLead = FText::GetEmpty();
+			Tray.Hint = FText::FromString(Garrison + TEXT(" Esc puts them down."));
+		}
 	}
 	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
 	{
@@ -5626,6 +5654,15 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
 	RefreshOrders();
+	if (bNewInHand)
+	{
+		// (Rules 84.2.4; the playtester's case 2.) A garrison in hand says at once how it comes out of its town.
+		const FString Garrison = GarrisonSays();
+		if (!Garrison.IsEmpty())
+		{
+			Notify(Garrison, 9.0);
+		}
+	}
 	if (bNewInHand)
 	{
 		// It answers, in its own language: a word on the tray for a moment (and one day a voice).
@@ -6157,8 +6194,9 @@ FString ACampaignPlayerController::GarrisonSays() const
 {
 	// (The rules builder, 17 November: corps in a town neither march nor attack until they take the field; a garrison
 	// shut in attacks by sortie. The code checker: a garrison in hand was being promised marches it would never make.
-	// The words are the rules builder's own, held here until whyNotOrderGarrison comes with rules 84.2.4.)
-	const FCampaignSession* Session = GetSession();
+	// The sentence is the rules' own (whyNotOrderGarrison, rules 84.2.4); the same words stand here for a save or a
+	// bundle that has none.)
+	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0)
 	{
 		return FString();
@@ -6175,6 +6213,13 @@ FString ACampaignPlayerController::GarrisonSays() const
 		if (First.IsEmpty())
 		{
 			First = Unit->Name;
+		}
+	}
+	{
+		const FString Rules = Session->GarrisonWhy(ArmyRegion);
+		if (!Rules.IsEmpty())
+		{
+			return Rules;
 		}
 	}
 	auto AtWarWith = [&View](const FString& Tag)
@@ -6224,6 +6269,11 @@ FString ACampaignPlayerController::WhyNoAttackOn(int32 RegionId) const
 		return FString();
 	}
 	const FString& Name = Map->GetData().Regions[RegionId].Name;
+	if (View.bEve)
+	{
+		// (Rules 84.2.3: on the eve of war no attack goes in. The browser game's own sentence.)
+		return TEXT("On the eve of war every army stays where it is placed: no attack goes in until the war has opened.");
+	}
 	if (Map->GetData().Regions[ArmyRegion].Neighbors.Contains(RegionId))
 	{
 		// Next door, and still no attack: the ground between bars the way (the rules' own bar: rivers.ts).
@@ -6255,6 +6305,26 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	{
 		if (Session && Map.IsValid() && ArmyRegion != INDEX_NONE && RegionId == ArmyRegion)
 		{
+			const FString Garrison = GarrisonSays();
+			if (!Garrison.IsEmpty())
+			{
+				// (The rules builder's cases, 17 November; the playtester's case 2.) The garrison in hand and its own
+				// town right-clicked: the rules' sentence says how it comes out (the sortie, or taking the field), and
+				// the province's card opens on its orders, where that order stands with its odds.
+				SelectRegion(RegionId);
+				SetProvinceTab(2);
+				// (where the rules will not have the sortie now, as after one this month, their reason is what is said)
+				FString Refused;
+				for (const FProvinceOption& Option : Session->Province(RegionId).Options)
+				{
+					if (Option.Action.StartsWith(TEXT("work:sally")) && !Option.bEnabled && !Option.Why.IsEmpty())
+					{
+						Refused = Option.Why;
+					}
+				}
+				Notify(Refused.IsEmpty() ? Garrison + TEXT(" The order is under ORDERS on the province's card.") : Refused, 10.0);
+				return;
+			}
 			// (Ruling 182.) A right-click on the town with the army that stands round it in hand: the assault's card.
 			OpenStormCard(RegionId, false);
 		}
@@ -8147,6 +8217,7 @@ void ACampaignPlayerController::FinishMonth()
 
 void ACampaignPlayerController::Notify(const FString& Text, double Seconds)
 {
+	++NoticesSaid; // (the playtester's hook: a sentence said again is still an answer)
 	NoticeText = Text;
 	NoticeUntil = FPlatformTime::Seconds() + Seconds;
 }

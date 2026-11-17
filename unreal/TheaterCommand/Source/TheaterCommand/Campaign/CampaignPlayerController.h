@@ -878,6 +878,9 @@ public:
 	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord);
 	const TArray<int32>& StepPicked() const { return PickedCorps; }
 	int32 StepFleet() const { return FleetInHand; }
+	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
+	int32 StepNotices() const { return NoticesSaid; }
+	int32 NoticesSaid = 0;
 	void PressEscape() { Escape(); }
 	void PressSpace() { SpaceBar(); }
 	/** What the game is showing by itself just now, for the screens a month's end brings: the question, the replay, a newsreel, an announcement, or the page on top. */

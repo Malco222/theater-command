@@ -36,6 +36,7 @@ private:
 		FString Open, Words, Hand, Digest, Holder;
 		int64 Stamp = 0;
 		int64 Bare = 0; // the same reading with no province named
+		int32 Notices = 0; // how many sentences the paper line had been given
 	};
 
 	FSeen Look(ACampaignPlayerController& Player, int32 RegionId) const;
