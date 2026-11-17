@@ -19,7 +19,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, routineNews, worksOf } from './game';
+import { allied, atWar, headline, routineNews, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -493,6 +493,7 @@ export function openAirWar(g: Game): void {
 export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
   if (r.id === f.base) return 'It is already based there.';
+  if (thornGround(g, r, f.nat)) return `${g.nations[r.owner].name} keeps its own air force: no group of its allies is based there.`;
   // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
   // field of an enemy province has the use of its airfield after a month, and a wrecked one serves nobody.
   if (!airfieldOpenTo(g, f.nat, r)) {

@@ -19,7 +19,7 @@ import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesOf, signTrade, tradeRules, wealthOf } from './trade';
-import { DIPLOMACY, canCourt, court, courtable, receptive, step } from './diplomacy';
+import { DIPLOMACY, canCourt, court, courtable, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
@@ -238,9 +238,20 @@ function build(g: Game, nat: string): string | null {
 // ---- Diplomacy ----------------------------------------------------------------------------------------
 
 function diplomacy(g: Game, nat: string): string | null {
+  // (Ruling 223(d): while the Axis courts a neutral of the Americas, the United States courts it back at no cost.)
+  const back = Object.values(g.nations).filter((T) => freeCourt(g, nat, T.id) && canCourt(g, nat, T.id).ok && court(g, nat, T.id));
+  const said = envoys(g, nat);
+  if (!back.length) return said;
+  const backed = `courted ${listAnd(back.map((T) => the(T)))} back, at no cost while the Axis courts ${back.length === 1 ? 'it' : 'them'}`;
+  return said ? `${backed}, and ${said}` : `${backed}.`;
+}
+
+function envoys(g: Game, nat: string): string | null {
   const n = g.nations[nat], b = bloc(n);
   if (!b || b === 'league' || n.pc < DIPLOMACY.court.cost + DEPTH.diplomacy.keep) return null;
   const side = b === 'axis' ? 1 : -1;
+  // (A player's own Axis courts as it always has, by hand or by his staff: ruling 223(e). The computer's envoys in the
+  // Americas are diplomacy.ts's americasMonth.)
   let best: Nation | null = null, top = 0, book = 0;
   for (const T of Object.values(g.nations)) {
     if (!canCourt(g, nat, T.id).ok) continue;
