@@ -51,17 +51,22 @@ export const LAND = {
   height: { over: 8, up: 1.15, down: 0.9 },
   /**
    * Holding its own ground: a defending block within 'within' metres of where it was drawn up takes this share of the
-   * damage (it knows the ground, it is set, the attacker is out in the open). Set by the fairness table so that two
-   * computer generals carry the ground about as often as the dice would (ruling 217(3)).
+   * damage. Set by the fairness table, ground by ground, so that two computer generals carry the ground about as often
+   * as the dice would (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock) already gives the
+   * defence more than the campaign's odds, which count the ground already, mean it to have.
    */
-  hold: { take: { plains: 0.4, forest: 0.4, hills: 0.4, mountain: 0.5, marsh: 0.5, urban: 0.4, desert: 0.4 } as Record<string, number>, within: 300 },
+  hold: { take: { plains: 1, forest: 1.75, hills: 1.1, mountain: 1.45, marsh: 1.9, urban: 1, desert: 1 } as Record<string, number>, within: 300 },
   /** Dug in: the damage taken while it stays within this many metres of where it began. */
   dug: { take: 0.65, keep: 30 },
   nerve: {
     /** Below 'waver' it fights worse; below 'rout' it runs; a runner rallies at 'rally' when clear of the enemy for 'quiet' seconds. */
     waver: 0.4, rout: 0.2, rally: 0.35, quiet: 15, clear: 450,
-    /** Nerve lost for each share of strength lost, before where the blow landed. */
-    perLoss: 0.5,
+    /**
+     * Nerve lost for each share of strength lost, before where the blow landed. Divisions break on their nerve long
+     * before they are worn away, so a battle fought to its end costs about what the campaign bills for its result
+     * (the design director, b356); an attack's nerve goes faster than a defence's on its own ground.
+     */
+    perLoss: { att: 0.5, def: 0.5 } as Record<'att' | 'def', number>,
     /** A friend breaking within 'near' metres. */
     friendRuns: 0.03, near: 400,
     /** Coming back while not being hit for 'still' seconds, a second; faster for a runner who is clear. */
@@ -71,8 +76,25 @@ export const LAND = {
     /** Experience and a general: experience takes this share off every loss of nerve at full; each level of the general 0.03. */
     xp: 0.35, general: 0.03,
   },
+  /**
+   * Blocks a side: one a division. A side with fewer than 'least' has divisions split into their three regiments until
+   * it has enough to handle (ruling 217(c)); more than 'most' and divisions are folded two to a block.
+   */
+  blocks: { least: 6, most: 20, regiments: 3 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
+  /**
+   * Or when this share of its power is worn away: what an attack will pay before it is called off, and a defence
+   * before it gives up the ground. Set so that a battle fought to its end costs each side about what the campaign's
+   * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
+   */
+  spent: { att: 0.13, def: 0.18 } as Record<'att' | 'def', number>,
+  /**
+   * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
+   * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
+   * falls back to the lines it came from: the campaign's own bill has the same shape (resolveBattle in game.ts).
+   */
+  count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } } as { routing: Record<'att' | 'def', number>; gone: Record<'att' | 'def', number> },
   /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
   jitter: 0.1,
   /** Seconds of battle time before the defender is counted as having held. */

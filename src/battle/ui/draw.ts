@@ -6,7 +6,7 @@
 import { DT, type Side } from '../core/types';
 import type { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
-import { PAINT } from './paint';
+import { PAINT, type Painted } from './paint';
 
 export interface Camera { x: number; y: number; z: number }
 
@@ -76,15 +76,20 @@ export function signSvg(kind: string, color: string): string {
 
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 
-export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, field: HTMLCanvasElement): void {
+export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, field: Painted): void {
   const { cam, W, H } = s;
   x.save();
   x.fillStyle = '#0e0b08';
   x.fillRect(0, 0, W, H);
   // The painted field: its top-left is the field's north-west corner.
   const [fx, fy] = toScreen(s, 0, b.field.h);
+  const fw = (field.base.width / PAINT) * cam.z, fh = (field.base.height / PAINT) * cam.z;
   x.imageSmoothingEnabled = true;
-  x.drawImage(field, fx, fy, (field.width / PAINT) * cam.z, (field.height / PAINT) * cam.z);
+  x.drawImage(field.base, fx, fy, fw, fh);
+  // The furrows and single crowns come in from the closer zooms; the whole-field view stays quiet (the art director).
+  const whole = Math.min(W / b.field.w, H / b.field.h);
+  const near = Math.max(0, Math.min(1, (cam.z / whole - 1.4) / 0.8));
+  if (near > 0) { x.globalAlpha = near; x.drawImage(field.detail, fx, fy, fw, fh); x.globalAlpha = 1; }
 
   // Where each side drew up: a faint ruled band, only while the battle has not started.
   if (b.t < DT) {
@@ -120,22 +125,30 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   const colour: Record<Side, string> = { att: b.ticket.att.color, def: b.ticket.def.color };
   const byId = new Map(b.units.map((u) => [u.id, u]));
 
-  // Orders of the player's own blocks: where they are going, in brass; whom they are going for, in red.
+  // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
+  // down, the staff's pencil, ink and thinner. Gold is what you hold, pencil is what stands ordered; never red. An
+  // attack ends in a small head at its target, a march in a dot.
   for (const u of b.units) {
     if (u.side !== s.me || !live(u) || !u.order) continue;
     const pts: [number, number][] = [[u.x, u.y], ...u.path];
     const tgt = u.order.target !== undefined ? byId.get(u.order.target) : undefined;
     const end: [number, number] = tgt && live(tgt) ? [tgt.x, tgt.y] : [u.order.x, u.order.y];
     pts.push(end);
-    const strong = s.sel.has(u.id);
-    x.strokeStyle = u.order.kind === 'attack' ? `rgba(196,85,63,${strong ? 0.95 : 0.55})` : u.order.kind === 'withdraw' ? `rgba(143,176,200,${strong ? 0.9 : 0.5})` : `rgba(224,184,114,${strong ? 0.95 : 0.55})`;
-    x.lineWidth = strong ? 2.2 : 1.4; x.setLineDash([7, 5]);
+    const held = s.sel.has(u.id);
+    const ink = held ? BRASS : 'rgba(42,45,47,.6)';
+    x.strokeStyle = ink; x.fillStyle = ink;
+    x.lineWidth = held ? 2.2 : 1.2; x.setLineDash(held ? [7, 5] : [5, 4]);
+    const sp = pts.map(([px, py]) => toScreen(s, px, py));
     x.beginPath();
-    pts.forEach(([px, py], i) => { const [a, c] = toScreen(s, px, py); if (i) x.lineTo(a, c); else x.moveTo(a, c); });
+    sp.forEach(([a, c], i) => { if (i) x.lineTo(a, c); else x.moveTo(a, c); });
     x.stroke(); x.setLineDash([]);
-    const [ex, ey] = toScreen(s, end[0], end[1]);
-    if (u.order.kind === 'attack') { x.beginPath(); x.arc(ex, ey, 7, 0, Math.PI * 2); x.stroke(); }
-    else { x.beginPath(); x.arc(ex, ey, 2.5, 0, Math.PI * 2); x.fillStyle = x.strokeStyle; x.fill(); }
+    const [ex, ey] = sp[sp.length - 1], [qx, qy] = sp[Math.max(0, sp.length - 2)];
+    if (u.order.kind === 'attack' && Math.hypot(ex - qx, ey - qy) > 1) {
+      const a = Math.atan2(ey - qy, ex - qx), L = held ? 11 : 9, Wd = held ? 5 : 4;
+      x.beginPath();
+      x.moveTo(ex, ey); x.lineTo(ex - L * Math.cos(a) + Wd * Math.sin(a), ey - L * Math.sin(a) - Wd * Math.cos(a));
+      x.lineTo(ex - L * Math.cos(a) - Wd * Math.sin(a), ey - L * Math.sin(a) + Wd * Math.cos(a)); x.closePath(); x.fill();
+    } else { x.beginPath(); x.arc(ex, ey, held ? 2.8 : 2.2, 0, Math.PI * 2); x.fill(); }
   }
 
   // The blocks: the dead and the departed are not drawn.
@@ -169,7 +182,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   if (s.ping && s.now - s.ping.at < 0.6) {
     const k = (s.now - s.ping.at) / 0.6;
     const [a, c] = toScreen(s, s.ping.x, s.ping.y);
-    x.strokeStyle = s.ping.kind === 'attack' ? `rgba(196,85,63,${1 - k})` : `rgba(224,184,114,${1 - k})`;
+    x.strokeStyle = `rgba(224,184,114,${1 - k})`;
     x.lineWidth = 2; x.beginPath(); x.arc(a, c, 6 + 16 * k, 0, Math.PI * 2); x.stroke();
   }
   x.restore();
@@ -237,16 +250,17 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     sign(x, u.kind, sw, sh);
   }
   // TODO(polish): its models. The 3D game stands figures0 models in ranks inside this box and fades one for each share lost (figures).
-  x.restore();
-
-  // Strength over the block, upright: the player's own and anything under the pointer.
+  // Strength at the block's back edge, a fixed gap behind it, turning with it (the UI director, 10): the player's own
+  // and anything under the pointer.
   if (mine || hot || picked) {
-    const bw = Math.max(18, Math.min(60, w * 0.8)), bx = sx - bw / 2, by = sy - Math.max(w, d) / 2 - 9;
-    x.fillStyle = 'rgba(14,11,8,.75)'; x.fillRect(bx - 1, by - 1, bw + 2, 5);
+    const bw = Math.max(18, w * 0.8), by = d / 2 + 4;
+    x.globalAlpha = 1;
+    x.fillStyle = 'rgba(14,11,8,.75)'; x.fillRect(-bw / 2 - 1, by - 1, bw + 2, 5);
     const k = u.str / Math.max(1e-6, u.str0);
     x.fillStyle = k < 0.35 ? ALARM : k < 0.65 ? AMBER : GAIN;
-    x.fillRect(bx, by, bw * Math.max(0, Math.min(1, u.str)), 3);
+    x.fillRect(-bw / 2, by, bw * Math.max(0, Math.min(1, u.str)), 3);
   }
+  x.restore();
   // The name, for the one under the pointer.
   if (hot) {
     const label = `${u.name}${u.state === 'steady' ? '' : ` · ${u.state}`}`;

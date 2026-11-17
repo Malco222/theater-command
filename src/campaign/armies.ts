@@ -29,6 +29,7 @@ import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './moral
 export const DIVISIONS = data as unknown as {
   kinds: Record<Kind, { word: string; name: string; short: string }>;
   names: Record<string, Partial<Record<Kind, [string, string]>>>;
+  historic: Record<string, Record<string, [string, string][]>>;
   order: Kind[];
   spread: { str: number; xp: number };
   hardened: number;
@@ -122,8 +123,10 @@ export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   return Array.from({ length: c.divs }, (_, i) => {
     const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
     const no = first + i;
+    // The 1939 order of battle's own divisions, where the historian has them; else the nation's number for its kind.
+    const own = DIVISIONS.historic[c.nat]?.[c.name]?.[i];
     return {
-      slot: i, no, name: `${ordinal(no)} ${words.name}`, short: `${ordinal(no)} ${words.short}`, kind: c.kind, nat: c.nat,
+      slot: i, no, name: own?.[0] ?? `${ordinal(no)} ${words.name}`, short: own?.[1] ?? `${ordinal(no)} ${words.short}`, kind: c.kind, nat: c.nat,
       str: s, men: Math.round(s * MEN_PER_DIV), xp: x, grade: grade(x), stripes: stripesOf(x), hardened: x >= DIVISIONS.hardened,
     };
   });

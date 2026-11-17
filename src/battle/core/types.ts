@@ -66,6 +66,8 @@ export interface ForceTicket {
   dug?: boolean;
   /** The number its first division (or ship, or group) carries, for the blocks' names. */
   first?: number;
+  /** Its divisions as the campaign's army tray shows them (land): the name and short name, strength, experience, men. */
+  divisions?: { name: string; short: string; str: number; xp: number; men: number }[];
   /** Its share of its side's power in the reckoning, 0..1. The shares of a side add up to 1. */
   share: number;
 }

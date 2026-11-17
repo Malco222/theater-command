@@ -284,7 +284,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.str = Math.max(0, t.str - share * t.str0);
     const lost = (before - t.str) / t.str0;
     const steady = 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
-    t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss * (nerveMul / Math.max(1, dmg > 0 ? 1 : 1)) * Math.max(0.3, steady));
+    t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     const full = LAND.figures[t.kind];
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(full * t.str));
@@ -297,14 +297,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     const enemyNear = this.units.some((e) => e.side !== u.side && fighting(e) && dist(e.x, e.y, u.x, u.y) < N.clear);
     if (enemyNear) u.clear = 0;
     if (u.state === 'routing') {
-      if (u.clear > N.quiet) u.mor = Math.min(1, u.mor + N.runnerRecover * DT);
+      if (u.clear > N.quiet) u.mor = Math.min(u.mor0, u.mor + N.runnerRecover * DT);
       if (!this.broke[u.side] && u.clear > N.quiet && u.mor >= N.rally && u.str > N.shattered) {
         u.state = 'wavering'; u.order = null; u.path = []; u.act = 'idle';
         this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${u.name} has rallied.`, x: u.x, y: u.y });
       }
       return;
     }
-    if (u.still > N.still) u.mor = Math.min(1, u.mor + N.recover * DT);
+    if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
     if (u.str <= N.shattered * u.str0 || u.mor < N.rout) { this.rout(u); return; }
     const was = u.state;
     u.state = u.mor < N.waver ? 'wavering' : 'steady';
@@ -450,11 +450,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     return gone / this.power[s];
   }
 
+  /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
+  wornShare(s: Side): number {
+    let worn = 0;
+    for (const u of this.units) if (u.side === s) worn += u.power0 * (1 - u.str / u.str0);
+    return worn / this.power[s];
+  }
+
   private judge(): void {
     for (const s of ['att', 'def'] as Side[]) {
       const left = this.units.filter((u) => u.side === s && fighting(u));
       if (!left.length) { this.finish(other(s), this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed'); return; }
-      if (this.brokenShare(s) >= LAND.breaks) {
+      // An army breaks when half its power is running or gone, or when it has bled as much as an army of its side
+      // will stand (LAND.spent): so a battle fought out costs about what the campaign bills for its result (b356).
+      if (this.brokenShare(s) >= LAND.breaks || this.wornShare(s) >= LAND.spent[s]) {
         this.broke[s] = true;
         for (const u of left) this.rout(u);
         this.say({ what: 'broken', side: s, text: `The ${this.ticket[s].adj} army breaks.` });
@@ -469,7 +478,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   lostShares(): Record<Side, number> {
     const lost = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'withdrawn' ? u.str : u.state === 'gone' ? u.str * 0.5 : u.state === 'routing' ? u.str * 0.75 : u.str;
+      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
       lost[u.side] += u.power0 * (1 - kept / u.str0);
     }
     return { att: lost.att / this.power.att, def: lost.def / this.power.def };
@@ -491,14 +500,22 @@ export class LandBattle implements BattleSim<LandUnit> {
       forces.set(u.corps, f);
     }
     const A = this.ticket.att.adj, D = this.ticket.def.adj;
+    // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
+    const pct = (p: number): string => (p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
     const lines = [
       how === 'rout' ? `The ${winner === 'att' ? D : A} army broke after ${Math.round(this.t / 60)} minutes.`
         : how === 'withdrew' ? `The ${winner === 'att' ? D : A} army withdrew from the field.`
           : how === 'time' ? `The ${D} line held until the day was done.`
             : how === 'destroyed' ? `The ${winner === 'att' ? D : A} army was driven from the field.`
               : `The staff settled the rest of the attack on ${this.ticket.place.town ?? this.ticket.place.name} from where it stood: what you had won stays won.`,
-      `The ${A} attack lost about ${Math.round(lost.att * 100)}% of its strength, the ${D} defence about ${Math.round(lost.def * 100)}%.`,
+      // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
+      // campaign's bill for the whole day (the design director, b356).
+      how === 'objective'
+        ? `Before you handed the battle to the staff, the ${A} attack had lost ${pct(lost.att)} of its strength on the field, and the ${D} defence ${pct(lost.def)}.`
+        : `The ${A} attack lost ${pct(lost.att)} of its strength, the ${D} defence ${pct(lost.def)}.`,
     ];
+    // The battle is over: nothing marches on (the blocks' cards and the 3D models alike).
+    for (const u of this.units) if (live(u) && u.state !== 'routing') { u.act = 'idle'; u.speed = 0; u.engaged = undefined; }
     this.over = {
       winner: verdict, how, seconds: Math.round(this.t), lost, men, R: Math.round(r * 1000) / 1000,
       level: levelOf(r, men.att > men.def), lines,

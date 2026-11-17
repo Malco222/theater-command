@@ -10,6 +10,10 @@
 //   1. its attack(ids, to) takes a third argument, fought?: number, and passes it on: orderAttack(s, sent, s.regions[to], fought)
 //   2. import { battleCalls } from './battle-bridge';   and in the TC object:   ...battleCalls({ game, attack }),
 // With no battle fought, nothing changes: attack(ids, to) rolls the dice as before.
+// Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, and passes it to
+// airAct(s, action, fought); and the TC object's line becomes
+//   ...battleCalls({ game, attack, raid: (k, t, ids, f) => act(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
+// With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
 //
 // The calls, on the same global object TC:
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, or null where there is no field battle to fight
@@ -19,15 +23,32 @@
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
-//                                   battle is over; null before that
+//                                   battle is over; null before that (after an air battle: what TC.act returns for the raid)
+//   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
+//                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'night', 'superiority')
+//   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //
 // A view: { t, limit, speed, units, balance, events, zones, ai, over }. Each unit: { id, side, kind, name, x, y, face,
 // str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does; each event's 'cue' is a one-shot, at its x and y. Sound names are the sound director's (sound-list.json).
+// An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
+// metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
 // Sea and air plug in by the same rule (their threads send the diff): a start call of their own that builds their sim
 // and hands it to begin() with how to settle it; tick, speed, order, view and end are shared.
+//
+// Fleet actions (src/battle/sea): the rules fight them while a month closes, not from a card, so they are found ahead:
+//   TC.seaLook()                 -> { actions: [{ key, title, ticket }] }: the player's fleet actions the month's end
+//                                   will bring, found on a copy of the game (call it only when the player has asked to
+//                                   fight his fleet actions: it plays the computer's months once more on the copy)
+//   TC.seaStart(key)             -> { field: { size, edge, zoneName }, view }: that action, opened paused
+// then tick, speed, order, view as above (the sea's own orders: { do: 'sea:speed', units, speed: 'slow' | 'cruise' |
+// 'flank' }; the carrier strike is the core's ability command with key 'strike'), and TC.battleEnd() -> { key, R,
+// level, lines, sunk, burnt } once it is over. Nothing is booked yet: the played result waits until TC.endMonth()
+// reaches that action, and stands in for the dice there (navy.ts seaField). An action not fought, or one that comes
+// out of the month with other fleets in it, rolls the dice as before. Each sea unit's extra carries its class (cls),
+// its ships afloat and sunk, and its fleet; 'loop' comes from src/battle/sea/cues.ts.
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { LOOPS } from '../../../src/battle/core/cues';
@@ -37,12 +58,26 @@ import { goingIn, landTicket } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
 import { MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
+import { SKY } from '../../../src/battle/air/book';
+import { AirSim } from '../../../src/battle/air/sim';
+import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
+import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
+import type { FoughtAir } from '../../../src/campaign/airfought';
+import type { RaidKind } from '../../../src/campaign/airwar';
 import type { Game } from '../../../src/campaign/types';
+import { seaField } from '../../../src/campaign/navy';
+import { endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
+import { SEA_LOOPS } from '../../../src/battle/sea/cues';
+import { foughtOf, playedHook, seaAhead, type SeaAhead, type SeaPlayed } from '../../../src/battle/sea/handoff';
+import { SEA } from '../../../src/battle/sea/numbers';
+import { SeaSim, type SeaLosses } from '../../../src/battle/sea/sim';
 
 export interface BattleHooks {
   game: () => Game;
   /** The campaign bridge's own attack call; with 'fought', the field's R stands in for the dice. */
   attack: (ids: number[], to: number, fought?: number) => unknown;
+  /** The campaign bridge's own raid order (act 'raid:kind:target:ids'); with 'fought', the air battle's losses stand in for the dice. */
+  raid?: (kind: string, target: number, ids: number[], fought?: FoughtAir) => unknown;
 }
 
 interface Session {
@@ -54,18 +89,27 @@ interface Session {
   settled: unknown;
 }
 
+/** An air group's loop: its engines while it flies, nothing on the ground or once it is gone. */
+function airLoop(a: AirUnit): string {
+  return a.act === 'idle' || a.act === 'down' ? '' : SKY.cues.loops[a.air];
+}
+
 /** One unit as the 3D game reads it: plain fields only. */
 function unitOut(u: UnitBase): Record<string, unknown> {
   const land = u as LandUnit;
+  const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
+  const extra = air ? { ...(u.extra ?? {}), n: air.n, n0: air.n0, band: air.band, alt: Math.round(air.alt), job: air.job.do, per: air.per } : u.extra;
   return {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
-    loop: loops?.[u.act] ?? '',
+    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : loops?.[u.act] ?? '',
+    // A land block's name for a card ("11th Infantry"), beside its full name.
+    ...(land.short ? { short: land.short } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
-    ...(u.extra ? { extra: u.extra } : {}),
+    ...(extra ? { extra } : {}),
   };
 }
 
@@ -76,6 +120,17 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
 export function battleCalls(h: BattleHooks) {
   let s: Session | null = null;
   const need = (): Session => { if (!s) throw new Error('No battle is being fought'); return s; };
+
+  // Fleet actions the month's end will bring, and the ones the player has fought, waiting for the close to reach them.
+  let seaAhead0: SeaAhead[] = [];
+  const seaPlayed: SeaPlayed = new Map();
+  // Left in place for the session: with nothing played it answers nothing, so every fleet action rolls the dice as before.
+  seaField.fought = playedHook(seaPlayed);
+  /** The month's end as the rules run it, on a copy: the player's close, then the computer's months to his next. */
+  const closeMonth = (c: Game): void => {
+    if (onEve(c)) endEve(c); else endHuman(c);
+    for (let guard = 0; guard < 200 && !humanUp(c) && c.human; guard++) stepAI(c);
+  };
 
   /** Any domain's battle on the shared clock: it opens paused, the player's side commanding. */
   function begin(sim: BattleSim, settle: (r: FieldResult) => unknown): Session {
@@ -135,6 +190,40 @@ export function battleCalls(h: BattleHooks) {
       s = null;
       return out;
     },
-    // Sea and air add their start calls here: build the sim from their ticket, then begin(sim, (r) => their hand-back).
+    seaLook() {
+      const g = h.game();
+      const me = g.human;
+      seaAhead0 = me ? seaAhead(g, closeMonth).filter((a) => a.ticket.place.fleets.some((f) => f.nat === me)) : [];
+      return { actions: seaAhead0.map((a) => ({ key: a.key, title: a.ticket.title, ticket: a.ticket })) };
+    },
+    seaStart(key: string) {
+      const a = seaAhead0.find((x) => x.key === key);
+      if (!a) return null;
+      const sim = new SeaSim(a.ticket);
+      const ses = begin(sim, (r) => {
+        seaPlayed.set(a.key, { meeting: a.meeting, fought: foughtOf(r) });
+        const x = r.extra as unknown as SeaLosses;
+        return { key: a.key, R: r.R, level: r.level, lines: r.lines, sunk: x.sunk, burnt: x.burnt };
+      });
+      return { field: { size: SEA.field.size, edge: SEA.field.edge, zoneName: a.ticket.place.zoneName }, view: viewOut(ses, sim.view(ses.me)) };
+    },
+    airLook(kind: string, target: number, ids: number[]) {
+      const t = airTicket(h.game(), kind as RaidKind, target, ids);
+      return t.ticket ? { ticket: t.ticket } : { ticket: null, why: t.why };
+    },
+    airStart(kind: string, target: number, ids: number[]) {
+      const raid = h.raid;
+      if (!raid) return null;
+      const t = airTicket(h.game(), kind as RaidKind, target, ids);
+      if (!t.ticket) return null;
+      const sim = new AirSim(t.ticket);
+      // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
+      // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
+      const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));
+      return {
+        sky: { w: SKY.w, h: SKY.h, scale: SKY.scale, target: SKY.target, flakR: SKY.flakR, bands: SKY.bands.alt, place: t.ticket.place },
+        view: viewOut(ses, sim.view(ses.me)),
+      };
+    },
   };
 }

@@ -1,6 +1,8 @@
 // The field as a staff map: the campaign map's paper and inks, the ground painted soft underneath, roads, water and
-// works drawn crisp on top, the relief in contour lines. Painted once a battle into a picture the screen pans over.
-// TODO(polish): the art director's own ground swatches and a hand-drawn pass on woods, towns and works.
+// works drawn crisp on top, the relief in contour lines. Painted once a battle into two pictures the screen pans over:
+// the map itself, and the detail that comes in only from the closer zooms (the furrows of the fields, the woods' single
+// crowns), so the whole-field view stays quiet (the art director's review of the first slice).
+// TODO(polish): the art director's own ground swatches and a hand-drawn pass on towns and works.
 
 import { GROUNDS, type Ground, type LandField } from '../land/field';
 import type { Terrain } from '../land/field';
@@ -22,11 +24,60 @@ function stream(seed: number): () => number {
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 100000) / 100000; };
 }
 
-export function paintField(f: LandField, terrain: Terrain, seed: number): HTMLCanvasElement {
+const sheet = (w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] => {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return [c, c.getContext('2d')!];
+};
+
+/** The cells of one kind in patches of at least 'least' cells (joined side to side): the rest are strays. */
+function patches(f: LandField, test: (c: number, r: number) => boolean, least: number): Uint8Array {
+  const keep = new Uint8Array(f.cols * f.rows), seen = new Uint8Array(f.cols * f.rows);
+  for (let i = 0; i < keep.length; i++) {
+    if (seen[i] || !test(i % f.cols, Math.floor(i / f.cols))) continue;
+    const got: number[] = [], todo = [i];
+    seen[i] = 1;
+    while (todo.length) {
+      const j = todo.pop()!, c = j % f.cols, r = Math.floor(j / f.cols);
+      got.push(j);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const cc = c + dc, rr = r + dr, k = rr * f.cols + cc;
+        if (cc < 0 || rr < 0 || cc >= f.cols || rr >= f.rows || seen[k] || !test(cc, rr)) continue;
+        seen[k] = 1; todo.push(k);
+      }
+    }
+    if (got.length >= least) for (const j of got) keep[j] = 1;
+  }
+  return keep;
+}
+
+/**
+ * A smooth shape over the cells that pass: the cell grid drawn up, blurred and cut at half, so a patch has rounded
+ * edges and not the grid's stair steps (the art director: "less edges, more smooth").
+ */
+function smoothMask(f: LandField, W: number, H: number, test: (c: number, r: number) => boolean, blur: number): HTMLCanvasElement {
+  const [small, s] = sheet(f.cols, f.rows);
+  s.fillStyle = '#fff';
+  for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) if (test(c, r)) s.fillRect(c, f.rows - 1 - r, 1, 1);
+  const [big, b] = sheet(W, H);
+  b.imageSmoothingEnabled = true;
+  b.filter = `blur(${blur}px)`;
+  b.drawImage(small, 0, 0, W, H);
+  b.filter = 'none';
+  const img = b.getImageData(0, 0, W, H), d = img.data;
+  // Cut at half, with a pixel or two of ramp so the edge is not jagged.
+  for (let i = 3; i < d.length; i += 4) d[i] = Math.max(0, Math.min(255, (d[i] - 112) * 8));
+  b.putImageData(img, 0, 0);
+  return big;
+}
+
+/** The field painted: the map, and the detail laid over it from the closer zooms. */
+export interface Painted { base: HTMLCanvasElement; detail: HTMLCanvasElement }
+
+export function paintField(f: LandField, terrain: Terrain, seed: number): Painted {
   const W = Math.round(f.w * PAINT), H = Math.round(f.h * PAINT), cs = f.cell * PAINT;
-  const out = document.createElement('canvas');
-  out.width = W; out.height = H;
-  const x = out.getContext('2d')!;
+  const [out, x] = sheet(W, H);
+  const [detail, dx] = sheet(W, H);
   const g = (c: number, r: number): Ground => GROUNDS[f.ground[Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c))]];
   const hgt = (c: number, r: number): number => f.height[Math.max(0, Math.min(f.rows - 1, r)) * f.cols + Math.max(0, Math.min(f.cols - 1, c))];
   // Field row r is metres north; the picture's row 0 is the north edge.
@@ -41,7 +92,8 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): HTMLCa
   const s = small.getContext('2d')!;
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
     const k = g(c, r);
-    s.fillStyle = wash(k === 'water' || k === 'blown' || k === 'bridge' ? 'open' : k);
+    // Woods are drawn as their canopy below, so they leave no halo in the wash; fields as their own soft patches.
+    s.fillStyle = wash(k === 'water' || k === 'blown' || k === 'bridge' || k === 'woods' ? 'open' : k);
     s.fillRect(c, f.rows - 1 - r, 1, 1);
   }
   x.imageSmoothingEnabled = true;
@@ -62,21 +114,50 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): HTMLCa
   }
   x.drawImage(shade, 0, 0, W, H);
 
-  // 3. Ornament by cell: furrows, trees, tussocks, reeds, scree.
+  // 3. Woods: one soft canopy for each wood of five cells or more, a muted green with a slightly darker scalloped
+  // edge, drawn on a layer of its own so overlaps do not darken (the art director, 2). Strays show only from closer in.
+  const isWood = (c: number, r: number): boolean => g(c, r) === 'woods';
+  const woods = patches(f, isWood, 5);
+  const canopy = (color: string, rad: number): HTMLCanvasElement => {
+    const [cv, cx2] = sheet(W, H);
+    cx2.fillStyle = color;
+    cx2.beginPath();
+    for (let i = 0; i < woods.length; i++) {
+      if (!woods[i]) continue;
+      const X = px(i % f.cols) + cs / 2, Y = py(Math.floor(i / f.cols)) + cs / 2;
+      cx2.moveTo(X + rad, Y); cx2.arc(X, Y, rad, 0, Math.PI * 2);
+    }
+    cx2.fill();
+    return cv;
+  };
+  {
+    const [cv, c2] = sheet(W, H);
+    // The inner disc reaches past the corners of its cell, so the canopy is one solid shape; the outer one scallops its edge.
+    c2.drawImage(canopy('#a3aa7c', cs * 0.92), 0, 0);
+    c2.drawImage(canopy('#bcc196', cs * 0.76), 0, 0);
+    x.globalAlpha = 0.92; x.drawImage(cv, 0, 0); x.globalAlpha = 1;
+  }
+  // The fields: furrows over a smooth patch, in the detail only (at the whole-field view their hatch is a mottle).
+  {
+    const [hv, h2] = sheet(W, H);
+    h2.strokeStyle = 'rgba(120,96,52,.22)'; h2.lineWidth = 1.2;
+    h2.beginPath();
+    for (let y = -W * 0.2; y < H + W * 0.2; y += 6) { h2.moveTo(0, y); h2.lineTo(W, y + W * 0.08); }
+    h2.stroke();
+    h2.globalCompositeOperation = 'destination-in';
+    h2.drawImage(smoothMask(f, W, H, (c, r) => g(c, r) === 'field', cs * 0.45), 0, 0);
+    dx.drawImage(hv, 0, 0);
+  }
+  // Ornament by cell: single crowns (detail only, no ring and no glow), tussocks, reeds, scree.
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
     const kd = g(c, r), X = px(c), Y = py(r);
-    if (kd === 'field') {
-      x.strokeStyle = 'rgba(120,96,52,.20)'; x.lineWidth = 1.2;
-      const lean = (c * 7 + r * 3) % 2 ? 0.35 : -0.35;
-      for (let i = 4; i < cs; i += 6) { x.beginPath(); x.moveTo(X, Y + i); x.lineTo(X + cs, Y + i + lean * 6); x.stroke(); }
-    } else if (kd === 'woods') {
+    if (kd === 'woods') {
       for (let i = 0; i < 3; i++) {
         const tx = X + 4 + rnd() * (cs - 8), ty = Y + 4 + rnd() * (cs - 8), tr = 4.5 + rnd() * 3.5;
-        x.fillStyle = 'rgba(112,124,74,.55)'; x.beginPath(); x.arc(tx, ty, tr, 0, Math.PI * 2); x.fill();
-        x.strokeStyle = 'rgba(52,58,34,.55)'; x.lineWidth = 0.9; x.stroke();
+        dx.fillStyle = 'rgba(104,116,68,.42)'; dx.beginPath(); dx.arc(tx, ty, tr, 0, Math.PI * 2); dx.fill();
       }
     } else if (kd === 'rough') {
-      x.fillStyle = 'rgba(80,66,46,.38)';
+      x.fillStyle = 'rgba(80,66,46,.27)';
       for (let i = 0; i < 5; i++) { x.beginPath(); x.arc(X + rnd() * cs, Y + rnd() * cs, 1.1, 0, Math.PI * 2); x.fill(); }
     } else if (kd === 'marsh') {
       x.strokeStyle = 'rgba(63,110,140,.55)'; x.lineWidth = 1.1;
@@ -179,9 +260,6 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): HTMLCa
         const bw = 5 + rnd() * 7, bh = 4 + rnd() * 6, bx = X + rnd() * (cs - bw), by = Y + rnd() * (cs - bh);
         x.fillRect(bx, by, bw, bh); x.strokeRect(bx, by, bw, bh);
       }
-    } else if (kd === 'bunker') {
-      x.fillStyle = 'rgba(42,45,47,.85)'; x.fillRect(X + cs / 2 - 5, Y + cs / 2 - 4, 10, 8);
-      x.strokeStyle = INK; x.lineWidth = 1.2; x.beginPath(); x.arc(X + cs / 2, Y + cs / 2, 9, Math.PI * 1.1, Math.PI * 1.9); x.stroke();
     } else if (kd === 'works') {
       x.strokeStyle = 'rgba(92,70,40,.85)'; x.lineWidth = 1.5;
       x.beginPath(); x.moveTo(X + 2, Y + cs / 2);
@@ -190,9 +268,38 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): HTMLCa
     }
   }
 
+  // Bunkers: the campaign map's own fortress sign, the notched block in ink with no fill (.fortmark), one for each
+  // bunker however many cells it covers, sized to read at the whole-field view (the art director, 3).
+  {
+    const isBunker = (c: number, r: number): boolean => g(c, r) === 'bunker';
+    const seen = new Uint8Array(f.cols * f.rows);
+    const k = 7 * PAINT;
+    x.strokeStyle = INK; x.lineWidth = 0.9 * k * 0.55; x.lineJoin = 'miter'; x.lineCap = 'butt';
+    for (let i = 0; i < seen.length; i++) {
+      const c0 = i % f.cols, r0 = Math.floor(i / f.cols);
+      if (seen[i] || !isBunker(c0, r0)) continue;
+      let sx = 0, sy = 0, n = 0;
+      const todo = [i]; seen[i] = 1;
+      while (todo.length) {
+        const j = todo.pop()!, c = j % f.cols, r = Math.floor(j / f.cols);
+        sx += px(c) + cs / 2; sy += py(r) + cs / 2; n++;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+          const cc = c + dc, rr = r + dr, q = rr * f.cols + cc;
+          if (cc < 0 || rr < 0 || cc >= f.cols || rr >= f.rows || seen[q] || !isBunker(cc, rr)) continue;
+          seen[q] = 1; todo.push(q);
+        }
+      }
+      const X = sx / n, Y = sy / n;
+      x.beginPath();
+      x.moveTo(X - 3 * k, Y + 2.5 * k); x.lineTo(X - 3 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 0.8 * k);
+      x.lineTo(X + 1.2 * k, Y - 0.8 * k); x.lineTo(X + 1.2 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y + 2.5 * k);
+      x.stroke();
+    }
+  }
+
   // 8. The paper's grain and a ruled border, as on the campaign map's sheets.
   x.fillStyle = 'rgba(80,60,30,.035)';
   for (let i = 0; i < (W * H) / 900; i++) x.fillRect(rnd() * W, rnd() * H, 1.5, 1.5);
   x.strokeStyle = 'rgba(42,45,47,.6)'; x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
-  return out;
+  return { base: out, detail };
 }
