@@ -1855,7 +1855,9 @@ const chanceWords = (look: Look): string => (look.exact || Math.round(look.chanc
  * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, said: at the ends of the scale in
  * words, never "about 100%" or "about 0%". The card's own odds line says it the same way (ChanceTo in the controller).
  */
-const endWords = (words: string): string => (words === 'about 100%' ? 'your staff is sure of it' : words === 'about 0%' ? 'your staff gives it no chance' : '');
+// (Rules 84.3.1: the browser's endSaid, word for word.) `named` where the line has already named the staff.
+const endWords = (words: string, named = false): string => (words === 'about 100%' ? (named ? 'they are sure of it' : 'your staff is sure of it')
+  : words === 'about 0%' ? (named ? 'they give it no chance' : 'your staff gives it no chance') : '');
 const chanceTo = (look: Look, place: string): string => {
   const words = chanceWords(look);
   return endWords(words) || `${words} to take ${place}`;
@@ -1916,7 +1918,7 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
   return {
     head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.',
-    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now) || `it reads ${done.now}`}.` : ''}` : '',
+    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ''}` : '',
     probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : ' THE LINE'}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
     bomb: v.bomb ? {
       label: 'BOMB THE LINE', ok: !v.bomb.why,

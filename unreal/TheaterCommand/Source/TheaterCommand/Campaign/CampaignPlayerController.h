@@ -935,8 +935,10 @@ public:
 	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
 	int32 StepNotices() const { return NoticesSaid; }
 	int32 NoticesSaid = 0;
-	void PressEscape() { Escape(); }
-	void PressSpace() { SpaceBar(); }
+	void PressEscape() { EscapeKey(); }
+	void PressSpace() { SpaceKey(); }
+	/** Enter as the key gives it: the lit button of the card that is up, or the map's own END THE MONTH under the key guard. */
+	void PressEnter() { EnterKey(); }
 	/** What the game is showing by itself just now, for the screens a month's end brings: the question, the replay, a newsreel, an announcement, or the page on top. */
 	FString StepState() const;
 	/** A click on a province's airfield, as the mouse gives it. */
@@ -1278,6 +1280,15 @@ private:
 	void OpenScreen4();
 	void OpenScreen5();
 	bool bScripted = false;
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The keys as they are bound: each notes when it put a card
+	// down, and the map's own Enter waits the key guard's half second after that. A card put down by the mouse leaves
+	// the map's Enter free.
+	void EnterKey();
+	void EscapeKey();
+	void SpaceKey();
+	bool IsCardUp() const { return IsTableBusy() || EndAsk.bVisible; }
+	double KeyShutAt = -1000.0;
+	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
 	bool bBySea = false;

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c22a6d6 2026-11-17. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c76d872 2026-11-17. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -30308,6 +30308,12 @@
     const b = best;
     return { region: b.h.region, months: b.months, rail: b.rail, corps: b.h.corps.map((c) => c.id), name: helperName(g2, nat, b.h), to: b.to };
   }
+  function handLine(g2, help, r, cure) {
+    const held = help.name.startsWith("the army ") ? `The${help.name.slice(3)}` : g2.corps.find((c) => c.id === help.corps[0])?.name ?? help.name;
+    if (help.to === r.id) return `${held} is in hand. Right-click ${r.name} to ${cure === "empty" ? "march in" : "send it"}.`;
+    if (help.to === help.region) return `${held} is in hand. It can ${cure === "empty" ? "march into" : cure} ${r.name} next month.`;
+    return `${held} is in hand. Right-click ${g2.regions[help.to].name} to send it on towards ${r.name}.`;
+  }
   function homeAlarms(g2, nat = g2.human) {
     if (!nat) return [];
     const n = g2.nations[nat];
@@ -30362,8 +30368,7 @@
       const named2 = reachIds.map((id) => id === cap8 ? `${g2.regions[id].name}, your capital` : g2.regions[id].name);
       const s2 = !named2.length ? "" : named2.length === 1 ? `Next month ${many ? "they" : "it"} can reach ${named2[0]}.` : named2.length === 2 ? `Next month ${many ? "they" : "it"} can reach ${named2[0]} or ${named2[1]}.` : `Next month ${many ? "they" : "it"} can reach ${named2[0]}${named2[0].includes(",") ? "," : ""} and ${named2.length - 1} more towns of yours.`;
       const s3 = !help ? `No army of yours can come. A new corps takes ${monthsWord4(raise2)}.` : help.months === 0 ? `Nearest help: ${help.name}, in reach this month.` : `Nearest help: ${help.name}, ${monthsWord4(help.months)} by ${help.rail ? "rail" : "road"}.`;
-      const held1 = help ? help.name.startsWith("the army ") ? `The${help.name.slice(3)}` : g2.corps.find((c) => c.id === help.corps[0])?.name ?? help.name : "";
-      const hand = help ? `${held1} is in hand. Right-click ${g2.regions[help.to].name} to send it.` : "";
+      const hand = help ? handLine(g2, help, r, inTown ? "storm" : "attack") : "";
       out.push({ case: kase, region: r.id, by, reach: reachIds, help, raise: raise2, lines: [s1, s2, s3], hand });
     }
     out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
@@ -30375,8 +30380,7 @@
       const s1 = `${r.name}, on your home ground, is still in ${adj} hands, with no troops in it.`;
       const who = help ? `${help.name[0].toUpperCase()}${help.name.slice(1)}` : "";
       const s3 = !help ? `No army of yours can reach it. A new corps takes ${monthsWord4(raise2)}.` : help.months === 0 ? `${who} can march in and take it back this month.` : `${who} can march in and take it back in ${monthsWord4(help.months)}, by ${help.rail ? "rail" : "road"}.`;
-      const held1 = help ? help.name.startsWith("the army ") ? `The${help.name.slice(3)}` : g2.corps.find((c) => c.id === help.corps[0])?.name ?? help.name : "";
-      const hand = help ? `${held1} is in hand. Right-click ${g2.regions[help.to].name} to ${help.to === r.id ? "march in" : "send it"}.` : "";
+      const hand = help ? handLine(g2, help, r, "empty") : "";
       out.push({ case: "empty", region: r.id, by: r.ctrl, reach: [], help, raise: raise2, lines: [s1, "", s3], hand });
     }
     return out;
@@ -33824,7 +33828,7 @@
   }
   var oddsPct = (p) => p >= 0.9995 ? 100 : p <= 5e-4 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100)));
   var chanceWords = (look) => look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`;
-  var endWords = (words) => words === "about 100%" ? "your staff is sure of it" : words === "about 0%" ? "your staff gives it no chance" : "";
+  var endWords = (words, named2 = false) => words === "about 100%" ? named2 ? "they are sure of it" : "your staff is sure of it" : words === "about 0%" ? named2 ? "they give it no chance" : "your staff gives it no chance" : "";
   var chanceTo = (look, place2) => {
     const words = chanceWords(look);
     return endWords(words) || `${words} to take ${place2}`;
@@ -33873,7 +33877,7 @@
     const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num5(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
     return {
       head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
-      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now) || `it reads ${done.now}`}.` : ""}` : "",
+      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ""}` : "",
       probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : " THE LINE"}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
       bomb: v.bomb ? {
         label: "BOMB THE LINE",

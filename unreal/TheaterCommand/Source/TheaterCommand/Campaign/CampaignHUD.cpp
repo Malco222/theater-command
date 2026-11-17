@@ -5747,7 +5747,8 @@ namespace
 					]
 
 					// (Rulings 88 and 90.) The question at the month's end: a small card over a half-dark veil. SHOW ME is the
-					// brass one (Tab); END THE MONTH ends it (Enter); and a tick stops the asking.
+					// brass one and takes Enter (and Tab); END THE MONTH ends it, with a click only (Rules 84.3.1: Enter
+					// presses the lit button, and the lit button is the safe one); and a tick stops the asking.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
@@ -5803,7 +5804,7 @@ namespace
 										+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 										[
 											SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-											.ToolTipText(FText::FromString(TEXT("Goes to the first of them. (Tab)")))
+											.ToolTipText(FText::FromString(TEXT("Goes to the first of them. (Enter)")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(true); } return FReply::Handled(); })
 											[
 												SNew(SHorizontalBox)
@@ -5811,21 +5812,16 @@ namespace
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("SHOW ME"))).Font(Font(TEXT("Bold"), 12, 220)).ColorAndOpacity(DeskInk)
 												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), DeskInk)]
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), DeskInk)]
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth()
 										[
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
-											.ToolTipText(FText::FromString(TEXT("Ends the month as it stands. (Enter)")))
+											.ToolTipText(FText::FromString(TEXT("Ends the month as it stands.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerEndAsk(false); } return FReply::Handled(); })
 											[
-												SNew(SHorizontalBox)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("END THE MONTH"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
-												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Muted)]
+												SNew(STextBlock).Text(FText::FromString(TEXT("END THE MONTH"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
 											]
 										]
 									]

@@ -872,9 +872,9 @@ void ACampaignPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACampaignPlayerController::WheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACampaignPlayerController::WheelDown);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
-	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
-	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::EscapeKey);
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EnterKey);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceKey);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
@@ -2572,6 +2572,45 @@ void ACampaignPlayerController::ToggleEffects()
 {
 	Notify(CampaignSounds::Toggle() ? TEXT("Sound effects on.") : TEXT("Sound effects off. Press N to bring them back."), 3.0);
 	SaveOptions();
+}
+
+void ACampaignPlayerController::EnterKey()
+{
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The map's own Enter never takes the press that put a card
+	// down, nor one hurried after it: Enter on CALL IT OFF or Esc, and a second Enter at once, opened the question
+	// before the month's end. A card put down by the mouse leaves it free.
+	const bool bCardUp = IsCardUp();
+	if (!bCardUp && !bScripted && FPlatformTime::Seconds() - KeyShutAt < 0.5)
+	{
+		return;
+	}
+	bEnterByKey = true;
+	EndMonth();
+	bEnterByKey = false;
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds();
+	}
+}
+
+void ACampaignPlayerController::EscapeKey()
+{
+	const bool bCardUp = IsCardUp();
+	Escape();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::SpaceKey()
+{
+	const bool bCardUp = IsCardUp();
+	SpaceBar();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
 }
 
 void ACampaignPlayerController::SpaceBar()
@@ -7539,17 +7578,18 @@ namespace
 	/**
 	 * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, on the card's odds line: at the
 	 * ends of the scale in words, never "about 100%" or "about 0%". The bridge says the row of everyone in reach the
-	 * same way (chanceTo).
+	 * same way (chanceTo), and both follow the browser's endSaid (Rules 84.3.1): bNamed where the line has already
+	 * named the staff ("The staff's estimate: ...").
 	 */
-	FString ChanceTo(const FString& Words, const FString& Place)
+	FString ChanceTo(const FString& Words, const FString& Place, bool bNamed = false)
 	{
 		if (Words == TEXT("about 100%"))
 		{
-			return TEXT("your staff is sure of it");
+			return bNamed ? TEXT("they are sure of it") : TEXT("your staff is sure of it");
 		}
 		if (Words == TEXT("about 0%"))
 		{
-			return TEXT("your staff gives it no chance");
+			return bNamed ? TEXT("they give it no chance") : TEXT("your staff gives it no chance");
 		}
 		return FString::Printf(TEXT("%s to take %s"), *Words, *Place);
 	}
@@ -7736,12 +7776,12 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 		if (!Preview.ChanceWords.IsEmpty())
 		{
 			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
-			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place, /*bNamed*/ true);
 		}
 		else if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
 		{
 			Odds += TEXT("  \u00B7  ") + (Preview.ChancePctLow == Preview.ChancePctHigh
-				? ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePctLow), Place)
+				? ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePctLow), Place, /*bNamed*/ true)
 				: FString::Printf(TEXT("%d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place));
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
@@ -7944,7 +7984,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 			: FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Low), *Say(High));
 		if (!ChanceWords.IsEmpty())
 		{
-			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town);
+			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town, /*bNamed*/ !bExact); // (the estimate's line names the staff)
 		}
 		return FText::FromString(CampaignText::Phrases(Line));
 	};
@@ -8373,6 +8413,14 @@ void ACampaignPlayerController::EndMonth()
 	{
 		if (FPlatformTime::Seconds() - EndAsk.Since < 0.5)
 		{
+			return;
+		}
+		if (bEnterByKey)
+		{
+			// (Rules 84.3.1; the UI director's ruling of 17 November, one rule for every card: Enter presses the lit
+			// button, and the lit button is the safe one.) On the question Enter is SHOW ME, as Tab is: a double Enter
+			// shows the armies and never ends the month. END THE MONTH takes a click.
+			AnswerEndAsk(true);
 			return;
 		}
 		EndAsk.bVisible = false;
