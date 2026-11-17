@@ -89,6 +89,11 @@ export interface CardBand {
   /** FREED by his own side: the band's left edge takes the rows' good-news green, and its field stays red. */
   good?: boolean;
   /**
+   * A country in danger whose warning ends with the help of his home ground's first alarm (ruling 211(c)): SHOW ON MAP
+   * does what a press on the tray's red row does, picking up that army and centring the town (the UI director's words, section 2).
+   */
+  alarm?: boolean;
+  /**
    * The month of grace is spent (ruling 120): the standing warning of the months after a LAST MONTH lead, while the
    * campaign goes on. Its head is the warning's own title ('Rome holds, for now'), the label WARNING sits on a cream
    * plate in red letters and the band's bright edge turns cream (the art director's turn-report brief), so it cannot
@@ -767,9 +772,18 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // (His ring that closes on the enemy is his news too: an enemy army cut off on ground that touches his own.)
   const hisRing = (h: Headline): boolean => h.region !== undefined && foe(h.lost) && /^The ring closes at /.test(h.text) && (g.regions[h.region]?.nb ?? []).some((n) => g.regions[n]?.ctrl === me);
   const involves = (h: Headline): boolean => mine(h.nat) || mine(h.won) || mine(h.lost) || (h.region !== undefined && (g.regions[h.region]?.ctrl === me || mark.before[h.region] === me)) || hisRing(h);
+  // A siege of his side's town raised with no battle (its besiegers gone, or guns left alone falling back): one row,
+  // HELD against the besieger, whose line is the head alone (ruling 211(f); the UI director's words of 17 November).
+  const RAISED = /^The siege of .+? is raised\b|\. The siege is raised\.$/;
+  const raisedNews = (h: Headline): boolean => h.arm === 'land' && h.region !== undefined && side(g.regions[h.region]?.ctrl) && RAISED.test(h.text);
+  const raisedBy = new Map<number, string>();
+  for (const h of hs) if (raisedNews(h) && foe(h.lost) && !raisedBy.has(h.region!)) raisedBy.set(h.region!, h.lost!);
+  const raisedAt = new Set<number>();
   for (const h of hs) {
     if (!h.arm || h.warn || (h.kind !== 'battle' && h.kind !== 'event')) continue;
     if (!involves(h) || freedBand(h)) continue;
+    const raised = raisedNews(h);
+    if (raised && raisedAt.has(h.region!)) { used.add(h); continue; }
     // One story, one row: the battle report tells it better.
     const told = h.arm === 'land' ? h.region !== undefined && fought.has(h.region)
       : h.arm === 'air' ? (h.region !== undefined ? airAt.has(h.region) || shelled.has(h.region) : airAtSea.includes(h.nat ?? '') || airs.some((r) => r.zone >= 0))
@@ -820,6 +834,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.head = `The ring closes at ${row.place}`;
       row.follows = `${cap(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? 'is' : 'are'} cut off from all supply.`;
       row.facts = row.figures;
+    }
+    if (raised && !fought.has(h.region!)) {
+      raisedAt.add(h.region!);
+      const town = townName(g.regions[h.region!]), by = raisedBy.get(h.region!);
+      Object.assign(row, { tag: 'HELD', tone: 'good', picture: 'town', line: `The siege of ${town} is raised.`, head: `The siege of ${town} is raised`, theirs: by ?? null });
+      if (by) row.join = { word: 'against', name: theName(g.nations[by]) };
     }
     const escorts = /^The escorts of (?:the )?(.+?) sinks? /.exec(h.text);
     if (escorts && ships) row.line = `Sunk by escorts of the ${escorts[1]}.`;
@@ -915,7 +935,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const due = stakeDue(g, me);
   if (fall && (fall.level !== 'last' || due)) {
     const h: Headline = { turn: g.turn, week: 1, text: fall.text, kind: 'event', nat: fall.nat, region: fall.region, warn: fall.title, about: fall.nat };
-    banded.push({ band: { word: 'WARNING', title: fall.title, nats: [fall.nat], head: fall.head, text: fall.text, sub: fall.sub, week: 1, when: '', region: fall.region, note: fall.note }, rank: fall.level === 'reach' ? 1 : -1, h });
+    banded.push({ band: { word: 'WARNING', title: fall.title, nats: [fall.nat], head: fall.head, text: fall.text, sub: fall.sub, week: 1, when: '', region: fall.region, note: fall.note, ...(fall.alarm?.help && fall.nat === me ? { alarm: true } : {}) }, rank: fall.level === 'reach' ? 1 : -1, h });
   }
   // One story, one band. A country's fall is told once, by the line that says the country fell (the capital's own
   // fall is the same news); and a country that declares war on several in a month does so in one band.

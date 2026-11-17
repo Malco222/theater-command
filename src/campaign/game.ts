@@ -170,8 +170,21 @@ export function theName(n: Nation, start = false): string {
   return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
+/**
+ * The countries whose names take their article wherever they follow another word, and "The" at the head of a line
+ * ("against the United States", "The United States against Canada": the UI director's words for ruling 211(f)).
+ * Every line of news passes through it, so no line has to remember; "a Soviet Union that ..." is left as written.
+ */
+const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands)\b/g;
+export function theWords(text: string): string {
+  return text.replace(ARTICLED, (_m, pre: string, name: string, at: number) => {
+    const head = /(^|[.!?]\s+)$/.test(text.slice(0, at + pre.length));
+    return `${pre}${head ? 'The' : 'the'} ${name}`;
+  });
+}
+
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
-  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind, nat, region, ...tag });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind, nat, region, ...tag });
 }
 
 /**
@@ -197,7 +210,7 @@ export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
-  g.headlines.push({ turn: g.turn, week: newsWeek(g), text, kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind: 'event', nat, region, warn: title, ...(about ? { about } : {}) });
 }
 
 /** Routine news of a computer-run nation's month, kept back for one line when the month closes. */
@@ -232,7 +245,7 @@ export function foldNews(g: Game, nat: string): void {
   if (!mine.length) return;
   const shown = mine.slice(0, 6);
   const more = mine.length - shown.length;
-  headline(g, 'info', `The month in the air and at sea, ${g.nations[nat].name}: ${shown.join('; ')}${more > 0 ? `; and ${more} more of the same` : ''}.`, nat);
+  headline(g, 'info', `The month in the air and at sea, ${theName(g.nations[nat])}: ${shown.join('; ')}${more > 0 ? `; and ${more} more of the same` : ''}.`, nat);
 }
 
 // ---- Who stands where ---------------------------------------------------------------
@@ -2448,12 +2461,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (cap) { cap.cap = true; V.capital = cap.id; }
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
-    headline(g, 'fall', `${X.name} capitulates to ${g.nations[by].name}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
+    headline(g, 'fall', `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
   }
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
-    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${X.name} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
+    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
   X.atWar = [];
