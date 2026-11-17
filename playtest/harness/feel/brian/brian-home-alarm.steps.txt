@@ -1,0 +1,18 @@
+# Ruling 211, the finish-line piece fl-home-alarm: the player's own save, nothing done for five months.
+# Before the mend (Version 84.2.2): Pittsburgh falls in January 1941, Washington in March, Norfolk in April.
+load	/mnt/project-files/brian-save-usa-1940-12-turn16.json
+select-province	Buffalo
+end-month
+check-province	Pittsburgh	holder USA
+select-province	Pittsburgh
+end-month
+check-province	Pittsburgh	holder USA
+end-month
+check-province	Washington	holder USA
+select-province	Washington
+end-month
+check-province	Washington	holder USA
+end-month
+check-province	Washington	holder USA
+check-province	Norfolk	holder USA
+check-province	Pittsburgh	holder USA
