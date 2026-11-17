@@ -2170,7 +2170,7 @@ function evacuations(g: Game, nat: string): void {
     if (!trapped.length) return;
     let goal: Region | null = null, most = 0;
     for (const r of g.regions) {
-      if (!r.port || !atWar(g, nat, r.ctrl)) continue;
+      if (!r.port || !atWar(g, nat, r.ctrl) || lineShut(g, nat, r)) continue;
       const k = trapped.filter((c) => g.regions[c.reg].nb.includes(r.id)).length;
       if (k > most) { most = k; goal = r; }
     }

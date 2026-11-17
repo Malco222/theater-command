@@ -17,6 +17,7 @@ import { HISTORY, setStop } from '../src/campaign/history';
 import { inLine, lineBinds, lineLeaves, lineShut, lines, type Line } from '../src/campaign/line';
 import { decide, prospect, startOpen, type Op } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
+import { whyNotLand } from '../src/campaign/navy';
 import type { Game } from '../src/campaign/types';
 
 const OPEN = openData as unknown as { ops: Record<string, Op[]>; temper: Record<string, unknown>; impatience: { after: number[] } };
@@ -187,6 +188,18 @@ describe('215(c): the record\'s line', () => {
     expect(lineShut(g, 'SOV', at(g, 'Warsaw'))).toBe(false);
   });
 
+  it('lands nobody beyond the line: a computer staff\'s landing there is barred, the player\'s is not', () => {
+    drawn();
+    const g = grand(2, null, 1);
+    const gdynia = at(g, 'Danzig Corridor'), warsaw = at(g, 'Warsaw');
+    const cs = g.corps.filter((c) => c.nat === 'GER' && c.kind !== 'fort').slice(0, 1);
+    expect(whyNotLand(g, cs, warsaw)).toMatch(/beyond the record's line/);
+    expect(whyNotLand(g, cs, gdynia) ?? '').not.toMatch(/record's line/);
+    const mine = grand(2, 'FRA', 1);
+    const fr = mine.corps.filter((c) => c.nat === 'FRA' && c.kind !== 'fort').slice(0, 1);
+    expect(whyNotLand(mine, fr, at(mine, 'Warsaw')) ?? '').not.toMatch(/record's line/);
+  });
+
   it('is a floor for the invaded country\'s computer staff: what the invader holds by a lasting span stays his before the floor\'s month, raid ground does not', () => {
     drawn();
     const g = grand(2, null, 1);
@@ -297,18 +310,18 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     expect(D.open.temper.JAP).toEqual({ attackAt: 1.2, persist: 0.9, minOdds: 1.3 });
   });
 
-  it('draws the record\'s line on China\'s ground: 32 provinces on the first day, the floor to month 69 over the lasting ground and the 1944 offensive\'s', () => {
+  it('draws the record\'s line on China\'s ground: 39 provinces on the first day (the finer chart), the floor to month 69 over the lasting ground and the 1944 offensive\'s', () => {
     expect([L.id, L.theatre, L.land, L.taker, L.until]).toEqual(['china', 'china', 'CHN', 'JAP', 72]);
     expect(L.floor).toEqual({ until: 69, kinds: ['day one', 'lasting', 'ichigo'] });
     const all = Object.entries(L.spans);
-    expect(all.filter(([, s]) => s.some((x) => x.kind === 'day one' && x.from === 1)).length).toBe(32);
+    expect(all.filter(([, s]) => s.some((x) => x.kind === 'day one' && x.from === 1)).length).toBe(39);
     for (const [nm, spans] of all) for (const s of spans) {
       expect(['day one', 'lasting', 'raid', 'ichigo'], nm).toContain(s.kind);
       expect(s.from, nm).toBeLessThanOrEqual(s.to);
       expect(s.to, nm).toBeLessThanOrEqual(L.until);
     }
     // Never Japan's, by the record.
-    for (const nm of ['Chungking', 'Chengtu', 'Kweiyang', 'Kunming', 'Sian', 'Lanchow', 'Yenan', 'Tsunyi']) expect(L.spans[nm], nm).toBeUndefined();
+    for (const nm of ['Chungking', 'Chengtu', 'Kweiyang', 'Kunming', 'Sian', 'Lanchow', 'Yenan', 'Tsunyi', 'Enshih', 'Pengshui']) expect(L.spans[nm], nm).toBeUndefined();
     // The two lasting gains and the furthest point of 1944.
     expect(L.spans.Ichang).toEqual([{ from: 10, to: 72, kind: 'lasting' }]);
     expect(L.spans.Ningpo).toEqual([{ from: 20, to: 72, kind: 'lasting' }]);

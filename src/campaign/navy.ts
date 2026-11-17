@@ -17,6 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
+import { lineShut } from './line';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -431,6 +432,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!cs.length) return 'No corps chosen.';
   const nat = cs[0].nat, n = g.nations[nat], from = g.regions[cs[0].reg];
   for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
+  // (By the book a computer staff lands nobody beyond the record's line: line.ts. Never the player's.)
+  if (lineShut(g, nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
