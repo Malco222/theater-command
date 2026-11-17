@@ -2,7 +2,7 @@
 // dice. Counted, not flown: groups are blocks with a count, a morale meter, fuel and one of three heights, and while
 // in contact they wear each other down at rates taken from the raid card's own forecast. The rulings it is held to
 // (the design director, 2026-11-17 17:55Z): the computer against the computer averages the raid card within a tenth;
-// what a fought raid hands back to the rules stays inside the dice's own run (fly()'s luck, plus or minus 15 per cent).
+// what a fought raid hands back to the rules is booked as the field saw it (b397).
 import { describe, expect, it } from 'vitest';
 import { afterCard, afterWords, rosterWords, settleFought } from '../src/campaign/airfought';
 import { launchRaid, planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
@@ -13,7 +13,7 @@ import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 import { runOut } from '../src/battle/core/clock';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle, peopleOf, subjectOf, told } from '../src/battle/air/sim';
-import { airHandBack, airTicket, foughtAir } from '../src/battle/air/ticket';
+import { airTicket, foughtAir } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
 
@@ -343,25 +343,18 @@ describe('the dispatches\' grammar (the UI director, air review 10)', () => {
   });
 });
 
-describe('the result back to the rules (ruling of 17:55Z: inside the dice\'s own run)', () => {
+describe('the result back to the rules (b397: the card takes the field\'s losses)', () => {
   const fleet = (id: number, ftr: number, bmr: number): AirFleet => ({ id, ftr, bmr } as AirFleet);
 
-  it('keeps what the battle reports when it is inside the run, and holds it at the edge when it is not', () => {
+  it('books what the battle reports, however far from the card, never past a group\'s strength', () => {
     const a = fleet(1, 100, 0), b = fleet(2, 100, 0), e = fleet(3, 50, 0), bm = fleet(4, 0, 80);
-    const groups = { def: [{ f: a, share: 0.6 }, { f: b, share: 0.4 }], esc: [{ f: e, share: 1 }], bmr: [{ f: bm, share: 1 }] };
-    const inside = settleFought({ lost: { 1: { ftr: 12, bmr: 0, back: 5 }, 2: { ftr: 8, bmr: 0, back: 3 }, 3: { ftr: 10, bmr: 0, back: 1 }, 4: { ftr: 0, bmr: 16, back: 0 } }, dropped: 62 },
-      { foe: 20, ftr: 10, bmr: 16 }, groups, 80);
+    const inside = settleFought({ lost: { 1: { ftr: 12, bmr: 0, back: 5 }, 2: { ftr: 8, bmr: 0, back: 3 }, 3: { ftr: 10, bmr: 0, back: 1 }, 4: { ftr: 0, bmr: 16, back: 0 } }, dropped: 62 }, 80);
     expect([inside.ftr(a), inside.ftr(b), inside.ftr(e), inside.bmr(bm)]).toEqual([12, 8, 10, 16]);
     expect(inside.back(a, 12)).toBe(5);
     expect(inside.through()).toBe(62);
-    // A battle far luckier for the defenders than the dice allow: held to the top of the run, spread by fly()'s shares.
-    const wild = settleFought({ lost: { 1: { ftr: 1, bmr: 0, back: 0 }, 2: { ftr: 0, bmr: 0, back: 0 }, 3: { ftr: 40, bmr: 0, back: 0 }, 4: { ftr: 0, bmr: 50, back: 0 } }, dropped: 10 },
-      { foe: 20, ftr: 10, bmr: 16 }, groups, 80);
-    expect(wild.ftr(a) + wild.ftr(b)).toBe(Math.floor(20 * 0.85));
-    expect(wild.ftr(a)).toBeGreaterThan(wild.ftr(b));
-    expect(wild.ftr(e)).toBe(Math.ceil(10 * 1.15));
-    expect(wild.bmr(bm)).toBe(Math.ceil(16 * 1.15));
-    // The bombers that bomb are the field's, held to nothing but the bombers that flew (b384(a)).
+    // A battle far luckier for the defenders than the card: it stands as fought (the playtester's Bremen, b397(3)).
+    const wild = settleFought({ lost: { 1: { ftr: 1, bmr: 0, back: 0 }, 2: { ftr: 0, bmr: 0, back: 0 }, 3: { ftr: 40, bmr: 0, back: 0 }, 4: { ftr: 0, bmr: 90, back: 0 } }, dropped: 10 }, 80);
+    expect([wild.ftr(a), wild.ftr(b), wild.ftr(e), wild.bmr(bm)]).toEqual([1, 0, 40, 80]);
     expect(wild.through()).toBe(10);
   });
 
@@ -412,22 +405,22 @@ describe('the result back to the rules (ruling of 17:55Z: inside the dice\'s own
     expect(afterWords({ ...w, bombers: 48, dropped: 36, jettisoned: 41, lostBefore: 0 })[0]).toBe('36 of your 48 bombers dropped their bombs on Bremen; 12 jettisoned theirs.');
   });
 
-  it('a fought raid lands on the campaign as the battle went, inside the run', () => {
-    const { g, target, ids, ticket } = raid('GER', 'bomb', 'Alsace');
-    const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
-    runOut(s);
-    const before = new Map(g.airFleets.map((f) => [f.id, { ftr: f.ftr, bmr: f.bmr }]));
-    const rep = airHandBack(g, 'bomb', target, ids, s.over!);
-    expect(rep).not.toBeNull();
-    const f = ticket.place.forecast;
-    const lost = (side: 'att' | 'def', k: 'ftr' | 'bmr'): number => ticket[side].forces.filter((x, i, xs) => xs.findIndex((y) => y.corps === x.corps) === i)
-      .reduce((n, x) => n + before.get(x.corps)![k] - g.airFleets.find((y) => y.id === x.corps)![k], 0);
-    expect(lost('def', 'ftr')).toBeGreaterThanOrEqual(Math.floor(f.foe * 0.85));
-    expect(lost('def', 'ftr')).toBeLessThanOrEqual(Math.ceil(f.foe * 1.15));
-    expect(lost('att', 'bmr')).toBeGreaterThanOrEqual(Math.floor(f.bmr * 0.85));
-    expect(lost('att', 'bmr')).toBeLessThanOrEqual(Math.ceil(f.bmr * 1.15));
-    // Inside the run, the battle's own figure stands.
-    const battle = s.outcome().groups.filter((x) => x.side === 'def').reduce((n, x) => n + x.lostFtr, 0);
-    if (battle >= Math.floor(f.foe * 0.85) && battle <= Math.ceil(f.foe * 1.15)) expect(lost('def', 'ftr')).toBe(battle);
+  it('a fought raid lands on the campaign exactly as the battle went (b397(3))', () => {
+    for (const [nat, kind, name] of [['GER', 'bomb', 'Alsace'], ['UK', 'bomb', 'Bremen']] as [string, RaidKind, string][]) {
+      for (const k of [0, 1, 2]) {
+        const { g, target, ids, ticket } = raid(nat, kind, name);
+        const s = airBattle({ ...ticket, seed: ticket.seed + k }); s.ai.att = true; s.ai.def = true;
+        runOut(s);
+        const before = new Map(g.airFleets.map((f) => [f.id, { ftr: f.ftr, bmr: f.bmr }]));
+        const out = s.outcome();
+        const rep = launchRaid(g, kind, target, ids, nat, foughtAir(out));
+        expect(rep, `${name} ${k}`).not.toBeNull();
+        for (const gr of out.groups) {
+          const f = g.airFleets.find((y) => y.id === gr.id)!;
+          expect(before.get(gr.id)!.ftr - f.ftr, `${name} ${k} group ${gr.id} fighters`).toBe(gr.lostFtr);
+          expect(before.get(gr.id)!.bmr - f.bmr, `${name} ${k} group ${gr.id} bombers`).toBe(gr.lostBmr);
+        }
+      }
+    }
   });
 });

@@ -210,11 +210,12 @@ export function railBombChance(g: Game, target: number, through: number, gunsSto
 /**
  * A raid on a province's rail yards and junctions. Returns true if the line is cut. `guns` is the level of the
  * anti-aircraft guns that stand there: it is kept with the cut for the page to say (the rule is in `gunsStop`).
+ * `roll`, from 0 to 1, stands in for the dice: an air battle's own throw, so the line its field showed cut is cut.
  */
-export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number): boolean {
+export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number, roll?: number): boolean {
   const p = railBombChance(g, target, through, gunsStop);
   if (p <= 0) return false;
-  if (!(new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target, 'bombed', by))) return false;
+  if (!((roll ?? new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next()) < p && cutRail(g, target, 'bombed', by))) return false;
   if (guns !== undefined) g.flags[gunsKey(target)] = Math.max(0, Math.round(guns)) + 1;
   return true;
 }
@@ -307,10 +308,10 @@ export function ruinChance(g: Game, r: Region, stopped: number): number {
   return Math.min(0.95, stopped * U.chance);
 }
 
-/** A heavy raid on a province's industry. Returns true if a factory is wrecked. */
-export function bombFactories(g: Game, by: string, r: Region, stopped: number): boolean {
+/** A heavy raid on a province's industry. Returns true if a factory is wrecked. `roll`, as for bombRail, stands in for the dice. */
+export function bombFactories(g: Game, by: string, r: Region, stopped: number, roll?: number): boolean {
   const p = ruinChance(g, r, stopped);
-  if (p <= 0 || new Rng(hashString(`ruin:${g.seed}:${g.turn}:${r.id}:${by}`)).next() >= p) return false;
+  if (p <= 0 || (roll ?? new Rng(hashString(`ruin:${g.seed}:${g.turn}:${r.id}:${by}`)).next()) >= p) return false;
   g.flags[ruinKey(r.id)] = ruinedAt(g, r) + 1;
   return true;
 }

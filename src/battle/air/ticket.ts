@@ -5,7 +5,7 @@
 // Nothing in the campaign is changed here; the raid is flown, and paid for, only when the battle hands its result
 // back through launchRaid (see campaign/airfought.ts).
 
-import { AIR, AIRWAR, airWar, assessAir, carrierOf, forecastAir, groupAt } from '../../campaign/air';
+import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, forecastAir, groupAt } from '../../campaign/air';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { orderRaid } from '../../campaign/turn';
 import type { FoughtAir } from '../../campaign/airfought';
@@ -109,6 +109,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
     reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
+    bombs: bombLaw(g, a, m, target),
     starts,
     from: fromOf(att.map((f) => !!carrierOf(g, a.att.find((x) => x.f.id === f.corps)!.f))),
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
@@ -129,6 +130,25 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     limit: SKY.limit,
   };
   return { ticket, why: null };
+}
+
+/**
+ * The groups a fought raid sends, as the raid card picks them: the staff's pick and every fighter group that can go with
+ * it by day, all from the nation's own airfields (the design director, b397: Bremen is flown by the RAF, not by the Home
+ * Fleet's carriers). Where the staff would send only carrier groups, the bombers of the nearest airfield go in their
+ * place, as the staff picks a raid's bombers. A night raid takes the staff's pick alone.
+ */
+export function raidGroups(g: Game, kind: RaidKind, target: number, nat: string): number[] {
+  const plan = planRaid(g, kind, target, undefined, nat);
+  const seats = plan.seats.filter((x) => x.ship < 0 && !x.why);
+  const land = new Set(seats.map((x) => x.id));
+  let picked = plan.picked.filter((id) => land.has(id));
+  if (!picked.length) {
+    const lead = seats.filter((x) => x.kind !== 'ftr').sort((a, b) => a.km - b.km)[0];
+    if (lead) picked = planRaid(g, kind, target, seats.filter((x) => x.kind !== 'ftr' && x.base === lead.base).map((x) => x.id), nat).picked;
+  }
+  if (kind === 'night') return picked;
+  return [...picked, ...seats.filter((x) => x.kind === 'ftr' && !picked.includes(x.id)).map((x) => x.id)];
 }
 
 /** Where a raid's groups fly from, by whether each comes off a carrier. */
@@ -154,13 +174,13 @@ export function foughtAir(o: AirOutcome): FoughtAir {
   }
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
-    ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.staff ? { staff: o.staff } : {}),
+    ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
   };
 }
 
 /**
- * Hands a fought raid back: the rules' own raid order (orderRaid), paid with what the battle reports, held inside the
- * dice's run (campaign/airfought.ts), whether it was fought to the end or handed to the staff part way.
+ * Hands a fought raid back: the rules' own raid order (orderRaid), paid with what the battle reports (campaign/airfought.ts),
+ * whether it was fought to the end or handed to the staff part way.
  */
 export function airHandBack(g: Game, kind: RaidKind, target: number, ids: number[], result: FieldResult): AirReport | null {
   const out = result.extra?.air as AirOutcome | undefined;

@@ -40,6 +40,13 @@
 .air .fwarn { padding: 5px 12px; border: 1px solid var(--amber); border-radius: 2px; background: rgba(14, 11, 8, .82); color: var(--amber); font: 700 13px/18px var(--font-typed); text-align: center; text-wrap: balance; }
 .air .ftag { position: absolute; left: 12px; top: 12px; height: var(--control-sm); box-sizing: border-box; padding: 0 10px; border-radius: 2px; background: var(--paper-100); color: var(--ink-900, #1d1610); font: 700 12px/18px var(--font-typed); letter-spacing: .1em; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
 .air .ftag .tc-key { opacity: 1; }
+/* The aim slip (the UI director, 20:53Z): pinned at the field's top left under the tag's place, whether the tag shows or not. */
+.air .faim { position: absolute; left: 12px; top: calc(12px + var(--control-sm) + 8px); max-width: 340px; padding: 7px 10px 8px; display: grid; gap: 2px; pointer-events: none; font: 400 13px/18px var(--font-serif); }
+.air .faim[hidden], .air .faim [hidden] { display: none; }
+.air .faim .tc-label { color: var(--brass-700); }
+.air .faim b { font-weight: 700; }
+.air .faim #aimLost, .air .faim #aimNow { font: 400 12px/17px var(--font-typed); text-wrap: balance; }
+.air .faim #aimLost { white-space: nowrap; }
 
 /* The controls line folds once under 1440, before "Arrows" (the UI director's fold rule); the dot at the fold goes. */
 .air .keys .kfold { display: none; }

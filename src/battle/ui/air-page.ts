@@ -18,7 +18,7 @@ import { unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import { SKY } from '../air/book';
 import { AirSim } from '../air/sim';
-import { airTicket, foughtAir } from '../air/ticket';
+import { airTicket, foughtAir, raidGroups } from '../air/ticket';
 import type { AirPlace, AirUnit } from '../air/types';
 import { BAND_WORD, SOUTH, drawAir, live, planeSvg, shown, takeEvents, type AirScene } from './air-draw';
 import { toField, toScreen } from './draw';
@@ -85,19 +85,27 @@ const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string }[] = 
  * campaign id, goes into every raid offered after it; and what changed, for the chooser's SINCE YOUR LAST BATTLE.
  */
 const carried = new Map<number, { ftr: number; bmr: number }>();
-/** One line per group that lost aircraft: whose, what is left, and, for an enemy group, its campaign id and its fighters left. */
-let since: { who: string; left: string; foe: number | null; n: number }[] = [];
+/**
+ * One line per group that lost aircraft: whose, what it had and lost, what is left, and, for an enemy group, its
+ * campaign id and its fighters left.
+ */
+let since: { who: string; had: string; left: string; foe: number | null; n: number }[] = [];
+
+/** Battles fought on this page so far: each one is the campaign's month played again, with its own luck. */
+let battles = 0;
 
 function raidOf(i: number): Raid | null {
   const o = OFFERS[i];
   const g = startOpen(createGame(7, o.nat));
   for (const w of o.wars) setWar(g, o.nat, w);
+  // Each battle has luck of its own (the design director, b397): the same September every time, but not the same throws.
+  g.seed = (7 + 7919 * battles) >>> 0;
+  g.flags.airBattles = battles;
   for (const f of g.airFleets) { const c = carried.get(f.id); if (c) { f.ftr = c.ftr; f.bmr = c.bmr; } }
   const t = raidTargets(g, o.kind, o.nat).find((x) => planRaid(g, o.kind, x.id, undefined, o.nat).place === o.name);
   if (!t) return null;
-  const plan = planRaid(g, o.kind, t.id, undefined, o.nat);
-  // Every fighter group that can go with it by day, as the raid card offers them.
-  const ids = o.kind === 'night' ? plan.picked : [...plan.picked, ...plan.seats.filter((x) => !x.why && !x.picked && x.kind === 'ftr').map((x) => x.id)];
+  // The staff's pick and every fighter group that can go with it by day, from the nation's own airfields (b397).
+  const ids = raidGroups(g, o.kind, t.id, o.nat);
   const { ticket } = airTicket(g, o.kind, t.id, ids, o.nat);
   return ticket ? { g, nat: o.nat, kind: o.kind, target: t.id, ids, ticket } : null;
 }
@@ -126,11 +134,35 @@ function chanceWords(p: number): string {
  * raid is judged by what it was sent to do, so a raid that bombs well and misses what mattered is no surprise.
  */
 function aimWords(t: FieldTicket<AirPlace>): string {
-  const P = t.place, them = peopleOf(t.def.adj);
-  if (P.mission === 'superiority') return `The aim: the sky over ${P.name}. The fight counts if your fighters end it stronger than what the ${them} can put up.`;
-  if (P.reckon.value >= 1 || P.reckon.ruin > 0) return `The aim: the factories of ${P.name}. The raid counts if its bombs do more harm than it costs you in aircraft.`;
-  if (P.reckon.rail > 0) return `The aim: the rail yards of ${P.name}. The raid counts if the line is cut, or if the ${them} lose more aircraft than you.`;
+  const P = t.place, them = peopleOf(t.def.adj), aim = aimOf(t);
+  if (aim === 'sky') return `The aim: the sky over ${P.name}. The fight counts if your fighters end it stronger than what the ${them} can put up.`;
+  if (aim === 'factories') return `The aim: the factories of ${P.name}. The raid counts if its bombs do more harm than it costs you in aircraft.`;
+  if (aim === 'rail') return `The aim: the rail yards of ${P.name}. The raid counts if the line is cut, or if the ${them} lose more aircraft than you.`;
   return `The aim: ${P.name}, which has nothing the bombs can harm. The raid counts only if the ${them} lose more aircraft than you.`;
+}
+
+/** What a raid is sent to do: the sky, the factories, the rail yards, or nothing the bombs can harm. */
+function aimOf(t: FieldTicket<AirPlace>): 'sky' | 'factories' | 'rail' | 'none' {
+  const P = t.place;
+  if (P.mission === 'superiority') return 'sky';
+  if (P.reckon.value >= 1 || P.reckon.ruin > 0) return 'factories';
+  return P.reckon.rail > 0 ? 'rail' : 'none';
+}
+
+/**
+ * The aim slip at the field's top left, under the tag (the UI director, 20:53Z; the design director, b397: the field
+ * shows the score the stamp will use): what the raid is for, and how it stands on the very counts the stamp judges.
+ */
+function aimSlip(sim: AirSim): [string, string, string] {
+  const t = sim.ticket, P = t.place, me = S.scene.me, foe: Side = me === 'att' ? 'def' : 'att', sc = sim.score(), them = t[foe].adj;
+  const lost = `Aircraft lost: yours ${sc.lost[me]}, ${them} ${sc.lost[foe]}`;
+  switch (aimOf(t)) {
+    case 'sky': return [`The sky over ${P.name}`, `Fighters in the air: yours ${sc.up[me]}, ${them} ${sc.up[foe]}`, ''];
+    case 'factories': return [`The factories of ${P.name}`, sim.droppedNow() <= 0 ? 'No bombs have fallen yet'
+      : sc.ratio >= 1 ? 'So far its bombs have done more than the raid has cost' : 'So far the raid has cost more than its bombs have done', ''];
+    case 'rail': return [`The rail yards of ${P.name}`, sc.cut ? 'The line is cut' : 'The line still runs', lost];
+    default: return [P.name, lost, ''];
+  }
 }
 
 /** What kind of battle it is, for the top bar's subtitle: "an escorted day raid", "a fight for the sky", "a night raid". */
@@ -164,10 +196,12 @@ function showChooser(): void {
     const n = t[foe].forces.filter((f) => f.corps === id).reduce((a, f) => a + f.men, 0);
     return n > 0 ? [n] : [];
   });
+  // A count that adds up (the UI director, 20:53Z): "French Groupe de Chasse 3: 250 fighters, 27 lost; 223 left, and 156
+  // of them rise to meet you." His own: "Jagdgeschwader 4: 200 fighters, 17 lost; 183 left."
   const sinceLine = (x: (typeof since)[number]): string => {
     const ns = x.foe === null ? [] : rise(x.foe), most = ns.length ? Math.max(...ns) : 0;
-    const tail = !most ? '' : most >= x.n ? '; all of them rise to meet you' : `; ${ns.every((n) => n === most) ? '' : 'up to '}${most} of them rise to meet you`;
-    return `<b>${esc(x.who)}</b>: ${x.left} left${tail}.`;
+    const tail = !most ? '' : most >= x.n ? ', and all of them rise to meet you' : `, and ${ns.every((n) => n === most) ? '' : 'up to '}${most} of them rise to meet you`;
+    return `<b>${esc(x.who)}</b>: ${x.had}; ${x.left} left${tail}.`;
   };
   app.innerHTML = `<div class="choose tc air">
     <header class="chead"><div><div class="tc-label">Air battles · first slice</div><h1 class="tc-title-1">Choose a raid to fight</h1></div></header>
@@ -216,7 +250,7 @@ function startBattle(r: Raid): void {
       <div class="bbal" title="The staff's chance, as the fight stands now. The pale mark is where it stood when the formations set out.">
         <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
         <div class="btrack"><i id="balMe" style="background:${mine.color}"></i><i id="balThem" style="background:${theirs.color}"></i><b id="balMark"></b></div>
-        <div class="bbreak" title="When a bar fills, that side breaks off and heads for home. Who breaks off first does not decide the raid: its aim does."><span class="bbar2"><i id="nearMe" style="background:${mine.color}"></i></span><span class="tc-label">How near to breaking off</span><span class="bbar2 is-theirs"><i id="nearThem" style="background:${theirs.color}"></i></span></div>
+        <div class="bbreak" title="A bar fills as a side runs short of ammunition or nerve; when it is full, that side breaks off and heads for home. Who breaks off first does not decide the raid: its aim does."><span class="bbar2"><i id="nearMe" style="background:${mine.color}"></i></span><span class="tc-label">How near to breaking off</span><span class="bbar2 is-theirs"><i id="nearThem" style="background:${theirs.color}"></i></span></div>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands.">Hand it to the staff</button>
@@ -228,6 +262,7 @@ function startBattle(r: Raid): void {
       <div class="dispatch tc-paper" id="dispatch"></div>
       <div class="ftop"><div class="fwarn" id="fwarn" hidden></div></div>
       <div class="ftag" id="ftag" hidden></div>
+      <div class="faim tc-paper" id="faim"><div class="tc-label">The aim</div><b id="aimWhat"></b><span id="aimNow"></span><span id="aimLost"></span></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sky">Whole sky</button></div>
       <div class="airorders tc-paper" id="airorders" hidden>
         <span class="tc-label">Height</span><span class="tc-seg" id="band">${BAND_WORD.map((w, i) => `<button data-band="${i}">${w}</button>`).join('')}</span>
@@ -367,6 +402,12 @@ function updateTop(force = false): void {
     : S.tag && now() < S.tag.until ? S.tag.text : '';
   tag.hidden = !words || !!sim.over;
   if (tag.innerHTML !== words) tag.innerHTML = words;
+  // The aim slip under it: the score the stamp will judge, as it stands.
+  el('faim').hidden = !!sim.over;
+  if (!sim.over) {
+    const slip = aimSlip(sim);
+    (['aimWhat', 'aimNow', 'aimLost'] as const).forEach((id, i) => { const x = el(id); if (x.textContent !== slip[i]) x.textContent = slip[i]; x.hidden = !slip[i]; });
+  }
   // The orders strip shows only what the groups in hand can take (the UI director, newcomer review 1): height for all,
   // the escort's for fighters while his bombers fly, the hunt for fighters, the bombs for bombers still carrying them.
   const ids = chosen();
@@ -672,6 +713,9 @@ function frame(): void {
 
 // ---- After the battle: what the campaign makes of it -------------------------------------------------------------------
 
+/** Never "0.0%" (the UI director, ruled 19:51Z): "less than 0.1% of German production", until the rules print it so. */
+const never00 = (text: string): string => text.replace(/\b0\.0% of (\S+) production/g, 'less than 0.1% of $1 production');
+
 function showAfter(): void {
   const sim = S.sim!, r = sim.over!, raid = S.raid!;
   S.screen = 'after';
@@ -681,6 +725,7 @@ function showAfter(): void {
   const fought = foughtAir(sim.outcome());
   const rep = launchRaid(raid.g, raid.kind, raid.target, raid.ids, raid.nat, fought);
   const card: AfterCard | null = rep ? afterCard(raid.g, rep, fought) : null;
+  if (rep) battles++;
   // The battle's verdict is the one the campaign booked: the field's own (b331, b384(a)), or, handed to the staff, theirs.
   if (rep) { r.winner = rep.won ? 'att' : 'def'; r.level = rep.level; }
   const lines = card ? card.lines : r.lines;
@@ -715,9 +760,13 @@ function showAfter(): void {
         const f = raid.g.airFleets.find((y) => y.id === x.id);
         if (f) carried.set(f.id, { ftr: f.ftr, bmr: f.bmr });
         if (!x.lostFtr && !x.lostBmr) continue;
-        const left = [x.bmr ? `${x.bmr - x.lostBmr}${NB}${x.bmr - x.lostBmr === 1 ? 'bomber' : 'bombers'}` : '', x.ftr ? `${x.ftr - x.lostFtr}${NB}${x.ftr - x.lostFtr === 1 ? 'fighter' : 'fighters'}` : ''].filter(Boolean).join(' and ');
+        const kinds = (['bmr', 'ftr'] as const).filter((k) => x[k] > 0);
+        const lostOf = (k: 'bmr' | 'ftr'): number => (k === 'bmr' ? x.lostBmr : x.lostFtr);
+        const word = (k: 'bmr' | 'ftr', n: number): string => `${n}${NB}${k === 'bmr' ? 'bomber' : 'fighter'}${n === 1 ? '' : 's'}`;
+        const had = kinds.map((k) => `${word(k, x[k])}, ${lostOf(k)} lost`).join(', and ');
+        const left = kinds.length === 1 ? `${x[kinds[0]] - lostOf(kinds[0])}` : kinds.map((k) => word(k, x[k] - lostOf(k))).join(' and ');
         const who = side === S.scene.me ? x.fleet : `${t[side].adj} ${x.fleet}`;
-        since.push({ who, left, foe: side === S.scene.me ? null : x.id, n: x.ftr - x.lostFtr });
+        since.push({ who, had, left, foe: side === S.scene.me ? null : x.id, n: x.ftr - x.lostFtr });
       }
     }
   }
@@ -730,7 +779,7 @@ function showAfter(): void {
     <div class="tc-label kick">${sky ? 'Battle result' : 'Raid result'} · ${esc(t.date)}</div>
     <h2 class="tc-title-2">${esc(t.title)}</h2>
     <div class="verdict"><span class="tc-stamp ${won ? 'tc-stamp--won' : ''}">${esc(level)}</span></div>
-    ${rep && rep.result && (sky || (rep.dropped ?? 0) > 0) ? `<p class="told"><b>${esc(rep.result)}</b></p>` : ''}
+    ${rep && rep.result && (sky || (rep.dropped ?? 0) > 0) ? `<p class="told"><b>${esc(never00(rep.result))}</b></p>` : ''}
     <h3 class="tc-label">In the air</h3><ul class="flines">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
     ${card?.reckoning ? `<h3 class="tc-label">Against the staff's reckoning</h3><p class="dice">${esc(card.reckoning)}</p>` : ''}
     ${sides}

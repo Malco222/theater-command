@@ -14,7 +14,7 @@ import { DT } from '../core/types';
 import { SKY, type Band } from './book';
 import { drawFall, fallWords } from './falls';
 import type { AirJob, AirOutcome, AirPlace, AirUnit } from './types';
-import { afterWords, staffHow } from '../../campaign/airfought';
+import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
 
@@ -75,6 +75,15 @@ export class AirSim implements BattleSim<AirUnit> {
   fired = false;
   /** The bombers the staff's reckoning expected through at the start (see throughNow). */
   private through0 = 0;
+  /**
+   * The field's throws for the railway and for a factory, drawn when the battle starts (b397): the line is cut, or a
+   * factory wrecked, as soon as its chance from the bombers that have dropped comes above its throw. fly() takes the
+   * same throws, so the campaign books what the field showed.
+   */
+  private rolls: { rail: number; ruin: number };
+  /** Whether the bombs have cut the railway, and wrecked a factory outright. */
+  railCut = false;
+  ruined = false;
   private flakT: number;
   private flakIn: number;
   /** The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber, the bombers' own guns. */
@@ -86,6 +95,7 @@ export class AirSim implements BattleSim<AirUnit> {
     this.rng = new Rng(ticket.seed);
     this.fallRng = this.rng.fork(7);
     this.lossRng = this.rng.fork(11);
+    this.rolls = { rail: this.rng.fork(13).next(), ruin: this.rng.fork(17).next() };
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -239,23 +249,37 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
-   * How near a side's formations are to breaking off, from 0 (all fresh) to 1 (every one broken off), weighted by the
-   * aircraft each sent up (ruling 226, mark 3: no hidden thresholds). A group is as near as the further of two marks:
-   * its morale on the way from where it started down to routing, and, for a fighter group, its fight spent on the way
-   * down to the share at which it breaks off for home. A group lost, routing or fought out has broken off.
+   * How near a side is to breaking off, from 0 (all fresh) to 1 (broken off), and why (ruling 226, mark 3: no hidden
+   * thresholds). A group is as near as the further of two marks: its morale on the way from where it started down to
+   * routing ('nerve'), and, for a fighter group, its fight spent on the way down to the share at which it breaks off
+   * for home ('ammo'). A group lost, routing, turned back with its bombs or fought out has broken off. Each kind is
+   * weighted by the aircraft it sent up. A raid counts what turns a raid back, its losses and its escort's state
+   * (the design director, b397): the further of its escort's mark and its bombers', so fresh bombers do not hold it
+   * down, and either side can fill first.
    */
+  nearWhy(side: Side): { at: number; why: 'ammo' | 'nerve' } {
+    const sum = (us: AirUnit[]): { at: number; ammo: number; nerve: number } => {
+      let all = 0, ammo = 0, nerve = 0;
+      for (const u of us) {
+        all += u.n0;
+        if (u.state === 'gone' || u.state === 'routing' || u.jettisoned) { nerve += u.n0; continue; }
+        if (u.air === 'ftr' && u.kit0 > 0 && u.vig < SKY.spent) { ammo += u.n0; continue; }
+        const m0 = this.mor0.get(u.id) ?? u.mor;
+        const byMor = m0 > SKY.morale.routing ? clamp01((m0 - u.mor) / (m0 - SKY.morale.routing)) : 0;
+        const byFight = u.air === 'ftr' && u.kit0 > 0 ? clamp01((1 - u.vig) / (1 - SKY.spent)) : 0;
+        if (byFight > byMor) ammo += u.n0 * byFight; else nerve += u.n0 * byMor;
+      }
+      return all > 0 ? { at: (ammo + nerve) / all, ammo, nerve } : { at: 0, ammo: 0, nerve: 0 };
+    };
+    const mine = this.units.filter((u) => u.side === side);
+    const bmr = mine.filter((u) => u.air === 'bmr'), ftr = mine.filter((u) => u.air === 'ftr');
+    const parts = bmr.length && ftr.length ? [sum(ftr), sum(bmr)] : [sum(mine)];
+    const top = parts.reduce((a, b) => (b.at > a.at ? b : a));
+    return { at: top.at, why: top.ammo > top.nerve ? 'ammo' : 'nerve' };
+  }
+
   nearBreak(side: Side): number {
-    let w = 0, all = 0;
-    for (const u of this.units) {
-      if (u.side !== side) continue;
-      all += u.n0;
-      if (u.state === 'gone' || u.state === 'routing' || (u.air === 'ftr' && u.kit0 > 0 && u.vig < SKY.spent)) { w += u.n0; continue; }
-      const m0 = this.mor0.get(u.id) ?? u.mor;
-      const byMor = m0 > SKY.morale.routing ? clamp01((m0 - u.mor) / (m0 - SKY.morale.routing)) : 0;
-      const byFight = u.air === 'ftr' && u.kit0 > 0 ? clamp01((1 - u.vig) / (1 - SKY.spent)) : 0;
-      w += u.n0 * Math.max(byMor, byFight);
-    }
-    return all > 0 ? w / all : 0;
+    return this.nearWhy(side).at;
   }
 
   /**
@@ -267,8 +291,11 @@ export class AirSim implements BattleSim<AirUnit> {
       if (this.warned.has(side) || this.nearBreak(side) < SKY.warn) continue;
       this.warned.add(side);
       const raid = side === 'att' && this.units.some((u) => u.side === 'att' && u.air === 'bmr');
-      const who = this.ticket[side].human ? `Your ${raid ? 'raid is' : 'fighters are'}` : `The ${this.ticket[side].adj} ${raid ? 'raid is' : 'fighters are'}`;
-      this.say('air:near', null, `${who} near breaking off.`, { side });
+      const mine = this.ticket[side].human;
+      const who = mine ? `Your ${raid ? 'raid is' : 'fighters are'}` : `The ${this.ticket[side].adj} ${raid ? 'raid is' : 'fighters are'}`;
+      // The enemy's line names the cause (the UI director, 20:53Z): short of ammunition, or shaken.
+      const why = mine ? '' : this.nearWhy(side).why === 'ammo' ? ': short of ammunition' : ': shaken';
+      this.say('air:near', null, `${who} near breaking off${why}.`, { side });
     }
   }
 
@@ -364,6 +391,7 @@ export class AirSim implements BattleSim<AirUnit> {
         if (u.run >= SKY.run) {
           u.dropped = u.n;
           this.say('air:bombs', u, `${told(this.called(u), '{N} [bombs|bomb]')} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          this.bombsFall();
         }
       }
     }
@@ -740,6 +768,46 @@ export class AirSim implements BattleSim<AirUnit> {
     return done + Math.max(0, coming - bmrToCome);
   }
 
+  /** The bombers that have dropped on the target so far. */
+  droppedNow(): number {
+    return this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.dropped, 0);
+  }
+
+  /**
+   * As each box bombs: whether the bombs dropped so far have cut the railway, or wrecked a factory outright, by the
+   * campaign's own law against the field's throws (b397). Told once each, as it happens.
+   */
+  private bombsFall(): void {
+    const L = this.place.bombs;
+    if (!L) return;
+    const n = this.droppedNow();
+    if (!this.railCut && railChanceOf(L, n) > this.rolls.rail) {
+      this.railCut = true;
+      this.say('air:rail', null, `The railway through ${this.place.name} is cut.`, { x: SKY.target.x, y: SKY.target.y });
+    }
+    if (!this.ruined && ruinChanceOf(L, n) > this.rolls.ruin) {
+      this.ruined = true;
+      this.say('air:ruin', null, `A factory at ${this.place.name} is wrecked outright.`, { x: SKY.target.x, y: SKY.target.y });
+    }
+  }
+
+  /**
+   * The score the stamp will judge, as it stands (the design director, b397; the UI director's aim slip, 20:53Z): the
+   * aircraft each side has lost, what the bombs have done on the campaign's scale, the railway and the factory, and
+   * the fighters each side still has in the air. 'ratio' is fly()'s own measure on these counts; 1 or more is a win.
+   */
+  score(): { lost: Record<Side, number>; worth: number; cut: boolean; ruined: boolean; ratio: number; up: Record<Side, number> } {
+    const R = this.place.reckon, L = this.place.bombs;
+    const lost = (s: Side): number => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n0 - u.n, 0);
+    const dropped = this.droppedNow();
+    const worth = this.place.mission === 'superiority' ? 0
+      : L ? bombWorth(L, dropped) + 300 * ((this.railCut ? 1 : 0) + (this.ruined ? 1 : 0))
+      : this.through0 > 0 ? R.value * Math.min(1.5, dropped / this.through0) : 0;
+    const up = (s: Side): number => this.units.filter((u) => u.side === s && u.air === 'ftr' && flying(u)).reduce((t, u) => t + u.n, 0);
+    const l = { att: lost('att'), def: lost('def') };
+    return { lost: l, worth, cut: this.railCut, ruined: this.ruined, ratio: (l.def + worth + 10) / (l.att + 10), up: { att: up('att'), def: up('def') } };
+  }
+
   /**
    * The raider's chance of success if the staff settled the rest now (ruling 226, mark 5: HAND IT TO THE STAFF says
    * the staff's chance now), weighed as forecastAir weighs the raid card's: the aircraft each side has lost and is
@@ -751,8 +819,21 @@ export class AirSim implements BattleSim<AirUnit> {
     const lost = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
     const foe = lost('def', 'ftr') + rest.foe * F.foe, ftr = lost('att', 'ftr') + rest.ftr * F.ftr, bmrToCome = rest.bmr * F.bmr;
     const bmr = lost('att', 'bmr') + bmrToCome;
-    const share = this.through0 > 0 ? Math.min(1.5, this.throughNow(bmrToCome) / this.through0) : 1;
-    const pr = Math.min(1, R.rail * share), pf = Math.min(1, R.ruin * share), value = R.value * share;
+    const L = this.place.bombs;
+    let pr: number, pf: number, value: number;
+    if (L) {
+      // By the campaign's own law (b397): what the bombers still getting through should do, and, for the railway and a
+      // factory, what has happened already, or the chance the staff's own throw gives it from all the bombs.
+      const t = this.droppedNow(), T = Math.max(t, this.throughNow(bmrToCome));
+      // Handed over, a railway already cut stays cut, and the staff throw again for one not yet cut, from all the bombs.
+      const rest = (done: boolean, p: (n: number) => number): number => (done ? 1 : p(T));
+      pr = rest(this.railCut, (n) => railChanceOf(L, n));
+      pf = rest(this.ruined, (n) => ruinChanceOf(L, n));
+      value = bombWorth(L, T);
+    } else {
+      const share = this.through0 > 0 ? Math.min(1.5, this.throughNow(bmrToCome) / this.through0) : 1;
+      pr = Math.min(1, R.rail * share); pf = Math.min(1, R.ruin * share); value = R.value * share;
+    }
     const beats = (worth: number): number => { const x = Math.pow((foe + worth + 10) / (ftr + bmr + 10), R.k); return x / (1 + x); };
     return (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);
   }
@@ -774,23 +855,21 @@ export class AirSim implements BattleSim<AirUnit> {
       lostBefore: att.reduce((s, u) => s + u.n0 - u.n, 0) - after, lostAfter: after,
       ...(this.gaveUp ? { gaveUp: this.gaveUp } : {}),
       ...(this.staff ? { staff: this.staff } : {}),
+      // Fought to the end, the field's throws decide the railway and the factory in the campaign too. Handed to the staff,
+      // what the bombs had done stands (a throw of 0 cuts it) and the staff's own dice decide the rest (b368).
+      ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }
 
   /**
    * The field's verdict by the campaign's own measure (fly(): the aircraft the defender lost, and what the bombs were
-   * worth, against the aircraft the raider lost, each with 10 added). What the bombs broke beyond the output they
-   * stopped (a railway cut, a factory wrecked) is the campaign's to roll when it books the raid, so this is the field's
-   * verdict before it: fly() judges it again from the field's own losses with what the bombs did, and the after card
-   * says that (the design director, b384(a); ruling 226 mark 6). A side that broke off everything lost; where its
-   * losses say otherwise, it is a close defeat. As the raider reads it, on the campaign's air scale.
+   * worth, against the aircraft the raider lost, each with 10 added), on the score the field shows (score()): the
+   * bombs weighed by the campaign's law, the railway and the factory as the field's throws decided them (b397). fly()
+   * judges it again on the same counts, and the after card says that (b384(a); ruling 226 mark 6). A side that broke
+   * off everything lost; where its losses say otherwise, it is a close defeat. As the raider reads it.
    */
   private judge(): { won: boolean; level: VictoryLevel; ratio: number } {
-    const R = this.place.reckon;
-    const count = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
-    const dropped = this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.dropped, 0);
-    const worth = this.place.mission === 'superiority' || this.through0 <= 0 ? 0 : R.value * Math.min(1.5, dropped / this.through0);
-    const ratio = (count('def', 'ftr') + count('def', 'bmr') + worth + 10) / (count('att', 'ftr') + count('att', 'bmr') + 10);
+    const { ratio } = this.score();
     const won = this.gaveUp ? this.gaveUp === 'def' : ratio >= 1;
     const level: VictoryLevel = won ? (ratio >= 2 ? 'Decisive victory' : 'Close victory') : ratio < 0.5 ? 'Decisive defeat' : 'Close defeat';
     return { won, level, ratio };

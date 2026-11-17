@@ -5,10 +5,11 @@
 // numbers in place of its dice, and everything a raid does after that (output stopped, railways, factories, the sky
 // won, the news) follows from them exactly as it does for a raid the dice settled.
 //
-// The rules stay the judge: what the battle reports is held inside the dice's own run round the expected figures
-// (the design director's ruling of 2026-11-17 17:55Z): each side's losses within fly()'s luck of the expected. The
-// bombers that bomb are those that reached the release on the field, and the verdict is the field's, booked as b331
-// has it (the design director, b384(a)). Absent, fly() rolls its dice exactly as before.
+// The field is the judge (the design director, b397): fly() books the very losses the field saw, so the after card
+// never says other than the field (ruling 226, mark 6), and the bombers that bomb are those that reached the release.
+// Whether the bombs cut the railway or wrecked a factory is decided on the field as the bombs fall, by the campaign's
+// own law (BombLaw), with one throw for each drawn when the battle starts; fly() takes the same throws, so the line the
+// field reports cut is the line the campaign cuts. Absent, fly() rolls its dice exactly as before.
 
 import type { VictoryLevel } from '../core/ticket';
 import type { AirFleet, AirReport, Game } from './types';
@@ -42,53 +43,54 @@ export interface FoughtAir {
   flew?: Record<number, { ftr: number; bmr: number }>;
   /** The raid card's chance of success, for the after card's reckoning line. */
   chance?: number;
+  /**
+   * The field's throws for the railway and for a factory (b397): each is cut or wrecked when its chance, from the bombers
+   * that dropped, comes above the throw. fly() uses them in place of its own, so it books what the field showed.
+   */
+  rolls?: { rail?: number; ruin?: number };
 }
 
-/** The dice's run either side of the expected figure: fly()'s own luck (AIR.combat.luck). */
-const RUN = { luck: 0.15 };
+/**
+ * How a raid's bombs are weighed, from the bombers that drop: fly()'s own law for a raid on a province (b397), so the
+ * field can say as the bombs fall what the campaign will make of them.
+ */
+export interface BombLaw {
+  /** What each bomber that drops counts for on the target: by night fewer find it, and better bombers count for more. */
+  hit: number;
+  /** The share of the province's output stopped, min(most, hit x bombers / scale) x keep, worth 'worth' aircraft whole (0 where there is none). */
+  out: { scale: number; most: number; keep: number; worth: number };
+  /** The railway: cut with the chance min(most, hit x bombers / scale) x (1 - stop); null where it cannot be cut. */
+  rail: { scale: number; most: number; stop: number } | null;
+  /** A factory wrecked outright: the chance min(cap, stopped x chance) once the output stopped passes 'over'; null where none can be. */
+  ruin: { over: number; chance: number; cap: number } | null;
+}
+/** The share of output the bombs of n bombers stop. */
+export const bombStopped = (L: BombLaw, n: number): number => (n > 0 ? Math.min(L.out.most, (n * L.hit) / L.out.scale) * L.out.keep : 0);
+/** What the bombs of n bombers are worth on the campaign's scale (aircraft), before a cut railway or a wrecked factory. */
+export const bombWorth = (L: BombLaw, n: number): number => L.out.worth * bombStopped(L, n);
+/** The chance that the bombs of n bombers cut the railway. */
+export const railChanceOf = (L: BombLaw, n: number): number => (L.rail && n > 0 ? Math.min(L.rail.most, (n * L.hit) / L.rail.scale) * (1 - L.rail.stop) : 0);
+/** The chance that the bombs of n bombers wreck a factory outright. */
+export const ruinChanceOf = (L: BombLaw, n: number): number => {
+  if (!L.ruin) return 0;
+  const s = bombStopped(L, n);
+  return s <= L.ruin.over ? 0 : Math.min(L.ruin.cap, s * L.ruin.chance);
+};
 
 /**
- * What fly() applies for a fought raid: each group's losses, held inside the dice's run. `expected` are fly()'s own
- * figures at even luck (defending fighters, escorting fighters, bombers lost), `groups` the groups each applies to
- * with the share fly() would give each, and `B` the bombers that reached the target.
+ * What fly() applies for a fought raid: each group's losses as the field saw them (the design director, b397: the card
+ * takes the field's losses, so the tray, the card and the field never disagree), never past a group's own strength,
+ * and the bombers that reached the release. `B` are the bombers that flew.
  */
 export function settleFought(
   fought: FoughtAir,
-  expected: { foe: number; ftr: number; bmr: number },
-  groups: { def: { f: AirFleet; share: number }[]; esc: { f: AirFleet; share: number }[]; bmr: { f: AirFleet; share: number }[] },
   B: number,
-  luck = RUN.luck,
 ): { ftr: (f: AirFleet) => number; bmr: (f: AirFleet) => number; back: (f: AirFleet, k: number) => number; through: () => number } {
-  const held = (rows: { f: AirFleet; share: number }[], want: (f: AirFleet) => number, exp: number, cap: (f: AirFleet) => number): Map<number, number> => {
-    const got = new Map(rows.map((r) => [r.f.id, Math.min(cap(r.f), Math.max(0, Math.round(want(r.f))))]));
-    const total = [...got.values()].reduce((s, v) => s + v, 0);
-    const lo = Math.floor(exp * (1 - luck)), hi = Math.ceil(exp * (1 + luck));
-    const goal = total < lo ? lo : total > hi ? hi : total;
-    if (goal === total || !rows.length) return got;
-    // Held at the edge of the run: the whole is scaled to it, each group keeping its part of what was lost on the field
-    // (ruling 226, mark 6: the card's rows never contradict the field). Where nothing fell on the field the shares
-    // fly() itself would give stand in. Whole aircraft, by the largest remainders, never past a group's own strength.
-    const weight = (r: { f: AirFleet; share: number }): number => (total > 0 ? got.get(r.f.id)! / total : r.share);
-    const out = new Map(rows.map((r) => [r.f.id, Math.min(cap(r.f), Math.floor(goal * weight(r)))]));
-    let left = goal - [...out.values()].reduce((s, v) => s + v, 0);
-    const order = [...rows].sort((a, b) => (goal * weight(b)) % 1 - (goal * weight(a)) % 1 || weight(b) - weight(a) || a.f.id - b.f.id);
-    for (let guard = 0; left > 0 && guard < 100; guard++) {
-      let moved = false;
-      for (const r of order) {
-        if (left <= 0) break;
-        if (out.get(r.f.id)! < cap(r.f)) { out.set(r.f.id, out.get(r.f.id)! + 1); left--; moved = true; }
-      }
-      if (!moved) break;
-    }
-    return out;
-  };
   const row = (f: AirFleet): FoughtAir['lost'][number] => fought.lost[f.id] ?? { ftr: 0, bmr: 0, back: 0 };
-  const def = held(groups.def, (f) => row(f).ftr, expected.foe, (f) => f.ftr);
-  const esc = held(groups.esc, (f) => row(f).ftr, expected.ftr, (f) => f.ftr);
-  const bmr = held(groups.bmr, (f) => row(f).bmr, expected.bmr, (f) => f.bmr);
+  const whole = (n: number, most: number): number => Math.min(most, Math.max(0, Math.round(n)));
   return {
-    ftr: (f) => def.get(f.id) ?? esc.get(f.id) ?? 0,
-    bmr: (f) => bmr.get(f.id) ?? 0,
+    ftr: (f) => whole(row(f).ftr, f.ftr),
+    bmr: (f) => whole(row(f).bmr, f.bmr),
     back: (f, k) => Math.min(k, row(f).back),
     // The bombers that bomb: those that reached the release on the field, including any lost after it (b384(a)).
     through: () => Math.max(0, Math.min(B, fought.dropped)),
@@ -114,12 +116,15 @@ function staffLine(w: { place: string; sky: boolean; how: StaffHow }): string {
   return `The staff settled the rest of the ${what} ${w.place} from where it stood${w.how === 'won' ? ': what you had won stays won' : ''}.`;
 }
 
-/** Which form: no group had met an enemy; or the staff's chance at the press, his side of it, above the raid card's. */
+/** How far the fight must have moved his way before "what you had won stays won" is said (the design director, 20:51Z): 5 points. */
+export const WON_BY = 0.05;
+
+/** Which form: no group had met an enemy; or the staff's chance at the press, his side of it, 5 points or more above the raid card's. */
 export function staffHow(me: 'att' | 'def', staff: { chance?: number; fired?: boolean }, card?: number): StaffHow {
   if (staff.fired === false) return 'whole';
   if (staff.chance === undefined || card === undefined) return 'rest';
   const mine = (p: number): number => (me === 'att' ? p : 1 - p);
-  return mine(staff.chance) > mine(card) ? 'won' : 'rest';
+  return mine(staff.chance) - mine(card) >= WON_BY - 1e-9 ? 'won' : 'rest';
 }
 
 /**

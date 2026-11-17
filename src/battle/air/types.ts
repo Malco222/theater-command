@@ -5,6 +5,7 @@
 // the fight's centre, a loss is one model falling (see 'air:lost' events). Nothing here flies a single aircraft.
 
 import type { AirMission } from '../../campaign/types';
+import type { BombLaw } from '../../campaign/airfought';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
 import type { AirGround } from './ground';
@@ -115,6 +116,12 @@ export interface AirPlace {
    * wrecked factory (rail, ruin), each worth 300 aircraft.
    */
   reckon: { k: number; value: number; rail: number; ruin: number };
+  /**
+   * How the campaign weighs the bombs of a raid on a province, from the bombers that drop (campaign/air.ts bombLaw): the
+   * output stopped, the railway cut, a factory wrecked. The field decides the railway and the factory as the bombs fall,
+   * by this law (b397). Absent for a fight for the sky.
+   */
+  bombs?: BombLaw | null;
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
   /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */
@@ -144,6 +151,10 @@ export interface AirOutcome {
   gaveUp?: Side;
   /** Handed to the staff (sim.settleNow): each pool's share of the raid's cost still to come, and the bombers that had turned back. */
   staff?: { rest: { foe: number; ftr: number; bmr: number }; away: number; chance?: number; fired?: boolean };
+  /** The field's throws for the railway and a factory, and whether the bombs had cut the one and wrecked the other (b397). */
+  rolls?: { rail?: number; ruin?: number };
+  railCut?: boolean;
+  ruined?: boolean;
 }
 
 /** One loss, as the 3D side plays it. */
