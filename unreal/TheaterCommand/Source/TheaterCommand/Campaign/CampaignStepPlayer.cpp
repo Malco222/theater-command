@@ -685,7 +685,7 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		// A key of the keyboard, by the hand that key is bound to.
 		const FString Key = Step.Target.ToLower();
-		if (Key == TEXT("tab")) { Player.NextArmy(); }
+		if (Key == TEXT("tab")) { Player.PressTab(); }
 		else if (Key == TEXT("enter") || Key == TEXT("return")) { bMonth = !Player.IsTableBusy() && !Player.GetEndAsk().bVisible; Player.PressEnter(); }
 		else if (Key == TEXT("esc") || Key == TEXT("escape")) { Player.PressEscape(); }
 		else if (Key == TEXT("space")) { Player.PressSpace(); }

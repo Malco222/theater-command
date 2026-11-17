@@ -944,6 +944,7 @@ public:
 	int32 StepNotices() const { return NoticesSaid; }
 	int32 NoticesSaid = 0;
 	void PressEscape() { EscapeKey(); }
+	void PressTab() { TabKey(); } // (the code checker's pre-check: a replay's Tab goes through the key guard, as a player's does)
 	void PressSpace() { SpaceKey(); }
 	/** Enter as the key gives it: the lit button of the card that is up, or the map's own END THE MONTH under the key guard. */
 	void PressEnter() { EnterKey(); }

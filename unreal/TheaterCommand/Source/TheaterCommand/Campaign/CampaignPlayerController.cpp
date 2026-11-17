@@ -3738,6 +3738,7 @@ void ACampaignPlayerController::FrameReachSoon()
 
 void ACampaignPlayerController::FrameReach()
 {
+	THEATER_SPEED_SCOPE(FrameReach); // (the code checker's pre-check: the search below grows with the panels, four loops deep)
 	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
