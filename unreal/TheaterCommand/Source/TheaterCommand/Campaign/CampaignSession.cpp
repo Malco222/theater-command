@@ -55,6 +55,12 @@ namespace
 		Out.AppendChar(TEXT('"'));
 		return Out;
 	}
+
+	/** (One voice after a press.) The army in hand's name and its corps in the field, as the rules' last two arguments: nothing where no name is given. */
+	FString ArmyArgs(const FString& Army, const TArray<int32>& ArmyIds)
+	{
+		return Army.IsEmpty() ? FString() : FString::Printf(TEXT(",%s,[%s]"), *JsonQuote(Army), *IdList(ArmyIds));
+	}
 }
 
 bool FCampaignSession::Prepare(FString& OutError)
@@ -1207,6 +1213,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				{
 					C.MarchTo = Marching;
 					Unit->TryGetNumberField(TEXT("marchMonths"), C.MarchMonths);
+					Unit->TryGetBoolField(TEXT("marchNext"), C.bMarchNext);
 				}
 			}
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
@@ -1512,11 +1519,11 @@ FString FCampaignSession::Stands(int32 RegionId)
 	return Now;
 }
 
-FMarchPlan FCampaignSession::PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId)
+FMarchPlan FCampaignSession::PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds)
 {
 	FMarchPlan Plan;
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("marchPlan"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("marchPlan"), FString::Printf(TEXT("[[%s],%d%s]"), *IdList(CorpsIds), RegionId, *ArmyArgs(Army, ArmyIds)), Object))
 	{
 		return Plan;
 	}
@@ -1536,10 +1543,10 @@ FMarchPlan FCampaignSession::PlanMarch(const TArray<int32>& CorpsIds, int32 Regi
 	return Plan;
 }
 
-TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote)
+TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote, const FString& Army, const TArray<int32>& ArmyIds)
 {
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("move"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("move"), FString::Printf(TEXT("[[%s],%d%s]"), *IdList(CorpsIds), RegionId, *ArmyArgs(Army, ArmyIds)), Object))
 	{
 		return TArray<FCorpsMove>();
 	}
@@ -2374,11 +2381,11 @@ TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 R
 	return Out;
 }
 
-FRailShow FCampaignSession::RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March)
+FRailShow FCampaignSession::RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March, const FString& Army, const TArray<int32>& ArmyIds)
 {
 	FRailShow Out;
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("railShow"), FString::Printf(TEXT("[[%s],[%s]]"), *IdList(CorpsIds), *IdList(March)), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("railShow"), FString::Printf(TEXT("[[%s],[%s]%s]"), *IdList(CorpsIds), *IdList(March), *ArmyArgs(Army, ArmyIds)), Object))
 	{
 		return Out;
 	}

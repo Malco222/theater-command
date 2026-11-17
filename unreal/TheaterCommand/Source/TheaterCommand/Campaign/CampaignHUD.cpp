@@ -4409,6 +4409,8 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 8.0f, 0.0f)
 								[
 									SNew(SHorizontalBox)
+									// (One voice after a press.) While the lesson's slip is up the foot is blank: the slip says it once.
+									.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMarchSlipShown() ? EVisibility::Hidden : EVisibility::Visible; })
 									// (Ruling 87.) "No moves left this month." in brass, before what to do about it.
 									+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 									[

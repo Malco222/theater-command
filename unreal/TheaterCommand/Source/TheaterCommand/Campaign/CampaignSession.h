@@ -65,7 +65,8 @@ public:
 	 */
 	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr);
 	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
-	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId);
+	/** Army, ArmyIds: (one voice after a press) the army in hand's name as its tray names it, and its corps in the field, so that the line names whom it is true of. */
+	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 	/**
 	 * (Ruling 102.) The province of the army the round goes to next, by the rules' own order: those not yet visited
 	 * this round first, the nearest to From (on the map's own scale) among equals. InOutSeen is the round so far and
@@ -91,7 +92,8 @@ public:
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */
-	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote = nullptr);
+	/** Army, ArmyIds: as for PlanMarch. A march kept is answered by one sentence naming the army, or so many corps of it, or the one corps. */
+	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote = nullptr, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 
 	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
 	/** bOpening: the card is being opened, so the staff may bring in everyone the roads will carry where that beats the pick. */
@@ -146,7 +148,8 @@ public:
 	/** Sends the given corps by rail. Returns the ones that went. */
 	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutSaid = nullptr);
 	/** (Rulings 110, 112, 118.) What the trains will do for these corps this month; March is where they can walk to. */
-	FRailShow RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March);
+	/** Army, ArmyIds: as for PlanMarch, so that "No train for the American army this month" is said of the army where it is true of all of it. */
+	FRailShow RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 	/** The pointer's words for a province beyond their march. */
 	FRailTip RailTip(const TArray<int32>& CorpsIds, int32 RegionId);
 
