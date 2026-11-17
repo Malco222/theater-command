@@ -94,12 +94,18 @@ if (stale.length) console.log(`named crossings a city now lies between: ${stale.
 if (process.argv.includes('--list')) for (const [a, b, k] of found.values()) if (isPiece(a) || isPiece(b)) console.log(`  ${rivers[k].name}: ${at.get(a).name} - ${at.get(b).name}`);
 
 // The rivers of the survey: the real courses, the rivers and streams the chart did not have, and their crossings.
-const more = moreRivers({ map, all, at, byName, nb, handed: rivers, found, struck, key, beside });
+const more = moreRivers({ map, all, at, byName, nb, handed: rivers, found, struck, key, beside, land: [...map.land, ...read('campaign-map').land] });
 const crossings = [...found.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
 fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.meta.url), JSON.stringify({ rivers: more.rivers, crossings }));
 {
   const cls = (c) => more.rivers.filter((r) => r.class === c).length;
-  console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
+  console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried - more.gone.length} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
+  const pts = more.rivers.reduce((t, r) => t + r.pts.length, 0);
+  console.log(`  ${pts} points in the courses; ${more.cutBack.length} courses cut back to the shore${more.cutBack.length ? ` (the furthest: ${[...more.cutBack].sort((p, q) => q.by - p.by).slice(0, 8).map((c) => `${c.name} ${c.by}`).join(', ')})` : ''}`);
+  if (more.runOn.length) console.log(`  ${more.runOn.length} courses run on to the shore the survey ends them short of: ${[...more.runOn].sort((p, q) => q.by - p.by).map((c) => `${c.name} ${c.by}`).join(', ')}`);
+  if (more.gone.length) console.log(`crossings handed over on a reach where the river did not run in 1939, struck (${more.gone.length}): ${more.gone.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far} from its course)`).join(', ')}`);
+  if (more.toMouth.length) console.log(`crossings moved from open water to their river's mouth (${more.toMouth.length}): ${more.toMouth.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  if (more.adrift.length) console.log(`crossings on an arm of the sea or a lake beyond their river as drawn (${more.adrift.length}): ${more.adrift.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   if (more.off.length) console.log(`crossings handed over whose river's real course runs over 25 units away (${more.off.length}): ${more.off.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   // The new crossings, countable by country and by river: for the rules' measure.
   const byCountry = {}, byRiver = {};

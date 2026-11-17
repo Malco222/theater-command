@@ -9,7 +9,7 @@
 // --list prints every river taken, by part of the world. Without --fresh the rivers already in more-rivers.mjs keep
 // their order (a river keeps its number for good once the chart is handed over) and new ones follow them.
 import fs from 'node:fs';
-import { SURVEY_FIX, SURVEY_SPLIT, LAKE_NAMES, RIVER_ALIASES, RIVER_TRIM, RIVER_LEAVE, RIVER_NAMES, RIVER_SKIP, RIVER_PICK, RIVER_GREAT, RIVER_RIVERS, RIVER_STREAMS, RIVER_INTO, RIVER_SEASONAL, RIVER_FLIP, RIVER_BAR } from '../data/campaign/detail.mjs';
+import { SURVEY_FIX, SURVEY_SPLIT, LAKE_NAMES, RIVER_ALIASES, RIVER_TRIM, RIVER_LEAVE, RIVER_FOOT, RIVER_HAND, RIVER_NAMES, RIVER_SKIP, RIVER_PICK, RIVER_GREAT, RIVER_RIVERS, RIVER_STREAMS, RIVER_INTO, RIVER_SEASONAL, RIVER_FLIP, RIVER_BAR } from '../data/campaign/detail.mjs';
 
 const src = process.argv[2];
 if (!src || src.startsWith('--')) { console.error('give the path of ne_10m_rivers_lake_centerlines.geojson'); process.exit(1); }
@@ -129,6 +129,38 @@ function chain(ls, gap) {
   }
   return out;
 }
+/**
+ * A walk that comes back on itself is cut where it turns back. Where a river parts into arms (a delta, a side
+ * channel) the longest walk can run down one arm and back up another to where they parted; the river is the walk
+ * as far as the point of that loop that lies furthest from the parting.
+ */
+const unlooped = [];
+function unloop(ll, name) {
+  for (let pass = 0; pass < 4; pass++) {
+    let cut = false;
+    for (const end of ['foot', 'head']) {
+      const p = ll.map(uv), n = p.length - 1;
+      const along = [0];
+      for (let i = 1; i <= n; i++) along.push(along[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
+      const e = end === 'foot' ? n : 0;
+      let at = -1, bd = 2;
+      for (let j = 0; j < n; j++) {
+        if (Math.abs(along[j] - along[e]) < 25 || Math.abs(along[j + 1] - along[e]) < 25) continue;
+        const d = nearest(p[e], [p[j], p[j + 1]]).d;
+        if (d < bd) { bd = d; at = j; }
+      }
+      if (at < 0) continue;
+      // The loop runs from the parting (at) to the end: the point of it furthest from the end.
+      let far = e, fd = 0;
+      for (let i = Math.min(at, e); i <= Math.max(at, e); i++) { const d = Math.hypot(p[i][0] - p[e][0], p[i][1] - p[e][1]); if (d > fd) { fd = d; far = i; } }
+      unlooped.push(`${name} (${end}: ${Math.round(Math.abs(along[e] - along[far]))} units of an arm walked back, cut at ${ll[far][1].toFixed(2)}, ${ll[far][0].toFixed(2)})`);
+      ll = end === 'foot' ? ll.slice(0, far + 1) : ll.slice(far);
+      cut = true;
+    }
+    if (!cut) break;
+  }
+  return ll;
+}
 /** A course without the points the survey repeats, cut to what lies outside the map of Europe (its longest run). */
 function outside(ll) {
   const runs = [[]];
@@ -165,13 +197,37 @@ for (let again = true; again; ) {
     }
   }
 }
+/**
+ * A foot laid by the lists (RIVER_FOOT): places by hand, and reaches of the survey's lines by name, each followed
+ * from where the course stands to the place named. The lines followed are that river's and no other's.
+ */
+function footOf(items, from) {
+  const out = [], used = [];
+  let last = from;
+  for (const it of items) {
+    if (typeof it[0] === 'number') { last = [it[1], it[0]]; out.push(last); continue; }
+    const [name, lat, lon] = it;
+    let best = null;
+    for (const c of chain(lines.filter((l) => l.name === fold(name)), 5)) {
+      const idx = (pt) => { let at = 0, d = Infinity; c.ll.forEach((q, i) => { const e = Math.hypot((q[1] - pt[1]) * 40, turn(q[0] - pt[0]) * K); if (e < d) { d = e; at = i; } }); return { at, d }; };
+      const a = idx(last), b = idx([lon, lat]);
+      if (!best || a.d + b.d < best.a.d + best.b.d) best = { c, a, b };
+    }
+    if (!best || best.a.d + best.b.d > 40) throw new Error(`RIVER_FOOT: the survey has no line called ${name} from ${last[1].toFixed(2)}, ${last[0].toFixed(2)} to ${lat}, ${lon}`);
+    const run = best.a.at <= best.b.at ? best.c.ll.slice(best.a.at, best.b.at + 1) : best.c.ll.slice(best.b.at, best.a.at + 1).reverse();
+    out.push(...run);
+    used.push(...best.c.used);
+    last = run[run.length - 1];
+  }
+  return { ll: out, used };
+}
 const real = {}, realNotes = [];
 have.forEach((rv, k) => {
   const mine = lines.filter((l) => l.river === k);
   const hand = courses[k], L = len(hand);
   const pick = chain(mine, 40).sort((a, b) => len(b.ll.map(uv)) - len(a.ll.map(uv)))[0];
   if (!pick) { realNotes.push(`${rv.name}: not in the survey, drawn as handed over`); return; }
-  let ll = pick.ll;
+  let ll = unloop(pick.ll, rv.name);
   // The same way round as the course handed over.
   if (nearest(uv(ll[0]), hand).s > nearest(uv(ll[ll.length - 1]), hand).s) ll = [...ll].reverse();
   if (RIVER_TRIM.includes(rv.name)) {
@@ -198,9 +254,13 @@ have.forEach((rv, k) => {
   const handLL = rv.ll.map(([lat, lon]) => [turn(lon), lat]);
   let run = 0;
   const along = hand.map((p, i) => (i ? (run += Math.hypot(p[0] - hand[i - 1][0], p[1] - hand[i - 1][1])) : 0));
-  const head = s0 > 25 ? handLL.filter((_, i) => along[i] < s0 - 8) : [], tail = L - s1 > 25 ? handLL.filter((_, i) => along[i] > s1 + 8) : [];
-  if (head.length || tail.length) realNotes.push(`${rv.name}: the survey stops short (${head.length ? `${Math.round(s0)} units at the head` : ''}${head.length && tail.length ? ', ' : ''}${tail.length ? `${Math.round(L - s1)} at the foot` : ''}): the course handed over runs on there`);
-  real[rv.name] = { ll: [...head, ...ll, ...tail], was: Math.round(L), now: Math.round(len([...head, ...ll, ...tail].map(uv))), used: new Set(pick.used) };
+  const head = s0 > 25 ? handLL.filter((_, i) => along[i] < s0 - 8) : [];
+  let tail = L - s1 > 25 ? handLL.filter((_, i) => along[i] > s1 + 8) : [];
+  // (Where the course handed over is not the river's course of 1939 either, the lists lay the foot.)
+  const foot = RIVER_FOOT[rv.name] ? footOf(RIVER_FOOT[rv.name], ll[ll.length - 1]) : null;
+  if (foot) { tail = foot.ll; realNotes.push(`${rv.name}: its foot is laid by the lists (${foot.ll.length} points)`); }
+  if (!foot && (head.length || tail.length)) realNotes.push(`${rv.name}: the survey stops short (${head.length ? `${Math.round(s0)} units at the head` : ''}${head.length && tail.length ? ', ' : ''}${tail.length ? `${Math.round(L - s1)} at the foot` : ''}): the course handed over runs on there`);
+  real[rv.name] = { ll: [...head, ...ll, ...tail], was: Math.round(L), now: Math.round(len([...head, ...ll, ...tail].map(uv))), used: new Set([...pick.used, ...(foot?.used ?? [])]) };
 });
 
 // ---- The rivers the chart did not have -----------------------------------------------------------------------------
@@ -215,13 +275,18 @@ const at = (list, name, lat, lon) => list.some((row) => fold(row[0]) === name &&
 const found = [];
 for (const [name, ls] of byName) {
   for (const c of chain(ls, 25)) {
-    const ll = outside(c.ll);
+    const ll = outside(unloop(c.ll, name));
     if (!ll || ll.length < 2) continue;
     const p = ll.map(uv), L = len(p), mid = ll[Math.floor(ll.length / 2)];
     const picked = at(RIVER_PICK, name, mid[1], mid[0]);
     if (at(RIVER_SKIP, name, mid[1], mid[0])) continue;
     found.push({ ne: name, rank: c.rank, ll, len: L, mid, picked });
   }
+}
+// The rivers the survey does not have, drawn by hand (RIVER_HAND): they are what the lists say they are.
+for (const row of RIVER_HAND) {
+  const ll = row[3].map(([lat, lon]) => [lon, lat]);
+  found.push({ ne: row[0], rank: 0, ll, len: len(ll.map(uv)), mid: ll[Math.floor(ll.length / 2)], picked: true, hand: row });
 }
 // Names: the chart's own (a 1939 atlas's) where the lists give one.
 for (const r of found) {
@@ -277,7 +342,7 @@ for (const r of found) { if (names.has(r.name)) clash.push(`${r.name} (${r.part}
 const great = new Set(RIVER_GREAT), rivers = new Set(RIVER_RIVERS), streams = new Set(RIVER_STREAMS), seasonal = new Set(RIVER_SEASONAL);
 // A river in the rules is one the size of Europe's own (the Meuse, the Prut, the Berezina); the rest are streams.
 const classOf = (name, rank, L, empty) => (great.has(name) ? 'great' : streams.has(name) ? 'small' : rivers.has(name) ? 'middle' : !empty && ((rank <= 5 && L >= RIVER_BAR[0]) || (rank === 6 && L >= RIVER_BAR[1]) || (rank === 7 && L >= RIVER_BAR[2]) || (rank === 8 && L >= RIVER_BAR[3])) ? 'middle' : 'small');
-for (const r of found) r.class = classOf(r.name, r.rank, r.len, wild(r));
+for (const r of found) r.class = r.hand ? r.hand[1] : classOf(r.name, r.rank, r.len, wild(r));
 // Thinned: no point of a course is dropped that stands more than a unit from the line drawn without it.
 function thin(ll, tol) {
   const p = ll.map(uv), keep = new Uint8Array(p.length);
@@ -341,7 +406,10 @@ const TOL = 1.2;
 // (A course is drawn to the top of the chart and no further: the Lena's delta lies beyond it.)
 const TOP = 71.4;
 const onChart = (ll) => { let a = 0, b = ll.length; while (a < b - 2 && ll[a][1] > TOP) a++; while (b > a + 2 && ll[b - 1][1] > TOP) b--; return ll.slice(a, b); };
-const draw = (ll) => onChart(ease(thin(ll, TOL)));
+// (And when it has been eased it is thinned again, so that a point stands only where the course bends: the line
+// is drawn as a curve through its points, and none of them is further than FINE from the eased course.)
+const FINE = 0.6;
+const draw = (ll) => onChart(thin(ease(thin(ll, TOL)), FINE));
 
 // The survey's lakes (ne_10m_lakes.geojson, a second path), for a river that ends in one: the lakes that were
 // there in 1939 (a reservoir only if its dam was built by then).
@@ -380,7 +448,8 @@ function coast(end) {
 }
 const wet = (end) => coast(end) < 8 || lakeAt(end) !== null;
 // What a river runs into: the river, old or new, that its foot touches; else the lake or the sea it ends in.
-const all = [...have.map((rv) => ({ name: rv.name, ll: real[rv.name]?.ll ?? rv.ll.map(([lat, lon]) => [turn(lon), lat]), old: true })), ...found];
+// (A river handed over the wrong way round, foot first, is turned to run from its head: RIVER_FLIP.)
+const all = [...have.map((rv) => { const ll = real[rv.name]?.ll ?? rv.ll.map(([lat, lon]) => [turn(lon), lat]); return { name: rv.name, ll: RIVER_FLIP.includes(rv.name) ? [...ll].reverse() : ll, old: true }; }), ...found];
 for (const r of all) r.p = r.ll.map(uv);
 const zones = chart.seas.zones;
 function into(r) {
@@ -401,7 +470,7 @@ function into(r) {
   let f = touch(r.p[r.p.length - 1], reach), h = touch(r.p[0], reach);
   // Which end is the foot: the end that lies in another river's course; else the end at the sea or a lake; else the
   // survey's own word, or the lists'. (The chart's own 60 run as they were handed over.)
-  if (!r.old) {
+  if (!r.old && !r.hand) {
     const fIn = f && f.kind === 0, hIn = h && h.kind === 0;
     let flip = false;
     if (fIn !== hIn) flip = hIn;
@@ -409,11 +478,12 @@ function into(r) {
     if (RIVER_FLIP.includes(r.name)) flip = !flip;
     if (flip) { r.ll.reverse(); r.p.reverse(); r.turned = true; [f, h] = [h, f]; }
   }
-  if (RIVER_INTO[r.name]) {
+  const named = r.hand ? r.hand[2] : RIVER_INTO[r.name];
+  if (named) {
     // Named by the lists: where that is a river whose course lies near, the foot is still set on its line.
-    const o = all.find((o) => o !== r && o.name === RIVER_INTO[r.name]);
+    const o = all.find((o) => o !== r && o.name === named);
     if (o && nearest(r.p[r.p.length - 1], o.p).d < 25) r.joins = o;
-    return RIVER_INTO[r.name];
+    return named;
   }
   if (f && f.kind === 0) { r.joins = f.o; return f.o.name; }
   const end = r.ll[r.ll.length - 1];
@@ -483,6 +553,7 @@ fs.writeFileSync(outFile, text);
 const count = (c) => more.filter((r) => r.class === c).length;
 console.log(`the chart's 60 rivers: ${Object.keys(real).length} on their real courses${realNotes.length ? `\n  ${realNotes.join('\n  ')}` : ''}`);
 console.log(`new: ${more.length} (${count('great')} great, ${count('middle')} middle, ${count('small')} streams); ${(fs.statSync(outFile).size / 1024).toFixed(0)} KB`);
+if (unlooped.length) console.log(`walks that came back on themselves, cut where they turned back (${unlooped.length}):\n  ${unlooped.join('\n  ')}`);
 if (clash.length) console.log(`! two rivers share a name:\n  ${clash.join('\n  ')}`);
 if (gone.length) console.log(`! rivers that were in more-rivers.mjs and are not found now: ${gone.join(', ')}`);
 const noInto = all.filter((r) => !r.into).map((r) => r.name);

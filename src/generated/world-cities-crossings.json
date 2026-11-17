@@ -1,28 +1,29 @@
 {
  "carried": 305,
- "fresh": 179,
+ "fresh": 177,
  "byCountry": {
   "UK": 38,
-  "CHN": 26,
+  "CHN": 24,
   "BRA": 21,
   "USA": 19,
-  "SOV": 18,
+  "SOV": 17,
   "CAN": 13,
   "BEL": 11,
   "COL": 10,
   "ITA": 10,
   "PER": 9,
   "POR": 7,
-  "FRA": 5,
-  "AUS": 4,
+  "FRA": 6,
   "MEX": 4,
   "SAF": 4,
   "ARG": 3,
+  "AUS": 3,
   "BOL": 3,
   "THA": 3,
   "ECU": 2,
   "GUA": 2,
   "AFG": 1,
+  "IRN": 1,
   "MGL": 1,
   "PAR": 1,
   "VEN": 1
@@ -56,11 +57,11 @@
   "Godavari": 2,
   "Hudson": 2,
   "Jurua": 2,
+  "Kama": 2,
   "Mackenzie": 2,
   "Magdalena": 2,
   "Meklong": 2,
   "Mississippi": 2,
-  "Ob": 2,
   "Okavango": 2,
   "Omo": 2,
   "Panuco": 2,
@@ -78,7 +79,6 @@
   "Vaal": 2,
   "Volta": 2,
   "Yalung": 2,
-  "Yangtze": 2,
   "Yellow River": 2,
   "Yuan": 2,
   "Amur": 1,
@@ -88,18 +88,19 @@
   "Blue Nile": 1,
   "Chao Phraya": 1,
   "Congo": 1,
-  "Han": 1,
   "Helmand": 1,
   "Indus": 1,
   "Irtysh": 1,
   "Juba": 1,
   "Kafue": 1,
   "Kaladan": 1,
-  "Kama": 1,
+  "Karun": 1,
   "Lomami": 1,
   "Mekong": 1,
   "Niger": 1,
   "North Saskatchewan": 1,
+  "Ob": 1,
+  "Ogowe": 1,
   "Ottawa": 1,
   "Parana": 1,
   "Red River": 1,
@@ -108,7 +109,6 @@
   "Sao Francisco": 1,
   "Saskatchewan": 1,
   "Selenga": 1,
-  "Sepik": 1,
   "Shari": 1,
   "Siang": 1,
   "Sittang": 1,
@@ -118,10 +118,10 @@
   "Ural": 1,
   "Ussuri": 1,
   "White Nile": 1,
+  "Yangtze": 1,
   "Yenisei": 1,
   "Yukon": 1,
-  "Yungting": 1,
-  "Zeya": 1
+  "Yungting": 1
  },
  "crossings": [
   [
@@ -629,14 +629,6 @@
    "middle"
   ],
   [
-   "Siangyang",
-   "CHN",
-   "Hanchung",
-   "CHN",
-   "Han",
-   "middle"
-  ],
-  [
    "Hengyang",
    "CHN",
    "Lingling",
@@ -762,7 +754,7 @@
    "Stalinsk",
    "SOV",
    "Irtysh",
-   "middle"
+   "great"
   ],
   [
    "Chamdo",
@@ -794,14 +786,6 @@
    "Spassk",
    "SOV",
    "Ussuri",
-   "middle"
-  ],
-  [
-   "Blagoveshchensk",
-   "SOV",
-   "Svobodny",
-   "SOV",
-   "Zeya",
    "middle"
   ],
   [
@@ -861,19 +845,19 @@
    "middle"
   ],
   [
-   "Madang",
-   "AUS",
-   "Wewak",
-   "AUS",
-   "Sepik",
-   "middle"
-  ],
-  [
    "Broken Hill",
    "AUS",
    "Wagga Wagga",
    "AUS",
    "Lachlan",
+   "middle"
+  ],
+  [
+   "Izhevsk",
+   "SOV",
+   "Molotov",
+   "SOV",
+   "Kama",
    "middle"
   ],
   [
@@ -927,14 +911,6 @@
   [
    "Tomsk",
    "SOV",
-   "Kolpashevo",
-   "SOV",
-   "Ob",
-   "great"
-  ],
-  [
-   "Tomsk",
-   "SOV",
    "Yeniseisk",
    "SOV",
    "Chulym",
@@ -970,6 +946,14 @@
    "Kokchetav",
    "SOV",
    "Ishim",
+   "middle"
+  ],
+  [
+   "Ahwaz",
+   "IRN",
+   "Abadan",
+   "IRN",
+   "Karun",
    "middle"
   ],
   [
@@ -1245,6 +1229,14 @@
    "middle"
   ],
   [
+   "Libreville",
+   "FRA",
+   "Lambarene",
+   "FRA",
+   "Ogowe",
+   "middle"
+  ],
+  [
    "Leopoldville",
    "BEL",
    "Coquilhatville",
@@ -1451,14 +1443,6 @@
    "BRA",
    "Araguaia",
    "middle"
-  ],
-  [
-   "Sichang",
-   "CHN",
-   "Suifu",
-   "CHN",
-   "Yangtze",
-   "great"
   ],
   [
    "Tsunyi",
