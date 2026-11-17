@@ -42,6 +42,16 @@ const wide = (d: any): boolean => d?.flags?.world === 1;
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
 const KEEP_SEA = 80;
+/**
+ * The four American armies of the first day are called by their names alone (the UI director's ruling of 17 November
+ * 2026, "one name to a thing": the bracket listed divisions that disagreed with the chips under it). A campaign saved
+ * before carries the old names on the corps, in the news and in the battle reports; each is read under the new one.
+ */
+const ARMIES_RENAMED: [string, string][] = [
+  ['First Army (1st Division)', 'First Army'], ['Second Army (5th and 6th Divisions)', 'Second Army'],
+  ['Third Army (2nd Division and 1st Cavalry Division)', 'Third Army'], ['Fourth Army (3rd Division)', 'Fourth Army'],
+];
+export const armyWords = (text: string): string => ARMIES_RENAMED.reduce((t, [was, now]) => t.split(was).join(now), text);
 
 export function saveGame(g: Game): string {
   return JSON.stringify({
@@ -96,6 +106,7 @@ export const fleetWords = (text: string): string =>
   text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
 
 export function loadGame(text: string): Game | null {
+  if (text.includes(' Army (')) text = armyWords(text);
   let d: any;
   try { d = JSON.parse(/Squadron|Escort Group|Submarine Flotilla/.test(text) ? fleetWords(text) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
