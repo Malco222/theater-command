@@ -198,7 +198,7 @@ export type CoreCommand =
   | { do: 'ability'; units: number[]; key: string; x?: number; y?: number; target?: number }
   /** Hand the side to the computer (true) or take it back (false). The fairness test puts both sides on it. */
   | { do: 'auto'; side: Side; on: boolean }
-  /** Finish it for me (ruling 217(4)): the rest goes back to the dice, rolled at the ratio then standing. */
+  /** Hand it to the staff (ruling 217(4); the button is named in b348): the rest goes back to the dice, rolled at the ratio then standing. */
   | { do: 'dice' };
 
 /** A domain's own orders: 'sea:screen', 'land:dig'. */

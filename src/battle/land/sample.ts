@@ -22,7 +22,7 @@ export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {})
   const A = 100;
   return {
     domain: 'land', kind: 'field', seed: o.seed ?? 7, turn: 1, date: 'September 1939', title: 'A practice field',
-    place: { region: -1, name: 'Practice ground', terrain, river: o.river ? 'the Stream' : null, bridgeDown: !!o.bridgeDown, town: o.town === null ? null : 'Millbrook', townSize: o.town === undefined ? 'village' : o.town, fort: o.fort ?? 0, mines: 0 },
+    place: { region: -1, name: 'Practice ground', terrain, river: o.river ? 'Wend' : null, bridgeDown: !!o.bridgeDown, town: o.town === null ? null : 'Millbrook', townSize: o.town === undefined ? 'village' : o.town, fort: o.fort ?? 0, mines: 0 },
     att, def, reckoning: { A, D: A / odds, odds, dice: [0.8, 1.2], even: 1.2 }, lines: [], limit: LAND.limit,
   };
 }

@@ -15,6 +15,9 @@ export interface LandOrder {
   /** The facing to take on arrival, from a drawn line. */
   face?: number;
   target?: number;
+  /** An attack by several blocks at one: this block's place across the attack, metres right of its middle, and the attack's bearing. */
+  lane?: number;
+  axis?: number;
 }
 
 export interface LandUnit extends UnitBase {

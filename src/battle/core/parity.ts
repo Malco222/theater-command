@@ -6,8 +6,11 @@
 import { runOut } from './clock';
 import type { BattleSim, FieldTicket } from './types';
 
-/** The rules' chance of carrying the ground at these odds with this run of luck (the same sum as chanceOn in game.ts). */
-export const diceChance = (odds: number, dice: [number, number]): number => Math.max(0, Math.min(1, (dice[1] - 1.2 / Math.max(1e-6, odds)) / (dice[1] - dice[0])));
+/**
+ * The rules' chance of carrying the day at these odds with this run of luck (the same sum as chanceOn in game.ts).
+ * 'carry' is the ratio that wins: 1.2 on land; a domain whose rules draw the line elsewhere passes its own (sea: 1).
+ */
+export const diceChance = (odds: number, dice: [number, number], carry = 1.2): number => Math.max(0, Math.min(1, (dice[1] - carry / Math.max(1e-6, odds)) / (dice[1] - dice[0])));
 
 export interface ParityRow { odds: number; played: number; dice: number; runs: number; R: number }
 
@@ -15,7 +18,7 @@ export interface ParityRow { odds: number; played: number; dice: number; runs: n
  * For each odds, 'runs' battles with the computer on both sides: the share the attacker won, the dice's chance, and
  * the average R handed back. 'make' builds a sim for a ticket at those odds and that seed.
  */
-export function parity(make: (odds: number, seed: number) => BattleSim, odds: number[], runs: number, dice: [number, number] = [0.8, 1.2]): ParityRow[] {
+export function parity(make: (odds: number, seed: number) => BattleSim, odds: number[], runs: number, dice: [number, number] = [0.8, 1.2], carry = 1.2): ParityRow[] {
   return odds.map((o) => {
     let won = 0, R = 0;
     for (let s = 1; s <= runs; s++) {
@@ -25,7 +28,7 @@ export function parity(make: (odds: number, seed: number) => BattleSim, odds: nu
       if (sim.over?.winner === 'att') won++;
       R += sim.over?.R ?? 0;
     }
-    return { odds: o, played: won / runs, dice: diceChance(o, dice), runs, R: R / runs };
+    return { odds: o, played: won / runs, dice: diceChance(o, dice, carry), runs, R: R / runs };
   });
 }
 
