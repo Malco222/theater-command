@@ -30807,19 +30807,47 @@
     }
   }
   var pictureDepth = 0;
-  var pictureBook = null;
-  function tradeLedgerOnce(s) {
-    if (pictureDepth > 0 && pictureBook && pictureBook.s === s) return pictureBook.book;
-    const book = tradeLedger(s);
-    if (pictureDepth > 0) pictureBook = { s, book };
-    return book;
+  var pictureTradeKept = null;
+  function pictureTrade(s) {
+    if (pictureDepth > 0 && pictureTradeKept && pictureTradeKept.s === s) return pictureTradeKept.trade;
+    const trade = workOutPictureTrade(s);
+    if (pictureDepth > 0) pictureTradeKept = { s, trade };
+    return trade;
+  }
+  function workOutPictureTrade(s) {
+    const nat = s.human;
+    const n = nat ? s.nations[nat] : void 0;
+    if (!nat || !n || !tradeRules(s)) return null;
+    const boost = civicSum(s, nat).trade;
+    const deals = dealsOf(s, nat).map((d) => {
+      const o = d.a === nat ? d.b : d.a;
+      return { nat: o, pays: d.state === "cut" ? 0 : d.worth * (1 - d.lost) * (1 + boost), full: d.worth * (1 + boost), state: d.state, path: tradePath(s, d) };
+    }).sort((x, y) => y.full - x.full || (x.nat < y.nat ? -1 : 1));
+    let ready = null;
+    return {
+      used: deals.length,
+      houses: housesOf(s, nat),
+      pc: n.pc,
+      cost: TRADE.sign.pc,
+      deals,
+      // (An offer's `why` is null when the rules find nothing in the way and the player has the political capital. A
+      // country the book leaves out of the offers, the player's own, one fallen or asleep, one already trading, always
+      // has something in the way, so asking every country is the same as asking the offers.)
+      anyReady: () => {
+        if (ready === null) {
+          const ctx = /* @__PURE__ */ new Map();
+          ready = n.pc >= TRADE.sign.pc && Object.values(s.nations).some((b) => whyNoTrade(s, nat, b.id, ctx) === null);
+        }
+        return ready;
+      }
+    };
   }
   function view2() {
     pictureDepth++;
     try {
       return drawView();
     } finally {
-      if (--pictureDepth === 0) pictureBook = null;
+      if (--pictureDepth === 0) pictureTradeKept = null;
     }
   }
   function drawView() {
@@ -31319,7 +31347,7 @@
       lanes: s.flags.open === 1 ? [
         ...shippingLanes(s).filter((l) => l.kind === "sea" && l.path.length > 1 && l.state !== "idle").map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
         // The player's trade routes, over land and sea, in gold: red where one is cut.
-        ...(tradeLedgerOnce(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === "open" ? "trade" : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 }))
+        ...(pictureTrade(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === "open" ? "trade" : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 }))
       ] : [],
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
       idle: s.human ? idleTeams(s, s.human) : 0,
@@ -32344,7 +32372,7 @@
       } : null
     };
   }
-  function preview(ids2, to, open = false) {
+  function preview(ids2, to, open = false, glance = false) {
     const s = game();
     let pickedIds = [];
     if (open) {
@@ -32388,7 +32416,7 @@
       tone: look ? verdictOf(look).tone : "",
       verdict: look ? verdictOf(look).word : "",
       // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
-      soften: softenRow(s, corps, to),
+      soften: glance ? null : softenRow(s, corps, to),
       // (Version 84; rulings 149(d), 164(f) and 174) WHAT YOU FACE: a sign and a sentence for each thing the defence will
       // do to what he brings, four at most, and one more for what is not scouted. Empty in a history campaign.
       face: (look?.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown }))
@@ -33996,7 +34024,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       if (governmentOf(s)?.mine) out.push({ id: "cabinet", label: "THE CABINET" });
     } catch {
     }
-    if (tradeLedgerOnce(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
+    if (pictureTrade(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
     if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "towns", label: "TOWNS TO BUILD UP" });
     const act2 = lastAct(s);
     if (act2 && (act2.decided || act2.on)) out.push({ id: "lastact", label: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT" });
@@ -34050,11 +34078,11 @@ ${next.text}` : ""}` : next ? next.also : "";
       if (theirs2.length) out.push({ k: `goto:${theirs2[0].region}`, t: theirs2.length === 1 ? `YOU BESIEGE ${theirs2[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs2.length} TOWNS`, tip: `${theirs2.map((v) => v.town).slice(0, 4).join(", ")}. Starve it out, or storm it: pick the province and look under ORDERS.` });
     } catch {
     }
-    const book = tradeLedgerOnce(s);
+    const book = pictureTrade(s);
     if (book) {
       const cut = book.deals.filter((d) => d.state === "cut").length;
       if (cut) out.push({ k: "page:trade", t: cut === 1 ? "A TRADE ROUTE IS CUT" : `${cut} TRADE ROUTES ARE CUT`, tip: "An agreement pays nothing while its route is cut. Open TRADE AGREEMENTS to see which, and why." });
-      else if (book.houses > book.used && book.pc >= book.cost && book.offers.some((o) => o.why === null)) {
+      else if (book.houses > book.used && book.pc >= book.cost && book.anyReady()) {
         out.push({ k: "page:trade", t: "A TRADING HOUSE STANDS IDLE", tip: "A country is ready to sign a trade agreement, and you have a trading house free for it. It would pay into the treasury every month." });
       }
     }

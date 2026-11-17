@@ -113,6 +113,8 @@ import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, so
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
+import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
+import { civicSum as civicSumOf } from '../../../src/campaign/buildings';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 
 let g: Game | null = null;
@@ -323,17 +325,57 @@ function carriedBy(s: Game, c: Corps): number[] | null {
   try { const k = carried(s, c); return k ? [k.antiTank, k.machineGuns ? 1 : 0, k.mortars ? 1 : 0, k.snipers ? 1 : 0] : null; } catch { return null; }
 }
 
-// (Speed, 17 November 2026.) One picture of the war asks for the player's trade book three times over (for the
-// lanes on the table, for the pages, and for what wants doing), and the book is the dearest thing in it: about two
-// thirds of the picture's time. While a picture is being drawn up nothing in the war changes, so the book is worked
-// out once a picture and kept until the picture is done. Everywhere else it is worked out each time, as before.
+// (Speed, 17 November 2026.) One picture of the war asked for the player's trade book three times over (for the
+// lanes on the table, for the pages, and for what wants doing), and the book was the dearest thing in it.
+//
+// (Speed, second round.) Of the book, the picture uses only the player's own agreements (the gold lanes on the
+// table, and a route cut) and, when a trading house stands idle with the political capital to fill it, whether any
+// country is ready to sign. The rest of the book, every country's offer with its route and what it would pay, was
+// half of the picture's time, and the picture threw it away. So the picture now works out the agreements as the book
+// does, line for line (tradeBook, in src/campaign/trade.ts: keep the two the same), and asks after the offers only when
+// the list of what wants doing needs to know, stopping at the first country ready. The trade page still gets the whole
+// book. While a picture is being drawn up nothing in the war changes, so this is worked out once a picture.
+interface PictureTrade {
+  used: number;
+  houses: number;
+  pc: number;
+  cost: number;
+  deals: { nat: string; pays: number; full: number; state: 'open' | 'raided' | 'cut'; path: [number, number][] }[];
+  /** Whether a country would sign now: the book's `offers.some((o) => o.why === null)`. */
+  anyReady: () => boolean;
+}
 let pictureDepth = 0;
-let pictureBook: { s: Game; book: ReturnType<typeof tradeLedger> } | null = null;
-function tradeLedgerOnce(s: Game): ReturnType<typeof tradeLedger> {
-  if (pictureDepth > 0 && pictureBook && pictureBook.s === s) return pictureBook.book;
-  const book = tradeLedger(s);
-  if (pictureDepth > 0) pictureBook = { s, book };
-  return book;
+let pictureTradeKept: { s: Game; trade: PictureTrade | null } | null = null;
+function pictureTrade(s: Game): PictureTrade | null {
+  if (pictureDepth > 0 && pictureTradeKept && pictureTradeKept.s === s) return pictureTradeKept.trade;
+  const trade = workOutPictureTrade(s);
+  if (pictureDepth > 0) pictureTradeKept = { s, trade };
+  return trade;
+}
+function workOutPictureTrade(s: Game): PictureTrade | null {
+  // (null exactly when tradeLedger(s) is: no player, or not the grand campaign)
+  const nat = s.human;
+  const n = nat ? s.nations[nat] : undefined;
+  if (!nat || !n || !tradeIsOn(s)) return null;
+  const boost = civicSumOf(s, nat).trade;
+  const deals = tradeDealsOf(s, nat).map((d) => {
+    const o = d.a === nat ? d.b : d.a;
+    return { nat: o, pays: d.state === 'cut' ? 0 : d.worth * (1 - d.lost) * (1 + boost), full: d.worth * (1 + boost), state: d.state, path: tradePathOf(s, d) };
+  }).sort((x, y) => y.full - x.full || (x.nat < y.nat ? -1 : 1));
+  let ready: boolean | null = null;
+  return {
+    used: deals.length, houses: tradeHousesOf(s, nat), pc: n.pc, cost: TRADE_RULES.sign.pc, deals,
+    // (An offer's `why` is null when the rules find nothing in the way and the player has the political capital. A
+    // country the book leaves out of the offers, the player's own, one fallen or asleep, one already trading, always
+    // has something in the way, so asking every country is the same as asking the offers.)
+    anyReady: () => {
+      if (ready === null) {
+        const ctx = new Map();
+        ready = n.pc >= TRADE_RULES.sign.pc && Object.values(s.nations).some((b) => whyNoTradeWith(s, nat, b.id, ctx) === null);
+      }
+      return ready;
+    },
+  };
 }
 
 function view() {
@@ -341,7 +383,7 @@ function view() {
   try {
     return drawView();
   } finally {
-    if (--pictureDepth === 0) pictureBook = null;
+    if (--pictureDepth === 0) pictureTradeKept = null;
   }
 }
 
@@ -729,7 +771,7 @@ function drawView() {
     lanes: s.flags.open === 1 ? [
       ...shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
       // The player's trade routes, over land and sea, in gold: red where one is cut.
-      ...(tradeLedgerOnce(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
+      ...(pictureTrade(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
     ] : [],
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
@@ -1876,7 +1918,10 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   };
 }
 
-function preview(ids: number[], to: number, open = false) {
+// (Speed, second round.) `glance` is the pointer's tip, which reads only the odds: it leaves out the row that offers to
+// soften the line first, which asks after every air group that could fly at it and was nineteen parts in twenty of the
+// time this took. The attack card never asks with `glance`, and gets the whole answer as before.
+function preview(ids: number[], to: number, open = false, glance = false) {
   const s = game();
   // (Version 63) The card opens on the best attack to be had: everyone the roads will carry, where that beats the
   // corps picked. It says so, and gives back the corps that were picked so one button can return to them.
@@ -1918,7 +1963,7 @@ function preview(ids: number[], to: number, open = false) {
     chanceWords: look ? chanceWords(look) : '', cost: costLines(look), ids, opened, pickedIds,
     tone: look ? verdictOf(look).tone : '', verdict: look ? verdictOf(look).word : '',
     // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
-    soften: softenRow(s, corps, to),
+    soften: glance ? null : softenRow(s, corps, to),
     // (Version 84; rulings 149(d), 164(f) and 174) WHAT YOU FACE: a sign and a sentence for each thing the defence will
     // do to what he brings, four at most, and one more for what is not scouted. Empty in a history campaign.
     face: (look?.face ?? []).map((l) => ({ sign: l.sign, text: l.text, unknown: !!l.unknown })),
@@ -3526,7 +3571,7 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   // The government and its war cabinet (Version 57, the grand campaign).
   try { if (governmentOf(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
   // Towns to build up and trade agreements (the grand campaign).
-  if (tradeLedgerOnce(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
+  if (pictureTrade(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
@@ -3587,11 +3632,11 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
     if (theirs.length) out.push({ k: `goto:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: pick the province and look under ORDERS.` });
   } catch { /* a campaign from history has no sieges */ }
   // Trade: a route cut, or a trading house idle with a country ready to sign.
-  const book = tradeLedgerOnce(s);
+  const book = pictureTrade(s);
   if (book) {
     const cut = book.deals.filter((d) => d.state === 'cut').length;
     if (cut) out.push({ k: 'page:trade', t: cut === 1 ? 'A TRADE ROUTE IS CUT' : `${cut} TRADE ROUTES ARE CUT`, tip: 'An agreement pays nothing while its route is cut. Open TRADE AGREEMENTS to see which, and why.' });
-    else if (book.houses > book.used && book.pc >= book.cost && book.offers.some((o) => o.why === null)) {
+    else if (book.houses > book.used && book.pc >= book.cost && book.anyReady()) {
       out.push({ k: 'page:trade', t: 'A TRADING HOUSE STANDS IDLE', tip: 'A country is ready to sign a trade agreement, and you have a trading house free for it. It would pay into the treasury every month.' });
     }
   }

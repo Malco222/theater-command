@@ -9,6 +9,7 @@
 #include "Campaign/CampaignTerrain.h"
 #include "Campaign/CampaignView.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignTextures.h"
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
@@ -496,6 +497,8 @@ private:
 		UMaterialInstanceDynamic* SeaPaint = nullptr;
 		TArray<UObject*> Kept; // its pictures and its paints, which FineKeep holds for the engine
 		UProceduralMeshComponent* Sea = nullptr;
+		TMap<FName, CampaignTextures::FLevels> Ahead; // (speed) its pictures with their smaller copies, made on the thread that modelled it
+		TSet<int32> FogFor; // (speed) the haze its fog picture among them was made for
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
 	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
@@ -506,6 +509,8 @@ private:
 	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
+	/** (Speed: tc.Speed.FineAside.) The pictures DressFineSheet makes, with their smaller copies, made ahead on the thread that models the sheet. */
+	static void PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& Haze);
 	void StandFineSheet(FFineSheet& Sheet);
 	void DropFineSheet(FFineSheet& Sheet);
 	/** Stands the coarse world sheet's tiles over a box up afresh, after a hole in it has been made or closed. */

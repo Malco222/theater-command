@@ -22,6 +22,24 @@ namespace CampaignTextures
 	 */
 	UTexture2D* Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name);
 
+	/**
+	 * (Speed, 17 November 2026.) A picture's every level worked out ahead, on any thread: the full size first, then each
+	 * smaller copy exactly as Create makes them. CreateFromLevels then makes the same picture Create would make from
+	 * Each[0], without that work in the frame that wants the picture.
+	 */
+	struct FLevels
+	{
+		int32 Width = 0;
+		int32 Height = 0;
+		bool bColour = false;
+		TArray<TArray<FColor>> Each;
+		TArray<FIntPoint> Sizes;
+		/** Whether these are the levels Create would make from these pixels: the same size and kind, and the same pixels at full size. */
+		bool Fits(int32 InWidth, int32 InHeight, bool bInColour, const TArray<FColor>& Pixels) const;
+	};
+	void MakeLevels(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, FLevels& Out);
+	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name);
+
 	/** Paints new pixels into a picture made by Create. The size must be the same. */
 	void Update(UTexture2D* Texture, const TArray<FColor>& Pixels);
 	/**
