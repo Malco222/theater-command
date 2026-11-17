@@ -22,8 +22,12 @@ export const LAND = {
   size: { inf: [150, 40], mtn: [140, 40], cav: [150, 50], eng: [120, 40], mot: [140, 60], arm: [130, 60], art: [110, 50], fort: [140, 50] } as Record<Kind, [number, number]>,
   /** Models on a full-strength tray (the art director, 17 November): one fades off for each share lost. */
   figures: { inf: 12, mtn: 12, cav: 12, eng: 12, fort: 12, mot: 6, arm: 4, art: 3 } as Record<Kind, number>,
-  /** The share of a block's own power it takes off its target each second, at full strength and in the open. */
-  rate: 0.011,
+  /**
+   * The share of a block's own power it takes off its target each second, at full strength and in the open. Slow
+   * enough that a close fight runs two or three minutes from the first contact, time for three or four choices
+   * (ruling 226(2); tests/battle-land.test.ts).
+   */
+  rate: 0.0015,
   /** Blows struck on the march, and by a block that is wavering. */
   moving: 0.4,
   wavering: 0.7,
@@ -55,7 +59,7 @@ export const LAND = {
    * as the dice would (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock) already gives the
    * defence more than the campaign's odds, which count the ground already, mean it to have.
    */
-  hold: { take: { plains: 1, forest: 1.75, hills: 1.1, mountain: 1.45, marsh: 1.9, urban: 1, desert: 1 } as Record<string, number>, within: 300 },
+  hold: { take: { plains: 0.78, forest: 0.96, hills: 0.79, mountain: 0.91, marsh: 1.14, urban: 0.82, desert: 0.93 } as Record<string, number>, within: 300 },
   /** Dug in: the damage taken while it stays within this many metres of where it began. */
   dug: { take: 0.65, keep: 30 },
   nerve: {
@@ -78,9 +82,9 @@ export const LAND = {
   },
   /**
    * Blocks a side: one a division. A side with fewer than 'least' has divisions split into their three regiments until
-   * it has enough to handle (ruling 217(c)); more than 'most' and divisions are folded two to a block.
+   * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
    */
-  blocks: { least: 6, most: 20, regiments: 3 },
+  blocks: { least: 6, regiments: 3 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
   /**
@@ -89,6 +93,8 @@ export const LAND = {
    * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
    */
   spent: { att: 0.13, def: 0.18 } as Record<'att' | 'def', number>,
+  /** But not while less than this share of its power has been in the fight: one block's fall never takes a fresh army with it (ruling 226(2)). */
+  fought: 0.5,
   /**
    * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
    * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
@@ -97,8 +103,10 @@ export const LAND = {
   count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } } as { routing: Record<'att' | 'def', number>; gone: Record<'att' | 'def', number> },
   /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
   jitter: 0.1,
+  /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
+  press: 600,
   /** Seconds of battle time before the defender is counted as having held. */
-  limit: 900,
+  limit: 360,
   /** The computer general thinks once a second. */
   think: 1,
 };

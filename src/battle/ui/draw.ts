@@ -4,6 +4,8 @@
 // view with the models (figures, act, speed, engaged, cover are there for it).
 
 import { DT, type Side } from '../core/types';
+import { groundAt } from '../land/field';
+import { LAND } from '../land/rules';
 import type { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { PAINT, type Painted } from './paint';
@@ -26,6 +28,8 @@ export interface Scene {
   now: number;
   /** A brief mark where the last order went. */
   ping: { x: number; y: number; at: number; kind: 'move' | 'attack' } | null;
+  /** The sides' colours on this field, where the page has settled them (sideColours); else the ticket's. */
+  colours?: Record<Side, string> | null;
 }
 
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
@@ -92,10 +96,14 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   if (near > 0) { x.globalAlpha = near; x.drawImage(field.detail, fx, fy, fw, fh); x.globalAlpha = 1; }
   // Bunkers: the campaign map's notched block in ink, no fill, held at its whole-field size from there inward with
   // the same thin stroke, as a label is (the art director, slice 2).
+  const k = 7 * Math.min(cam.z, whole);
+  works(x, b, s, k);
   if (field.forts.length) {
-    const k = 7 * Math.min(cam.z, whole);
     x.strokeStyle = INK; x.lineWidth = 0.5 * k; x.lineJoin = 'miter'; x.lineCap = 'butt';
+    const under = (mx: number, my: number): boolean => b.units.some((u) => u.side === 'def' && u.kind !== 'art' && Math.abs(u.home[0] - mx) < u.w / 2 + 12 && Math.abs(u.home[1] - my) < u.d / 2 + 30);
     for (const [mx, my] of field.forts) {
+      // A bunker sits on the dug line in a gap or at an end, never under a block (the art director, ruling 226(12)).
+      if (under(mx, my)) continue;
       const [X, Y] = toScreen(s, mx, my);
       if (X < -6 * k || Y < -6 * k || X > W + 6 * k || Y > H + 6 * k) continue;
       x.beginPath();
@@ -136,7 +144,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     }
   }
 
-  const colour: Record<Side, string> = { att: b.ticket.att.color, def: b.ticket.def.color };
+  const colour: Record<Side, string> = s.colours ?? { att: b.ticket.att.color, def: b.ticket.def.color };
   const byId = new Map(b.units.map((u) => [u.id, u]));
 
   // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
@@ -167,7 +175,9 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
 
   // The blocks: the dead and the departed are not drawn.
   const order = [...b.units].filter(live).sort((a, c) => (a.side === s.me ? 1 : 0) - (c.side === s.me ? 1 : 0));
-  for (const u of order) drawBlock(x, s, u, colour[u.side], byId);
+  for (const u of order) drawBlock(x, s, u, colour[u.side], byId, b);
+  const hot = s.hover !== null ? byId.get(s.hover) : undefined;
+  if (hot && live(hot)) hoverLabel(x, s, hot, b);
 
   // A line being drawn: the ghosts of where the blocks will stand.
   if (s.line) {
@@ -202,7 +212,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   x.restore();
 }
 
-function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: string, byId: Map<number, LandUnit>): void {
+function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: string, byId: Map<number, LandUnit>, b: LandBattle): void {
   const z = s.cam.z;
   const [sx, sy] = toScreen(s, u.x, u.y);
   const w = Math.max(8, u.w * z), d = Math.max(4, u.d * z);
@@ -248,6 +258,9 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   // The front edge, heavier: which way it faces.
   x.strokeStyle = INK; x.lineWidth = 1;
   x.strokeRect(-w / 2, -d / 2, w, d);
+  // The side cue (the art and UI directors, ruling 226(12)): the player's own carry a thin paper line inside the ink
+  // outline, theirs the ink alone. Colour tells nations apart; this tells sides apart.
+  if (mine && w > 10 && d > 7) { x.strokeStyle = 'rgba(241,233,212,.85)'; x.lineWidth = 1; x.strokeRect(-w / 2 + 2, -d / 2 + 2, w - 4, d - 4); x.strokeStyle = INK; }
   x.lineWidth = Math.max(2, Math.min(4, 7 * z));
   x.beginPath(); x.moveTo(-w / 2, -d / 2); x.lineTo(w / 2, -d / 2); x.stroke();
   // Its state, round the edge: brass for chosen, amber for wavering, red for running.
@@ -264,9 +277,18 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     sign(x, u.kind, sw, sh);
   }
   // TODO(polish): its models. The 3D game stands figures0 models in ranks inside this box and fades one for each share lost (figures).
-  // Strength at the block's back edge, a fixed gap behind it, turning with it (the UI director, 10): the player's own
-  // and anything under the pointer.
-  if (mine || hot || picked) {
+  // In its works: a small notched sign in paper at its rear corner, held at the size it has at the whole-field view.
+  if (inWorks(u, b)) {
+    const q = Math.min(1.6, Math.max(1, 3 * z)), cx = w / 2 - 6 * q, cy = d / 2 - 2 * q;
+    x.strokeStyle = PAPER; x.lineWidth = 1; x.lineCap = 'butt'; x.lineJoin = 'miter';
+    x.beginPath();
+    x.moveTo(cx - 3 * q, cy); x.lineTo(cx - 3 * q, cy - 3.5 * q); x.lineTo(cx - 1.2 * q, cy - 3.5 * q); x.lineTo(cx - 1.2 * q, cy - 2 * q);
+    x.lineTo(cx + 1.2 * q, cy - 2 * q); x.lineTo(cx + 1.2 * q, cy - 3.5 * q); x.lineTo(cx + 3 * q, cy - 3.5 * q); x.lineTo(cx + 3 * q, cy);
+    x.stroke();
+  }
+  // Strength at the block's back edge, a fixed gap behind it, turning with it (the UI director, 10): every block's,
+  // the enemy's too, so he can size them up (ruling 226(7)).
+  {
     const bw = Math.max(18, w * 0.8), by = d / 2 + 4;
     x.globalAlpha = 1;
     x.fillStyle = 'rgba(14,11,8,.75)'; x.fillRect(-bw / 2 - 1, by - 1, bw + 2, 5);
@@ -275,14 +297,71 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     x.fillRect(-bw / 2, by, bw * Math.max(0, Math.min(1, u.str)), 3);
   }
   x.restore();
-  // The name, for the one under the pointer.
-  if (hot) {
-    const label = `${u.name}${u.state === 'steady' ? '' : ` · ${u.state}`}`;
+}
+
+/**
+ * The name, for the one under the pointer (the UI director's words for ruling 226(7)): the enemy's with its country,
+ * strength and what to do; his own as built. The state word only when not Steady. Drawn over every block.
+ */
+function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandBattle): void {
+  const z = s.cam.z;
+  const [sx, sy] = toScreen(s, u.x, u.y);
+  const w = Math.max(8, u.w * z), d = Math.max(4, u.d * z);
+  const mine = u.side === s.me;
+  x.save();
+  {
+    const st = u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`;
+    const label = mine ? `${u.name}${st}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${s.sel.size ? ' · Right-click to attack' : ''}`;
     x.font = '700 12px "Courier Prime", ui-monospace, monospace';
     const tw = x.measureText(label).width;
     const lx = Math.min(s.W - tw - 14, Math.max(6, sx - tw / 2 - 6)), ly = sy + Math.max(w, d) / 2 + 10;
     x.fillStyle = '#e2d7bc'; x.strokeStyle = '#cdbf9c'; x.lineWidth = 1;
     x.fillRect(lx, ly, tw + 12, 20); x.strokeRect(lx, ly, tw + 12, 20);
     x.fillStyle = '#2a2118'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(label, lx + 6, ly + 10.5);
+  }
+  x.restore();
+}
+
+/** A block standing in works: dug in where it began, or on fieldworks or a bunker. */
+function inWorks(u: LandUnit, b: LandBattle): boolean {
+  if (u.state === 'routing') return false;
+  const atHome = Math.hypot(u.x - u.home[0], u.y - u.home[1]);
+  if (u.dug && atHome < LAND.dug.keep) return true;
+  // The defenders' front row behind fortress works stands in them while it holds its place.
+  if (u.side === 'def' && b.ticket.place.fort > 0 && atHome < 40) {
+    const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art').map((x) => x.home[1]));
+    if (Math.abs(u.home[1] - front) < 30) return true;
+  }
+  const g = groundAt(b.field, u.x, u.y);
+  return g === 'works' || g === 'bunker';
+}
+
+/**
+ * The defenders' works (the art director, ruling 226(12)): along the front edge of the line they drew up on, under the
+ * blocks and a little past each end, the campaign's fortress notch run on as a thin ink square wave, held at its
+ * whole-field size on the screen; where the works carry wire, a row of small ink crosses a short way in front. Drawn
+ * where they were dug: they stay if the defenders leave.
+ */
+function works(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, k: number): void {
+  const def = b.units.filter((u) => u.side === 'def' && u.kind !== 'art');
+  if (!def.length || !(b.ticket.place.fort > 0 || def.some((u) => u.dug))) return;
+  const front = Math.min(...def.map((u) => u.home[1]));
+  const row = def.filter((u) => Math.abs(u.home[1] - front) < 30);
+  const x0 = Math.min(...row.map((u) => u.home[0] - u.w / 2)) - 40, x1 = Math.max(...row.map((u) => u.home[0] + u.w / 2)) + 40;
+  const y = front - Math.max(...row.map((u) => u.d)) / 2;
+  const [ax, ay] = toScreen(s, x0, y), [bx] = toScreen(s, x1, y);
+  const step = 1.6 * k, up = 0.9 * k;
+  x.strokeStyle = INK; x.lineWidth = Math.max(1, 0.25 * k); x.lineJoin = 'miter'; x.lineCap = 'butt';
+  x.beginPath(); x.moveTo(ax, ay);
+  let px = ax, hi = false;
+  while (px < bx) { const nx = Math.min(bx, px + step); x.lineTo(nx, ay - (hi ? up : 0)); if (nx < bx) x.lineTo(nx, ay - (hi ? 0 : up)); hi = !hi; px = nx; }
+  x.stroke();
+  if (b.ticket.place.fort >= 2 || (b.ticket.place.mines ?? 0) > 0) {
+    // Wire: small crosses 30 m in front of the line.
+    const [, wy] = toScreen(s, x0, y - 30);
+    const c = 0.45 * k;
+    x.lineWidth = Math.max(1, 0.2 * k); x.beginPath();
+    for (let qx = ax + step; qx < bx; qx += 2.2 * step) { x.moveTo(qx - c, wy - c); x.lineTo(qx + c, wy + c); x.moveTo(qx - c, wy + c); x.lineTo(qx + c, wy - c); }
+    x.stroke();
   }
 }

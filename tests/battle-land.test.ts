@@ -37,12 +37,12 @@ describe('the field is built from the province', () => {
 });
 
 describe('blocks from divisions', () => {
-  it('one a division, at least six, at most twenty a side', () => {
+  it('one a division, at least six a side, and never two divisions folded into one (ruling 226(10))', () => {
     const f = (divs: number[]) => blocksFor(divs.map((d, i) => ({ corps: i, name: '', nat: 'X', kind: 'inf', divs: d, men: 1, str: 1, org: 1, xp: 0, share: 1 / divs.length })));
     expect(f([3, 3, 2])).toEqual([3, 3, 2]);
     expect(f([2]).reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(3);
     expect(f([1, 1]).reduce((a, b) => a + b, 0)).toBe(6);
-    expect(f([8, 8, 8, 8]).reduce((a, b) => a + b, 0)).toBe(20);
+    expect(f([8, 8, 8, 8]).reduce((a, b) => a + b, 0)).toBe(32);
   });
   it('each side\'s blocks add up to the power the card counted, so the odds are the card\'s', () => {
     const b = new LandBattle(sampleTicket('plains', 1.5));
@@ -179,6 +179,89 @@ describe('a battle fought to its end costs what the campaign bills for it (the d
     expect(inA / n).toBeGreaterThanOrEqual(0.7);
     expect(inD / n).toBeGreaterThanOrEqual(0.7);
   }, 120000);
+});
+
+describe('a fight, not a blink (the design director, ruling 226)', () => {
+  const GROUNDS7 = ['plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert'] as const;
+  /** Select every block, right-click the enemy nearest them, Space: the order a newcomer gives first (mark 4). */
+  const plainAttack = (b: LandBattle): void => {
+    const mine = b.units.filter((u) => u.side === 'att' && u.kind !== 'fort');
+    const cx = mine.reduce((a, u) => a + u.x, 0) / mine.length, cy = mine.reduce((a, u) => a + u.y, 0) / mine.length;
+    const foes = b.units.filter((u) => u.side === 'def');
+    const near = foes.reduce((m, f) => (Math.hypot(f.x - cx, f.y - cy) < Math.hypot(m.x - cx, m.y - cy) ? f : m), foes[0]);
+    expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: near.id }, 'att')).toBe(true);
+  };
+
+  it('a close battle lasts minutes from the first contact, and never breaks an army most of which has not fought (mark 2)', () => {
+    const fights: number[] = [];
+    for (const ground of GROUNDS7) {
+      for (const odds of [0.8, 1.0, 1.2, 1.5]) {
+        for (let s = 1; s <= 3; s++) {
+          const b = new LandBattle(sampleTicket(ground, odds, { seed: s * 7919 + 13 }));
+          b.ai.att = b.ai.def = true;
+          runOut(b);
+          expect(b.contactAt).not.toBeNull();
+          fights.push(b.t - b.contactAt!);
+          const broke = b.log.find((e) => e.what === 'broken');
+          if (broke) {
+            // The army that broke: at least half its strength had been in the fight.
+            const us = b.units.filter((u) => u.side === broke.side);
+            const P = us.reduce((a, u) => a + u.power0, 0);
+            const fought = us.filter((u) => u.met || u.str < u.str0 * 0.97 || u.state === 'gone').reduce((a, u) => a + u.power0, 0);
+            expect(fought / P).toBeGreaterThanOrEqual(0.5);
+          }
+        }
+      }
+    }
+    fights.sort((a, c) => a - c);
+    const at = (p: number): number => fights[Math.floor(p * (fights.length - 1))];
+    expect(at(0.05)).toBeGreaterThanOrEqual(90);
+    expect(at(0.5)).toBeGreaterThanOrEqual(120);
+    expect(at(0.5)).toBeLessThanOrEqual(240);
+  }, 120000);
+
+  it('one block running falls back alone: the army bar counts only its share', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    const u = b.units.find((x) => x.side === 'att' && x.kind === 'inf')!;
+    const before = b.breaking('att');
+    u.str = u.str0 * 0.5; u.mor = 0;
+    for (let i = 0; i < 5; i++) b.step();
+    expect(u.state).toBe('routing');
+    expect(b.over).toBeNull();
+    expect(b.breaking('att')).toBeGreaterThan(before);
+    expect(b.breaking('att')).toBeLessThan(0.75);
+    expect(b.view().breaking!.att).toBeCloseTo(b.breaking('att'), 6);
+  });
+
+  // Over 20 battles at each odds on every ground, the plain attack carries the day within a tenth of the card's chance.
+  const gaps: Record<string, { gap: number; bias: number }> = {};
+  for (const ground of GROUNDS7) {
+    it(`the plain attack honours the card on ${ground} (mark 4)`, () => {
+      const ODDS = [0.8, 1.0, 1.2, 1.4, 1.6, 1.8];
+      let gap = 0, bias = 0;
+      for (const odds of ODDS) {
+        let won = 0;
+        for (let s = 1; s <= 20; s++) {
+          const b = new LandBattle(sampleTicket(ground, odds, { seed: s * 7919 + 13, humanAtt: true }));
+          b.ai.att = false; b.ai.def = true;
+          plainAttack(b);
+          runOut(b);
+          if (b.over!.winner === 'att') won++;
+        }
+        const d = won / 20 - diceChance(odds, [0.8, 1.2]);
+        gap += Math.abs(d); bias += d;
+      }
+      gaps[ground] = { gap: gap / ODDS.length, bias: bias / ODDS.length };
+      expect(gaps[ground].bias).toBeGreaterThanOrEqual(-0.1);
+      expect(gaps[ground].bias).toBeLessThanOrEqual(0.1);
+      expect(gaps[ground].gap).toBeLessThanOrEqual(0.13);
+    }, 120000);
+  }
+  it('and within a tenth across all grounds together (mark 4)', () => {
+    const all = Object.values(gaps);
+    expect(all.length).toBe(7);
+    expect(all.reduce((a, g) => a + g.gap, 0) / all.length).toBeLessThanOrEqual(0.1);
+  });
 });
 
 describe('the hand-off with a real campaign', () => {

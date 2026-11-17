@@ -47,8 +47,21 @@ interface State {
   dispatch: FieldEvent | null;
   /** Real seconds the dispatch line has stood while the clock ran: it fades after a while so it never reads as stale. */
   dispatchAge: number;
-  /** The question WITHDRAW asks, open in place. */
-  asking: boolean;
+  /** The question standing on the field, open in place: WITHDRAW's, or HAND IT TO THE STAFF's (ruling 226(5)). */
+  asking: false | 'withdraw' | 'staff';
+  /** Blocks told to hold (H): their cards say so until their next order. */
+  holding: Set<number>;
+  /** The first card the tray shows, when the army has more than fit (ruling 226(9)). */
+  trayFrom: number;
+  /** A tag on the field for a moment: RUNNING ×2, THE ARMIES MEET, and when it goes (real seconds). */
+  tag: { text: string; until: number } | null;
+  /** The clock was running at the last frame, and the armies had met: for the tags when either changes. */
+  wasRunning: boolean;
+  met: boolean;
+  /** Each side's colour on this field (sideColours). */
+  colours: Record<Side, string>;
+  /** What the chooser offered before the last battle, and how it went: for SINCE YOUR LAST BATTLE (ruling 226(11)). */
+  before: { offers: Offer[]; fought: number; how: string } | null;
   /** The speed the clock had when a question stopped it: STAY or Esc starts it again there. */
   resume: Speed | null;
   last: number;
@@ -58,9 +71,24 @@ interface State {
 const app = document.getElementById('app')!;
 const S: State = {
   g: newCampaign(), screen: 'choose', offer: null, b: null, field: null, clock: new Clock(),
-  scene: { cam: { x: 1500, y: 1000, z: 0.3 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null },
+  scene: { cam: { x: 1500, y: 1000, z: 0.3 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, colours: null },
   guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, resume: null, last: 0, trayAt: 0,
+  holding: new Set(), trayFrom: 0, tag: null, wasRunning: false, met: false, before: null, colours: { att: '#888', def: '#888' },
 };
+/**
+ * The two sides' colours as the campaign paints them, but where a pair stands too near to tell apart (under 20 by
+ * CIEDE2000 for a normal eye or a colour-blind one), the lighter raised in lightness only (the art director, ruling
+ * 226(12)). Every other pair stays as the campaign has it.
+ */
+const PAIR_FIX: Record<string, Record<string, string>> = { FRA: { GER: '#5f84c7' }, ITA: { UK: '#92c495' }, POL: { GER: '#cf848b' } };
+function sideColours(t: FieldTicket<LandPlace>): Record<Side, string> {
+  const fix = (a: SideTicketLike, b: SideTicketLike): string => PAIR_FIX[a.nat]?.[b.nat] ?? a.color;
+  return { att: fix(t.att, t.def), def: fix(t.def, t.att) };
+}
+type SideTicketLike = { nat: string; color: string };
+
+/** How much faster time runs on its own until the armies meet (ruling 226(1)): the clock at least this fast. */
+const RUSH = 4;
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
 
@@ -87,7 +115,8 @@ function showChooser(): void {
   app.innerHTML = `<div class="choose tc">
     <header class="chead"><div><div class="tc-label">Field battles · first slice</div><h1 class="tc-title-1">Choose a battle to fight</h1></div></header>
     <div class="cbody">
-      <section class="tc-paper intro"><p><b>The campaign settles every battle from its Battle Ticket until you choose to fight one here.</b> The field is drawn from the province: its ground, its river and bridges, its town and its fortress works. Each division is a block, and the two armies share out exactly the strength the attack card counted, so the card's odds are the field's. What happens here goes back to the campaign as the same kind of result, and you can hand the rest to the staff at any moment: what you have won stays won.</p></section>
+      <section class="tc-paper intro"><p><b>The campaign settles every battle from its Battle Ticket until you choose to fight one here.</b> The field is drawn from the province: its ground, its river and bridges, its town and its fortress works. Your divisions take the field as the campaign counts them, each drawn to its size. Where an army has few, some fight as their three regiments, named on the field as such. The two armies share out exactly the strength the attack card counted, so the card's odds are the field's. What happens here goes back to the campaign as the same kind of result, and you can hand the rest to the staff at any moment.</p></section>
+      ${since(list)}
       <h2 class="tc-label shead">${facts(['Your attacks this month', `${esc(me.name)}, ${esc(list[0]?.ticket.date ?? '')}`])}</h2>
       <div class="offers">${list.length ? list.map(row).join('') : '<p class="tc-data none">No attack can be ordered now. Start the campaign again to fight another.</p>'}</div>
       <div class="again"><button class="tc-btn tc-btn--quiet" data-act="restart">Start the campaign again</button></div>
@@ -96,13 +125,44 @@ function showChooser(): void {
     </div></div>`;
   app.querySelectorAll<HTMLElement>('[data-offer]').forEach((el) => el.addEventListener('click', () => {
     const o = list[Number(el.dataset.offer)];
+    S.before = { offers: list, fought: o.target.id, how: '' };
     startBattle(o.ticket, o);
   }));
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
     const t = sampleTicket(el.dataset.ground as Terrain, 1.3, { humanAtt: true, river: !!el.dataset.river, fort: Number(el.dataset.fort ?? 0), seed: 1 + Math.floor(Math.random() * 1e6) });
     startBattle(t, null);
   }));
-  app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); showChooser(); });
+  app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
+}
+
+/**
+ * SINCE YOUR LAST BATTLE (the UI director's words for ruling 226(11)): one line for each thing that changed in the
+ * attacks on offer, the place first. No band when nothing changed, or before the first battle.
+ */
+function since(now: Offer[]): string {
+  const was = S.before;
+  if (!was || !was.how) return '';
+  const g = S.g, lines: string[] = [];
+  const by = new Map(now.map((o) => [o.target.id, o]));
+  const say = (place: string, text: string): void => { lines.push(`<li><b>${esc(place)}:</b> ${text}</li>`); };
+  const fought = was.offers.find((o) => o.target.id === was.fought);
+  if (fought) say(fought.target.name, was.how);
+  for (const o of was.offers) {
+    if (o.target.id === was.fought) continue;
+    const n = by.get(o.target.id);
+    if (!n) {
+      const spent = o.corps.find((c) => c.fought && !now.some((x) => x.corps.includes(c)));
+      say(o.target.name, spent ? `${esc(spent.name)} has fought this month and cannot attack again.` : 'out of reach this month.');
+      continue;
+    }
+    if (n.ticket.place.bridgeDown && !o.ticket.place.bridgeDown) say(o.target.name, 'bridges down.');
+    const ca = n.ticket.att.forces.length, cd = n.ticket.def.forces.length;
+    if (ca !== o.ticket.att.forces.length || cd !== o.ticket.def.forces.length) say(o.target.name, `now ${ca} corps against ${cd}.`);
+    if (Math.abs(n.odds - o.odds) >= 0.005) say(o.target.name, `<span class="nobr">now ${odds(n.odds)} to 1, from ${odds(o.odds)}.</span>`);
+  }
+  for (const n of now) if (!was.offers.some((o) => o.target.id === n.target.id)) say(n.target.name, 'now in reach.');
+  void g;
+  return lines.length ? `<section class="tc-paper since"><h2 class="tc-label">Since your last battle</h2><ul>${lines.join('')}</ul></section>` : '';
 }
 
 // ---- The battle screen --------------------------------------------------------------------------------------------
@@ -118,39 +178,43 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
   S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null;
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false;
+  S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false;
   const place = t.place.town ? `before ${t.place.town}` : `in ${t.place.name}`;
   S.dispatch = { t: 0, what: 'contact', text: `Your army stands ${place}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   S.resume = null;
   guard();
   const mine = t[S.scene.me], theirs = t[S.scene.me === 'att' ? 'def' : 'att'];
+  const col = sideColours(t);
+  S.colours = col; S.scene.colours = col;
   app.innerHTML = `<div class="battle tc">
     <header class="bbar">
       <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), esc(TERRAIN_WORD[t.place.terrain]), ...(t.place.river ? [`the ${esc(t.place.river)}`] : [])])}</span></div>
-      <div class="bclock"><span class="tc-label">Battle time</span><span class="tc-data" id="time">0:00</span></div>
+      <div class="bclock" title="At ${mmss(t.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Speed">
-        <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)">Pause <span class="tc-key">Space</span></button>
+        <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
         <button class="tc-btn tc-btn--sm" data-speed="1" title="Normal speed (1)">×1 <span class="tc-key">1</span></button>
         <button class="tc-btn tc-btn--sm" data-speed="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-speed="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's strength still standing. The pale mark is where the attack card put it.">
         <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
-        <div class="btrack"><i id="balA" style="background:${t.att.color}"></i><i id="balD" style="background:${t.def.color}"></i><b id="balMark"></b></div>
+        <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
+        <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>
       <div class="bacts">
-        <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, at the strength each side has left, held to what the dice could have done.">Hand it to the staff</button>
+        <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands.">Hand it to the staff</button>
         <button class="tc-btn tc-btn--grave" data-act="withdraw">Withdraw</button>
-        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="Withdraw the army?"><p>Withdraw the army? The battle ends and the field is theirs.</p><div class="wbtns"><button class="tc-btn" data-act="wgo">Withdraw</button><button class="tc-btn tc-btn--primary" data-act="wstay">Stay</button></div></div>
+        <div class="wask tc-paper" id="sask" hidden role="alertdialog" aria-label="Hand the battle to the staff?"><p id="saskText"></p><div class="wbtns"><button class="tc-btn" data-act="sgo">Hand it over</button><button class="tc-btn tc-btn--primary" data-act="stay">Keep fighting</button></div></div>
+        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="Withdraw the army?"><p>Withdraw the army? The battle ends and the field is theirs.</p><div class="wbtns"><button class="tc-btn" data-act="wgo">Withdraw</button><button class="tc-btn tc-btn--primary" data-act="stay">Keep fighting</button></div></div>
       </div>
     </header>
     <div class="bfield"><canvas id="field"></canvas>
-      <div class="dispatch tc-paper" id="dispatch"></div>
+      <div class="ftop"><div class="ftag tc-paper" id="ftag" hidden></div><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Left click: pick up', 'Right click: march, or attack an enemy', 'Right drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down'])}</div>
-    <footer class="tray" id="tray">${b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, mine.color)).join('')}</footer>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round'])}</div>
+    <footer class="tray" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = document.getElementById('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
@@ -158,6 +222,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
   wireBattle();
   updateTop(true);
   updateTray(true);
+  pageTray();
   S.last = now();
 }
 
@@ -170,7 +235,58 @@ function card(u: LandUnit, color: string): string {
 }
 
 const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Routing', gone: 'Fled the field', withdrawn: 'Withdrawn' };
-const ACT_WORD: Record<string, string> = { idle: 'standing', march: 'marching', run: 'at the double', turn: 'wheeling', fight: 'in action', rout: '', down: '' };
+
+/** The card says the order, not the walk, the moment it is given, paused or not (the UI director's words for ruling 226(8)). */
+function doingWord(u: LandUnit): string {
+  if (u.state === 'routing') return '';
+  const o = u.order;
+  if (o?.kind === 'attack') return 'attacking';
+  if (o?.kind === 'withdraw') return 'falling back';
+  if (o?.kind === 'move') return u.act === 'run' ? 'at the double' : 'marching';
+  if (S.holding.has(u.id)) return 'holding';
+  return u.act === 'fight' || u.engaged !== undefined ? 'in action' : 'standing';
+}
+
+/**
+ * The tray shows whole cards only (ruling 226(9)): when the army has more than fit, the last place is a card of its
+ * own, "7 more ▸", and the first then reads "◂ 7 more". Tab, and picking one up on the field, bring its card into view.
+ */
+function pageTray(): void {
+  const tray = document.getElementById('tray');
+  if (!tray) return;
+  const cards = [...tray.querySelectorAll<HTMLElement>('[data-unit]')];
+  const back = tray.querySelector<HTMLElement>('[data-page="-1"]')!, fwd = tray.querySelector<HTMLElement>('[data-page="1"]')!;
+  const room = tray.clientWidth - 24;
+  const each = 196 + 8, more = 112 + 8;
+  const fitAll = Math.max(1, Math.floor((room + 8) / each));
+  if (cards.length <= fitAll) {
+    S.trayFrom = 0; back.hidden = true; fwd.hidden = true;
+    cards.forEach((c) => { c.hidden = false; });
+    return;
+  }
+  // Room for the cards beside one "more" place at the first or last page, between two in the middle.
+  const one = Math.max(1, Math.floor((room - more + 8) / each)), two = Math.max(1, Math.floor((room - 2 * more + 8) / each));
+  S.trayFrom = Math.max(0, Math.min(S.trayFrom, cards.length - one));
+  const fit = S.trayFrom === 0 || S.trayFrom + one >= cards.length ? one : two;
+  const to = S.trayFrom + fit;
+  cards.forEach((c, i) => { c.hidden = i < S.trayFrom || i >= to; });
+  back.hidden = S.trayFrom === 0; fwd.hidden = to >= cards.length;
+  back.textContent = `◂ ${S.trayFrom} more`;
+  fwd.textContent = `${cards.length - to} more ▸`;
+  back.dataset.fit = fwd.dataset.fit = String(fit);
+}
+
+/** Bring a block's card into view in the tray. */
+function showCard(id: number): void {
+  const tray = document.getElementById('tray');
+  if (!tray) return;
+  const cards = [...tray.querySelectorAll<HTMLElement>('[data-unit]')];
+  const i = cards.findIndex((c) => Number(c.dataset.unit) === id);
+  if (i < 0 || !cards[i].hidden) return;
+  const fit = Number(tray.querySelector<HTMLElement>('[data-page="1"]')!.dataset.fit ?? 1);
+  S.trayFrom = i < S.trayFrom ? i : i - fit + 1;
+  pageTray();
+}
 
 function updateTray(force = false): void {
   const b = S.b!;
@@ -194,7 +310,7 @@ function updateTray(force = false): void {
     // Steady, Wavering, Routing in words; only Routing in red (the UI director's must-haves, 3).
     const st = el.querySelector<HTMLElement>('.ustate')!;
     // Once the battle is over nothing marches: the card says so (the design director, b356).
-    const doing = b.over ? (live(u) ? 'battle over' : '') : live(u) ? ACT_WORD[u.act] ?? '' : '';
+    const doing = b.over ? (live(u) ? 'battle over' : '') : live(u) ? doingWord(u) : '';
     st.innerHTML = `<b>${STATE_WORD[u.state]}</b>${doing ? ` · ${doing}` : ''}`;
     st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
@@ -214,7 +330,26 @@ function updateTop(force = false): void {
   el('ratio').textContent = `Card ${odds(k.odds)} to 1 · now ${odds(bal.att / Math.max(1e-6, bal.def))} to 1`;
   const sp = S.clock.speed;
   document.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
-  (document.getElementById('wask') as HTMLElement).hidden = !S.asking;
+  // Paused means paused (ruling 226(8)): the clock's label is the state, and the first segment reads Paused when lit.
+  const cs = el('clockState');
+  cs.textContent = sp === 0 ? 'Paused' : 'Running';
+  cs.classList.toggle('is-paused', sp === 0);
+  el('pauseWord').textContent = sp === 0 ? 'Paused' : 'Pause';
+  // How near to breaking (ruling 226(3)): a bar a side, no numbers.
+  const v = { att: b.breaking('att'), def: b.breaking('def') };
+  const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
+  el('brkMe').style.width = `${(Math.min(1, v[me]) * 100).toFixed(1)}%`;
+  el('brkThem').style.width = `${(Math.min(1, v[them]) * 100).toFixed(1)}%`;
+  el('fwarn').hidden = !!b.over || v[me] < 0.75 || S.screen !== 'battle';
+  (document.getElementById('wask') as HTMLElement).hidden = S.asking !== 'withdraw';
+  (document.getElementById('sask') as HTMLElement).hidden = S.asking !== 'staff';
+  // The tag on the field: PAUSED with its key while stopped, or a passing word; never while a question stands.
+  const tag = el('ftag');
+  const passing = S.tag && now() < S.tag.until ? S.tag.text : '';
+  const rushing = sp > 0 && b.contactAt === null && sp < RUSH;
+  const tagHtml = S.asking || b.over ? '' : sp === 0 ? 'Paused <span class="tc-key">Space</span>' : rushing ? `×${RUSH} until the armies meet` : esc(passing);
+  if (tag.innerHTML !== tagHtml) tag.innerHTML = tagHtml;
+  tag.hidden = !tagHtml;
   if (force || S.dispatch) {
     const d = S.dispatch;
     const box = el('dispatch');
@@ -268,6 +403,8 @@ function chosen(): number[] {
 function give(c: Command): boolean {
   const b = S.b!;
   const ok = b.command(c, S.scene.me);
+  // A block told to hold says so until its next order (ruling 226(8)).
+  if (ok && 'units' in c && c.units) for (const id of c.units) { if (c.do === 'hold') S.holding.add(id); else S.holding.delete(id); }
   return ok;
 }
 
@@ -353,20 +490,24 @@ function wireBattle(): void {
     if (e.ctrlKey || notched) zoomAt(px, py, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
-  window.onresize = (): void => { if (S.screen !== 'choose') fit(); };
+  window.onresize = (): void => { if (S.screen !== 'choose') { fit(); pageTray(); } };
 
   app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking) return; S.clock.set(Number(el.dataset.speed) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
   }));
-  app.querySelector('[data-act="dice"]')!.addEventListener('click', () => { give({ do: 'dice' }); });
-  // WITHDRAW asks once, in place; STAY, the answer that loses nothing, carries the brass (and Esc).
-  app.querySelector('[data-act="withdraw"]')!.addEventListener('click', () => { ask(); updateTop(); });
-  app.querySelector('[data-act="wstay"]')!.addEventListener('click', () => { answered(); updateTop(); });
+  // HAND IT TO THE STAFF and WITHDRAW each ask once, in place, with the clock stopped; KEEP FIGHTING, the answer that
+  // changes nothing, carries the brass (and Esc) (ruling 226(5)).
+  app.querySelector('[data-act="dice"]')!.addEventListener('click', () => { ask('staff'); updateTop(); });
+  app.querySelector('[data-act="withdraw"]')!.addEventListener('click', () => { ask('withdraw'); updateTop(); });
+  app.querySelectorAll<HTMLElement>('[data-act="stay"]').forEach((el) => el.addEventListener('click', () => { answered(); updateTop(); }));
+  app.querySelector('[data-act="sgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; S.resume = null; give({ do: 'dice' }); });
   app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; S.resume = null; give({ do: 'withdrawAll', side: sc.me }); });
   const tray = document.getElementById('tray')!;
   tray.addEventListener('click', (e) => {
+    const more = (e.target as HTMLElement).closest<HTMLElement>('[data-page]');
+    if (more) { S.trayFrom += Number(more.dataset.page) * Number(more.dataset.fit ?? 1); pageTray(); return; }
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-unit]');
     if (!el) return;
     const id = Number(el.dataset.unit), u = S.b!.unit(id);
@@ -382,9 +523,17 @@ function wireBattle(): void {
 }
 
 /** A question on the field stops the clock while it stands (b358): no one loses men while reading. */
-function ask(): void {
-  if (S.asking) return;
-  S.asking = true;
+function ask(kind: 'withdraw' | 'staff'): void {
+  if (S.asking || !S.b || S.b.over) return;
+  if (kind === 'staff') {
+    // The staff's chance now, from the strength each side has left (the UI director's words for ruling 226(5)).
+    const b = S.b, c = b.chanceNow(), where = b.ticket.place.name;
+    const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to take ${esc(where)}.`;
+    document.getElementById('saskText')!.innerHTML = b.contactAt === null
+      ? `Hand the battle to the staff? No shot has been fired: they settle the whole battle at once. ${odds}`
+      : `Hand the battle to the staff? They settle the rest at once, from where it stands now. ${odds}`;
+  }
+  S.asking = kind;
   S.resume = S.clock.speed;
   S.clock.set(0);
   guard();
@@ -403,6 +552,7 @@ function pickAt(px: number, py: number, add: boolean): void {
   const u = unitAt(b.units.filter((x) => x.side === sc.me && orderable(x)), fx, fy, Math.max(85, 16 / sc.cam.z), sc.me);
   if (!u) { if (!add) sc.sel.clear(); return; }
   if (add) { if (sc.sel.has(u.id)) sc.sel.delete(u.id); else sc.sel.add(u.id); } else { sc.sel.clear(); sc.sel.add(u.id); }
+  showCard(u.id);
 }
 
 function orderAt(px: number, py: number): void {
@@ -440,6 +590,7 @@ window.addEventListener('keydown', (e) => {
       const next = mine[(i + (e.shiftKey ? mine.length - 1 : 1)) % mine.length];
       sc.sel.clear(); sc.sel.add(next.id);
       sc.cam.x = next.x; sc.cam.y = next.y; clampCam();
+      showCard(next.id);
       break;
     }
     case 'ArrowLeft': case 'a': sc.cam.x -= pan; clampCam(); break;
@@ -463,11 +614,19 @@ function frame(): void {
   S.last = t;
   S.scene.now = t;
   const b = S.b;
+  // Fast until the armies meet, then the speed he set, with a word on the field each way (ruling 226(1)).
+  S.clock.rush = b.contactAt === null && S.clock.speed > 0 && S.clock.speed < RUSH ? RUSH / S.clock.speed : 1;
   S.clock.advance(b, dt);
+  const running = S.clock.speed > 0;
+  if (running && !S.wasRunning && b.contactAt === null && S.clock.speed >= RUSH) S.tag = { text: `Running ×${S.clock.speed}`, until: t + 2 };
+  else if (running && !S.wasRunning && b.contactAt !== null) S.tag = { text: `Running ×${S.clock.speed}`, until: t + 2 };
+  if (b.contactAt !== null && !S.met) { S.met = true; S.tag = { text: `The armies meet · Running ×${S.clock.speed || 1}`, until: t + 2.5 }; }
+  S.wasRunning = running;
   const v = b.view(S.scene.me);
   // The opening line says the clock is stopped: once it runs, the first fact replaces it.
   if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) { S.dispatch = { t: b.t, what: 'contact', text: `The ${b.ticket[S.scene.me].adj} army is moving.`, unit: -1 }; S.dispatchAge = 0; }
-  for (const e of v.events) if (e.text) { S.dispatch = e; S.dispatchAge = 0; }
+  // His own army near breaking has its amber line that stays (fwarn); everything else comes through the strip.
+  for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = b.unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
   drawFrame(ctx, b, S.scene, S.field);
@@ -501,6 +660,7 @@ function showAfter(): void {
   const g = S.g;
   const settled = S.offer ? settle(g, S.offer, r) : null;
   const rep = settled?.report ?? null;
+  if (S.before && S.offer) S.before.how = !rep ? 'the attack could not be ordered.' : rep.siege ? 'under siege.' : rep.taken ? 'taken.' : 'the attack was thrown back.';
   const won = rep ? rep.taken || !!rep.siege : r.winner === 'att';
   const level = rep ? rep.level : r.level;
   const chance = diceChance(k.odds, k.dice);

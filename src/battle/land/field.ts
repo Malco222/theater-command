@@ -197,11 +197,13 @@ export function buildField(place: LandPlace, seed: number): LandField {
     }
   }
 
-  // Fortress works: a line of bunkers across the front of the defender's half, thicker with the level.
+  // Fortress works: bunkers along the front edge of the line the defenders draw up on, across their zone and a little
+  // past it, thicker with the level, so the defenders stand in their works (the art director, ruling 226(12)).
   if (place.fort > 0) {
-    const fy = h * 0.6, every = Math.round(10 / place.fort);
-    for (let c = 2; c < cols - 2; c += every) {
-      const r = Math.floor((fy + Math.sin(c * 0.2) * 40) / cell);
+    // The defenders' front row stands 40 m inside their zone (deploy in units.ts); its front edge 20 m before that.
+    const fy = h * 0.62 + 40 - 20 - cell, every = Math.round(10 / place.fort);
+    for (let c = Math.floor((w * 0.1) / cell); c < Math.min(cols - 2, Math.ceil((w * 0.9) / cell)); c += every) {
+      const r = Math.floor(fy / cell);
       for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
         const i = at(c + dc, r + dr);
         if (ground[i] !== G.water && ground[i] !== G.bridge && ground[i] !== G.blown) ground[i] = G.bunker;
