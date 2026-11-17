@@ -65,7 +65,7 @@ export const DIPLOMACY = data as unknown as {
   leaders: Record<'allies' | 'axis', string>; majors: string[];
   pcIncome: Record<string, number>; pcCap: number;
   court: { cost: number; opinion: number; home: number };
-  americas?: { backer: string; of: string[]; join: Record<string, number>; joinOf: Record<string, Record<string, number>>; months: number };
+  americas?: { backer: string; of: string[]; join: Record<string, number>; readiness: Record<string, number>; most: number; months: number };
   tradeIncome: number; resist: Record<string, number>;
   home: Record<string, number>; bandwagon: Record<string, number>;
   events: DiploEvent[];
@@ -161,18 +161,26 @@ export function americasOpen(g: Game): boolean {
   return step(U) < 0 || U.atWar.some((e) => bloc(g.nations[e]) === 'axis');
 }
 
-/** The share of campaigns in which the Axis can win this country over, at this stop of the dial. */
-export const americasShare = (g: Game, id: string): number => {
-  const k = String(stopOf(g));
-  return AMERICAS?.joinOf[id]?.[k] ?? AMERICAS?.join[k] ?? 0;
-};
+/** The share of campaigns in which the Axis can win this country over, at this stop of the dial: the stop's figure times its readiness (b391). */
+export const americasShare = (g: Game, id: string): number =>
+  !AMERICAS ? 0 : (AMERICAS.join[String(stopOf(g))] ?? 0) * (AMERICAS.readiness[id] ?? AMERICAS.readiness._default ?? 1);
+
+/** How many countries of the Americas have joined the Axis by its courting in this campaign. */
+const americasIn = (g: Game): number => (AMERICAS?.of ?? []).filter((id) => g.flags[`americas:in:${id}`] !== undefined).length;
 
 /** The one roll for this country and this campaign: whether the Axis can win it over. The same every month. */
 export const americasWon = (g: Game, id: string): boolean => hashString(`americas:${g.seed}:${id}`) / 4294967296 < americasShare(g, id);
 
+/** The countries of the Axis that have courted this country this month or last. */
+export const axisCourters = (g: Game, id: string): Nation[] =>
+  Object.values(g.nations).filter((n) => bloc(n) === 'axis' && (g.flags[`court:${n.id}:${id}`] ?? -9) >= g.turn - 1);
 /** The Axis has courted this country this month or last. */
-export const axisCourts = (g: Game, id: string): boolean =>
-  Object.values(g.nations).some((n) => bloc(n) === 'axis' && (g.flags[`court:${n.id}:${id}`] ?? -9) >= g.turn - 1);
+export const axisCourts = (g: Game, id: string): boolean => axisCourters(g, id).length > 0;
+/** Whose envoys court it, as the words say them (the UI director's words for ruling 223): "German", or "Axis" for two or more. */
+export const envoysWord = (g: Game, ids: string[]): string => {
+  const who = new Set(ids.flatMap((id) => axisCourters(g, id).map((n) => n.adj)));
+  return who.size === 1 ? [...who][0] : 'Axis';
+};
 
 /**
  * The backer courts this neutral at no cost while the Axis courts it (ruling 223(d)), whether or not it has joined
@@ -253,7 +261,8 @@ function courtsAmericas(g: Game, B: Nation, T: Nation): void {
     const seat = g.regions[T.capital];
     headline(g, 'event', `${B.adj} envoys are courting ${seat ? seat.name : T.name}.`, T.id, seat?.id);
   }
-  if (months >= AMERICAS!.months && americasWon(g, T.id) && joinBloc(g, T, 'axis')) g.flags[`americas:in:${T.id}`] = g.turn;
+  // (No more than one country of the Americas joins the Axis in a campaign: b391.)
+  if (months >= AMERICAS!.months && americasWon(g, T.id) && americasIn(g) < AMERICAS!.most && joinBloc(g, T, 'axis')) g.flags[`americas:in:${T.id}`] = g.turn;
 }
 
 const blocName = (s: number): string => (s > 0 ? 'the Axis' : 'the Allies');
