@@ -30653,7 +30653,23 @@
       return null;
     }
   }
+  var pictureDepth = 0;
+  var pictureBook = null;
+  function tradeLedgerOnce(s) {
+    if (pictureDepth > 0 && pictureBook && pictureBook.s === s) return pictureBook.book;
+    const book = tradeLedger(s);
+    if (pictureDepth > 0) pictureBook = { s, book };
+    return book;
+  }
   function view2() {
+    pictureDepth++;
+    try {
+      return drawView();
+    } finally {
+      if (--pictureDepth === 0) pictureBook = null;
+    }
+  }
+  function drawView() {
     const s = game();
     const up = humanUp(s);
     const seen2 = sight(s);
@@ -31150,7 +31166,7 @@
       lanes: s.flags.open === 1 ? [
         ...shippingLanes(s).filter((l) => l.kind === "sea" && l.path.length > 1 && l.state !== "idle").map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
         // The player's trade routes, over land and sea, in gold: red where one is cut.
-        ...(tradeLedger(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === "open" ? "trade" : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 }))
+        ...(tradeLedgerOnce(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === "open" ? "trade" : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 }))
       ] : [],
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
       idle: s.human ? idleTeams(s, s.human) : 0,
@@ -33810,7 +33826,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       if (governmentOf(s)?.mine) out.push({ id: "cabinet", label: "THE CABINET" });
     } catch {
     }
-    if (tradeLedger(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
+    if (tradeLedgerOnce(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
     if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "towns", label: "TOWNS TO BUILD UP" });
     const act2 = lastAct(s);
     if (act2 && (act2.decided || act2.on)) out.push({ id: "lastact", label: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT" });
@@ -33864,7 +33880,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       if (theirs2.length) out.push({ k: `goto:${theirs2[0].region}`, t: theirs2.length === 1 ? `YOU BESIEGE ${theirs2[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs2.length} TOWNS`, tip: `${theirs2.map((v) => v.town).slice(0, 4).join(", ")}. Starve it out, or storm it: pick the province and look under ORDERS.` });
     } catch {
     }
-    const book = tradeLedger(s);
+    const book = tradeLedgerOnce(s);
     if (book) {
       const cut = book.deals.filter((d) => d.state === "cut").length;
       if (cut) out.push({ k: "page:trade", t: cut === 1 ? "A TRADE ROUTE IS CUT" : `${cut} TRADE ROUTES ARE CUT`, tip: "An agreement pays nothing while its route is cut. Open TRADE AGREEMENTS to see which, and why." });

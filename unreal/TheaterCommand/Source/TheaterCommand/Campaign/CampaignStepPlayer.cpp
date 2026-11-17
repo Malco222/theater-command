@@ -3,6 +3,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/TheaterSpeed.h"
 #include "TheaterCommand.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -109,6 +110,7 @@ namespace
 
 	TArray<FFoundButton> ButtonsOnScreen()
 	{
+		THEATER_SPEED_SCOPE(HarnessFindButton); // (the step player's own work, which a player does not pay for)
 		TArray<FFoundButton> Out;
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (Window.IsValid())
@@ -170,6 +172,7 @@ bool FStepPlayer::Load(const FString& File, const FString& InFolder)
 
 FStepPlayer::FSeen FStepPlayer::Look(ACampaignPlayerController& Player, int32 RegionId) const
 {
+	THEATER_SPEED_SCOPE(HarnessLook); // (the step player's own work, which a player does not pay for)
 	FSeen Seen;
 	Player.DescribeScreen(Seen.Open, Seen.Words, Seen.Hand);
 	Seen.Notices = Player.StepNotices();
