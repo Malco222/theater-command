@@ -581,6 +581,9 @@ struct FApproachRow
 	FString Says; // enemy ground on the way: what the march does there
 	TArray<int32> Road; // the provinces marched through, the approach itself last
 	TArray<int32> Going; // (the code checker, 17 November) the corps of the hand that can reach it this month: they alone go
+	FString River; // (sheet 34) the river between it and the enemy, by name, or empty: "across the Vistula" is said in the bright ink
+	FString RiverWords; // "no river to cross", or "across the Vistula" (", bridges down")
+	FString Ground; // the rules' key for its ground; the card prints the game's own word for it
 };
 
 /** The march up and the attack planned as one order: the game's pick first, then up to three more ways. */
@@ -590,6 +593,8 @@ struct FApproachPlan
 	FString Name; // the enemy's province
 	TArray<FApproachRow> Rows;
 	FString None; // where nothing beside the enemy can be reached this month: the sentence that says so and names the nearest
+	// (Sheet 34.) The card's two sides: where the road starts, the hand in numbers, and the enemy as far as the fog shows.
+	FString From, Ours, Foe, FoeName, FoeLine;
 };
 
 struct FGateAsk

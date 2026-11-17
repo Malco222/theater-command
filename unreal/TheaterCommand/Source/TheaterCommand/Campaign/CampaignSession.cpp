@@ -1943,6 +1943,11 @@ FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int3
 	Object->TryGetBoolField(TEXT("ok"), Plan.bOk);
 	Object->TryGetStringField(TEXT("name"), Plan.Name);
 	Object->TryGetStringField(TEXT("none"), Plan.None);
+	Object->TryGetStringField(TEXT("from"), Plan.From);
+	Object->TryGetStringField(TEXT("ours"), Plan.Ours);
+	Object->TryGetStringField(TEXT("foe"), Plan.Foe);
+	Object->TryGetStringField(TEXT("foeName"), Plan.FoeName);
+	Object->TryGetStringField(TEXT("foeLine"), Plan.FoeLine);
 	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
 	if (Object->TryGetArrayField(TEXT("rows"), Rows))
 	{
@@ -1962,10 +1967,10 @@ FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int3
 			Row->TryGetStringField(TEXT("arrive"), Way.Arrive);
 			{
 				// (The UI director, check 19: the ground by its label, "open country", never the rules' key "plains".)
-				FString River, Ground;
-				Row->TryGetStringField(TEXT("riverWords"), River);
-				Row->TryGetStringField(TEXT("ground"), Ground);
-				Way.How = River + TEXT(" \u00B7 ") + FCampaignMapData::TerrainLabel(Ground).ToLower();
+				Row->TryGetStringField(TEXT("river"), Way.River);
+				Row->TryGetStringField(TEXT("riverWords"), Way.RiverWords);
+				Row->TryGetStringField(TEXT("ground"), Way.Ground);
+				Way.How = Way.RiverWords + TEXT(" \u00B7 ") + FCampaignMapData::TerrainLabel(Way.Ground).ToLower();
 			}
 			Row->TryGetStringField(TEXT("says"), Way.Says);
 			const TArray<TSharedPtr<FJsonValue>>* Road = nullptr;

@@ -32323,10 +32323,12 @@
     return r.defNat === s.human ? ` The line held, but its works are worn: the attack took ${took} off them, and ${now}. Your troops there ${pace} this month. A quiet month builds the works up again.` : ` Thrown back, but not for nothing: the attack took ${took} off the defenders' works, and ${now}. The defenders ${pace} this month, so the next blow meets less. Guns in the attack wear works down faster.`;
   }
   var noArmy = (lines) => lines.map((l) => l.label === "Forces" ? { ...l, value: l.value.replace("against 0 corps, 0 men: ", "against no army: ") } : l);
+  var approachRule = rulesByName["approaches"];
+  var armyAtRule = rulesByName["armyAt"];
   function approach(ids2, to) {
     const s = game();
     const target = s.regions[to];
-    const out = { ok: false, name: target?.name ?? "", rows: [], none: "" };
+    const out = { ok: false, name: target?.name ?? "", rows: [], none: "", from: "", ours: "", foe: "", foeName: "", foeLine: "" };
     const me = s.human;
     try {
       if (!target || !me || !humanUp(s) || onEve(s)) return out;
@@ -32334,54 +32336,69 @@
       const cs = corpsById(s, ids2).filter((c) => canOrder(s, c) && !c.town);
       if (!cs.length || cs.some((c) => c.ap > 0 && s.regions[c.reg].nb.includes(to))) return out;
       const reaches = cs.map((c) => ({ c, m: reach2(s, c) }));
-      const rows = [];
-      for (const j of target.nb) {
+      const rowFor = (j, ruled2) => {
         const r = s.regions[j];
         const going = reaches.filter(({ m }) => {
           const e = m.get(j);
           return !!e && !e.attack;
         });
-        if (!going.length) continue;
-        const enemy = !allied(s, me, r.ctrl);
-        let meets = "", meetsLine = "";
-        if (enemy) {
-          try {
-            const o = marchOutlook(s, going.map((x) => x.c), j);
-            meets = o?.meets ?? "";
-            meetsLine = o?.line ?? "";
-          } catch {
-            meets = "";
-            meetsLine = "";
-          }
-          if (meets === "guard") continue;
-        }
+        if (!going.length || going.every(({ c }) => blocked(s, c, target, j))) return null;
         const cost = Math.min(...going.map(({ m }) => m.get(j).cost));
-        const stops = enemy && meets !== "open" && meets !== "gates";
-        const lefts = going.map(({ c, m }) => ({ c, left: stops ? 0 : Math.max(0, c.ap - m.get(j).cost) }));
-        if (going.every(({ c }) => blocked(s, c, target, j))) continue;
-        const left = Math.max(0, ...lefts.map((x) => x.left));
-        const attack2 = lefts.some(({ c, left: l }) => l > 0 && !blocked(s, c, target, j));
+        const lefts = going.map(({ c, m }) => ({ c, left: Math.max(0, c.ap - m.get(j).cost) }));
+        const left = ruled2 ?? Math.max(0, ...lefts.map((x) => x.left));
+        const attack2 = left > 0 && lefts.some(({ c, left: l }) => l > 0 && !blocked(s, c, target, j));
         const cross = riverBetween(s, j, to);
         const river = cross ? riverName(cross) : "";
         const down = !!cross && bridgeDown(s, cross);
-        const town = enemy ? (() => {
-          try {
-            return townSiege(s, j)?.town ?? r.name;
-          } catch {
-            return r.name;
-          }
-        })() : "";
         const arrive3 = attack2 ? `${left} move${left === 1 ? "" : "s"} left on arrival: you can attack this month` : left > 0 ? `${left} move${left === 1 ? "" : "s"} left on arrival, but the way in from there is barred to this army this month` : "No move left on arrival: the attack waits for next month";
-        const riverWords = river ? `across the ${river.replace(/^the /i, "")}${down ? ", bridges down" : ""}` : "no river";
+        const riverWords = river ? `across the ${river.replace(/^the /i, "")}${down ? ", bridges down" : ""}` : "no river to cross";
         const how = `${riverWords} · ${r.terrain}`;
-        const says = !enemy ? "" : meetsLine || (stops ? `${r.name} is enemy ground: the army closes round ${town} as it arrives, and the siege begins.` : `${r.name} is enemy ground with nothing to hold it: the army takes it on the way.`);
         const first2 = going.slice().sort((a, b) => a.m.get(j).cost - b.m.get(j).cost)[0];
         const road = [];
         for (let at = j; at !== first2.c.reg && at >= 0 && road.length < 32; at = first2.m.get(at)?.prev ?? -1) road.unshift(at);
-        rows.push({ id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy, arrive: arrive3, how, says, road, going: going.map(({ c }) => c.id) });
+        return { id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy: false, arrive: arrive3, how, says: "", road, going: going.map(({ c }) => c.id) };
+      };
+      let rows = [];
+      let ruled = null;
+      try {
+        ruled = approachRule ? approachRule(s, cs, target) : null;
+      } catch {
+        ruled = null;
       }
-      rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || (a.enemy ? 1 : 0) - (b.enemy ? 1 : 0) || a.id - b.id);
-      if (rows.length) return { ok: true, name: target.name, rows: rows.slice(0, 4), none: "" };
+      if (ruled) {
+        rows = ruled.slice(0, 4).map((a) => rowFor(a.region, a.left)).filter((x) => x !== null);
+      } else {
+        for (const j of target.nb) {
+          if (!allied(s, me, s.regions[j].ctrl)) continue;
+          const row2 = rowFor(j);
+          if (row2) rows.push(row2);
+        }
+        rows.sort((a, b) => a.cost - b.cost || (a.river ? 1 : 0) - (b.river ? 1 : 0) || (TERRAIN_DEF[s.regions[b.id].terrain] ?? 1) - (TERRAIN_DEF[s.regions[a.id].terrain] ?? 1) || a.id - b.id);
+        rows = rows.slice(0, 4);
+      }
+      if (rows.length) {
+        const num5 = (n) => Math.round(n).toLocaleString("en-US");
+        const divs = (n) => `${num5(n)} division${Math.round(n) === 1 ? "" : "s"}`;
+        out.from = s.regions[cs[0].reg]?.name ?? "";
+        out.ours = `${cs.length} corps · ${divs(cs.reduce((t, c) => t + c.divs, 0))} · ${num5(cs.reduce((t, c) => t + men(c), 0))} men`;
+        const foe = hostileUnits(s, target, me)[0]?.nat ?? "";
+        let seen2 = null;
+        try {
+          seen2 = foe && armyAtRule ? armyAtRule(s, to, foe) : null;
+        } catch {
+          seen2 = null;
+        }
+        let siege = null;
+        try {
+          siege = townSiege(s, to);
+        } catch {
+          siege = null;
+        }
+        out.foe = foe;
+        out.foeName = siege && siege.by === foe ? `Round ${siege.town}` : seen2?.name ?? "";
+        out.foeLine = !seen2 ? "" : seen2.known === "full" ? `${seen2.corpsCount} corps · ${divs(seen2.divs)} · ${num5(seen2.men)} men` : seen2.line || `${seen2.corpsCount} corps not identified`;
+        return { ...out, ok: true, rows };
+      }
       let best = null;
       for (const j of target.nb) {
         if (!allied(s, me, s.regions[j].ctrl)) continue;
@@ -32395,7 +32412,7 @@
           if (q && q.ok && !q.now && (!best || q.months < best.months)) best = { name: s.regions[j].name, months: q.months };
         }
       }
-      out.none = best ? `An army attacks from the province next door, and nothing beside ${target.name} can be reached this month. The nearest is ${best.name}, ${inMonths2(best.months)}' march: right-click it to set the army marching.`.replace("month' march", "month's march").replace("months' march", "months' march") : `An army attacks from the province next door, and nothing beside ${target.name} can be reached this month.`;
+      out.none = best ? `No ground beside the army round ${target.name} can be reached this month. The nearest is ${best.name}, ${inMonths2(best.months)}' march: right-click it to set off.`.replace("month' march", "month's march") : `No ground beside the army round ${target.name} can be reached this month.`;
       return out;
     } catch {
       return out;
