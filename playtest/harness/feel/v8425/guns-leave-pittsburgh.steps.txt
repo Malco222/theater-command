@@ -1,0 +1,5 @@
+load	out/click/brel1-norelief.save.txt
+select-province	Pittsburgh
+end-month
+check-province	Pittsburgh	holder USA
+select-province	Pittsburgh
