@@ -2169,11 +2169,14 @@ export function wantsOut(g: Game, c: Corps): boolean {
     if (!scope || !leaving || !scope.has(c.reg) || havensOf(g.regions[c.reg]).includes(g.regions[c.reg].name)) return false;
     return !c.supplied || !g.nations[g.regions[c.reg].owner].alive || leaving.when.some((nm) => !!g.byName[nm] && atWar(g, c.nat, g.byName[nm].ctrl));
   }
-  // Beyond Europe, an army on ground it has taken from a country it is still at war with is nobody's guest: it holds
-  // its conquest, and comes off only when cut off or broken. (Japan in China has no ally on the continent to be its
-  // host, and without this its whole army sailed home in September 1939.) Europe keeps the host rule below.
+  // Beyond Europe, an army on ground it has taken from a country it is still at war with, or in the field round one of
+  // that country's towns it besieges, is nobody's guest: it holds its conquest or keeps its siege, and comes off only
+  // when cut off or broken. (Japan in China has no ally on the continent to be its host, and without this its whole
+  // army sailed home in September 1939; reading the province's holder alone, a besieger sailed home while the town
+  // held: ruling 224, b387. Reading the field's alone, a garrison besieged in a town it took would.) Europe keeps the
+  // host rule below.
   const here = g.regions[c.reg];
-  if (beyondEurope(here) && here.ctrl === c.nat && atWar(g, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
+  if (beyondEurope(here) && (here.ctrl === c.nat || fieldCtrl(g, here) === c.nat) && atWar(g, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;
