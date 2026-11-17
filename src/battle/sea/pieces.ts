@@ -64,6 +64,8 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
           name: p.n === 1 ? `${cap(RULES_CLASSES[c].one)}, ${p.f.name}` : `${p.n} ${RULES_CLASSES[c].many}, ${p.f.name}`,
           x, y, face: side === 'att' ? 0 : Math.PI, str: 1, mor: 1, state: 'steady',
           men0: p.n * SEA.classes[c].crew,
+          // The core's fields for the models (from the land thread's merge; the sea thread keeps them up to date as the sim runs).
+          figures0: p.n, figures: p.n, w: 120, d: 220 * p.n, act: 'idle', speed: 0,
           extra: { cls: c, ships0: p.n, ships: p.n, sunk: 0, way: SEA.classes[c].speed * SEA.speeds.cruise, speed: 'cruise', target: -1, fleet: p.f.name },
         };
         if (c === 'cv') u.abilities = [{ key: 'strike', label: 'Carrier strike', ready: 0, windup: SEA.strike.windup, winding: false }];
