@@ -235,6 +235,13 @@ export const RIVER_INTO = {
   Mekong: 'South China Sea', Godavari: 'Bay of Bengal', Cuando: 'Zambezi', Ogowe: 'Gulf of Guinea', Tshuapa: 'Congo',
   Baoule: 'Bani', Semliki: 'Lake Albert', 'Webi Shebeli': 'the Shebeli Swamps',
 };
+/**
+ * Rivers that begin where they leave a lake, where the survey runs their line up the lake's length and on to a
+ * stream above it (the art director, 17 November 2026: a river's name is never written over a lake). The San Juan
+ * leaves Lake Nicaragua at San Carlos, the Semliki leaves Lake Edward at its north end, the Winnipeg leaves the Lake
+ * of the Woods at Kenora (Rat Portage), the Santiago leaves Lake Chapala at Ocotlan.
+ */
+export const RIVER_FROM_LAKE = { 'San Juan': 'Lake Nicaragua', Semliki: 'Lake Edward', Winnipeg: 'Lake of the Woods', Santiago: 'Lake Chapala' };
 
 /** Rivers that run dry for part of the year: drawn as a broken line. */
 export const RIVER_SEASONAL = ['Barwon', 'Gila', 'Fitzroy', 'Ord', 'Victoria', 'Mitchell', 'Desaguadero', 'Atrek', 'Hari Rud', 'Konche', 'Shara Muren', 'Webi Shebeli', 'Atbara', 'Darling', 'Lachlan', 'Limpopo', 'Tarim'];

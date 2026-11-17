@@ -12,9 +12,12 @@
 //    where the river did not run in 1939 (RIVER_FOOT: the Yellow River below Hungtse Lake, where the course handed
 //    over ran on to a mouth dry since 1855) there is no river to cross, and the crossing goes with the reach.
 //  - A course is drawn on dry land: its head and its foot are cut back to the shore of the sea or the lake they
-//    lie in.
+//    lie in. A river that leaves a lake (RIVER_FROM_LAKE) begins on its shore; one that runs into a lake ends where
+//    it first comes to the shore; one that runs into the sea and stops short of it runs on to the coast.
+//  - Two knots of a course under a unit apart are one: the browser draws a curve through them, and a short leg
+//    between long ones makes a hook.
 import { REAL_COURSES, MORE_RIVERS } from '../data/campaign/more-rivers.mjs';
-import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT } from '../data/campaign/detail.mjs';
+import { MORE_RIVER_CUT, MORE_RIVER_ADD, RIVER_FOOT, RIVER_FROM_LAKE } from '../data/campaign/detail.mjs';
 
 const K = Math.cos((50 * Math.PI) / 180) * 40;
 const NEAR = 0.28;
@@ -175,7 +178,8 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     let best = { d: REACH };
     const lake = lakes.find((l) => l.name === name);
     if (lake) { for (const w of [0, ROUND, -ROUND]) { const n = onRing(lake.ring, x + w, y, { d: best.d }); if (n.p) best = { d: n.d, p: [n.p[0] - w, n.p[1]] }; } return best.p ? best : null; }
-    if (!map.seas.zones.some((z) => z.name === name)) return null;
+    // (A sea: one of the chart's sea zones, or a sea the chart does not name, such as the Caspian.)
+    if (!map.seas.zones.some((z) => z.name === name) && !/\b(Sea|Gulf|Bay|Ocean|Coast|Waters|Bight|Sound|Channel|Strait)\b/.test(name)) return null;
     for (const w of [0, ROUND, -ROUND]) for (let i = 0; i < land.length; i++) {
       const [a, b, c, d] = boxes[i], X = x + w;
       if (X < a - best.d || X > b + best.d || y < c - best.d || y > d + best.d) continue;
@@ -183,11 +187,35 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     }
     return best.p ? best : null;
   };
-  const cutBack = [], runOn = [];
+  const cutBack = [], runOn = [], fromLake = [], toLake = [], knots = [];
   for (const r of rivers) {
-    // Into a lake of the chart: no further than where the course first meets it.
+    // Out of a lake of the chart: from where the course last leaves it.
+    const source = lakes.find((l) => l.name === RIVER_FROM_LAKE[r.name]);
+    if (RIVER_FROM_LAKE[r.name] && !source) console.warn('no lake on the chart for', r.name, RIVER_FROM_LAKE[r.name]);
+    if (source) {
+      let last = -1;
+      for (let i = 0; i < r.pts.length - 1; i++) if (inLake(source, r.pts[i]) || inLake(source, [(r.pts[i][0] + r.pts[i + 1][0]) / 2, (r.pts[i][1] + r.pts[i + 1][1]) / 2])) last = i;
+      if (last >= 0) {
+        const from = inLake(source, r.pts[last]) ? r.pts[last] : [(r.pts[last][0] + r.pts[last + 1][0]) / 2, (r.pts[last][1] + r.pts[last + 1][1]) / 2];
+        const head = shore(r.pts[last + 1], from), lost = run(r.pts, 0, last + 1);
+        r.pts = [head, ...r.pts.slice(last + 1)];
+        r.ll = [llOf(head), ...r.ll.slice(last + 1)];
+        fromLake.push({ name: r.name, lake: source.name, by: Math.round(lost) });
+      }
+    }
+    // Into a lake of the chart: no further than where the course first meets it, or first comes within a unit of
+    // its shore (and then it ends on the shore).
     const lake = lakes.find((l) => l.name === r.into);
-    if (lake) { const at = r.pts.findIndex((p, i) => i > 0 && inLake(lake, p)); if (at > 0 && at < r.pts.length - 1) { r.pts = r.pts.slice(0, at + 1); r.ll = r.ll.slice(0, at + 1); } }
+    if (lake) {
+      const near = (p) => [0, ROUND, -ROUND].some((w) => p[0] + w >= lake.box[0] - 1 && p[0] + w <= lake.box[1] + 1 && p[1] >= lake.box[2] - 1 && p[1] <= lake.box[3] + 1 && nearestOn([...lake.ring, lake.ring[0]], p[0] + w, p[1]).d < 1);
+      const at = r.pts.findIndex((p, i) => i > 0 && (inLake(lake, p) || near(p)));
+      if (at > 0 && at < r.pts.length - 1) {
+        const lost = run(r.pts, at, r.pts.length - 1);
+        r.pts = r.pts.slice(0, at + 1); r.ll = r.ll.slice(0, at + 1);
+        if (!inLake(lake, r.pts[at])) { const n = onRing(lake.ring, r.pts[at][0], r.pts[at][1], { d: Infinity }); if (n.p) { r.pts[at] = [r2(n.p[0]), r2(n.p[1])]; r.ll[at] = llOf(r.pts[at]); } }
+        if (lost > 3) toLake.push({ name: r.name, lake: lake.name, by: Math.round(lost) });
+      }
+    }
     let a = 0, b = r.pts.length - 1;
     while (b > 0 && !dry(r.pts[b])) b--;
     while (a < b && !dry(r.pts[a])) a++;
@@ -203,6 +231,40 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     const to = waterOf(r.into, r.pts[r.pts.length - 1]);
     if (to && to.d > 0.5) { const p = [r2(to.p[0]), r2(to.p[1])]; r.pts.push(p); r.ll.push(llOf(p)); runOn.push({ name: r.name, by: Math.round(to.d) }); }
   }
+  // Two knots under a unit apart: the one between is dropped (the head and the foot stay).
+  for (const r of rivers) {
+    const keep = [0], n = r.pts.length - 1, gap = (i, j) => Math.hypot(r.pts[i][0] - r.pts[j][0], r.pts[i][1] - r.pts[j][1]);
+    for (let i = 1; i < n; i++) if (gap(i, keep[keep.length - 1]) >= 1) keep.push(i);
+    while (keep.length > 1 && gap(n, keep[keep.length - 1]) < 1) keep.pop();
+    keep.push(n);
+    let dropped = r.pts.length - keep.length;
+    r.pts = keep.map((i) => r.pts[i]); r.ll = keep.map((i) => r.ll[i]);
+    // (And where the curve the browser draws through the knots would stray from a leg by more than a unit and more
+    // than the leg is long, a hook, one end of the leg is dropped: the one that lies nearer the line its neighbours
+    // make.)
+    for (let guard = 0; guard < 50; guard++) {
+      const P = r.pts, n2 = P.length;
+      let hook = -1;
+      for (let i = 0; i + 1 < n2 && hook < 0; i++) {
+        const a = P[Math.max(i - 1, 0)], b = P[i], c = P[i + 1], e = P[Math.min(i + 2, n2 - 1)];
+        const c1 = [b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6], c2 = [c[0] - (e[0] - b[0]) / 6, c[1] - (e[1] - b[1]) / 6];
+        const leg = Math.hypot(c[0] - b[0], c[1] - b[1]);
+        let worst = 0;
+        for (let j = 0; j <= 40; j++) {
+          const t = j / 40, u = 1 - t;
+          const x = u ** 3 * b[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t ** 3 * c[0], y = u ** 3 * b[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t ** 3 * c[1];
+          worst = Math.max(worst, nearestOn([b, c], x, y).d);
+        }
+        if (worst > 1 && worst > leg) hook = i;
+      }
+      if (hook < 0 || n2 <= 3) break;
+      const off = (k) => (k <= 0 || k >= n2 - 1 ? Infinity : nearestOn([P[k - 1], P[k + 1]], P[k][0], P[k][1]).d);
+      const k = off(hook) <= off(hook + 1) ? hook : hook + 1;
+      if (!Number.isFinite(off(k))) break;
+      r.pts = P.filter((_, i) => i !== k); r.ll = r.ll.filter((_, i) => i !== k); dropped++;
+    }
+    if (dropped) knots.push({ name: r.name, by: dropped });
+  }
   // A crossing stands on its river as drawn. Where the course was cut back from under it: a crossing left out on
   // open water goes to the river's mouth; one in a narrow arm of the sea or a lake between its two provinces (the
   // St Lawrence below Montreal) stays where the road meets the water.
@@ -216,5 +278,5 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); } else adrift.push(row);
   }
   for (const r of rivers) { delete r.box; delete r.real; }
-  return { rivers, fresh, moved, off, gone, cutBack, runOn, adrift, toMouth };
+  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, adrift, toMouth };
 }

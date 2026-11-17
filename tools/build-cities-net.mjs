@@ -102,6 +102,9 @@ fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.met
   console.log(`rivers of the survey: ${more.rivers.length} in all (${cls('great')} great, ${cls('middle')} middle, ${cls('small')} streams), ${crossings.length} crossings: ${carried - more.gone.length} carried on (${more.moved} set on the real course), ${more.fresh.length} new`);
   const pts = more.rivers.reduce((t, r) => t + r.pts.length, 0);
   console.log(`  ${pts} points in the courses; ${more.cutBack.length} courses cut back to the shore${more.cutBack.length ? ` (the furthest: ${[...more.cutBack].sort((p, q) => q.by - p.by).slice(0, 8).map((c) => `${c.name} ${c.by}`).join(', ')})` : ''}`);
+  if (more.fromLake.length) console.log(`  ${more.fromLake.length} courses begin where they leave their lake: ${more.fromLake.map((c) => `${c.name} from ${c.lake} (${c.by} cut)`).join(', ')}`);
+  if (more.toLake.length) console.log(`  ${more.toLake.length} courses end where they first come to their lake's shore: ${more.toLake.map((c) => `${c.name} at ${c.lake} (${c.by} cut)`).join(', ')}`);
+  if (more.knots.length) console.log(`  ${more.knots.reduce((t, c) => t + c.by, 0)} knots under a unit from the one before dropped, on ${more.knots.length} courses`);
   if (more.runOn.length) console.log(`  ${more.runOn.length} courses run on to the shore the survey ends them short of: ${[...more.runOn].sort((p, q) => q.by - p.by).map((c) => `${c.name} ${c.by}`).join(', ')}`);
   if (more.gone.length) console.log(`crossings handed over on a reach where the river did not run in 1939, struck (${more.gone.length}): ${more.gone.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far} from its course)`).join(', ')}`);
   if (more.toMouth.length) console.log(`crossings moved from open water to their river's mouth (${more.toMouth.length}): ${more.toMouth.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
