@@ -4,7 +4,8 @@ snapshot	start
 # --- A. Brian's five finds of 2026-11-17. Words as of Version 84.1, where each is answered.
 # A1. An airfield never shows or names aircraft unless an air group stands there.
 point-at	airfield Norfolk	says-why
-click-mark	airfield Norfolk	says No air group
+# since Version 84.2 I Bomber Command is based at Norfolk, so the airfield no longer says "No air group"
+click-mark	airfield Norfolk	does
 # A2. The carrier's planes can be sent ashore and back (a new order, ruling 175).
 select-unit	Atlantic Fleet carrier fighters	does
 order-province	Norfolk	says flies ashore
