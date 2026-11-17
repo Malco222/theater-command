@@ -1,5 +1,6 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Campaign/TheaterStillMesh.h"
 #include "ImageUtils.h"
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
@@ -115,14 +116,25 @@ ACampaignMapActor::ACampaignMapActor()
 		Mesh->SetCastShadow(bShadows);
 		return Mesh;
 	};
-	TerrainMesh = MakeMesh(TEXT("Terrain"), true);
-	SeaMesh = MakeMesh(TEXT("Sea"), false);
-	BorderMesh = MakeMesh(TEXT("Borders"), false);
+	// (Speed: those made once and then left alone are still meshes, drawn from Unreal's kept drawing orders. A still mesh
+	// must never be given SetMeshSectionVisible or UpdateMeshSection: see TheaterStillMesh.h.)
+	auto MakeStill = [this](const TCHAR* Name, bool bShadows)
+	{
+		UProceduralMeshComponent* Mesh = CreateDefaultSubobject<UTheaterStillMesh>(Name);
+		Mesh->SetupAttachment(Root);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCastShadow(bShadows);
+		return Mesh;
+	};
+	TerrainMesh = MakeStill(TEXT("Terrain"), true);
+	SeaMesh = MakeStill(TEXT("Sea"), false);
+	BorderMesh = MakeStill(TEXT("Borders"), false);
 	RiverMesh = MakeMesh(TEXT("Rivers"), false);
-	RailMesh = MakeMesh(TEXT("Railways"), false);
-	WorksMesh = MakeMesh(TEXT("Works"), false);
-	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
-	RoomMesh = MakeMesh(TEXT("WarRoom"), false);
+	RailMesh = MakeStill(TEXT("Railways"), false);
+	WorksMesh = MakeStill(TEXT("Works"), false);
+	BuildingsMesh = MakeStill(TEXT("Buildings"), false);
+	RoomMesh = MakeStill(TEXT("WarRoom"), false);
 	CloudMesh = MakeMesh(TEXT("Clouds"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	FlakSmokeMesh = MakeMesh(TEXT("FlakSmoke"), false);
@@ -946,7 +958,7 @@ void ACampaignMapActor::ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn)
 		{
 			return;
 		}
-		WrecksMesh = NewObject<UProceduralMeshComponent>(this);
+		WrecksMesh = UTheaterStillMesh::Make(this, TEXT("Wrecks"));
 		WrecksMesh->SetupAttachment(Root);
 		WrecksMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		WrecksMesh->RegisterComponent();
@@ -2247,7 +2259,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 	UProceduralMeshComponent* Mesh = SpareLandMeshes.Num() > 0 ? SpareLandMeshes.Pop() : nullptr;
 	if (!Mesh)
 	{
-		Mesh = NewObject<UProceduralMeshComponent>(this);
+		Mesh = UTheaterStillMesh::Make(this, TEXT("LandTile"));
 		Mesh->SetupAttachment(Root);
 		Mesh->bUseAsyncCooking = false;
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -2565,7 +2577,7 @@ void ACampaignMapActor::BuildWorld()
 	// Its sea: one flat sheet at the level of the map's own, with the map's own box left out of it.
 	if (!WorldSeaMesh)
 	{
-		WorldSeaMesh = NewObject<UProceduralMeshComponent>(this);
+		WorldSeaMesh = UTheaterStillMesh::Make(this, TEXT("WorldSea"));
 		WorldSeaMesh->SetupAttachment(Root);
 		WorldSeaMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		WorldSeaMesh->SetCastShadow(false);
@@ -2609,7 +2621,7 @@ void ACampaignMapActor::BuildWorld()
 		// (the same sea again, to stand a turn of the world to whichever side the eye is on)
 		if (!WorldSeaTwin)
 		{
-			WorldSeaTwin = NewObject<UProceduralMeshComponent>(this);
+			WorldSeaTwin = UTheaterStillMesh::Make(this, TEXT("WorldSeaTwin"));
 			WorldSeaTwin->SetupAttachment(Root);
 			WorldSeaTwin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			WorldSeaTwin->SetCastShadow(false);
@@ -2953,7 +2965,7 @@ void ACampaignMapActor::StandFineSheet(FFineSheet& Sheet)
 	// Its own water, a hair above the coarse sheet's: the shore and the shallows drawn as finely as its land.
 	if (!Sheet.Sea)
 	{
-		Sheet.Sea = NewObject<UProceduralMeshComponent>(this);
+		Sheet.Sea = UTheaterStillMesh::Make(this, TEXT("SheetSea"));
 		Sheet.Sea->SetupAttachment(Root);
 		Sheet.Sea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Sheet.Sea->SetCastShadow(false);
@@ -5663,7 +5675,7 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	ShownCivic = Civic;
 	if (!CivicMesh)
 	{
-		CivicMesh = NewObject<UProceduralMeshComponent>(this);
+		CivicMesh = UTheaterStillMesh::Make(this, TEXT("Civic"));
 		CivicMesh->SetupAttachment(Root);
 		CivicMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		CivicMesh->RegisterComponent();
@@ -5853,7 +5865,7 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 	ShownWorksLeft = Left;
 	if (!WorksLeftMesh)
 	{
-		WorksLeftMesh = NewObject<UProceduralMeshComponent>(this);
+		WorksLeftMesh = UTheaterStillMesh::Make(this, TEXT("WorksLeft"));
 		WorksLeftMesh->SetupAttachment(Root);
 		WorksLeftMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		WorksLeftMesh->RegisterComponent();
@@ -5923,7 +5935,7 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 	PrizeFires.Reset();
 	if (!PrizesMesh)
 	{
-		PrizesMesh = NewObject<UProceduralMeshComponent>(this);
+		PrizesMesh = UTheaterStillMesh::Make(this, TEXT("Prizes"));
 		PrizesMesh->SetupAttachment(Root);
 		PrizesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PrizesMesh->RegisterComponent();
@@ -6224,7 +6236,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	ShownAirSigns = Signature;
 	if (!AirSignMesh)
 	{
-		AirSignMesh = NewObject<UProceduralMeshComponent>(this);
+		AirSignMesh = UTheaterStillMesh::Make(this, TEXT("AirSigns"));
 		AirSignMesh->SetupAttachment(Root);
 		AirSignMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		AirSignMesh->RegisterComponent();
@@ -6360,7 +6372,7 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 					}
 				}
 			}
-			UProceduralMeshComponent* Made = NewObject<UProceduralMeshComponent>(this);
+			UProceduralMeshComponent* Made = UTheaterStillMesh::Make(this, TEXT("ParkedPlanes"));
 			Made->SetupAttachment(Root);
 			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Made->RegisterComponent();
@@ -6390,7 +6402,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 	ShownScars = Scars;
 	if (!ScarsMesh)
 	{
-		ScarsMesh = NewObject<UProceduralMeshComponent>(this);
+		ScarsMesh = UTheaterStillMesh::Make(this, TEXT("Scars"));
 		ScarsMesh->SetupAttachment(Root);
 		ScarsMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		ScarsMesh->RegisterComponent();
@@ -6712,7 +6724,7 @@ void ACampaignMapActor::BuildTowns()
 	{
 		while (Pool.Num() <= Index)
 		{
-			UProceduralMeshComponent* Made = NewObject<UProceduralMeshComponent>(this);
+			UProceduralMeshComponent* Made = UTheaterStillMesh::Make(this, bFar ? TEXT("TownSquareFar") : TEXT("TownSquare"));
 			Made->SetupAttachment(Root);
 			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			if (bFar || TownShadowsCast == 0)
@@ -7094,7 +7106,7 @@ void ACampaignMapActor::BuildSheetMargin()
 	}
 	if (!MarginMesh)
 	{
-		MarginMesh = NewObject<UProceduralMeshComponent>(this);
+		MarginMesh = UTheaterStillMesh::Make(this, TEXT("Margin"));
 		MarginMesh->SetupAttachment(Root);
 		MarginMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		MarginMesh->RegisterComponent();
@@ -7930,7 +7942,7 @@ void ACampaignMapActor::BuildTrees(const TSet<FIntPoint>* Only)
 			{
 				continue;
 			}
-			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+			UProceduralMeshComponent* Mesh = UTheaterStillMesh::Make(this, TEXT("TreeSquare"));
 			Mesh->SetupAttachment(Root);
 			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Mesh->SetCastShadow(false); // thousands of small shadows cost more than they show

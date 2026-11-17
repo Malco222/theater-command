@@ -2,6 +2,7 @@
 
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/TheaterStillMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -678,7 +679,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 				}
 			}
 		}
-		Cloth = NewObject<UProceduralMeshComponent>(this);
+		Cloth = UTheaterStillMesh::Make(this, TEXT("Cloth"));
 		Cloth->SetupAttachment(Standard);
 		Cloth->SetRelativeLocation(-StandardFoot); // (its points are written in the piece's own space)
 		Cloth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -741,7 +742,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 
 	// The mesh is done: hand it over.
-	Body = NewObject<UProceduralMeshComponent>(this);
+	Body = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), TEXT("Body"))); // (not still: its wake's sections are shown and hidden as it marches)
 	Body->SetupAttachment(Root);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->RegisterComponent();
@@ -766,7 +767,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 	if (Turf.Vertices.Num() > 0 && !bGlimpsed)
 	{
-		Flock = NewObject<UProceduralMeshComponent>(this);
+		Flock = UTheaterStillMesh::Make(this, TEXT("Flock"));
 		Flock->SetupAttachment(Root);
 		Flock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Flock->RegisterComponent();
@@ -777,7 +778,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 	if (DarkEarth.Vertices.Num() > 0 && !bGlimpsed)
 	{
-		FarEarth = NewObject<UProceduralMeshComponent>(this);
+		FarEarth = UTheaterStillMesh::Make(this, TEXT("FarEarth"));
 		FarEarth->SetupAttachment(Root);
 		FarEarth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		FarEarth->RegisterComponent();
@@ -786,7 +787,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		FarEarth->SetCastShadow(false);
 		FarEarth->SetVisibility(!bFlockNear);
 	}
-	Mast = NewObject<UProceduralMeshComponent>(this);
+	Mast = UTheaterStillMesh::Make(this, TEXT("Mast"));
 	Mast->SetupAttachment(Standard);
 	Mast->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mast->RegisterComponent();
