@@ -83,7 +83,13 @@ describe('twelve wars with no plan', () => {
   });
 
   it('do not all end the same way', () => {
-    expect(spread((w) => w.ends)).toBeGreaterThanOrEqual(5);
+    // At least four different endings, and no one ending in more than seven of the twelve wars. Since Version 84.2.5
+    // (guns never go forward alone) these twelve seeds give four endings where they gave five; over 24 wars the count
+    // is 8 where it was 7, so the variety stands and the bar of five sat on the edge of chance. The second bound
+    // catches what a count alone misses: wars drifting toward one ending.
+    expect(spread((w) => w.ends)).toBeGreaterThanOrEqual(4);
+    const most = Math.max(...[...new Set(wars.map((w) => w.ends))].map((e) => count((w) => w.ends === e)));
+    expect(most).toBeLessThanOrEqual(7);
     // Moscow and Berlin are both held by their owners at the end in some wars and not in others.
     const moscow = count((w) => w.g.byName['Moscow'].ctrl === 'SOV'), berlin = count((w) => w.g.byName['Berlin'].ctrl === 'GER');
     expect(moscow).toBeGreaterThan(0);
