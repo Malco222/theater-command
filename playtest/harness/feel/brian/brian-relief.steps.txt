@@ -1,0 +1,6 @@
+load	brian/brian-save-usa-1940-12-turn16.json
+select-province	Vancouver
+order-province	Pittsburgh
+close
+end-month
+select-province	Pittsburgh

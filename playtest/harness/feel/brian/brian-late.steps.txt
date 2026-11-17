@@ -1,0 +1,6 @@
+load	brian/brian-save-usa-1940-12-turn16.json
+end-month
+select-province	Vancouver
+order-province	Washington
+close
+end-month

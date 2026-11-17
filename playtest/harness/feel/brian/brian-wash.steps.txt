@@ -1,0 +1,7 @@
+load	out/click/bpitt.save.txt
+end-month
+select-province	Washington
+end-month
+select-province	Washington
+end-month
+select-province	Washington

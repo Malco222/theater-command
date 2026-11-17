@@ -1,0 +1,3 @@
+load	out/click/blate.save.txt
+select-province	Ohio Valley
+order-province	Pittsburgh

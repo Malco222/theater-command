@@ -1,0 +1,10 @@
+load	brian/brian-save-usa-1940-12-turn16.json
+select-province	Buffalo
+select-province	Pittsburgh
+end-month
+select-province	Pittsburgh
+select-province	Buffalo
+end-month
+select-province	Pittsburgh
+end-month
+select-province	Pittsburgh
