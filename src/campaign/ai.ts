@@ -409,6 +409,8 @@ function overseas(g: Game, nat: string): void {
       const enemies = new Set<string>();
       for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
       for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
+      // An army overseas brings its guns up as the main army does: the guns go where the works are (the grand campaign).
+      if (enemies.size) gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null);
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
@@ -1450,7 +1452,16 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
       const v = f * 10 - d;
       if (v > bv) { bv = v; best = r; }
     }
-    if (best) walkToward(g, c, best);
+    if (!best) continue;
+    // An army overseas has one road, and the sector at the end of it stands full. Its weakest corps on foot, one the
+    // road would not carry into the attack in any case, steps back to where the guns stood and they take its place.
+    if (scope && here.nb.includes(best.id) && friendlyUnits(g, best, nat).length >= STACK) {
+      const out = best.units
+        .filter((u) => u.nat === nat && !u.dead && u.kind === 'inf' && !u.hold && !u.town && u.ap > 0 && u.joint === undefined && u.leave === undefined && !massed.has(u.id))
+        .sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
+      if (out) moveCorps(g, out, here);
+    }
+    walkToward(g, c, best);
   }
 }
 

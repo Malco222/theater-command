@@ -2548,6 +2548,8 @@ function expeditions(g: Game, nat: string): void {
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (row[1] !== nat || g.turn < row[0]) return;
     const o = row[6] ?? {};
+    // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
+    if (o.open && g.flags.open !== 1) return;
     if (g.flags[`sent:${i}`]) {
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];

@@ -5,7 +5,7 @@ import {
   DEFENCE, DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar, digsLate, endPhase,
   fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksOf, worksShare,
 } from '../src/campaign/game';
-import { theatrePhases } from '../src/campaign/ai';
+import { runAI, theatrePhases } from '../src/campaign/ai';
 import { canRaise, orderCorps } from '../src/campaign/economy';
 import { closedTo, convoyWar, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -565,5 +565,73 @@ describe('the Libya convoys', () => {
     const g = createGame(1, null);
     convoyWar(g, 'ITA');
     expect(g.convoys.libya).toBeUndefined();
+  });
+});
+
+describe("the Eighth Army's guns (the design director's ruling 171)", () => {
+  const guns = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'UK' && c.kind === 'art' && !c.dead && c.name.startsWith('Royal Artillery'));
+  const MAY_42 = 33, SEPTEMBER_42 = 37;
+
+  it('two artillery corps arrive in Egypt in the grand campaign, in May and September 1942, for a computer and for a player', () => {
+    for (const human of [null, 'UK']) {
+      const g = startOpen(createGame(1, human));
+      declareWar(g, 'ITA', 'UK');
+      g.turn = MAY_42 - 1;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(0);
+      g.turn = MAY_42;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(1);
+      g.turn = SEPTEMBER_42 - 1;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(1);
+      g.turn = SEPTEMBER_42;
+      startPhase(g, 'UK');
+      expect(guns(g)).toHaveLength(2);
+      // They land in Egypt, at Alexandria or the nearest ground with room, each two divisions of guns.
+      for (const c of guns(g)) {
+        expect(c.divs).toBe(2);
+        expect(g.regions[c.reg].ctrl).toBe('UK');
+        expect(g.regions[c.reg].overseas).toBeTruthy();
+      }
+    }
+  });
+
+  it('wait for the war with Italy, and are no part of the campaigns of history', () => {
+    const peace = startOpen(createGame(1, null));
+    peace.turn = MAY_42;
+    startPhase(peace, 'UK');
+    expect(guns(peace)).toHaveLength(0);
+    const history = createGame(1, null);
+    declareWar(history, 'ITA', 'UK');
+    for (const t of [MAY_42, SEPTEMBER_42]) { history.turn = t; startPhase(history, 'UK'); }
+    expect(guns(history)).toHaveLength(0);
+  });
+
+  it('the desert staff brings its guns up to the works, and a full sector makes room for them', () => {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 29;
+    const front = g.byName['Mersa Matruh'], rear = g.byName['El Alamein'], target = g.byName['Sidi Barrani'];
+    for (const r of [front, rear, target]) for (const c of [...r.units]) removeCorps(g, c);
+    capture(g, target, 'ITA');
+    capture(g, front, 'UK');
+    capture(g, rear, 'UK');
+    // A line three corps cannot break: Italian infantry in finished works with armour beside it.
+    for (const [name, kind] of [['Camp A', 'inf'], ['Camp B', 'inf'], ['Camp C', 'inf'], ['Lorried', 'mot'], ['Armour', 'arm']] as const) {
+      const c = addCorps(g, 'ITA', name, kind, 3, 'Sidi Barrani', {});
+      c.dug = true;
+      c.dugFor = 12;
+    }
+    // The sector opposite stands full, and the guns are a march behind it.
+    const tanks = [addCorps(g, 'UK', 'Tanks A', 'arm', 2, 'Mersa Matruh', {}), addCorps(g, 'UK', 'Tanks B', 'arm', 2, 'Mersa Matruh', {})];
+    const foot = [addCorps(g, 'UK', 'Foot A', 'inf', 3, 'Mersa Matruh', { xp: 0.5 }), addCorps(g, 'UK', 'Foot B', 'inf', 3, 'Mersa Matruh', { xp: 0.3 }), addCorps(g, 'UK', 'Foot C', 'inf', 2, 'Mersa Matruh', {})];
+    const gun = addCorps(g, 'UK', 'Royal Artillery, Eighth Army', 'art', 2, 'El Alamein', {});
+    computeSupply(g);
+    runAI(g, 'UK');
+    // The guns stand in the sector now, and the weakest infantry corps has stepped back to where they stood.
+    expect(gun.reg).toBe(front.id);
+    expect(foot[2].reg).toBe(rear.id);
+    for (const c of [...tanks, foot[0], foot[1]]) expect(c.reg).toBe(front.id);
   });
 });
