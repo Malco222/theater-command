@@ -326,6 +326,141 @@
    "licence": "CC BY 3.0",
    "seconds": 94,
    "mb": 1.3
+  },
+  {
+   "id": "fire_campfire",
+   "for": "fire",
+   "title": "File:Campfire sound ambience.ogg",
+   "licence": "CC BY 3.0",
+   "seconds": 60,
+   "mb": 1,
+   "note": "A campfire burning: under a burning tank or a burning ship (fire_loop). Round three, for the battle pack."
+  },
+  {
+   "id": "fire_wood_crackle",
+   "for": "fire",
+   "title": "File:Bones breaking wood fire ice crackling.ogg",
+   "licence": "Public domain",
+   "seconds": 74,
+   "mb": 2,
+   "note": "Wood crackling in a fire: the crackle over a burning wreck. Round three, for the battle pack."
+  },
+  {
+   "id": "fire_forge_wws",
+   "for": "fire",
+   "title": "File:WWS Fireoftheforge.ogg",
+   "licence": "CC BY 4.0",
+   "seconds": 18,
+   "mb": 0,
+   "note": "A forge fire roaring: the roar of a big fire. Round three, for the battle pack."
+  },
+  {
+   "id": "footstep_gravel",
+   "for": "footsteps",
+   "title": "File:Footstep on Gravel (Gravity Sound).mp3",
+   "licence": "CC BY 4.0",
+   "seconds": 1,
+   "mb": 0,
+   "note": "One footstep on gravel. Round three, for the battle pack."
+  },
+  {
+   "id": "thud_dull",
+   "for": "body fall",
+   "title": "File:Dull thud.ogg",
+   "licence": "Public domain",
+   "seconds": 0,
+   "mb": 0,
+   "note": "A dull thud: a body or a knee on the ground. Round three, for the battle pack."
+  },
+  {
+   "id": "workers_marching_01",
+   "for": "march",
+   "title": "File:Workers marching - 01.ogv",
+   "licence": "CC0",
+   "seconds": 16,
+   "mb": 18,
+   "note": "A crowd on foot marching: feet on a road. Round three, for the battle pack."
+  },
+  {
+   "id": "workers_marching_02",
+   "for": "march",
+   "title": "File:Workers marching - 02.ogv",
+   "licence": "CC0",
+   "seconds": 12,
+   "mb": 13,
+   "note": "A crowd on foot marching: feet on a road. Round three, for the battle pack."
+  },
+  {
+   "id": "horses_six_galloping",
+   "for": "cavalry",
+   "title": "File:Six Horses Galloping By.ogg",
+   "licence": "CC0",
+   "seconds": 25,
+   "mb": 0,
+   "note": "Six horses galloping by: cavalry. Round three, for the battle pack."
+  },
+  {
+   "id": "horse_sfx",
+   "for": "cavalry",
+   "title": "File:Horse sound effect.wav",
+   "licence": "CC0",
+   "seconds": 189,
+   "mb": 33,
+   "note": "A horse: hooves and snorts. Round three, for the battle pack."
+  },
+  {
+   "id": "ship_5inch_torpedo",
+   "for": "ship guns",
+   "title": "File:Torpedo and 5\" Gun Exercise aboard USS Curtis Wilbur (DDG 54).webm",
+   "licence": "CC BY 3.0",
+   "seconds": 30,
+   "mb": 10,
+   "note": "A destroyer firing its 5-inch gun and a torpedo: the sea battles. Round three, for the battle pack."
+  },
+  {
+   "id": "ship_horn_albatros",
+   "for": "ship horn",
+   "title": "File:Cruise ship Albatros ship horn.ogg",
+   "licence": "CC0",
+   "seconds": 29,
+   "mb": 0,
+   "note": "A big ship's horn. Round three, for the battle pack."
+  },
+  {
+   "id": "fog_signal_bremerhaven",
+   "for": "ship horn",
+   "title": "File:Fog signal Bremerhaven.ogg",
+   "licence": "CC0",
+   "seconds": 128,
+   "mb": 1,
+   "note": "A harbour fog signal: a deep horn. Round three, for the battle pack."
+  },
+  {
+   "id": "bugle_assembly",
+   "for": "bugle",
+   "title": "File:Assembly bugle call.ogg",
+   "licence": "Public domain",
+   "seconds": 8,
+   "mb": 0,
+   "note": "A US Army bugle call (Assembly). Round three, for the battle pack."
+  },
+  {
+   "id": "bugle_recall",
+   "for": "bugle",
+   "title": "File:Recall bugle call.ogg",
+   "licence": "Public domain",
+   "seconds": 8,
+   "mb": 0,
+   "note": "A US Army bugle call (Recall): the retreat. Round three, for the battle pack."
+  },
+  {
+   "id": "whistle_referee",
+   "for": "whistle",
+   "title": "File:218318 splicesound referee-whistle-blow-gymnasium.wav",
+   "licence": "CC0",
+   "seconds": 3,
+   "mb": 0,
+   "note": "A whistle blown: an officer's whistle to go over. Round three, for the battle pack."
   }
  ],
  "searches": [
