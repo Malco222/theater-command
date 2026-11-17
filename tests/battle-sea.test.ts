@@ -124,7 +124,7 @@ describe('the orders of the first slice', () => {
     const cv = piece(sim, 'att', 'cv'), foe = piece(sim, 'def', 'bb');
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(true);
     const off = events(sim).find((e) => e.what === 'ability')!;
-    expect(off.text).toMatch(/strike of 24 bombers is flying off/);
+    expect(off.text).toBe('Carrier, Home Fleet flies off a strike of 24 bombers at Battleship, Battle Fleet.');
     // Not ready again until its aircraft are back.
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(false);
     const str0 = foe.str;
@@ -171,7 +171,9 @@ describe('the orders of the first slice', () => {
     const [lo, hi] = diceRange(1.3);
     expect(r.R).toBeGreaterThanOrEqual(Math.min(lo, 1));
     expect(r.R).toBeLessThanOrEqual(hi);
-    expect(r.lines.some((l) => /left to the admirals/.test(l))).toBe(true);
+    expect(r.lines).toContain('The staff settled the rest of the action in the North Sea from where it stood: what you had won stays won.');
+    // The player never reads "dice" (log b348).
+    expect(r.lines.join(' ')).not.toMatch(/dice/i);
     // Nothing is taken after the end.
     expect(sim.command({ do: 'hold', units: [piece(sim, 'att', 'bb').id] }, 'att')).toBe(false);
   });

@@ -194,7 +194,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
         return true;
       }
       case 'sea:dice': {
-        // One press hands the rest back to the dice, at the ratio then standing (ruling 217).
+        // One press hands the rest back to the dice, at the ratio then standing (ruling 217): on screen, HAND IT TO THE STAFF (log b348).
         this.finish(this.leader(), 'time', true);
         return true;
       }
@@ -214,7 +214,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     ab.winding = true;
     ab.ready = SEA.strike.every;
     this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight, from: cv.extra.fleet, count });
-    this.say({ what: 'ability', unit: cv.id, side: cv.side, text: `${cv.name}: a strike of ${count ? `${count} bombers` : 'its aircraft'} is flying off for the ${foe.name}.`, extra: { key: 'strike', target: foe.id, count } });
+    this.say({ what: 'ability', unit: cv.id, side: cv.side, text: `${cv.name} flies off a strike of ${count ? `${count} bombers` : 'its aircraft'} at ${foe.name}.`, extra: { key: 'strike', target: foe.id, count } });
     return true;
   }
 
@@ -423,12 +423,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
-      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
       for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - SEA.nerve.near);
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
-      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} of ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
     }
     if (u.extra.ships <= 0) {
       // A piece whose last ship went out of the fight burning has left the field; one whose last ship sank is gone.
@@ -450,7 +450,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!at) continue;
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `The ${s.from}'s strike${s.count ? ` of ${s.count} bombers` : ''} finds the ${at.name}.`, extra: { count: s.count } });
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.from}'s strike${s.count ? ` of ${s.count} bombers` : ''} finds ${at.name}.`, extra: { count: s.count } });
     }
   }
 
@@ -467,7 +467,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const weight = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side);
       this.splash(at, weight, side);
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + weight;
-      this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack the ${at.name}.` });
+      this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${at.name}.` });
     }
   }
 
@@ -544,7 +544,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       `${this.adj(winner)} ships hold the ${this.ticket.place.zoneName}.`,
       `${this.ticket.att.adj} losses: ${shipWords(sunkOf('att'))} sunk. ${this.ticket.def.adj} losses: ${shipWords(sunkOf('def'))} sunk.`,
     ];
-    if (toDice) lines.push('The rest of the action was left to the admirals.');
+    // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's words.
+    if (toDice) lines.push(`The staff settled the rest of the action in the ${this.ticket.place.zoneName} from where it stood: what you had won stays won.`);
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...(toDice ? { toDice } : {}) };
     this.over = {
       winner, how, seconds: this.t, lost, men: crews, R, level: seaLevel(R), lines, forces,
