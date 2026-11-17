@@ -3,6 +3,11 @@ export const DEG = Math.PI / 180;
 export const TAU = Math.PI * 2;
 
 export const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+/**
+ * A share to a tenth of a per cent, as the bombing and shelling lines give it: "0.4%", and under 0.05% "less than
+ * 0.1%", never "0.0%" (the UI director, 17 November 2026).
+ */
+export const tenthPct = (x: number): string => (x * 100 < 0.05 ? 'less than 0.1%' : `${(x * 100).toFixed(1)}%`);
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** Wraps an angle into (-PI, PI]. */

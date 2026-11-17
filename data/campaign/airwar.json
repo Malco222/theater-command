@@ -9,16 +9,10 @@
     "words": [[500, "Landing ground"], [1000, "Airfield"], [2000, "Air base"], [99999, "Great air base"]]
   },
   "groups": {
-    "_note": "most is the largest group a fleet is split into. names is how each nation numbers its groups of each kind: {n} is the number and {nth} the ordinal. A command small enough to be one group keeps its own name.",
+    "_note": "most is the largest group a fleet is split into. A command small enough to be one group keeps its own name. Every other group takes, once, the name of the rung of its country's ladder nearest its full strength (ruling 220, air-names.json); names._default is the plain form where no rung is near or the country has no ladder: {n} is the number and {nth} the ordinal.",
     "most": 250,
     "names": {
-      "_default": { "ftr": "{nth} Fighter Group", "bmr": "{nth} Bomber Group" },
-      "GER": { "ftr": "Jagdgeschwader {n}", "bmr": "Kampfgeschwader {n}" },
-      "UK": { "ftr": "No. {n} Fighter Wing", "bmr": "No. {n} Bomber Group" },
-      "FRA": { "ftr": "Groupe de Chasse {n}", "bmr": "Groupe de Bombardement {n}" },
-      "ITA": { "ftr": "Stormo Caccia {n}", "bmr": "Stormo Bombardieri {n}" },
-      "SOV": { "ftr": "{nth} Fighter Division", "bmr": "{nth} Bomber Division" },
-      "USA": { "ftr": "{nth} Fighter Group", "bmr": "{nth} Bomb Group" }
+      "_default": { "ftr": "{nth} Fighter Group", "bmr": "{nth} Bomber Group" }
     }
   },
   "raids": {

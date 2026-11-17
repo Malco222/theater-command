@@ -41,21 +41,21 @@
   "ore": {"to": "GER", "source": "Norrbotten", "share": 0.08, "iceMonths": [12, 1, 2, 3, 4], "winterPort": "Narvik", "summerZones": ["bothnia", "baltic"]},
   "fleets": [
     {"nat": "UK", "name": "Home Fleet", "base": "Highlands", "port": "Scapa Flow", "home": "nsea", "zone": "nsea", "duty": "patrol", "admiral": "Charles Forbes", "ships": {"bb": 7, "cv": 2, "ca": 12, "dd": 24, "ss": 0}},
-    {"nat": "UK", "name": "Western Approaches Command", "base": "Cornwall", "port": "Plymouth", "home": "wapp", "zone": "wapp", "duty": "patrol", "tied": true, "admiral": "Martin Dunbar-Nasmith", "ships": {"bb": 0, "cv": 0, "ca": 3, "dd": 36, "ss": 0}},
-    {"nat": "UK", "name": "Dover Command", "base": "Kent", "port": "Dover", "home": "channel", "zone": "channel", "duty": "patrol", "tied": true, "admiral": "Bertram Ramsay", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 18, "ss": 0}},
+    {"nat": "UK", "name": "Western Approaches Fleet", "base": "Cornwall", "port": "Plymouth", "home": "wapp", "zone": "wapp", "duty": "patrol", "tied": true, "admiral": "Martin Dunbar-Nasmith", "ships": {"bb": 0, "cv": 0, "ca": 3, "dd": 36, "ss": 0}},
+    {"nat": "UK", "name": "Dover Fleet", "base": "Kent", "port": "Dover", "home": "channel", "zone": "channel", "duty": "patrol", "tied": true, "admiral": "Bertram Ramsay", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 18, "ss": 0}},
     {"nat": "UK", "name": "Mediterranean Fleet", "base": "Alexandria", "port": "Alexandria", "home": "emed", "zone": "emed", "duty": "patrol", "admiral": "Andrew Cunningham", "ships": {"bb": 3, "cv": 1, "ca": 7, "dd": 22, "ss": 8}},
     {"nat": "UK", "name": "Force H", "from": 11, "base": "Gibraltar", "port": "Gibraltar", "home": "iberia", "zone": "iberia", "duty": "patrol", "admiral": "James Somerville", "ships": {"bb": 2, "cv": 1, "ca": 2, "dd": 9, "ss": 0}},
 
     {"nat": "GER", "name": "Battle Fleet", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "nsea", "duty": "port", "admiral": "Wilhelm Marschall", "ships": {"bb": 2, "cv": 0, "ca": 8, "dd": 20, "ss": 0}},
-    {"nat": "GER", "name": "U-boat Arm", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "wapp", "duty": "raid", "admiral": "Karl Donitz", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 27}},
-    {"nat": "GER", "name": "Baltic Station", "base": "Stettin", "port": "Swinemunde", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Rolf Carls", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 6, "ss": 6}},
+    {"nat": "GER", "name": "U-boat Fleet", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "wapp", "duty": "raid", "admiral": "Karl Donitz", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 27}},
+    {"nat": "GER", "name": "Swinemunde Fleet", "base": "Stettin", "port": "Swinemunde", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Rolf Carls", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 6, "ss": 6}},
 
     {"nat": "FRA", "name": "Atlantic Fleet", "base": "Brittany", "port": "Brest", "home": "biscay", "zone": "biscay", "duty": "patrol", "admiral": "Marcel Gensoul", "ships": {"bb": 2, "cv": 1, "ca": 3, "dd": 10, "ss": 12}},
     {"nat": "FRA", "name": "Mediterranean Fleet", "base": "Marseille", "port": "Toulon", "home": "wmed", "zone": "wmed", "duty": "patrol", "admiral": "Jean-Pierre Esteva", "ships": {"bb": 3, "cv": 0, "ca": 10, "dd": 28, "ss": 40}},
 
     {"nat": "ITA", "name": "1st Fleet", "base": "Apulia", "port": "Taranto", "home": "ionian", "zone": "ionian", "duty": "patrol", "admiral": "Inigo Campioni", "ships": {"bb": 4, "cv": 0, "ca": 12, "dd": 30, "ss": 0}},
     {"nat": "ITA", "name": "2nd Fleet", "base": "Naples", "port": "Naples", "home": "tyrr", "zone": "tyrr", "duty": "patrol", "admiral": "Riccardo Paladini", "ships": {"bb": 0, "cv": 0, "ca": 7, "dd": 25, "ss": 0}},
-    {"nat": "ITA", "name": "Submarine Command", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 60}},
+    {"nat": "ITA", "name": "Submarine Fleet", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 60}},
 
     {"nat": "SOV", "name": "Baltic Fleet", "base": "Leningrad", "port": "Kronstadt", "home": "finland", "zone": "finland", "duty": "patrol", "tied": true, "admiral": "Vladimir Tributs", "ships": {"bb": 2, "cv": 0, "ca": 2, "dd": 20, "ss": 50}},
     {"nat": "SOV", "name": "Black Sea Fleet", "base": "Crimea", "port": "Sevastopol", "home": "black", "zone": "black", "duty": "patrol", "tied": true, "admiral": "Filipp Oktyabrsky", "ships": {"bb": 1, "cv": 0, "ca": 5, "dd": 17, "ss": 44}},
@@ -65,19 +65,19 @@
     {"nat": "POL", "name": "Polish Navy", "base": "Danzig Corridor", "port": "Gdynia", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Jozef Unrug", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 4, "ss": 5}}
   ],
   "building": [
-    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 2, "to": 12, "perMonth": 2},
-    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 13, "to": 18, "perMonth": 6},
-    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 19, "to": 28, "perMonth": 13},
-    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 29, "to": 99, "perMonth": 18},
-    {"nat": "UK", "fleet": "Western Approaches Command", "cls": "dd", "from": 6, "to": 12, "perMonth": 4},
-    {"nat": "UK", "fleet": "Western Approaches Command", "cls": "dd", "from": 13, "to": 99, "perMonth": 8},
+    {"nat": "GER", "fleet": "U-boat Fleet", "cls": "ss", "from": 2, "to": 12, "perMonth": 2},
+    {"nat": "GER", "fleet": "U-boat Fleet", "cls": "ss", "from": 13, "to": 18, "perMonth": 6},
+    {"nat": "GER", "fleet": "U-boat Fleet", "cls": "ss", "from": 19, "to": 28, "perMonth": 13},
+    {"nat": "GER", "fleet": "U-boat Fleet", "cls": "ss", "from": 29, "to": 99, "perMonth": 18},
+    {"nat": "UK", "fleet": "Western Approaches Fleet", "cls": "dd", "from": 6, "to": 12, "perMonth": 4},
+    {"nat": "UK", "fleet": "Western Approaches Fleet", "cls": "dd", "from": 13, "to": 99, "perMonth": 8},
     {"nat": "UK", "fleet": "Home Fleet", "cls": "dd", "from": 10, "to": 99, "perMonth": 1}
   ],
   "arrivals": [
     [10, "UK", "Home Fleet", {"cv": 1}, "the carrier Illustrious"],
-    [13, "UK", "Western Approaches Command", {"dd": 12}, "the first of fifty old American destroyers"],
-    [14, "UK", "Western Approaches Command", {"dd": 12}, "more of the American destroyers"],
-    [15, "UK", "Western Approaches Command", {"dd": 12}, "more of the American destroyers"],
+    [13, "UK", "Western Approaches Fleet", {"dd": 12}, "the first of fifty old American destroyers"],
+    [14, "UK", "Western Approaches Fleet", {"dd": 12}, "more of the American destroyers"],
+    [15, "UK", "Western Approaches Fleet", {"dd": 12}, "more of the American destroyers"],
     [16, "UK", "Home Fleet", {"bb": 1}, "the battleship King George V"],
     [16, "UK", "Mediterranean Fleet", {"cv": 1}, "the carrier Formidable"],
     [21, "UK", "Home Fleet", {"bb": 1, "cv": 1}, "the battleship Prince of Wales and the carrier Victorious"],

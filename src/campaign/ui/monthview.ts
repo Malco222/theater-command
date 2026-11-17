@@ -85,7 +85,9 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const room = o.all ? 0 : L ? (shown.length <= 3 ? 1 : 0) : shown.length <= 3 ? 2 : shown.length <= 5 ? 1 : 0;
   const read = card.letters.slice(0, room);
   const letters = read.length ? `<div class="mc-letters"><div class="mc-lab">${read.length > 1 ? 'Letters from the front' : 'A letter from the front'}</div>${read.map((l) => `<blockquote><p>${esc(l.text)}</p><cite>${esc(l.by)}</cite></blockquote>`).join('')}</div>` : '';
-  const fronts = `<div class="mc-rt"><div class="mc-lab">${card.lead || shown.some((r) => r.cls === 3 || r.cls === 4) ? 'Your fronts · the land first, then sea and air' : 'Your fronts'}</div>
+  // (Where the lead story was the month's only fighting, no head stands over an empty column: the second Playtester's
+  // 84.2.6 find. A letter keeps its own.)
+  const fronts = `<div class="mc-rt">${!shown.length && !card.quiet ? '' : `<div class="mc-lab">${card.lead || shown.some((r) => r.cls === 3 || r.cls === 4) ? 'Your fronts · the land first, then sea and air' : 'Your fronts'}</div>`}
     ${card.quiet ? `<p class="mc-quiet">${esc(card.quiet)}</p>` : ''}${shown.length ? `<div class="mc-rows">${shown.map(row).join('')}</div>` : ''}${more}${letters}</div>`;
 
   const it = (sign: string, body: string, cls = ''): string => `<div class="mc-it${cls}">${sign}${body}</div>`;

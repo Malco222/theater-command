@@ -40,7 +40,7 @@
     ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", {}],
     ["POL", "Army Karpaty", "mtn", 2, "Przemysl", {}],
     ["POL", "Army Prusy", "inf", 3, "Kielce", {}],
-    ["POL", "Army Prusy reserve", "inf", 3, "Warsaw", {}],
+    ["POL", "Wyszkow Group", "inf", 3, "Warsaw", {}],
     ["POL", "Warsaw garrison", "inf", 2, "Warsaw", {"hold": 1}],
     ["POL", "Lublin reserve", "inf", 2, "Lublin", {}],
     ["POL", "Lwow garrison", "inf", 1, "Lwow", {"hold": 1}],
