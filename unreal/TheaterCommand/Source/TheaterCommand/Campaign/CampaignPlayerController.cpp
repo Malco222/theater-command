@@ -800,6 +800,35 @@ void ACampaignPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// (Brian, 17 November 2026: "how do we make the game run more smooth". The art director's speed brief, group A,
+	// all at once: a map seen from above needs one sun, one soft fill, the relief shade already painted into the
+	// ground and the table lamp. Bounced light worked out each frame, mirror reflections, fine contact shade and the
+	// lens's blurs are given up; shadows are softer; the map is drawn at two thirds of the window each way and
+	// sharpened up, with the frame, the cards and the plates drawn after at full size. Timed inside one running game
+	// on his Mac, over New York and Louisiana at playing height: the graphics chip's share of a frame falls from
+	// 22.8 ms to 15.9, and the picture's light stays within one part in a hundred. "-TheaterOldLight" keeps the
+	// old settings, for a picture to set beside the new.)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")))
+	{
+		static const TPair<const TCHAR*, const TCHAR*> Trims[] = {
+			{ TEXT("r.DynamicGlobalIlluminationMethod"), TEXT("0") },
+			{ TEXT("r.ReflectionMethod"), TEXT("0") },
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("0") },
+			{ TEXT("r.ContactShadows"), TEXT("0") },
+			{ TEXT("sg.ShadowQuality"), TEXT("2") },
+			{ TEXT("r.DepthOfFieldQuality"), TEXT("0") },
+			{ TEXT("r.LensFlareQuality"), TEXT("0") },
+			{ TEXT("r.LightShaftQuality"), TEXT("0") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& Trim : Trims)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(Trim.Key))
+			{
+				Variable->Set(Trim.Value, ECVF_SetByCode);
+			}
+		}
+	}
+
 	FInputModeGameAndUI Mode;
 	Mode.SetHideCursorDuringCapture(false);
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -1139,10 +1168,9 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		if (Parts.Num() >= 3 && Parts[1] == TEXT("alarm"))
 		{
 			// (Rules 84.2.6; the words of ruling 211, section 2.) SHOW ON MAP on the month card's warning does what a press
-			// on the alarm's row does: the nearest help in hand and the town centred. Without an alarm it shows the place.
-			const TArray<FHomeAlarm>& Raised = Session->GetView().Alarms;
-			const int32 Which = Raised.IndexOfByPredicate([Number](const FHomeAlarm& Each) { return Each.Region == Number; });
-			AlarmShown = Which != INDEX_NONE ? Which : 0;
+			// on the alarm's row does, from its first alarm (the one the warning's help names): the nearest help in hand and
+			// the town centred. Without an alarm it shows the place.
+			AlarmShown = 0;
 			if (GetAlarm())
 			{
 				PressAlarm();
@@ -3990,11 +4018,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		if (ViewWidth > 0 && ViewHeight > 0)
 		{
 			// ("-TheaterMapSize=67": the map drawn at that many hundredths of a 1600 by 1000 window each way, for timing a trim before it is decided.)
+			// (The art director's group A, item 5: the map at two thirds of a 1600 by 1000 window each way. It was at
+			// about four fifths. "-TheaterOldLight" keeps the old size with the old light.)
 			static const double Budget = []
 			{
 				int32 Hundredths = 0;
 				return FParse::Value(FCommandLine::Get(), TEXT("TheaterMapSize="), Hundredths) && Hundredths >= 40 && Hundredths <= 100
-					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0) : 1250.0 * 780.0;
+					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0)
+					: FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")) ? 1250.0 * 780.0 : 1072.0 * 670.0;
 			}();
 			const int32 Percent = FMath::Clamp(FMath::RoundToInt32(100.0 * FMath::Sqrt(Budget / (static_cast<double>(ViewWidth) * ViewHeight))), 50, 100);
 			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
@@ -4507,7 +4538,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					if (There->IsWar())
 					{
 						const FCampaignNation* Theirs = Map->GetData().FindNation(There->War);
-						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *Theirs->Name : *There->War);
+						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *WithThe(Theirs->Name) : *There->War);
 					}
 					else if (!Alone.IsEmpty())
 					{
@@ -7208,7 +7239,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 		return false;
 	}
 	const FCampaignNation* Nation = Map->GetData().FindNation(Tag);
-	const FString Name = Nation ? Nation->Name : Tag;
+	const FString Name = Nation ? WithThe(Nation->Name) : Tag; // (84.2.6: "Declare war on the United States?")
 	WarPrompt = FWarPrompt();
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
@@ -7232,7 +7263,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 	{
 		WarPrompt.Body = FText::FromString(FString::Printf(
 			TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
-			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *Name));
+			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *HeadThe(Name)));
 	}
 	if (WarPrompt.Region != INDEX_NONE)
 	{
@@ -7301,7 +7332,7 @@ void ACampaignPlayerController::ConfirmWar()
 		return;
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
-	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? Nation->Name : Asked.Tag;
+	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? WithThe(Nation->Name) : Asked.Tag;
 	FString Answered;
 	if (!Session->Declare(Asked.Tag, &Answered))
 	{
@@ -8627,7 +8658,7 @@ void ACampaignPlayerController::FinishMonth()
 	if (!Month.Fallen.IsEmpty())
 	{
 		const FCampaignNation* Nation = Map->GetData().FindNation(Month.Fallen);
-		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *Nation->Name : *Month.Fallen), 12.0);
+		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *HeadThe(Nation->Name) : *Month.Fallen), 12.0);
 	}
 	else
 	{

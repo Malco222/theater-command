@@ -586,6 +586,94 @@ void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data)
 	SpreadDistance(BorderDistance);
 }
 
+void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data, int32 I0, int32 J0, int32 I1, int32 J1)
+{
+	if (BorderDistance.Num() != NX * NY || NX < 3 || NY < 3)
+	{
+		MeasureFrontiers(Data);
+		return;
+	}
+	I0 = FMath::Clamp(I0 - 2, 0, NX - 1);
+	I1 = FMath::Clamp(I1 + 2, I0, NX - 1);
+	J0 = FMath::Clamp(J0 - 2, 0, NY - 1);
+	J1 = FMath::Clamp(J1 + 2, J0, NY - 1);
+	TMap<FString, int32> Numbers;
+	TArray<int32> Holder;
+	Holder.SetNumUninitialized(Data.Regions.Num());
+	for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+	{
+		const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
+		Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+	}
+	auto OwnerOf = [&](int32 Idx) -> int32
+	{
+		const int16 Id = Region[Idx];
+		return Id >= 0 && Holder.IsValidIndex(Id) ? Holder[Id] : -1;
+	};
+	// The box's outermost ring keeps what it has, where the grid goes on beyond it: it is the measure of every
+	// frontier outside the box, which has not moved. Everything inside the ring is measured afresh.
+	const int32 A0 = I0 > 0 ? I0 + 1 : I0, A1 = I1 < NX - 1 ? I1 - 1 : I1, B0 = J0 > 0 ? J0 + 1 : J0, B1 = J1 < NY - 1 ? J1 - 1 : J1;
+	if (A1 < A0 || B1 < B0)
+	{
+		return;
+	}
+	for (int32 J = B0; J <= B1; ++J)
+	{
+		for (int32 I = A0; I <= A1; ++I)
+		{
+			BorderDistance[Index(I, J)] = 1.0e6f;
+		}
+	}
+	auto Inside = [&](int32 I, int32 J) { return I >= A0 && I <= A1 && J >= B0 && J <= B1; };
+	for (int32 J = J0; J <= J1; ++J)
+	{
+		for (int32 I = I0; I <= I1; ++I)
+		{
+			const int32 Idx = Index(I, J);
+			const int32 Mine = OwnerOf(Idx);
+			if (Mine < 0)
+			{
+				continue;
+			}
+			const int32 Right = I + 1 < NX ? OwnerOf(Idx + 1) : -1;
+			const int32 Down = J + 1 < NY ? OwnerOf(Idx + NX) : -1;
+			if (Right >= 0 && Right != Mine)
+			{
+				if (Inside(I, J)) { BorderDistance[Idx] = 0.0f; }
+				if (Inside(I + 1, J)) { BorderDistance[Idx + 1] = 0.0f; }
+			}
+			if (Down >= 0 && Down != Mine)
+			{
+				if (Inside(I, J)) { BorderDistance[Idx] = 0.0f; }
+				if (Inside(I, J + 1)) { BorderDistance[Idx + NX] = 0.0f; }
+			}
+		}
+	}
+	const float Straight = 1.0f, Diagonal = 1.4142f;
+	for (int32 J = B0; J <= B1; ++J)
+	{
+		for (int32 I = A0; I <= A1; ++I)
+		{
+			float& D = BorderDistance[Index(I, J)];
+			if (I > 0) D = FMath::Min(D, BorderDistance[Index(I - 1, J)] + Straight);
+			if (J > 0) D = FMath::Min(D, BorderDistance[Index(I, J - 1)] + Straight);
+			if (I > 0 && J > 0) D = FMath::Min(D, BorderDistance[Index(I - 1, J - 1)] + Diagonal);
+			if (I + 1 < NX && J > 0) D = FMath::Min(D, BorderDistance[Index(I + 1, J - 1)] + Diagonal);
+		}
+	}
+	for (int32 J = B1; J >= B0; --J)
+	{
+		for (int32 I = A1; I >= A0; --I)
+		{
+			float& D = BorderDistance[Index(I, J)];
+			if (I + 1 < NX) D = FMath::Min(D, BorderDistance[Index(I + 1, J)] + Straight);
+			if (J + 1 < NY) D = FMath::Min(D, BorderDistance[Index(I, J + 1)] + Straight);
+			if (I + 1 < NX && J + 1 < NY) D = FMath::Min(D, BorderDistance[Index(I + 1, J + 1)] + Diagonal);
+			if (I > 0 && J + 1 < NY) D = FMath::Min(D, BorderDistance[Index(I - 1, J + 1)] + Diagonal);
+		}
+	}
+}
+
 void FCampaignTerrain::SpreadDistance(TArray<float>& Field) const
 {
 	const float Straight = 1.0f, Diagonal = 1.4142f;

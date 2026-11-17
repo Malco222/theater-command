@@ -445,6 +445,9 @@ struct FMonthBand
 	// own side (a green edge); and a warning whose month of grace is spent (its label on cream, a cream edge).
 	FString Title, Sub, Note;
 	bool bGood = false, bSpent = false;
+	// (Rules 84.2.6; ruling 211(c).) A warning that ends with the help of his home ground's first alarm: its SHOW ON MAP
+	// is a press on the tray's red row, from the first alarm (it picks that army up and centres the town).
+	bool bAlarm = false;
 };
 
 /** One box of the month's score. */
@@ -459,7 +462,10 @@ struct FMonthRow
 {
 	FString Picture, Sign, Place, Tag;
 	int32 Tone = 0; // 1 good news, -1 bad, 2 something that blocks or warns
-	FString A, B; // the two flags, the attacker's first
+	FString A, B; // the two flags: his side's, then the other side's
+	// (Rules 84.2.6.) The word that goes with the tag and the other side's name, so the row reads whole with no picture:
+	// "WON from Mexico", "LOST to Mexico", "HELD against Canada", "BESIEGED by Canada". Empty where the rules give none.
+	FString JoinWord, JoinName;
 	FString Text;
 	TArray<FMonthFigure> Figures;
 	int32 Region = INDEX_NONE;

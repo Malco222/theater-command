@@ -47,6 +47,25 @@ const { chromium } = require('playwright');
   const fleetNames = await page.evaluate(() => { const g = window.theater.game(); return g.fleets.filter((f) => f.nat === g.human).map((f) => f.name); });
   check(fleetNames.every((n) => !OLD_SHIPS.test(n)), `his ships are fleets: ${fleetNames.join(', ') || 'none'}`, fleetNames);
 
+  // The red row (ruling 211(c), Version 84.2.6), where the tree has it: first in the tray, and a press picks up the
+  // army the save was to name (December 1940: the army round Vancouver), selects where it stands and says the cure.
+  if (expect.alarm) {
+    const has = await page.evaluate(() => window.theater.ui.alarmAt !== undefined);
+    if (!has) console.log('      (the red row: not in this tree, passed over)');
+    else {
+      const first = await page.evaluate(() => { const el = document.querySelector('button.alert'); return el ? { kind: el.dataset.kind, text: el.innerText.replace(/\s+/g, ' ') } : null; });
+      check(!!first && first.kind === 'home' && !BAD_TEXT.test(first.text), `the red row is first in the tray: "${first ? first.text.slice(0, 140) : ''}"`, first);
+      if (first && first.kind === 'home') {
+        await page.click('button.alert[data-kind="home"]').catch(() => {});
+        await page.waitForTimeout(900);
+        const got = await page.evaluate((army) => { const t = window.theater, g = t.game(); const ids = [...t.ui.picked]; const at = [...new Set(ids.map((id) => g.regions[g.corps.find((c) => c.id === id).reg].name))]; return { ids, at, sel: t.ui.sel >= 0 ? g.regions[t.ui.sel].name : '', msg: t.ui.msg || '', army }; }, expect.alarm.army);
+        check(got.ids.length > 0 && got.at.length === 1 && got.at[0] === expect.alarm.army && got.sel === expect.alarm.army && /in hand/.test(got.msg), `a press on it picks up the army round ${expect.alarm.army}: "${got.msg}"`, got);
+        if (OUT) await page.screenshot({ path: `${OUT}/${tag}-red-row-pressed.png` });
+        await page.evaluate(() => { const t = window.theater; t.ui.picked.clear(); t.ui.sel = -1; t.ui.msg = ''; t.refresh(); });
+      }
+    }
+  }
+
   // END THE MONTH as he presses it, sure of it, until the month's card is up.
   const endMonth = async () => {
     const t0 = await page.evaluate(() => window.theater.game().turn);

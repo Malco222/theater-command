@@ -7994,14 +7994,34 @@ namespace
 					]
 				];
 			}
-			if (!Told.A.IsEmpty())
+			if (!Told.JoinWord.IsEmpty() && !Told.B.IsEmpty())
+			{
+				// (Rules 84.2.6; the UI director's words for ruling 211, section 5.) The word that goes with the tag, the other side's
+				// flag and its name, so the row reads whole with no picture: "WON from [flag] Mexico", "BESIEGED by [flag] Canada".
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 6.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Told.JoinWord)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				];
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)[SNew(SImage).Image(FlagBrush(Told.B))]
+				];
+				if (!Told.JoinName.IsEmpty())
+				{
+					Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(5.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Told.JoinName)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+					];
+				}
+			}
+			if (!Told.A.IsEmpty() && Told.JoinWord.IsEmpty())
 			{
 				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)[SNew(SImage).Image(FlagBrush(Told.A))]
 				];
 			}
-			if (!Told.A.IsEmpty() && !Told.B.IsEmpty())
+			if (!Told.A.IsEmpty() && !Told.B.IsEmpty() && Told.JoinWord.IsEmpty())
 			{
 				Top->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(7.0f, 0.0f, 7.0f, 0.0f)
 				[
@@ -8209,7 +8229,7 @@ namespace
 				}
 				if (Band.Region >= 0)
 				{
-					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region, bWarning)];
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[ShowOnMap(Band.Region, Band.bAlarm)];
 				}
 				// (A second line that must be read whole is printed in full under the headline: the band is as tall as
 				// it needs. Rulings 133(a) and 167: it may run to three lines, and it is never cut.)
@@ -10434,7 +10454,7 @@ namespace
 					{
 						Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 						[
-							OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean: the whole League stands by it. Nothing happens until you confirm."), *Member.Name),
+							OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean: the whole League stands by it. Nothing happens until you confirm."), *ACampaignPlayerController::WithThe(Member.Name)),
 								[this, Tag = Member.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
 						];
 					}
@@ -10589,7 +10609,7 @@ namespace
 				{
 					Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *Power.Name),
+						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *ACampaignPlayerController::WithThe(Power.Name)),
 							[this, Tag = Power.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
 					];
 				}
@@ -10675,7 +10695,7 @@ namespace
 				{
 					Buttons->AddSlot().AutoWidth()
 					[
-						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *Entry.Name),
+						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *ACampaignPlayerController::WithThe(Entry.Name)),
 							[this, Tag = Entry.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
 					];
 				}

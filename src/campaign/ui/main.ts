@@ -5,6 +5,7 @@
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
+import { gunsAlone, homeAlarms } from '../danger';
 import { monthCardHtml } from './monthview';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
@@ -62,7 +63,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
-import { WORLD, beyondEurope, lakesOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
+import { WORLD, answersOf, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -90,7 +91,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, forceWords, hasRoom, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -110,6 +111,8 @@ const ui = {
   land: false,
   /** The sea being looked at, when no region is. */
   sea: -1,
+  /** The alarm of his home ground the tray's red row last pressed went to (ruling 211(c)): each press goes on to the next. */
+  alarmAt: -1,
   /** The fleet being given orders under the Navy tab. */
   fleet: -1,
   /** The crossing whose reckoning is open under the Navy tab: the beach, or -1. */
@@ -1760,7 +1763,7 @@ function drawBar(): void {
   const me = g.human;
   const w = weather(g);
   const eve = onEve(g);
-  const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
+  const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${theName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
   const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span><span class="rdshort"> · ${esc(commandOf(g)?.depth ? (commandOf(g)!.name.split(' ')[0]) : 'Own mix')}</span>${dialOf(g) && dialOf(g)!.stop !== HIST_FREE ? `<span class="rdial" title="The history dial stands at ${esc(dialOf(g)!.name)}.">${dialMark(dialOf(g)!.stop - 1)}</span>` : ''}</button>` : '';
@@ -1772,7 +1775,7 @@ function drawBar(): void {
     // A small country chooses its own path: the card is one click away, and flagged while it stands alone under attack.
     if (!eve && paths(g).length) { const alone = !bloc(g.nations[me]) && g.nations[me].atWar.length > 0; b += `<button class="btn${alone ? ' flag' : ''}" data-act="path" title="${alone ? 'You are at war and stand alone. See who would take you in.' : 'Join the Axis, join the Allies, stand alone, or found a League of your own.'}">Your path${alone ? '<i class="dotn"></i>' : ''}</button>`; }
     if (!eve && isOpen(g) && !cabinetIsOff(g)) { const fl = cabinetFlag(); b += `<button class="btn${fl ? ' flag' : ''}" data-act="cabinet" title="${esc(fl || 'Your government: the war cabinet and its trust in you, your ministers, your decrees and the directive.')}">Cabinet${fl ? '<i class="dotn"></i>' : ''}</button>`; }
-    if (!eve && isOpen(g) && hasTraits(me)) b += `<button class="btn wideonly" data-act="traits" title="What ${esc(natName(me))} does best: its abilities and its special formation.">Abilities</button>`;
+    if (!eve && isOpen(g) && hasTraits(me)) b += `<button class="btn wideonly" data-act="traits" title="What ${esc(theName(me))} does best: its abilities and its special formation.">Abilities</button>`;
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
     // END MONTH is never barred (ruling 88): it is dark while armies have a move left, and lights when every army has its orders.
     const yet = eve ? 0 : roundCount(g).bright;
@@ -2426,6 +2429,23 @@ function orderAt(id: number): boolean {
 }
 
 /**
+ * The refusal a right-click on this province would give the corps in hand when they are guns or engineers with no
+ * infantry or tanks (ruling 211(a)): the same sentence, so the hover says it before the press (the design director's
+ * log b357). Nothing where the right-click would act.
+ */
+function aloneAt(id: number): string | null {
+  if (!g.human || !ui.picked.size || mapBusy() || ui.tab !== 'region') return null;
+  const picked = g.corps.filter((c) => ui.picked.has(c.id) && !c.dead);
+  const r = g.regions[id];
+  if (!picked.length || !r || allied(g, g.human, r.ctrl) || !atWar(g, g.human, r.ctrl)) return null;
+  // (Cheap first: a hand with a fighting corps in it is never refused, and the attack's widening is read only for guns alone.)
+  const first = whyNotLead(g, picked, id);
+  if (!first || !hostileUnits(g, r, g.human).length) return first;
+  const near = picked.filter((c) => g.regions[c.reg].nb.includes(id));
+  return near.length ? whyNotLead(g, openingForce(g, near, r).corps, id) : null;
+}
+
+/**
  * Marches the corps picked to a province, with everything the map shows of it. `look` is set where the player's
  * reports could not say what holds the town there: if it turns out to be its guard alone, the assault's card opens
  * as the army arrives.
@@ -2495,7 +2515,7 @@ function drawPane(): void {
 
 // ---- What wants the player's attention this month --------------------------------------------
 
-interface Alert { kind: string; text: string; /** Regions to visit in turn, for an alert about places. */ regs?: number[]; tab?: string }
+interface Alert { kind: string; text: string; /** Regions to visit in turn, for an alert about places. */ regs?: number[]; tab?: string; /** The row as written, where it is more than plain words (the red alarm). */ html?: string }
 
 function alertList(): Alert[] {
   const me = g.human;
@@ -2535,6 +2555,9 @@ function alertList(): Alert[] {
     if (shutIn.length) out.push({ kind: 'besieged', text: shutIn.length === 1 ? `${shutIn[0].town} is under siege` : `${shutIn.length} of your towns are under siege`, regs: shutIn.map((v) => v.region) });
     const round = sg.filter((v) => atWar(g, me, v.holder) && !whyNotStormTown(g, v.region));
     if (round.length) out.push({ kind: 'siege', text: round.length === 1 ? `Your army stands round ${round[0].town}: storm it or sit it out` : `Your armies stand round ${round.length} towns`, regs: round.map((v) => v.region) });
+    // His siege where only guns are left round the town (ruling 211(a); words, section 4): red while infantry or tanks
+    // of his can reach them this month, plain where none can.
+    for (const a of gunsAlone(g, me)) out.push({ kind: a.red ? 'gunsalone' : 'gunsleft', text: a.line, regs: [a.region] });
   }
   // Coasts of the player's shelled from the sea since his last month.
   const shelled = ui.shoreFrom < 0 ? [] : [...new Set(g.shoreReports.slice(ui.shoreFrom).filter((r) => atWar(g, r.nat, me) && (r.defNat === me || g.regions[r.region].ctrl === me || g.regions[r.region].units.some((c) => c.nat === me))).map((r) => r.region))];
@@ -2568,6 +2591,16 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
+  // The alarm, first in the tray (ruling 211(c); words, section 1): an enemy army on his home ground, what it can reach
+  // next month, and the nearest help. The row speaks of the one nearest his capital; each press goes on to the next.
+  const alarms = homeAlarms(g, me);
+  if (alarms.length) {
+    const k = Math.max(0, ui.alarmAt) % alarms.length, a = alarms[k];
+    out.unshift({
+      kind: 'home', text: a.lines.filter(Boolean).join(' '), regs: [a.region],
+      html: `<span class="sign">⚠</span><b>${esc(a.lines[0])}</b>${a.lines[1] ? ` ${esc(a.lines[1])}` : ''} ${esc(a.lines[2])}${alarms.length > 1 ? ` <span class="of">${k + 1} of ${alarms.length}</span>` : ''}`,
+    });
+  }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
   const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
@@ -2647,12 +2680,41 @@ function replaceCard(data: Record<string, string | undefined>): string {
     <footer><button class="btn go" data-act="close">Keep it</button><button class="btn" data-act="start" data-sure="1" ${again}>Start the new one</button></footer>`;
 }
 
-const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}">${esc(a.text)}</button>`).join('');
+const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(a.text)}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
+
+/**
+ * The red alarm's press (ruling 211(c); words, section 1): it picks up the nearest army that can come and centres the
+ * town, and the paper says the cure in one line. Where no army can come it centres the town. Each press goes on to
+ * the next alarm.
+ */
+function followHomeAlarm(): void {
+  const all = homeAlarms(g, g.human);
+  if (!all.length) return;
+  const k = (ui.alarmAt + 1) % all.length;
+  ui.alarmAt = k;
+  const a = all[k];
+  ui.rail = ui.ship = ui.land = ui.rebase = false;
+  if (a.help) {
+    selectRegion(a.help.region);
+    const go = g.corps.filter((c) => a.help!.corps.includes(c.id) && canOrder(g, c));
+    if (go.length) ui.picked = new Set(go.map((c) => c.id));
+    ui.msg = a.hand;
+  } else {
+    selectRegion(a.region);
+    ui.msg = '';
+  }
+  refresh();
+  const svg = $('#map');
+  const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
+  const w = Math.min(ui.view.w, 700);
+  glide({ x: g.regions[a.region].x - w / 2, y: g.regions[a.region].y - (w * tall) / 2, w });
+}
 
 /** Goes where an alert points: the next place on its list, or the tab that deals with it. */
 function followAlert(kind: string): void {
   const a = alertList().find((x) => x.kind === kind);
   if (!a) return;
+  if (kind === 'home') { followHomeAlarm(); return; }
   if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
@@ -2857,7 +2919,7 @@ function provinceWorth(r: Region): string {
   if (y.capital) parts.push(`the capital ${cash(y.capital)}`);
   const mine = !!me && r.ctrl === me;
   const less = y.siege ? 'Under siege: it pays nothing until the siege is raised.' : r.ctrl !== r.owner ? 'Occupied ground pays half.' : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
-  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(natName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(natName(r.ctrl))} each month`}</span><b>${cash(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
+  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${cash(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
 }
 
 /** A town's glyph as a small picture for a panel or a card. */
@@ -2894,7 +2956,7 @@ function prizeBlock(r: Region): string {
   const p = prize(g, r.id);
   if (!p || !p.items.length) return '';
   const figure = p.kind === 'taken' ? `+${num(p.income)}` : p.kind === 'restored' ? `−${num(p.incomeNow)}` : num(p.kind === 'ally' ? p.incomeNow : p.income);
-  const under = p.kind === 'taken' ? 'a month to you' : p.kind === 'restored' ? `a month to ${esc(natName(r.ctrl))}` : 'a month';
+  const under = p.kind === 'taken' ? 'a month to you' : p.kind === 'restored' ? `a month to ${esc(theName(r.ctrl))}` : 'a month';
   return `<div class="prize ${p.kind}"><div class="phead"><span>${esc(prizeHead(p))}</span><b>${figure}</b><small>${under}</small></div>
     <p>${esc(p.line)}</p><div class="pzrows">${p.items.map((it) => `<div class="pzrow">${PRIZE_SIGN[it.key] ?? ''}<span><b>${esc(it.label)}</b> ${esc(it.text)}.</span></div>`).join('')}</div></div>`;
 }
@@ -3346,7 +3408,7 @@ function regionPane(): string {
   }
   const r = g.regions[ui.sel];
   const me = g.human;
-  const held = r.ctrl === r.owner ? `${g.nations[r.owner].adj} territory` : `${g.nations[r.owner].adj} territory, held by ${natName(r.ctrl)}`;
+  const held = r.ctrl === r.owner ? `${g.nations[r.owner].adj} territory` : `${g.nations[r.owner].adj} territory, held by ${theName(r.ctrl)}`;
   const tags: string[] = [];
   if (r.cap) tags.push('<span class="tag good">Capital</span>');
   if (r.port) tags.push('<span class="tag">Port</span>');
@@ -4744,10 +4806,10 @@ function powersPane(): string {
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
       // Its general staff: the character it has in this war, and its main effort where the player may know it.
       const staff = rivalStaff(g, n.id);
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
-      const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${natName(n.fellOn!.to)}` : `Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
+      const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${theName(n.fellOn!.to)}` : `Asked ${theName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
       out += `<div class="nat gone${f?.yours ? ' freeable' : ''}"${f && f.capital >= 0 ? ` data-act="showmap" data-id="${f.capital}" title="Show ${esc(f.capitalName)} on the map"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}${f?.yours ? ' <i class="tag good">You can free it</i>' : ''}</small><div class="will"><small>${how}${f && isOpen(g) ? `. ${esc(f.note)}` : ''}</small></div></div>`;
     }
   }
@@ -5054,7 +5116,7 @@ function seaNotes(): string {
   const ore = oreRoute(g);
   const to = NAVY.ore.to;
   if (ore !== 'none' && (!me || me === to || atWar(g, me, to))) {
-    const text = ore === 'baltic' ? `Swedish iron ore is reaching ${natName(to)} across the Baltic.` : ore === 'narvik' ? `The Baltic ports are frozen. Swedish iron ore is reaching ${natName(to)} through ${NAVY.ore.winterPort}.` : `Swedish iron ore is not getting through. ${natName(to)} loses ${Math.round(NAVY.ore.share * 100)}% of its production until the route is open again.`;
+    const text = ore === 'baltic' ? `Swedish iron ore is reaching ${theName(to)} across the Baltic.` : ore === 'narvik' ? `The Baltic ports are frozen. Swedish iron ore is reaching ${theName(to)} through ${NAVY.ore.winterPort}.` : `Swedish iron ore is not getting through. ${natName(to)} loses ${Math.round(NAVY.ore.share * 100)}% of its production until the route is open again.`;
     out += `<div class="note"${ore === 'cut' ? ' style="border-left-color:var(--red)"' : ''}><b>The ore traffic.</b> ${esc(text)}</div>`;
   }
   return out;
@@ -5142,7 +5204,7 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
     : `The preparation is yours: fly a fight for the sky over ${esc(x.to.name)} from the Air tab, and send a fleet to patrol the ${esc(g.seas[x.account.worst].name)}. Hand the air war or the navy to your staff and they prepare the plan for you.`
   } The landing is always your own order: stand the force on the quay at ${esc(x.from.name)}, and it can embark the month after.</p>`;
   return `<div class="cross${x.planned ? ' plan' : ''}">
-    <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
+    <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(theName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
     <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
     ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.bar)}</div>` : ''}
     ${holdLine(x.account.hold, x.to)}
@@ -5206,7 +5268,7 @@ function seaPane(): string {
     const other = g.seas[gt.a === z.id ? gt.b : gt.a];
     const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
     const gv = gateViews(g, me || null)[g.gates.indexOf(gt)];
-    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(natName(holder))}.`}${gv.shutLine && !/shut it|holder's order/.test(gv.line) ? ` ${esc(gv.shutLine)}` : ''}${gv.order ? ` <button class="btn small" data-act="gateask" data-id="${gv.id}" ${whyNotGate(g, gv.id) ? `disabled title="${esc(whyNotGate(g, gv.id)!)}"` : ''}>${esc(gv.orderLine)}</button>` : ''}</div>`;
+    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}${me ? `. ${esc(gv.line)}` : `, held by ${esc(theName(holder))}.`}${gv.shutLine && !/shut it|holder's order/.test(gv.line) ? ` ${esc(gv.shutLine)}` : ''}${gv.order ? ` <button class="btn small" data-act="gateask" data-id="${gv.id}" ${whyNotGate(g, gv.id) ? `disabled title="${esc(whyNotGate(g, gv.id)!)}"` : ''}>${esc(gv.orderLine)}</button>` : ''}</div>`;
   }
   return `<h2>${esc(z.name)}</h2>${head}${straits}
     <h3>Fleets at sea here</h3>${here.length ? here.map(rowOf).join('') : `<div class="empty">${pic ? 'No fleet has been found at sea here.' : 'No fleet at sea here.'}</div>`}
@@ -6169,7 +6231,11 @@ const hasTraits = (nat: string): boolean => traitsOf(nat).length > 0 || !!eliteO
 function traitList(nat: string, full = false): string {
   const u = eliteOf(nat);
   const row = (name: string, text: string, rule: string, star = false): string => `<li${star ? ' class="unit"' : ''}><b>${star ? '<i>★</i> ' : ''}${esc(name)}</b>${full && text ? `<span>${esc(text)}</span>` : ''}${rule ? `<em>${esc(rule)}</em>` : ''}</li>`;
-  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}</ul>`;
+  // A dominion (ruling 211(b) as Brian changed it; the UI director's words (f)): war on it brings its patron in so many times in ten.
+  const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null, odds = patron ? Math.round(answersOf(patron) * 10) : 0;
+  const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times', 'every time'];
+  const dom = patron && odds > 0 && g.nations[patron] ? row('Dominion', '', `War on it brings ${newsName(g.nations[patron])} in ${odds >= 10 ? 'every time' : `${TIMES[odds]} in ten`}, the same month.`) : '';
+  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
 }
 
 /** What a country does best, with every other country's abilities a click away. */
@@ -6746,7 +6812,8 @@ function attackCard(): string {
   // What is known of the defence: everything, or the staff's estimate of it.
   const sure = allKnown(foes);
   const foeEst = sure ? null : armyAt(g, target.id, foes[0]?.nat ?? target.ctrl)?.est ?? null;
-  const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
+  const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (!chosen.length && whyNotLead(g, [c], target.id) ? whyNotLead(g, [c], target.id)!.split('.')[0] : g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
+  // (Guns or engineers picked with no infantry or tanks: the box gives ruling 211(a)'s reason, the foot's own words, never the roads.)
   const ours: Side = {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
     cards: cands.map((c) => battleCard(c, { act: true, on: inSet.has(c.id), note: why(c), from: true })).join(''),
@@ -7094,7 +7161,7 @@ function ledgerCard(nat: string): string {
   const story = L.budget
     ? `Think of it as a household budget. Every province is a pay cheque, large or small. The armed forces are the standing bills, due every month whether they fight or not. What is left after the bills replaces losses first and then buys new forces, and a new corps is not only its price: it is another bill every month after.`
     : `Every month the factories pay in, losses in the field are made good, and what is left buys new corps and works.`;
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The ledger · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} ${esc(mine ? 'Your treasury' : `The treasury of ${natName(nat)}`)}</h2></header>
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The ledger · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} ${esc(mine ? 'Your treasury' : `The treasury of ${theName(nat)}`)}</h2></header>
     <div class="body ledger">
       <div class="lfacts"><div class="lfact"><span>In the treasury</span><b class="${L.treasury < 0 ? 'neg' : ''}">${inHand(L.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(L.gross, true)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${L.budget ? cash(-L.upkeepTotal, true) : '0'}</b></div><div class="lfact net"><span>${L.net >= 0 ? 'Left to spend a month' : 'Short each month'}</span><b class="${L.net < 0 ? 'neg' : 'pos'}">${cash(L.net, true)}</b></div></div>
       ${bar}${debt}
@@ -7121,7 +7188,11 @@ function invadeCard(on: string, target: number): string {
   const r = target >= 0 ? g.regions[target] : null;
   const mine = bloc(g.nations[me]);
   const blocOf = (b: 'allies' | 'axis'): string => (b === 'axis' ? 'the Axis' : 'the Allies');
-  const friendRows = f.friends.map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
+  // A dominion's mother country stands first among its friends, by name, with the year of the tie (display only:
+  // the tie moves no opinion; the one rule is the roll the card states under What follows).
+  const mother = motherOf(on);
+  const motherRow = mother ? `<div class="frow mother">${chip(mother)}<span class="grow"><b>${esc(newsName(g.nations[mother]))}</b><small>${esc(motherLine(mother, on, natName(on)))}</small></span><small class="stand">${esc(standLabel(g.nations[mother]))}</small></div>` : '';
+  const friendRows = motherRow + f.friends.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
   what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${divsOf(fieldArmy(g, on))} fight${Math.round(fieldArmy(g, on)) === 1 ? 's' : ''} for them.` : `<b>${The}</b> and its ${divsOf(fieldArmy(g, on))} are at war with you from today.`);
@@ -7166,11 +7237,22 @@ function invadeCard(on: string, target: number): string {
     <footer><button class="btn" data-act="close">Not now</button><button class="btn warn" data-act="dodeclare" data-nat="${on}" data-target="${target}">${r ? 'Declare war and march ▸' : 'Declare war'}</button></footer>`;
 }
 
+/** A dominion's mother country, alive, in the open campaign outside World Domination: first among its friends. */
+function motherOf(nat: string): string | null {
+  const p = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
+  return p && g.nations[p]?.alive ? p : null;
+}
+/** The friends the declare list names: the mother country first, as the card does. */
+function friendNames(nat: string): string[] {
+  const mother = motherOf(nat);
+  return [...(mother ? [newsName(g.nations[mother])] : []), ...friendsOf(nat).filter((f) => f.nat !== mother && g.nations[f.nat]?.alive).map((f) => natName(f.nat))];
+}
+
 function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${friendsOf(id).some((f) => g.nations[f.nat]?.alive) ? ` · friends: ${esc(listOf(friendsOf(id).filter((f) => g.nations[f.nat]?.alive).map((f) => natName(f.nat))))}` : ''}</span></span></button>`).join('')}
+    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${friendNames(id).length ? ` · friends: ${esc(listOf(friendNames(id)))}` : ''}</span></span></button>`).join('')}
     <p class="sub" style="margin-top:8px">Pick a country to see what declaring war on it would mean. Nothing happens until you confirm.</p></div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
@@ -7397,7 +7479,7 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     const weeks = Object.values(GOALS[lost] ?? {}).some((x) => x?.outlast !== undefined) ? weeksLasted(g, lost) : null;
     const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
     const hope = nationsFallen(g).find((f) => f.nat === lost);
-    const back = hope?.canReturn ? ` If ${natName(hope.fell.to)}'s enemies take ${hope.capitalName}, ${natName(lost)} is liberated and you lead it again.` : '';
+    const back = hope?.canReturn ? ` If ${theName(hope.fell.to)}'s enemies take ${hope.capitalName}, ${natName(lost)} is liberated and you lead it again.` : '';
     // The head of a card names the month it reports (ruling 117, point 5): the month the country fell in, which was
     // played out to its end before this card opened.
     const fellIn = [...g.passings].reverse().find((p) => p.nat === lost && p.kind === 'fell');
@@ -8275,6 +8357,8 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'showmap': openModal(null); ui.sel = id; ui.tab = 'region'; focusOn([id]); refresh(); break;
+    // The month card's warning that ends with the help: SHOW ON MAP is a press on the tray's red row, from its first alarm.
+    case 'homealarm': openModal(null); ui.alarmAt = -1; followHomeAlarm(); break;
     case 'declare': openModal({ kind: 'declare' }); break;
     case 'level': openModal({ kind: 'level' }); if (t.dataset.part === 'cabinet') document.querySelector('#card #setcab')?.scrollIntoView({ block: 'start' }); break;
     case 'setcabinet': {
@@ -8790,10 +8874,12 @@ function keepMarches(id: number, held: Corps[]): boolean {
   if (!kept && go.every((p) => p.c.reg !== id)) return false;
   slipDone();
   ui.unread += g.headlines.length - h;
-  const place = g.regions[id].name, who = go.length === 1 ? lead.name : `${go.length} corps`;
+  // (One voice, 84.2.6: the army is named as every other line names it, "The American army", "2 corps of the
+  // American army", a lone corps by its name.)
+  const place = g.regions[id].name, force = forceWords(g, go.map((p) => p.c)), who = upFirst(force.who);
   ui.msg = !kept ? '' : spent
     ? `${who} will march to ${place} from next month, ${aboutMonths(months)}. Any other order ends the march.`
-    : `${who} ${go.length === 1 ? 'is' : 'are'} on the march to ${place}: ${aboutMonths(months)} more, going on as each month opens. Any other order ends the march.`;
+    : `${who} ${force.many ? 'are' : 'is'} on the march to ${place}: ${aboutMonths(months)} more, going on as each month opens. Any other order ends the march.`;
   // The army goes with its leading corps: where that has marched to this month, the corps that came with it stay in hand.
   const moved = lead.reg !== from;
   if (moved) { ui.sel = lead.reg; ui.picked = new Set(go.filter((p) => p.c.reg === lead.reg).map((p) => p.c.id)); ui.tab = 'region'; }
@@ -9007,7 +9093,9 @@ function wireMap(): void {
     // (No road this month: the march that would be kept there for the army in hand, or why none can be.)
     const mp = !way && marchPlan && marchPlan.id === r.id ? marchPlan : null;
     const tp = !way && trainPlan && trainPlan.id === r.id ? trainPlan : null;
-    const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>`
+    // (Guns or engineers alone in hand over enemy ground: the right-click's own refusal, said on the hover first. Log b357.)
+    const lone = aloneAt(r.id);
+    const order = lone ? `<br><span class="tipno">${esc(lone)}</span>` : way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>`
       : tp && tp.go ? rideTip(r.id)
       // (A break he can act on comes first, its opening in the box's emphasis, and the kept march after it, dim; any
       // other reason is an aside after the march's line. The art director's railway brief, section 8.)
@@ -9020,7 +9108,7 @@ function wireMap(): void {
     const t = townIn(g, r.id)!;
     const pz = prize(g, r.id);
     const has = t.signs.filter((s) => s !== 'fort').map((s) => (s === 'factory' ? `${t.factories} factor${t.factories === 1 ? 'y' : 'ies'}` : TOWNS.words[s].toLowerCase()));
-    const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(natName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(natName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
+    const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(theName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(theName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
     tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}${sortie}`;
     }

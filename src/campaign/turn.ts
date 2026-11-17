@@ -501,7 +501,9 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
     if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
     return l;
-  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Tanks alone' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
+  // (Guns alone, ruling 211(a): before the battle the row is left out while any defender is not identified, and the
+  // odds speak alone; the fog wins, the design director's log b357. After it they have been seen.)
+  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Tanks alone' || l.label === 'Guns alone' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
   // Tanks with no infantry beside them, against guns that are not known: the most they could take (ruling 164(c)).
   const loneMost = k.none.length && a.faced?.antiTank && a.faced.shock !== null ? SUPPORT.antiTank.alone.cut * (1 - a.faced.antiTank.cover) : 0;
   if (loneMost >= 0.005) {

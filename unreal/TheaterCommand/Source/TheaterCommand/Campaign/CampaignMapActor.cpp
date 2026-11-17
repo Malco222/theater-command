@@ -646,15 +646,44 @@ void ACampaignMapActor::BuildFrontLine()
 	static const double Heavier[2] = { 1.0, 2.7 };
 	int32 Mine = 0, Theirs = 0;
 	double ToBarb = 1.1;
+	// (Speed, 17 November 2026: the holder of each province as a number, and the pairs at war as numbers. Every edge
+	// of the world was having a name made of its two holders to look the war up, each time a province changed hands.)
+	TMap<FString, int32> Numbers;
+	TArray<int32> Holder;
+	Holder.SetNumUninitialized(Data.Regions.Num());
+	for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+	{
+		const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
+		Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+	}
+	TSet<uint32> PairsAtWar;
+	for (const FString& Pair : WarSet)
+	{
+		FString One, Other;
+		if (Pair.Split(TEXT("|"), &One, &Other))
+		{
+			const int32* A = Numbers.Find(One);
+			const int32* B = Numbers.Find(Other);
+			if (A && B)
+			{
+				PairsAtWar.Add((static_cast<uint32>(*A) << 16) | static_cast<uint32>(*B));
+			}
+		}
+	}
+	TArray<bool> IsFoe;
+	IsFoe.Init(false, Numbers.Num());
+	for (const TPair<FString, int32>& Each : Numbers)
+	{
+		IsFoe[Each.Value] = WarFoes.Contains(Each.Key);
+	}
 	for (const FSharedEdge& Edge : SharedEdges)
 	{
-		const FString& Here = Data.Regions[Edge.Here].Owner;
-		const FString& There = Data.Regions[Edge.There].Owner;
-		if (Here == There || !WarSet.Contains(Here + TEXT("|") + There))
+		const int32 Here = Holder[Edge.Here], There = Holder[Edge.There];
+		if (Here == There || !PairsAtWar.Contains((static_cast<uint32>(Here) << 16) | static_cast<uint32>(There)))
 		{
 			continue;
 		}
-		const bool bHereFoe = WarFoes.Contains(Here), bThereFoe = WarFoes.Contains(There);
+		const bool bHereFoe = IsFoe[Here], bThereFoe = IsFoe[There];
 		const bool bMine = bHereFoe != bThereFoe;
 		(bMine ? Mine : Theirs)++;
 		const FVector2D Toward = bThereFoe ? Edge.Side : -Edge.Side; // (toward the player's enemy)
@@ -9332,13 +9361,10 @@ void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed)
 			{
 				continue;
 			}
-			if (!bAny)
-			{
-				Shape.MeasureFrontiers(Data);
-				bAny = true;
-			}
+			bAny = true;
 			const int32 I0 = FMath::Clamp(FMath::FloorToInt32((X0 - Shape.OriginX) / Shape.Cell), 0, Shape.NX - 1), I1 = FMath::Clamp(FMath::CeilToInt32((X1 - Shape.OriginX) / Shape.Cell), 0, Shape.NX - 1);
 			const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Y0 - Shape.OriginY) / Shape.Cell), 0, Shape.NY - 1), J1 = FMath::Clamp(FMath::CeilToInt32((Y1 - Shape.OriginY) / Shape.Cell), 0, Shape.NY - 1);
+			Shape.MeasureFrontiers(Data, I0, J0, I1, J1); // (speed: in the box that changed, on this sheet)
 			Painted.PaintTint(Data, Shape, I0, J0, I1, J1);
 			Box.Min.X = FMath::Min(Box.Min.X, I0);
 			Box.Min.Y = FMath::Min(Box.Min.Y, J0);
@@ -9672,15 +9698,24 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
 	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.
-	{
-		THEATER_SPEED_SCOPE(MeasureFrontiers);
-		Terrain.MeasureFrontiers(Data);
-	}
 	const double Margin = FCampaignGround::BandReach + 2.0; // (the band of stronger stain along the new frontier reaches that far in)
 	const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.X - Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 I1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
 	const int32 J1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.Y + Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+	{
+		// (Speed, 17 November: the frontiers are measured again in the box that was changed, not over the whole table.
+		// Where the League has turned, ground far from the box changes colour too: then the whole of it.)
+		THEATER_SPEED_SCOPE(MeasureFrontiers);
+		if (Turned.Num() > 0 || !bLandLaid)
+		{
+			Terrain.MeasureFrontiers(Data);
+		}
+		else
+		{
+			Terrain.MeasureFrontiers(Data, I0, J0, I1, J1);
+		}
+	}
 	// (names written on ground that has changed hands are inked to suit its new paint)
 	for (int32 i = 0; i < Labels.Num() && i < LabelRegions.Num(); ++i)
 	{
