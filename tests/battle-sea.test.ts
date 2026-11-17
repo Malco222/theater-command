@@ -124,7 +124,7 @@ describe('the orders of the first slice', () => {
     const cv = piece(sim, 'att', 'cv'), foe = piece(sim, 'def', 'bb');
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(true);
     const off = events(sim).find((e) => e.what === 'ability')!;
-    expect(off.text).toBe('Carrier, Home Fleet flies off a strike of 24 bombers at Battleship, Battle Fleet.');
+    expect(off.text).toBe('A carrier of Home Fleet flies off 24 bombers against a battleship of Battle Fleet.');
     // Not ready again until its aircraft are back.
     expect(sim.command({ do: 'ability', units: [cv.id], key: 'strike', target: foe.id }, 'att')).toBe(false);
     const str0 = foe.str;
@@ -176,6 +176,17 @@ describe('the orders of the first slice', () => {
     expect(r.lines.join(' ')).not.toMatch(/dice/i);
     // Nothing is taken after the end.
     expect(sim.command({ do: 'hold', units: [piece(sim, 'att', 'bb').id] }, 'att')).toBe(false);
+  });
+
+  it('handed to the staff before a shot is fired, it books exactly what the campaign would have rolled', () => {
+    for (const seed of [3, 11, 29]) for (const odds of [0.85, 1.3, 2.14]) {
+      const sim = battle(seed, { odds });
+      expect(sim.command({ do: 'dice' }, 'att')).toBe(true);
+      const r = sim.over!;
+      expect(r.R).toBeCloseTo(odds * sim.luck, 9);
+      expect(r.winner).toBe(r.R >= 1 ? 'att' : 'def');
+      expect(r.lines).toContain('No ship had gone down on either side when the staff took over.');
+    }
   });
 
   it('the computer takes over a side when asked, and gives it back', () => {

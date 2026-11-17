@@ -1,0 +1,17 @@
+/* The fleet action page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
+   is scoped to .sea, so the field battle page never sees it. */
+.sea .btitle { flex: 0 1 460px; }
+.sea .btitle .tc-data { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .bends .tc-data { white-space: nowrap; }
+.sea .offer .otop .tc-data { white-space: nowrap; }
+
+/* A piece's card: what it is, then its fleet underneath ("4 destroyers" / "Mediterranean Fleet"). */
+.sea .ucard .uwhat { display: grid; min-width: 0; }
+.sea .ucard .uwhat b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard .uwhat small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard .bsign { flex: none; width: 34px; height: 16px; }
+
+/* Speed for the chosen ships, over the field's lower left, above the keys. */
+.sea .seaspeed { position: absolute; left: 12px; bottom: 40px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+.sea .seaspeed[hidden] { display: none; }
+.sea .seaspeed .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
