@@ -42,7 +42,7 @@
     "id": "MAN",
     "small": true,
     "years": {
-     "1939": "A state made by Japan, with Japan's army on its soil and Japan's officials in its ministries. At war with China from the first day. Four thin divisions, the steel of Anshan, and the Soviet Union on three sides. Without Japan you cannot stand."
+     "1939": "A state made by Japan, with Japan's army on its soil and Japan's officials in its ministries. Four thin divisions, the steel of Anshan and the coal of Fushun, and the Soviet Union on three sides. Without Japan you cannot stand."
     }
    },
    {
@@ -846,7 +846,7 @@
       "name": "A country too large to conquer",
       "builtin": true,
       "text": "China has lost its coast, its capital and most of its industry, and fights on from the mountains of the interior.",
-      "rule": "China asks for terms only when nearly all it holds of worth is lost: 97 parts in a hundred, where most countries give in at about half."
+      "rule": "China asks for terms only when 97% of what it holds of worth is lost. Most countries ask at about half."
      }
     ]
    },
@@ -912,7 +912,7 @@
       "name": "Bends before the storm",
       "builtin": true,
       "text": "A small kingdom that has kept its independence by giving way to the stronger power in time, as it agreed a cease-fire within hours of Japan's landings in December 1941.",
-      "rule": "Thailand asks for terms early: when 20 parts in a hundred of what it holds of worth are lost."
+      "rule": "Thailand asks for terms early: when 20% of what it holds of worth is lost."
      }
     ]
    },
@@ -930,7 +930,7 @@
       "name": "Coal and steel for another's army",
       "builtin": true,
       "text": "The steel of Anshan, the coal of Fushun and the arsenal at Mukden, built up to feed Japan's army.",
-      "rule": "Its three factories, at Mukden and Anshan, pay into its budget as any factory does. They are on the map, and nothing is added for them."
+      "rule": "Three factories, two at Mukden and one at Anshan, pay into its budget as any factory does."
      }
     ]
    },
@@ -1022,9 +1022,9 @@
     ],
     "last": [
      "Ward",
-     "Brown",
+     "Kirby",
      "Taylor",
-     "Walker",
+     "Gibbs",
      "Spencer",
      "Murray",
      "Hayes",
@@ -1038,8 +1038,8 @@
    "NZL": {
     "first": [
      "Donald",
-     "Robert",
-     "David",
+     "Ernest",
+     "Gordon",
      "Alexander",
      "Hugh",
      "Leonard",
@@ -1051,7 +1051,7 @@
      "Thomson",
      "Anderson",
      "Kerr",
-     "Cunningham",
+     "Barclay",
      "Reid",
      "Morrison",
      "Hunter",
@@ -1101,7 +1101,7 @@
     "last": [
      "Te-lin",
      "Hung-sheng",
-     "Chi-wu",
+     "Hsiu-feng",
      "Shu-tang",
      "Wen-hai",
      "Yung-an",

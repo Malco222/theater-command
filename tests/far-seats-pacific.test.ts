@@ -42,8 +42,12 @@ describe('the rows as they wait', () => {
     expect(S.door.path.CHN).toMatch(/^At war with Japan from the first day/);
     expect(S.door.path.MAN).toMatch(/^Japan's client\. At war with China from the first day/);
     expect(S.door.path.MGL).toMatch(/^The Soviet Union's client\./);
-    // The first day's war stands and the opening text says so (T6).
-    expect(S.grand.nations.find((n: any) => n.id === 'MAN').years['1939']).toMatch(/At war with China from the first day/);
+    // The first day's war is said once on the door, on the ITS PATH row and not in the opening text above it; and
+    // a row that names the tie itself (id dominion or client) is left off the door, which keeps it on the Abilities
+    // page (the UI director's pass, sheet 33).
+    expect(S.grand.nations.find((n: any) => n.id === 'MAN').years['1939']).not.toMatch(/first day/);
+    for (const id of ['AUS', 'NZL']) expect(S.traits.nations[id].traits.map((t: any) => t.id), id).toContain('dominion');
+    for (const id of ['MAN', 'MGL']) expect(S.traits.nations[id].traits.map((t: any) => t.id), id).toContain('client');
     // None is on the door already, and none is a country the League bars.
     const door = (grandData as any).nations.map((n: any) => n.id);
     for (const id of SIX) { expect(door, id).not.toContain(id); expect((leagueData as any).never, id).not.toContain(id); }
