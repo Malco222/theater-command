@@ -333,6 +333,18 @@ struct FWarPrompt
 	TArray<FApproachRow> Ways;
 	int32 Way = 0;
 	FText WaysHead;
+	// (Rules 84.5; the UI director's sheet 34, "The road before the order".) The march-up card in the landing card's
+	// parts: the kicker and date, the two sides with THE ROAD between them, the headline (bright where he can attack
+	// this month, amber where the attack waits), the sentence under it, and the note over the rows.
+	FString Kicker; // "MARCH UP AND ATTACK  ·  JANUARY 1941"
+	FString OursTag, OursName, OursLine; // the hand: its flag, the name the tray gives it, and its numbers
+	FString FoeName, FoeLine; // the enemy as far as the fog shows ("Round Pittsburgh"; its flag is Tag)
+	FString From; // where the road starts
+	FString Road; // "from New York to Susquehanna, beside the enemy"
+	FText Headline; // the row's own sentence: "3 moves left on arrival: you can attack this month"
+	bool bHeadAmber = false; // the attack waits for next month
+	FText Under; // the staff's pick and what Enter does, in one or two sentences
+	FText WaysNote; // "press a row to go another way", or "the only one in reach this month"
 };
 
 /**

@@ -3605,6 +3605,17 @@ namespace
 					AlarmGroundBrush = FSlateRoundedBoxBrush(AlarmGround, 2.0f, Alarm, 1.0f);
 					AlarmCountBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, FLinearColor(FColor::FromHex(TEXT("E2D7BC"))).CopyWithNewOpacity(0.6f), 1.0f);
 				}
+				{
+					// (Rules 84.5; the UI director's sheet 34.) The march-up card's rows: a box with a hairline between rows,
+					// the chosen row on a warmer ground with a 3px brass edge, and the staff's pick as a small brass tag.
+					ApproachBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("20160E"))), 2.0f, Brass.CopyWithNewOpacity(0.45f), 1.0f);
+					ApproachLitBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("3A2918"))), 0.0f);
+					ApproachEdgeBrush = FSlateRoundedBoxBrush(BrightBrass, 0.0f);
+					ApproachHairBrush = FSlateRoundedBoxBrush(Brass.CopyWithNewOpacity(0.35f), 0.0f);
+					PickTagBrush = FSlateRoundedBoxBrush(BrightBrass, 2.0f);
+					RadioRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 7.0f, BrightBrass, 1.5f);
+					RadioDotBrush = FSlateRoundedBoxBrush(BrightBrass, 3.0f);
+				}
 				RearChipBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2E241A"))).CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("6F5D38"))), 1.0f);
 				RearRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 8.0f, FLinearColor::White, 1.2f);
 				// (rulings 86 and 87: the marks inside the pointer's box)
@@ -5836,8 +5847,9 @@ namespace
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							// (a landing's question carries the reckoning and the holding of the sea: it is broader, so that its lines do not fold)
-							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 900.0f : 640.0f); })
+							// (a landing's question carries the reckoning and the holding of the sea: it is broader, so that its lines do not
+							// fold; the march-up card is the landing card's width, sheet 34's 880)
+							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 900.0f : Controller.IsValid() && Controller->GetWarPrompt().bApproach ? 880.0f : 640.0f); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 24.0f))
 								[
@@ -5845,6 +5857,7 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 									[
 										SNew(SBox).WidthOverride(132.0f).HeightOverride(88.0f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
 										[
 											SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWarPrompt().Tag : FString()); })
 										]
@@ -5852,7 +5865,13 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										// (Rules 84.5; sheet 34.) The march-up card stands in the flag's and the title's place.
+										ApproachCard()
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
@@ -5882,6 +5901,7 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Body.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Body : FText::GetEmpty(); })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
@@ -5897,22 +5917,6 @@ namespace
 											return FSlateColor(Tone == 3 ? Alarm : Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Muted);
 										})
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Ashore : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
-									[
-										// (The design director, 17 November 2026.) The approach order: the ways up to the enemy, the game's
-										// pick first and lit. A press picks another; the road on the map and the card's words follow it.
-										SNew(SVerticalBox)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach && Controller->GetWarPrompt().Ways.Num() > 1 ? EVisibility::Visible : EVisibility::Collapsed; })
-										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
-										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Brass)
-											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().WaysHead : FText::GetEmpty(); })
-										]
-										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(0)]
-										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(1)]
-										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(2)]
-										+ SVerticalBox::Slot().AutoHeight()[ApproachRow(3)]
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
@@ -7386,36 +7390,259 @@ namespace
 				];
 		}
 
-		/** One way up on the approach order's card: its province, its river and ground in a word, and what is left on arrival. The one chosen is lit. */
-		TSharedRef<SWidget> ApproachRow(int32 Index)
+		/** The name a country goes by on a card ("United States"), from the map's own list; its tag where it has none. */
+		FString NationName(const FString& Tag) const
 		{
-			auto Way = [this, Index]() -> const FApproachRow* { return Controller.IsValid() && Controller->GetWarPrompt().Ways.IsValidIndex(Index) ? &Controller->GetWarPrompt().Ways[Index] : nullptr; };
-			auto Lit = [this, Index]() { return Controller.IsValid() && Controller->GetWarPrompt().Way == Index; };
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false)
-				.Visibility_Lambda([Way]() { return Way() ? EVisibility::Visible : EVisibility::Collapsed; })
-				.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickApproach(Index); } return FReply::Handled(); })
+			const ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			const FCampaignNation* Nation = Table ? Table->GetData().FindNation(Tag) : nullptr;
+			return Nation ? Nation->Name : Tag;
+		}
+
+		/**
+		 * (Rules 84.5; the UI director's sheet 34, "The road before the order".) The march up and the attack planned as
+		 * one order, in the landing card's parts and nothing new: the kicker and the date, the title, the two sides with
+		 * THE ROAD between them, the headline (what he gets on arrival: bright where he can attack this month, amber where
+		 * the attack waits), the staff's pick in a sentence, and the approaches as rows he can press. Every word is the
+		 * rules' or the sheet's; the controller sets them.
+		 */
+		TSharedRef<SWidget> ApproachCard()
+		{
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			auto Card = [this]() -> const FWarPrompt* { return Controller.IsValid() ? &Controller->GetWarPrompt() : nullptr; };
+			const FLinearColor Amber(FColor::FromHex(TEXT("E0A13C")));
+			auto Hair = [this]() -> TSharedRef<SWidget>
+			{
+				return SNew(SBox).HeightOverride(1.0f)[SNew(SImage).Image(&ApproachHairBrush)];
+			};
+			// One side of the card: the flag and the country's name over the army's name and its numbers.
+			auto Side = [this, Card, Px](bool bOurs) -> TSharedRef<SWidget>
+			{
+				const EHorizontalAlignment Align = bOurs ? HAlign_Left : HAlign_Right;
+				auto Flag = [this, Card, bOurs]() -> TSharedRef<SWidget>
+				{
+					return SNew(SBox).WidthOverride(38.0f).HeightOverride(22.0f)
+						[
+							SNew(SImage).Image_Lambda([this, Card, bOurs]() { const FWarPrompt* P = Card(); return FlagBrush(P ? (bOurs ? P->OursTag : P->Tag) : FString()); })
+						];
+				};
+				TSharedRef<STextBlock> Country = SNew(STextBlock).Font(Typed(Px(10.0f), true, 60)).ColorAndOpacity(Brass)
+					.Text_Lambda([this, Card, bOurs]() { const FWarPrompt* P = Card(); return P ? FText::FromString(NationName(bOurs ? P->OursTag : P->Tag).ToUpper()) : FText::GetEmpty(); });
+				TSharedRef<SHorizontalBox> Head = SNew(SHorizontalBox);
+				if (bOurs)
+				{
+					Head->AddSlot().AutoWidth().VAlign(VAlign_Center)[Flag()];
+					Head->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[Country];
+				}
+				else
+				{
+					Head->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)[Country];
+					Head->AddSlot().AutoWidth().VAlign(VAlign_Center)[Flag()];
+				}
+				return SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(Align)[Head]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 10.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Serif(TEXT("Regular"), Px(28.0f))).ColorAndOpacity(Cream)
+						.Text_Lambda([Card, bOurs]() { const FWarPrompt* P = Card(); return P ? FText::FromString(bOurs ? P->OursName : P->FoeName) : FText::GetEmpty(); })
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Typed(Px(13.0f))).ColorAndOpacity(Muted)
+						.Text_Lambda([Card, bOurs]() { const FWarPrompt* P = Card(); return P ? FText::FromString(bOurs ? P->OursLine : P->FoeLine) : FText::GetEmpty(); })
+					];
+			};
+			return SNew(SVerticalBox)
+				.Visibility_Lambda([Card]() { const FWarPrompt* P = Card(); return P && P->bApproach ? EVisibility::Visible : EVisibility::Collapsed; })
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Font(Typed(Px(11.0f), true, 60)).ColorAndOpacity(Brass)
+					.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? FText::FromString(P->Kicker) : FText::GetEmpty(); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+					.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? P->Title : FText::GetEmpty(); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 14.0f)[Hair()]
+				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)[Side(true)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f)
 					[
 						SNew(SBox).WidthOverride(170.0f)
 						[
-							SNew(STextBlock).Font(Font(TEXT("Bold"), 13))
-							.ColorAndOpacity_Lambda([this, Lit]() { return FSlateColor(Lit() ? BrightBrass : Cream); })
-							.Text_Lambda([Way, Lit]() { const FApproachRow* Row = Way(); return Row ? FText::FromString((Lit() ? TEXT("\u25B8 ") : TEXT("   ")) + Row->Name) : FText::GetEmpty(); })
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(STextBlock).Font(Typed(Px(10.0f), true, 60)).ColorAndOpacity(Brass).Text(FText::FromString(TEXT("THE ROAD")))
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Italic"), Px(15.0f))).ColorAndOpacity(Muted).AutoWrapText(true).Justification(ETextJustify::Center)
+								.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? FText::FromString(P->Road) : FText::GetEmpty(); })
+							]
 						]
 					]
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)[Side(false)]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 16.0f)[Hair()]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					// (the headline is what he gets on arrival: bright where he can attack this month, amber where it waits)
+					SNew(STextBlock).Font(Serif(TEXT("Bold"), Px(26.0f))).AutoWrapText(true)
+					.ColorAndOpacity_Lambda([Card, Amber]() { const FWarPrompt* P = Card(); return FSlateColor(P && P->bHeadAmber ? Amber : Cream); })
+					.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? P->Headline : FText::GetEmpty(); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Serif(TEXT("Regular"), Px(16.0f))).ColorAndOpacity(Cream).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Visibility_Lambda([Card]() { const FWarPrompt* P = Card(); return P && !P->Under.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? P->Under : FText::GetEmpty(); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+				[
+					// THE APPROACH: the rows in a box, the staff's pick first and lit. A press on a row takes that way: the
+					// road, the headline and the map follow it.
+					SNew(SBorder).BorderImage(&ApproachBoxBrush).Padding(FMargin(1.0f))
 					[
-						// (no order row is cut mid-word, and a fold falls at a dot and the dot goes: check 19)
-						SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(360.0f)
-						.Text_Lambda([Way]()
-						{
-							const FApproachRow* Row = Way();
-							if (!Row) { return FText::GetEmpty(); }
-							const FString Left = Row->bAttack ? FString::Printf(TEXT("%d %s left"), Row->Left, Row->Left == 1 ? TEXT("move") : TEXT("moves")) : FString(TEXT("no move left"));
-							return FText::FromString(Row->How + TEXT("  \u00B7  ") + Left);
-						})
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(12.0f, 8.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Typed(Px(10.0f), true, 60)).ColorAndOpacity(Brass)
+								.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? P->WaysHead : FText::GetEmpty(); })
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Typed(Px(11.0f))).ColorAndOpacity(Muted)
+								.Text_Lambda([Card]() { const FWarPrompt* P = Card(); return P ? P->WaysNote : FText::GetEmpty(); })
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight()[ApproachRow(0)]
+						+ SVerticalBox::Slot().AutoHeight()[ApproachRow(1)]
+						+ SVerticalBox::Slot().AutoHeight()[ApproachRow(2)]
+						+ SVerticalBox::Slot().AutoHeight()[ApproachRow(3)]
+					]
+				];
+		}
+
+		/**
+		 * (Sheet 34.) One approach on the march-up card: a hairline over it, the radio mark, the province, its ground in
+		 * the game's own word and its river ("no river to cross", or "across the Vistula" with the name in the bright
+		 * ink), and the moves left on arrival ("no move left" in amber). The first row is the staff's pick and says so.
+		 * The one chosen stands on a warmer ground with a brass edge.
+		 */
+		TSharedRef<SWidget> ApproachRow(int32 Index)
+		{
+			auto Px = [](float Pixels) { return Pixels * 0.75f; };
+			auto Way = [this, Index]() -> const FApproachRow* { return Controller.IsValid() && Controller->GetWarPrompt().Ways.IsValidIndex(Index) ? &Controller->GetWarPrompt().Ways[Index] : nullptr; };
+			auto Lit = [this, Index]() { return Controller.IsValid() && Controller->GetWarPrompt().Way == Index; };
+			const FLinearColor Amber(FColor::FromHex(TEXT("E0A13C")));
+			return SNew(SVerticalBox)
+				.Visibility_Lambda([Way]() { return Way() ? EVisibility::Visible : EVisibility::Collapsed; })
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox).HeightOverride(1.0f)[SNew(SImage).Image(&ApproachHairBrush)]
+				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickApproach(Index); } return FReply::Handled(); })
+					[
+						SNew(SBorder).Padding(FMargin(0.0f))
+						.BorderImage_Lambda([this, Lit]() -> const FSlateBrush* { return Lit() ? &ApproachLitBrush : &NoBrush; })
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth()
+							[
+								// (the chosen row's brass edge)
+								SNew(SBox).WidthOverride(3.0f)
+								[
+									SNew(SImage).Image(&ApproachEdgeBrush)
+									.Visibility_Lambda([Lit]() { return Lit() ? EVisibility::Visible : EVisibility::Hidden; })
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(10.0f, 8.0f, 12.0f, 8.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									// (the radio mark, drawn rather than lettered, so that no face is wanting the glyph: a brass
+									// ring, with a dot in it on the chosen row)
+									SNew(SBox).WidthOverride(14.0f).HeightOverride(14.0f)
+									[
+										SNew(SOverlay)
+										+ SOverlay::Slot()[SNew(SImage).Image(&RadioRingBrush)]
+										+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+										[
+											SNew(SBox).WidthOverride(6.0f).HeightOverride(6.0f)
+											.Visibility_Lambda([Lit]() { return Lit() ? EVisibility::Visible : EVisibility::Hidden; })
+											[
+												SNew(SImage).Image(&RadioDotBrush)
+											]
+										]
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(170.0f)
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), Px(18.0f))).ColorAndOpacity(Cream)
+										.Text_Lambda([Way]() { const FApproachRow* Row = Way(); return Row ? FText::FromString(Row->Name) : FText::GetEmpty(); })
+									]
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									// (the ground in the game's own word, then the river: its name in the bright ink, since it
+									// weakens the attack; "no river to cross" in the quiet one)
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+									[
+										SNew(STextBlock).Font(Typed(Px(12.0f))).ColorAndOpacity(Muted)
+										.Text_Lambda([Way]()
+										{
+											const FApproachRow* Row = Way();
+											if (!Row) { return FText::GetEmpty(); }
+											const FString Ground = Row->Ground.IsEmpty() ? FString() : FCampaignMapData::TerrainLabel(Row->Ground) + TEXT("  \u00B7  ");
+											return FText::FromString(Ground);
+										})
+									]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+									[
+										SNew(STextBlock)
+										.Font_Lambda([Way, Px]() { const FApproachRow* Row = Way(); return Typed(Px(12.0f), Row && !Row->River.IsEmpty()); })
+										.ColorAndOpacity_Lambda([Way]() { const FApproachRow* Row = Way(); return FSlateColor(Row && !Row->River.IsEmpty() ? BrightBrass : Muted); })
+										.Text_Lambda([Way]() { const FApproachRow* Row = Way(); return Row ? FText::FromString(Row->RiverWords.IsEmpty() ? Row->How : Row->RiverWords) : FText::GetEmpty(); })
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Font(Typed(Px(12.0f), true))
+									.ColorAndOpacity_Lambda([Way, Amber]() { const FApproachRow* Row = Way(); return FSlateColor(Row && Row->Left <= 0 ? Amber : Cream); })
+									.Text_Lambda([Way]()
+									{
+										const FApproachRow* Row = Way();
+										if (!Row) { return FText::GetEmpty(); }
+										if (Row->Left <= 0) { return FText::FromString(TEXT("no move left")); }
+										return FText::FromString(FString::Printf(TEXT("%d %s left"), Row->Left, Row->Left == 1 ? TEXT("move") : TEXT("moves")));
+									})
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									// (the first row is the staff's pick, and says so; a lone row needs no tag, as on the sheet's amber
+									// card, where the note over it says it is the only one in reach)
+									SNew(SBorder).BorderImage(&PickTagBrush).Padding(FMargin(6.0f, 1.0f, 6.0f, 2.0f))
+									.Visibility_Lambda([this, Index]() { return Index == 0 && Controller.IsValid() && Controller->GetWarPrompt().Ways.Num() > 1 ? EVisibility::Visible : EVisibility::Collapsed; })
+									[
+										SNew(STextBlock).Font(Typed(Px(10.0f), true, 20)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("1F1808"))))
+										.Text(FText::FromString(TEXT("The staff's pick")))
+									]
+								]
+							]
+						]
 					]
 				];
 		}
@@ -12142,6 +12369,8 @@ namespace
 		FButtonStyle AlarmStyle; // (rules 84.2.6, sheet 35) the alarm's red row: a block on #1d0f0c with a 1px edge in the alarm's red
 		FSlateBrush AlarmEdgeBrush, AlarmCountBrush; // and its 5px left edge, and the small box round its "1 of 3"
 		FSlateBrush AlarmGroundBrush; // (rules 84.2.6) the same block, for a row that is pressed through a plain button
+		FSlateBrush ApproachBoxBrush, ApproachLitBrush, ApproachEdgeBrush, ApproachHairBrush, PickTagBrush; // (rules 84.5, sheet 34) the march-up card's rows
+		FSlateBrush RadioRingBrush, RadioDotBrush; // and the radio mark on each row
 		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;

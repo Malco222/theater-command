@@ -4596,8 +4596,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				else if (const FApproachPlan Road = (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
 				{
 					// (The code checker, 17 November.) One test for the tip and the order: the march-up card is promised only
-					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order).
-					Line += TEXT("\nAn army attacks from the province next door. Right-click: plan the march up and the attack. You are shown the road first.");
+					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order). (Rules 84.5;
+					// sheet 34: the slip says the order, and under it the staff's pick and the moves left on arrival.)
+					const FApproachRow& Pick = Road.Rows[0];
+					const FString Left = Pick.Left <= 0 ? FString(TEXT("no move left")) : FString::Printf(TEXT("%d %s left"), Pick.Left, Pick.Left == 1 ? TEXT("move") : TEXT("moves"));
+					Line += FString::Printf(TEXT("\nRight-click \u00B7 march up and attack\nBy %s, %s on arrival"), *Pick.Name, *Left);
 				}
 				else if (!bByRail && !bBySea && RailBeyond.Contains(TipRegion))
 				{
@@ -6292,8 +6295,47 @@ bool ACampaignPlayerController::OpenApproach(int32 RegionId, bool bSayNone)
 		WarPrompt.Tag = Foe->Nation;
 	}
 	WarPrompt.Name = Plan.Name;
-	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("March on the enemy at %s"), *Plan.Name));
-	WarPrompt.Confirm = FText::FromString(TEXT("MARCH"));
+	if (!Plan.Foe.IsEmpty())
+	{
+		WarPrompt.Tag = Plan.Foe;
+	}
+	// (Rules 84.5; the UI director's sheet 34.) The card in the landing card's parts: the kicker and the date, the title,
+	// the two sides with THE ROAD between them, and the fixed foot, CALL IT OFF and MARCH UP. Its words are the sheet's.
+	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Marching on %s"), *Plan.Name));
+	WarPrompt.Kicker = FString::Printf(TEXT("MARCH UP AND ATTACK  \u00B7  %s"), *View.Date.ToUpper());
+	WarPrompt.OursTag = View.Human;
+	// (One voice after a press: who is named.) The whole army in hand as the tray's head names it, part of it as "2 corps
+	// of the American army", and one corps alone by its name without the bracket.
+	if (PickedCorps.Num() == 1)
+	{
+		const FViewCorps* Alone = View.Corps.FindByPredicate([this](const FViewCorps& Each) { return Each.Id == PickedCorps[0]; });
+		FString Called = Alone ? Alone->Name : HandArmy;
+		int32 Open = INDEX_NONE;
+		if (Called.EndsWith(TEXT(")")) && Called.FindLastChar(TEXT('('), Open) && Called.Mid(Open).Contains(TEXT("Division")))
+		{
+			Called = Called.Left(Open).TrimEnd();
+		}
+		WarPrompt.OursName = Called;
+	}
+	else if (PickedCorps.Num() == HandArmyIds.Num() && !PickedCorps.ContainsByPredicate([this](int32 Id) { return !HandArmyIds.Contains(Id); }))
+	{
+		WarPrompt.OursName = HandArmy;
+	}
+	else
+	{
+		WarPrompt.OursName = FString::Printf(TEXT("%d corps of %s"), PickedCorps.Num(), *HandArmy);
+	}
+	if (!WarPrompt.OursName.IsEmpty())
+	{
+		WarPrompt.OursName[0] = FChar::ToUpper(WarPrompt.OursName[0]);
+	}
+	WarPrompt.OursLine = Plan.Ours;
+	WarPrompt.FoeName = Plan.FoeName;
+	WarPrompt.FoeLine = Plan.FoeLine;
+	WarPrompt.From = Plan.From;
+	WarPrompt.WaysHead = FText::FromString(TEXT("THE APPROACH"));
+	WarPrompt.WaysNote = FText::FromString(Plan.Rows.Num() > 1 ? TEXT("press a row to go another way") : TEXT("the only one in reach this month"));
+	WarPrompt.Confirm = FText::FromString(TEXT("MARCH UP"));
 	WarPrompt.Cancel = FText::FromString(TEXT("CALL IT OFF"));
 	WarPromptSince = FPlatformTime::Seconds();
 	DressApproach();
@@ -6309,17 +6351,26 @@ void ACampaignPlayerController::DressApproach()
 		return;
 	}
 	const FApproachRow& Way = WarPrompt.Ways[WarPrompt.Way];
-	FString Body = FString::Printf(TEXT("An army attacks from the province next door. This one marches to %s and comes up beside the enemy at %s.\n%s."), *Way.Name, *WarPrompt.Name, *Way.Arrive);
-	Body += FString::Printf(TEXT("\nThe way in from %s: %s."), *Way.Name, *Way.How);
-	if (!Way.Says.IsEmpty())
+	// (Rules 84.5; sheet 34, the words passed at 16:23 UTC.) The headline is what he gets on arrival, bright where he can
+	// attack this month and amber where the attack waits; under it the staff's pick and what Enter does.
+	const FString Army = WarPrompt.OursName.IsEmpty() ? FString(TEXT("The army")) : WarPrompt.OursName;
+	const FString ArmyMid = Army.StartsWith(TEXT("The "), ESearchCase::CaseSensitive) ? TEXT("the") + Army.Mid(3) : Army; // (inside a sentence)
+	WarPrompt.Road = FString::Printf(TEXT("from %s to %s, beside the enemy"), *WarPrompt.From, *Way.Name);
+	WarPrompt.Headline = FText::FromString(Way.Arrive);
+	WarPrompt.bHeadAmber = !Way.bAttack;
+	FString Under;
+	if (Way.bAttack)
 	{
-		Body += TEXT("\n") + Way.Says;
+		Under = WarPrompt.Way == 0 ? FString::Printf(TEXT("The staff takes you by %s, the ground beside the enemy that is reached soonest. "), *Way.Name) : FString();
+		Under += FString::Printf(TEXT("When %s arrives the attack card opens, with the odds in front of you."), *ArmyMid);
 	}
-	WarPrompt.Body = FText::FromString(Body);
-	WarPrompt.Last = FText::FromString(Way.bAttack
-		? TEXT("When the army arrives the attack card opens, and nothing is fought until you send them in.")
-		: TEXT("Only the march is carried out this month."));
-	WarPrompt.WaysHead = WarPrompt.Ways.Num() > 1 ? FText::FromString(TEXT("THE WAYS UP")) : FText::GetEmpty();
+	else
+	{
+		Under = FString::Printf(TEXT("The march alone is carried out. %s ends the month at %s, beside the enemy."), *Army, *Way.Name);
+	}
+	WarPrompt.Under = FText::FromString(Under);
+	WarPrompt.Body = FText::GetEmpty();
+	WarPrompt.Last = FText::GetEmpty();
 	// The road is drawn: to the approach, and on to the enemy.
 	TArray<int32> Road = Way.Road;
 	Road.Add(WarPrompt.ApproachTo);
@@ -6445,7 +6496,9 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 			return;
 		}
 	}
-	Notify(FString::Printf(TEXT("The army stands at %s, beside the enemy at %s. It has no move left this month: the attack waits for next month."), *Way.Name, *Asked.Name), 9.0);
+	// (Rules 84.5; sheet 34.) The march alone was carried out: what the paper says after Enter on the amber card.
+	Notify(FString::Printf(TEXT("%s has marched to %s. No move is left this month: right-click the army round %s next month to plan the attack."),
+		Asked.OursName.IsEmpty() ? TEXT("The army") : *Asked.OursName, *Way.Name, *Asked.Name), 9.0);
 }
 
 FString ACampaignPlayerController::GarrisonWhere() const
