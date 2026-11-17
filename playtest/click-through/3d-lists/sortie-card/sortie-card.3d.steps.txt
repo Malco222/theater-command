@@ -6,11 +6,16 @@
 # nothing changes; does = the game changes. Please keep a picture of every step: the card's words are the test.
 start	USA 1939-09
 load	case2-poland-september-1939-besieged.save.txt
-# A. Mlawa: the garrison's sentence, then the second click opens the card (step 29 of attack-8423, owed then)
+# A. Mlawa: the garrison's sentence; a second click on the same town opens the card in the browser (step 29 of
+# attack-8423): whether it does in 3D is a question of one meaning to a press, so note what it does either way
 select-province	Mlawa	says-why
 select-province	Mlawa	card
-# CALL IT OFF costs nothing: the garrison stays inside, no battle in the news, its moves unspent
-press	CALL IT OFF	says-why
+close
+# The right-click on the garrison's own town opens the card; CALL IT OFF costs nothing: the garrison stays inside,
+# no battle in the news, its moves unspent
+select-province	Mlawa
+order-province	Mlawa	card
+press	CALL IT OFF
 select-province	Mlawa	says-why
 # B. Bialystok by right-click on its own town: the card, read, then called off with Esc
 select-province	Bialystok
