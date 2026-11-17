@@ -27,8 +27,8 @@ import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guar
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, limitAttackers, moveCorps as moveTo, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
+  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  hasRoom, hostileUnits, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, takeOut, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -499,7 +499,7 @@ function mainCampaign(g: Game, nat: string): void {
  * of the invader's side standing on ground the line leaves out in month `t` marches for the nearest ground of its own
  * side's inside the line. At the start of the month the ground they have left goes back (ruling 219, lineGiveBack).
  */
-function lineHome(g: Game, nat: string, t: number): void {
+export function lineHome(g: Game, nat: string, t: number): void {
   if (!lineAny(g, nat)) return;
   if (t === g.turn) lineGiveBack(g, nat);
   for (const c of g.corps) {
@@ -510,7 +510,14 @@ function lineHome(g: Game, nat: string, t: number): void {
     const d = hops(g, c.reg, ours);
     let goal: Region | null = null;
     for (const r of g.regions) if (d[r.id] > 0 && allied(g, nat, r.ctrl) && !lineLeaves(g, nat, r, t) && (!goal || d[r.id] < d[goal.id])) goal = r;
-    if (!goal) continue;
+    // With no road home inside the line, it is taken out by sea (the director, 18:59Z): under F to the nearest
+    // harbour its country holds there inside the line, or else home. Never stranded beyond the line.
+    if (!goal) {
+      const here = g.regions[c.reg];
+      const to = (EASTERN.nearRefuge ? nearHarbour(g, nat, here, (r) => !lineLeaves(g, nat, r, t)) : null) ?? (g.nations[nat].capital >= 0 ? g.regions[g.nations[nat].capital] : null);
+      if (to && to.id !== here.id) takeOut(g, c, to);
+      continue;
+    }
     const back = hops(g, goal.id, ours);
     for (let step = 0; step < 6 && c.ap > 0 && c.reg !== goal.id; step++) {
       let next: Region | null = null;

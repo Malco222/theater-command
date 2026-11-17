@@ -12,8 +12,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import china from '../data/campaign/china-line.json';
-import { lineGiveBack, ringJudgement } from '../src/campaign/ai';
-import { addCorps, allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
+import { lineGiveBack, lineHome, ringJudgement } from '../src/campaign/ai';
+import { EASTERN, addCorps, allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { inLine, lineBinds, lineLeaves, lineShut, lines, type Line } from '../src/campaign/line';
 import { decide, prospect, startOpen, type Op } from '../src/campaign/staff';
@@ -431,6 +431,60 @@ describe('215(c): the record\'s line', () => {
     const f = raided(fra, 'GER', 'FRA');
     expect(lineGiveBack(fra, 'GER').map((x) => x.name)).toEqual(['Lodz']);
     expect(f.ctrl).toBe('POL');
+  });
+
+  it('never strands a corps beyond the line: with no road home inside it, it is taken out by sea (the director, 18:59Z)', () => {
+    drawn();
+    const E = EASTERN as unknown as Record<string, unknown>;
+    const keep = E.nearRefuge;
+    /** A German corps left at Kielce when the offensive's months (5 to 8) are over, with Polish ground all round it. */
+    const stranded = (h: Game): Corps => {
+      const kielce = at(h, 'Kielce');
+      for (const c of [...kielce.units]) removeCorps(h, c);
+      kielce.ctrl = 'GER'; kielce.prev = 'POL'; kielce.since = 5;
+      for (const j of kielce.nb) { const r = h.regions[j]; if (r.owner === 'POL') { r.ctrl = 'POL'; for (const c of r.units.filter((x) => x.nat !== 'POL')) removeCorps(h, c); } }
+      at(h, 'Danzig Corridor').ctrl = 'GER';
+      for (const c of [...at(h, 'Danzig Corridor').units]) removeCorps(h, c);
+      h.turn = 9; h.supplyDirty = true;
+      return addCorps(h, 'GER', 'Raid Corps', 'inf', 2, kielce.id, {});
+    };
+    try {
+      // Under F: to the nearest harbour Germany holds on Poland's ground inside the line, at an evacuation's cost.
+      E.nearRefuge = true;
+      const g = grand(2, null, 1);
+      const c = stranded(g);
+      expect(at(g, 'Kielce').nb.some((j) => allied(g, 'GER', g.regions[j].ctrl))).toBe(false);
+      lineHome(g, 'GER', 9);
+      expect(g.regions[c.reg].name).toBe('Danzig Corridor');
+      expect(c.str).toBeCloseTo(0.75, 9);
+      expect(g.headlines.some((h) => /taken out by sea to Danzig Corridor/.test(h.text))).toBe(true);
+      // The raid ground, empty now, goes back at the next turn of the month (219).
+      expect(lineGiveBack(g, 'GER').map((r) => r.name)).toEqual(['Kielce']);
+      // A harbour beyond the line is no refuge: with none inside it, the corps is taken home.
+      const far = grand(2, null, 1);
+      const d = stranded(far);
+      test.spans['Danzig Corridor'] = [{ from: 1, to: 8, kind: 'day one' }];
+      lineHome(far, 'GER', 9);
+      expect(far.regions[d.reg].id).toBe(far.nations.GER.capital);
+      test.spans['Danzig Corridor'] = [{ from: 1, to: 20, kind: 'day one' }];
+      // Without F it goes home as any lifted-off corps does.
+      E.nearRefuge = undefined;
+      const off = grand(2, null, 1);
+      const e = stranded(off);
+      lineHome(off, 'GER', 9);
+      expect(off.regions[e.reg].id).toBe(off.nations.GER.capital);
+      // Computer against computer only: with the player on either side the line binds nobody, and the corps stays.
+      E.nearRefuge = true;
+      for (const human of ['GER', 'POL']) {
+        const p = grand(2, human, 1);
+        const x = stranded(p);
+        lineHome(p, 'GER', 9);
+        expect(p.regions[x.reg].name, human).toBe('Kielce');
+      }
+    } finally {
+      test.spans['Danzig Corridor'] = [{ from: 1, to: 20, kind: 'day one' }];
+      if (keep === undefined) delete E.nearRefuge; else E.nearRefuge = keep;
+    }
   });
 
   it('holds in a war nobody plays: the invader\'s army takes nothing beyond the line and leaves a raid when its months are over', () => {

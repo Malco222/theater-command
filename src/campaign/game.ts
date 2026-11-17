@@ -2629,12 +2629,34 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
   // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
   // goes on. Without it they are taken home, and from an island home nothing ever ships them back (paper 20, finding 3).
   if (EASTERN.nearRefuge && from.owner !== c.nat && atWar(g, c.nat, from.owner)) {
-    const near = g.regions
-      .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === c.nat && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r))
-      .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y) || a.id - b.id)[0];
+    const near = nearHarbour(g, c.nat, from);
     if (near) return near;
   }
   return g.regions[g.nations[c.nat].capital];
+}
+
+/**
+ * The nearest harbour a nation holds on the ground of the country it stands in, other than where it stands, with no
+ * enemy in it, room for one more corps and the sea open to its ships (ruling 221, F); 'fits' narrows the choice.
+ */
+export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
+  return g.regions
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).length < STACK && seaOpenAt(g, nat, r) && fits(r))
+    .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y) || a.id - b.id)[0] ?? null;
+}
+
+/**
+ * A corps with no road back to its own side is taken out by sea (the director's ruling of 18:59Z, under 221 F): to
+ * the harbour given, at an evacuation's cost, with the news. The line's march home calls it (ai.ts lineHome).
+ */
+export function takeOut(g: Game, c: Corps, to: Region): void {
+  const from = g.regions[c.reg], N = g.nations[c.nat];
+  place(g, c, to);
+  c.str *= 0.75; c.org = Math.min(c.org, 0.3); c.ap = 0; c.hold = false;
+  if (!g.flags[`evac:${g.turn}`]) {
+    g.flags[`evac:${g.turn}`] = 1;
+    headline(g, 'event', `${N.adj} troops at ${from.name}, with no road back to their own lines, are taken out by sea to ${to.name}, without their heavy equipment.`, c.nat, from.id, { arm: 'land', lost: c.nat });
+  }
 }
 
 /**
