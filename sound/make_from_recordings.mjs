@@ -52,7 +52,7 @@ for (const s of all) {
   const row = {
     name: s.name, family: s.family, bus: s.bus ?? 'world', loop: !!s.loop, channels: ch, seconds: +(n / SR).toFixed(2),
     peakDb: +toDb(peak(x)).toFixed(1), lufs: +(s.loop ? l.integrated : l.moment).toFixed(1), quieterThanAsked: done.short > 0.3 ? done.short : 0,
-    about: s.about ?? '', real: true, sources: [...used].map((id) => ({ id, title: byId[id].title, licence: byId[id].licence, credit: byId[id].credit, page: byId[id].page })),
+    title: s.title ?? s.name, about: s.about ?? '', real: true, sources: [...used].map((id) => ({ id, title: byId[id].title, licence: byId[id].licence, credit: byId[id].credit, page: byId[id].page })),
   };
   list.push(row);
   console.log(`${row.name.padEnd(22)} ${String(row.seconds).padStart(6)} s  ${ch === 1 ? 'mono  ' : 'stereo'}  peak ${String(row.peakDb).padStart(6)} dB  ${String(row.lufs).padStart(6)} LUFS${row.quieterThanAsked ? `  (${row.quieterThanAsked} dB under its target, to keep its peak whole)` : ''}  from ${[...used].join(', ')}`);

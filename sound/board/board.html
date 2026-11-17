@@ -97,6 +97,15 @@ input[type=range] { accent-color: var(--brass); width: 110px; }
 .scene .wave { height: 44px; }
 .foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
+/* The real recordings */
+.scene.real .src { font-family: var(--typed); font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.scene.real .src b { color: var(--ink-2); font-weight: 400; }
+.oldwrap { display: flex; align-items: center; gap: 10px; border-top: 1px dashed var(--line); padding-top: 10px; color: var(--ink-3); font-size: 14px; }
+.oldwrap > .play { width: 32px; height: 32px; background: var(--panel-3); color: var(--ink-2); border-color: var(--line); }
+.oldwrap > .play svg { width: 12px; height: 12px; }
+details.old-set > summary { cursor: pointer; font-family: var(--typed); color: var(--ink-2); padding: 14px 0; border-top: 1px solid var(--line); margin-top: 28px; }
+details.old-set > summary:hover { color: var(--ink); }
+
 /* The eyes-shut test */
 .tests { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
 .test { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -145,7 +154,7 @@ footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 14px;
   <header>
     <p class="eyebrow">Theater Command &middot; Sound department &middot; 16 November 2026</p>
     <h1>Sound Listening Board</h1>
-    <p class="lede">Every sound made for the game, and seven scenes that show how they play together. Nobody who built them can hear, so the last check is yours. Press play, then stamp each one <b>Good</b>, <b>Fix</b> or <b>Cut</b>. Your stamps save by themselves. Listen once on headphones and once on the laptop's own speakers, which is how most players will hear it.</p>
+    <p class="lede">Nobody who makes these sounds can hear them, so the last check is yours. Press play, then stamp each one <b>Good</b>, <b>Fix</b> or <b>Cut</b>, and say what should change. Your stamps save by themselves. Listen once on headphones and once on the laptop's own speakers, which is how most players will hear it.</p>
   </header>
 
   <div class="bar" role="region" aria-label="Count and volume">
@@ -161,6 +170,17 @@ footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 14px;
     </div>
   </div>
 
+  <section id="real-sec" hidden>
+    <div class="sec-head">
+      <p class="label">First &middot; judge these</p>
+      <h2>Real recordings</h2>
+      <p>The first set was drawn from tones and noise, and it failed your ear. These are real recordings of real engines and guns, mixed for weight. Play each one, hear the old one beside it if you like, and stamp it. If these pass, the other two hundred are remade the same way.</p>
+    </div>
+    <div class="scenes" id="real"></div>
+  </section>
+
+  <details class="old-set" id="old-set" open>
+  <summary id="old-sum" hidden>The first set, rejected on 16 November. Kept only so you can compare.</summary>
   <section id="scenes-sec">
     <div class="sec-head">
       <p class="label">One &middot; start here</p>
@@ -194,9 +214,10 @@ footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 14px;
     <div id="list"></div>
     <p class="empty" id="empty" hidden>Nothing matches. Clear the filters to see every sound.</p>
   </section>
+  </details>
 
   <footer>
-    <p>Every sound here is original: synthesised from tones and noise by the project's own program. Nothing is recorded, sampled or borrowed, and nothing is taken from any other game. The licence log and the sound brief are in the project files, folder <span style="font-family:var(--typed)">sound</span>.</p>
+    <p>The real recordings come from public archives and are public domain, CC0 or licensed for use with a credit. Each one is named on its card and in the licence log. The first set was synthesised from tones and noise by the project's own program. Nothing is taken from any film or any other game. The licence log and the sound brief are in the project files, folder <span style="font-family:var(--typed)">sound</span>.</p>
     <div id="local-out" hidden>
       <p style="margin-top:12px">Your stamps are kept in this browser only. To hand them over, copy this list into the thread.</p>
       <button class="btn" id="copy" style="margin-top:8px">Copy my stamps</button>
@@ -312,8 +333,9 @@ function paint(name) {
 }
 function tally() {
   let g = 0, f = 0, c = 0;
-  for (const name of hosts.keys()) { const k = get(name).mark; if (k === 'good') g++; else if (k === 'fix') f++; else if (k === 'cut') c++; }
-  const all = hosts.size;
+  const counted = [...hosts.keys()].filter((name) => !(DATA.real || []).length || name.startsWith('real_'));
+  for (const name of counted) { const k = get(name).mark; if (k === 'good') g++; else if (k === 'fix') f++; else if (k === 'cut') c++; }
+  const all = counted.length;
   $('#t-done').textContent = g + f + c; $('#t-all').textContent = all; $('#t-good').textContent = g; $('#t-fix').textContent = f; $('#t-cut').textContent = c;
   $('#m-good').style.width = (g / all * 100) + '%'; $('#m-fix').style.width = (f / all * 100) + '%'; $('#m-cut').style.width = (c / all * 100) + '%';
   const n = { all: 0, todo: 0, good: 0, fix: 0, cut: 0 };
@@ -336,6 +358,33 @@ function stampsFor(name, kinds) {
   input.addEventListener('blur', commit);
   wrap.appendChild(input);
   return { box, wrap };
+}
+
+// ---------- first: the real recordings ----------
+const REAL = DATA.real || [];
+if (REAL.length) {
+  $('#real-sec').hidden = false; $('#old-sum').hidden = false; $('#old-set').open = false;
+  for (const s of REAL) {
+    const id = 'real_' + s.n;
+    const card = el('article', 'scene real'); hosts.set(id, card);
+    const head = el('div', 'head');
+    const play = el('button', 'play big'); play.type = 'button'; play.innerHTML = ICONS; play.setAttribute('aria-label', 'Play the real recording: ' + s.t);
+    play.addEventListener('click', () => toggle(id, { host: card, label: s.t, loop: s.lp || null }));
+    const tt = el('div'); tt.appendChild(el('h3', '', s.t)); tt.appendChild(el('p', 'meta', [secs(s.s), s.lp ? 'loop' : '', s.n].filter(Boolean).join(' · ')));
+    head.append(play, tt);
+    const src = el('p', 'src'); src.appendChild(el('b', '', 'From: ')); src.appendChild(document.createTextNode(s.src));
+    const foot = el('div', 'foot');
+    const st = stampsFor(id); foot.appendChild(st.box);
+    card.append(head, waveEl(s.w), el('p', 'about', s.a), src, foot, st.wrap);
+    if (s.old) {
+      const ow = el('div', 'oldwrap');
+      const ob = el('button', 'play'); ob.type = 'button'; ob.innerHTML = ICONS; ob.setAttribute('aria-label', 'Play the old one: ' + s.t);
+      ob.addEventListener('click', () => toggle(s.n, { host: ow, label: s.t + ' (the old one)', loop: s.oldlp || null }));
+      ow.append(ob, el('span', '', 'The old one, made from tones'));
+      card.appendChild(ow);
+    }
+    $('#real').appendChild(card);
+  }
 }
 
 // ---------- one: the scenes ----------

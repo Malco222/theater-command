@@ -2,6 +2,60 @@
  "note": "Round one: recordings for the six test sounds, all from Wikimedia Commons. Licences were read from Commons when found; fetch_recording.mjs reads them again and refuses anything a game may not use.",
  "recordings": [
   {
+   "id": "t34_estonia_museum",
+   "for": "tank",
+   "title": "File:Tank T-34 Eesti Vabadusvõitluse Muuseumis.ogg",
+   "licence": "CC0",
+   "seconds": 51,
+   "mb": 337,
+   "note": "A real T-34 at the Estonian Museum of the Fight for Freedom."
+  },
+  {
+   "id": "t34_85_finnish_flagday",
+   "for": "tank",
+   "title": "File:Taistelunäytös Lippujuhlan päivä 2014 18 T-34-85.webm",
+   "licence": "Public domain",
+   "seconds": 34,
+   "mb": 67,
+   "note": "A Finnish T-34-85 advancing at a display, Lappeenranta 2014."
+  },
+  {
+   "id": "bradley_poland_broll",
+   "for": "tank",
+   "title": "File:B-Roll- U S soldiers in Poland advance their Bradley Fighting Vehicle battlefield skills (967113).webm",
+   "licence": "Public domain",
+   "seconds": 60,
+   "mb": 18,
+   "note": "Tracked vehicle on the move, diesel and tracks; US Army."
+  },
+  {
+   "id": "leopard2_setc_driving",
+   "for": "tank",
+   "title": "File:Strong Europe Tank Challenge 17.ogv",
+   "licence": "Public domain",
+   "seconds": 131,
+   "mb": 340,
+   "note": "A Leopard 2A6 driven through a precision lane; US Army film."
+  },
+  {
+   "id": "abrams_livefire_bulgaria",
+   "for": "tank gun",
+   "title": "File:1st Infantry Division Performs M1A2 Abrams Live Fire in Bulgaria (984396).webm",
+   "licence": "Public domain",
+   "seconds": 60,
+   "mb": 17,
+   "note": "Tank main gun fired on a range; US Army."
+  },
+  {
+   "id": "abrams_gunnery_2_37",
+   "for": "tank gun",
+   "title": "File:2-37 AR, 1ID Hones Lethality During M1A2 Abrams Gunnery (1017452).webm",
+   "licence": "Public domain",
+   "seconds": 26,
+   "mb": 7,
+   "note": "Tank main gun fired on a range; US Army."
+  },
+  {
    "id": "b17_paine_2011",
    "for": "bomber",
    "title": "File:B-17 Flying Fortress and B-25 Bomber start-up and take off at Paine Field USA Aug 2011 with sound.ogv",
@@ -76,7 +130,7 @@
   {
    "id": "barrage_usrok",
    "for": "artillery",
-   "title": "File:Artillery Battery Barrage \u2022 U.S.-ROK Marines Live-Fire.webm",
+   "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
    "licence": "Public domain",
    "seconds": 237,
    "mb": 28.4
@@ -232,14 +286,6 @@
    "licence": "CC BY 2.0",
    "seconds": 27,
    "mb": 74.8
-  },
-  {
-   "id": "steam_53808_somerset",
-   "for": "train",
-   "title": "File:Locomotive 53808 West Somerset Steam Railway.webm",
-   "licence": "CC BY 3.0",
-   "seconds": 13,
-   "mb": 19
   },
   {
    "id": "steam_dorset_4492",

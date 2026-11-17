@@ -1,6 +1,10 @@
 // Builds the listening board: one page on which every sound and scene can be played and stamped Good, Fix or Cut.
 //
 //   node sound/tools/make_board.mjs <sounds> <scenes> <mp3 of sounds> <mp3 of scenes> <browser-set> <out-folder>
+//        [<sounds made from recordings> <their mp3s>]
+//
+// With the last two, the board opens on the real recordings, each beside the old sound of the same name, and the
+// first set is folded away below.
 //
 // Writes <out>/listening-board.html (the page, with the list of sounds written into it), <out>/audio/*.mp3 (what it
 // plays) and <out>/files.json (the audio paths, for publishing). The page is board/board.html with the data put in.
@@ -10,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isStereo, readWav } from '../kit/dsp.mjs';
 
-const [src, scenesDir, mp3Dir, mp3Scenes, browserDir, out] = process.argv.slice(2);
+const [src, scenesDir, mp3Dir, mp3Scenes, browserDir, out, realDir, realMp3] = process.argv.slice(2);
 if (!out) { console.error('usage: node sound/tools/make_board.mjs <sounds> <scenes> <mp3> <mp3-scenes> <browser-set> <out-folder>'); process.exit(1); }
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const list = read(path.join(src, 'sound-list.json')), scenes = read(path.join(scenesDir, 'scene-list.json'));
@@ -56,6 +60,18 @@ for (const t of tests) for (const c of [...t.a.clips, ...t.b.clips]) if (!have.h
 
 fs.mkdirSync(path.join(out, 'audio'), { recursive: true });
 const files = [];
+// The real recordings, each under its own name with "real_" before it, so the old sound of that name stays playable.
+const real = [];
+if (realDir) {
+  const realList = read(path.join(realDir, 'sound-list.json')), realMp3List = Object.fromEntries(read(path.join(realMp3, 'mp3-list.json')).map((r) => [r.name, r]));
+  for (const s of realList) {
+    const lp = realMp3List[s.name]?.loop ? [realMp3List[s.name].loop.from, realMp3List[s.name].loop.length] : 0;
+    const from = s.sources.map((x) => `${x.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '')} (${x.licence}${x.credit ? ', credit ' + x.credit : ''})`).join('; ');
+    real.push({ n: s.name, t: s.title ?? s.name, s: s.seconds, lp, a: s.about, src: from + '. Wikimedia Commons.', w: shape(path.join(realDir, s.name + '.wav'), 120), old: have.has(s.name) ? 1 : 0, oldlp: loopOf(s.name) });
+    fs.copyFileSync(path.join(realMp3, s.name + '.mp3'), path.join(out, 'audio', `real_${s.name}.mp3`));
+    files.push({ path: `audio/real_${s.name}.mp3` });
+  }
+}
 for (const name of [...sounds.map((s) => s.n), ...sceneRows.map((s) => s.n)]) {
   const from = [path.join(mp3Dir, name + '.mp3'), path.join(mp3Scenes, name + '.mp3')].find((f) => fs.existsSync(f));
   if (!from) throw new Error(`no MP3 for ${name}`);
@@ -63,9 +79,9 @@ for (const name of [...sounds.map((s) => s.n), ...sceneRows.map((s) => s.n)]) {
   files.push({ path: `audio/${name}.mp3` });
 }
 const here = path.dirname(fileURLToPath(import.meta.url));
-const data = JSON.stringify({ families: FAMILIES, sounds, scenes: sceneRows, tests }).replace(/</g, '\\u003c');
+const data = JSON.stringify({ families: FAMILIES, sounds, scenes: sceneRows, tests, real }).replace(/</g, '\\u003c');
 const page = fs.readFileSync(path.join(here, '../board/board.html'), 'utf8').replace('/*DATA*/null', () => data);
 fs.writeFileSync(path.join(out, 'listening-board.html'), page);
 fs.writeFileSync(path.join(out, 'files.json'), JSON.stringify(files));
 const bytes = files.reduce((a, f) => a + fs.statSync(path.join(out, f.path)).size, 0);
-console.log(`listening board: ${sounds.length} sounds, ${sceneRows.length} scenes, ${files.length} audio files (${(bytes / 1048576).toFixed(1)} MB), page ${(page.length / 1024).toFixed(0)} KB`);
+console.log(`listening board: ${real.length} real recordings, ${sounds.length} sounds, ${sceneRows.length} scenes, ${files.length} audio files (${(bytes / 1048576).toFixed(1)} MB), page ${(page.length / 1024).toFixed(0)} KB`);
