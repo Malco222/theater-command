@@ -86,7 +86,20 @@ const farRegions = far.map((r) => {
   if (period.has(r.name)) renamed.push(`${r.name} -> ${period.get(r.name)}`);
   return out;
 });
-const regions = [...A.regions, ...farRegions];
+// Where the final chart has redrawn one of the Americas' provinces at its edge with the far side (the Alaska panhandle's
+// mainland, taken from Whitehorse, Watson Lake and Prince Rupert on 17 November), the whole world takes its outline and
+// its seas from the final chart; everything else, its neighbours above all, stays the cities version's. With the far
+// side off the cities version's own chart is played, unchanged.
+const redrawn = [];
+const americasAt = new Map(americas.map((r) => [remap.get(r.id), r]));
+const older = A.regions.map((a) => {
+  const r = americasAt.get(a.id);
+  const same = (k) => JSON.stringify(a[k]) === JSON.stringify(r[k]);
+  if (same('polys') && same('seas')) return a;
+  redrawn.push(`${a.name}${same('seas') ? '' : ` (seas ${JSON.stringify(a.seas ?? [])} to ${JSON.stringify(r.seas ?? [])})`}`);
+  return { ...a, polys: r.polys, seas: r.seas };
+});
+const regions = [...older, ...farRegions];
 regions.forEach((r, i) => { if (r.id !== first + i) problems.push(`id ${r.id} at place ${first + i}`); });
 
 // The land borders across the stages: [older province, far province], both as the game numbers them.
@@ -109,9 +122,12 @@ const seas = { ...C.seas, zones: C.seas.zones.map((z, i) => {
   if (a && (a.name !== z.name || a.x !== z.x || a.y !== z.y)) problems.push(`sea ${i} moved: ${a.name} / ${z.name}`);
   return { ...z, coast: z.coast.filter((id) => { if (!inChart(id)) problems.push(`${z.name}: coast ${id} outside the chart`); return inChart(id); }).map(to) };
 }) };
+// The Americas' coasts: the cities version's, but for a redrawn province that has left a sea or come onto one.
 for (let i = 0; i < A.seas.zones.length; i++) {
-  const was = A.seas.zones[i].coast.filter((id) => id >= first), now = seas.zones[i].coast.filter((id) => id >= first && id < FAR_FIRST);
-  if (was.join() !== now.join()) problems.push(`${A.seas.zones[i].name}: the Americas' coasts differ from the cities version's`);
+  const was = A.seas.zones[i].coast.filter((id) => id >= first && (older[id - first].seas ?? []).includes(i));
+  for (const r of older) if (r !== A.regions[r.id - first] && (r.seas ?? []).includes(i) && !was.includes(r.id)) was.push(r.id);
+  const now = seas.zones[i].coast.filter((id) => id >= first && id < FAR_FIRST);
+  if ([...was].sort((a, b) => a - b).join() !== [...now].sort((a, b) => a - b).join()) problems.push(`${A.seas.zones[i].name}: the Americas' coasts differ from the cities version's`);
 }
 for (const r of regions) for (const s of r.seas ?? []) if (!seas.zones[s]?.coast.includes(r.id)) problems.push(`${r.name} on sea ${s} but not in its coasts`);
 for (const [i, z] of seas.zones.entries()) for (const id of z.coast) if (id >= first && !(regions[id - first].seas ?? []).includes(i)) problems.push(`${z.name} lists ${regions[id - first].name}, which does not name it`);
@@ -177,6 +193,7 @@ if (idsOut) {
 }
 console.log(`the whole wider world: ${A.regions.length} provinces of the Americas (${first} to ${FAR_FIRST - 1}) and ${farRegions.length} beyond them (${FAR_FIRST} to ${first + regions.length - 1}); stages ${chart.stages.join(', ')}`);
 console.log(`${joins.length} land borders across the stages, ${links.length} ferries, ${seas.zones.length} seas, ${lakes.length} lakes, ${rails.links.length} railway links, ${rivers.rivers.length} rivers with ${rivers.crossings.length} crossings`);
+console.log(`the Americas redrawn by the final chart, outline and seas taken from it with the far side on (${redrawn.length}): ${redrawn.join(', ') || 'none'}`);
 console.log(table.join('\n'));
 console.log(`names as of September 1939 in the clerk's tables, NOT applied (${renamed.length}): ${renamed.join(', ') || 'none'}`);
 console.log(problems.length ? `PROBLEMS (${problems.length}):\n${problems.slice(0, 60).join('\n')}` : 'checks: no problems');
