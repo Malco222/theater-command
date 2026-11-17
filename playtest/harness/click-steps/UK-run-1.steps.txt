@@ -1,0 +1,140 @@
+# United Kingdom, run 1: 1939-09, at war with GER. Step file version 1 (see README.md). Written by mksteps.cjs from what the seat holds.
+start	UK 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Every army once: a march on its own ground, a neutral frontier, enemy ground with and without an army in it.
+select-province	Lille	does
+press-each	tray
+restore	start
+select-province	London	does
+order-province	Midlands	moves
+press-each	tray
+restore	start
+select-province	Kent	does
+order-province	East Anglia	moves
+press-each	tray
+restore	start
+select-province	Mersa Matruh	does
+order-province	Sidi Barrani	moves
+press-each	tray
+restore	start
+select-province	Lille	does
+order-province	Namur	card
+press-each	card
+close
+restore	start
+# a fortress garrison: it moves, or the game says it never marches
+select-province	Gibraltar	does
+order-province	Cadiz	says-why
+# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
+select-unit	Home Fleet	does
+order-sea	North Sea	says-why
+select-sea	North Atlantic	moves
+select-sea	English Channel	
+press-each	tray
+restore	start
+select-unit	Western Approaches Command	does
+order-sea	Western Approaches	says-why
+select-sea	North Atlantic	moves
+select-sea	Irish Sea	
+press-each	tray
+restore	start
+select-unit	Dover Command	does
+order-sea	English Channel	says-why
+select-sea	Western Approaches	moves
+select-sea	North Sea	
+press-each	tray
+restore	start
+select-unit	Mediterranean Fleet	does
+order-sea	Eastern Mediterranean	says-why
+select-sea	Aegean Sea	moves
+select-sea	Libyan Sea	
+press-each	tray
+restore	start
+# --- C. Every air group once.
+open-page	Air	does
+select-unit	No. 11 Group	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	No. 12 Group	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	No. 13 Group	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	No. 1 Bomber Group	does
+press-each	page
+restore	start
+open-page	Air
+# a gate he holds: it can be closed and opened again
+point-at	gate Strait of Gibraltar	says-why
+press	Close Strait of Gibraltar	does
+# --- D. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+restore	start
+open-page	Research	does
+press-each	page
+restore	start
+open-page	Generals	does
+press-each	page
+restore	start
+open-page	Honours	does
+press-each	page
+restore	start
+open-page	Navy	does
+press-each	page
+restore	start
+open-page	Air	does
+press-each	page
+restore	start
+open-page	Spies	does
+press-each	page
+restore	start
+open-page	News	does
+press-each	page
+restore	start
+open-page	Battles	does
+press-each	page
+restore	start
+open-page	Powers	does
+press-each	page
+restore	start
+open-page	Staff	does
+press-each	page
+restore	start
+press	CABINET	card
+press-each	card
+close
+restore	start
+press	ABILITIES	card
+press-each	card
+close
+restore	start
+press	DECLARE WAR	card
+press-each	card
+close
+restore	start
+press	Treasury	card
+press-each	card
+close
+restore	start
+# --- E. Province cards: the capital, a port, a neighbour.
+select-province	London	does
+press-each	page
+restore	start
+select-province	Kent	does
+press-each	page
+restore	start
+select-province	Namur	does
+press-each	page
+restore	start
+# --- F. Three months ended by the game's own button, the month card read each time.
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card

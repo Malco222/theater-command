@@ -1,0 +1,16 @@
+ship3-17	node out84/probe84.mjs 17,18,19 80
+ship3-20	node out84/probe84.mjs 20,21,22 80
+ship3-23	node out84/probe84.mjs 23,24,25 80
+ship3-26	node out84/probe84.mjs 26,27,28 80
+ship3-29	node out84/probe84.mjs 29,30,31 80
+ship3-32	node out84/probe84.mjs 32,33,34 80
+ship3-35	node out84/probe84.mjs 35,36,37 80
+ship3-38	node out84/probe84.mjs 38,39,40 80
+ship4-17	TC_DIAL=4 node out84/probe84.mjs 17,18,19 80
+ship4-20	TC_DIAL=4 node out84/probe84.mjs 20,21,22 80
+ship4-23	TC_DIAL=4 node out84/probe84.mjs 23,24,25 80
+ship4-26	TC_DIAL=4 node out84/probe84.mjs 26,27,28 80
+ship4-29	TC_DIAL=4 node out84/probe84.mjs 29,30,31 80
+ship4-32	TC_DIAL=4 node out84/probe84.mjs 32,33,34 80
+ship4-35	TC_DIAL=4 node out84/probe84.mjs 35,36,37 80
+ship4-38	TC_DIAL=4 node out84/probe84.mjs 38,39,40 80

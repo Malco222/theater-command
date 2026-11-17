@@ -1,0 +1,126 @@
+hemi-18	node out84/hemi76.mjs 18 76
+hemi-22	node out84/hemi76.mjs 22 76
+hemi-26	node out84/hemi76.mjs 26 76
+hemi-30	node out84/hemi76.mjs 30 76
+hemi-34	node out84/hemi76.mjs 34 76
+hemi-38	node out84/hemi76.mjs 38 76
+seatstage-USA-25	node out84/probe58.mjs USA 1 25 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-25	node out84/probe58.mjs USA 1 25 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-26	node out84/probe58.mjs USA 1 26 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-26	node out84/probe58.mjs USA 1 26 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-27	node out84/probe58.mjs USA 1 27 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-27	node out84/probe58.mjs USA 1 27 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-28	node out84/probe58.mjs USA 1 28 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-28	node out84/probe58.mjs USA 1 28 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-29	node out84/probe58.mjs USA 1 29 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-29	node out84/probe58.mjs USA 1 29 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-30	node out84/probe58.mjs USA 1 30 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-30	node out84/probe58.mjs USA 1 30 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-31	node out84/probe58.mjs USA 1 31 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-31	node out84/probe58.mjs USA 1 31 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-32	node out84/probe58.mjs USA 1 32 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-32	node out84/probe58.mjs USA 1 32 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-33	node out84/probe58.mjs USA 1 33 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-33	node out84/probe58.mjs USA 1 33 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-34	node out84/probe58.mjs USA 1 34 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-34	node out84/probe58.mjs USA 1 34 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-35	node out84/probe58.mjs USA 1 35 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-35	node out84/probe58.mjs USA 1 35 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-36	node out84/probe58.mjs USA 1 36 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-36	node out84/probe58.mjs USA 1 36 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-25	node out84/probe58.mjs UK 1 25 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-25	node out84/probe58.mjs UK 1 25 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-26	node out84/probe58.mjs UK 1 26 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-26	node out84/probe58.mjs UK 1 26 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-27	node out84/probe58.mjs UK 1 27 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-27	node out84/probe58.mjs UK 1 27 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-28	node out84/probe58.mjs UK 1 28 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-28	node out84/probe58.mjs UK 1 28 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-29	node out84/probe58.mjs UK 1 29 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-29	node out84/probe58.mjs UK 1 29 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-30	node out84/probe58.mjs UK 1 30 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-30	node out84/probe58.mjs UK 1 30 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-31	node out84/probe58.mjs UK 1 31 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-31	node out84/probe58.mjs UK 1 31 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-32	node out84/probe58.mjs UK 1 32 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-32	node out84/probe58.mjs UK 1 32 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-33	node out84/probe58.mjs UK 1 33 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-33	node out84/probe58.mjs UK 1 33 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-34	node out84/probe58.mjs UK 1 34 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-34	node out84/probe58.mjs UK 1 34 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-35	node out84/probe58.mjs UK 1 35 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-35	node out84/probe58.mjs UK 1 35 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-36	node out84/probe58.mjs UK 1 36 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-36	node out84/probe58.mjs UK 1 36 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-37	node out84/probe58.mjs UK 1 37 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-37	node out84/probe58.mjs UK 1 37 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-38	node out84/probe58.mjs UK 1 38 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-38	node out84/probe58.mjs UK 1 38 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-39	node out84/probe58.mjs UK 1 39 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-39	node out84/probe58.mjs UK 1 39 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-40	node out84/probe58.mjs UK 1 40 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-40	node out84/probe58.mjs UK 1 40 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-41	node out84/probe58.mjs UK 1 41 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-41	node out84/probe58.mjs UK 1 41 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-42	node out84/probe58.mjs UK 1 42 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-42	node out84/probe58.mjs UK 1 42 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-43	node out84/probe58.mjs UK 1 43 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-43	node out84/probe58.mjs UK 1 43 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-44	node out84/probe58.mjs UK 1 44 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-44	node out84/probe58.mjs UK 1 44 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-45	node out84/probe58.mjs UK 1 45 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-45	node out84/probe58.mjs UK 1 45 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-46	node out84/probe58.mjs UK 1 46 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-46	node out84/probe58.mjs UK 1 46 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-47	node out84/probe58.mjs UK 1 47 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-47	node out84/probe58.mjs UK 1 47 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seat-UK-48	node out84/probe58.mjs UK 1 48 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-UK-48	node out84/probe58.mjs UK 1 48 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-37	node out84/probe58.mjs USA 1 37 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-37	node out84/probe58.mjs USA 1 37 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-38	node out84/probe58.mjs USA 1 38 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-38	node out84/probe58.mjs USA 1 38 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-39	node out84/probe58.mjs USA 1 39 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-39	node out84/probe58.mjs USA 1 39 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-40	node out84/probe58.mjs USA 1 40 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-40	node out84/probe58.mjs USA 1 40 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-41	node out84/probe58.mjs USA 1 41 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-41	node out84/probe58.mjs USA 1 41 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-42	node out84/probe58.mjs USA 1 42 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-42	node out84/probe58.mjs USA 1 42 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-43	node out84/probe58.mjs USA 1 43 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-43	node out84/probe58.mjs USA 1 43 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-44	node out84/probe58.mjs USA 1 44 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-44	node out84/probe58.mjs USA 1 44 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-45	node out84/probe58.mjs USA 1 45 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-45	node out84/probe58.mjs USA 1 45 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-46	node out84/probe58.mjs USA 1 46 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-46	node out84/probe58.mjs USA 1 46 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-47	node out84/probe58.mjs USA 1 47 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-47	node out84/probe58.mjs USA 1 47 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+seatstage-USA-48	node out84/probe58.mjs USA 1 48 76 '{"minOdds":1.5,"land":true,"stage":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+seatfield-USA-48	node out84/probe58.mjs USA 1 48 76 '{"minOdds":1.5,"land":true,"depth":"field"}'
+armyuk-USA-25	node out84/probe69.mjs UK 1 25 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-26	node out84/probe69.mjs UK 1 26 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-27	node out84/probe69.mjs UK 1 27 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-28	node out84/probe69.mjs UK 1 28 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-29	node out84/probe69.mjs UK 1 29 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-30	node out84/probe69.mjs UK 1 30 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-31	node out84/probe69.mjs UK 1 31 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-32	node out84/probe69.mjs UK 1 32 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-33	node out84/probe69.mjs UK 1 33 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-34	node out84/probe69.mjs UK 1 34 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-35	node out84/probe69.mjs UK 1 35 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyuk-USA-36	node out84/probe69.mjs UK 1 36 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' USA
+armyukidle-USA-25	node out84/probe69.mjs UK 1 25 76 '{"idle":true}' USA
+armyukidle-USA-26	node out84/probe69.mjs UK 1 26 76 '{"idle":true}' USA
+armyukidle-USA-27	node out84/probe69.mjs UK 1 27 76 '{"idle":true}' USA
+armyukidle-USA-28	node out84/probe69.mjs UK 1 28 76 '{"idle":true}' USA
+armyukidle-USA-29	node out84/probe69.mjs UK 1 29 76 '{"idle":true}' USA
+armyukidle-USA-30	node out84/probe69.mjs UK 1 30 76 '{"idle":true}' USA
+armyukidle-USA-31	node out84/probe69.mjs UK 1 31 76 '{"idle":true}' USA
+armyukidle-USA-32	node out84/probe69.mjs UK 1 32 76 '{"idle":true}' USA
+armyukidle-USA-33	node out84/probe69.mjs UK 1 33 76 '{"idle":true}' USA
+armyukidle-USA-34	node out84/probe69.mjs UK 1 34 76 '{"idle":true}' USA
+armyukidle-USA-35	node out84/probe69.mjs UK 1 35 76 '{"idle":true}' USA
+armyukidle-USA-36	node out84/probe69.mjs UK 1 36 76 '{"idle":true}' USA

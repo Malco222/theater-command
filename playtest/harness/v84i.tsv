@@ -1,0 +1,12 @@
+arm-25	node out84/probe85.mjs 25 76
+arm-26	node out84/probe85.mjs 26 76
+arm-27	node out84/probe85.mjs 27 76
+arm-28	node out84/probe85.mjs 28 76
+seat-ITA-25	node out84/probe58.mjs ITA 1 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-25	node out84/probe58.mjs ITA 1 25 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-26	node out84/probe58.mjs ITA 1 26 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-26	node out84/probe58.mjs ITA 1 26 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-27	node out84/probe58.mjs ITA 1 27 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-27	node out84/probe58.mjs ITA 1 27 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'
+seat-ITA-28	node out84/probe58.mjs ITA 1 28 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+seatfield-ITA-28	node out84/probe58.mjs ITA 1 28 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"depth":"field"}'

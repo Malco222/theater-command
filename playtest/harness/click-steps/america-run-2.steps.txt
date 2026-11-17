@@ -1,0 +1,32 @@
+# America, run 2: enemy ground from the frontier, September 1939. Step file version 1 (see README.md).
+# Four cases, each a check for ruling 175(c), "marching in is the attack". What the browser game (Version 84) does today is noted.
+start	USA 1939-09 seed 25 colonel	does
+snapshot	start
+# Case 1. A village with no guard (Chihuahua, Mexico): it falls on the move. Browser: yes.
+select-province	North Texas	does
+order-province	West Texas	moves
+order-province	Chihuahua	card
+press	Declare war	does
+check-province	Chihuahua	holder USA
+# Case 2. A town with a corps inside (Monterrey): the attack card, with the defenders and the forecast. Browser: yes.
+order-province	Monterrey	card
+press-each	card
+close
+end-month		card
+close
+# Case 3. A town held only by its guard (Sonora, a fifth of a division): it opens its gates on the march. Browser: yes.
+select-province	Chihuahua	does
+order-province	Sonora	moves
+check-province	Sonora	holder USA
+restore	start
+# Case 4. A city held only by its guard (Toronto, Canada): the guard fights. The game shows the guard and the odds, and yes storms it.
+# Browser today: the army marches in, the province stays Canadian, the side page offers STORM THE TOWN, the assault card opens, and the storm takes it.
+select-province	Chicago	does
+order-province	Detroit	moves
+order-province	Toronto	card
+press	Declare war	does
+select-province	Toronto	does
+press	STORM THE TOWN	card
+press	STORM THE TOWN	does
+close
+check-province	Toronto	holder USA

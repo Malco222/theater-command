@@ -228,6 +228,8 @@ export interface Plan {
   first?: (g: Game, run: Run) => void;
   /** Version 58: told of every field attack the player orders, with the attack card's outlook as read just before (default off). */
   onAttack?: (g: Game, out: any, rep: any, target: any) => void;
+  /** Version 84: told of every field attack just BEFORE it is ordered, with the corps that go (reads only): what the card says can be read here while the fog still stands. */
+  beforeAttack?: (g: Game, out: any, cands: any[], target: any) => void;
   /** Version 58: shown every attack on offer before the player chooses (the province, the corps that would go, the card's outlook), each pass of the month (default off). */
   onLook?: (g: Game, options: { r: any; cands: any[]; odds: number; out: any }[], pass: number) => void;
   /** Version 58: attack only where the attack card gives this chance or better (default off: the odds alone decide). */
@@ -587,6 +589,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       if (!out || !goes(x.r.id, out)) continue;
       if (out.odds < minOdds && x.r.id !== chaseId) (run as any).grinds = ((run as any).grinds ?? 0) + 1;
       if (plan.minChance !== undefined && ((out as any).chance ?? 1) < plan.minChance) continue;
+      plan.beforeAttack?.(g, out, cands, x.r);
       const rep = T.orderAttack(g, cands, x.r);
       if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; plan.onAttack?.(g, out, rep, x.r); if (plan.waves !== undefined && (out as any).works >= 0.5 || struck.has(x.r.id)) { if (struck.has(x.r.id)) (run as any).secondBlows = ((run as any).secondBlows ?? 0) + 1, (rep.taken || (rep as any).siege) && ((run as any).secondWon = ((run as any).secondWon ?? 0) + 1); struck.add(x.r.id); } }
     }

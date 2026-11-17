@@ -1,0 +1,134 @@
+# Soviet Union, run 1: 1939-09, at peace. Step file version 1 (see README.md). Written by mksteps.cjs from what the seat holds.
+start	SOV 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Every army once: a march on its own ground, a neutral frontier, enemy ground with and without an army in it.
+select-province	Lwow	does
+order-province	Volhynia	moves
+press-each	tray
+restore	start
+select-province	Brest	does
+order-province	Bialystok	moves
+press-each	tray
+restore	start
+select-province	Bialystok	does
+order-province	Brest	moves
+press-each	tray
+restore	start
+select-province	Wilno	does
+order-province	Polotsk	moves
+press-each	tray
+restore	start
+select-province	Polesie	does
+order-province	Minsk	moves
+press-each	tray
+restore	start
+select-province	Tbilisi	does
+order-province	Terek	moves
+press-each	tray
+restore	start
+select-province	Lwow	does
+order-province	Lublin	card
+press-each	card
+close
+restore	start
+# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
+select-unit	Baltic Fleet	does
+order-sea	Gulf of Finland	says-why
+select-sea	Baltic Sea	moves
+press-each	tray
+restore	start
+select-unit	Black Sea Fleet	does
+order-sea	Black Sea	says-why
+select-sea	Aegean Sea	moves
+press-each	tray
+restore	start
+select-unit	Northern Fleet	does
+order-sea	Barents Sea	says-why
+select-sea	Norwegian Sea	moves
+press-each	tray
+restore	start
+# --- C. Every air group once.
+open-page	Air	does
+select-unit	1st Fighter Division	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	2nd Fighter Division	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	1st Bomber Division	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	2nd Bomber Division	does
+press-each	page
+restore	start
+open-page	Air
+# --- D. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+restore	start
+open-page	Research	does
+press-each	page
+restore	start
+open-page	Generals	does
+press-each	page
+restore	start
+open-page	Honours	does
+press-each	page
+restore	start
+open-page	Navy	does
+press-each	page
+restore	start
+open-page	Air	does
+press-each	page
+restore	start
+open-page	Spies	does
+press-each	page
+restore	start
+open-page	News	does
+press-each	page
+restore	start
+open-page	Battles	does
+press-each	page
+restore	start
+open-page	Powers	does
+press-each	page
+restore	start
+open-page	Staff	does
+press-each	page
+restore	start
+press	CABINET	card
+press-each	card
+close
+restore	start
+press	ABILITIES	card
+press-each	card
+close
+restore	start
+press	DECLARE WAR	card
+press-each	card
+close
+restore	start
+press	Treasury	card
+press-each	card
+close
+restore	start
+# --- E. Province cards: the capital, a port, a neighbour.
+select-province	Moscow	does
+press-each	page
+restore	start
+select-province	Leningrad	does
+press-each	page
+restore	start
+select-province	Lublin	does
+press-each	page
+restore	start
+# --- F. Three months ended by the game's own button, the month card read each time.
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card

@@ -1,0 +1,142 @@
+# Germany, run 1: 1939-09, at war with POL, UK, FRA, CAN. Step file version 1 (see README.md). Written by mksteps.cjs from what the seat holds.
+start	GER 1939-09 seed 25 colonel	does
+snapshot	start
+# --- A. Every army once: a march on its own ground, a neutral frontier, enemy ground with and without an army in it.
+select-province	Berlin	does
+order-province	Dresden	moves
+press-each	tray
+restore	start
+select-province	Hamburg	does
+order-province	Magdeburg	moves
+press-each	tray
+restore	start
+select-province	Westphalia	does
+order-province	Bremen	moves
+press-each	tray
+restore	start
+select-province	Farther Pomerania	does
+order-province	Stettin	moves
+press-each	tray
+restore	start
+select-province	Lower Silesia	does
+order-province	Dresden	moves
+press-each	tray
+restore	start
+select-province	Upper Silesia	does
+order-province	Lower Silesia	moves
+press-each	tray
+restore	start
+select-province	Saar	does
+order-province	Alsace	card
+press-each	card
+close
+restore	start
+select-province	Westphalia	does
+order-province	Gelderland	card
+press-each	card
+close
+restore	start
+# --- B. Every fleet once: a right click on a sea, then a click on a sea next door.
+select-unit	Battle Fleet	does
+order-sea	North Sea	says-why
+select-sea	North Atlantic	moves
+select-sea	English Channel	
+press-each	tray
+restore	start
+select-unit	U-boat Arm	does
+order-sea	Western Approaches	says-why
+select-sea	North Atlantic	moves
+select-sea	Irish Sea	
+press-each	tray
+restore	start
+select-unit	Baltic Station	does
+order-sea	Baltic Sea	says-why
+select-sea	Skagerrak	moves
+select-sea	Gulf of Bothnia	
+press-each	tray
+restore	start
+# --- C. Every air group once.
+open-page	Air	does
+select-unit	Jagdgeschwader 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Jagdgeschwader 2	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Kampfgeschwader 1	does
+press-each	page
+restore	start
+open-page	Air
+select-unit	Kampfgeschwader 2	does
+press-each	page
+restore	start
+open-page	Air
+# --- D. Every page, and every button on it.
+open-page	Build	does
+press-each	page
+restore	start
+open-page	Research	does
+press-each	page
+restore	start
+open-page	Generals	does
+press-each	page
+restore	start
+open-page	Honours	does
+press-each	page
+restore	start
+open-page	Navy	does
+press-each	page
+restore	start
+open-page	Air	does
+press-each	page
+restore	start
+open-page	Spies	does
+press-each	page
+restore	start
+open-page	News	does
+press-each	page
+restore	start
+open-page	Battles	does
+press-each	page
+restore	start
+open-page	Powers	does
+press-each	page
+restore	start
+open-page	Staff	does
+press-each	page
+restore	start
+press	CABINET	card
+press-each	card
+close
+restore	start
+press	ABILITIES	card
+press-each	card
+close
+restore	start
+press	DECLARE WAR	card
+press-each	card
+close
+restore	start
+press	Treasury	card
+press-each	card
+close
+restore	start
+# --- E. Province cards: the capital, a port, a neighbour.
+select-province	Berlin	does
+press-each	page
+restore	start
+select-province	Hamburg	does
+press-each	page
+restore	start
+select-province	Gelderland	does
+press-each	page
+restore	start
+# --- F. Three months ended by the game's own button, the month card read each time.
+end-month		card
+press-each	card
+close
+end-month		card
+close
+end-month		card
