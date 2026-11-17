@@ -14,7 +14,7 @@ import { CITY_GROUPS, CITY_SHORES, CITY_LINKS } from '../data/campaign/cities.mj
 
 export function carveCities(chart) {
   if (!CITY_GROUPS.length) return;
-  const { core, today, regions, first, tables, parentRows, fromTable, tabledSoFar, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet } = chart;
+  const { core, today, regions, first, tables, parentRows, nowRows, fromTable, tabledSoFar, warn, proj, W, gx0, COLS, ROWS, inPoly, boxOf, closed, r1, trim, fillRound, regionAt, zoneAt, STEPS, BORDER, joins, links, zones, index, stages, out, arg, quiet } = chart;
   const SMALL = 400;
   const base = [...today.regions, ...regions];
   const byId = new Map(base.map((r) => [r.id, r]));
@@ -25,6 +25,14 @@ export function carveCities(chart) {
   const cities = [];
   const tabledBefore = tabledSoFar();
   let parentTabled = 0;
+  // A province of the far side whose row the clerk has changed since the chart was handed over reads the row as
+  // it is now (never its owner): the chart as handed over stands, this one follows the tables.
+  const changedSince = [];
+  for (const r of regions) if (nowRows.has(r.name)) {
+    const row = rows.get(r.id), t = fromTable(r.name, row.owner, row.terrain, row.vp, row.fac, row.flags, nowRows);
+    Object.assign(row, { terrain: t.terrain, vp: t.vp, fac: t.fac, flags: t.flags });
+    changedSince.push(r.name);
+  }
   for (const [parentName, list, change] of CITY_GROUPS) {
     const p = baseByName.get(parentName);
     if (!p) { warn(`! no province called ${parentName} to cut a city from`); continue; }
@@ -34,6 +42,9 @@ export function carveCities(chart) {
     if (p.id < first && tables.has(p.name)) Object.assign(row, fromTable(p.name, row.owner, row.terrain, row.vp, row.fac, row.flags));
     // A province of the far side as it stands once it is cut: the clerk's row in cities-parents.csv (never its owner).
     if (p.id >= first && parentRows.has(p.name)) { const t = fromTable(p.name, row.owner, row.terrain, row.vp, row.fac, row.flags, parentRows); Object.assign(row, { terrain: t.terrain, vp: t.vp, fac: t.fac, flags: t.flags }); parentTabled++; }
+    // A province of today's chart has no row in the tables: the clerk's row for it gives only what it is worth
+    // once cut (victory points and factories; a blank stands for the map as it is).
+    if (p.id < first && parentRows.has(p.name)) { const r = parentRows.get(p.name); if (r.vp !== '' && r.vp !== undefined) row.vp = Number(r.vp); if (r.factories !== '' && r.factories !== undefined) row.fac = Number(r.factories); parentTabled++; }
     for (const [name, lat, lon, terrain0, vp0, fac0, flags0] of list) {
       if (names.has(name)) warn(`! two provinces are called ${name}`);
       names.add(name);
@@ -321,8 +332,11 @@ export function carveCities(chart) {
     check2(worst < 0.002 && strays <= cut2 * 0.002 && !lost.length, `the cities and what is left of their provinces tile the ground those provinces had: ${cut2} squares in ${kids.size} cut provinces, ${strays} set by the nearest seed, the widest difference in area ${(worst * 100).toFixed(3)}% (${where})${lost.length ? `; no ground left for ${lost.join(', ')}` : ''}`);
   }
   {
-    const same = base.filter((r) => !kids.has(r.id)).every((r) => { const now = rows.get(r.id); return JSON.stringify([r.name, r.owner, r.terrain, r.vp, r.fac, r.flags, r.x, r.y, r.polys, r.seas]) === JSON.stringify([now.name, now.owner, now.terrain, now.vp, now.fac, now.flags, now.x, now.y, now.polys, now.seas]) && r.nb.every((j) => now.nb.includes(j) || kids.has(j)); });
-    check2(same, `the ${base.length - kids.size} provinces that were not cut are written as they stand, but for neighbours that are now cities`);
+    // (A province whose row the clerk has changed since reads its ground, worth and flags from the row.)
+    const since = new Set(changedSince);
+    const worth = (r) => (since.has(r.name) ? [] : [r.terrain, r.vp, r.fac, r.flags]);
+    const same = base.filter((r) => !kids.has(r.id)).every((r) => { const now = rows.get(r.id); return JSON.stringify([r.name, r.owner, worth(r), r.x, r.y, r.polys, r.seas]) === JSON.stringify([now.name, now.owner, worth(now), now.x, now.y, now.polys, now.seas]) && r.nb.every((j) => now.nb.includes(j) || kids.has(j)); });
+    check2(same, `the ${base.length - kids.size} provinces that were not cut are written as they stand, but for neighbours that are now cities${since.size ? ` and ${since.size} whose row in the tables has changed since` : ''}`);
     const kept = [...kids.keys()].every((pid) => { const r = byId.get(pid), now = rows.get(pid); return r.name === now.name && r.owner === now.owner && r.x === now.x && r.y === now.y; });
     check2(kept, `the ${kids.size} provinces that were cut keep their numbers, names, seeds and owners`);
   }
@@ -346,7 +360,8 @@ export function carveCities(chart) {
   fs.writeFileSync(new URL(`../src/generated/${arg('cities-out') ?? 'world-cities'}.json`, import.meta.url), JSON.stringify(out2));
   console.log(`\ncities: ${cities.length} new provinces (${first + regions.length} to ${first + regions.length + cities.length - 1}) cut out of ${kids.size}; ${out2.regions.length + core.regions.length} provinces in the world; ${(JSON.stringify(out2).length / 1024).toFixed(0)} KB`);
   console.log(`${cityTabled} of ${cities.length} cities have a row in the tables`);
-  if (parentTabled) console.log(`${parentTabled} cut provinces of the far side have a row in cities-parents.csv`);
+  if (parentTabled) console.log(`${parentTabled} cut provinces have a row in cities-parents.csv`);
+  if (changedSince.length) console.log(`${changedSince.length} provinces read a row the clerk has changed since the chart was handed over: ${changedSince.join(', ')}`);
   if (!quiet && moved2.length) console.log(`pieces passed to a sister: ${moved2.join(', ')}`);
   const small = [...kids.keys()].flatMap((pid) => sitesOf(pid)).map((s) => [s.name, Math.round(s.polys.reduce((t, q) => t + sizeOf(q), 0))]).filter(([, a]) => a < 700);
   if (small.length) console.log(`small (under 700 square units): ${small.map(([n, a]) => `${n} ${a}`).join(', ')}`);
