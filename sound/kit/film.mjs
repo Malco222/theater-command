@@ -99,7 +99,7 @@ export function layers(list, { stereo = false } = {}) {
   const n = Math.max(...list.map((l) => sec(l.at ?? 0) + lengthOf(l.x)));
   const out = stereo ? { L: new Float32Array(n), R: new Float32Array(n) } : new Float32Array(n);
   for (const l of list) {
-    const g = db(l.db ?? 0), at = sec(l.at ?? 0);
+    const g = db(l.db ?? 0), at = l.at ?? 0;   // seconds: add() does its own counting
     if (stereo) {
       const s = toStereo(l.x), pan = clamp(l.pan ?? 0, -1, 1), a = (pan + 1) * Math.PI / 4;
       const gl = isStereo(l.x) ? (pan > 0 ? 1 - pan : 1) : Math.cos(a) * Math.SQRT2, gr = isStereo(l.x) ? (pan < 0 ? 1 + pan : 1) : Math.sin(a) * Math.SQRT2;
@@ -145,3 +145,71 @@ export function finishLoop(x, target, { ceiling = -3, lowCut = 28 } = {}) {
   each(y, (ch) => { for (let i = 0; i < ch.length; i++) { const v = Math.abs(ch[i]); if (v > knee) { const t = (v - knee) / (c - knee); ch[i] = Math.sign(ch[i]) * (knee + (c - knee) * Math.tanh(t)); } } });
   return { x: y, short: +(target - loudness(y).integrated).toFixed(1) };
 }
+
+/**
+ * Evens out slow swells. An aircraft passing comes up and dies away; a loop made from it must hold one level. The
+ * sound's own level is followed over "window" seconds and divided out: strength 1 holds it flat, 0 leaves it alone.
+ * Only slow movement is taken out, so the beat of an engine or an exhaust is untouched.
+ */
+export function even(x, { window = 1.5, strength = 0.85 } = {}) {
+  const n = lengthOf(x), m = toMono(x), w = sec(window), hop = sec(0.05);
+  const ps = new Float64Array(n + 1); for (let i = 0; i < n; i++) ps[i + 1] = ps[i] + m[i] * m[i];
+  const whole = Math.sqrt(ps[n] / Math.max(1, n)) || 1e-9;
+  const at = (c) => { const a = Math.max(0, c - (w >> 1)), b = Math.min(n, c + (w >> 1)); return Math.sqrt((ps[b] - ps[a]) / Math.max(1, b - a)) || 1e-9; };
+  const g = new Float32Array(n);
+  for (let i = 0; i < n; i += hop) {
+    const g0 = Math.pow(whole / at(i), strength), g1 = Math.pow(whole / at(Math.min(n - 1, i + hop)), strength);
+    for (let k = 0; k < hop && i + k < n; k++) g[i + k] = g0 + (g1 - g0) * (k / hop);
+  }
+  return mul(copy(x), g);
+}
+
+/** A short stretch made long: laid end over end with long folds, until it lasts "seconds". For a drone, not a rhythm. */
+export function sustain(x, seconds, overlap = 1.5) {
+  const n = lengthOf(x), no = Math.min(sec(overlap), n >> 1), step = n - no, want = sec(seconds);
+  const one = (ch) => {
+    const out = new Float32Array(want + n);
+    for (let at = 0; at < want; at += step) for (let i = 0; i < n; i++) {
+      const up = at > 0 && i < no ? Math.sin(i / no * Math.PI / 2) : 1, down = i >= n - no ? Math.cos((i - (n - no)) / no * Math.PI / 2) : 1;
+      out[at + i] += ch[i] * up * down;
+    }
+    return out.slice(0, want);
+  };
+  return both(x, one);
+}
+
+/**
+ * Where the beats of a regular sound fall, in seconds: an exhaust, a wheel on rail joints. Give its rough "period";
+ * each beat is looked for near where the last two say it should be, so a train gathering speed is followed.
+ */
+export function beats(x, { period, over = 300 } = {}) {
+  const m = hp(Float32Array.from(toMono(x)), over), hop = sec(0.004), env = [];
+  for (let i = 0; i + hop <= m.length; i += hop) { let s = 0; for (let k = 0; k < hop; k++) s += m[i + k] * m[i + k]; env.push(Math.sqrt(s / hop)); }
+  const sm = env.map((_, i) => { let s = 0, c = 0; for (let k = -3; k <= 3; k++) if (env[i + k] != null) { s += env[i + k]; c++; } return s / c; });
+  const top = (a, b) => { let best = a; for (let i = Math.max(0, a); i <= Math.min(sm.length - 1, b); i++) if (sm[i] > sm[best]) best = i; return best; };
+  let p = period / (hop / SR), t = top(0, Math.round(p));
+  const out = [t];
+  while (t + p * 1.3 < sm.length) { const next = top(Math.round(t + p * 0.78), Math.round(t + p * 1.22)); p = 0.75 * p + 0.25 * (next - t); t = next; out.push(t); }
+  return out.map((i) => i * hop / SR);
+}
+
+/**
+ * Sets a sound's beats exactly "period" apart, by playing each stretch between two beats a shade faster or slower.
+ * A train gathering speed becomes a train at one speed, which can then go round without a stumble. Starts "lead"
+ * seconds before the first beat given and ends at the last.
+ */
+export function steady(x, at, period, lead = 0.06) {
+  const N = sec(period);
+  const one = (ch) => {
+    const out = new Float32Array(N * (at.length - 1));
+    for (let b = 0; b + 1 < at.length; b++) {
+      const a0 = (at[b] - lead) * SR, len = (at[b + 1] - at[b]) * SR;
+      for (let i = 0; i < N; i++) { const pos = a0 + i / N * len, j = Math.floor(pos), u = pos - j; out[b * N + i] = (ch[j] ?? 0) + ((ch[j + 1] ?? 0) - (ch[j] ?? 0)) * u; }
+    }
+    return out;
+  };
+  return both(x, one);
+}
+
+/** A shelf or a band of the sound lifted or lowered: tone(x, 'high', 700, -5) takes 5 dB off everything above 700 Hz. */
+export const tone = (x, kind, hz, gainDb, q) => both(x, (ch) => eq(Float32Array.from(ch), kind, hz, gainDb, q));

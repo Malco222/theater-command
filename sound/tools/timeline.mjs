@@ -4,12 +4,13 @@
 //
 //   node sound/tools/timeline.mjs <file> [--from s] [--to s] [--step 1] [--png out.png]
 //
-// --png also draws the recording (a spectrogram, low notes at the bottom), which can be read by eye: a gunshot is a
-// thin upright line, an engine is a ladder of level lines, a voice is a stack of wavering lines between 100 and 4000 Hz.
+// --png also draws the stretch read (see draw.mjs for how to read the picture).
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { SR, toDb, lp, hp, fft } from '../kit/dsp.mjs';
-import { decode, probe, FFMPEG } from '../kit/source.mjs';
+import { decode, probe } from '../kit/source.mjs';
 
 const a = process.argv.slice(2);
 const opt = (k, d = null) => (a.includes(k) ? a[a.indexOf(k) + 1] : d);
@@ -47,6 +48,7 @@ console.log('  level, peak: dB. crest: peak over level (a shot is 15 or more, an
 
 const png = opt('--png');
 if (png) {
-  const r = spawnSync(FFMPEG, ['-v', 'error', '-y', '-nostdin', '-ss', String(from), '-t', String(to - from), '-i', file, '-lavfi', 'aformat=channel_layouts=mono,showspectrumpic=s=1500x420:legend=1:fscale=log:scale=log:drange=90:start=30:stop=16000', png], { encoding: 'utf8' });
-  console.log(r.status === 0 ? `  drawn to ${png}` : `  could not draw: ${(r.stderr || '').trim()}`);
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const r = spawnSync(process.execPath, [path.join(here, 'draw.mjs'), png, `${file}@${from}-${to}`], { encoding: 'utf8' });
+  console.log(r.status === 0 ? `  ${r.stdout.trim()}` : `  could not draw: ${(r.stderr || '').trim()}`);
 }
