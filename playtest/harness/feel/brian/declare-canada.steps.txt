@@ -1,0 +1,8 @@
+# Ruling 211(b) as Brian changed it (60 in 100): a new America declares war on Canada. Change the seed on the first line.
+start	USA 1939-09 seed 25 colonel	does
+press	DECLARE WAR	card
+press	Canada	card
+press	DECLARE WAR	does
+close
+end-month
+end-month
