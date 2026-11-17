@@ -3528,10 +3528,15 @@ function regionPane(): string {
     const canEvac = evacAsk.length > 0;
     const evacWhy = canEvac && evacAsk.every((c) => whyNotEvacuate(g, c) !== null) ? whyNotEvacuate(g, evacAsk[0]) : null;
     const evacTo = canEvac ? refuge(g, evacAsk[0], r) : null;
+    // An ally's corps in hand bars the landing (landTargets wants every corps the player's own). Where his own corps
+    // in hand could land without it, INVADE BY SEA is shown off with the rules' sentence for it instead of missing.
+    const ownInHand = picked.filter((c) => c.nat === me);
+    const landBarred = !lands.length && ownInHand.length > 0 && ownInHand.length < picked.length && (r.port || byAir(ownInHand)) && g.nations[me!].atWar.length > 0 && landTargets(g, ownInHand).length > 0
+      ? `An ally's corps does not sail under your orders: send the landing with your own. Click ${andList(picked.filter((c) => c.nat !== me).map((c) => c.name))} in the tray to leave it out.` : '';
     // (The Rail move switch is gone, by the design director's ruling 118: both reaches show at once, a right-click on
     // blue ground takes the train, and inside the march's reach a march is never the worse way. What the trains will
     // do for the army in hand is said in one line on its own card: railLine.)
-    acts = `<div class="acts">${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? (byAir(picked) ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Drop these airborne troops on an enemy coast across one sea. They need no ships, and fight without heavy weapons.">Airborne assault</button>` : `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>`) : ''}${canEvac ? (evacWhy ? `<button class="btn small" data-act="evac" disabled title="${esc(evacWhy)}">Evacuate by sea</button>` : `<button class="btn small" data-act="evac" title="An emergency lift ${evacTo && !evacTo.cap ? `to ${esc(evacTo.name)}, the nearest haven still in friendly hands` : 'home'}. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>`) : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>${evacWhy ? whyOff(evacWhy) : ''}`;
+    acts = `<div class="acts">${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? (byAir(picked) ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Drop these airborne troops on an enemy coast across one sea. They need no ships, and fight without heavy weapons.">Airborne assault</button>` : `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>`) : landBarred ? `<button class="btn small" data-act="land" disabled title="${esc(landBarred)}">${byAir(ownInHand) ? 'Airborne assault' : 'Invade by sea'}</button>` : ''}${canEvac ? (evacWhy ? `<button class="btn small" data-act="evac" disabled title="${esc(evacWhy)}">Evacuate by sea</button>` : `<button class="btn small" data-act="evac" title="An emergency lift ${evacTo && !evacTo.cap ? `to ${esc(evacTo.name)}, the nearest haven still in friendly hands` : 'home'}. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>`) : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>${evacWhy ? whyOff(evacWhy) : ''}${landBarred ? whyOff(landBarred) : ''}`;
   } else if (mineHere.some((c) => c.ap > 0)) {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
@@ -9361,16 +9366,26 @@ function keepMarches(id: number, held: Corps[]): boolean {
 function shipPicked(id: number): void {
   const picked = pickedCorps();
   const to = g.regions[id];
-  let sailed = 0;
   const leftGate = gateLeft(g, picked);
-  for (const c of picked) if (orderShip(g, c, id)) sailed++;
+  const went: Corps[] = [], stayed: Corps[] = [];
+  for (const c of picked) (orderShip(g, c, id) ? went : stayed).push(c);
+  const sailed = went.length;
+  // Why the first corps left on the quay did not sail, asked after the others have: the shipping they took and the room they filled count.
+  const whyStayed = (c: Corps): string => (c.nat !== g.human ? `${c.name} is an ally's corps and does not sail under your orders.` : whyNotShip(g, c, to) ?? `${c.name} cannot be given orders now.`);
   if (!sailed) {
-    ui.msg = (picked[0] && whyNotShip(g, picked[0], to)) || `Nothing can be shipped to ${to.name} this month.`;
+    ui.msg = (stayed[0] && whyStayed(stayed[0])) || `Nothing can be shipped to ${to.name} this month.`;
     refresh();
     return;
   }
   ui.msg = `${sailed === 1 ? 'One corps has sailed' : `${sailed} corps have sailed`} to ${to.name}. The voyage is ${sailed === 1 ? 'its' : 'their'} whole month.${gateGone(leftGate) ? ` ${gateGone(leftGate)}` : ''}`;
   queueSave();
+  if (stayed.length) {
+    // A sailing that leaves corps behind keeps them in hand where they stand and names them with the reason (ruling 204(d)): never dropped without a word.
+    ui.msg += ` Still at ${g.regions[stayed[0].reg].name}: ${andList(stayed.map((c) => c.name))}. ${whyStayed(stayed[0])}`;
+    for (const c of went) ui.picked.delete(c.id);
+    refresh();
+    return;
+  }
   selectRegion(id);
   ui.picked.clear();
   ui.tab = 'region';
