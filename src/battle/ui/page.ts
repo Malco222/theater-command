@@ -163,7 +163,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
 
 function card(u: LandUnit, color: string): string {
   return `<button class="tc-card is-press ucard" data-unit="${u.id}" title="${esc(u.name)}">
-    <span class="uhead">${signSvg(u.kind, color)}<b>${esc(u.short)}</b></span>
+    <span class="uhead">${signSvg(u.kind, color)}<span class="uname"><b>${esc(u.short)}</b><span>${esc(u.parent)}</span></span></span>
     <span class="tc-meter" data-m="str"><span class="tc-label">Strength</span><i><b></b></i><span></span></span>
     <span class="tc-meter is-rest" data-m="mor"><span class="tc-label">Morale</span><i><b></b></i><span></span></span>
     <span class="ustate tc-data"></span></button>`;

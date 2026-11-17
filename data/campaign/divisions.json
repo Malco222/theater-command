@@ -4,7 +4,7 @@
     "rule": "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
     "kinds": "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
     "names": "What a nation calls its own divisions of a kind, where it differs: [name, short].",
-    "historic": "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358).",
+    "historic": "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
     "order": "The order the kinds are listed in when an army is summed up.",
     "spread": "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
     "hardened": "The experience (0 to 1) at which a division counts as battle-hardened."
@@ -21,7 +21,7 @@
   },
   "historic": {
     "GER": {
-      "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"], ["Panzer Division Kempf", "Kempf"]],
+      "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
       "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
     }
   },

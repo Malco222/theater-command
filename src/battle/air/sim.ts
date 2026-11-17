@@ -14,6 +14,8 @@ import { DT } from '../core/types';
 import { SKY, type Band } from './book';
 import { drawFall, fallWords } from './falls';
 import type { AirJob, AirOutcome, AirPlace, AirUnit } from './types';
+import { afterWords } from '../../campaign/airfought';
+export { peopleOf } from '../../campaign/airfought';
 
 const C = SKY.cues;
 
@@ -44,6 +46,9 @@ export class AirSim implements BattleSim<AirUnit> {
   private toStaff = false;
   /** Each side's losses when the player handed the rest to the staff, for the after card. */
   private before: { att: { ftr: number; bmr: number }; def: { ftr: number; bmr: number } } | null = null;
+  /** The staff's reckoning of what the raid would cost each pool, at the start (see expect), and what is handed back at the press. */
+  private start = { foe: 0, ftr: 0, bmr: 0 };
+  private staff: AirOutcome['staff'];
   private flakT: number;
   /** The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber, the bombers' own guns. */
   private law = { D: 0, B: 0, ePer: 0, guns: 0, met: 0 };
@@ -98,6 +103,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // Both sides start on the staff's plan; the player changes what he likes before or after he starts the clock.
     this.think('att', true);
     this.think('def', true);
+    this.start = this.expect();
   }
 
   /** How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres. */
@@ -572,37 +578,57 @@ export class AirSim implements BattleSim<AirUnit> {
    * a group the player drove off deals nothing more, a battered one less, and a box left without its escort pays for
    * it, as the board would have made it pay. Bombers still coming on get through; those that turned back stay turned.
    */
-  private settleNow(): void {
-    if (this.over) return;
-    const lost = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
-    this.before = { att: { ftr: lost('att', 'ftr'), bmr: lost('att', 'bmr') }, def: { ftr: lost('def', 'ftr'), bmr: 0 } };
-    const live = this.units.filter(flying);
+  /**
+   * What the rest of the raid would still cost each pool from where each side stands, at even luck: the defending
+   * fighters ('foe'), the raid's fighters ('ftr') and its bombers ('bmr'). Each fighter group's fight left, at its
+   * strength now, against the enemy still in play, and the guns' run each box has still to fly. Groups on the ground
+   * count: they would come up.
+   */
+  private expect(): { foe: number; ftr: number; bmr: number } {
+    const live = this.units.filter((u) => !off(u));
     const inPlay = (v: AirUnit): boolean => !away(v);
+    const out = { foe: 0, ftr: 0, bmr: 0 };
+    const took = new Map<number, number>();
     for (const u of live) {
       if (u.air !== 'ftr' || away(u) || u.kit0 <= 0) continue;
       const vig = (u.kit.ftr + u.kit.bmr) / u.kit0;
       if (vig <= SKY.spent) continue;
-      const k = ((vig - SKY.spent) / vig) * (u.n / u.n0) * (u.state === 'wavering' ? SKY.edge.wavering : 1) * u.luck;
+      const k = ((vig - SKY.spent) / vig) * (u.n / u.n0) * (u.state === 'wavering' ? SKY.edge.wavering : 1);
       const F = live.filter((v) => v.side !== u.side && v.air === 'ftr' && inPlay(v)), Bs = live.filter((v) => v.side !== u.side && v.air === 'bmr' && inPlay(v));
-      const nF = F.reduce((s, v) => s + v.n, 0), nB = Bs.reduce((s, v) => s + v.n, 0);
-      if (nF > 0) { for (const v of F) v.owed += u.kit.ftr * k * (v.n / nF); u.kit.ftr *= 1 - k; }
-      if (nB > 0) {
-        for (const b of Bs) {
-          const most = this.place.law.most * b.n0 - (b.n0 - b.n) - b.owed;
-          if (most > 0) b.owed += Math.min(most, u.kit.bmr * k * (b.n / nB) * this.cover(b, live));
-        }
-        u.kit.bmr *= 1 - k;
+      if (F.length) out[u.side === 'att' ? 'foe' : 'ftr'] += u.kit.ftr * k;
+      const nB = Bs.reduce((s, v) => s + v.n, 0);
+      for (const b of Bs) {
+        const most = this.place.law.most * b.n0 - (b.n0 - b.n) - (took.get(b.id) ?? 0);
+        const hit = most > 0 ? Math.min(most, u.kit.bmr * k * (b.n / Math.max(1, nB)) * this.cover(b, live)) : 0;
+        took.set(b.id, (took.get(b.id) ?? 0) + hit);
+        out.bmr += hit;
       }
     }
-    // The guns: what is left of their run for each box still over the target or coming to it.
-    for (const b of live) if (b.air === 'bmr' && b.side === 'att' && !away(b)) b.owed += b.n * this.place.gunLoss * SKY.flak.band[b.band] * (1 - b.shot);
-    this.fall(live);
-    for (const b of live) if (b.air === 'bmr' && b.side === 'att' && b.n > 0 && !b.dropped && !b.jettisoned && !away(b)) b.dropped = b.n;
+    for (const b of live) if (b.air === 'bmr' && b.side === 'att' && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.band] * (1 - b.shot);
+    return out;
+  }
+
+  /**
+   * HAND IT TO THE STAFF: what was fought stays fought, and the rest goes to the rules' own dice (the design director,
+   * log b368). The battle ends here and hands back what each group had lost, with each pool's share of the raid's cost
+   * still to come from where each side stands (the staff's reckoning now against the same reckoning at the start).
+   * The campaign rolls the raid exactly as it does for any raid and books that share of its roll on top. Pressed at
+   * once, the share is 1 and nothing is lost yet: it books exactly what the campaign would have rolled.
+   */
+  private settleNow(): void {
+    if (this.over) return;
+    const lost = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
+    this.before = { att: { ftr: lost('att', 'ftr'), bmr: lost('att', 'bmr') }, def: { ftr: lost('def', 'ftr'), bmr: 0 } };
+    const now = this.expect(), S = this.start;
+    // A pool the reckoning never weighed (no escort, no bombers) is left to the dice whole: they give it what they give it.
+    const share = (k: 'foe' | 'ftr' | 'bmr'): number => (S[k] > 0 ? Math.min(2, now[k] / S[k]) : 1);
+    // Bombers still in the air that had turned back without bombing: they do not bomb when the staff settle it.
+    const turned = this.units.filter((b) => b.air === 'bmr' && b.side === 'att' && b.n > 0 && !b.dropped && (b.jettisoned || away(b)));
+    this.staff = { rest: { foe: share('foe'), ftr: share('ftr'), bmr: share('bmr') }, away: turned.reduce((t, b) => t + b.n, 0) };
     this.toStaff = true;
     this.finish('objective');
   }
 
-  /** The exact result for the rules: each campaign group's losses, the pilots who come back, the bombs dropped. */
   outcome(): AirOutcome {
     const groups = new Map<number, AirOutcome['groups'][number]>();
     for (const u of this.units) {
@@ -614,6 +640,7 @@ export class AirSim implements BattleSim<AirUnit> {
     const att = this.units.filter((u) => u.side === 'att' && u.air === 'bmr');
     return {
       groups: [...groups.values()], dropped: att.reduce((s, u) => s + u.dropped, 0), jettisoned: att.reduce((s, u) => s + (u.jettisoned ? u.n : 0), 0),
+      ...(this.staff ? { staff: this.staff } : {}),
     };
   }
 
@@ -629,25 +656,16 @@ export class AirSim implements BattleSim<AirUnit> {
       : lost.def > lost.att ? 'att' : 'def';
     const R = fieldRatio(winner, lost);
     const count = (s: Side, k: 'ftr' | 'bmr'): number => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
-    // The after card in the UI director's words (18:45Z): one bill, the one the campaign books, the player's own side
-    // first; handed to the staff partway, one line more says which part of it came before the press (the design
-    // director, 18:39Z). A kind at 0 is left out, and a side that lost nothing lost none.
+    // The after card in the UI director's words (airfought.ts afterWords). Handed to the staff, the battle does not
+    // know the bill (the campaign's dice settle the rest), so its own card leaves the bill and the bombers line out;
+    // the campaign's raid order writes the whole card from what it books (airpages.ts airAct).
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
-    const foe = other(me), them = peopleOf(this.ticket[foe].adj);
-    const what = (n: (s: Side, k: 'ftr' | 'bmr') => number, s: Side): string => {
-      const f = n(s, 'ftr'), b = n(s, 'bmr');
-      return [f ? `${f} ${f === 1 ? 'fighter' : 'fighters'}` : '', b ? `${b} ${b === 1 ? 'bomber' : 'bombers'}` : ''].filter(Boolean).join(' and ');
-    };
-    const sky = this.place.mission === 'superiority';
-    const B = this.before;
-    const mine0 = B ? what((s, k) => B[s][k], me) || 'none' : '';
-    const lines = [
-      // Whose bombers (the UI director, 18:50Z): his own, or the raiders' by their adjective when he defends.
-      ...(bombers0 > 0 ? [`${out.dropped} of ${me === 'att' ? 'your ' : ''}${bombers0} ${me === 'att' ? '' : `${this.ticket.att.adj} `}bombers dropped their bombs on ${this.place.name}${out.jettisoned ? `, and ${out.jettisoned} jettisoned theirs` : ''}.`] : []),
-      `The ${sky ? `fight for the sky over ${this.place.name}` : 'raid'} cost you ${what(count, me) || 'nothing'}, and the ${them} lost ${what(count, foe) || 'none'}.`,
-      // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
-      ...(B ? [`Before you handed it to the staff, you had lost ${mine0}${mine0.includes(' and ') ? ',' : ''} and the ${them} ${what((s, k) => B[s][k], foe) || 'none'}.`] : []),
-    ];
+    const bill = (s: Side) => ({ ftr: count(s, 'ftr'), bmr: count(s, 'bmr') });
+    const lines = afterWords({
+      place: this.place.name, sky: this.place.mission === 'superiority', me, adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
+      bombers: this.toStaff ? 0 : bombers0, dropped: out.dropped, jettisoned: out.jettisoned, staff: this.toStaff,
+      bill: this.toStaff ? null : { att: bill('att'), def: bill('def') }, before: this.before,
+    });
     this.over = {
       winner, how, seconds: this.t, lost,
       men: { att: count('att', 'ftr') + count('att', 'bmr'), def: count('def', 'ftr') },
@@ -659,17 +677,9 @@ export class AirSim implements BattleSim<AirUnit> {
       }),
       extra: { air: out },
     };
-    if (this.toStaff) this.over.lines.unshift(`The staff settled the rest of the ${this.place.mission === 'superiority' ? 'fight for the sky over' : 'raid on'} ${this.place.name} from where it stood: what you had won stays won.`);
     this.say('end', null, this.over.lines.join(' '));
   }
 }
 
 /** A battle from a ticket. */
 export const airBattle = (t: FieldTicket<AirPlace>): AirSim => new AirSim(t);
-
-/** A nation's people as the after card names them, from the adjective the cards use: the French, the Germans, the Swiss. */
-export function peopleOf(adj: string): string {
-  const odd: Record<string, string> = { Luxembourg: 'Luxembourgers', Northern: 'Northern side', Southern: 'Southern side' };
-  if (odd[adj]) return odd[adj];
-  return /(ish|ch|ese|ss)$/.test(adj) ? adj : `${adj}s`;
-}

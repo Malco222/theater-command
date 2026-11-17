@@ -10,8 +10,9 @@
 //   1. its attack(ids, to) takes a third argument, fought?: number, and passes it on: orderAttack(s, sent, s.regions[to], fought)
 //   2. import { battleCalls } from './battle-bridge';   and in the TC object:   ...battleCalls({ game, attack }),
 // With no battle fought, nothing changes: attack(ids, to) rolls the dice as before.
-// Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, and passes it to
-// airAct(s, action, fought); and the TC object's line becomes
+// Air adds one more line: its act(action, region) takes a third argument, fought?: FoughtAir, passes it to
+// airAct(s, action, fought), and puts airAct's after on what it returns (after: air.after, the after card written
+// from what the campaign booked: { lines, level, groups }); and the TC object's line becomes
 //   ...battleCalls({ game, attack, raid: (k, t, ids, f) => act(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
 // With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
 //
@@ -106,8 +107,8 @@ function unitOut(u: UnitBase): Record<string, unknown> {
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
     loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : loops?.[u.act] ?? '',
-    // A land block's name for a card ("11th Infantry"), beside its full name.
-    ...(land.short ? { short: land.short } : {}),
+    // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
+    ...(land.short ? { short: land.short, parent: land.parent } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };

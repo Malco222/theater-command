@@ -64,9 +64,12 @@ button { cursor: pointer; }
 .keys .facts > span { margin-left: -2em; }
 .keys .tc-key { opacity: 1; }
 .tray { display: flex; gap: 8px; padding: 8px 12px 10px; overflow-x: auto; background: var(--desk-900); border-top: 1px solid var(--brass-700); }
-.ucard { flex: none; width: 196px; display: grid; gap: 4px; text-align: left; color: var(--paper-100); font-family: var(--font-serif); padding: 8px 10px; }
+.ucard { flex: none; min-width: 196px; display: grid; gap: 4px; text-align: left; color: var(--paper-100); font-family: var(--font-serif); padding: 8px 10px; }
 .ucard .uhead { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ucard .uhead b { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Two lines, nothing cut (the UI director): the name in bold, what it belongs to under it. The chip grows to fit. */
+.ucard .uname { display: grid; white-space: nowrap; }
+.ucard .uname b { font-size: 13px; line-height: 16px; }
+.ucard .uname span { font-size: 12px; line-height: 15px; color: var(--paper-300); }
 .ucard .bsign { flex: none; width: 30px; height: 21px; }
 .ucard .tc-meter { grid-template-columns: 64px 1fr 26px; }
 .ucard .tc-meter .tc-label { font-size: 12px; }

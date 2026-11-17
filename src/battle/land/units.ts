@@ -23,8 +23,9 @@ export interface LandOrder {
 
 export interface LandUnit extends UnitBase {
   kind: Kind;
-  /** Its name for a card: "11th Infantry" (the army tray's short form). */
+  /** Its name for a card, and what it belongs to under it: "11th Infantry" over "I Corps", "1st Regiment" over "1st Infantry". */
   short: string;
+  parent: string;
   /** Its share of its side's power at the start: what it strikes with and what it can take. */
   power0: number;
   /** Strength it came onto the field with (the campaign's own): its meter starts here. */
@@ -116,14 +117,15 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       const ds = p.divs.map((d) => divs[d]);
       const name = p.regiment !== undefined ? `${ORD(p.regiment + 1)} Regiment, ${ds[0].short}`
         : ds.length === 1 ? ds[0].name : ds.map((d) => d.short).join(' and ');
-      const short = p.regiment !== undefined || ds.length > 1 ? name : ds[0].short;
+      const short = p.regiment !== undefined ? `${ORD(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
+      const parent = p.regiment !== undefined ? ds[0].short : f.name;
       const [w, d] = LAND.size[k];
       const full = LAND.figures[k];
       const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
       const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
       const share = weightOf(p) / all;
       out.push({
-        id: firstId + out.length, side, corps: f.corps, nat: f.nat, kind: k, name, short,
+        id: firstId + out.length, side, corps: f.corps, nat: f.nat, kind: k, name, short, parent,
         x: 0, y: 0, face: side === 'att' ? 0 : Math.PI,
         str: str0, str0, mor: mor0, mor0, xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
         state: 'steady', men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== undefined ? LAND.blocks.regiments : 1)),

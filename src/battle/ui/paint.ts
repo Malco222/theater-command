@@ -72,7 +72,9 @@ function smoothMask(f: LandField, W: number, H: number, test: (c: number, r: num
 }
 
 /** The field painted: the map, and the detail laid over it from the closer zooms. */
-export interface Painted { base: HTMLCanvasElement; detail: HTMLCanvasElement }
+/** The painted map, the closer zooms' detail, and the bunkers' places in field metres: the bunker sign is drawn on the
+ *  screen at a fixed size, as a label is, so it never grows heavier than the town when the view comes closer. */
+export interface Painted { base: HTMLCanvasElement; detail: HTMLCanvasElement; forts: [number, number][] }
 
 export function paintField(f: LandField, terrain: Terrain, seed: number): Painted {
   const W = Math.round(f.w * PAINT), H = Math.round(f.h * PAINT), cs = f.cell * PAINT;
@@ -268,13 +270,12 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
     }
   }
 
-  // Bunkers: the campaign map's own fortress sign, the notched block in ink with no fill (.fortmark), one for each
-  // bunker however many cells it covers, sized to read at the whole-field view (the art director, 3).
+  // Bunkers: the campaign map's own fortress sign, one for each bunker however many cells it covers (the art director,
+  // 3). Only their places here: drawFrame draws the sign at its whole-field size on the screen.
+  const forts: [number, number][] = [];
   {
     const isBunker = (c: number, r: number): boolean => g(c, r) === 'bunker';
     const seen = new Uint8Array(f.cols * f.rows);
-    const k = 7 * PAINT;
-    x.strokeStyle = INK; x.lineWidth = 0.9 * k * 0.55; x.lineJoin = 'miter'; x.lineCap = 'butt';
     for (let i = 0; i < seen.length; i++) {
       const c0 = i % f.cols, r0 = Math.floor(i / f.cols);
       if (seen[i] || !isBunker(c0, r0)) continue;
@@ -282,18 +283,14 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
       const todo = [i]; seen[i] = 1;
       while (todo.length) {
         const j = todo.pop()!, c = j % f.cols, r = Math.floor(j / f.cols);
-        sx += px(c) + cs / 2; sy += py(r) + cs / 2; n++;
+        sx += (c + 0.5) * f.cell; sy += (r + 0.5) * f.cell; n++;
         for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
           const cc = c + dc, rr = r + dr, q = rr * f.cols + cc;
           if (cc < 0 || rr < 0 || cc >= f.cols || rr >= f.rows || seen[q] || !isBunker(cc, rr)) continue;
           seen[q] = 1; todo.push(q);
         }
       }
-      const X = sx / n, Y = sy / n;
-      x.beginPath();
-      x.moveTo(X - 3 * k, Y + 2.5 * k); x.lineTo(X - 3 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 2.5 * k); x.lineTo(X - 1.2 * k, Y - 0.8 * k);
-      x.lineTo(X + 1.2 * k, Y - 0.8 * k); x.lineTo(X + 1.2 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y - 2.5 * k); x.lineTo(X + 3 * k, Y + 2.5 * k);
-      x.stroke();
+      forts.push([sx / n, sy / n]);
     }
   }
 
@@ -301,5 +298,5 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   x.fillStyle = 'rgba(80,60,30,.035)';
   for (let i = 0; i < (W * H) / 900; i++) x.fillRect(rnd() * W, rnd() * H, 1.5, 1.5);
   x.strokeStyle = 'rgba(42,45,47,.6)'; x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
-  return { base: out, detail };
+  return { base: out, detail, forts };
 }
