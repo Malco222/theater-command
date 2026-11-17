@@ -5,7 +5,7 @@
 
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { afloat, airAI, airFleetsOf, fieldRoom, km, rebaseAir, whyNotBase } from './air';
+import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
 import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
@@ -1300,7 +1300,7 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
     headline(g, 'event', `The ${f.name} crosses the ocean to ${to.name}: the ${n.adj} fleet goes where its army has gone, to cover the crossings still to come.`, nat, to.id);
   }
   if (O.air === undefined || g.flags[`fy:air:${nat}`] === g.turn) return;
-  const home = airFleetsOf(g, nat).filter((f) => !afloat(f) && beyondEurope(f.base)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
+  const home = airFleetsOf(g, nat).filter((f) => !afloat(f) && beyondEurope(f.base) && !homeCommand(f)).sort((a, b) => b.ftr + b.bmr - (a.ftr + a.bmr) || a.id - b.id);
   if (home.length <= O.air) return;
   for (const f of home) {
     let to: Region | null = null, bd = Infinity;

@@ -18,7 +18,7 @@ import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
-import { openAirWar, skyDenies } from './air';
+import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
@@ -100,6 +100,7 @@ export function startOpen(g: Game, wide = true): Game {
   openTraits(g);
   openTech(g);
   openStores(g);
+  openWorldAir(g);
   openAirWar(g);
   openCarriers(g);
   openSieges(g);

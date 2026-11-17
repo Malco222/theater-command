@@ -20,7 +20,7 @@ import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, setMission, shipsInPort, whyNotBase, whyNotMission,
+  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -315,8 +315,11 @@ export function setGroupJob(g: Game, id: number, key: string, nat: string | null
   return setMission(g, f, 'support');
 }
 
-/** Where a group could move to: the airfields in reach, nearest first, with the room each has. */
-export interface BaseOption { region: number; name: string; km: number; word: string; holds: number; free: number; why: string | null }
+/**
+ * Where a group could move to: the airfields in reach, nearest first, with the room each has; then, for a land group,
+ * the friendly airfields across an ocean, where it goes by sea (`sea`: one group of a nation a month, ruling 133(b)).
+ */
+export interface BaseOption { region: number; name: string; km: number; word: string; holds: number; free: number; why: string | null; sea?: boolean }
 
 export function groupBases(g: Game, id: number, nat: string | null = g.human): BaseOption[] {
   const f = mine(g, id, nat);
@@ -337,12 +340,14 @@ export function groupBases(g: Game, id: number, nat: string | null = g.human): B
   for (const r of g.regions) {
     const holds = airfieldsHold(g, r.id);
     if (holds <= 0 || r.id === f.base || !allied(g, f.nat, r.ctrl)) continue;
-    const d = kmTo(g, f, r.id);
-    if (d > AIR.ferry) continue;
+    const d = kmTo(g, f, r.id), sea = overOcean(f, r);
+    if (!sea && d > AIR.ferry) continue;
     const there = g.airFleets.reduce((s, x) => s + (x.base === r.id && !afloat(x) ? x.ftr + x.bmr : 0), 0);
-    out.push({ region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: whyNotBase(g, f, r) });
+    const o: BaseOption = { region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: sea ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r) };
+    if (sea) o.sea = true;
+    out.push(o);
   }
-  return out.sort((a, b) => a.km - b.km);
+  return out.sort((a, b) => (a.sea ? 1 : 0) - (b.sea ? 1 : 0) || a.km - b.km);
 }
 
 /** The fleets a carrier wing ashore could go back aboard: those it can board now first. Empty for any other group. */

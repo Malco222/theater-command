@@ -10,7 +10,7 @@ import { FIELDS } from './research';
 import { newStories } from './stories';
 import { restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
-import { openAirWar } from './air';
+import { openAirWar, openWorldAir } from './air';
 import { openCarriers } from './carriers';
 import { openSieges } from './siege';
 import { FAIR } from './difficulty';
@@ -173,6 +173,8 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.airFleets)) { g.airFleets = d.airFleets; g.nextAir = d.nextAir; g.airReports = d.airReports ?? []; g.airPool = d.airPool ?? {}; g.sky = d.sky ?? {}; g.raids = d.raids ?? {}; }
   // A grand campaign saved before the air war became its own game: its airfields are placed and its fleets become air groups.
   if (g.flags.open === 1) openAirWar(g);
+  // And one saved before the air commands beyond the old chart were listed (America's): they are raised on their fields.
+  if (g.flags.open === 1) openWorldAir(g);
   // A grand campaign saved before morale was kept, or before divisions carried numbers, picks both up here.
   openMorale(g);
   numberDivisions(g);

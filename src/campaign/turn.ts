@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
+import { airBattles, airBases, airTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
@@ -18,7 +18,7 @@ import {
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
-import { cancelBuild, orderCorps, orderFort } from './economy';
+import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
@@ -38,7 +38,7 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
-import { court, majorsOf, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
+import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
@@ -1469,9 +1469,11 @@ export interface GateRow {
   own: boolean;
   /** What happens to its trade, as a sentence. */
   what: string;
-  /** What it loses a month. */
+  /** What it loses a month, rounded to the money the page shows (budget.json 'scale'), so that the rows add up to the totals. */
   loss: number;
 }
+/** A country that resents the shut gate (ruling 177(a)): how far its opinion has moved for this shutting, of the most it can. */
+export interface GateSoreRow { nat: string; name: string; so: number; most: number; line: string }
 export interface GateQuestion {
   gate: GateView;
   /** The order the box offers: to shut the gate, or to open it again. */
@@ -1479,16 +1481,58 @@ export interface GateQuestion {
   label: string;
   question: string;
   lead: string;
-  /** The price as rows: whose trade stops or goes the long way round, the holder's own first, with what each loses a month. */
+  /**
+   * The price as rows: whose trade stops or goes the long way round, with what each loses a month. The holder's own
+   * row always stands first, even when none of his trade runs through the gate (it then says so, and its loss is 0).
+   */
   heading: string;
   rows: GateRow[];
+  /** All the rows together; and the other countries' alone, with the words for that last row of the tally. */
   total: number;
-  /** Said in place of the rows where no trade runs through the gate. */
+  others: number;
+  sumLabel: string;
+  /** Said under the holder's own row where nobody else's trade runs through the gate. */
   none: string;
+  /**
+   * Who resents it (ruling 177(a)): the countries at peace and outside both blocs whose trade it turns back, each a
+   * point of opinion a month away from the holder's side, to a most for one shutting. Empty where nobody will.
+   */
+  resentHeading: string;
+  resentNote: string;
+  resent: GateSoreRow[];
   /** The two buttons: the order, and leaving things as they are. */
   yes: string;
   no: string;
 }
+/**
+ * What ordering these corps away would leave a sea gate to (ruling 176(d)): when they are the last of the player's and
+ * his allies' corps in the province of a gate he holds, the sentence for the move's card. Null otherwise. Nothing is changed.
+ */
+export interface GateLeft {
+  gate: number; name: string; region: number;
+  /** The town's own guard that stays, in men: 0 where the place has none. */
+  men: number;
+  /** For the move's card, before the order: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
+  ifLine: string;
+  /** Once they have gone: "The Panama Canal is left to its town guard: about 4,800 men, and no army." */
+  line: string;
+}
+export function gateLeft(g: Game, corps: Corps[]): GateLeft | null {
+  if (g.human === null || !corps.length) return null;
+  const going = new Set(corps.map((c) => c.id));
+  for (const from of new Set(corps.map((c) => c.reg))) {
+    const i = g.gates.findIndex((gt) => gt.region === from);
+    const r = g.regions[from];
+    if (i < 0 || !r || r.ctrl !== g.human) continue;
+    const stays = [...r.units, ...(r.garr ?? [])].some((c) => !c.dead && !going.has(c.id) && allied(g, g.human!, c.nat));
+    if (stays) continue;
+    const gt = g.gates[i], many = /s$/.test(gt.name), men = guardMen(g, r);
+    const rest = men > 0 ? `${many ? 'are' : 'is'} left to ${many ? 'their' : 'its'} town guard: about ${menWord(men)} men, and no army.` : `${many ? 'are' : 'is'} left with nobody to hold ${many ? 'them' : 'it'}.`;
+    return { gate: i, name: gt.name, region: from, men, ifLine: `If they go, ${gt.name} ${rest}`, line: `${gt.name[0].toUpperCase()}${gt.name.slice(1)} ${rest}` };
+  }
+  return null;
+}
+
 /** Why the player cannot give a gate's order, or null when he can. */
 export function whyNotGate(g: Game, gate: number): string | null {
   const gt = g.gates[gate];
@@ -1521,8 +1565,20 @@ export function gateQuestion(g: Game, gate: number): GateQuestion | null {
     if (r.round.length) parts.push(`${parts.length ? (own ? 'your' : 'its') : own ? 'Your' : 'Its'} trade with ${namesOf(g, r.round)} goes the long way round`);
     return `${parts.join('; ')}.`;
   };
-  const rows: GateRow[] = list.map((r) => ({ nat: r.nat, name: g.nations[r.nat].name, own: r.nat === me, what: what(r, r.nat === me), loss: r.loss }))
+  // (Each figure is rounded to the money the page shows, and the totals are the rows added up: a sum that is one out reads as a fault.)
+  const shown = (x: number): number => Math.round(x * BUDGET.scale) / BUDGET.scale;
+  const rows: GateRow[] = list.map((r) => ({ nat: r.nat, name: g.nations[r.nat].name, own: r.nat === me, what: what(r, r.nat === me), loss: shown(r.loss) }))
     .sort((x, y) => Number(y.own) - Number(x.own));
+  // His own row first, always: he must not read the others' bill as his own.
+  if (!rows.length || !rows[0].own) rows.unshift({ nat: me, name: g.nations[me].name, own: true, what: 'None of your own trade runs through it.', loss: 0 });
+  const others = rows.filter((r) => !r.own);
+  // Who resents it: fixed at the shutting for a gate already shut, else those of the rows who would.
+  const G = RELATIONS.gate, side = sideName(g, me);
+  const sore = isShut ? soreList(g, gate) : others.filter((r) => wouldResent(g, me, r.nat)).map((r) => ({ nat: r.nat, so: 0 }));
+  const resent: GateSoreRow[] = sore.map((x) => ({
+    nat: x.nat, name: g.nations[x.nat].name, so: x.so, most: G.most,
+    line: isShut ? `${x.so} of ${G.most} points so far` : `${G.month} point of opinion a month, ${G.most} at most`,
+  })).sort((x, y) => x.name.localeCompare(y.name));
   return {
     gate: v, order: isShut ? 'open' : 'shut', label: 'Sea gate · you hold it',
     question: isShut ? `Open ${gt.name} again?` : `Shut ${gt.name}?`,
@@ -1530,15 +1586,23 @@ export function gateQuestion(g: Game, gate: number): GateQuestion | null {
       ? `You shut ${them} in ${turnToDate(v.shutSince).label}. Open, ${it} ${many ? 'stand' : 'stands'} as before: ${gt.closed ? 'in wartime only your allies may pass, and a country at war with nobody' : 'every country may pass that is not at war with you'}.`
       : `Shut, ${it} ${many ? 'let' : 'lets'} through only your own ships and your allies'. Every other country's ships are turned back: its warships, its supply ships and the trade it carries, your own trade with it included. You can open ${them} again whenever you choose.`,
     heading: isShut ? 'What it is costing each month' : 'What it costs each month',
-    rows, total: rows.reduce((s, r) => s + r.loss, 0),
+    rows, total: shown(rows.reduce((s, r) => s + r.loss, 0)), others: shown(others.reduce((s, r) => s + r.loss, 0)), sumLabel: 'All told, to others',
     none: isShut ? 'No agreement is held up by it today.' : 'No trade runs through it today: shutting it costs nobody anything yet.',
+    resentHeading: isShut ? 'Who resents it' : 'Who will resent it',
+    resentNote: !resent.length ? '' : isShut
+      ? `Each has moved away from ${side} in public opinion since you shut ${them}. Open, they move no further.`
+      : `Each moves away from ${side} in public opinion for as long as ${it} ${many ? 'stay' : 'stays'} shut.`,
+    resent,
     yes: isShut ? 'Open the gate' : 'Shut the gate', no: isShut ? 'Leave it shut' : 'Leave it open',
   };
 }
 /** The holder's order: shuts his gate to all ships but his own and his allies', or opens it again. */
 export function orderGate(g: Game, gate: number, shut: boolean): boolean {
   if (whyNotGate(g, gate) || (gateShutSince(g, gate) >= 0) === shut) return false;
+  // Who resents it is fixed at the shutting: the countries whose trade it turns back this month (ruling 177(a)).
+  const sore = shut ? gateQuestion(g, gate)?.resent.map((r) => r.nat) ?? [] : [];
   setGate(g, gate, shut);
+  if (shut) soreAtShut(g, gate, g.human!, sore); else soreForget(g, gate);
   // His own agreements find the gate so at once; every other country's do in its own month.
   refreshTrade(g, g.human!);
   return true;
@@ -1547,7 +1611,8 @@ export function orderGate(g: Game, gate: number, shut: boolean): boolean {
 export function orderAirBase(g: Game, id: number, region: number): boolean {
   const f = myAir(g, id), r = g.regions[region];
   if (!f || !r) return false;
-  return f.ship !== undefined ? flyAshore(g, f, r) : rebaseAir(g, f, r);
+  // (Across an ocean a land group goes by sea, one a month: ruling 133(b).)
+  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
 }
 
 /** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */

@@ -15,7 +15,7 @@
 // 'harbour' (target: a province) are raids like the rest.
 
 import type { Game } from './types';
-import { airWar, carrierRules, groupAt } from './air';
+import { SHIP_AIR_TIP, airWar, carrierRules, groupAt, overOcean } from './air';
 import type { GroupRow, RaidKind, RaidPlan } from './airwar';
 import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
@@ -206,15 +206,24 @@ function rebasePage(g: Game, id: number): Page | null {
       top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections: [{ heading: 'AIRFIELDS', text: '', rows: fields }],
     };
   }
-  const rows: PageRow[] = airGroupBases(g, id).slice(0, 14).map((b) => ({
+  const all = airGroupBases(g, id);
+  const rows: PageRow[] = all.filter((b) => !b.sea).slice(0, 14).map((b) => ({
     nat: g.regions[b.region].ctrl, title: b.name,
     lines: [`${b.word}, ${num(b.km)} km away: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.free < x.aircraft ? ' It would be crowded: not all of the group could fly.' : ''}${b.why ? ` ${b.why}` : ''}`],
     buttons: [{ label: 'MOVE HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? 'Settling in costs it some readiness for a month.' }],
   }));
+  // Across an ocean a group goes by sea (ruling 133(b)): the fields it could be shipped to now first, then the nearest.
+  const over: PageRow[] = all.filter((b) => b.sea).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.km - b.km).slice(0, 8).map((b) => ({
+    nat: g.regions[b.region].ctrl, title: b.name,
+    lines: [`${b.word}, ${num(b.km)} km away across the ocean: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.why ? ` ${b.why}` : ''}`],
+    buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],
+  }));
+  const sections = [{ heading: 'AIRFIELDS', text: '', rows }];
+  if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  ·  ${x.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
     note: `${x.name} is based at ${x.baseName}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
-    top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections: [{ heading: 'AIRFIELDS', text: '', rows }],
+    top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
 }
 
@@ -329,9 +338,11 @@ export function airAct(g: Game, action: string): AirActResult | null {
   }
   if (part[0] === 'airbase') {
     const wing = g.airFleets.find((f) => f.id === Number(part[1]) && f.ship !== undefined);
+    const grp = g.airFleets.find((f) => f.id === Number(part[1])), to = g.regions[Number(part[2])];
+    const sea = !!grp && !!to && overOcean(grp, to);
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
-    const where = g.regions[Number(part[2])]?.name ?? 'its new airfield';
-    return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : 'It cannot move there now.', open: `group:${part[1]}` };
+    const where = to?.name ?? 'its new airfield';
+    return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };
   }
   if (part[0] === 'aboard') {
     const id = Number(part[1]), fleet = g.fleets.find((c) => c.id === Number(part[2]));

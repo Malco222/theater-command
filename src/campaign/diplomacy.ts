@@ -13,7 +13,7 @@ import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
-import { fleetsOnFall } from './navy';
+import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin, stopDef } from './history';
@@ -178,11 +178,68 @@ const blocName = (s: number): string => (s > 0 ? 'the Axis' : 'the Allies');
 export const RELATIONS = relationsData as unknown as {
   sneak: { attack: number };
   wary: { all: { opinion: number; home: number }; friend: { opinion: number; home: number } };
+  gate: { month: number; most: number };
   groups: { id: string; name: string; why: string; nations: string[] }[];
   pairs: [string, string, string][];
 };
 
 export interface Friend { nat: string; why: string }
+
+// ---- A gate its holder has shut: who resents it (rulings 176(e) and 177(a)) -----------------------------------
+
+const soreKey = (gate: number, nat: string): string => `gatesore:${gate}:${nat}`;
+
+/** The side a country stands on or leans to: +1 the Axis, -1 the Allies, 0 neither (a strict neutral, or the League). */
+export function sideHeld(g: Game, nat: string): number {
+  const n = g.nations[nat];
+  if (!n) return 0;
+  const b = bloc(n);
+  return b === 'axis' ? 1 : b === 'allies' ? -1 : b === 'league' ? 0 : Math.sign(step(n));
+}
+
+/** The words for that side: "the Allies", "the Axis", or '' for neither. */
+export const sideName = (g: Game, nat: string): string => (sideHeld(g, nat) ? blocName(sideHeld(g, nat)) : '');
+
+/** True for a country that would resent a gate this holder shut on its trade: at peace, outside both blocs, and the holder has a side to turn it from. */
+export const wouldResent = (g: Game, holder: string, nat: string): boolean => nat !== holder && sideHeld(g, holder) !== 0 && !!g.nations[nat] && courtable(g.nations[nat]);
+
+/** Forgets who resents a gate: it is open again, or it has changed hands. */
+export function soreForget(g: Game, gate: number): void {
+  for (const k of Object.keys(g.flags)) if (k.startsWith(`gatesore:${gate}:`)) delete g.flags[k];
+}
+
+/** Marks who resents a gate its holder has just shut. The list is fixed at the shutting: the countries whose trade it turned back that month. */
+export function soreAtShut(g: Game, gate: number, holder: string, nats: string[]): void {
+  soreForget(g, gate);
+  for (const id of nats) if (wouldResent(g, holder, id)) g.flags[soreKey(gate, id)] = 0;
+}
+
+/** Who resents a gate shut now, with the points of opinion each has moved so far. */
+export function soreList(g: Game, gate: number): { nat: string; so: number }[] {
+  const pre = `gatesore:${gate}:`;
+  return Object.keys(g.flags).filter((k) => k.startsWith(pre)).map((k) => ({ nat: k.slice(pre.length), so: g.flags[k] })).filter((x) => !!g.nations[x.nat]);
+}
+
+/**
+ * The month's move for each neutral that resents a shut gate: so many points away from the side the gate's holder
+ * stands on, counted against the most one shutting costs. A gate that is open again, or in other hands, is forgotten.
+ */
+function soreMonth(g: Game): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('gatesore:')) continue;
+    const [, gi, nat] = k.split(':');
+    const gate = Number(gi), gt = g.gates[gate];
+    const holder = gt ? (gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation ?? '') : '';
+    if (!gt || gateShutSince(g, gate) < 0) { delete g.flags[k]; continue; }
+    const n = g.nations[nat], side = sideHeld(g, holder);
+    if (!n || !courtable(n) || !side || g.flags[k] >= RELATIONS.gate.most) continue;
+    const pts = Math.min(RELATIONS.gate.month, RELATIONS.gate.most - g.flags[k]);
+    g.flags[k] += pts;
+    out.set(nat, (out.get(nat) ?? 0) - side * pts);
+  }
+  return out;
+}
 
 /** The countries that count this one a friend, and why: its circle of neighbours first, then its single friendships. */
 export function friendsOf(nat: string): Friend[] {
@@ -659,11 +716,13 @@ export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
   if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
+  // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
+  const sore = soreMonth(g);
   for (const n of Object.values(g.nations)) {
     // A small country in the player's hands stays where its player puts it.
     if (!courtable(n) || ownPath(g, n.id)) continue;
     const bw = DIPLOMACY.bandwagon[n.id] ?? DIPLOMACY.bandwagon._default;
-    n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
+    n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw + (sore.get(n.id) ?? 0), -100, 100);
     settle(g, n);
   }
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.

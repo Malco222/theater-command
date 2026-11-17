@@ -7,7 +7,8 @@
     "production": "Aircraft built each month, as [from turn, fighters, bombers]. They go to a reserve and from there to fleets below establishment.",
     "pilots": "Fighter pilots trained each month, as [from turn, pilots]. A fighter needs a pilot. 'home' is the share of pilots shot down over friendly ground who fly again; 'away' the share who get home from over enemy ground.",
     "reserve": "The most the reserve holds: spare aircraft and spare pilots beyond this go elsewhere.",
-    "fleets": "est is the establishment over time, as [from turn, fighters, bombers]: the strength a fleet is kept at. When it drops, the surplus goes to the reserve for other fleets. start is the strength on the first day, if below establishment. from is the month the fleet forms, once its base is held. ftrRange gives one fleet's fighters a reach of their own, in place of its nation's: the long-range fighters of 1944. scripted marks an air force history raised for an invasion of its own planning: in free play it does not form.",
+    "fleets": "est is the establishment over time, as [from turn, fighters, bombers]: the strength a fleet is kept at. When it drops, the surplus goes to the reserve for other fleets. start is the strength on the first day, if below establishment. from is the month the fleet forms, once its base is held. ftrRange gives one fleet's fighters a reach of their own, in place of its nation's: the long-range fighters of 1944. scripted marks an air force history raised for an invasion of its own planning: in free play it does not form. home marks a command that guards its own country: when that country's army goes across an ocean and its air groups follow (world.json 'overseas'), this one stays where it is.",
+    "america": "The United States (ruling 133(b), Version 84.2). Its commands stand on fields beyond the old chart, so they form only in the grand campaign: the home commands from the first day (about 500 first-line aircraft in September 1939, kept larger from 1941 and smaller again once the air forces overseas are raised), and from January 1942 the air forces raised against Germany, each formed at home at part strength, filled from the factories and shipped across with the army, one group a month. Its bombers reach 1,100 km. Its air forces in the Pacific wait for the Pacific.",
     "combat": "fighters and bombers scale the month's losses. escortShare is how much of the defenders' effort falls on the escort rather than the bombers. bomberDefence is what a bomber's own guns are worth. flak is the share of bombers lost to guns alone. seaCover is how much of a fighter force can cover ships at sea. night: few fighters find the bombers and few bombs find the target.",
     "damage": "airfields: bombers needed to cut a base's readiness by 1.0, the most one month can cut, and the share of bombers that destroys an aircraft on the ground. industry: bombers needed to stop a region's output for a month, and the most one month can stop. shipping: how hard a strike falls on ships at sea and on coastal trade.",
     "airfields": "The airfields of one region serve 'holds' aircraft. When more are based there, every fleet in the region flies only that share of its aircraft.",
@@ -24,7 +25,8 @@
     "FRA": { "quality": 0.85, "ftrRange": 220, "bmrRange": 700 },
     "ITA": { "quality": 0.75, "ftrRange": 220, "bmrRange": 800 },
     "POL": { "quality": 0.8, "ftrRange": 180, "bmrRange": 600 },
-    "SOV": { "quality": 0.6, "ftrRange": 200, "bmrRange": 800 }
+    "SOV": { "quality": 0.6, "ftrRange": 200, "bmrRange": 800 },
+    "USA": { "quality": 1, "ftrRange": 300, "bmrRange": 1100 }
   },
   "range": { "fullAt": 0.6, "atLimit": 0.5 },
   "radar": {
@@ -39,7 +41,8 @@
     "UK": [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 400, 350]],
     "FRA": [[1, 120, 60], [7, 250, 120]],
     "ITA": [[1, 120, 100]],
-    "SOV": [[1, 250, 200], [22, 450, 350], [26, 700, 500]]
+    "SOV": [[1, 250, 200], [22, 450, 350], [26, 700, 500]],
+    "USA": [[1, 20, 15], [17, 60, 40], [29, 150, 150], [36, 220, 220], [44, 300, 300], [53, 350, 350]]
   },
   "pilots": {
     "home": 0.5,
@@ -49,14 +52,16 @@
       "UK": [[1, 80], [9, 160], [11, 260], [13, 300]],
       "FRA": [[1, 80]],
       "ITA": [[1, 90]],
-      "SOV": [[1, 250], [22, 450]]
+      "SOV": [[1, 250], [22, 450]],
+      "USA": [[1, 30], [17, 80], [29, 200], [36, 300], [44, 400]]
     }
   },
   "reserve": {
     "_default": { "ftr": 150, "bmr": 150, "pilots": 100 },
     "GER": { "ftr": 400, "bmr": 500, "pilots": 250 },
     "UK": { "ftr": 300, "bmr": 250, "pilots": 200 },
-    "SOV": { "ftr": 600, "bmr": 500, "pilots": 400 }
+    "SOV": { "ftr": 600, "bmr": 500, "pilots": 400 },
+    "USA": { "ftr": 400, "bmr": 400, "pilots": 300 }
   },
   "leader": { "perLevel": 0.04, "maxLevel": 5 },
   "combat": {
@@ -109,7 +114,19 @@
     { "nat": "SOV", "name": "Moscow Air Defence", "base": "Moscow", "leader": "Mikhail Gromadin", "est": [[1, 300, 0], [22, 500, 0]] },
     { "nat": "UK", "name": "Mediterranean Air Command", "base": "Malta", "from": 46, "leader": "Arthur Tedder", "est": [[46, 500, 400]] },
     { "nat": "UK", "name": "Second Tactical Air Force", "base": "Hampshire", "from": 56, "leader": "Arthur Coningham", "ftrRange": 400, "scripted": true, "est": [[56, 1000, 500]] },
-    { "nat": "UK", "name": "US Ninth Air Force", "base": "West Country", "from": 56, "leader": "Lewis Brereton", "ftrRange": 600, "scripted": true, "est": [[56, 1000, 600]] }
+    { "nat": "UK", "name": "US Ninth Air Force", "base": "West Country", "from": 56, "leader": "Lewis Brereton", "ftrRange": 600, "scripted": true, "est": [[56, 1000, 600]] },
+
+    { "nat": "USA", "name": "First Air Force", "base": "New York", "home": true, "est": [[1, 80, 0], [17, 160, 0], [29, 240, 0], [41, 160, 0]] },
+    { "nat": "USA", "name": "I Bomber Command", "base": "Norfolk", "home": true, "est": [[1, 0, 80], [17, 0, 120], [29, 0, 150], [41, 0, 100]] },
+    { "nat": "USA", "name": "Third Air Force", "base": "Louisiana", "home": true, "est": [[1, 40, 80], [17, 80, 120], [29, 100, 150], [41, 60, 80]] },
+    { "nat": "USA", "name": "Fourth Air Force", "base": "Los Angeles", "home": true, "est": [[1, 80, 80], [17, 140, 100], [29, 240, 120], [41, 140, 80]] },
+    { "nat": "USA", "name": "Caribbean Air Force", "base": "Canal Zone", "home": true, "est": [[1, 40, 30], [17, 100, 50], [29, 150, 60], [41, 100, 40]] },
+    { "nat": "USA", "name": "Eighth Air Force", "base": "Georgia", "from": 29, "start": [80, 100], "est": [[29, 200, 250]] },
+    { "nat": "USA", "name": "Twelfth Air Force", "base": "Washington", "from": 36, "start": [80, 80], "est": [[36, 200, 200]] },
+    { "nat": "USA", "name": "VIII Bomber Command", "base": "Georgia", "from": 41, "start": [0, 150], "est": [[41, 0, 400]] },
+    { "nat": "USA", "name": "VIII Fighter Command", "base": "New York", "from": 44, "start": [100, 0], "ftrRange": 600, "est": [[44, 250, 0]] },
+    { "nat": "USA", "name": "Ninth Air Force", "base": "Georgia", "from": 47, "start": [80, 80], "est": [[47, 200, 200]] },
+    { "nat": "USA", "name": "Fifteenth Air Force", "base": "Washington", "from": 51, "start": [60, 140], "ftrRange": 600, "est": [[51, 150, 350]] }
   ],
   "plan": [
     { "nat": "GER", "from": 11, "to": 11, "name": "The Channel battles", "against": "UK", "orders": [
