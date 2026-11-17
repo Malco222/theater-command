@@ -1,0 +1,22 @@
+# Ruling 211(a) on Version 84.2.5, the player's side, second form: the attack card gathers every corps the roads carry,
+# so hold back the infantry and tanks and leave the guns or engineers alone on the card. Save: ger-guns-staged.save.txt.
+load	out/click/ger-guns-staged.save.txt
+# Mlawa from Elbing: hold back Corps Wodrig (infantry) and the guns from Masuria, leaving only the lone guns of Elbing
+select-province	Elbing
+order-province	Mlawa	card
+press	Corps Wodrig
+press	Staged Artillery C
+close
+key	Escape
+# Poznan from Neumark: press ONLY THE CORPS I PICKED with the engineers in hand
+select-province	Neumark
+order-province	Poznan	card
+press	ONLY THE CORPS I PICKED
+close
+key	Escape
+# Danzig Corridor from Elbing: ONLY THE CORPS I PICKED with the lone guns in hand
+select-province	Elbing
+order-province	Danzig Corridor	card
+press	ONLY THE CORPS I PICKED
+close
+key	Escape

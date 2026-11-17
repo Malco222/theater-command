@@ -1,0 +1,18 @@
+# Ruling 211(a) on 84.2.5: with only the lone guns left on the card, does AUTO-RESOLVE fight? Save: ger-guns-staged.
+load	out/click/ger-guns-staged.save.txt
+select-province	Elbing
+order-province	Danzig Corridor	card
+press	ONLY THE CORPS I PICKED
+press	AUTO-RESOLVE	says-why
+close
+key	Escape
+check-province	Danzig Corridor	holder POL
+# and the lone guns pressed back in by hand: the guns' own box
+select-province	Elbing
+order-province	Danzig Corridor	card
+press	ONLY THE CORPS I PICKED
+press	Staged Artillery C
+press	AUTO-RESOLVE	says-why
+close
+key	Escape
+check-province	Danzig Corridor	holder POL

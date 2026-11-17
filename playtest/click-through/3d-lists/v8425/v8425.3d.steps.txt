@@ -1,0 +1,44 @@
+# Version 84.2.5 in the 3D game (ruling 211(a) and (b)). Written 2026-11-17 by the Playtester, in the 3D form
+# (a start step first; SEND THEM IN for AUTO-RESOLVE; key esc after a month's end). Play it once the 3D bundle
+# carries rules 84.2.5 (main 2eb7806). Please keep a picture of every step: the words are the test.
+# Browser results on 84.2.5 for the same steps are in /mnt/project-files/playtest/feel/v8425-check.md.
+start	USA 1939-09
+# A. Brian's own save, one month on: the Canadian guns pull back from Pittsburgh to Buffalo; Britain declares war
+# ("Britain stands by Canada"); Pittsburgh stays American.
+load	brian-save-usa-1940-12-turn16.json
+select-province	Pittsburgh
+end-month
+key	esc
+check-province	Pittsburgh	holder USA
+check-province	Buffalo	holder CAN
+select-province	Buffalo
+# B. A new America declares war on Canada: the declare card must give the odds (six times in ten Britain declares
+# war the same month, four times in ten it stays out). Seed 29: Britain stays out. Seed 25: Britain comes in.
+start	USA 1939-09 seed 29
+press	DECLARE WAR	card
+press	Canada	card
+press	DECLARE WAR	does
+end-month
+key	esc
+start	USA 1939-09 seed 25
+press	DECLARE WAR	card
+press	Canada	card
+press	DECLARE WAR	does
+end-month
+key	esc
+# C. Guns alone as the player (Germany, September 1939, staged: corps 6 at Elbing made guns and alone, corps 3 at
+# Neumark made engineers and alone). Hold every other corps back: the attack must be refused with "Guns cannot take
+# ground alone. Send infantry or tanks in with them." and nothing fought.
+load	germany-september-1939-guns-alone-staged.save.txt
+select-province	Elbing
+order-province	Danzig Corridor	card
+press	ONLY THE CORPS I PICKED
+press	SEND THEM IN	says-why
+key	esc
+check-province	Danzig Corridor	holder POL
+select-province	Neumark
+order-province	Poznan	card
+press	ONLY THE CORPS I PICKED
+press	SEND THEM IN	says-why
+key	esc
+check-province	Poznan	holder POL

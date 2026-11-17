@@ -1,0 +1,21 @@
+# Ruling 211(a) on Version 84.2.5, the player's side: guns or engineers alone may not attack or march onto enemy ground.
+# Staged from Germany, September 1939 (seed 25): corps 6 at Elbing made guns and alone, corps 3 at Neumark made
+# engineers and alone, corps 4 at Masuria made guns beside an infantry corps. Save: ger-guns-staged.save.txt.
+load	out/click/ger-guns-staged.save.txt
+select-province	Elbing
+point-province	Mlawa
+order-province	Mlawa	says-why
+close
+order-province	Danzig Corridor	says-why
+close
+key	Escape
+select-province	Neumark
+point-province	Poznan
+order-province	Poznan	says-why
+close
+key	Escape
+# guns with infantry beside them: the attack card opens and can be fought
+select-province	Masuria
+order-province	Mlawa	card
+close
+key	Escape
