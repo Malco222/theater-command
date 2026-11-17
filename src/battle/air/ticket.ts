@@ -134,7 +134,7 @@ export function foughtAir(o: AirOutcome): FoughtAir {
     const row = (lost[gr.id] ??= { ftr: 0, bmr: 0, back: 0 });
     row.ftr += gr.lostFtr; row.bmr += gr.lostBmr; row.back += gr.back;
   }
-  return { lost, dropped: o.dropped };
+  return { lost, dropped: o.dropped, jettisoned: o.jettisoned, ...(o.staff ? { staff: o.staff } : {}) };
 }
 
 /**
