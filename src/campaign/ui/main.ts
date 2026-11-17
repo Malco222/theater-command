@@ -8396,8 +8396,9 @@ function onClick(e: MouseEvent): void {
           ? `The army at ${at} is digging in. Leave it where it is this month and it fights from fieldworks from the next.`
           : autoDig() ? `The army at ${at} will stand and fight where it is. Left there for the month, it digs in.` : `The army at ${at} will stand and fight where it is.`;
       // A press that changes nothing still answers (ruling 204(d)).
+      // (The UI director's words, 2026-11-17: a corps on leave in the rules' own sentence of ruling 176(c), with the latest date among them.)
       else ui.msg = field.length && field.every((c) => c.leave !== undefined)
-        ? `The army at ${at} is at home with its fame and takes no orders until it is back.`
+        ? `The army at ${at} is at home, out of the line, and takes no orders until ${date(Math.max(...field.map((c) => c.leave ?? 0)))}.`
         : `The army at ${at} takes no orders this month.`;
       refresh(); break;
     }
