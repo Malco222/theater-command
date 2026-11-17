@@ -2823,7 +2823,7 @@ function askEndCard(): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Before the month ends</div><h2>${esc(roundQuestion(c))}</h2></header>
     <div class="body"><p>${n === 1 ? 'It has a corps that has neither moved nor fought this month.' : 'Each has a corps that has neither moved nor fought this month.'} ${c.bright > c.front ? 'The other armies in the rear are not counted.' : 'Armies in the rear are not counted.'}</p>
     <button class="asktick" data-act="asktick" role="checkbox" aria-checked="${off}"><span class="box">${off ? '✓' : ''}</span>Do not ask me this again. ${isOpen(g) ? 'Settings brings it back.' : 'The guide brings it back.'}</button></div>
-    <footer><button class="btn go" data-act="askshow">Show me${keys ? '<kbd>Tab</kbd>' : ''}</button><button class="btn" data-act="end" data-sure="1">End the month${keys ? '<kbd>Enter</kbd>' : ''}</button></footer>`;
+    <footer><button class="btn go" data-act="askshow">Show me${keys ? '<kbd>Enter</kbd>' : ''}</button><button class="btn" data-act="end" data-sure="1">End the month</button></footer>`;
 }
 
 /**
@@ -7090,6 +7090,7 @@ function tellResult(rep: BattleReport, was: BeforeBattle): void {
   const why = whyCard(rep, was);
   ui.resultLog.push({ turn: g.turn, id: rep.id, why });
   ui.result = why ? null : { id: rep.id, region: rep.region };
+  if (!why) slipAt = performance.now();
   refresh();
   openModal(why ? { kind: 'report', id: rep.id } : null);
 }
@@ -9255,17 +9256,28 @@ const KEY_GUARD = 500;
 const keysDown = new Set<string>(), heldAtCard = new Set<string>();
 /** The card that is up, and when it was first drawn. Drawing the same card again (a chip pressed on it) keeps its time. */
 let guardedCard: typeof ui.modal = null, cardAt = 0;
+/** Whether the card last put down was put down by a key: then `cardAt` is when, and the map's Enter waits the same beat. */
+let shutByKey = false;
+/** When the result slip last came up on the map. */
+let slipAt = 0;
 const cardKey = (m: NonNullable<typeof ui.modal>): string => `${m.kind}:${m.target ?? m.id ?? m.region ?? ''}`;
 function cardDrawn(m: typeof ui.modal): void {
   const same = !!m && !!guardedCard && cardKey(m) === cardKey(guardedCard);
   if (m === guardedCard || same) { guardedCard = m; return; }
   guardedCard = m;
   cardAt = performance.now();
+  shutByKey = !m && keysDown.size > 0;
   heldAtCard.clear();
   for (const k of keysDown) heldAtCard.add(k);
 }
 /** True while a key may not yet answer the card that is up: it is a repeat, it was held when the card came, or the card is too new. */
 const cardGuarded = (e: KeyboardEvent): boolean => e.repeat || heldAtCard.has(e.key) || performance.now() - cardAt < KEY_GUARD;
+/**
+ * The map's own Enter (END THE MONTH) under the same guard (the second playtester's check of 84.3): it never takes the
+ * press that put a card down, nor one hurried after it. Enter on CALL IT OFF, Esc, or Enter on the month's report, and a
+ * second Enter 40 ms later, opened the question before the month's end. A card put down by the mouse leaves it free.
+ */
+const mapGuarded = (e: KeyboardEvent): boolean => e.repeat || (shutByKey && (heldAtCard.has(e.key) || performance.now() - cardAt < KEY_GUARD));
 function onKeyUp(e: KeyboardEvent): void { keysDown.delete(e.key); heldAtCard.delete(e.key); }
 /** Keys let go outside the window are never heard: a window that loses the focus forgets them. */
 function forgetKeys(): void { keysDown.clear(); heldAtCard.clear(); }
@@ -9281,6 +9293,8 @@ function onKey(e: KeyboardEvent): void {
   // than that, so the Enter that follows SEND THEM IN by habit never ends the month.
   if (ui.result && !ui.modal) {
     if (e.repeat) { e.preventDefault(); return; }
+    // No key puts it down in its first half second (the key guard): a double Enter after SEND THEM IN leaves it to be read.
+    if (performance.now() - slipAt < KEY_GUARD) { e.preventDefault(); return; }
     ui.result = null; drawResult();
     if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); return; }
   }
@@ -9290,11 +9304,13 @@ function onKey(e: KeyboardEvent): void {
     else if (ui.picked.size || ui.sel >= 0) { ui.picked.clear(); ui.sel = -1; ui.rail = ui.ship = ui.land = false; ui.msg = ''; refresh(); }
     return;
   }
-  // The question before the month ends: Tab is SHOW ME and Enter is END THE MONTH, under the key guard (its first half second).
+  // The question before the month ends: Enter is SHOW ME, its lit button and the safe one (the UI director's ruling of
+  // 17 November 2026, one rule for every card); Tab, NEXT ARMY's key, does the same. END THE MONTH takes a click. Under
+  // the key guard (its first half second), so a double Enter shows the armies and never ends the month.
   if (ui.modal?.kind === 'askend' && (e.key === 'Tab' || e.key === 'Enter')) {
     e.preventDefault();
     if (cardGuarded(e)) return;
-    ($('#card').querySelector(e.key === 'Tab' ? '[data-act="askshow"]' : '[data-act="end"]') as HTMLElement | null)?.click();
+    ($('#card').querySelector('[data-act="askshow"]') as HTMLElement | null)?.click();
     return;
   }
   // NEXT ARMY: Tab takes up the next army that still has a move.
@@ -9315,7 +9331,7 @@ function onKey(e: KeyboardEvent): void {
   // Whatever plays ends on Space or Enter, and says so with the key cap (ruling 204).
   if ((e.key === ' ' || e.key === 'Enter') && tour) { e.preventDefault(); if (!e.repeat) endTour(true); }
   else if ((e.key === ' ' || e.key === 'Enter') && passing) { e.preventDefault(); if (!e.repeat) endPassing(); }
-  else if (e.key === 'Enter' && !ui.modal && !passing && g.human && humanUp(g)) { e.preventDefault(); if (!e.repeat) ($('#barbtns').querySelector('[data-act="end"]') as HTMLElement | null)?.click(); }
+  else if (e.key === 'Enter' && !ui.modal && !passing && g.human && humanUp(g)) { e.preventDefault(); if (!mapGuarded(e)) ($('#barbtns').querySelector('[data-act="end"]') as HTMLElement | null)?.click(); }
 }
 
 function selectRegion(id: number): void {
