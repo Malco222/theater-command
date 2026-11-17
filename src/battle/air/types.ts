@@ -51,6 +51,8 @@ export interface AirUnit extends UnitBase {
   run: number;
   dropped: number;
   jettisoned: boolean;
+  /** Bombers: how much of the guns' run round the target it has flown through, 0 to 1 (more at low height). */
+  shot: number;
   /** Losses still owed below one whole aircraft; a whole one falls when this reaches 1. */
   owed: number;
   /** Fighter pilots of its own lost aircraft who came down and will fly again (the rules' pilots back). */
@@ -113,8 +115,6 @@ export interface AirPlace {
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
   groups: { id: number; side: Side; lostFtr: number; lostBmr: number; back: number }[];
-  /** Left to the dice (one press, ruling 217(4)): the rules settle the whole raid with their own throw, as if it had not been fought. */
-  dice?: boolean;
   /** Bombers that dropped on the target, and bombers that jettisoned and turned back. */
   dropped: number;
   jettisoned: number;

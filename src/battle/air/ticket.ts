@@ -127,12 +127,8 @@ function force(f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): Forc
   };
 }
 
-/**
- * What a fought raid hands back to the rules (launchRaid's `fought`): each campaign group's losses, and the bombs
- * dropped. Undefined when the raid was left to the dice: the rules then throw for it as they always have.
- */
-export function foughtAir(o: AirOutcome): FoughtAir | undefined {
-  if (o.dice) return undefined;
+/** What a fought raid hands back to the rules (launchRaid's `fought`): each campaign group's losses, and the bombs dropped. */
+export function foughtAir(o: AirOutcome): FoughtAir {
   const lost: FoughtAir['lost'] = {};
   for (const gr of o.groups) {
     const row = (lost[gr.id] ??= { ftr: 0, bmr: 0, back: 0 });
@@ -143,7 +139,7 @@ export function foughtAir(o: AirOutcome): FoughtAir | undefined {
 
 /**
  * Hands a fought raid back: the rules' own raid order (orderRaid), paid with what the battle reports, held inside the
- * dice's run (campaign/airfought.ts). A raid left to the dice is flown as if it had never been fought.
+ * dice's run (campaign/airfought.ts), whether it was fought to the end or handed to the staff part way.
  */
 export function airHandBack(g: Game, kind: RaidKind, target: number, ids: number[], result: FieldResult): AirReport | null {
   const out = result.extra?.air as AirOutcome | undefined;

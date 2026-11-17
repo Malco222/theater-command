@@ -42,5 +42,5 @@ export function drawFall(rng: Rng, kind: AirKind, over: Fall['over'], saved: num
 export function fallWords(name: string, f: Fall): string {
   const how = f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
   const chutes = f.chutes === 0 ? '' : f.chutes === 1 ? ', one parachute' : `, ${f.chutes} parachutes`;
-  return `A machine of the ${name} ${how}${chutes}.`;
+  return `An aircraft of ${name} ${how}${chutes}.`;
 }

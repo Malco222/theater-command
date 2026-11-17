@@ -5,7 +5,7 @@
 // what a fought raid hands back to the rules stays inside the dice's own run (fly()'s luck, plus or minus 15 per cent).
 import { describe, expect, it } from 'vitest';
 import { settleFought } from '../src/campaign/airfought';
-import { launchRaid, planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
+import { planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, Game } from '../src/campaign/types';
@@ -130,14 +130,26 @@ describe('what the player decides', () => {
     expect(s.over?.how).toBe('withdrew');
   });
 
-  it('one press hands the whole raid back to the dice', () => {
+  it('one press hands the rest to the staff: settled at once from where each side stands, and what was fought stays fought', () => {
     const { ticket } = raid('GER', 'bomb', 'Alsace');
     const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
-    for (let k = 0; k < 800 && !s.over; k++) s.step();
+    while (!s.over && s.history().filter((e) => e.what === 'air:lost').length < 10) s.step();
+    const sofar = new Map(s.units.map((u) => [u.id, u.n0 - u.n]));
     expect(s.command({ do: 'dice' }, 'att')).toBe(true);
     expect(s.over).not.toBeNull();
-    expect(s.outcome().dice).toBe(true);
-    expect(foughtAir(s.outcome())).toBeUndefined();
+    for (const u of s.units) expect(u.n0 - u.n).toBeGreaterThanOrEqual(sofar.get(u.id)!);
+    expect(s.over!.lines[0]).toContain('The staff settled the rest of the raid on Alsace');
+    expect(s.outcome().dropped).toBeGreaterThan(0);
+  });
+
+  it('handed to the staff at first contact, the raid still costs about what the card forecast', () => {
+    const { ticket } = raid('GER', 'bomb', 'Alsace');
+    const f = ticket.place.forecast;
+    const got = average(ticket, 24, (s) => {
+      const step = s.step.bind(s);
+      s.step = () => { step(); if (!s.over && s.units.some((u) => u.contacts.length)) s.command({ do: 'dice' }, 'att'); };
+    });
+    for (const [k, want] of [['foe', f.foe], ['ftr', f.ftr], ['bmr', f.bmr]] as const) expect(Math.abs(got[k] / want - 1), `${k}: ${got[k].toFixed(1)} against ${want.toFixed(1)}`).toBeLessThan(0.15);
   });
 
   it('by night the defender sees only what comes close', () => {
@@ -216,14 +228,6 @@ describe('the result back to the rules (ruling of 17:55Z: inside the dice\'s own
     expect(wild.ftr(e)).toBe(Math.ceil(10 * 1.15));
     expect(wild.bmr(bm)).toBe(Math.ceil(16 * 1.15));
     expect(wild.through(80 - wild.bmr(bm))).toBe(80 - Math.ceil(16 * 1.15));
-  });
-
-  it('a raid left to the dice is flown exactly as if it had never been fought', () => {
-    const one = raid('GER', 'bomb', 'Alsace'), two = raid('GER', 'bomb', 'Alsace');
-    const s = airBattle(one.ticket); s.command({ do: 'dice' }, 'att');
-    const a = airHandBack(one.g, 'bomb', one.target, one.ids, s.over!);
-    const b = launchRaid(two.g, 'bomb', two.target, two.ids, 'GER');
-    expect(a).toEqual(b);
   });
 
   it('a fought raid lands on the campaign as the battle went, inside the run', () => {
