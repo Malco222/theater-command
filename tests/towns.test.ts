@@ -39,7 +39,9 @@ describe('the town data', () => {
 
   it('gives every province a place of its own: no two share a name, and no town is called after another province', () => {
     // One pair across the ocean since the cities version, and only that one: the Midlands' chief town and the city of
-    // Alabama are both Birmingham (put to the UI director, 17 November 2026; both names kept until she rules).
+    // Alabama are both Birmingham. The UI director's rule (ui-style-guide.md, Words, 17 November 2026): a twin is
+    // allowed only an ocean apart, and only where no line or list shows the two without a country beside them; where a
+    // real fuller name exists (Santiago de Cuba) it is used instead. Both stay plain "Birmingham".
     const OVERSEAS_TWINS = new Set(['Birmingham']);
     const names = g.regions.map(townName).filter((n) => !OVERSEAS_TWINS.has(n));
     expect(new Set(names).size).toBe(names.length);
