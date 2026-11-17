@@ -11,6 +11,11 @@ const path = require('path');
 const { chromium } = require('playwright');
 const PAGE = process.env.TC_PAGE || 'file:///home/user/tc84/dist/play.html';
 const PICS = process.env.TC_PICS || 'bad';
+// TC_NEW=1 plays as a new player would: nothing switched off (the page asks before a month ends with armies waiting, and
+// shows the computer's moves), and every step also gets a row of feel measures in out/click/PREFIX.feel.tsv: the clicks it
+// took, the time from the click to the next picture, the work the page did, and how much there is to read.
+const NEW = process.env.TC_NEW === '1';
+const feel = []; const btnLog = []; let clicks = 0; let lastExtra = ''; let scrolls = 0; let lastBelow = 0;
 const [stepFile, prefix] = process.argv.slice(2);
 const HERE = __dirname;
 fs.mkdirSync(path.join(HERE, 'out/click'), { recursive: true }); fs.mkdirSync(path.join(HERE, 'shots/click'), { recursive: true });
@@ -22,8 +27,24 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
   const browser = await chromium.launch();
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })).newPage();
   page.on('pageerror', (e) => errors.push(e.message.slice(0, 240)));
+  await page.addInitScript(() => {
+    window.__feel = { ev: [], lt: [] };
+    try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__feel.ev.push([e.name, Math.round(e.duration), Math.round(e.processingEnd - e.processingStart)]); }).observe({ type: 'event', durationThreshold: 16, buffered: true }); } catch (e) {}
+    try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__feel.lt.push(Math.round(e.duration)); }).observe({ type: 'longtask', buffered: true }); } catch (e) {}
+  });
+  { const c = page.mouse.click.bind(page.mouse); page.mouse.click = async (...a) => { clicks++; return c(...a); }; const k = page.keyboard.press.bind(page.keyboard); page.keyboard.press = async (...a) => { clicks++; return k(...a); }; }
+  // The feel of the step just played: the slowest click-to-picture time, the longest stretch of work, and what there is to read.
+  const takeFeel = () => page.evaluate(() => {
+    const f = window.__feel || { ev: [], lt: [] }; const mine = f.ev.filter((e) => /^(pointerdown|pointerup|mousedown|mouseup|click|auxclick|contextmenu|keydown|keyup)$/.test(e[0]));
+    const words = (e) => (e ? ((e.innerText || '').trim().match(/\S+/g) || []).length : 0); const open = document.querySelector('#veil')?.classList.contains('open');
+    const card = document.querySelector('#card'), pane = document.querySelector('#pane'), tray = document.querySelector('#tray');
+    const out = { inp: mine.reduce((m, e) => Math.max(m, e[1]), 0), work: mine.reduce((m, e) => Math.max(m, e[2]), 0), lt: f.lt.reduce((a, b) => a + b, 0), ltMax: f.lt.reduce((a, b) => Math.max(a, b), 0),
+      cardWords: open ? words(card) : 0, cardPx: open && card ? card.scrollHeight : 0, cardBtns: open && card ? [...card.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 1).length : 0,
+      cardBelow: open && card ? [...card.querySelectorAll('button')].filter((b) => { const r = b.getBoundingClientRect(); return r.width > 1 && r.top > window.innerHeight; }).length : 0, paneWords: words(pane), panePx: pane ? pane.scrollHeight : 0, paneView: pane ? pane.clientHeight : 0, trayWords: words(tray), win: window.innerHeight, btns: [...(open ? card : pane).querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 1).map((b) => (b.disabled ? '(off) ' : '') + (b.innerText || b.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0, 44)).slice(0, 60), trayBtns: tray ? [...tray.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 1).map((b) => (b.disabled ? '(off) ' : '') + (b.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 44)).slice(0, 30) : [] };
+    f.ev = []; f.lt = []; return out;
+  });
   await page.goto(PAGE);
-  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('tc-watch', '0'); localStorage.setItem('tc-ask-end', '0'); });
+  await page.evaluate((nw) => { localStorage.clear(); if (!nw) { localStorage.setItem('tc-watch', '0'); localStorage.setItem('tc-ask-end', '0'); } }, NEW);
   await page.reload(); await page.waitForSelector('#card');
 
   const veil = () => page.evaluate(() => { const v = document.querySelector('#veil'); return !!v && v.classList.contains('open'); });
@@ -33,7 +54,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
     const t = (e, n = 400) => (e ? (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, n) : '');
     const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h; };
     const th = window.theater, g = th.game(), ui = th.ui;
-    if (!g || !ui.live) return { live: false, dig: null, game: 0, card: '', cardWords: t(document.querySelector('#card'), 200), tray: '', pane: '', hint: '', tip: '', tab: '', digest: 'no game' };
+    if (!g || !ui.live) return { live: false, dig: null, game: 0, card: 'door', cardHash: hash(t(document.querySelector('#card'), 9000) + [...document.querySelectorAll('#card button.on, #card button.sel')].map((b) => b.innerText).join('|')), cardWords: t(document.querySelector('#card'), 200), tray: '', pane: '', hint: '', tip: '', tab: '', digest: 'no game' };
     const me = g.human, n = me ? g.nations[me] : null; const R = g.regions;
     const open = document.querySelector('#veil')?.classList.contains('open');
     const card = document.querySelector('#card');
@@ -70,7 +91,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
   const putBack = async (text) => {
     for (let go = 0; go < 3; go++) {
       await page.waitForTimeout(700);
-      await page.evaluate((text) => { localStorage.clear(); localStorage.setItem('tc-watch', '0'); localStorage.setItem('tc-ask-end', '0'); localStorage.setItem('theater-command-save-v1', text); }, text);
+      await page.evaluate(({ text, nw }) => { localStorage.clear(); if (!nw) { localStorage.setItem('tc-watch', '0'); localStorage.setItem('tc-ask-end', '0'); } localStorage.setItem('theater-command-save-v1', text); }, { text, nw: NEW });
       await page.reload(); await page.waitForSelector('#card'); await page.evaluate(() => { try { window.theater.continueGame(); } catch (err) {} }); await page.waitForTimeout(2000);
       const same = await page.evaluate((text) => { try { return window.theater.save() === text; } catch (err) { return false; } }, text);
       if (same) return true;
@@ -85,12 +106,50 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
     if (!seen.length) return null; seen.sort((a, b) => b.score - a.score || a.root - b.root || a.len - b.len); const best = seen[0];
     const el = [...document.querySelectorAll('[data-click-pick]')].find((e) => (e.innerText || e.getAttribute('aria-label') || e.getAttribute('title') || '').replace(/\s+/g, ' ').trim() === best.txt);
     for (const e of document.querySelectorAll('[data-click-pick]')) e.removeAttribute('data-click-pick');
-    if (!el) return null; el.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = el.getBoundingClientRect();
-    return { txt: best.txt.slice(0, 90), x: r.x + r.width / 2, y: r.y + r.height / 2, off: !!el.disabled || el.getAttribute('aria-disabled') === 'true', on: el.classList.contains('on') || el.classList.contains('sel') || el.classList.contains('pick') || el.getAttribute('aria-pressed') === 'true', why: (el.getAttribute('title') || '').slice(0, 200), n: seen.length };
+    if (!el) return null; const r0 = el.getBoundingClientRect(); const below = Math.round(Math.max(r0.bottom - window.innerHeight, -r0.top, 0)); el.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = el.getBoundingClientRect();
+    return { below, txt: best.txt.slice(0, 90), x: r.x + r.width / 2, y: r.y + r.height / 2, off: !!el.disabled || el.getAttribute('aria-disabled') === 'true', on: el.classList.contains('on') || el.classList.contains('sel') || el.classList.contains('pick') || el.getAttribute('aria-pressed') === 'true', why: (el.getAttribute('title') || '').slice(0, 200), n: seen.length };
   }, { label, scope: scope || '' });
   const listButtons = (sel) => page.evaluate((sel) => { const root = document.querySelector(sel); if (!root) return []; const out = []; const keys = new Set(); for (const b of root.querySelectorAll('button, [data-act]')) { const r = b.getBoundingClientRect(); if (r.width < 2 || r.height < 2) continue; const txt = (b.innerText || b.getAttribute('aria-label') || b.getAttribute('title') || '').replace(/\s+/g, ' ').trim(); const act = b.dataset.act || ''; if (!txt && !act) continue; if (b.classList.contains('on') || b.getAttribute('aria-pressed') === 'true') continue; const kind = act || 'words'; const key = `${kind}:${txt.slice(0, 40)}`; if (keys.has(key)) continue; const many = [...keys].filter((k) => k.startsWith(kind + ':')).length; if (many >= 6) continue; keys.add(key); out.push({ key, act, txt: txt.slice(0, 80), off: !!b.disabled, why: (b.getAttribute('title') || '').slice(0, 200), nth: [...root.querySelectorAll(act ? `[data-act="${act}"]` : 'button')].indexOf(b) }); } return out; }, sel);
   const pressNth = (sel, btn) => page.evaluate(({ sel, btn }) => { const root = document.querySelector(sel); if (!root) return null; const all = [...root.querySelectorAll(btn.act ? `[data-act="${btn.act}"]` : 'button')].filter((b) => { const r = b.getBoundingClientRect(); return r.width >= 2 && r.height >= 2; }); const words = (b) => (b.innerText || b.getAttribute('aria-label') || b.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0, 80); const el = all.find((b) => words(b) === btn.txt); if (!el) return null; el.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, off: !!el.disabled }; }, { sel, btn });
   const endMonth = async () => { if (await veil()) { const go = await findButton('GIVE ORDERS', '#card'); if (go) { await page.mouse.click(go.x, go.y); await page.waitForTimeout(400); } await closeAll(); } const before = await page.evaluate(() => window.theater.game().turn); const b = await findButton('END MONTH', '#barbtns'); if (!b) return 'no END MONTH button'; await page.mouse.click(b.x, b.y); await page.waitForTimeout(600); await page.evaluate(() => { const q = [...document.querySelectorAll('#card button')].find((x) => /end the month/i.test(x.innerText || '')); if (q) q.click(); }); const t0 = Date.now(); while (Date.now() - t0 < 300000) { await page.waitForTimeout(600); if (await page.evaluate(() => window.theater.game().turn) !== before) { await page.waitForTimeout(1500); return ''; } } return 'the month did not end in 300 seconds'; };
+
+  // A month's end as a new player meets it: every screen that comes up after END MONTH, how long the wait was, and how
+  // many presses it took to be giving orders again. The plainest button that goes on is pressed each time.
+  const endMonthNew = async () => {
+    const st = () => page.evaluate(() => { const th = window.theater, g = th.game(); const open = document.querySelector('#veil')?.classList.contains('open'); const card = document.querySelector('#card'); const end = document.querySelector('#barbtns [data-act="end"]'); const t = (e, n = 80) => (e ? (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, n) : ''); return { turn: g.turn, open, kind: open && th.ui.modal ? th.ui.modal.kind : '', head: open ? t(card, 70) : '', words: open ? ((card.innerText || '').trim().match(/\S+/g) || []).length : 0, px: open ? card.scrollHeight : 0, btns: open ? [...card.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 1).map((b) => t(b, 40)) : [], endOff: !end || end.disabled, endWords: t(end, 40), hint: t(document.querySelector('#hint'), 60) }; });
+    if (await veil()) { const go = await findButton('GIVE ORDERS', '#card'); if (go) { await page.mouse.click(go.x, go.y); await page.waitForTimeout(400); } await closeAll(); }
+    const s0 = await st(); const b = await findButton('END MONTH', '#barbtns'); if (!b) return 'no END MONTH button';
+    const before = clicks; await page.mouse.click(b.x, b.y); const t0 = Date.now(); let last = ''; let quiet = 0; const seen = []; let turned = 0;
+    for (;;) {
+      await page.waitForTimeout(300); const s = await st(); const sec = (Date.now() - t0) / 1000;
+      if (!turned && s.turn > s0.turn) turned = sec;
+      const key = `${s.turn}|${s.open}|${s.kind}|${s.head.slice(0, 40)}|${s.endWords}|${s.endOff}`;
+      if (key !== last) { last = key; seen.push(`${sec.toFixed(1)}s ${s.open ? `card "${s.kind}" ${s.head.slice(0, 50)} (${s.words} words, ${s.px}px)` : `no card, end button "${s.endWords}"${s.endOff ? ' off' : ''}`}`); quiet = 0; }
+      if (s.turn > s0.turn && !s.open && !s.endOff && /END MONTH/i.test(s.endWords)) { quiet++; if (quiet >= 4) { lastExtra = `month over in ${turned.toFixed(1)}s; giving orders again after ${(sec - 0.9).toFixed(1)}s and ${clicks - before} presses; screens: ${seen.join(' >> ')}`; return ''; } continue; }
+      if (s.open) {
+        const go = ['END THE MONTH', 'END MONTH', 'YES', 'GIVE ORDERS', 'CONTINUE', 'SKIP', 'CLOSE', 'OK', '×'].find((w) => s.btns.some((x) => x.toLowerCase().startsWith(w.toLowerCase())));
+        await page.waitForTimeout(600); const btn = go ? await findButton(go, '#card') : null; if (btn && !btn.off) await page.mouse.click(btn.x, btn.y); else await page.keyboard.press('Escape');
+      }
+      if (Date.now() - t0 > 300000) { lastExtra = `gave up after 300s; screens: ${seen.join(' >> ')}`; return 'the month did not end in 300 seconds'; }
+    }
+  };
+  // The map moved by hand: dragged and wheeled for a few seconds at three heights, with every picture's time taken.
+  const panZoom = async (name, height) => {
+    const at = (await regionOf(name)) || (await seaOf(name)); if (!at) return `no place named ${name}`;
+    const w = height === 'near' ? 240 : 760;
+    await page.evaluate(({ x, y, w }) => { const t = window.theater, el = document.querySelector('#map'); const tall = el.clientHeight / Math.max(1, el.clientWidth); t.ui.view.w = w; t.ui.view.x = x - w / 2; t.ui.view.y = y - w * tall / 2; t.applyView(); }, { x: at.x, y: at.y, w });
+    await page.waitForTimeout(500); const box = await page.evaluate(() => { const r = document.querySelector('#map').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    if (height === 'far') { await page.mouse.move(box.x, box.y); for (let i = 0; i < 30; i++) { await page.mouse.wheel(0, 240); await page.waitForTimeout(20); } await page.waitForTimeout(600); }
+    await page.evaluate(() => { const f = (window.__frames = { on: true, t: [], last: performance.now() }); const tick = (now) => { if (!f.on) return; f.t.push(now - f.last); f.last = now; requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
+    await page.mouse.move(box.x, box.y); await page.mouse.down();
+    for (let i = 0; i < 60; i++) { const a = (i / 60) * Math.PI * 2; await page.mouse.move(box.x + Math.cos(a) * 160 - 160, box.y + Math.sin(a) * 110); await page.waitForTimeout(16); }
+    await page.mouse.up(); await page.mouse.move(box.x + 40, box.y + 30);
+    for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, -120); await page.waitForTimeout(40); }
+    for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(40); }
+    const fr = await page.evaluate(() => { const f = window.__frames; f.on = false; const t = f.t.slice(2).sort((a, b) => a - b); if (!t.length) return null; const q = (p) => t[Math.min(t.length - 1, Math.floor(t.length * p))]; return { n: t.length, mid: q(0.5), slow: q(0.95), worst: t[t.length - 1] }; });
+    lastExtra = fr ? `${height}: ${fr.n} pictures; middle ${(1000 / fr.mid).toFixed(0)} a second, slow ones ${(1000 / fr.slow).toFixed(0)} a second, the worst took ${fr.worst.toFixed(0)}ms` : 'no pictures counted';
+    return '';
+  };
 
   // One step, played. Returns a note (why it could not be played) or ''.
   const play = async (s) => {
@@ -106,7 +165,7 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
         // a fleet's piece on the map first; then anything on the screen that carries the name
         const fl = await page.evaluate((name) => { const g = window.theater.game(); const f = g.fleets.find((x) => x.name === name && x.nat === g.human && !x.dead); if (!f) return null; const z = g.seas[f.zone] || null; const p = f.port != null && f.port >= 0 ? g.regions[f.port] : null; return { id: f.id, x: p ? p.x : z ? z.x : 0, y: p ? p.y : z ? z.y : 0 }; }, s.target);
         if (fl) { await centreOn(fl.x, fl.y); await page.waitForTimeout(350); const pt = await page.evaluate((id) => { const el = [...document.querySelectorAll('[data-fleets]')].find((x) => (x.dataset.fleets || '').split(',').map(Number).includes(id)); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, fl.id); if (pt) { await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(800); return ''; } }
-        const btn = await findButton(s.target); if (!btn) return `nothing on the screen is named ${s.target}${fl ? ' (and the fleet has no piece on the map)' : ''}`; if (btn.on) return 'HELD'; /* already picked: a second click would put it down */ await page.mouse.click(btn.x, btn.y); await page.waitForTimeout(800); return '';
+        const btn = await findButton(s.target); if (!btn) return `nothing on the screen is named ${s.target}${fl ? ' (and the fleet has no piece on the map)' : ''}`; if (btn.below > 0) { scrolls++; lastBelow = btn.below; } if (btn.on) return 'HELD'; /* already picked: a second click would put it down */ await page.mouse.click(btn.x, btn.y); await page.waitForTimeout(800); return '';
       }
       case 'point-at': case 'click-mark': {
         const name = s.target.replace(/^(airfield|gate)\s+/i, ''); const kind = /^gate/i.test(s.target) ? 'gate' : 'airfield';
@@ -116,11 +175,13 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
         if (!pt) return `the ${kind} ${name} has no mark on the map`; await page.mouse.move(pt.x - 3, pt.y - 3); await page.mouse.move(pt.x, pt.y); await page.waitForTimeout(700); if (s.verb === 'click-mark') { await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(800); } return '';
       }
       case 'open-page': { if (await veil()) { await page.keyboard.press('Escape'); await page.waitForTimeout(300); await closeAll(); } const names = { build: 'build', research: 'research', air: 'air', navy: 'navy', powers: 'powers', spies: 'spies', staff: 'staff', news: 'reel', battles: 'battles', generals: 'generals', honours: 'honours', region: 'region' }; const key = names[s.target.toLowerCase()]; if (key) { const pt = await page.evaluate((key) => { const el = document.querySelector(`#tabs [data-tab="${key}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 1 ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null; }, key); if (!pt) return `no ${s.target} tab on the screen`; await page.mouse.click(pt.x, pt.y); await page.waitForTimeout(700); return ''; } const btn = await findButton(s.target, '#barbtns') || await findButton(s.target, '#app'); if (!btn) return `no door to a page named ${s.target}`; await page.mouse.click(btn.x, btn.y); await page.waitForTimeout(800); return ''; }
-      case 'press': { const btn = await findButton(s.target); if (!btn) return `no button reads "${s.target}"`; if (btn.off) return `MUTE?${btn.why}`; await page.mouse.click(btn.x, btn.y); await page.waitForTimeout(900); return ''; }
+      case 'press': { const btn = await findButton(s.target); if (!btn) return `no button reads "${s.target}"`; if (btn.below > 0) { scrolls++; lastBelow = btn.below; } if (btn.off) return `MUTE?${btn.why}`; await page.mouse.click(btn.x, btn.y); await page.waitForTimeout(900); return ''; }
       case 'check-province': { const r = await regionOf(s.target); return r ? '' : `no province named ${s.target}`; }
       case 'key': { await page.keyboard.press(s.target); await page.waitForTimeout(700); return ''; }
       case 'close': { await page.keyboard.press('Escape'); await page.waitForTimeout(400); if (await veil()) await closeAll(); return ''; }
-      case 'end-month': return endMonth();
+      case 'layers': { lastExtra = await page.evaluate(() => [...document.querySelector('#map').children].map((c) => `${c.id || c.tagName}:${c.querySelectorAll('*').length}`).join(' ') + ` | whole page: ${document.querySelectorAll('*').length} nodes | running animations: ${document.getAnimations ? document.getAnimations().map((a) => { const t = a.effect && a.effect.target; return `${a.animationName || a.transitionProperty || a.constructor.name} on ${t ? `${t.tagName}${t.id ? '#' + t.id : ''}.${String(t.className && t.className.baseVal !== undefined ? t.className.baseVal : t.className).slice(0, 30)} in #${(t.closest('g[id], div[id], svg[id]') || {}).id || '?'}` : '?'}`; }).join('; ') : '?'} | fx: ${(document.querySelector('#fx') || { innerHTML: '' }).innerHTML.replace(/\s+/g, ' ').slice(0, 420)}`); return ''; }
+      case 'end-month': return NEW ? endMonthNew() : endMonth();
+      case 'pan-zoom': { const parts = s.target.split(/\s+/); const height = /^(near|middle|far)$/.test(parts[parts.length - 1]) ? parts.pop() : 'middle'; return panZoom(parts.join(' '), height); }
       default: return `unknown verb ${s.verb}`;
     }
   };
@@ -171,13 +232,15 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
     n++; errors = [];
     // the game's last words are wiped before each step, so that the same reason given twice is heard the second time
     await page.evaluate(() => { try { const th = window.theater; if (th && th.ui && th.ui.msg) { th.ui.msg = ''; if (th.refresh) th.refresh(); } } catch (e) {} }); const a = await look(/province|sea/.test(s.verb) ? s.target : '');
-    let note = '';
+    let note = ''; lastExtra = ''; lastBelow = 0; const c0 = clicks; if (NEW) await takeFeel();
     try { note = await play(s); } catch (err) { note = `the runner failed: ${String(err.message || err).slice(0, 160)}`; }
     const b = await look(/province|sea/.test(s.verb) ? s.target : '');
     const held = note === 'HELD'; if (held) note = '';
     let verdict = errors.length ? 'ERROR' : held ? 'DID' : note.startsWith('MUTE?') ? (note.length > 5 ? 'SAID WHY' : 'MUTE') : note ? 'MISSING' : ['start', 'load', 'snapshot', 'restore', 'close'].includes(s.verb) ? 'DID' : s.verb === 'check-province' ? 'READ' : judge(a, b, errors, s.verb === 'point-at');
     if (note.startsWith('MUTE?')) note = note.length > 5 ? `it cannot be pressed, and says: ${note.slice(5)}` : 'it cannot be pressed, and does not say why';
-    await record(n, s, a, b, verdict, errors.length ? errors.join(' // ') : held ? 'it was already in hand' : note);
+    if ((s.verb === 'pan-zoom' || s.verb === 'layers') && !note) verdict = 'READ';
+    await record(n, s, a, b, verdict, errors.length ? errors.join(' // ') : held ? 'it was already in hand' : note || (lastExtra && (s.verb === 'pan-zoom' || s.verb === 'layers') ? lastExtra : ''));
+    if (NEW) { const f = await takeFeel(); btnLog.push(`${n} ${s.verb} ${s.target}: ${verdict}\n   ${f.cardWords ? 'card' : 'page'}: ${f.btns.join(' ¦ ')}${f.trayBtns.length ? `\n   tray: ${f.trayBtns.join(' ¦ ')}` : ''}`); feel.push([n, s.verb, s.target, verdict, clicks - c0, f.inp, f.work, f.lt, f.ltMax, f.cardWords, f.cardPx, f.cardBtns, f.paneWords, f.panePx, f.paneView, f.trayWords, lastBelow, f.cardBelow, clean(b.msg || b.hint || '').slice(0, 120), lastExtra].join('\t')); }
     // The trail: the clicks that only changed what is on the screen since the game last moved. A sweep plays it again
     // after each restore, to stand where it stood.
     const opened = !!b.card && (a.card !== b.card || a.cardHash !== b.cardHash);
@@ -193,6 +256,9 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
   const head = ['step', 'line', 'verb', 'target', 'expect', 'verdict', 'check', 'what happened', 'before', 'after', 'picture'].join('\t');
   fs.writeFileSync(path.join(HERE, `out/click/${prefix}.log.tsv`), head + '\n' + log.join('\n') + '\n');
   fs.writeFileSync(path.join(HERE, `out/click/${prefix}.steps.jsonl`), json.join('\n') + '\n');
+  if (NEW) { try { fs.writeFileSync(path.join(HERE, `out/click/${prefix}.save.txt`), await page.evaluate(() => window.theater.save())); } catch (err) {} }
+  if (NEW) fs.writeFileSync(path.join(HERE, `out/click/${prefix}.buttons.txt`), btnLog.join('\n') + '\n');
+  if (NEW) fs.writeFileSync(path.join(HERE, `out/click/${prefix}.feel.tsv`), ['step', 'verb', 'target', 'verdict', 'presses', 'click to picture ms', 'work ms', 'long work ms', 'longest work ms', 'card words', 'card px', 'card buttons', 'side page words', 'side page px', 'side page window px', 'tray words', 'pressed button px below the edge', 'card buttons below the edge', 'words shown', 'more'].join('\t') + '\n' + feel.join('\n') + '\n');
   const rows = log.map((l) => l.split('\t')); const count = (v) => rows.filter((r) => r[5] === v).length;
   const bad = rows.filter((r) => ['DEAD', 'ERROR', 'MISSING', 'MUTE'].includes(r[5]) || r[6] === 'FAIL');
   const sum = [`${path.basename(stepFile)} on ${PAGE}`, `steps ${rows.length}: DID ${count('DID')}, SAID WHY ${count('SAID WHY')}, DEAD ${count('DEAD')}, MUTE ${count('MUTE')}, MISSING ${count('MISSING')}, ERROR ${count('ERROR')}; checks passed ${rows.filter((r) => r[6] === 'PASS').length}, failed ${rows.filter((r) => r[6] === 'FAIL').length}`, '', ...bad.map((r) => `${r[5]}${r[6] === 'FAIL' ? ' (FAIL, wanted ' + r[4] + ')' : ''}  step ${r[0]} (line ${r[1]}): ${r[2]} ${r[3]}  --  ${r[7].slice(0, 230)}`)].join('\n');

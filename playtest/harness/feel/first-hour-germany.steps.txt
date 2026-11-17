@@ -1,0 +1,70 @@
+# First hour as Germany, as a new player meets it: the door's own defaults (Germany, 1939, Colonel, Theatre command,
+# History's shape), so the staff flies the raids and sails the fleets and the player has the armies, the factories,
+# the laboratories and the envoys. Step file version 1 (the click-through's verbs, plus pan-zoom).
+# For the feel pass on Brian's ask of 2026-11-17. Play it with NOTHING switched off. Every step wants its time, its
+# lowest and middle frame rate, and a picture. Expectations are blank on purpose: this run measures.
+# The words are the browser game's on Version 84.2. Where the 3D game says it differently, press the button that
+# does the same job and note the word.
+#
+# --- A. The way in: one press, since the door opens on Germany.
+press	BEGIN THE CAMPAIGN	
+# --- B. The map by hand at three heights, at home and over the front.
+pan-zoom	Berlin near	
+pan-zoom	Berlin middle	
+pan-zoom	Berlin far	
+pan-zoom	Warsaw middle	
+# --- C. The first battle of the war: an army picked up, the attack card, the order, the result.
+key	Tab	
+select-province	Upper Silesia	
+order-province	Polish Silesia	
+press	AUTO-RESOLVE	
+close		
+# --- D. Two more battles in the same month: is the second one any quicker than the first?
+select-province	Lower Silesia	
+order-province	Poznan	
+press	AUTO-RESOLVE	
+close		
+select-province	Farther Pomerania	
+order-province	Danzig Corridor	
+press	AUTO-RESOLVE	
+close		
+# --- E. The to-dos of the first screen: money to spend, research teams with no work, the cabinet.
+press	in the treasury to spend	
+press	Infantry corps	
+press	Mountain corps	
+select-province	Bavaria	
+press	2 research teams have no work	
+press	Anti-tank guns	
+press	RESEARCH ·	
+press	Sonar and convoys	
+press	RESEARCH ·	
+close		
+press	Your war cabinet is all caretakers	
+press	MINISTERS	
+press	The organiser	
+close		
+# --- F. What the staff is doing with the desks it runs, and the other powers.
+open-page	Staff	
+open-page	Powers	
+press	Court	
+close		
+press	TRADE AGREEMENTS	
+close		
+# --- G. The month's end at war: every screen between END MONTH and the next order, in seconds.
+open-page	Region	
+end-month		
+# --- H. The second month: the news read, an army found with Tab, one more battle, the month's end.
+open-page	News	
+open-page	Battles	
+open-page	Region	
+key	Tab	
+select-province	Polish Silesia	
+order-province	Krakow	
+press	AUTO-RESOLVE	
+close		
+end-month		
+end-month		
+end-month		
+# --- I. The whole world once more with the war on.
+pan-zoom	Warsaw near	
+pan-zoom	Warsaw far	

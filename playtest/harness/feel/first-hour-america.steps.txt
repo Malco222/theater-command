@@ -1,0 +1,89 @@
+# First hour as America, as a new player meets it. Step file version 1 (the click-through's verbs, plus pan-zoom).
+# For the feel pass on Brian's ask of 2026-11-17: "how do we make the game run more smooth, its not very easy and
+# enjoyable to play. i want the game tester to really go through every details".
+# Play it with NOTHING switched off (the month's question, the replay, the newsreel and the announcements all as a
+# new player gets them). Every step wants its time (input to first picture, input to settled), its lowest and middle
+# frame rate, and a picture. Expectations are left blank on purpose: this run measures, it does not pass or fail.
+# The words are the browser game's on Version 84.2. Where the 3D game's menu or card says it differently, press the
+# button that does the same job and note the word.
+#
+# --- A. The way in: from the opening screen to giving orders. Count the presses and the seconds.
+press	United States	
+press	Supreme command	
+press	BEGIN THE CAMPAIGN	
+# --- B. The map by hand, before anything else: ten seconds dragging and zooming at three heights.
+pan-zoom	New York near	
+pan-zoom	New York middle	
+pan-zoom	New York far	
+pan-zoom	Eastern Seaboard far	
+pan-zoom	Canal Zone far	
+# --- C. The three things the first screen asks for.
+press	2 research teams have no work	
+press	Anti-tank guns	
+press	RESEARCH ·	
+press	Sonar and convoys	
+press	RESEARCH ·	
+close		
+press	Your war cabinet is all caretakers	
+press	MINISTERS	
+press	The organiser	
+close		
+# --- D. One army: found with Tab, marched one province; another picked up on the map and sent far by rail.
+key	Tab	
+order-province	Philadelphia	
+select-province	Chicago	
+order-province	North Texas	
+# --- E. The arsenal: what can a new player buy in the first month?
+open-page	Build	
+press	Infantry corps	
+press	AIR FORCE	
+press	WORKS	
+press	ARMY	
+# --- F. The fleet: picked up from its piece and sent to sea.
+open-page	Navy	
+select-unit	Atlantic Squadron	
+order-sea	Eastern Seaboard	
+# --- G. An air group: found, picked up, moved to another field.
+open-page	Air	
+select-unit	1st Bomb Group	
+press	MOVE TO ANOTHER AIRFIELD	
+click-mark	airfield East Texas	
+# --- H. The other powers.
+open-page	Powers	
+press	Court	
+close		
+press	TRADE AGREEMENTS	
+close		
+press	DECLARE WAR	
+close		
+# --- I. Two months at peace: every screen between END MONTH and the next order, in seconds.
+open-page	Region	
+end-month		
+end-month		
+# --- J. War with Mexico, by marching in: the question, then a village taken on the move.
+select-province	North Texas	
+order-province	West Texas	
+order-province	Chihuahua	
+press	Declare war	
+# --- K. One raid, start to finish.
+open-page	Air	
+select-unit	1st Bomb Group	
+press	PLAN A RAID WITH IT	
+press	BOMB FACTORIES AND RAILWAYS	
+press	Monterrey	
+press	FLY THE RAID BY DAY	
+close		
+# --- L. A month's end at war, then one battle: the attack card, the order, the result.
+open-page	Region	
+end-month		
+select-province	Chihuahua	
+order-province	Monterrey	
+press	AUTO-RESOLVE	
+close		
+# --- M. Three more months at war: the waits and the screens.
+end-month		
+end-month		
+end-month		
+# --- N. The whole world once more, now with a war on.
+pan-zoom	Monterrey middle	
+pan-zoom	Monterrey far	

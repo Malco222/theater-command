@@ -1,0 +1,6 @@
+uk-counts.txt on file:///home/user/tc842/dist/play.html
+steps 34: DID 28, SAID WHY 3, DEAD 0, MUTE 1, MISSING 2, ERROR 0; checks passed 0, failed 0
+
+MUTE  step 8 (line 9): press The industrialist  --  it cannot be pressed, and does not say why
+MISSING  step 9 (line 10): press YES, APPOINT HIM  --  no button reads "YES, APPOINT HIM"
+MISSING  step 33 (line 38): press SEND THEM IN  --  no button reads "SEND THEM IN"

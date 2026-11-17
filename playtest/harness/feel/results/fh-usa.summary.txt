@@ -1,0 +1,8 @@
+first-hour-america.steps.txt on file:///home/user/tc842/dist/play.html
+steps 63: DID 50, SAID WHY 2, DEAD 3, MUTE 0, MISSING 2, ERROR 0; checks passed 0, failed 0
+
+MISSING  step 8 (line 19): pan-zoom Panama far  --  no place named Panama
+DEAD  step 11 (line 23): press Anti-tank guns  --  the game is as it was
+DEAD  step 18 (line 31): select-province New York  --  the game is as it was
+MISSING  step 26 (line 40): press WORKS  --  no button reads "WORKS"
+DEAD  step 27 (line 42): open-page Navy  --  the game is as it was
