@@ -15,7 +15,9 @@
 // The world is attached once, as the grand campaign opens (staff.ts), before anything else is set up for it, and
 // again whenever a campaign saved on it is loaded (save.ts).
 
-import worldMap from '../generated/world-americas.json';
+import americasMap from '../generated/world-americas.json';
+import wholeMap from '../generated/world-whole.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
@@ -31,10 +33,18 @@ interface WorldMap {
   lakes: { name: string; level: number; x: number; y: number; outline: number[][] }[];
   regions: any[];
   links: [number, number][];
+  /** Land borders between a province of an earlier stage (Europe's or the Americas') and a far one: [older id, far id]. */
+  joins?: [number, number][];
+  /** How many provinces the wider world had at each stage of its drawing, today's last. */
+  stages?: number[];
   seas: { zones: any[]; gates: any[]; borders: [number, number][][] };
 }
 
-export const WORLD_MAP = worldMap as unknown as WorldMap;
+/**
+ * The wider world's chart: the Americas with their cities (tools/build-world-americas.mjs), or, once the far stage is
+ * on (stage.ts), the whole world with the Pacific and the globe laid after them (tools/build-world-whole.mjs).
+ */
+export const WORLD_MAP = (FAR_STAGE ? wholeMap : americasMap) as unknown as WorldMap;
 
 export const WORLD = data as unknown as {
   nations: Record<string, any>;
@@ -69,10 +79,19 @@ export const WORLD_REGIONS = WORLD_MAP.regions.length;
  * 84.3; the cities version lays 339 cities after them, tools/build-world-americas.mjs). The chart only ever grows at its end, so a campaign saved on an earlier
  * stage can be laid over today's (save.ts): the ground it never knew begins as it stood on the first day.
  */
-export const WORLD_STAGES = [104, 201];
+export const WORLD_STAGES = FAR_STAGE ? [104, 201, 540] : [104, 201];
+
+/**
+ * The first province of the far side: the Pacific, then the globe, then their cities, laid after the Americas' cities
+ * (the rules builder's numbering, 17 November 2026: 915 to 1226, 1227 to 1593, 1594 to 2065).
+ */
+export const FAR_FIRST = WORLD_FIRST + (wholeMap as unknown as WorldMap).stages![1];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
+
+/** True for a campaign whose chart reaches the far side of the world: the Pacific and the globe. */
+export const farOn = (g: Game): boolean => worldOn(g) && g.regions.length > FAR_FIRST;
 
 /** The mother country that stands by a dominion (world.json, 'dominions'), or null. */
 export function patronOf(nat: string): string | null {
@@ -126,6 +145,15 @@ export function attachWorld(g: Game, fresh = true): void {
     // A depot is a home province that can feed an army cut off from its capital.
     if (row.flags.depot) g.flags['depot:' + r.id] = 1;
   }
+  // The land borders between an older province and a far one (the chart's 'joins': Kazan and Gorky, the Yukon and
+  // Alaska), added to both. A province's list of neighbours is the map file's own array, shared by every game made
+  // in this process, so it is copied before it grows.
+  for (const [a, b] of WORLD_MAP.joins ?? []) {
+    const A = g.regions[a], B = g.regions[b];
+    if (!A || !B) continue;
+    if (!A.nb.includes(b)) A.nb = [...A.nb, b];
+    if (!B.nb.includes(a)) B.nb = [...B.nb, a];
+  }
   // The chart itself: the coasts, the ferries, and the frame the interfaces draw in.
   g.links = [...g.links, ...WORLD_MAP.links];
   // Europe's factories as the wider world counts them (world.json, 'works'): a saved campaign is laid over a fresh
@@ -170,7 +198,7 @@ export function attachWorld(g: Game, fresh = true): void {
   g.supplyDirty = true;
   // A saved campaign's picture is laid over one drawn here, with every country in its usual place in it. (A new
   // campaign's is drawn once everything else is set up: staff.ts.)
-  if (!fresh) { computeSupply(g); return; }
+  if (!fresh) { standInCountries(g); computeSupply(g); return; }
   // The armies standing at home on the first day: peacetime cadres.
   for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
     if (!g.nations[nat]?.alive || !g.byName[at] || g.byName[at].ctrl !== nat) continue;
@@ -186,6 +214,35 @@ export function attachWorld(g: Game, fresh = true): void {
     for (const e of M.atWar) if (g.nations[e]?.alive) setWar(g, id, e);
   }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
+  standInCountries(g);
+}
+
+/** The bare countries of the far stage's guard: name, adjective, colour. */
+const STAND_IN: Record<string, [string, string, string]> = {
+  JAP: ['Japan', 'Japanese', '#b23a48'], CHN: ['China', 'Chinese', '#3e6fa3'], MAN: ['Manchukuo', 'Manchukuoan', '#a8894a'],
+  MGL: ['Mongolia', 'Mongolian', '#8c5a3c'], THA: ['Thailand', 'Thai', '#5b8c8a'], AUS: ['Australia', 'Australian', '#2f7d5b'],
+  NZL: ['New Zealand', 'New Zealand', '#40507a'], SAF: ['South Africa', 'South African', '#d98a2b'], SAU: ['Saudi Arabia', 'Saudi', '#3f8f5a'],
+  YEM: ['Yemen', 'Yemeni', '#b0563f'], AFG: ['Afghanistan', 'Afghan', '#6f7f4a'], NEP: ['Nepal', 'Nepalese', '#9c3d54'], LBR: ['Liberia', 'Liberian', '#4a6fa5'],
+};
+
+/**
+ * The far stage's guard: a bare country for every owner code on the chart that is still no country once the far
+ * side's own rows are laid (far.ts). It stands at home, at peace and independent, with no army, so the map and every
+ * page can name whoever owns a province. Where every code has its own row it does nothing; on a narrower chart it
+ * is never reached.
+ */
+function standInCountries(g: Game): void {
+  if (!farOn(g)) return;
+  for (const r of g.regions) {
+    const id = r.owner;
+    if (g.nations[id]) continue;
+    const [name, adj, color] = STAND_IN[id] ?? [id, id, '#8a8a80'];
+    const own = g.regions.filter((x) => x.owner === id);
+    const cap = own.find((x) => x.cap) ?? [...own].sort((a, b) => b.vp - a.vp || a.id - b.id)[0];
+    g.nations[id] = nationOf(id, { name, adj, color, quality: 0.5, air: 0, resilience: 0.5, align: 'independent' }, cap.id);
+    if (!g.order.includes(id)) g.order.push(id);
+    g.capDist[id] = capitalDistances(g, cap.id);
+  }
 }
 
 /**

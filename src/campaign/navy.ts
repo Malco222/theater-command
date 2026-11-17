@@ -3,13 +3,19 @@
 // knows (ships by class, aircraft on the coasts, admirals, readiness), and every number
 // lives in data/campaign/navy.json and data/campaign/seas.json.
 
+import { mapDist } from './wrap';
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-americas.json';
+import americasMap from '../generated/world-americas.json';
+import wholeMap from '../generated/world-whole.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
+
+/** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
+const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { capOver, deckWorth, syncWings } from './carriers';
@@ -118,14 +124,15 @@ export function shipList(s: Ships): string {
 
 let lookup: Int8Array | null = null;
 let lookCols = 0;
-let wide: Int8Array | null = null;
+// The wider world's lookup holds sea numbers past 127 once the far side is on the chart (145 seas): two bytes a cell.
+let wide: Int16Array | null = null;
 
 /** The same on the wider world: its chart is laid out in the same squares, from its own west edge, each row as runs of [sea, squares]. */
 function seaAtWide(x: number, y: number): number {
   const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
   const md = W.seas;
   if (!wide) {
-    wide = new Int8Array(md.cols * md.grid.length).fill(-1);
+    wide = new Int16Array(md.cols * md.grid.length).fill(-1);
     md.grid.forEach((row, r) => {
       let c = 0;
       for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0 && c < md.cols; k--) wide![r * md.cols + c++] = row[i];
@@ -1373,7 +1380,7 @@ function newBase(g: Game, f: Fleet): boolean {
   let best: Region | null = null, bd = 1e9;
   for (const r of g.regions) {
     if (!r.port || !r.seas.length || r.ctrl !== f.nat || !canSailTo(g, f, r)) continue;
-    const d = Math.hypot(r.x - old.x, r.y - old.y);
+    const d = mapDist(g, r.x, r.y, old.x, old.y);
     if (d < bd) { bd = d; best = r; }
   }
   if (best) {

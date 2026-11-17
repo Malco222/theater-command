@@ -33,6 +33,7 @@ import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope } from './world';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
+import { mapDist } from './wrap';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -167,7 +168,7 @@ export function airPool(g: Game, nat: string): AirPool {
 /** Kilometres between the centres of two regions. */
 export function km(g: Game, a: number, b: number): number {
   const A = g.regions[a], B = g.regions[b];
-  return Math.hypot(A.x - B.x, A.y - B.y) * AIR.kmPerUnit;
+  return mapDist(g, A.x, A.y, B.x, B.y) * AIR.kmPerUnit;
 }
 
 /** How far a base is from a sea: nothing if it stands on its shore, otherwise the distance to the nearest shore. */
@@ -743,7 +744,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
     let out: Region | null = null, bd = Infinity;
     for (const r of g.regions) {
       if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r) || prizeOut(g, r, 'airfield') > 0) continue;
-      const d = Math.hypot(r.x - old.x, r.y - old.y);
+      const d = mapDist(g, r.x, r.y, old.x, old.y);
       if (d < bd) { bd = d; out = r; }
     }
     return out;
