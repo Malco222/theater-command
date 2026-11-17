@@ -4,11 +4,12 @@
 // (the design director, 2026-11-17 17:55Z): the computer against the computer averages the raid card within a tenth;
 // what a fought raid hands back to the rules stays inside the dice's own run (fly()'s luck, plus or minus 15 per cent).
 import { describe, expect, it } from 'vitest';
-import { settleFought } from '../src/campaign/airfought';
-import { planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
+import { afterCard, settleFought } from '../src/campaign/airfought';
+import { launchRaid, planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
+import { airAct } from '../src/campaign/airpages';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
-import type { AirFleet, Game } from '../src/campaign/types';
+import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 import { runOut } from '../src/battle/core/clock';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle, peopleOf } from '../src/battle/air/sim';
@@ -130,20 +131,22 @@ describe('what the player decides', () => {
     expect(s.over?.how).toBe('withdrew');
   });
 
-  it('one press hands the rest to the staff: settled at once from where each side stands, and what was fought stays fought', () => {
+  it('one press hands the rest to the staff: the battle ends at once, and what was fought stays fought', () => {
     const { ticket } = raid('GER', 'bomb', 'Alsace');
     const s = airBattle(ticket); s.ai.att = true; s.ai.def = true;
     while (!s.over && s.history().filter((e) => e.what === 'air:lost').length < 10) s.step();
     const sofar = new Map(s.units.map((u) => [u.id, u.n0 - u.n]));
     expect(s.command({ do: 'dice' }, 'att')).toBe(true);
     expect(s.over).not.toBeNull();
-    for (const u of s.units) expect(u.n0 - u.n).toBeGreaterThanOrEqual(sofar.get(u.id)!);
+    // The battle adds nothing of its own after the press: the rest is the campaign's dice.
+    for (const u of s.units) expect(u.n0 - u.n).toBe(sofar.get(u.id)!);
+    const st = s.outcome().staff!;
+    for (const k of ['foe', 'ftr', 'bmr'] as const) { expect(st.rest[k]).toBeGreaterThanOrEqual(0); expect(st.rest[k]).toBeLessThan(1); }
     expect(s.over!.lines[0]).toContain('The staff settled the rest of the raid on Alsace');
-    // One bill, the one the campaign books, then the part of it that came before the press (the UI director, 18:45Z).
-    expect(s.over!.lines.filter((l) => l.startsWith('The raid cost you'))).toHaveLength(1);
+    // Its own card leaves the bill to the campaign, and says which part came before the press.
+    expect(s.over!.lines.some((l) => l.startsWith('The raid cost you'))).toBe(false);
     expect(s.over!.lines[s.over!.lines.length - 1]).toMatch(/^Before you handed it to the staff, you had lost .+ and the French .+\.$/);
     expect(s.over!.lines.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
-    expect(s.outcome().dropped).toBeGreaterThan(0);
   });
 
   it('fought to the end, the after card has the one bill, the player\'s own side first', () => {
@@ -172,16 +175,6 @@ describe('what the player decides', () => {
   it('names a people from its adjective', () => {
     expect(['French', 'German', 'British', 'Swiss', 'Soviet', 'Japanese', 'Iraqi', 'Luxembourg'].map(peopleOf))
       .toEqual(['French', 'Germans', 'British', 'Swiss', 'Soviets', 'Japanese', 'Iraqis', 'Luxembourgers']);
-  });
-
-  it('handed to the staff at first contact, the raid still costs about what the card forecast', () => {
-    const { ticket } = raid('GER', 'bomb', 'Alsace');
-    const f = ticket.place.forecast;
-    const got = average(ticket, 24, (s) => {
-      const step = s.step.bind(s);
-      s.step = () => { step(); if (!s.over && s.units.some((u) => u.contacts.length)) s.command({ do: 'dice' }, 'att'); };
-    });
-    for (const [k, want] of [['foe', f.foe], ['ftr', f.ftr], ['bmr', f.bmr]] as const) expect(Math.abs(got[k] / want - 1), `${k}: ${got[k].toFixed(1)} against ${want.toFixed(1)}`).toBeLessThan(0.15);
   });
 
   it('by night the defender sees only what comes close', () => {
@@ -238,6 +231,74 @@ describe('an aircraft going down (Brian, 17 November)', () => {
       }
     }
     expect(falls).toBeGreaterThan(50);
+  });
+});
+
+describe('handed to the staff (the design director, log b368): the rules\' own dice settle the rest', () => {
+  /** Two copies of the same campaign: one to roll the raid with the dice, one to fight it and press at once. */
+  function twin(seed: number, nat: string, kind: RaidKind, name: string) {
+    const make = (): Game => { const g = startOpen(createGame(seed, nat)); for (const w of WARS[nat]) setWar(g, nat, w); return g; };
+    const a = make(), b = make();
+    const t = raidTargets(a, kind, nat).find((x) => planRaid(a, kind, x.id, undefined, nat).place === name)!;
+    const day = planRaid(a, kind, t.id, undefined, nat);
+    const ids = kind === 'night' ? day.picked : [...day.picked, ...day.seats.filter((x) => !x.why && !x.picked && x.kind === 'ftr').map((x) => x.id)];
+    return { a, b, target: t.id, ids };
+  }
+  const booked = (r: AirReport) => [...r.att, ...r.def].map((x) => `${x.id}:${x.lostFtr}/${x.lostBmr}`).join(' ');
+  const CASES: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['UK', 'bomb', 'Bremen'], ['GER', 'bomb', 'Kent'], ['GER', 'superiority', 'Alsace'], ['UK', 'night', 'Bremen']];
+
+  for (const [nat, kind, name] of CASES) {
+    it(`pressed at once, ${nat} ${kind} on ${name} books exactly what the campaign would have rolled, at several seeds`, () => {
+      for (const seed of [7, 19, 31, 58]) {
+        const { a, b, target, ids } = twin(seed, nat, kind, name);
+        const dice = launchRaid(a, kind, target, ids, nat)!;
+        const { ticket } = airTicket(b, kind, target, ids, nat);
+        const s = airBattle(ticket!);
+        s.command({ do: 'dice' }, 'att');
+        const st = s.outcome().staff!;
+        expect(st.rest).toEqual({ foe: 1, ftr: 1, bmr: 1 });
+        const rep = launchRaid(b, kind, target, ids, nat, foughtAir(s.outcome()))!;
+        expect(booked(rep), `seed ${seed}`).toBe(booked(dice));
+        expect(rep.result).toBe(dice.result);
+        expect(rep.level).toBe(dice.level);
+      }
+    });
+  }
+
+  it('pressed partway, it never books fewer losses than had already happened, and the card gives the campaign\'s bill', () => {
+    for (const [nat, kind, name] of CASES.slice(0, 4)) {
+      for (const seed of [7, 31]) {
+        const { b, target, ids } = twin(seed, nat, kind, name);
+        const { ticket } = airTicket(b, kind, target, ids, nat);
+        const s = airBattle(ticket!); s.ai.att = true; s.ai.def = true;
+        while (!s.over && s.history().filter((e) => e.what === 'air:lost').length < 12) s.step();
+        if (s.over) continue;
+        s.command({ do: 'dice' }, 'att');
+        const fought = foughtAir(s.outcome());
+        // The raid order the 3D game's bridge goes through; where it is not his turn in the test, the order beneath it.
+        const act = nat === 'GER' ? airAct(b, `raid:${kind}:${target}:${ids.join('.')}`, fought)! : null;
+        const rep = act ? b.airReports[b.airReports.length - 1] : launchRaid(b, kind, target, ids, nat, fought)!;
+        if (act) expect(act.ok).toBe(true);
+        for (const x of [...rep.att, ...rep.def]) {
+          const had = fought.lost[x.id!] ?? { ftr: 0, bmr: 0 };
+          expect(x.lostFtr, `${nat} ${kind} seed ${seed} ${x.fleet}`).toBeGreaterThanOrEqual(had.ftr);
+          expect(x.lostBmr).toBeGreaterThanOrEqual(had.bmr);
+        }
+        // The card's bill is the report's, his own side first, and the part before the press is the battle's own.
+        const card = act ? act.after! : afterCard(b, rep, fought);
+        const mine = rep.att.reduce((t, x) => t + x.lostFtr + x.lostBmr, 0);
+        expect(card.lines[0]).toContain('The staff settled the rest');
+        const bill = card.lines.find((l) => / cost you /.test(l))!;
+        expect(bill).toBeTruthy();
+        const myPart = bill.split(', and the ')[0], f = rep.att.reduce((t, x) => t + x.lostFtr, 0), k = rep.att.reduce((t, x) => t + x.lostBmr, 0);
+        if (mine === 0) expect(myPart).toContain('cost you nothing');
+        if (f) expect(myPart).toContain(`${f} fighter`);
+        if (k) expect(myPart).toContain(`${k} bomber`);
+        expect(card.lines[card.lines.length - 1]).toMatch(/^Before you handed it to the staff, you had lost /);
+        expect(card.lines.join(' ')).not.toMatch(/\b0 (fighters|bombers)|::|dice/);
+        expect(card.groups.length).toBe(rep.att.length + rep.def.length);
+      }
+    }
   });
 });
 

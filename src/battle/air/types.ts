@@ -118,6 +118,8 @@ export interface AirOutcome {
   /** Bombers that dropped on the target, and bombers that jettisoned and turned back. */
   dropped: number;
   jettisoned: number;
+  /** Handed to the staff (sim.settleNow): each pool's share of the raid's cost still to come, and the bombers that had turned back. */
+  staff?: { rest: { foe: number; ftr: number; bmr: number }; away: number };
 }
 
 /** One loss, as the 3D side plays it. */
