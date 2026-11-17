@@ -47,10 +47,21 @@ import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, 
 import { TOWNS, townName, townSize } from './towns';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
+import { stopOf } from './history';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
-  deepOwners: string[]; mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
+  deepOwners: string[];
+  /**
+   * Ruling 221 (the Pacific planner's paper 20). 'lineOwners': owners whose ground takes the long line as the Soviet
+   * Union's does (its drag, its thin drafts and rest, no railheads of the invader's own), counted from the invader's
+   * frontier and from the harbours it holds on that ground, with none of the Russian winter; read only at the dial's
+   * stops in 'lineStops' (every stop if it is not given). 'lineReckon': a staff reckons that line in its sums of
+   * strength, as it reckons the winter. 'nearRefuge': troops lifted off the coast of a country their own is fighting
+   * are landed at the nearest harbour their country holds on that country's ground, not taken home.
+   */
+  lineOwners?: string[]; lineStops?: number[]; lineReckon?: boolean; nearRefuge?: boolean;
+  mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
   mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
   works?: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][];
@@ -148,6 +159,7 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
     general: null, hold: !!o.hold, dyle: o.dyle ?? null, supplied: true, fought: false, dead: false,
   };
   if (o.airborne) c.airborne = true;
+  if (o.stay) c.stay = true;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -504,6 +516,17 @@ export function weather(g: Game): { mud: boolean; winter: boolean; text: string 
   return { mud: false, winter: false, text: 'Clear campaigning weather.' };
 }
 
+/**
+ * Whose ground takes the long line in this war: the Soviet Union's at every stop, and that of the owners in east.json
+ * 'lineOwners' at the dial's stops in 'lineStops' (ruling 221, L). The Russian winter stays the Soviet Union's alone.
+ */
+export function lineOwners(g: Game): string[] {
+  const more = EASTERN.lineOwners ?? [];
+  if (!more.length || (EASTERN.lineStops && !EASTERN.lineStops.includes(stopOf(g)))) return EASTERN.deepOwners;
+  return [...EASTERN.deepOwners, ...more];
+}
+export const lineOwner = (g: Game, o: string): boolean => lineOwners(g).includes(o);
+
 /** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
 export function frozen(g: Game, nat: string, r: Region): boolean {
   return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g, nat);
@@ -525,7 +548,8 @@ export function lineDrag(g: Game, c: Corps, to: Region): number {
     for (const [max, extra] of DESERT.drag) if (length <= max) return extra;
     return 0;
   }
-  if (!EASTERN.deepOwners.includes(to.owner) || EASTERN.deepOwners.includes(c.nat)) return 0;
+  const long = lineOwners(g);
+  if (!long.includes(to.owner) || long.includes(c.nat)) return 0;
   if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
   ensureSupply(g);
   const reach = g.reach[c.nat];
@@ -589,12 +613,13 @@ export function computeSupply(g: Game): void {
   const size = g.regions.length;
   const holders: string[] = [], holderNo = new Map<string, number>();
   const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
+  const long = lineOwners(g);
   for (const r of g.regions) {
     const who = field ? field[r.id] : r.ctrl;
     let k = holderNo.get(who);
     if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
     road[r.id] = k;
-    if (EASTERN.deepOwners.includes(r.owner)) deep[r.id] = 1;
+    if (long.includes(r.owner)) deep[r.id] = 1;
     if (inDesert(r)) sand[r.id] = 1;
   }
   for (const id of active) {
@@ -692,16 +717,20 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
 /**
  * The length of a nation's supply line in every region it can reach inside the Soviet Union,
  * counted from the frontier railheads. Regions held long enough to relay the track count for less.
+ * (Ruling 221, L: on the ground of the other owners of the long line it is counted from the harbours the invader
+ * holds there as well, where its ships bring the stores in.)
  */
 function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
   const d = new Float32Array(g.regions.length);
-  if (EASTERN.deepOwners.includes(id)) return d; // at home on their own railways
-  const deep = (r: Region): boolean => EASTERN.deepOwners.includes(r.owner);
+  const long = lineOwners(g);
+  if (long.includes(id)) return d; // at home on their own railways
+  const deep = (r: Region): boolean => long.includes(r.owner);
+  const quay = (r: Region): boolean => ok[r.id] === 2 && !EASTERN.deepOwners.includes(r.owner);
   const w = weather(g);
   const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
   d.fill(1e6);
   const q: number[] = [];
-  for (const r of g.regions) if (ok[r.id] && !deep(r)) { d[r.id] = 0; q.push(r.id); }
+  for (const r of g.regions) if (ok[r.id] && (!deep(r) || quay(r))) { d[r.id] = 0; q.push(r.id); }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     for (const j of g.regions[a].nb) {
@@ -2832,7 +2861,38 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
     const r = g.byName[nm];
     if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r)) return r;
   }
+  // Ruling 221 (F): troops lifted off the coast of a country their own is fighting are landed at the nearest harbour
+  // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
+  // goes on. Without it they are taken home, and from an island home nothing ever ships them back (paper 20, finding 3).
+  if (EASTERN.nearRefuge && from.owner !== c.nat && atWar(g, c.nat, from.owner)) {
+    const near = nearHarbour(g, c.nat, from);
+    if (near) return near;
+  }
   return g.regions[g.nations[c.nat].capital];
+}
+
+/**
+ * The nearest harbour a nation holds on the ground of the country it stands in, other than where it stands, with no
+ * enemy in it, room for one more corps and the sea open to its ships (ruling 221, F); 'fits' narrows the choice.
+ */
+export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
+  return g.regions
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).length < STACK && seaOpenAt(g, nat, r) && fits(r))
+    .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y) || a.id - b.id)[0] ?? null;
+}
+
+/**
+ * A corps with no road back to its own side is taken out by sea (the director's ruling of 18:59Z, under 221 F): to
+ * the harbour given, at an evacuation's cost, with the news. The line's march home calls it (ai.ts lineHome).
+ */
+export function takeOut(g: Game, c: Corps, to: Region): void {
+  const from = g.regions[c.reg], N = g.nations[c.nat];
+  place(g, c, to);
+  c.str *= 0.75; c.org = Math.min(c.org, 0.3); c.ap = 0; c.hold = false;
+  if (!g.flags[`evac:${g.turn}`]) {
+    g.flags[`evac:${g.turn}`] = 1;
+    headline(g, 'event', `${N.adj} troops at ${from.name}, with no road back to their own lines, are taken out by sea to ${to.name}, without their heavy equipment.`, c.nat, from.id, { arm: 'land', lost: c.nat });
+  }
 }
 
 /**

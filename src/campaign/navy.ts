@@ -17,6 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
+import { lineShut } from './line';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -414,6 +415,9 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
   if (thornGround(g, to, c.nat)) return `${g.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
+  // (By the book a computer staff ships nobody into a harbour beyond the record's line, as it lands nobody there: a
+  // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
+  if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
   for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
@@ -500,6 +504,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
   // Guns and engineers land on no enemy shore by themselves (ruling 211(a), the grand campaign).
   if (gunsRule(g) && !cs.some(fights) && !allied(g, nat, to.ctrl) && !gunsMayFollow(g, cs[0], to)) return aloneLine(cs);
+  // (By the book a computer staff lands nobody beyond the record's line: line.ts. Never the player's.)
+  if (lineShut(g, nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
