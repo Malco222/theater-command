@@ -961,6 +961,8 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
+  dropped?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */

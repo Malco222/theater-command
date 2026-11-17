@@ -1,6 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
+import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
@@ -506,11 +507,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
-  return resolveBattle(g, ok, target);
+  // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------
@@ -1676,8 +1678,8 @@ export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: numbe
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
-export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) ? launchRaid(g, kind, target, ids, g.human) : null;
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[], fought?: FoughtAir): AirReport | null {
+  return g.human !== null && humanUp(g) ? launchRaid(g, kind, target, ids, g.human, fought) : null;
 }
 
 /**
