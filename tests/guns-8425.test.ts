@@ -1,4 +1,4 @@
-// Guns never go forward alone, Britain stands by its dominions, and the town guard tears up no railway (Version
+// Guns never go forward alone, Britain may stand by its dominions, and the town guard tears up no railway (Version
 // 84.2.5; the design director's ruling 211, from the Playtester's trace of Brian's own campaign of 2026-11-17: one
 // Canadian corps of guns with no infantry stormed Buffalo and Pittsburgh and would have taken Washington, while
 // Britain looked on at a war made on her dominion). The grand campaign only: history's campaigns raise no guns.
@@ -7,21 +7,24 @@
 //     attack, storms no town, makes no sortie, lands on no enemy shore and marches onto no enemy-held ground unless
 //     a fighting corps of its side stands there already; left alone round a town it gives up the siege; and guns
 //     caught alone in the field are overrun. Player and computer alike, and the refusal is a sentence.
-// (b) War on Canada is war with Britain the same month, whoever declares it; a war Canada starts is not Britain's.
+// (b) War on Canada by a country at peace with Britain: she answers six times in ten and stays out four (Brian's
+//     change of 2026-11-17, 16:49 UTC), on one roll made when the war is declared; a war Canada starts is not hers.
 // (g) A railway is torn up by troops as they fall back: where the loser has no corps next door, nobody does it.
 import { describe, expect, it } from 'vitest';
 import { notTanksAlone } from '../src/campaign/ai';
 import { warForecast } from '../src/campaign/diplomacy';
 import {
-  ENGINEERS_ALONE, GUNS_ALONE, addCorps, allied, assess, atWar, createGame, declareWar, fights, gunsRule, hostileUnits, limitAttackers, moveCorps, relocate, setWar, standsByWhom,
+  ENGINEERS_ALONE, GUNS_ALONE, addCorps, allied, assess, atWar, createGame, declareWar, dominionAnswers, fights, gunsRule, hostileUnits, limitAttackers, moveCorps, relocate, setWar, standsBy, standsByWhom,
 } from '../src/campaign/game';
+import { monthCard, monthMark } from '../src/campaign/monthcard';
 import { whyNotLand } from '../src/campaign/navy';
 import { onNet, wreckChance } from '../src/campaign/rails';
 import { besieged, garrison, siegeMonth, stormForce, townHeld, whyNotStorm } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, marchOrder, orderAttack, previewAttack, reach, stepAI, whyNotLead } from '../src/campaign/turn';
-import type { Corps, Game, Region } from '../src/campaign/types';
-import { worldMonth } from '../src/campaign/world';
+import { townName } from '../src/campaign/towns';
+import { beginHuman, gunsLeftAlone, humanUp, marchOrder, orderAttack, previewAttack, reach, stepAI, whyNotLead } from '../src/campaign/turn';
+import type { Corps, Game, Headline, Region } from '../src/campaign/types';
+import { WORLD, answersOf, worldMonth } from '../src/campaign/world';
 
 function playing(human = 'GER', seed = 3): Game {
   const g = startOpen(createGame(seed, human));
@@ -73,7 +76,7 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
     const eng = addCorps(g, 'GER', 'Test engineers', 'eng', 1, from.id, {});
     eng.ap = 4;
     expect(whyNotLead(g, [eng], to.id)).toBe(ENGINEERS_ALONE);
-    expect(whyNotLead(g, [eng, gun], to.id)).toBe(GUNS_ALONE);
+    expect(whyNotLead(g, [eng, gun], to.id)).toBe('Guns and engineers cannot take ground alone. Send infantry or tanks in with them.');
     // With a fighting corps the force goes, guns and all.
     expect(whyNotLead(g, [gun, inf], to.id)).toBeNull();
     const force = limitAttackers(g, [gun, inf], to);
@@ -127,7 +130,7 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
     expect(a).not.toBeNull();
     expect(a.overrun).toBe(true);
     expect(a.odds * a.dice[0]).toBeGreaterThanOrEqual(3);
-    expect(a.lines.find((l) => l.label === 'Guns alone')).toEqual({ label: 'Guns alone', value: 'The guns stand with no infantry or tanks in front of them', effect: 'They are overrun: every gun is taken' });
+    expect(a.lines.find((l) => l.label === 'Guns alone')).toEqual({ label: 'Guns alone', value: 'The guns stand with no infantry or tanks in front of them', effect: 'An attack overruns them: every gun is taken' });
     expect(a.lines.some((l) => (l.effect ?? '').includes('other defenders'))).toBe(false);
     const rep = orderAttack(g, [inf], to)!;
     expect(rep.taken).toBe(true);
@@ -171,7 +174,9 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
     expect(going).toContain(inf);
     g.nations.GER.maxAttack = most;
     // The infantry marches away: the guns are alone round the town.
+    expect(gunsLeftAlone(g, to.id)).toBeNull();
     relocate(g, inf, from);
+    expect(gunsLeftAlone(g, to.id)).toBe(`Only guns are left round ${townName(to)}: the siege is raised unless infantry or tanks join them this month.`);
     delete g.flags[`storm:${to.id}`];
     expect(whyNotStorm(g, to, 'GER')).toBe(GUNS_ALONE);
     expect(stormForce(g, [gun, gun2], to)).toEqual([]);
@@ -182,7 +187,7 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
     expect(to.ctrl).toBe('POL');
     for (const c of [gun, gun2]) { expect(c.dead ?? false).toBe(false); expect(c.reg).not.toBe(to.id); expect(allied(g, 'GER', g.regions[c.reg].ctrl)).toBe(true); }
     const said = g.headlines.slice(h).map((x) => x.text).join(' | ');
-    expect(said).toMatch(/The German guns round .+, left with no infantry or tanks beside them, give up the siege and fall back to /);
+    expect(said).toMatch(/The German guns round .+, left with no infantry or tanks beside them, fall back to [^.]+\. The siege is raised\./);
   });
 
   it('guns land on no enemy shore by themselves', () => {
@@ -194,64 +199,149 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
   });
 });
 
-describe('Britain stands by its dominions, one way only (Version 84.2.5, ruling 211(b))', () => {
-  it('war on Canada is war with Britain the same month, with her headline; France and the rest stay as they were', () => {
+describe('Britain may stand by its dominions: six times in ten (Version 84.2.5, ruling 211(b) as Brian changed it)', () => {
+  const ANSWERS = 'Britain stands by Canada', STAYS = 'Britain stays out of Canada\'s war';
+  /** The campaign's seed is set so that the roll for a war America makes on Canada in the month `war` goes the way asked. */
+  function fix(g: Game, answers: boolean, war = g.turn): Game {
+    for (let s = 1; s < 400; s++) { g.seed = s; if (dominionAnswers(g, 'UK', 'USA', 'CAN', war) === answers) return g; }
+    throw new Error('no seed gives that answer');
+  }
+  const titled = (g: Game, from: number): Headline[] => g.headlines.slice(from).filter((x) => x.head === ANSWERS || x.head === STAYS);
+
+  it('the odds sit in the data beside the row, and of 100 seeded declarations about 60 answer', () => {
+    expect(WORLD.dominions!.UK).toEqual({ of: ['CAN', 'AUS', 'NZL', 'SAF'], answers: 0.6 });
+    expect(answersOf('UK')).toBe(0.6);
+    expect(answersOf('FRA')).toBe(0);
+    const g = playing('USA');
+    let yes = 0;
+    for (let s = 1; s <= 100; s++) { g.seed = s; if (dominionAnswers(g, 'UK', 'USA', 'CAN', g.turn)) yes++; }
+    expect(yes).toBeGreaterThanOrEqual(50);
+    expect(yes).toBeLessThanOrEqual(70);
+    // Flat: over many campaigns, months, declarers and dominions the share is six in ten, and asking again
+    // gives the same answer.
+    let all = 0, n = 0;
+    for (let s = 1; s <= 250; s++) for (const war of [1, 9, 17, 30, 52]) for (const [by, on] of [['USA', 'CAN'], ['MEX', 'CAN'], ['JPN', 'AUS'], ['ITA', 'SAF']]) {
+      g.seed = s;
+      const first = dominionAnswers(g, 'UK', by, on, war);
+      expect(dominionAnswers(g, 'UK', by, on, war)).toBe(first);
+      all += Number(first); n++;
+    }
+    expect(all / n).toBeGreaterThan(0.57);
+    expect(all / n).toBeLessThan(0.63);
+  });
+
+  it('the card says the odds and never a promise', () => {
     const g = playing('USA');
     expect(allied(g, 'UK', 'CAN')).toBe(true);
     expect(atWar(g, 'USA', 'UK')).toBe(false);
     expect(standsByWhom(g, 'USA', 'CAN')).toBe('UK');
-    expect(warForecast(g, 'USA', 'CAN').patron).toBe('UK');
-    expect(warForecast(g, 'USA', 'MEX').patron).toBeNull();
+    const f = warForecast(g, 'USA', 'CAN');
+    expect(f.patron).toBe('UK');
+    expect(f.answers).toBe(0.6);
+    expect(f.patronSays).toEqual(['Britain may stand by it.', 'Canada is a dominion: six times in ten Britain declares war on you the same month, and four times in ten it stays out of this war.']);
+    const m = warForecast(g, 'USA', 'MEX');
+    expect([m.patron, m.answers, m.patronSays]).toEqual([null, 0, null]);
+  });
+
+  it('she answers: war with Britain the same month, with her headline; France and the rest stay as they were', () => {
+    const g = fix(playing('USA'), true);
     const align = g.nations.USA.align;
-    const h = g.headlines.length;
+    const h = g.headlines.length, mark = monthMark(g);
     declareWar(g, 'USA', 'CAN');
     expect(atWar(g, 'USA', 'CAN')).toBe(true);
     expect(atWar(g, 'USA', 'UK')).toBe(true);
     expect(g.flags['war:UK:USA']).toBe(g.turn);
-    const news = g.headlines.slice(h).find((x) => x.warn === 'Britain stands by Canada')!;
-    expect(news).toBeDefined();
-    expect(news.kind).toBe('war');
-    expect(news.nat).toBe('UK');
-    expect(news.text).toBe('Britain declares war on the United States: war on a dominion is war with Britain.');
+    const news = titled(g, h);
+    expect(news.map((x) => [x.head, x.kind, x.nat, x.warn, x.text])).toEqual([[ANSWERS, 'war', 'UK', undefined, 'Britain declares war on the United States: it answers for its dominion.']]);
     // One member alone: nobody else of the alliance, and America stands where it stood.
     expect(atWar(g, 'USA', 'FRA')).toBe(false);
     expect(g.nations.USA.align).toBe(align);
     expect(standsByWhom(g, 'USA', 'CAN')).toBeNull();
+    // On the month card it is a band of war, headed by its title, under Britain's flag.
+    const band = monthCard(g, mark).bands.find((x) => x.head === ANSWERS)!;
+    expect(band).toBeDefined();
+    expect([band.word, band.nats[0]]).toEqual(['WAR', 'UK']);
   });
 
-  it('a war a dominion starts is not Britain\'s', () => {
+  it('she stays out: no war, news the same month in the brass band, and no second roll while that war lasts', () => {
+    const g = fix(playing('USA'), false);
+    const h = g.headlines.length, mark = monthMark(g);
+    declareWar(g, 'USA', 'CAN');
+    expect(atWar(g, 'USA', 'CAN')).toBe(true);
+    expect(atWar(g, 'USA', 'UK')).toBe(false);
+    expect(g.flags['war:UK:USA']).toBeUndefined();
+    expect(titled(g, h).map((x) => [x.head, x.kind, x.nat, x.warn, x.text])).toEqual([[STAYS, 'info', 'UK', undefined, 'Britain does not declare war on the United States: Canada fights this war without it.']]);
+    // The month card: news, never a warning and never red.
+    const card = monthCard(g, mark);
+    const band = card.bands.find((x) => x.head === STAYS)!;
+    expect(band).toBeDefined();
+    expect([band.word, band.nats[0]]).toEqual(['NEWS', 'UK']);
+    expect(card.bands.some((x) => x.word === 'WARNING')).toBe(false);
+    // No second roll while that war lasts, whatever the dice would say now: months pass and she is still out.
+    const war = g.flags['war:USA:CAN'];
+    fix(g, true, war);
+    const k = g.headlines.length;
+    expect(standsBy(g, 'USA', 'CAN', war)).toBe(false);
+    for (let i = 0; i < 3; i++) { g.turn++; worldMonth(g); }
+    expect(atWar(g, 'USA', 'UK')).toBe(false);
+    expect(titled(g, k)).toEqual([]);
+    // Her own staff stays free: the forecast still names her, for a war of her own choosing is no roll.
+    expect(standsByWhom(g, 'USA', 'CAN')).toBe('UK');
+    // A war made again another month is a new declaration, and a new roll.
+    g.flags['war:USA:CAN'] = g.turn;
+    fix(g, true);
+    expect(standsBy(g, 'USA', 'CAN')).toBe(true);
+    expect(atWar(g, 'USA', 'UK')).toBe(true);
+  });
+
+  it('a war a dominion starts is not Britain\'s, and has no roll', () => {
     const g = playing('USA');
+    const h = g.headlines.length;
     declareWar(g, 'CAN', 'MEX');
     expect(atWar(g, 'CAN', 'MEX')).toBe(true);
     expect(atWar(g, 'UK', 'MEX')).toBe(false);
     worldMonth(g);
     expect(atWar(g, 'UK', 'MEX')).toBe(false);
+    expect(g.headlines.slice(h).some((x) => x.head !== undefined)).toBe(false);
+    expect(Object.keys(g.flags).some((key) => key.startsWith('domroll:'))).toBe(false);
   });
 
-  it('a campaign saved before the rule: Britain answers as the month ends, and says since when', () => {
+  it.each([[true], [false]])('a campaign saved before the rule: one roll as the month ends, and the news says since when (answers: %s)', (answers) => {
     const g = playing('USA');
     // The war as an older build left it: made on Canada two months ago, and Britain at peace.
     setWar(g, 'USA', 'CAN');
-    g.flags['war:USA:CAN'] = g.turn;
+    const since = g.turn;
+    g.flags['war:USA:CAN'] = since;
     g.turn += 2;
+    fix(g, answers, since);
     expect(atWar(g, 'USA', 'UK')).toBe(false);
     const h = g.headlines.length;
     worldMonth(g);
-    expect(atWar(g, 'USA', 'UK')).toBe(true);
-    const news = g.headlines.slice(h).find((x) => x.warn === 'Britain stands by Canada')!;
-    expect(news.text).toMatch(/^The United States has been at war with Canada since (September|October|November|December) 1939\. Britain declares war on the United States: war on a dominion is war with Britain\.$/);
-    // Once: the next month says nothing more.
+    expect(atWar(g, 'USA', 'UK')).toBe(answers);
+    const news = titled(g, h);
+    expect(news.length).toBe(1);
+    expect(news[0].head).toBe(answers ? ANSWERS : STAYS);
+    expect(news[0].text).toMatch(answers
+      ? /^The United States has been at war with Canada since (September|October|November|December) 1939\. Britain now declares war on the United States: it answers for its dominion\.$/
+      : /^The United States has been at war with Canada since (September|October|November|December) 1939\. Britain does not declare war on the United States: Canada fights this war without it\.$/);
+    // Once: the months after say nothing more, whatever the dice would say then.
+    fix(g, true, since);
     const k = g.headlines.length;
+    g.turn++;
     worldMonth(g);
-    expect(g.headlines.slice(k).some((x) => x.warn === 'Britain stands by Canada')).toBe(false);
+    expect(titled(g, k)).toEqual([]);
+    expect(atWar(g, 'USA', 'UK')).toBe(answers);
   });
 
   it('not in World Domination, where a dominion follows nobody either', () => {
-    const g = playing('USA');
+    const g = fix(playing('USA'), true);
     g.flags.dom = 1;
     expect(standsByWhom(g, 'USA', 'CAN')).toBeNull();
+    expect(warForecast(g, 'USA', 'CAN').patronSays).toBeNull();
+    const h = g.headlines.length;
     declareWar(g, 'USA', 'CAN');
     expect(atWar(g, 'USA', 'UK')).toBe(false);
+    expect(titled(g, h)).toEqual([]);
   });
 });
 

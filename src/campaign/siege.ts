@@ -746,6 +746,20 @@ export function siegeSweep(g: Game): void {
 const guns = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
 /**
+ * The player's own corps round a town of an enemy's are guns and engineers alone (his order has taken the fighting
+ * corps away, or they are dead): what the paper says of it, or null (ruling 211(a); the UI director's line). The
+ * siege is raised at the holder's next month unless a fighting corps joins them first.
+ */
+export function gunsLeftAlone(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  if (!r || g.human === null || g.flags.open !== 1 || !siegeRules(g) || allied(g, g.human, r.ctrl)) return null;
+  const round = besiegers(g, r).filter((c) => allied(g, c.nat, g.human!));
+  if (!round.length || round.some(fights)) return null;
+  const what = round.every((c) => c.kind === 'eng') ? 'engineers' : round.some((c) => c.kind === 'eng') ? 'guns and engineers' : 'guns';
+  return `Only ${what} are left round ${townName(r)}: the siege is raised unless infantry or tanks join them this month.`;
+}
+
+/**
  * Guns and engineers left alone in the field of an enemy's province, their fighting corps dead or marched away:
  * they keep up no siege (ruling 211(a)). They fall back on ground their side holds, as a beaten army does, and
  * where there is none they are taken where they stand.
@@ -761,8 +775,8 @@ function gunsFallBack(g: Game, r: Region, left: Corps[]): void {
   }
   const who = `${g.nations[by].adj} guns`;
   const text = taken === left.length
-    ? `The ${who} round ${town}, left with no infantry or tanks beside them and no way back, are taken where they stand.`
-    : `The ${who} round ${town}, left with no infantry or tanks beside them, give up the siege and fall back to ${[...back].join(' and ')}.`;
+    ? `The ${who} round ${town}, left with no infantry or tanks beside them and no way back, are taken where they stand. The siege is raised.`
+    : `The ${who} round ${town}, left with no infantry or tanks beside them, fall back to ${[...back].join(' and ')}. The siege is raised.`;
   tell(g, r, text, r.ctrl, [by, r.ctrl, ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl, lost: by });
   g.supplyDirty = true;
 }

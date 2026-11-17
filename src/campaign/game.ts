@@ -37,7 +37,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { beyondEurope, patronOf, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, patronOf, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
@@ -288,7 +288,7 @@ export function declareWar(g: Game, a: string, b: string): void {
     }
     if (stood.length) headline(g, 'war', `The League stands by ${B.name}: ${stood.length === 1 ? stood[0] : `${stood.slice(0, -1).join(', ')} and ${stood[stood.length - 1]}`} ${stood.length === 1 ? 'is' : 'are'} at war with ${theName(A)} too.`, b);
   }
-  // Britain stands by its dominions, one way only (ruling 211(b)): war on a dominion is war with her the same month.
+  // Britain may stand by its dominions, one way only (ruling 211(b)): six times in ten she goes to war the same month.
   standsBy(g, a, b);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
@@ -300,14 +300,16 @@ export function declareWar(g: Game, a: string, b: string): void {
 }
 
 /** The short name news gives a country: Britain for the United Kingdom. */
-const newsName = (n: Nation): string => (n.id === 'UK' ? 'Britain' : n.name);
+export const newsName = (n: Nation): string => (n.id === 'UK' ? 'Britain' : n.name);
 
 /**
- * The mother country that would go to war with `a` for making war on `b`, or null (ruling 211(b), the grand
- * campaign's wider world). Britain stands by Canada, Australia, New Zealand and South Africa, one way only: war
- * on a dominion is war with her the same month, whoever declares it, while the two stand in the same alliance. A
- * war a dominion starts is not hers, and war with any other member of an alliance is war with that member alone.
- * Not in World Domination, where a dominion follows nobody either.
+ * The mother country that may go to war with `a` for making war on `b`, or null (ruling 211(b) as Brian changed
+ * it on 17 November 2026; the grand campaign's wider world). Britain may stand by Canada, Australia, New Zealand
+ * and South Africa, one way only, when a country at peace with her makes war on one of them while the two stand
+ * in the same alliance: she answers six times in ten and stays out four (world.json, 'dominions'), in every year,
+ * at every stop of the dial and at every difficulty. A war a dominion starts is not hers, and war with any other
+ * member of an alliance is war with that member alone. Not in World Domination, where a dominion follows nobody
+ * either.
  */
 export function standsByWhom(g: Game, a: string, b: string): string | null {
   const p = patronOf(b);
@@ -318,18 +320,35 @@ export function standsByWhom(g: Game, a: string, b: string): string | null {
 }
 
 /**
- * The mother country goes to war with whoever made war on her dominion (standsByWhom). `since` is the month that
- * war was made, for a campaign saved before the rule, where she answers as a month ends. True if she went to war.
- * She declares nothing else by it: her allies stay as they are, and a country outside both blocs stays outside.
+ * Whether the mother country `p` answers for the war `a` made on her dominion `b` in the month `war`: the one roll
+ * of that declaration. It is made from the campaign's seed, the month and the countries, so it moves no other
+ * dice, both games agree on it, and the same month loaded again gives the same answer.
+ */
+export const dominionAnswers = (g: Game, p: string, a: string, b: string, war: number): boolean => hashString(`dominion:${g.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < answersOf(p);
+
+/**
+ * The mother country answers, or does not, for the war `a` made on her dominion `b` (standsByWhom): one roll for
+ * each such war, and both answers are news the same month. `since` is the month that war was made, for a campaign
+ * saved before the rule, where the roll is made as a month ends. True if she went to war. She declares nothing
+ * else by it: her allies stay as they are, and a country outside both blocs stays outside. Where she stays out
+ * there is no second roll while that war lasts (the flag `domroll` keeps the month of the war it was made for);
+ * her own staff stays as free as any staff.
  */
 export function standsBy(g: Game, a: string, b: string, since?: number): boolean {
   const p = standsByWhom(g, a, b);
   if (!p) return false;
+  const war = since ?? g.turn, key = `domroll:${a}:${b}`;
+  if (g.flags[key] === war) return false;
+  g.flags[key] = war;
   const P = g.nations[p], A = g.nations[a], B = g.nations[b];
+  const was = since !== undefined && since < g.turn ? `${theName(A, true)} has been at war with ${B.name} since ${turnToDate(since).label}. ` : '';
+  if (!dominionAnswers(g, p, a, b, war)) {
+    g.headlines.push({ turn: g.turn, week: g.week, kind: 'info', nat: p, head: `${newsName(P)} stays out of ${B.name}'s war`, text: `${was}${newsName(P)} does not declare war on ${theName(A)}: ${B.name} fights this war without it.` });
+    return false;
+  }
   setWar(g, p, a);
   g.flags[`war:${p}:${a}`] = g.turn;
-  const was = since !== undefined && since < g.turn ? `${theName(A, true)} has been at war with ${B.name} since ${turnToDate(since).label}. ` : '';
-  g.headlines.push({ turn: g.turn, week: g.week, kind: 'war', nat: p, warn: `${newsName(P)} stands by ${B.name}`, text: `${was}${newsName(P)} declares war on ${theName(A)}: war on a dominion is war with ${newsName(P)}.` });
+  g.headlines.push({ turn: g.turn, week: g.week, kind: 'war', nat: p, head: `${newsName(P)} stands by ${B.name}`, text: `${was}${newsName(P)}${was ? ' now' : ''} declares war on ${theName(A)}: it answers for its dominion.` });
   g.supplyDirty = true;
   return true;
 }
@@ -625,8 +644,13 @@ export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng
 export const GUNS_ALONE = 'Guns cannot take ground alone. Send infantry or tanks in with them.';
 /** The same for a force of engineers with no guns among them. */
 export const ENGINEERS_ALONE = 'Engineers cannot take ground alone. Send infantry or tanks in with them.';
+/** And for one of guns and engineers together. */
+export const GUNS_ENGINEERS_ALONE = 'Guns and engineers cannot take ground alone. Send infantry or tanks in with them.';
 /** The sentence for a force with no fighting corps in it. */
-export const aloneLine = (corps: Corps[]): string => (corps.some((c) => c.kind === 'art') || !corps.length ? GUNS_ALONE : ENGINEERS_ALONE);
+export function aloneLine(corps: Corps[]): string {
+  const guns = corps.some((c) => c.kind === 'art'), sappers = corps.some((c) => c.kind === 'eng');
+  return guns && sappers ? GUNS_ENGINEERS_ALONE : sappers ? ENGINEERS_ALONE : GUNS_ALONE;
+}
 /** Where the rule that guns never go forward alone holds: the grand campaign, which alone raises guns and engineers. */
 export const gunsRule = (g: Game): boolean => g.flags.open === 1;
 /** True if a corps that is not a fighting corps may come onto this enemy-held ground: a fighting corps of its side stands in its field already. */
@@ -1533,7 +1557,7 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
 }
 
 /** The ticket's line where guns stand alone in the field (ruling 146): before the battle, and as it reads after it. */
-const GUNS_OVERRUN: TicketLine = { label: 'Guns alone', value: 'The guns stand with no infantry or tanks in front of them', effect: 'They are overrun: every gun is taken' };
+const GUNS_OVERRUN: TicketLine = { label: 'Guns alone', value: 'The guns stand with no infantry or tanks in front of them', effect: 'An attack overruns them: every gun is taken' };
 const GUNS_OVERRUN_AFTER: TicketLine = { label: 'Guns alone', value: 'The guns stood with no infantry or tanks in front of them', effect: 'They were overrun: every gun was taken' };
 /** The odds guns alone are overrun at, at the least: a decisive win on the worst of the day's luck. */
 const OVERRUN_ODDS = 3;

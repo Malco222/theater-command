@@ -8,7 +8,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, standsByWhom, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, newsName, relocate, removeCorps, standsByWhom, theName, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -18,7 +18,7 @@ import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin, stopDef } from './history';
 import worldData from '../../data/campaign/world.json';
-import { warWorkMonth, worldMonth } from './world';
+import { answersOf, warWorkMonth, worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -351,14 +351,31 @@ export interface WarForecast {
   trade: boolean;
   /** The other members of the League, when the country belongs to it: each goes to war with the declarer the same day. */
   league: string[];
-  /** The mother country that stands by it, when it is a dominion of hers (ruling 211(b)): she goes to war with the declarer the same month. Or null. */
+  /**
+   * The mother country that may stand by it, when it is a dominion of hers (ruling 211(b)), or null. `answers` is
+   * the share of the time she goes to war with the declarer the same month (0.6; one roll when the war is
+   * declared), and `patronSays` the card's two sentences, the first set bold as the League's is.
+   */
   patron: string | null;
+  answers: number;
+  patronSays: [string, string] | null;
+}
+
+const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times'];
+/**
+ * The declare card's two sentences where a mother country may answer for the country declared on (the UI
+ * director's words, passed on 17 November 2026): the odds in plain words, never a promise.
+ */
+export function patronSays(g: Game, patron: string, on: string): [string, string] {
+  const P = newsName(g.nations[patron]), k = Math.min(9, Math.max(1, Math.round(answersOf(patron) * 10)));
+  return [`${P} may stand by it.`, `${g.nations[on].name} is a dominion: ${TIMES[k]} in ten ${P} declares war on you the same month, and ${TIMES[10 - k]} in ten it stays out of this war.`];
 }
 
 export function warForecast(g: Game, by: string, on: string): WarForecast {
   const A = g.nations[by], B = g.nations[on];
   const ba = A ? bloc(A) : null;
   const sneak = wouldSurprise(g, by, on);
+  const patron = standsByWhom(g, by, on);
   const fighting = !!B && B.atWar.some((x) => x === by || allied(g, x, by));
   return {
     on,
@@ -369,7 +386,9 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
     league: standsWith(g, by, on),
-    patron: standsByWhom(g, by, on),
+    patron,
+    answers: patron ? answersOf(patron) : 0,
+    patronSays: patron ? patronSays(g, patron, on) : null,
   };
 }
 

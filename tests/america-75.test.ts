@@ -50,8 +50,9 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; warned: boolean; island: boolean; wave: boolean }[] = [];
 const guard: number[] = [];
 {
-  // Seed 3 since Version 76: on the chart with Latin America seed 2's staffs make no landing before June 1943.
-  const g = wide(3);
+  // Seed 4 since Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no
+  // landing before June 1943. (Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);

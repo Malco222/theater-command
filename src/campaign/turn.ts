@@ -46,6 +46,7 @@ import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotD
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
 export { FORT_NO_ORDERS, garrisonLine, whyNotOrder, whyNotOrderGarrison } from './armies';
+export { gunsLeftAlone } from './siege';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';

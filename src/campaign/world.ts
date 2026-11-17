@@ -40,7 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
-  dominions?: Record<string, string[]>;
+  dominions?: Record<string, { of: string[]; answers: number }>;
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
@@ -73,8 +73,13 @@ export const worldOn = (g: Game): boolean => g.flags.world === 1;
 
 /** The mother country that stands by a dominion (world.json, 'dominions'), or null. */
 export function patronOf(nat: string): string | null {
-  for (const [p, ds] of Object.entries(WORLD.dominions ?? {})) if (ds.includes(nat)) return p;
+  for (const [p, row] of Object.entries(WORLD.dominions ?? {})) if (row.of.includes(nat)) return p;
   return null;
+}
+
+/** The share of the time a mother country answers when war is made on a dominion of hers: 0.6 for Britain (Brian's rule of 17 November 2026). */
+export function answersOf(patron: string): number {
+  return WORLD.dominions?.[patron]?.answers ?? 0;
 }
 
 /** True for a province beyond the map of Europe. */
@@ -200,10 +205,10 @@ export function worldMonth(g: Game): void {
       headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
     }
   }
-  // A campaign saved before ruling 211(b): a war somebody made on a dominion is answered by its mother country as
-  // the month ends (a new war is answered the day it is declared: declareWar).
-  for (const ds of Object.values(WORLD.dominions ?? {})) {
-    for (const d of ds) {
+  // A campaign saved before ruling 211(b): the roll for a war somebody made on a dominion is made as the month
+  // ends, once (a new war has its roll the day it is declared, in declareWar, and is passed over here).
+  for (const row of Object.values(WORLD.dominions ?? {})) {
+    for (const d of row.of) {
       const D = g.nations[d];
       if (!D?.alive) continue;
       for (const e of [...D.atWar]) { const since = g.flags[`war:${e}:${d}`]; if (since !== undefined) standsBy(g, e, d, since); }
