@@ -395,6 +395,9 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+  // (By the book a computer staff ships nobody into a harbour beyond the record's line, as it lands nobody there: a
+  // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
+  if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
   for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {

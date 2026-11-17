@@ -19,7 +19,7 @@ import { HISTORY, setStop } from '../src/campaign/history';
 import { inLine, lineBinds, lineLeaves, lineShut, lines, type Line } from '../src/campaign/line';
 import { decide, prospect, startOpen, type Op } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
-import { whyNotLand } from '../src/campaign/navy';
+import { whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { fieldCtrl } from '../src/campaign/siege';
 import { TRAITS, levyRule, traitLevy, traitRule, type Levy } from '../src/campaign/traits';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -488,6 +488,40 @@ describe('215(c): the record\'s line', () => {
     }
   });
 
+  it('ships nobody into a harbour beyond the line, though his side holds it, as it lands nobody there (224, b390)', () => {
+    drawn();
+    /** A fresh German corps in a German harbour, and the Danzig Corridor's harbour in German hands with nobody in it. */
+    const ferry = (h: Game): { c: Corps; to: Region } => {
+      const to = at(h, 'Danzig Corridor');
+      for (const c of [...to.units]) removeCorps(h, c);
+      to.ctrl = 'GER'; to.prev = 'POL'; to.since = 1;
+      const quay = h.regions.find((r) => r.owner === 'GER' && r.ctrl === 'GER' && r.port && r.id !== to.id)!;
+      return { c: addCorps(h, 'GER', 'Ferry Corps', 'inf', 1, quay.id, {}), to };
+    };
+    const shut = /record's line/;
+    try {
+      const g = grand(2, null, 1);
+      const { c, to } = ferry(g);
+      expect(String(whyNotShip(g, c, to))).not.toMatch(shut);
+      // Its span over, the harbour is beyond the line: the ferry is barred as a landing would be. (A game reads its
+      // spans once, so the shorter span is tried on a fresh one.)
+      test.spans['Danzig Corridor'] = [{ from: 1, to: 8, kind: 'day one' }];
+      const late = grand(2, null, 1);
+      const y = ferry(late);
+      late.turn = 9;
+      expect(lineShut(late, 'GER', y.to)).toBe(true);
+      expect(whyNotShip(late, y.c, y.to)).toMatch(shut);
+      expect(whyNotLand(late, [y.c], y.to)).toMatch(shut);
+      // Never the player's ships: with Germany played the line binds nobody.
+      const p = grand(2, 'GER', 1);
+      const x = ferry(p);
+      p.turn = 9;
+      expect(String(whyNotShip(p, x.c, x.to))).not.toMatch(shut);
+    } finally {
+      test.spans['Danzig Corridor'] = [{ from: 1, to: 20, kind: 'day one' }];
+    }
+  });
+
   it('holds in a war nobody plays: the invader\'s army takes nothing beyond the line and leaves a raid when its months are over', () => {
     drawn();
     const g = grand(2, null, 1);
@@ -572,6 +606,35 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     const row = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, Record<string, unknown>][] } })['setup-1939'].expeditions.find((r) => r[2] === '21st Army (5th Division)')!;
     expect(row.slice(0, 6)).toEqual([2, 'JAP', '21st Army (5th Division)', 'inf', 1, 'Taihoku']);
     expect(row[0]).toBeLessThan(D.history.dates.JAP.nanning);
+  });
+
+  it('lands the 1941 coast raid from Japan\'s own ports, each force alone, in the month every span opens (224, b375)', () => {
+    const coast = D.open.ops.JAP.find((o) => o.id === 'coast41')!;
+    expect(D.history.dates.JAP.coast41).toBe(20);
+    for (const nm of ['Foochow', 'Ningpo', 'Wenchow']) expect(L.spans[nm][0].from, nm).toBe(20);
+    expect(coast.landings).toEqual([
+      { corps: '23rd Army (48th Division)', to: ['Foochow', 'Wenchow'] },
+      { corps: '13th Army (Chekiang landing force)', to: ['Ningpo'] },
+      { corps: '13th Army (Wenchow detachment)', to: ['Wenchow', 'Ningpo'] },
+    ]);
+    // Each force comes to a home port the month before, by a row of its own beside the 5th Division's.
+    const rows = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, { str: number; from?: string[]; war: string[]; until?: number }][] } })['setup-1939'].expeditions;
+    expect(rows.map((r) => r[2])).toEqual(['21st Army (5th Division)', ...coast.landings!.map((l) => l.corps)]);
+    for (const l of coast.landings!) {
+      const r = rows.find((x) => x[2] === l.corps)!;
+      expect(r[0], l.corps).toBe(D.history.dates.JAP.coast41 - 1);
+      expect(r[1], l.corps).toBe('JAP');
+      expect(['Formosa', 'Taihoku'], l.corps).toContain(r[5]);
+      expect(r[6].war, l.corps).toEqual(['JAP', 'CHN']);
+    }
+    expect(rows.map((r) => r[6].str)).toEqual([0.9, 0.9, 0.9, 0.3]);
+    // None adds to Japan's lasting strength in China (b387): two are taken from rows already standing, and the
+    // detachment is lent for Wenchow's span (months 20 to 21) and struck off the month after.
+    expect(rows[1][6].from).toEqual(['Formosa Army']);
+    expect(rows[2][6].from).toEqual(['13th Army (116th Division, Anking)']);
+    expect(rows[3][6].from).toBeUndefined();
+    expect(rows[3][6].until).toBe(L.spans.Wenchow[0].to + 1);
+    expect(rows.slice(0, 3).every((r) => r[6].until === undefined)).toBe(true);
   });
 
   it('names only China\'s provinces, where the chart has China', () => {
