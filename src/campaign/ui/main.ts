@@ -2398,6 +2398,8 @@ function orderAt(id: number): boolean {
   if (hostileUnits(g, r, g.human!).length) {
     const near = picked.filter((c) => g.regions[c.reg].nb.includes(id));
     if (!near.length) return false;
+    // (On the eve of war no attack goes in. Said here: the card used to open with its odds, and its order did nothing.)
+    if (onEve(g)) { ui.msg = 'On the eve of war every army stays where it is placed: no attack goes in until the war has opened.'; refresh(); return true; }
     // The card opens on the best attack to be had: everyone the roads will carry, where that beats the army picked.
     const open = openingForce(g, near, r);
     openModal({ kind: 'attack', target: id, chosen: new Set(open.corps.map((c) => c.id)), picked: open.widened ? near.map((c) => c.id) : null });
@@ -8657,8 +8659,65 @@ function onRegion(id: number): void {
   }
   // A click on another of the player's armies picks that one up: sending this one to join it takes a right-click.
   if (picked.length && id !== ui.sel && !r.units.some((c) => canOrder(g, c) && c.ap > 0) && orderAt(id)) return;
+  // A second click on a town of his own with the enemy round it is a click on that army: the sortie's card.
+  if (id === ui.sel && ui.tab === 'region' && sallyAt(id)) return;
+  // (No press on an enemy army goes unanswered: what the army or the garrison in hand could not do is said as the look moves on.)
+  const said = noAttackLine(id);
   selectRegion(id);
+  ui.msg = said || sortieHint(id);
   refresh();
+}
+
+/** A town with the player's own corps inside and the enemy round it: how the sortie is planned, for the paper line; or ''. */
+const sortieHint = (id: number): string => (g.human && humanUp(g) && myGarrison(g, id).length && besiegers(g, g.regions[id]).length
+  ? `${townName(g.regions[id])} is under siege with your corps inside. ${fingers() ? 'Press and hold' : 'Right-click'} the army round it, or click it again, to plan a sortie.` : '');
+
+/**
+ * A press on the army round a town the player's own corps are inside (Version 84.2.3; Brian's find of 2026-11-17:
+ * "if an enemy army is out of a city i couldnt attack them"). The sortie was a button in the side panel alone, and
+ * a click on the army itself said nothing. Now the press opens the sortie's card, with the odds, or says why there
+ * can be none. True if the press was answered. Display only: the sortie is the rules' own, ordered from its card.
+ */
+function sallyAt(id: number): boolean {
+  const r = g.regions[id];
+  if (!r || !g.human || !humanUp(g) || ui.modal || mapBusy() || !myGarrison(g, id).length || !besiegers(g, r).length) return false;
+  if (ui.sel !== id || ui.tab !== 'region') selectRegion(id);
+  const why = whyNotSallyOut(g, id);
+  ui.msg = why ?? '';
+  refresh();
+  if (!why) openModal({ kind: 'siege', mode: 'sally', target: id });
+  return true;
+}
+
+/** The corps looked at are the player's own and every one is inside its town: how they come out, for the paper line; or ''. */
+function insideInHand(): string {
+  if (ui.sel < 0 || !g.human || !humanUp(g) || ui.tab !== 'region' || heldCorps().length) return '';
+  const r = g.regions[ui.sel];
+  if (!myGarrison(g, ui.sel).length || r.units.some((c) => c.nat === g.human && !c.dead)) return '';
+  const town = townName(r);
+  return besiegers(g, r).length
+    ? `Your corps in ${town} are shut in by the army round it. ${fingers() ? 'Press and hold' : 'Right-click'} that army to plan a sortie.`
+    : `Your corps in ${town} are inside the town. TAKE THE FIELD, on the page of ${town}, brings a corps out to march and fight like any army.`;
+}
+/** A right-click away from a town whose corps are all inside it: the line above, said. True if it was. */
+function insideSaid(id: number): boolean {
+  const line = id !== ui.sel ? insideInHand() : '';
+  if (!line) return false;
+  ui.msg = line;
+  refresh();
+  return true;
+}
+
+/**
+ * Why a click on an enemy army next door planned no attack, for the paper line: the army in hand has no move left
+ * this month, or the corps looked at are inside their town. '' where there is nothing to say. Asked before the
+ * look moves on to the province clicked.
+ */
+function noAttackLine(id: number): string {
+  const me = g.human, r = g.regions[id];
+  if (!me || !r || !humanUp(g) || ui.sel < 0 || id === ui.sel || ui.tab !== 'region' || !g.regions[ui.sel].nb.includes(id) || !hostileUnits(g, r, me).length) return '';
+  if (heldCorps().length) return pickedCorps().length ? '' : `${NO_MOVES} An attack is planned in the month it is made.`;
+  return insideInHand();
 }
 
 /** The line a kept march is offered in, for one corps or for the army: "IX Corps marches here from next month, about 2 months." */
@@ -8832,14 +8891,16 @@ function wireMap(): void {
   // On a touch screen there is no right button: pressing and holding a region gives the order instead.
   let hold = 0, held = false;
   const regionAt = (x: number, y: number): number => {
-    const el = document.elementFromPoint(x, y)?.closest('.reg') as HTMLElement | null;
+    // (A mark that takes the pointer, an airfield's pad or a city's badge, stands on a province: an order given
+    // on it is for the ground under it. Before Version 84.2.3 a right-click there was lost.)
+    const el = (document.elementFromPoint(x, y)?.closest('.reg') ?? document.elementsFromPoint(x, y).find((n) => n.classList.contains('reg'))) as HTMLElement | null | undefined;
     return el ? Number(el.dataset.id) : -1;
   };
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
     if (humanUp(g) && rightClickElse(id, e.clientX, e.clientY)) return;
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderOrMarch(id) && !sallyAt(id) && !insideSaid(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
   });
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -8850,7 +8911,7 @@ function wireMap(): void {
       hold = window.setTimeout(() => {
         if (moved || pts.size !== 1 || !humanUp(g)) return;
         const id = regionAt(x, y);
-        if (id >= 0 && orderOrMarch(id)) held = true;
+        if (id >= 0 && (orderOrMarch(id) || sallyAt(id) || insideSaid(id))) held = true;
       }, 520);
     }
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -8916,6 +8977,7 @@ function wireMap(): void {
       : mp && mp.plan.ok && !mp.plan.now && tp?.no?.strong ? `<br><span class="tipno"><b>${esc(tp.no.strong)}</b>${esc(tp.no.line.slice(tp.no.strong.length))}</span>${mp.plan.spent ? `<br><span class="nomoves">${esc(NO_MOVES)}</span>` : ''}<br><span class="tipgo dim">Right-click: ${esc(marchLine(mp.plan, mp.lead, mp.n))}</span>`
       : mp && mp.plan.ok && !mp.plan.now ? `${mp.plan.spent ? `<br><span class="nomoves">${esc(NO_MOVES)}</span>` : ''}<br><span class="tipgo">Right-click: ${esc(marchLine(mp.plan, mp.lead, mp.n))}</span>${tp?.no ? `<br><span class="tipaside">${esc(tp.no.line)}</span>` : ''}`
       : mp && mp.plan.spent && !mp.plan.ok ? `<br><span class="tipno">${esc(mp.plan.line.startsWith(NO_MOVES) ? mp.plan.line : `${NO_MOVES} ${mp.plan.line}`)}</span>` : '';
+    const sortie = !order && !mapBusy() && sortieHint(r.id) ? `<br><span class="tipgo">${fingers() ? 'Press and hold' : 'Right-click'} to plan a sortie</span>` : '';
     const rel = relationWord(r.ctrl);
     // The town, and what the ground is worth: to the player if it is the player's own, or as a prize.
     const t = townIn(g, r.id)!;
@@ -8923,7 +8985,7 @@ function wireMap(): void {
     const has = t.signs.filter((s) => s !== 'fort').map((s) => (s === 'factory' ? `${t.factories} factor${t.factories === 1 ? 'y' : 'ies'}` : TOWNS.words[s].toLowerCase()));
     const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(natName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(natName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}`;
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}${sortie}`;
     }
     placeTip(e.clientX, e.clientY, !!el && el.classList.contains('obadge'));
   });
@@ -8970,7 +9032,9 @@ function wireMap(): void {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
         const id = Number(el.dataset.id);
         const aiming = ui.rail || ui.ship || ui.land || ui.rebase || ui.spySend || ui.tab === 'build' || (ui.tab === 'air' && (!!ui.airMode || (!!ui.raid && ui.raid !== 'menu')));
-        if (aiming) onRegion(id); else openAirfield(id);
+        // (With an army in hand next door, the ground an enemy army stands on is its ground, pad or no pad: the click plans the attack, as it does beside the pad.)
+        const attack = !aiming && ui.tab === 'region' && !!g.human && hostileUnits(g, g.regions[id], g.human).length > 0 && pickedCorps().some((c) => g.regions[c.reg].nb.includes(id));
+        if (aiming || attack) onRegion(id); else openAirfield(id);
       }
       else if (!el) {
         const p = mapPoint(e.clientX, e.clientY);
