@@ -1,0 +1,38 @@
+press	United Kingdom	
+press	Supreme command	
+press	BEGIN THE CAMPAIGN	
+# the cabinet: one seat filled
+press	Your war cabinet is all caretakers	
+press	MINISTERS	
+press	The organiser	
+press	YES, APPOINT HIM	
+# (a second seat the same month is refused: the capital is spent)
+close		
+# diplomacy: one neutral courted, one trade agreement
+open-page	Powers	
+press	Court	
+press	Court	
+press	TRADE AGREEMENTS	
+close		
+# a fleet's orders
+open-page	Navy	
+select-unit	Dover Command	
+order-sea	North Sea	
+press	Hunt subs	
+# a raid
+open-page	Air	
+select-unit	No. 1 Bomber Group	
+press	PLAN A RAID WITH IT	
+press	BOMB FACTORIES AND RAILWAYS	
+press	Ruhr	
+press	FLY THE RAID BY	
+close		
+# a landing
+open-page	Navy	
+press	MAKE THIS THE PLAN	
+open-page	Region	
+select-province	London	
+press	Invade by sea	
+select-province	Hamburg	
+press	CALL IT OFF	
+close		

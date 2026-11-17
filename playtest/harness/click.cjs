@@ -25,7 +25,9 @@ const log = []; const json = []; const snaps = {}; let errors = []; let trail = 
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })).newPage();
+  // TC_SIZE=1600x1000 plays in the window the feel marks are counted in (ruling 204); the default stays 1440 by 900.
+  const [VW, VH] = (process.env.TC_SIZE || '1440x900').split('x').map(Number);
+  const page = await (await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 })).newPage();
   page.on('pageerror', (e) => errors.push(e.message.slice(0, 240)));
   await page.addInitScript(() => {
     window.__feel = { ev: [], lt: [] };
