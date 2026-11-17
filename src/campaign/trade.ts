@@ -37,7 +37,8 @@ export function wealthOf(g: Game, nat: string): number {
   const n = g.nations[nat];
   if (!n) return 0;
   let sum = n.offmap?.industry ?? 0;
-  for (const r of g.regions) if (r.ctrl === nat) sum += provinceYield(g, r, nat).total;
+  // Before ruling 214's factor on a smaller power's land: what a country has to trade is as it was.
+  for (const r of g.regions) if (r.ctrl === nat) sum += provinceYield(g, r, nat, false, true).total;
   return sum;
 }
 

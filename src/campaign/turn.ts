@@ -19,7 +19,7 @@ import {
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
-import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
+import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
@@ -90,6 +90,8 @@ function closePhase(g: Game, nat: string): void {
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
+    // A smaller power's aircraft from abroad, and the month its own works open (ruling 213(d), the grand campaign).
+    smallAirMonth(g);
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);

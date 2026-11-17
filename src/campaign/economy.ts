@@ -90,6 +90,8 @@ export const firstCorpsNumber = (nat: string): number => PRODUCTION.firstCorpsNu
 export const BUDGET = budgetData as unknown as {
   scale: number; capital: number;
   land: Record<Terrain, number>; port: number; oil: number; occupied: number; overseas: number;
+  /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
+  landFactor: Record<string, number>;
   upkeep: { corps: Record<Kind, number>; ships: Record<ShipClass, number>; air: { ftr: number; bmr: number }; peace: number };
   debt: { floor: number; rest: number; desert: number; aiMargin: number };
 };
@@ -104,10 +106,19 @@ export const budgeted = (g: Game): boolean => g.flags.open === 1;
 export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number; /** True while an enemy army stands round its town: it pays its holder little or nothing. */ siege?: boolean }
 
 /**
+ * Ruling 214: a smaller power's land and harbours pay by its worth, not by the count of its provinces (Australia's
+ * 74 provinces paid nearly three times Italy's land). The factor is the first-day owner's and goes with the ground,
+ * whoever holds it; a country not listed is 1. The grand campaign only.
+ */
+export const landFactor = (r: Region): number => BUDGET.landFactor[r.first ?? r.owner] ?? 1;
+
+/**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
+ * `bare` leaves out ruling 214's factor: trade reads a country's land as it was before the factor, so that no great
+ * power's first day moves.
  */
-export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false): Yield {
+export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false, bare = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
   const works = workingFactories(g, r);
@@ -116,9 +127,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const lift = own ? 0 : hallShare(g, r);
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
-  const land = BUDGET.land[r.terrain] * k;
+  const worth = bare || !budgeted(g) ? 1 : landFactor(r);
+  const land = BUDGET.land[r.terrain] * k * worth;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.

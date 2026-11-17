@@ -74,7 +74,7 @@ export function regionOf(r: any): Region {
   // Which side theatre each region belongs to. A theatre with an opening month is ordinary ground until then (see openTheatres).
   const k = THEATRE_OF.get(r.name) ?? -1;
   return {
-    id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
+    id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, first: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,

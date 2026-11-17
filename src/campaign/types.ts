@@ -10,6 +10,8 @@ export interface Region {
   name: string;
   owner: string;
   ctrl: string;
+  /** Who owned it on the first day (ruling 214: a smaller power's land pays by its worth, and the worth goes with the ground). Rebuilt from the map on loading, never saved. */
+  first?: string;
   terrain: Terrain;
   vp: number;
   fac: number;

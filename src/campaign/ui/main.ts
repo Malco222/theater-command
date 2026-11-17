@@ -55,7 +55,7 @@ import { dealsOf, housesOf, tradePath, tradeRules, type TradeOffer, type TradeRo
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
-import { ARSENAL, canStation, factoriesBuilt, workLevel, yardLevel, type Hull, type Offer } from '../arsenal';
+import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } from '../traits';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
@@ -3027,7 +3027,7 @@ function whyNoRevive(f: Fallen, site: number): string {
 }
 
 /** An offer as a full-width row in the Build tab: what it is, what it does, where it goes, and why not when it cannot be ordered. */
-function offerButton(o: Offer, quiet = false): string {
+function offerButton(o: Offer, quiet = false, tag = ''): string {
   const ok = humanUp(g) && o.why === null;
   // A row that cannot be ordered always says why: the money wanting, or the reason the rules give.
   const short = shortBy(o);
@@ -3037,7 +3037,7 @@ function offerButton(o: Offer, quiet = false): string {
   const facts = line[0].toUpperCase() + line.slice(1);
   // An order the technology tree still holds back opens the tree at the technology it waits on.
   const act = o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : `disabled title="${esc(whyNot)}"`}`;
-  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(o.blurb)}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${whyNot && !o.tech && !quiet ? `<small class="whyno">${esc(whyNot)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
+  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(o.blurb)}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${tag ? `<small class="whyno">${esc(tag)}</small>` : whyNot && !o.tech && !quiet ? `<small class="whyno">${esc(whyNot)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
 }
 
 /** An offer as a small card in a province: it can be ordered there only if this is where it would go. */
@@ -3048,7 +3048,9 @@ function offerCard(o: Offer, r: Region): string {
   // The nation's special formation is raised like a corps of its kind.
   const unit = group === 'elite' ? eliteOf(g.human!) : group === 'para' ? { kind: 'inf' as Kind, divs: TECH.units.para.divs } : group === 'cadre' ? { kind: o.kind ?? ('inf' as Kind), divs: parseInt(o.size, 10) || 1 } : null;
   const item = unit ? unit.kind : key;
-  const need = here ? '' : group === 'corps' || unit ? `Needs ${needsOf(g, item)} factor${needsOf(g, item) === 1 ? 'y' : 'ies'} here` : group === 'ship' ? `Needs a level ${ARSENAL.ships[item as Hull].yard} shipyard` : o.at < 0 ? 'No aircraft industry' : 'No airfields here';
+  // A smaller power's works (ruling 213(d)): the tag gives the case or the month, and leaves the reason to the sentence.
+  const works = group === 'air' ? aircraftTag(g, g.human!, item as 'ftr' | 'bmr') : null;
+  const need = here ? '' : group === 'corps' || unit ? `Needs ${needsOf(g, item)} factor${needsOf(g, item) === 1 ? 'y' : 'ies'} here` : group === 'ship' ? `Needs a level ${ARSENAL.ships[item as Hull].yard} shipyard` : works ?? (o.at < 0 ? 'No aircraft industry' : 'No airfields here');
   const keep = offerKeep(o);
   const count = group === 'ship' && item !== 'tp' ? ARSENAL.ships[item as Hull].count : 0;
   // A card is narrow: the count goes in as a multiple, and the title on hover says the rest.
@@ -3056,7 +3058,7 @@ function offerCard(o: Offer, r: Region): string {
   const name = offerLabel(o).replace(/, a cadre$/, '').replace(/ corps$/i, '').replace(/ (wing|flotilla)$/i, 's').replace(/^Aircraft carrier$/, 'Carrier');
   // Money the only thing in the way: the card says how much is wanting.
   const short = shortBy(o);
-  const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : short;
+  const why = o.tech ? 'Needs research' : works ?? (!here ? need : o.why && !o.poor ? o.why : short);
   return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
 
@@ -3087,18 +3089,20 @@ function provinceSlots(r: Region): string {
   // The grand campaign: what the treasury can build here.
   const list = me && g.nations[me].alive && r.ctrl === me ? arsenalOffers(g, r.id) : [];
   const coming = (item: string): number => (me ? g.nations[me].queue.filter((b) => b.what === 'work' && b.item === item && b.region === r.id).length : 0);
-  const slot = (key: string, glyph: string, title: string, has: boolean, pips: string, text: string, verb: string, wide = false): string => {
+  const slot = (key: string, glyph: string, title: string, has: boolean, pips: string, text: string, verb: string, wide = false, tag = ''): string => {
     const o = list.find((x) => x.key === key);
     const cls = `slot${has ? ' has' : ''}${wide ? ' wide' : ''}`;
     if (o && o.at === r.id && (o.why === null || o.poor)) {
       return `<button class="${cls} act" data-act="arsenal" data-key="${key}" ${humanUp(g) && o.why === null ? '' : 'disabled'} title="${shortBy(o) ? `${shortBy(o)}: the treasury holds ${money(g.nations[g.human!].pp)}. ` : o.why ? `${esc(o.why)} ` : humanUp(g) ? '' : 'It is not your month. '}${esc(o.blurb)} Ready in ${months(o.months)}.${o.upkeep > 0 ? ` Each level costs ${cash(o.upkeep)} a month to man.` : ''}">${glyph}<b>${title}</b>${pips}<small>${text}</small><small class="do">${verb} · ${money(o.cost)}</small></button>`;
     }
-    return `<div class="${cls}"${o?.why ? ` title="${esc(o.why)}"` : ''}>${glyph}<b>${title}</b>${pips}<small>${text}</small></div>`;
+    return `<div class="${cls}"${o?.why ? ` title="${esc(o.why)}"` : ''}>${glyph}<b>${title}</b>${pips}<small>${text}</small>${tag ? `<small>${esc(tag)}</small>` : ''}</div>`;
   };
   const built = factoriesBuilt(g, r.id), facComing = coming('factory');
-  const room = r.terrain === 'urban' || r.cap ? ARSENAL.works.factory.most.city : ARSENAL.works.factory.most.town;
+  // A smaller power at the end of its industry (ruling 213(e)): a short tag, and the pips show only what can still be built.
+  const facTag = me && isHome(g, me, r) ? factoryTag(g, me) : null;
+  const room = facTag ? built + facComing : r.terrain === 'urban' || r.cap ? ARSENAL.works.factory.most.city : ARSENAL.works.factory.most.town;
   const city = list.some((o) => o.key === 'work:factory' && (o.why === null || o.poor)) || built + facComing > 0;
-  const industry = slot('work:factory', slotIcon(GLYPH.factory), 'Industry', r.fac > 0, city ? pipsOf(built, facComing, room) : '', `${facs}${facComing ? `, ${facComing} more building` : ''}`, 'Build a factory', true);
+  const industry = slot('work:factory', slotIcon(GLYPH.factory), 'Industry', r.fac > 0, city ? pipsOf(built, facComing, room) : '', `${facs}${facComing ? `, ${facComing} more building` : ''}`, 'Build a factory', true, facTag ?? '');
   const works = slot('work:fort', slotIcon(GLYPH.works), 'Works', lv > 0, pipsOf(lv, queued, 3), state, `Build level ${lv + queued + 1}`);
   const yard = yardLevel(g, r), yardComing = coming('yard');
   const YARD = ['', 'builds destroyers, submarines and troopships', 'builds every ship up to cruisers', 'builds every class of ship'];
@@ -3143,15 +3147,17 @@ function provinceWorth(r: Region): string {
   const me = g.human;
   const y = provinceYield(g, r);
   if (y.total <= 0) return '';
+  // Ruling 214: never nothing where it pays something (a smaller power's land can pay less than 1 a month).
+  const some = (v: number): string => (v > 0 && Math.round(v * BUDGET.scale) < 1 ? 'under 1' : cash(v));
   const parts: string[] = [];
-  if (y.land) parts.push(`land ${cash(y.land)}`);
-  if (y.port) parts.push(`harbour ${cash(y.port)}`);
+  if (y.land) parts.push(`land ${some(y.land)}`);
+  if (y.port) parts.push(`harbour ${some(y.port)}`);
   if (y.oil) parts.push(`oil ${cash(y.oil)}`);
   if (y.fac) parts.push(`${r.fac} factor${r.fac === 1 ? 'y' : 'ies'} ${cash(y.fac)}`);
   if (y.capital) parts.push(`the capital ${cash(y.capital)}`);
   const mine = !!me && r.ctrl === me;
   const less = y.siege ? 'Under siege: it pays nothing until the siege is raised.' : r.ctrl !== r.owner ? 'Occupied ground pays half.' : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
-  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${cash(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
+  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${some(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
 }
 
 /** A town's glyph as a small picture for a panel or a card. */
@@ -3829,13 +3835,19 @@ function buildPane(): string {
     out += `<div class="seg shelves">${(Object.keys(SHELF) as (keyof typeof SHELF)[]).map((k) => `<button class="btn small${ui.arm === k ? ' on' : ''}" data-act="arm" data-arm="${k}">${SHELF[k]}</button>`).join('')}</div>`;
     if (ui.arm === 'army') out += army();
     else if (ui.arm === 'air') {
-      out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${airWar(g) ? 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on an airfield of yours, the round pads on the map. A new wing joins a group of its kind there if one has room, or forms a new air group.' : 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on airfields: a province where one of your air fleets is based, or one where you have built airfields.'} ${sel && canStation(g, me, sel) ? `Stationing at ${at(sel.name)}.` : 'Click such a province on the map to station them there.'}</p>${shelf('air')}`;
+      // A smaller power that can order neither kind this month (ruling 213(d)): the reasons, said once, in place of the opening lines, and the rows with their tags alone.
+      const once = worksOpening(g, me);
+      if (once) out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${esc(once)}</p>${list.filter((o) => o.group === 'air').map((o) => offerButton(o, true, aircraftTag(g, me, o.key.split(':')[1] as 'ftr' | 'bmr') ?? '')).join('')}`;
+      else out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${airWar(g) ? 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on an airfield of yours, the round pads on the map. A new wing joins a group of its kind there if one has room, or forms a new air group.' : 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on airfields: a province where one of your air fleets is based, or one where you have built airfields.'} ${sel && canStation(g, me, sel) ? `Stationing at ${at(sel.name)}.` : 'Click such a province on the map to station them there.'}</p>${shelf('air')}`;
     } else if (ui.arm === 'navy') {
       out += `<h3>Lay down ships</h3><p class="sub" style="margin:0 0 7px">Ships are laid down in a home port whose shipyard is big enough, and they take a long time. A level 1 yard builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships. ${sel && isHome(g, me, sel) && yardLevel(g, sel) > 0 ? `Building at ${at(sel.name)} where its yard will do.` : 'Click one of your ports on the map to build there.'}</p>${shelf('navy')}`;
     } else if (ui.arm === 'towns') out += townsShelf(sel);
     else {
       const own = !!sel && sel.ctrl === me;
-      out += `<h3>Build works</h3><p class="sub" style="margin:0 0 7px">${own ? `Building at ${at(sel!.name)}.` : '<b style="color:var(--brass)">Click one of your own provinces on the map to build there.</b>'} Factories go up in cities and add to your income every month. Shipyards go in ports. Anti-aircraft guns and airfields can go on any ground you hold.</p>${shelf('works', !own)}`;
+      // A smaller power that began the war with no industry (ruling 213(e)): its sentence in place of the words about factories, and the row keeps its tag alone.
+      const none = factoryTag(g, me) === 'No industry' ? list.find((o) => o.key === 'work:factory')?.why ?? null : null;
+      const rows = none ? list.filter((o) => o.group === 'works').map((o) => (o.key === 'work:factory' ? offerButton(o, true, 'No industry') : offerButton(o, !own))).join('') : shelf('works', !own);
+      out += `<h3>Build works</h3><p class="sub" style="margin:0 0 7px">${own ? `Building at ${at(sel!.name)}.` : '<b style="color:var(--brass)">Click one of your own provinces on the map to build there.</b>'} ${none ? esc(none) : 'Factories go up in cities and add to your income every month.'} Shipyards go in ports. Anti-aircraft guns and airfields can go on any ground you hold.</p>${rows}`;
     }
   }
 

@@ -127,7 +127,9 @@ describe('what a place is worth', () => {
     const g = open();
     for (const r of g.regions) {
       if (r.ctrl !== r.owner) continue;
-      expect(worthOf(g, r), r.name).toBe(Math.round(provinceYield(g, r, r.owner).total * BUDGET.scale));
+      // Never nothing where it pays something (ruling 214: a smaller power's land can pay less than 1 a month).
+      const pays = provinceYield(g, r, r.owner).total;
+      expect(worthOf(g, r), r.name).toBe(pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0);
     }
   });
 
