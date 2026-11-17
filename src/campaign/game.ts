@@ -25,7 +25,7 @@ import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
+import { closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -2347,6 +2347,26 @@ export function evacuate(g: Game, c: Corps): boolean {
     headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id, { arm: 'land', lost: c.nat });
   }
   return true;
+}
+
+/**
+ * Why a corps cannot be lifted off by sea from where it stands, in the tests evacuate() makes and in their order;
+ * null when it can. Words only: the page shows the order off with this sentence instead of lit and silent.
+ */
+export function whyNotEvacuate(g: Game, c: Corps): string | null {
+  const r = g.regions[c.reg];
+  const N = g.nations[c.nat];
+  if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
+  if (!r.port) return `${r.name} has no port to lift an army from.`;
+  if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
+  if (N.capital < 0) return `${N.name} has no home left to sail for.`;
+  if (!seaOpenAt(g, c.nat, r)) {
+    // Every sea at this port is closed to the troopships: name the one nearest to opening, in the landing's own sentence (ruling 207).
+    const gap = (z: number): number => opensAt(g, z, c.nat) - seaSide(g, z, c.nat, false).total;
+    const z = [...r.seas].sort((a, b) => gap(a) - gap(b))[0];
+    return z === undefined ? `${r.name} has no sea to sail from.` : closedLine(g, z, c.nat);
+  }
+  return null;
 }
 
 // ---- The start of a nation's month ---------------------------------------------------
