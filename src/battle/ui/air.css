@@ -1,0 +1,21 @@
+/* The air battle page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
+   is scoped to .air, so the field and sea pages never see it. */
+.air .btitle { flex: 0 1 460px; }
+.air .btitle .tc-data { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.air .bends .tc-data { white-space: nowrap; }
+
+/* A group's card: its name, then what it flies underneath ("Kampfgeschwader 5" / "Bombers"). */
+.air .ucard { min-width: 216px; }
+.air .ucard .uwhat { display: grid; min-width: 0; }
+.air .ucard .uwhat b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; line-height: 16px; }
+.air .ucard .uwhat small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.air .ucard .bsign { flex: none; width: 34px; height: 18px; }
+
+/* The orders for the groups in hand, over the field's lower left: height, the escort's and the hunt's, the bombs. */
+.air .airorders { position: absolute; left: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
+.air .airorders[hidden], .air .airorders [hidden] { display: none; }
+.air .airorders .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
+.air .airorders .aftr { display: flex; align-items: center; gap: 8px; }
+
+/* The after card's lines wrap without leaving a word alone (the UI director, 18:50Z). */
+.veil .flines li { text-wrap: pretty; }

@@ -677,7 +677,9 @@ export class AirSim implements BattleSim<AirUnit> {
       }),
       extra: { air: out },
     };
-    this.say('end', null, this.over.lines.join(' '));
+    // The end is told without the bill: the campaign books it (the after card, airfought.ts), and a dispatch with the
+    // battle's own count beside the card's would read as a second bill (the design director, 18:39Z).
+    this.say('end', null, `${this.ticket.title} is over.`);
   }
 }
 
