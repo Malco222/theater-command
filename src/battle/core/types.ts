@@ -14,8 +14,15 @@
 //   the attacker comes on from the south edge (y = 0), the defender holds the north;
 //   a facing is an angle in radians, 0 = north, PI/2 = east (clockwise, like a compass).
 //
-// Abstract by design (see project memory air-battle-paused): units are blocks with a strength meter and a morale
-// meter that wear each other down at a rate while in contact. There are no weapons, rounds or ballistics.
+// Abstract by design (see project memory air-battle-paused, and the design director's ruling 217): units are blocks
+// with a strength meter and a morale meter that wear each other down at a rate while in contact. There are no
+// weapons, rounds or ballistics.
+//
+// Drawn up close later (Brian, 2026-11-17 17:50Z: "use the 3d models we made and make them animated ... with the
+// sound effects"): the sims decide where a block is and what it is doing; the 3D game turns that into animated
+// models and sound. So every unit says how many models it shows ('figures'), how it is drawn up ('w', 'd'), what it
+// is doing for the animation ('act', 'speed', 'engaged', 'cover'), and events name the sound that answers them
+// ('cue', from the sound director's list). Presentation reads these; nothing in a sim reads them back.
 
 import type { TicketLine, VictoryLevel } from '../../core/ticket';
 
@@ -57,6 +64,8 @@ export interface ForceTicket {
   mor?: number;
   /** Dug in where it stands (land): starts the battle in fieldworks. */
   dug?: boolean;
+  /** The number its first division (or ship, or group) carries, for the blocks' names. */
+  first?: number;
   /** Its share of its side's power in the reckoning, 0..1. The shares of a side add up to 1. */
   share: number;
 }
@@ -99,6 +108,9 @@ export interface FieldTicket<P = unknown> {
 /** What a unit is doing. */
 export type UnitState = 'steady' | 'wavering' | 'routing' | 'gone' | 'withdrawn';
 
+/** What a unit's models are doing, for the 3D game's animation and the sound's loops. */
+export type Act = 'idle' | 'march' | 'run' | 'turn' | 'fight' | 'rout' | 'down';
+
 /** The fields every domain's units share, and the 3D game draws from. A domain's own unit type extends this. */
 export interface UnitBase {
   id: number;
@@ -119,6 +131,20 @@ export interface UnitBase {
   state: UnitState;
   /** Men or crews at the start, for the card ("612 / 800"). Display only: the campaign is paid in R. */
   men0: number;
+  /** For the models: how many it showed at the start and how many it shows now (one fewer as its strength falls). */
+  figures0: number;
+  figures: number;
+  /** Frontage and depth in metres: the models stand in ranks inside this box, the long side to the front. */
+  w: number;
+  d: number;
+  /** What it is doing, for the animation: standing, marching, at the double, turning, in a fight, running, gone. */
+  act: Act;
+  /** Speed over the ground now, metres a second, for walk and drive cycles. */
+  speed: number;
+  /** The enemy unit it is fighting, where it is in a fight: the models turn to face it. */
+  engaged?: number;
+  /** The ground under it (a domain's own word: 'woods', 'buildings', 'open'): the models take cover in it. */
+  cover?: string;
   /** Who can see it: a unit not spotted by a side is left out of that side's view. Absent means both see it. */
   spotted?: Record<Side, boolean>;
   /** Its timed abilities (smoke, a barrage, a torpedo run): what each is and when it is ready. */
@@ -170,8 +196,10 @@ export type CoreCommand =
   | { do: 'withdrawAll'; side: Side }
   /** A timed ability, at a point or at a unit where it needs one. */
   | { do: 'ability'; units: number[]; key: string; x?: number; y?: number; target?: number }
-  /** Hand the side to the computer (true) or take it back (false). Both sides on the computer is "finish it for me". */
-  | { do: 'auto'; side: Side; on: boolean };
+  /** Hand the side to the computer (true) or take it back (false). The fairness test puts both sides on it. */
+  | { do: 'auto'; side: Side; on: boolean }
+  /** Finish it for me (ruling 217(4)): the rest goes back to the dice, rolled at the ratio then standing. */
+  | { do: 'dice' };
 
 /** A domain's own orders: 'sea:screen', 'land:dig'. */
 export interface DomainCommand { do: `${Domain}:${string}`; units?: number[]; [k: string]: unknown }
@@ -188,6 +216,11 @@ export interface FieldEvent {
   text: string;
   /** The domain's own details, for the 3D side (how a ship went down, where a barrage fell). */
   extra?: Record<string, unknown>;
+  /** The sound that answers it: a name from the sound director's list (/mnt/project-files/sound/sound-list.json). */
+  cue?: string;
+  /** Where on the field it happened, for the camera and for placing the sound. */
+  x?: number;
+  y?: number;
 }
 
 /** How a battle ended. */

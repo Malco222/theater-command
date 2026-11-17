@@ -35,7 +35,7 @@ export class Clock {
     if (sim.over) return 0;
     this.owed += Math.max(0, realSeconds) * this.speed;
     let n = 0;
-    while (this.owed >= DT && n < this.maxTicks && !sim.over) { sim.step(); this.owed -= DT; n++; }
+    while (this.owed >= DT - 1e-9 && n < this.maxTicks && !sim.over) { sim.step(); this.owed -= DT; n++; }
     if (n >= this.maxTicks) this.owed = 0;
     return n;
   }

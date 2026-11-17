@@ -50,3 +50,32 @@ export function levelFor(side: Side, R: number, attLostMore: boolean): VictoryLe
   };
   return flip[a];
 }
+
+/**
+ * Ruling 217 (2), with (a) of 17:55Z: a fought battle never writes a result bigger than the dice could. The field's R
+ * is held inside the run the dice could have rolled at the card's odds, except that where the field's verdict lies
+ * outside that run, R may go as far as the line itself and no further (a field win books a bare close victory; a
+ * field defeat a bare close defeat), so the report never says the opposite of the field he watched. 'dice' is the
+ * strict reading, kept behind the switch.
+ */
+export const CLAMP: { mode: 'dice' | 'across' } = { mode: 'across' };
+export function clampToDice(R: number, odds: number, dice: [number, number], winner: Side): number {
+  const lo = odds * dice[0], hi = odds * dice[1];
+  let r = Math.min(hi, Math.max(lo, R));
+  if (CLAMP.mode === 'across') {
+    if (winner === 'att' && r < RATIO.carry) r = RATIO.carry;
+    if (winner === 'def' && r >= RATIO.carry) r = RATIO.carry - 0.01;
+  }
+  return r;
+}
+
+/**
+ * Ruling 217 (4): the dice are always there. Handing the rest of a battle back to the dice rolls them at the ratio
+ * then standing (each side's standing power, against the card's odds), and the result is held to the dice's run.
+ * 'roll' is a number in 0..1 from the battle's own stream.
+ */
+export function diceNow(odds: number, dice: [number, number], standing: Record<Side, number>, roll: number): number {
+  const now = odds * (Math.max(1e-6, standing.att) / Math.max(1e-6, standing.def));
+  const R = now * (dice[0] + (dice[1] - dice[0]) * roll);
+  return Math.min(odds * dice[1], Math.max(odds * dice[0], R));
+}
