@@ -13,7 +13,7 @@ import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
-  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, standersAt, standersLine, weather, whyNotEvacuate,
+  DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, standersAt, standersLine, theWords, weather, whyNotEvacuate,
 } from '../game';
 import {
   EVE_NO_RAID, beginEve, beginHuman, canOrder, candidates, current, declarable, gunsLeftAlone, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
@@ -629,7 +629,7 @@ function mount(): void {
     const off = (e.target as Element | null)?.closest?.('button[disabled]') as HTMLButtonElement | null;
     if (!off || !off.title || !g.human || ui.modal) return;
     ui.msg = off.title;
-    $('#hint').textContent = ui.msg;
+    $('#hint').textContent = theWords(ui.msg);
   }, true);
   wireMap();
   window.addEventListener('resize', applyView);
@@ -1570,8 +1570,10 @@ function refresh(): void {
   ($('#legrail') as HTMLElement).hidden = !groundRules(g);
   ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !cutsSeen.size;
   const hint = hintText();
-  if (hint.startsWith(NO_MOVES)) $('#hint').innerHTML = `<span class="nomoves">${esc(NO_MOVES)}</span>${esc(hint.slice(NO_MOVES.length))}`; else $('#hint').textContent = hint;
+  if (hint.startsWith(NO_MOVES)) $('#hint').innerHTML = `<span class="nomoves">${esc(NO_MOVES)}</span>${esc(theWords(hint.slice(NO_MOVES.length), NO_MOVES))}`; else $('#hint').textContent = theWords(hint);
   $('#alerts').innerHTML = roundPill() + alertButtons();
+  // (The rows of the alerts are buttons that read as sentences: they take their articles too.)
+  articled($('#alerts'), true);
   drawGates();
   // Not the empty key: with nothing to draw the key is empty too, and the signs of an army just put down would stay.
   guardKey = 'redraw';
@@ -2364,6 +2366,7 @@ function drawFleetTray(f: Fleet): void {
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
   el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
+  articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
 }
@@ -2433,6 +2436,7 @@ function drawTray(): void {
     ? `<div class="mslip"><span class="grow"><b>No moves left this month</b>${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and this army marches there by itself, starting next month.</span><button data-act="gotmarch">Got it</button></div>`
     : '';
   el.innerHTML = `${slip}<div class="thead">${head}${standRow}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${mine ? railLine(a.reg) : ''}${marching}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
+  articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
 }
@@ -2668,6 +2672,31 @@ function drawPane(): void {
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
+  articled(pane);
+}
+
+/**
+ * The places in a page's running text take "the" (the UI director's list, data/campaign/places.json: "the Ruhr",
+ * "The Ruhr" at a sentence's head), piece by piece, each piece read on from the text before it in its paragraph.
+ * Map labels, headings, kickers, table rows, buttons, key caps and form fields keep the bare name (`buttons`: a row of
+ * buttons that read as sentences, the alerts, takes the article too). A new paragraph, row or box starts the text over.
+ */
+function articled(root: HTMLElement, buttons = false): void {
+  const bare = `h1,h2,h3,h4,h5,h6,.kick,th,td,kbd,select,option,label,input,textarea,svg${buttons ? '' : ',button'}`;
+  const BLOCK = 'p,li,div,dd,dt,section,header,footer,blockquote,figcaption';
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let block: Element | null = null, before = '';
+  for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+    const el = n.parentElement;
+    if (!el) continue;
+    const b = el.closest(BLOCK);
+    if (b !== block) { block = b; before = ''; }
+    const t = n.data;
+    if (el.closest(bare) || !/[A-Z]/.test(t)) { before += t; continue; }
+    const now = theWords(t, before);
+    if (now !== t) n.data = now;
+    before += now;
+  }
 }
 
 // ---- What wants the player's attention this month --------------------------------------------
@@ -6286,6 +6315,7 @@ function openModal(m: typeof ui.modal): void {
 
 /** What every card gets once it is drawn: the key caps at its foot, the hovers of its off buttons, and the shadow over a body that scrolls. */
 function dressCard(card: HTMLElement): void {
+  articled(card);
   keyCaps(card);
   hoverWhy(card);
   // A card longer than the window: its foot stands over the body, with a shadow to say more lies under it.
@@ -7112,7 +7142,7 @@ function drawResult(): void {
   const el = $('#rslip');
   const rep = ui.result ? g.reports.find((r) => r.id === ui.result!.id) : null;
   if (!rep || !g.human) { ui.result = null; if (!el.hidden) { el.hidden = true; el.innerHTML = ''; } return; }
-  el.innerHTML = `<b class="rv">${esc(verdictFor(rep).text)}</b><span class="rl">${esc(resultLine(rep))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
+  el.innerHTML = `<b class="rv">${esc(verdictFor(rep).text)}</b><span class="rl">${esc(theWords(resultLine(rep)))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
   el.hidden = false;
   placeResult();
 }

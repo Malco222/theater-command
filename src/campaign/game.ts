@@ -29,6 +29,7 @@ import { closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingSt
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -176,11 +177,38 @@ export function theName(n: Nation, start = false): string {
  * Every line of news passes through it, so no line has to remember; "a Soviet Union that ..." is left as written.
  */
 const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands)\b/g;
-export function theWords(text: string): string {
-  return text.replace(ARTICLED, (_m, pre: string, name: string, at: number) => {
-    const head = /(^|[.!?]\s+)$/.test(text.slice(0, at + pre.length));
+/**
+ * And the places whose names take "the" (data/campaign/places.json, the UI director's list and rule): "the Ruhr", "The
+ * Ruhr" at the head of a line, "the Ruhr's output". A name inside a longer one keeps that one's form: one that runs on
+ * into a capital word ("Azores Waters", "Terek Cossacks"), one after a title or a word that makes a name ("Army Group
+ * Kuban", "General Mackenzie", "Mount Lebanon"), and the longer places the file names ("Rio Grande do Sul").
+ */
+const PLACES = placesData as { the: string[]; within?: Record<string, string[]> };
+const reEsc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const NAME_WORDS = 'Army|Group|Corps|Front|Fleet|Force|Command|Division|Brigade|Detachment|Legion|Operation|General|Admiral|Marshal|Colonel|Major|Captain|Lord|Sir|President|Minister|King|Mount|Lake|Cape|Port|Fort|River|Gulf|Bay|Isle|Saint|St|New|North|South|East|West|Upper|Lower|Old|Great';
+const PLACED = new RegExp(`(^|[^A-Za-z])(?<![Tt]he )(?<!\\b[Aa]n? )(?<!\\b(?:${NAME_WORDS}) )(${[...PLACES.the].sort((a, b) => b.length - a.length).map((n) => {
+  const longer = PLACES.within?.[n] ?? [];
+  const after = longer.filter((l) => l.startsWith(n)).map((l) => `(?!${reEsc(l.slice(n.length))})`).join('');
+  const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc(l.slice(0, l.length - n.length))})`).join('');
+  return `${before}${reEsc(n)}${after}`;
+}).join('|')})\\b(?! [A-Z])`, 'g');
+/**
+ * A line of running text with its articles. `before` is the text that runs before it in the same sentence or
+ * paragraph, where the line is one piece of a longer one (a page's text, piece by piece): it decides "The" or "the"
+ * and is not itself changed.
+ */
+export function theWords(text: string, before = ''): string {
+  const cut = before.length;
+  const put = (s: string, re: RegExp): string => s.replace(re, (m: string, pre: string, name: string, at: number) => {
+    if (at + pre.length < cut) return m;
+    const head = /(^|[.!?]\s+)$/.test(s.slice(0, at + pre.length));
     return `${pre}${head ? 'The' : 'the'} ${name}`;
   });
+  return put(put(before + text, ARTICLED), PLACED).slice(cut);
+}
+/** A place's name as it reads in running text: "the Ruhr", "Warsaw"; `start` at the head of a sentence. */
+export function placeName(name: string, start = false): string {
+  return PLACES.the.includes(name) ? `${start ? 'The' : 'the'} ${name}` : name;
 }
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
