@@ -1061,6 +1061,25 @@ export function favoured(look: Outlook): boolean {
   const b = verdictOf(look).band;
   return b === 'certain' || b === 'favoured';
 }
+/** How far over the forecast's own figure an attacker's losses may run and the result still count as forecast (ruling 204): half as much again. */
+export const AS_FORECAST_LOSS = 1.5;
+/**
+ * Ruling 204: a won battle that went as forecast is told on the map and opens no card. Four things together: the
+ * attack won; the verdict on the order's card was "certain" or "the odds favour you"; it was not a Pyrrhic
+ * victory; and the attacker's losses were no more than half as much again as the card said a win would cost.
+ * `look` is the forecast the order's card showed, taken before the order was given. One function, so that the
+ * browser's page and the 3D table never differ on which results are news.
+ */
+export function asForecast(look: Outlook | null | undefined, rep: BattleReport, of: 'attack' | 'storm' | 'sortie' = 'attack'): boolean {
+  if (!look || !rep.taken) return false;
+  const band = verdictOf(look, of).band;
+  if (band !== 'certain' && band !== 'favoured') return false;
+  if (rep.level === 'Pyrrhic victory') return false;
+  const said = look.cost.won;
+  if (!said) return false;
+  const lost = Math.max(rep.attLost, rep.attackers.reduce((s, u) => s + u.lost, 0));
+  return lost <= AS_FORECAST_LOSS * said.ours;
+}
 
 const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
 
@@ -1336,8 +1355,8 @@ export function orderLand(g: Game, cs: Corps[], to: number): Landing {
  * by land, the safest way over the water, what bars it today, why it is as dangerous as it is and what would make
  * it safer. The one he has named as his plan comes first.
  */
-export function crossings(g: Game): CrossingOutlook[] {
-  return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human) : [];
+export function crossings(g: Game, short = false): CrossingOutlook[] {
+  return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human, { short }) : [];
 }
 
 /**
