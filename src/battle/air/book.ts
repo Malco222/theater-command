@@ -7,14 +7,15 @@
 // aiming and no gunnery anywhere in it (project memory air-battle-paused; the design director's ruling 217).
 //
 // Units: metres on the board, "air seconds" for anything that happens in the sky. The sky runs faster than the
-// battle clock (SKY.scale air seconds to one battle second), so a raid that takes half an hour in the air plays in
-// about five minutes at normal speed.
+// battle clock (SKY.scale air seconds to one battle second). A fight between two groups lasts about two battle
+// minutes, long enough for three or four choices (ruling 226, mark 2, in spirit); the page runs the clock fast
+// while nobody is in a fight on the way in and on the way home (mark 1).
 //
 // TODO(polish): move these to data/battle/air.json once the calibration settles.
 
 export const SKY = {
-  /** Air seconds that pass in one battle second. */
-  scale: 6,
+  /** Air seconds that pass in one battle second (6 until ruling 226: a fight then lasted some 45 battle seconds). */
+  scale: 2,
   /** The board: 100 km square. The raid comes on from the south edge (y = 0), as the attacker does in every battle. */
   w: 100_000,
   h: 100_000,
@@ -40,9 +41,9 @@ export const SKY = {
   fields: { near: 15_000, far: 40_000, squeeze: 0.2 },
   /** Where a close escort flies beside its bombers, and how far ahead a loose escort sweeps. */
   escort: { close: 1_500, ahead: 7_000, reach: 12_000, near: 4_000, cover: [0.4, 2.5] as [number, number] },
-  /** Battle seconds before the battle is called, and the battle seconds the computer waits between rethinks. */
-  limit: 600,
-  think: 2,
+  /** Battle seconds before the battle is called (an hour in the air), and the battle seconds the computer waits between rethinks (12 air seconds). */
+  limit: 1_800,
+  think: 6,
   /** Once every bomber has dropped or turned back and nobody has been in contact for this many air seconds, it is over. */
   quiet: 120,
 
@@ -66,6 +67,8 @@ export const SKY = {
   tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
   edge: { bounce: 1.5, bounceFor: 60, climbing: 0.7, wavering: 0.8 },
+  /** How near a side is to breaking off (AirSim.nearBreak) when the player is warned: three quarters of the way (ruling 226, mark 3). */
+  warn: 0.75,
   /** Morale: where it starts (from readiness), what knocks it and what restores it; the marks for wavering and routing. */
   morale: { base: 0.55, ready: 0.45, perLoss: 1.1, bounced: 0.08, alone: 0.0005, mend: 0.001, wavering: 0.35, routing: 0.17 },
 

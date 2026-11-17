@@ -7,8 +7,16 @@
 .air .btitle { flex: 1 1 220px; min-width: 0; }
 .air .btitle .tc-title-3 { line-height: 22px; }
 .air .bclock, .air .bspeed, .air .bacts { flex: none; }
-.air .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
-.air .bratio { font-size: 12px; line-height: 14px; color: var(--paper-200); text-align: center; white-space: nowrap; }
+/* The clock box says the state over the time: PAUSED in brass, RUNNING in paper (ruling 226, mark 8). */
+.air .bclock { min-width: 64px; }
+.air .bclock .tc-label { color: var(--brass-300); }
+.air .bclock .tc-label.is-run { color: var(--paper-300); }
+/* How near each side is to breaking off: a bar a side in its nation's colour, no numbers (ruling 226, mark 3). */
+.air .bnear { flex: 1 1 200px; min-width: 180px; max-width: 360px; display: grid; gap: 3px; }
+.air .bnear .nrow { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; }
+.air .bnear .nadj { font: 700 11px/13px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.air .bnear .ntrack { display: block; height: 7px; border: 1px solid var(--line); border-radius: 2px; background: var(--desk-800); overflow: hidden; }
+.air .bnear .ntrack i { display: block; height: 100%; width: 0; transition: width .3s; }
 @media (max-width: 1279px) { .air .bbar { flex-wrap: wrap; } }
 /* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z). */
 /* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z); to leave
@@ -18,7 +26,7 @@
   .air .bbar { gap: 10px; }
   .air .btitle { flex: 1 1 auto; }
   .air .btitle .tc-title-3 { font-size: 16px; line-height: 20px; white-space: nowrap; }
-  .air .bbal { flex: 0 1 190px; min-width: 170px; }
+  .air .bnear { flex: 0 1 190px; min-width: 170px; }
   .air .bacts .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
 }
 
@@ -31,9 +39,29 @@
 
 /* The orders for the groups in hand, over the field's lower left: height, the escort's and the hunt's, the bombs. */
 .air .airorders { position: absolute; left: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
-.air .airorders[hidden], .air .airorders [hidden] { display: none; }
 .air .airorders .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
-.air .airorders .aftr { display: flex; align-items: center; gap: 8px; }
+
+/* Under the dispatch at the top of the field: his own side near breaking off, in amber, and the clock's tag. */
+.air .ftop { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; pointer-events: none; max-width: calc(100% - 32px); }
+.air .fwarn { padding: 5px 12px; border: 1px solid var(--amber); border-radius: 2px; background: rgba(14, 11, 8, .82); color: var(--amber); font: 700 13px/18px var(--font-typed); text-align: center; text-wrap: balance; }
+.air .ftag { padding: 3px 10px; border-radius: 2px; background: var(--paper-100); color: var(--ink-900, #1d1610); font: 700 12px/18px var(--font-typed); letter-spacing: .1em; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.air .ftag .tc-key { opacity: 1; }
+
+/* The controls line folds once under 1440, before "Arrows" (the UI director's fold rule); the dot at the fold goes. */
+.air .keys .kfold { display: none; }
+@media (max-width: 1439px) { .air .keys .kfold { display: block; flex-basis: 100%; height: 0; } }
+
+/* The chooser: the staff's chance at a card's top right, under the title when the card is narrow; the forces wrap
+   between words, a number never parting from its noun; what changed since the last battle, above the cards. */
+.air .offers { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.air .offer { align-content: start; }
+.air .offer .otop { flex-wrap: wrap; row-gap: 2px; }
+.air .offer .otop b { flex: 1 1 auto; min-width: 0; }
+.air .offer .ochance { flex: none; margin-left: auto; white-space: nowrap; color: var(--paper-200); font-size: 13px; }
+.air .offer .omid .fact { white-space: normal; }
+.air .since { margin: 0 0 12px; padding: 10px 14px; }
+.air .since ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.air .since li { font: 400 14px/20px var(--font-serif); color: var(--ink-900, #1d1610); }
 
 /* The after card's lines wrap without leaving a word alone (the UI director, 18:50Z). */
 .veil .flines li { text-wrap: pretty; }

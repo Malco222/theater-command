@@ -14,10 +14,16 @@ import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { SKY, type Band } from './book';
+import { groundOf } from './ground';
 import type { AirOutcome, AirPlace } from './types';
 
-/** The raids that can be fought out in the first slice (ruling of 2026-11-17 17:51Z): the player's day raids and fights for the sky, and night raids. */
-export const FOUGHT_KINDS: RaidKind[] = ['bomb', 'night', 'superiority'];
+/**
+ * The raids that can be fought out in the first slice (ruling of 2026-11-17 17:51Z): the player's day raids and fights
+ * for the sky. A night raid is not (the design director, b384(c)): its bombers' only choices on the field were their
+ * height and whether to jettison, so the staff settles it, as it settles any raid. The sim keeps what it knows of the
+ * night for the day it has choices worth giving the player.
+ */
+export const FOUGHT_KINDS: RaidKind[] = ['bomb', 'superiority'];
 
 const clampTo = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -31,7 +37,7 @@ export interface AirTicketResult {
  * raid card passes them (absent: the staff's proposal). Returns why not when the raid cannot be fought.
  */
 export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human): AirTicketResult {
-  if (!FOUGHT_KINDS.includes(kind)) return { ticket: null, why: 'Only bombing raids and fights for the sky can be fought out so far.' };
+  if (!FOUGHT_KINDS.includes(kind)) return { ticket: null, why: 'Only day raids and fights for the sky can be fought out so far: the staff settles a night raid.' };
   if (nat === null) return { ticket: null, why: 'Nobody is at the controls.' };
   const plan = planRaid(g, kind, target, ids, nat);
   if (plan.why) return { ticket: null, why: plan.why };
@@ -102,8 +108,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
     forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
+    reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
     starts,
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
+    // The country round the target, turned as the board is (b384(j)).
+    ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
   };
   const date = turnToDate(g.turn).label;
   const ticket: FieldTicket<AirPlace> = {
@@ -137,7 +146,10 @@ export function foughtAir(o: AirOutcome): FoughtAir {
     const up = (flew[gr.id] ??= { ftr: 0, bmr: 0 });
     up.ftr += gr.flewFtr; up.bmr += gr.flewBmr;
   }
-  return { lost, dropped: o.dropped, jettisoned: o.jettisoned, flew, chance: o.chance, ...(o.staff ? { staff: o.staff } : {}) };
+  return {
+    lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
+    ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.staff ? { staff: o.staff } : {}),
+  };
 }
 
 /**

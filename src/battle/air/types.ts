@@ -7,6 +7,7 @@
 import type { AirMission } from '../../campaign/types';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
+import type { AirGround } from './ground';
 
 export type AirKind = 'ftr' | 'bmr';
 
@@ -53,7 +54,7 @@ export interface AirUnit extends UnitBase {
   jettisoned: boolean;
   /** Bombers: how much of the guns' run round the target it has flown through, 0 to 1 (more at low height). */
   shot: number;
-  /** Losses still owed below one whole aircraft; a whole one falls when this reaches 1. */
+  /** The aircraft this group was owed this tick (a share of one falls by chance; AirSim.fall). */
   owed: number;
   /** Fighter pilots of its own lost aircraft who came down and will fly again (the rules' pilots back). */
   back: number;
@@ -108,8 +109,16 @@ export interface AirPlace {
   forecast: { foe: number; ftr: number; bmr: number; through: number; bomberLoss: number };
   /** The raid card's chance of success (forecastAir's 'success'), for the after card's reckoning line. */
   chance: number;
+  /**
+   * How forecastAir weighs that chance, so the staff can weigh it again from where a battle stands (AirSim.staffChance):
+   * the steepness k, what the bombers should achieve beyond aircraft (value), and the chances of a cut railway and a
+   * wrecked factory (rail, ruin), each worth 300 aircraft.
+   */
+  reckon: { k: number; value: number; rail: number; ruin: number };
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
+  /** The country round the target, in board metres (ground.ts): absent, the page draws a plain country. */
+  ground?: AirGround;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */
   saved: Record<Side, number>;
 }
@@ -123,8 +132,16 @@ export interface AirOutcome {
   /** Bombers that dropped on the target, and bombers that jettisoned and turned back. */
   dropped: number;
   jettisoned: number;
+  /**
+   * Bombers lost on the field before they reached the release (or without ever reaching it), and those lost after it:
+   * a bomber shot down after bombing still bombed (the design director, b384(a)).
+   */
+  lostBefore: number;
+  lostAfter: number;
+  /** A side that broke off everything (BREAK OFF ALL): it gave the battle up, whatever the count says. */
+  gaveUp?: Side;
   /** Handed to the staff (sim.settleNow): each pool's share of the raid's cost still to come, and the bombers that had turned back. */
-  staff?: { rest: { foe: number; ftr: number; bmr: number }; away: number };
+  staff?: { rest: { foe: number; ftr: number; bmr: number }; away: number; chance?: number; fired?: boolean };
 }
 
 /** One loss, as the 3D side plays it. */

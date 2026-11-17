@@ -1044,8 +1044,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  // The bombers that bomb: fought, held to the run; handed to the staff, all but those that had turned back.
-  const bombed = fix ? fix.through(Math.max(0, a.B - lostB)) : Math.max(0, a.B - lostB - (staff ? staff.away : 0));
+  // The bombers that bomb: fought, those that reached the release on the field, including any lost after it (b384(a));
+  // handed to the staff, all but those lost on the way in and those that had turned back.
+  const bombed = fix ? fix.through()
+    : Math.max(0, Math.min(a.B, a.B - lostB + (staff ? Math.min(lostB, battle?.lostAfter ?? 0) - staff.away : 0)));
   const through = bombed * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
 
   // What the bombers did.
@@ -1204,10 +1206,17 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const aLost = att.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
   const dLost = def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
   const ratio = (dLost + value + 10) / (aLost + 10);
-  const won = sky || ratio >= 1;
+  // Fought to the end, the verdict is the field's (b331; the design director, b384(a)): the same measure on the losses
+  // the field itself saw, with what the bombs did, and a side that broke off everything lost. The booked losses are
+  // held to the dice's run; where that turns the result, it books a bare close result the field's way, never the opposite.
+  const rolled = sky || ratio >= 1;
+  const seen = (rows: { f: AirFleet }[]): number => rows.reduce((t, x) => t + (battle!.lost[x.f.id]?.ftr ?? 0) + (battle!.lost[x.f.id]?.bmr ?? 0), 0);
+  const fieldWon = battle && !staff ? (battle.gaveUp ? battle.gaveUp === 'def' : sky || (seen(a.def) + value + 10) / (seen(a.att) + 10) >= 1) : null;
+  const won = fieldWon ?? rolled;
   for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); }
   for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); }
-  const level: VictoryLevel = sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
+  const level: VictoryLevel = fieldWon !== null && fieldWon !== rolled ? (won ? 'Close victory' : 'Close defeat')
+    : sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
   g.flags.airBattles = (g.flags.airBattles ?? 0) + 1;
   const troops = m === 'ground' || m === 'line' ? g.regions[target].units.find((u) => !u.dead && atWar(g, nat, u.nat))?.nat : undefined;
