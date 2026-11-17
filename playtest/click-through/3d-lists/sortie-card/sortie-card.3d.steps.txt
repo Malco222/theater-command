@@ -1,0 +1,32 @@
+# The sortie card in the 3D game (unreal 9ccc2c3 or later), the design director's test of 17:16Z:
+# "the odds are read before the fight, and calling it off costs nothing". Written 2026-11-17 by the Playtester,
+# in the 3D form the 3D builder used for attack-8423 (a start step first; SEND THEM IN; the order row under ORDERS).
+# Save: case2-poland-september-1939-besieged.save.txt (Poland, September 1939: Army Modlin shut in Mlawa,
+# Narew Group shut in Bialystok, Germans round both). Expectations: card = a card opens; says-why = a sentence and
+# nothing changes; does = the game changes. Please keep a picture of every step: the card's words are the test.
+start	USA 1939-09
+load	case2-poland-september-1939-besieged.save.txt
+# A. Mlawa: the garrison's sentence, then the second click opens the card (step 29 of attack-8423, owed then)
+select-province	Mlawa	says-why
+select-province	Mlawa	card
+# CALL IT OFF costs nothing: the garrison stays inside, no battle in the news, its moves unspent
+press	CALL IT OFF	says-why
+select-province	Mlawa	says-why
+# B. Bialystok by right-click on its own town: the card, read, then called off with Esc
+select-province	Bialystok
+order-province	Bialystok	card
+key	esc
+# C. Bialystok by the order row under ORDERS: the same card, not a fight
+click-mark	Bialystok
+press	ORDERS
+press	Sally out	card
+# D. Now fight it from the card, and a second try is refused with the rules' sentence
+press	SALLY OUT	does
+close
+select-province	Bialystok
+order-province	Bialystok	says-why
+# E. Mlawa can still sally the same month (calling it off spent nothing)
+select-province	Mlawa
+order-province	Mlawa	card
+press	SALLY OUT	does
+close
