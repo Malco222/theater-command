@@ -194,8 +194,8 @@ function patchesOf(sim: AirSim): Patch[] {
   let seed = 7 + sim.place.target * 7919;
   const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const out: Patch[] = [];
-  for (let i = 0; i < look.n; i++) {
-    const p = { x: rnd() * SKY.w, y: rnd() * SKY.h, r: 600 + rnd() * 2_400, turn: rnd() * Math.PI, a: 0.18 + rnd() * 0.22, wood: rnd() < look.wood };
+  for (let i = 0; i < Math.round((look.n * (SKY.h - SOUTH)) / SKY.h); i++) {
+    const p = { x: rnd() * SKY.w, y: SOUTH + rnd() * (SKY.h - SOUTH), r: 600 + rnd() * 2_400, turn: rnd() * Math.PI, a: 0.18 + rnd() * 0.22, wood: rnd() < look.wood };
     if (onLand(sim.place.ground, p.x, p.y)) out.push(p);
   }
   patches.set(sim, out);
@@ -214,6 +214,8 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
   // ruled squares ten kilometres each.
   x.fillStyle = '#0e0b08'; x.fillRect(0, 0, W, H);
   const [x0, y0] = toScreen(s, 0, SKY.h), [x1, y1] = toScreen(s, SKY.w, 0);
+  // The country runs on below the board's lower edge, where the formations form up (the UI director, b384 review 6).
+  const [, yg] = toScreen(s, 0, SOUTH);
   const ground = sim.place.ground, look = LOOK[ground?.terrain ?? 'plains'] ?? LOOK.plains;
   const g = x.createRadialGradient((x0 + x1) / 2, (y0 + y1) / 2, 0, (x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) * 0.75);
   g.addColorStop(0, look.ground[0]); g.addColorStop(1, look.ground[1]);
@@ -222,13 +224,13 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
     if (close) x.closePath();
   };
   x.save();
-  x.beginPath(); x.rect(x0, y0, x1 - x0, y1 - y0); x.clip();
+  x.beginPath(); x.rect(x0, y0, x1 - x0, yg - y0); x.clip();
   if (ground && !ground.inland) {
     // The sea first, then the land over it.
-    x.fillStyle = SEA; x.fillRect(x0, y0, x1 - x0, y1 - y0);
+    x.fillStyle = SEA; x.fillRect(x0, y0, x1 - x0, yg - y0);
     x.beginPath(); for (const ring of ground.land) trace(ring, true);
     x.fillStyle = g; x.fill('evenodd');
-  } else { x.fillStyle = g; x.fillRect(x0, y0, x1 - x0, y1 - y0); }
+  } else { x.fillStyle = g; x.fillRect(x0, y0, x1 - x0, yg - y0); }
   // Woods and open fields, fixed to the ground so they slide under the aircraft as the camera moves.
   for (const p of patchesOf(sim)) {
     const [a, b] = toScreen(s, p.x, p.y);
@@ -259,10 +261,11 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
   x.stroke();
   // By night the ground goes under a deep blue wash, and the aircraft cast no shadows on it.
   const night = sim.place.night;
-  if (night) { x.fillStyle = 'rgba(6,10,26,.62)'; x.fillRect(x0, y0, x1 - x0, y1 - y0); }
+  if (night) { x.fillStyle = 'rgba(6,10,26,.62)'; x.fillRect(x0, y0, x1 - x0, yg - y0); }
   // Under the board's left corner, clear of the raid, which comes in along the lower edge and fans out where it forms up.
   x.font = '700 11px "Courier Prime", monospace'; x.fillStyle = 'rgba(241,233,212,.45)'; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
-  const from = `FROM ${sim.ticket.att.adj.toUpperCase()} AIRFIELDS ↑`, fw = x.measureText(from).width;
+  const airfields = `${sim.ticket.att.adj.toUpperCase()} AIRFIELDS`, came = sim.place.from ?? 'land';
+  const from = `FROM ${came === 'sea' ? 'THE SEA' : came === 'both' ? `${airfields} AND THE SEA` : airfields} ↑`, fw = x.measureText(from).width;
   const raiders = sim.units.filter((u) => u.side === 'att');
   const [rx] = toScreen(s, raiders.reduce((t, u) => t + u.homeX, 0) / Math.max(1, raiders.length), 0);
   x.fillText(from, Math.max(8, Math.min(Math.max(x0, 8) + 2, rx - 150 - fw)), y1 + 16 <= H - 4 ? y1 + 16 : y1 - 6);
@@ -433,7 +436,7 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
       x.fillStyle = u.str < 0.35 ? ALARM : u.str < 0.65 ? AMBER : '#9cc08a'; x.fillRect(a - w / 2, b + rad + 3, w * Math.max(0, u.n / u.n0), 3);
     }
     if ((s.sel.has(u.id) || s.hover === u.id) && !inStack.has(u.id)) {
-      const label = groupLabel(u);
+      const label = groupLabel(u, sim, s);
       x.font = '700 12px "Courier Prime", monospace'; x.textAlign = 'center'; x.textBaseline = 'bottom';
       x.lineWidth = 3; x.strokeStyle = 'rgba(14,11,8,.85)'; x.strokeText(label, a, b - rad - 4);
       x.fillStyle = '#ede6d6'; x.fillText(label, a, b - rad - 4);
@@ -447,7 +450,7 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
     const ps = st.map((u) => at(u));
     const right = Math.max(...st.map((u, i) => ps[i][0] + (rads.get(u.id) ?? 12)));
     const left = Math.min(...st.map((u, i) => ps[i][0] - (rads.get(u.id) ?? 12)));
-    const labels = st.map(groupLabel);
+    const labels = st.map((u) => groupLabel(u, sim, s));
     const wide = Math.max(...labels.map((l) => x.measureText(l).width));
     const flip = right + 14 + wide > W - 8 && left - 14 - wide > 8;
     const lx = flip ? left - 14 : right + 14, cy = ps.reduce((t, p) => t + p[1], 0) / ps.length, top = cy - ((st.length - 1) * 16) / 2;
@@ -457,7 +460,8 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
       x.strokeStyle = 'rgba(241,233,212,.22)'; x.lineWidth = 1;
       x.beginPath(); x.moveTo(lx + (flip ? 4 : -4), ly); x.lineTo(ps[i][0], ps[i][1]); x.stroke();
       x.lineWidth = 3; x.strokeStyle = 'rgba(14,11,8,.85)'; x.strokeText(labels[i], lx, ly);
-      x.fillStyle = s.sel.has(u.id) ? BRASS : u.side === s.me ? '#ede6d6' : '#f3a184';
+      // Red is Routing's and flak's (the UI director, b384 review 4): the enemy's row is muted paper.
+      x.fillStyle = s.sel.has(u.id) ? BRASS : u.side === s.me ? '#ede6d6' : '#cdbf9c';
       x.fillText(labels[i], lx, ly);
     });
   }
@@ -528,12 +532,15 @@ export function drawAir(x: CanvasRenderingContext2D, sim: AirSim, v: BattleView<
   x.restore();
 }
 
+/** How far below the board's lower edge the camera goes and the country is drawn (as far as ground.ts cuts it): the formations fan out there as they form up. */
+export const SOUTH = -25_000;
+
 /** The height bands as the player reads them (the UI director: LOW, MIDDLE, HIGH). */
 export const BAND_WORD = ['LOW', 'MIDDLE', 'HIGH'] as const;
 
-/** A group's label on the field: "Jagdgeschwader 4 · 183 fighters · HIGH". */
-function groupLabel(u: AirUnit): string {
-  return `${u.name} · ${u.n} ${u.air === 'bmr' ? (u.n === 1 ? 'bomber' : 'bombers') : u.n === 1 ? 'fighter' : 'fighters'} · ${BAND_WORD[u.band]}`;
+/** A group's label on the field: "Jagdgeschwader 4 · 183 fighters · HIGH"; the enemy's with its country word first. */
+function groupLabel(u: AirUnit, sim: AirSim, s: AirScene): string {
+  return `${u.side === s.me ? u.name : sim.called(u)} · ${u.n} ${u.air === 'bmr' ? (u.n === 1 ? 'bomber' : 'bombers') : u.n === 1 ? 'fighter' : 'fighters'} · ${BAND_WORD[u.band]}`;
 }
 
 /** An aircraft's outline for the cards, a fighter or a bomber, in its nation's colour. */

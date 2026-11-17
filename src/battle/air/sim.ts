@@ -143,6 +143,16 @@ export class AirSim implements BattleSim<AirUnit> {
     return { figures0: figures, figures, per, w: cols * L.gap[kind], d: rows * L.gap[kind] };
   }
 
+  /**
+   * A group's name in a dispatch: his own bare, as the tray has them; the enemy's with its country word first, as every
+   * enemy named on the field (the UI director's ruling 226(7), carried to the air: "French Groupe de Chasse 3 is in a
+   * fight."). With nobody's hand on either side, both bare.
+   */
+  called(u: AirUnit): string {
+    const t = this.ticket;
+    return t[u.side].human || !(t.att.human || t.def.human) ? u.name : `${t[u.side].adj} ${u.name}`;
+  }
+
   private say(what: FieldEvent['what'], u: AirUnit | null, text: string, extra?: Record<string, unknown>, cue?: string): void {
     const at = extra && typeof extra.x === 'number' ? { x: extra.x as number, y: extra.y as number } : u ? { x: u.x, y: u.y } : {};
     const e: FieldEvent = { t: this.t, what, text, ...(u ? { unit: u.id, side: u.side } : {}), ...at, ...(cue ? { cue } : {}), ...(extra ? { extra } : {}) };
@@ -272,7 +282,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.job.do !== 'wait') continue;
       u.job = { do: 'patrol', x: SKY.target.x, y: SKY.target.y };
       u.band = 0; u.to = 1; u.alt = SKY.bands.alt[0];
-      this.say('air:scramble', u, told(u.name, '{N} [is|are] scrambled late and [climbs|climb] to meet the raid.'), undefined, C.scramble);
+      this.say('air:scramble', u, told(this.called(u), '{N} [is|are] scrambled late and [climbs|climb] to meet the raid.'), undefined, C.scramble);
     }
     this.think('def', true);
   }
@@ -344,7 +354,7 @@ export class AirSim implements BattleSim<AirUnit> {
       u.fuel -= dt * (u.contacts.length ? SKY.fuel.fight : 1);
       if (u.fuel <= 0 && u.job.do !== 'home') {
         u.fuel = 0; u.job = { do: 'home' };
-        this.say('air:bingo', u, told(u.name, '{N} [is|are] short of fuel and [turns|turn] for home.'), undefined, C.bingo);
+        this.say('air:bingo', u, told(this.called(u), '{N} [is|are] short of fuel and [turns|turn] for home.'), undefined, C.bingo);
       }
     }
     // The bombing run.
@@ -353,7 +363,7 @@ export class AirSim implements BattleSim<AirUnit> {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
-          this.say('air:bombs', u, `${told(u.name, '{N} [bombs|bomb]')} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          this.say('air:bombs', u, `${told(this.called(u), '{N} [bombs|bomb]')} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
         }
       }
     }
@@ -387,11 +397,11 @@ export class AirSim implements BattleSim<AirUnit> {
           const lo = hi === a ? d : a;
           hi.bounce = SKY.edge.bounceFor; hi.band = lo.band; hi.to = lo.band; hi.alt = SKY.bands.alt[lo.band];
           lo.mor = clamp01(lo.mor - SKY.morale.bounced);
-          this.say('air:bounce', hi, `${told(hi.name, '{N} [dives|dive] on')} ${subjectOf(lo.name).whom} from above.`, { on: lo.id });
+          this.say('air:bounce', hi, `${told(this.called(hi), '{N} [dives|dive] on')} ${subjectOf(this.called(lo)).whom} from above.`, { on: lo.id });
         }
         for (const x of [a, d]) if (!(before.get(x.id)?.size)) {
           x.luck = this.rng.range(1 - SKY.wear.luck, 1 + SKY.wear.luck);
-          this.say('contact', x, told(x.name, '{N} [is|are] in a fight.'), undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
+          this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
         }
       }
     }
@@ -487,7 +497,7 @@ export class AirSim implements BattleSim<AirUnit> {
       u.vig = u.kit0 > 0 ? (u.kit.ftr + u.kit.bmr) / u.kit0 : 1;
       if (u.vig < SKY.spent && u.job.do !== 'home') {
         u.job = { do: 'home' };
-        this.say('air:spent', u, told(u.name, '{N} [has|have] fought [itself|themselves] out and [breaks|break] off for home.'));
+        this.say('air:spent', u, told(this.called(u), '{N} [has|have] fought [itself|themselves] out and [breaks|break] off for home.'));
       }
     }
     // The guns round the target.
@@ -520,7 +530,7 @@ export class AirSim implements BattleSim<AirUnit> {
         const over = u.side === 'att' ? 'enemy' : 'own';
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
-        this.say('air:lost', u, fallWords(u.name, fall), { ...fall, air: u.air, alt: u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}) }, fall.kind === 'explode' ? C.explode : C.down);
+        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}) }, fall.kind === 'explode' ? C.explode : C.down);
         u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
       }
     }
@@ -529,7 +539,7 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Morale, leaving the board, and the end of a group. */
   private settle(u: AirUnit, dt: number): void {
     if (u.bounce > 0) u.bounce = Math.max(0, u.bounce - dt);
-    if (u.n <= 0) { this.state(u, 'gone', told(u.name, '{N} [is|are] wiped out.')); return; }
+    if (u.n <= 0) { this.state(u, 'gone', told(this.called(u), '{N} [is|are] wiped out.')); return; }
     u.str = u.n / u.n0;
     if (!u.contacts.length) u.mor = Math.min(SKY.morale.base + SKY.morale.ready, u.mor + SKY.morale.mend * dt);
     const was = u.state;
@@ -537,17 +547,17 @@ export class AirSim implements BattleSim<AirUnit> {
       // One notice for one event (the UI director, 18:28Z): the break says the bombs went too.
       const dump = u.air === 'bmr' && !u.dropped && !u.jettisoned;
       if (dump) u.jettisoned = true;
-      this.state(u, 'routing', dump ? told(u.name, '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.') : told(u.name, '{N} [breaks|break] off and [heads|head] for home.'));
+      this.state(u, 'routing', dump ? told(this.called(u), '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.') : told(this.called(u), '{N} [breaks|break] off and [heads|head] for home.'));
       u.job = { do: 'home' };
-    } else if (was !== 'routing' && u.mor < SKY.morale.wavering && was !== 'wavering') this.state(u, 'wavering', told(u.name, '{N} [is|are] wavering.'));
-    else if (was === 'wavering' && u.mor >= SKY.morale.wavering + 0.05) this.state(u, 'steady', told(u.name, '{N} [steadies|steady].'), 'rallied');
+    } else if (was !== 'routing' && u.mor < SKY.morale.wavering && was !== 'wavering') this.state(u, 'wavering', told(this.called(u), '{N} [is|are] wavering.'));
+    else if (was === 'wavering' && u.mor >= SKY.morale.wavering + 0.05) this.state(u, 'steady', told(this.called(u), '{N} [steadies|steady].'), 'rallied');
     // For the models: what it is doing, and whom it is fighting.
     u.engaged = u.contacts[0];
     u.act = u.job.do === 'wait' ? 'idle' : u.state === 'routing' ? 'rout' : u.contacts.length ? 'fight' : 'march';
     // Off the board: a raider past its own edge, a defender down at its airfield.
     if (u.job.do === 'home' || (u.job.do === 'route' && (u.dropped || u.jettisoned))) {
       const gone = u.side === 'att' ? u.y <= 0 : dist(u.x, u.y, u.homeX, u.homeY) <= 1_500;
-      if (gone) this.state(u, 'withdrawn', u.side === 'att' ? told(u.name, '{N} [is|are] clear of the fight and [heads|head] for home.') : told(u.name, '{N} [lands|land].'));
+      if (gone) this.state(u, 'withdrawn', u.side === 'att' ? told(this.called(u), '{N} [is|are] clear of the fight and [heads|head] for home.') : told(this.called(u), '{N} [lands|land].'));
     }
   }
 
@@ -624,7 +634,7 @@ export class AirSim implements BattleSim<AirUnit> {
       }
       case 'air:jettison': {
         const us = mine(c.units).filter((u) => u.air === 'bmr' && !u.dropped && !u.jettisoned);
-        for (const u of us) { u.jettisoned = true; u.job = { do: 'home' }; this.say('air:jettison', u, told(u.name, '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
+        for (const u of us) { u.jettisoned = true; u.job = { do: 'home' }; this.say('air:jettison', u, told(this.called(u), '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
         return us.length > 0;
       }
       default: return false;
@@ -632,19 +642,24 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   private goHome(u: AirUnit): void {
-    if (u.air === 'bmr' && !u.dropped && !u.jettisoned && u.side === 'att') { u.jettisoned = true; this.say('air:jettison', u, told(u.name, '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
+    if (u.air === 'bmr' && !u.dropped && !u.jettisoned && u.side === 'att') { u.jettisoned = true; this.say('air:jettison', u, told(this.called(u), '{N} [jettisons its|jettison their] bombs and [turns|turn] for home.'), { n: u.n }); }
     u.job = { do: 'home' };
+  }
+
+  /** Each side's fighting strength still in the air, as a share of what both sent up (the view's balance). */
+  balance(): Record<Side, number> {
+    const power = (s: Side): number => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n * u.q, 0);
+    const p0 = (s: Side): number => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n0 * u.q, 0);
+    const all = p0('att') + p0('def') || 1;
+    return { att: power('att') / all, def: power('def') / all };
   }
 
   view(as?: Side): BattleView<AirUnit> {
     const units = this.units.map((u) => ({ ...u, spotted: { att: this.sees('att', u), def: this.sees('def', u) } }))
       .filter((u) => !as || u.side === as || u.spotted[as]);
-    const power = (s: Side): number => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n * u.q, 0);
-    const p0 = (s: Side): number => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n0 * u.q, 0);
-    const all = p0('att') + p0('def') || 1;
     const events = this.events;
     this.events = [];
-    return { t: this.t, limit: this.ticket.limit, units, balance: { att: power('att') / all, def: power('def') / all }, events, zones: this.zones, ai: { ...this.ai }, over: this.over };
+    return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over };
   }
 
   /** Every event so far, for the after-action card and replays. */

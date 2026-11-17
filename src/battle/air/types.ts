@@ -117,6 +117,8 @@ export interface AirPlace {
   reckon: { k: number; value: number; rail: number; ruin: number };
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
+  /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */
+  from?: 'land' | 'sea' | 'both';
   /** The country round the target, in board metres (ground.ts): absent, the page draws a plain country. */
   ground?: AirGround;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */

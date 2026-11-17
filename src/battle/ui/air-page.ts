@@ -20,7 +20,7 @@ import { SKY } from '../air/book';
 import { AirSim } from '../air/sim';
 import { airTicket, foughtAir } from '../air/ticket';
 import type { AirPlace, AirUnit } from '../air/types';
-import { BAND_WORD, drawAir, live, planeSvg, shown, takeEvents, type AirScene } from './air-draw';
+import { BAND_WORD, SOUTH, drawAir, live, planeSvg, shown, takeEvents, type AirScene } from './air-draw';
 import { toField, toScreen } from './draw';
 
 const KEY_GUARD = 0.5;
@@ -53,13 +53,17 @@ interface State {
   trayAt: number;
   /** After the campaign books the raid: each of the player's groups' aircraft as booked, which the tray then shows. */
   booked: Map<number, number> | null;
+  /** The balance bar's pale mark: his side's share when the formations set out. */
+  mark: number;
+  /** The staff's chance now, for the balance bar's top line, and when it was last reckoned (real seconds). */
+  now: { p: number; at: number } | null;
 }
 
 const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, raid: null, clock: new Clock(),
   scene: { cam: { x: SKY.w / 2, y: SKY.h / 2, z: 0.008 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], at: null, fan: new Map() },
-  guardUntil: 0, dispatch: null, asking: null, tag: null, rushed: '', last: 0, trayAt: 0, booked: null,
+  guardUntil: 0, dispatch: null, asking: null, tag: null, rushed: '', last: 0, trayAt: 0, booked: null, mark: 0.5, now: null,
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -81,7 +85,8 @@ const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string }[] = 
  * campaign id, goes into every raid offered after it; and what changed, for the chooser's SINCE YOUR LAST BATTLE.
  */
 const carried = new Map<number, { ftr: number; bmr: number }>();
-let since: string[] = [];
+/** One line per group that lost aircraft: whose, what is left, and, for an enemy group, its campaign id and its fighters left. */
+let since: { who: string; left: string; foe: number | null; n: number }[] = [];
 
 function raidOf(i: number): Raid | null {
   const o = OFFERS[i];
@@ -122,8 +127,8 @@ function chanceWords(p: number): string {
  */
 function aimWords(t: FieldTicket<AirPlace>): string {
   const P = t.place, them = peopleOf(t.def.adj);
-  if (P.mission === 'superiority') return `The aim: the sky over ${P.name}. The fight counts if your fighters still outweigh what the ${them} can put up.`;
-  if (P.reckon.value >= 1 || P.reckon.ruin > 0) return `The aim: the factories of ${P.name}. The raid counts if the harm the bombs do outweighs the aircraft it costs.`;
+  if (P.mission === 'superiority') return `The aim: the sky over ${P.name}. The fight counts if your fighters end it stronger than what the ${them} can put up.`;
+  if (P.reckon.value >= 1 || P.reckon.ruin > 0) return `The aim: the factories of ${P.name}. The raid counts if its bombs do more harm than it costs you in aircraft.`;
   if (P.reckon.rail > 0) return `The aim: the rail yards of ${P.name}. The raid counts if the line is cut, or if the ${them} lose more aircraft than you.`;
   return `The aim: ${P.name}, which has nothing the bombs can harm. The raid counts only if the ${them} lose more aircraft than you.`;
 }
@@ -151,12 +156,25 @@ function showChooser(): void {
         <span class="oaim">${esc(aimWords(t))}</span>
         <span class="tc-data olow">${facts([t.place.night ? 'By night' : 'By day', kind])}</span></button>`;
   };
+  // An enemy group's line says how many of what it has left rise against the raids offered now (the UI director, b384
+  // review 6, passed 20:38Z): "French Groupe de Chasse 3: 223 fighters left; 156 of them rise to meet you."
+  const rise = (id: number): number[] => raids.flatMap((r) => {
+    if (!r) return [];
+    const t = r.ticket, foe: Side = t.att.human ? 'def' : 'att';
+    const n = t[foe].forces.filter((f) => f.corps === id).reduce((a, f) => a + f.men, 0);
+    return n > 0 ? [n] : [];
+  });
+  const sinceLine = (x: (typeof since)[number]): string => {
+    const ns = x.foe === null ? [] : rise(x.foe), most = ns.length ? Math.max(...ns) : 0;
+    const tail = !most ? '' : most >= x.n ? '; all of them rise to meet you' : `; ${ns.every((n) => n === most) ? '' : 'up to '}${most} of them rise to meet you`;
+    return `<b>${esc(x.who)}</b>: ${x.left} left${tail}.`;
+  };
   app.innerHTML = `<div class="choose tc air">
     <header class="chead"><div><div class="tc-label">Air battles · first slice</div><h1 class="tc-title-1">Choose a raid to fight</h1></div></header>
     <div class="cbody">
       <section class="tc-paper intro"><p><b>The campaign settles every raid from its raid card until you choose to fly one here.</b> Each air group is a formation that fights as one; the raid comes on as one stream and the defenders rise to meet it. Height is yours to choose: a group above its enemy dives on it and strikes first. What happens here goes back to the campaign as the aircraft each side lost and the bombers that bombed, and you can hand the rest to the staff at any moment.</p></section>
       <h2 class="tc-label shead">From the campaign · September 1939</h2>
-      ${since.length ? `<section class="tc-paper since"><div class="tc-label">Since your last battle</div><ul>${since.map((l) => `<li>${l}</li>`).join('')}</ul></section>` : ''}
+      ${since.length ? `<section class="tc-paper since"><div class="tc-label">Since your last battle</div><ul>${since.map((l) => `<li>${sinceLine(l)}</li>`).join('')}</ul></section>` : ''}
       <div class="offers">${raids.map((r, i) => (r ? offer(r, i) : '')).join('')}</div>
     </div></div>`;
   app.querySelectorAll<HTMLElement>('[data-raid]').forEach((el) => el.addEventListener('click', () => { const r = raids[Number(el.dataset.raid)]; if (r) startBattle(r); }));
@@ -195,10 +213,10 @@ function startBattle(r: Raid): void {
         <button class="tc-btn tc-btn--sm" data-clock="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bnear" title="When a bar fills, that side breaks off and heads for home. It measures breaking off, not the raid's result.">
-        <span class="tc-label">How near to breaking off</span>
-        <span class="nrow"><span class="nadj">${esc(mine.adj)}</span><span class="ntrack"><i id="nearMe"></i></span></span>
-        <span class="nrow"><span class="nadj">${esc(theirs.adj)}</span><span class="ntrack"><i id="nearThem"></i></span></span>
+      <div class="bbal" title="Each side's strength still in the air. The pale mark is where it stood when the formations set out.">
+        <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
+        <div class="btrack"><i id="balMe" style="background:${mine.color}"></i><i id="balThem" style="background:${theirs.color}"></i><b id="balMark"></b></div>
+        <div class="bbreak" title="When a bar fills, that side breaks off and heads for home. Who breaks off first does not decide the raid: its aim does."><span class="bbar2"><i id="nearMe" style="background:${mine.color}"></i></span><span class="tc-label">How near to breaking off</span><span class="bbar2 is-theirs"><i id="nearThem" style="background:${theirs.color}"></i></span></div>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands.">Hand it to the staff</button>
@@ -208,7 +226,8 @@ function startBattle(r: Raid): void {
     </header>
     <div class="bfield"><canvas id="field"></canvas>
       <div class="dispatch tc-paper" id="dispatch"></div>
-      <div class="ftop"><div class="fwarn" id="fwarn" hidden></div><div class="ftag" id="ftag" hidden></div></div>
+      <div class="ftop"><div class="fwarn" id="fwarn" hidden></div></div>
+      <div class="ftag" id="ftag" hidden></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole sky">Whole sky</button></div>
       <div class="airorders tc-paper" id="airorders" hidden>
         <span class="tc-label">Height</span><span class="tc-seg" id="band">${BAND_WORD.map((w, i) => `<button data-band="${i}">${w}</button>`).join('')}</span>
@@ -221,7 +240,9 @@ function startBattle(r: Raid): void {
     <footer class="tray" id="tray">${sim.units.filter((u) => u.side === sc.me).map((u) => card(u, mine.color)).join('')}</footer>
   </div>`;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  el('nearMe').style.background = mine.color; el('nearThem').style.background = theirs.color;
+  const b0 = sim.balance();
+  S.mark = b0[sc.me] / Math.max(1e-6, b0.att + b0.def);
+  S.now = null;
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   fit(true);
@@ -237,7 +258,7 @@ function startBattle(r: Raid): void {
  */
 function keysLine(): string {
   const k = (c: string): string => `<span class="tc-key">${c}</span>`;
-  const bits = ['Left click: pick up', 'Right-click an enemy group: attack it', 'Right-click the sky: patrol there', `${k('H')} hold`, `${k('R')} break off`, `${k('Tab')} next group`, `${k('Esc')} put down`];
+  const bits = ['Click or drag a box: pick up', 'Right-click an enemy group: attack it', 'Right-click the sky: patrol there', `${k('H')} hold`, `${k('R')} break off`, `${k('Tab')} next group`, `${k('Esc')} put down`];
   return `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}<span class="kfold"></span><span class="fact">Arrows or two-finger drag: look round</span></span></span>`;
 }
 
@@ -306,8 +327,19 @@ function updateTop(force = false): void {
   el('cstate').classList.toggle('is-run', !stopped);
   el('pword').textContent = S.clock.paused ? 'Paused' : 'Pause';
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
-  // How near each side is to breaking off, a bar a side, no numbers (ruling 226, mark 3).
+  // The top bar in land's form (the UI director, b384 review 2): each side's strength still in the air, his from the
+  // left; over it the card's chance and the staff's now, reckoned as the hand-over question reckons it, twice a second
+  // and always when stopped; under it how near each side is to breaking off, his from the left, no numbers (mark 3).
   const me = S.scene.me, foe: Side = me === 'att' ? 'def' : 'att';
+  const bal = sim.balance(), share = bal[me] / Math.max(1e-6, bal.att + bal.def);
+  el('balMe').style.width = `${(share * 100).toFixed(1)}%`;
+  el('balThem').style.width = `${((1 - share) * 100).toFixed(1)}%`;
+  el('balMark').style.left = `${(S.mark * 100).toFixed(1)}%`;
+  const mineOf = (p: number): number => (me === 'att' ? p : 1 - p);
+  if (!S.now || stopped || force || now() - S.now.at >= 0.5) S.now = { p: mineOf(sim.staffChance()), at: now() };
+  const pc = (p: number): string => (p >= 0.995 ? 'sure' : p <= 0.005 ? 'no chance' : `about ${Math.round(p * 100)}%`);
+  const line = `Card ${pc(mineOf(sim.place.chance))} · now ${pc(S.now.p)}`;
+  if (el('ratio').textContent !== line) el('ratio').textContent = line;
   el('nearMe').style.width = `${(100 * Math.min(1, sim.nearBreak(me))).toFixed(1)}%`;
   el('nearThem').style.width = `${(100 * Math.min(1, sim.nearBreak(foe))).toFixed(1)}%`;
   // His own side three quarters of the way there: an amber line that stays until it passes.
@@ -326,7 +358,8 @@ function updateTop(force = false): void {
   }
   // The tag at the top of the field: PAUSED while stopped (not while a question stands), the clock running itself fast,
   // or a passing word as the clock starts or drops back.
-  // The warning and the tag sit under the dispatch, however many lines it takes.
+  // The warning sits under the dispatch, however many lines it takes; the tag at the field's top left (the UI director,
+  // b384 review 1), at the zoom group's height, as on land and at sea.
   const d = el('dispatch');
   (app.querySelector('.ftop') as HTMLElement).style.top = `${(d.textContent ? d.offsetTop + d.offsetHeight : 10) + 8}px`;
   const tag = el('ftag'), r = rush();
@@ -365,7 +398,6 @@ function fit(first = false): void {
   if (first) whole();
 }
 /** The sky the camera keeps in view: the board, and under its southern edge the raid forming up and where it comes from. */
-const SOUTH = -8_000;
 /**
  * The field's free part, in pixels: under the dispatch at the top; and at the foot, the board's southern edge this far
  * above the field's, so the raid forming up under it, fanned out and ringed when picked up, stays clear of the orders
@@ -418,7 +450,7 @@ function orderWords(fx: number, fy: number): string {
   const ftr = chosen().filter((id) => unit(id)!.air === 'ftr');
   if (!ftr.length) return '';
   const foe = unitAt(drawn(visible()), fx, fy, reachPx());
-  return foe ? `Attack ${foe.name}` : onBoard(fx, fy) ? 'Patrol here' : '';
+  return foe ? `Attack ${S.sim!.called(foe)}` : onBoard(fx, fy) ? 'Patrol here' : '';
 }
 
 function wireBattle(): void {
@@ -631,7 +663,7 @@ function frame(): void {
       const [a, b] = toScreen(sc, sc.at[0], sc.at[1]);
       ctx.font = '700 12px "Courier Prime", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(14,11,8,.85)'; ctx.strokeText(words, a + 14, b + 12);
-      ctx.fillStyle = words.startsWith('Attack') ? '#f3a184' : '#e0b872'; ctx.fillText(words, a + 14, b + 12);
+      ctx.fillStyle = '#e0b872'; ctx.fillText(words, a + 14, b + 12);
     }
   }
   updateTop();
@@ -686,7 +718,7 @@ function showAfter(): void {
         if (!x.lostFtr && !x.lostBmr) continue;
         const left = [x.bmr ? `${x.bmr - x.lostBmr}${NB}${x.bmr - x.lostBmr === 1 ? 'bomber' : 'bombers'}` : '', x.ftr ? `${x.ftr - x.lostFtr}${NB}${x.ftr - x.lostFtr === 1 ? 'fighter' : 'fighters'}` : ''].filter(Boolean).join(' and ');
         const who = side === S.scene.me ? x.fleet : `${t[side].adj} ${x.fleet}`;
-        since.push(`<b>${esc(who)}</b>: ${left} left.`);
+        since.push({ who, left, foe: side === S.scene.me ? null : x.id, n: x.ftr - x.lostFtr });
       }
     }
   }

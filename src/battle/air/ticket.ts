@@ -5,7 +5,7 @@
 // Nothing in the campaign is changed here; the raid is flown, and paid for, only when the battle hands its result
 // back through launchRaid (see campaign/airfought.ts).
 
-import { AIR, AIRWAR, airWar, assessAir, forecastAir, groupAt } from '../../campaign/air';
+import { AIR, AIRWAR, airWar, assessAir, carrierOf, forecastAir, groupAt } from '../../campaign/air';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { orderRaid } from '../../campaign/turn';
 import type { FoughtAir } from '../../campaign/airfought';
@@ -110,6 +110,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     chance: fc.success,
     reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
     starts,
+    from: fromOf(att.map((f) => !!carrierOf(g, a.att.find((x) => x.f.id === f.corps)!.f))),
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
     // The country round the target, turned as the board is (b384(j)).
     ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
@@ -128,6 +129,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     limit: SKY.limit,
   };
   return { ticket, why: null };
+}
+
+/** Where a raid's groups fly from, by whether each comes off a carrier. */
+function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
+  return decks.length && decks.every(Boolean) ? 'sea' : decks.some(Boolean) ? 'both' : 'land';
 }
 
 function force(f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): ForceTicket {
