@@ -3,7 +3,7 @@
 // action's ratio and ships lost stand in place of the dice, and nothing else changes.
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
-import { closeWith, foughtOf, meetingKey, seaAhead, type SeaPlayed } from '../src/battle/sea/handoff';
+import { closeWith, foughtOf, meetingKey, playedHook, seaAhead, type SeaPlayed } from '../src/battle/sea/handoff';
 import { diceRange } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
 import { createGame } from '../src/campaign/game';
@@ -144,5 +144,28 @@ describe('a played action stands in place of the dice', () => {
     const other: SeaMeeting = { ...ahead.meeting, met: [...ahead.meeting.met, 999] };
     closeWith(b.g, new Map([[meetingKey(other), { meeting: other, fought: { R: 3, sunk: {} } }]]), ukClose);
     expect(JSON.stringify(b.g.seaReports)).toBe(JSON.stringify(a.g.seaReports));
+  });
+});
+
+describe('the hook left in place for a whole session (the 3D game)', () => {
+  it('books a played action once, and with nothing played rolls the dice as before', () => {
+    const a = meet(5), b = meet(5);
+    const played: SeaPlayed = new Map();
+    seaField.fought = playedHook(played);
+    try {
+      // Nothing played: the same as the dice alone.
+      seaBattles(b.g, 'UK');
+      seaBattles(a.g, 'UK');
+    } finally { seaField.fought = undefined; }
+    expect(saveGame(b.g)).toBe(saveGame(a.g));
+    // Played: booked once, then forgotten.
+    const c = meet(5);
+    const [x] = seaAhead(c.g, ukClose);
+    played.set(x.key, { meeting: x.meeting, fought: { R: 1.05, sunk: { [c.battle.id]: { dd: 2 } } } });
+    seaField.fought = playedHook(played);
+    try { seaBattles(c.g, 'UK'); } finally { seaField.fought = undefined; }
+    expect(c.g.seaReports[0].odds).toBe(1.05);
+    expect(c.g.seaReports[0].def[0].sunk.dd).toBe(2);
+    expect(played.size).toBe(0);
   });
 });

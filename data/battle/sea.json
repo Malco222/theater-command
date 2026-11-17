@@ -2,7 +2,7 @@
   "_about": {
     "what": "The numbers of a fleet action fought out on the field (src/battle/sea). Every ship's weight, toughness and nation's quality come from data/campaign/navy.json, as the rules count them: this file only says how the field plays them out. Abstract by design (project memory air-battle-paused, ruling 217): pieces wear each other down by range and angle; nothing is aimed and nothing flies.",
     "field": "The sea is a square of 'size' metres. The attacker's fleets come on from the south edge, 'edge' metres in, the defender's from the north. 'limit' is the battle time in seconds before it is called on the exchange so far.",
-    "classes": "speed in metres a second at cruising speed; turn in radians a second at full way (a ship turns slower when slow, and barely at all when stopped); best is the range at which a class hits hardest and reach the furthest it hits at all; per is how many ships of the class sail as one piece (destroyers in fours); crew is a ship's company, for the after-action card only; len is a ship's length in metres, for the screens. A carrier fights by its strike, not its guns: standoff is how far it keeps from the nearest enemy, behind its own screen, so that the heavy guns can still reach it and it pays for its place in the line as the rules count it. punch evens out what the reach of a class costs it: destroyers have to close before they can fire at all, so on the field each destroyer's weight hits harder, and a fleet strong in destroyers is worth what the rules say it is.",
+    "classes": "speed in metres a second at cruising speed; turn in radians a second at full way (a ship turns slower when slow, and barely at all when stopped); best is the range at which a class hits hardest and reach the furthest it hits at all; per is how many ships of the class sail as one piece (destroyers in fours); crew is a ship's company, for the after-action card only; len and beam are a ship's length and breadth in metres, for the screens and the 3D models; a piece's ships sail in line ahead, three lengths apart. A carrier fights by its strike, not its guns: standoff is how far it keeps from the nearest enemy, behind its own screen, so that the heavy guns can still reach it and it pays for its place in the line as the rules count it. punch evens out what the reach of a class costs it: destroyers have to close before they can fire at all, so on the field each destroyer's weight hits harder, and a fleet strong in destroyers is worth what the rules say it is.",
     "speeds": "Shares of a class's cruising speed for the speed order, and accel, how fast way is gained or lost (metres a second, each second).",
     "fire": "rate turns weight into wear on a hull each second. hull: a side's hulls together come to this many times its weight, shared over its ships by the rules' toughness (a battleship takes about twice the wear of its weight that a destroyer does), so that toughness decides which ships go down and not who wins. far is what a piece does at the edge of its reach, against 1 at its best range or closer. endOn is what its guns do when the target is dead ahead or astern, against 1 on the beam: crossing the T. damaged: a crippled ship still fights at this share. retarget: seconds between a piece looking for a new target.",
     "nerve": "A piece's nerve falls by 'hit' for each whole hull it takes in wear, and by 'near' when a ship of its own side goes down within 'nearR' metres; out of the fight for 'quiet' seconds it mends at 'mend' a second. Below 'waver' it wavers and fights at 'wavering'; below 'break' it breaks off for its own edge.",
@@ -26,6 +26,7 @@
       "per": 1,
       "crew": 1500,
       "len": 240,
+      "beam": 33,
       "punch": 1
     },
     "cv": {
@@ -36,6 +37,7 @@
       "per": 1,
       "crew": 1800,
       "len": 240,
+      "beam": 32,
       "standoff": 2500,
       "punch": 1
     },
@@ -47,6 +49,7 @@
       "per": 1,
       "crew": 700,
       "len": 180,
+      "beam": 20,
       "punch": 1
     },
     "dd": {
@@ -57,6 +60,7 @@
       "per": 4,
       "crew": 200,
       "len": 110,
+      "beam": 11,
       "punch": 1.5
     }
   },

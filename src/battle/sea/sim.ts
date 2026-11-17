@@ -16,10 +16,11 @@
 // Same ticket, same orders, same battle: every roll comes from the battle's own seeded stream.
 
 import { Rng } from '../../core/rng';
-import { bearing, clamp, lineUp, turn, DT } from '../core';
+import { bearing, clamp, dist, lineUp, turn, DT } from '../core';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, Side, Zone } from '../core/types';
 import { DICE, RULES_CLASSES, SEA } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
+import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipWords, sunkCaps } from './result';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
 
@@ -27,8 +28,6 @@ const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 /** Pieces that still answer orders and fight as told: not running for home. */
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
-/** Distance in metres; the square root is many times quicker than Math.hypot, and the sim asks it tens of thousands of times a second. */
-const dist = (ax: number, ay: number, bx: number, by: number): number => { const dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); };
 
 interface Strike { at: number; side: Side; target: number; weight: number; from: string; count: number }
 
@@ -67,6 +66,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** Wear each piece has dealt by gunfire, and seconds it has spent with a target in reach, by unit id: see tally. */
   private readonly dealt: number[] = [];
   private readonly inReach: number[] = [];
+  /** How hard each piece is turning, as a share of its helm at full way: for 'turn' in the models' act. */
+  private readonly swing: number[] = [];
   /** Wear dealt by strikes ('att:cv') and by the coasts' aircraft ('att:air'). */
   private readonly fromAir: Record<string, number> = {};
   /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
@@ -91,6 +92,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.byId.set(u.id, u);
       this.dealt[u.id] = 0;
       this.inReach[u.id] = 0;
+      this.swing[u.id] = 0;
       this.weight0[u.side] += this.weightOf(u);
     }
     for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); }
@@ -193,7 +195,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
         for (const u of us) u.extra.speed = sc.speed;
         return true;
       }
-      case 'sea:dice': {
+      case 'dice': {
         // One press hands the rest back to the dice, at the ratio then standing (ruling 217): on screen, HAND IT TO THE STAFF (log b348).
         this.finish(this.leader(), 'time', true);
         return true;
@@ -226,7 +228,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const tick = Math.round(this.t / DT);
     for (const u of this.units) if (live(u)) this.steer(u);
     if (tick % 10 === 0) this.decide();
-    for (const u of this.units) if (live(u)) this.fire(u);
+    for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
+    for (const u of this.units) this.pose(u);
     this.landStrikes();
     this.coastAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
@@ -335,7 +338,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const acc = SEA.speeds.accel * DT;
     u.extra.way = u.extra.way < speed ? Math.min(speed, u.extra.way + acc) : Math.max(speed, u.extra.way - acc);
     const helm = C.turn * (0.25 + 0.75 * Math.min(1, u.extra.way / C.speed)) * DT;
-    u.face = norm(u.face + clamp(turn(u.face, want), -helm, helm));
+    const swing = clamp(turn(u.face, want), -helm, helm);
+    this.swing[u.id] = helm > 0 ? Math.abs(swing) / (C.turn * DT) : 0;
+    u.face = norm(u.face + swing);
     u.x += Math.sin(u.face) * u.extra.way * DT;
     u.y += Math.cos(u.face) * u.extra.way * DT;
     // Out by its own edge: gone home, to fight another day.
@@ -396,7 +401,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const range = d <= C.best ? 1 : SEA.fire.far + (1 - SEA.fire.far) * (C.reach - d) / (C.reach - C.best);
     const arc = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(u.face, bearing(u.x, u.y, foe.x, foe.y))));
     const nerve = u.state === 'wavering' ? SEA.nerve.wavering : u.state === 'routing' || this.orders.get(u.id)?.kind === 'leave' ? 0.5 : 1;
-    if (!this.contact) { this.contact = true; this.say({ what: 'contact', side: u.side, text: 'The fleets are in range of each other.' }); }
+    if (!this.contact) { this.contact = true; this.say({ what: 'contact', unit: u.id, side: u.side, text: 'The fleets are in range of each other.' }); }
+    u.engaged = foe.id;
     const w = SEA.fire.rate * C.punch * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
     this.dealt[u.id] += w;
     this.inReach[u.id] += DT;
@@ -556,7 +562,25 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   // ---- What the screens draw --------------------------------------------------------------------------------------
 
-  private say(e: Omit<FieldEvent, 't'>): void { this.events.push({ t: this.t, ...e }); }
+  /** An event, placed where its unit is and with the sound that answers it (cues.ts), unless it names its own. */
+  private say(e: Omit<FieldEvent, 't'>): void {
+    const u = e.unit !== undefined ? this.byId.get(e.unit) : undefined;
+    const cue = SEA_CUES[e.what];
+    this.events.push({ t: this.t, ...(u ? { x: Math.round(u.x), y: Math.round(u.y) } : {}), ...(cue ? { cue } : {}), ...e });
+  }
+
+  /** What the models show: one ship a figure, the way on, and what the piece is doing, for the animation and the sound. */
+  private pose(u: SeaUnit): void {
+    u.figures = u.extra.ships;
+    if (!live(u)) { u.act = u.state === 'gone' ? 'down' : 'idle'; u.speed = 0; u.engaged = undefined; return; }
+    const C = SEA.classes[u.extra.cls as SeaClass];
+    u.speed = Math.round(u.extra.way * 10) / 10;
+    u.act = u.state === 'routing' || this.orders.get(u.id)?.kind === 'leave' ? 'rout'
+      : u.engaged !== undefined ? 'fight'
+        : u.extra.way < 0.5 ? 'idle'
+          : this.swing[u.id] > 0.6 ? 'turn'
+            : u.extra.way > C.speed * SEA.speeds.cruise * 1.05 ? 'run' : 'march';
+  }
 
   view(as?: Side): BattleView<SeaUnit> {
     const total = this.weight0.att + this.weight0.def;
