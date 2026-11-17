@@ -2617,7 +2617,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
     const V = g.nations.VIC;
     V.alive = true; V.dormant = false;
     const cap = g.regions.find((r) => r.owner === 'VIC' && r.name === 'Auvergne') ?? g.regions.find((r) => r.owner === 'VIC');
-    if (cap) { cap.cap = true; V.capital = cap.id; }
+    // (Its distances are counted the month it has a capital, as every other country's are on the day it is drawn:
+    // a beaten Vichy corps falls back toward Auvergne whatever year the campaign began in.)
+    if (cap) { cap.cap = true; V.capital = cap.id; g.capDist.VIC = capitalDistances(g, cap.id); }
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
     headline(g, 'fall', `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
