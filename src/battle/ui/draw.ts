@@ -35,6 +35,8 @@ export interface Scene {
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
 export const toField = (s: Scene, px: number, py: number): [number, number] => [s.cam.x + (px - s.W / 2) / s.cam.z, s.cam.y - (py - s.H / 2) / s.cam.z];
 
+/** Where each field's town name stands (field metres north of its centre), and when it was last moved (real seconds). */
+const townAt = new WeakMap<LandBattle, { y: number; at: number }>();
 const INK = '#2a2d2f';
 const PAPER = '#f1e9d4';
 const BRASS = '#e0b872';
@@ -130,13 +132,32 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     }
   }
 
-  // The town's name on the map, in the campaign map's lettering.
+  // The town's name on the map, in the campaign map's lettering: above the town, never under a block (the UI
+  // director, after the retest). Placed clear of the blocks where it can be, and moved, at most every two seconds,
+  // only when a block comes to stand on it.
   if (b.field.town && b.ticket.place.town) {
-    const [tx, ty] = toScreen(s, b.field.town.x, b.field.town.y + b.field.town.r * 0.75);
-    x.font = `italic 600 ${Math.max(11, Math.min(22, 38 * cam.z))}px "PT Serif", Georgia, serif`;
+    const T = b.field.town, name = b.ticket.place.town.toUpperCase();
+    const size = Math.max(12, Math.min(22, 38 * cam.z));
+    x.font = `italic 600 ${size}px "PT Serif", Georgia, serif`;
+    const half = x.measureText(name).width / 2 + 4;
+    const boxes = b.units.filter((v) => v.state !== 'gone' && v.state !== 'withdrawn').map((v) => {
+      const [vx, vy] = toScreen(s, v.x, v.y), r = Math.max(v.w, v.d) * cam.z / 2 + 4;
+      return [vx - r, vy - r, vx + r, vy + r];
+    });
+    const clear = (fy: number): boolean => {
+      const [tx, ty] = toScreen(s, T.x, fy);
+      return !boxes.some((q) => tx - half < q[2] && tx + half > q[0] && ty - size / 2 - 2 < q[3] && ty + size / 2 + 2 > q[1]);
+    };
+    const was = townAt.get(b);
+    if (!was || (!clear(was.y) && s.now - was.at > 2)) {
+      const step = (size + 6) / cam.z;
+      const up = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => T.y + T.r + step * (0.5 + k)), down = up.map((y) => 2 * T.y - y);
+      townAt.set(b, { y: [...up, ...down].find(clear) ?? up[0], at: s.now });
+    }
+    const [tx, ty] = toScreen(s, T.x, townAt.get(b)!.y);
     x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = 4; x.strokeStyle = 'rgba(233,226,207,.85)'; x.strokeText(b.ticket.place.town.toUpperCase(), tx, ty);
-    x.fillStyle = INK; x.fillText(b.ticket.place.town.toUpperCase(), tx, ty);
+    x.lineWidth = 4; x.strokeStyle = 'rgba(233,226,207,.85)'; x.strokeText(name, tx, ty);
+    x.fillStyle = INK; x.fillText(name, tx, ty);
   }
   if (b.ticket.place.river) {
     // The river's name over the water, where the river crosses the middle of the field.
@@ -145,7 +166,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     for (let r = 0; r < b.field.rows; r++) if (b.field.ground[r * b.field.cols + col] === 5) { row = r; break; }
     if (row >= 0) {
       const [rx, ry] = toScreen(s, col * b.field.cell, row * b.field.cell + 60);
-      x.font = `italic ${Math.max(10, Math.min(18, 30 * cam.z))}px "PT Serif", Georgia, serif`;
+      x.font = `italic ${Math.max(12, Math.min(18, 30 * cam.z))}px "PT Serif", Georgia, serif`;
       x.textAlign = 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(233,226,207,.75)'; x.strokeText(b.ticket.place.river, rx, ry);
       x.fillStyle = '#2c5878'; x.fillText(b.ticket.place.river, rx, ry);
     }

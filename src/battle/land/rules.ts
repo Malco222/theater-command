@@ -55,11 +55,13 @@ export const LAND = {
   height: { over: 8, up: 1.15, down: 0.9 },
   /**
    * Holding its own ground: a defending block within 'within' metres of where it was drawn up takes this share of the
-   * damage. Set by the fairness table, ground by ground, so that two computer generals carry the ground about as often
-   * as the dice would (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock) already gives the
-   * defence more than the campaign's odds, which count the ground already, mean it to have.
+   * damage. Set by the fairness table, ground by ground, so that the plain attack (select all, right-click the nearest,
+   * Space) carries the ground about as often as the card says at the telling odds, 1.1 to 1.4 (ruling 226, mark 4), and
+   * two computer generals stay fair to it too (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock)
+   * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
+   * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
    */
-  hold: { take: { plains: 0.78, forest: 0.96, hills: 0.79, mountain: 0.91, marsh: 1.14, urban: 0.82, desert: 0.93 } as Record<string, number>, within: 300 },
+  hold: { take: { plains: 0.85, forest: 0.906, hills: 0.91, mountain: 1.237, marsh: 1.1, urban: 0.91, desert: 0.909 } as Record<string, number>, within: 300, river: 1.58, works: [1, 1.08, 1.13, 1.19] },
   /** Dug in: the damage taken while it stays within this many metres of where it began. */
   dug: { take: 0.65, keep: 30 },
   nerve: {
@@ -103,6 +105,11 @@ export const LAND = {
   count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } } as { routing: Record<'att' | 'def', number>; gone: Record<'att' | 'def', number> },
   /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
   jitter: 0.1,
+  /**
+   * How much of the card's own run of luck the day carries (ruling 226(4)): 1 draws the day's luck across the whole run,
+   * as the card's chance does, so a plain attack at the card's odds wins about as often as the card says.
+   */
+  fortune: 1,
   /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
   press: 600,
   /** Seconds of battle time before the defender is counted as having held. */

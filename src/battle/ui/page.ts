@@ -14,7 +14,7 @@ import { RATIO } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { sampleTicket } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceReckoning, practiceTicket, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
@@ -28,6 +28,10 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 const num = (n: number): string => Math.round(n).toLocaleString('en-GB');
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
+/** A practice ground's name: its ground, or the river crossing and the fortress works (the field's title is the card's name). */
+const practiceName = (p: PracticeGround): string => (p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
+/** What the staff makes of a card's chance, as the offer and practice cards say it. */
+const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
 const TERRAIN_WORD: Record<Terrain, string> = { plains: 'Open country', forest: 'Forest', hills: 'Hill country', mountain: 'Mountains', marsh: 'Marsh', urban: 'City streets', desert: 'Open desert' };
 /** Facts in a row that fold whole: the dot between two goes with the fold, never ending or starting a line (brief check 19). */
@@ -61,7 +65,7 @@ interface State {
   /** Each side's colour on this field (sideColours). */
   colours: Record<Side, string>;
   /** What the chooser offered before the last battle, and how it went: for SINCE YOUR LAST BATTLE (ruling 226(11)). */
-  before: { offers: Offer[]; fought: number; how: string } | null;
+  before: { offers: Offer[]; fought: number; how: string; heavier?: boolean } | null;
   /** The speed the clock had when a question stopped it: STAY or Esc starts it again there. */
   resume: Speed | null;
   last: number;
@@ -104,14 +108,25 @@ function showChooser(): void {
     const t = o.ticket, p = t.place;
     const att = t.att.forces.length, def = t.def.forces.length;
     const bits = [TERRAIN_WORD[p.terrain], p.river ? `across the ${esc(p.river)}${p.bridgeDown ? ', bridges down' : ''}` : '', p.fort ? `fortress works, level ${p.fort}` : '', p.town ? townWords(p) : ''].filter(Boolean);
-    const chance = diceChance(o.odds, t.reckoning.dice);
-    const staff = chance >= 0.995 ? 'the staff is sure of it' : chance <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(chance * 100)}%`;
+    const staff = staffSays(diceChance(o.odds, t.reckoning.dice));
+    // The campaign lets a corps thrown back attack again while it has the moves for it (mark 11): the card says so.
+    const back = S.g.reports.filter((x) => x.turn === S.g.turn && x.region === o.target.id && x.attNat === S.g.human && !x.taken && !x.siege).length;
+    const again = back === 0 ? '' : `thrown back ${back === 1 ? 'once' : back === 2 ? 'twice' : `${back} times`} this month`;
     return `<button class="tc-card is-press offer" data-offer="${i}">
       <span class="otop"><b class="tc-title-3">${esc(o.target.name)}</b><span class="tc-data"><b>${odds(o.odds)}</b> to 1</span></span>
       <span class="tc-data omid">${facts(bits)}</span>
-      <span class="tc-data olow">${facts([`${att} corps against ${def}`, staff])}</span></button>`;
+      <span class="tc-data olow">${facts([`${att} corps against ${def}`, ...(again ? [again] : []), staff])}</span></button>`;
   };
-  const grounds: Terrain[] = ['plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert'];
+  // Each practice ground's card is reckoned as the campaign would reckon the two practice armies there (b400).
+  const practice = (p: PracticeGround, i: number): string => {
+    const k = practiceReckoning(p);
+    // The ground line in the campaign cards' own form, where the card's name does not already say it all.
+    const ground = p.river || p.fort ? facts([TERRAIN_WORD[p.terrain], ...(p.river ? ['across a river'] : []), ...(p.fort ? [`fortress works, level ${p.fort}`] : [])]) : '';
+    return `<button class="tc-card is-press offer ground" data-ground="${i}">
+      <span class="otop"><b class="tc-title-3">${practiceName(p)}</b><span class="tc-data"><b>${odds(k.odds)}</b> to 1</span></span>
+      ${ground ? `<span class="tc-data omid">${ground}</span>` : ''}
+      <span class="tc-data olow">${facts([staffSays(diceChance(k.odds, k.dice))])}</span></button>`;
+  };
   app.innerHTML = `<div class="choose tc">
     <header class="chead"><div><div class="tc-label">Field battles · first slice</div><h1 class="tc-title-1">Choose a battle to fight</h1></div></header>
     <div class="cbody">
@@ -120,8 +135,8 @@ function showChooser(): void {
       <h2 class="tc-label shead">${facts(['Your attacks this month', `${esc(me.name)}, ${esc(list[0]?.ticket.date ?? '')}`])}</h2>
       <div class="offers">${list.length ? list.map(row).join('') : '<p class="tc-data none">No attack can be ordered now. Start the campaign again to fight another.</p>'}</div>
       <div class="again"><button class="tc-btn tc-btn--quiet" data-act="restart">Start the campaign again</button></div>
-      <h2 class="tc-label shead">${facts(['Practice grounds', 'Odds of about 1.3 to 1', 'Nothing goes back to the campaign'])}</h2>
-      <div class="grounds">${grounds.map((k) => `<button class="tc-btn" data-ground="${k}">${TERRAIN_WORD[k]}</button>`).join('')}<button class="tc-btn" data-ground="plains" data-river="1">A river crossing</button><button class="tc-btn" data-ground="hills" data-fort="2">Fortress works</button></div>
+      <h2 class="tc-label shead">${facts(['Practice grounds', 'The same two armies on every ground', 'Nothing goes back to the campaign'])}</h2>
+      <div class="grounds">${PRACTICE_GROUNDS.map(practice).join('')}</div>
     </div></div>`;
   app.querySelectorAll<HTMLElement>('[data-offer]').forEach((el) => el.addEventListener('click', () => {
     const o = list[Number(el.dataset.offer)];
@@ -129,7 +144,8 @@ function showChooser(): void {
     startBattle(o.ticket, o);
   }));
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
-    const t = sampleTicket(el.dataset.ground as Terrain, 1.3, { humanAtt: true, river: !!el.dataset.river, fort: Number(el.dataset.fort ?? 0), seed: 1 + Math.floor(Math.random() * 1e6) });
+    const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
+    const t = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceName(p) });
     startBattle(t, null);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
@@ -150,7 +166,8 @@ function since(now: Offer[]): string {
   const offers = [...was.offers].sort((p, q) => (p.target.id === was.fought ? -1 : q.target.id === was.fought ? 1 : 0));
   for (const o of offers) {
     const n = by.get(o.target.id);
-    if (o.target.id === was.fought) say(o.target.name, was.how);
+    // When the odds rose after a defeat, the line says why (the UI director, after the retest).
+    if (o.target.id === was.fought) say(o.target.name, was.how === 'the attack was thrown back.' && n && n.odds > o.odds + 0.005 && was.heavier ? 'the attack was thrown back, but the defenders lost more of their strength than you' : was.how);
     else if (!n) {
       const spent = o.corps.find((c) => c.fought && !now.some((x) => x.corps.includes(c)));
       say(o.target.name, spent ? `${esc(spent.name)} has fought this month and cannot attack again` : 'out of reach this month');
@@ -200,7 +217,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
         <button class="tc-btn tc-btn--sm" data-speed="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's strength still standing. The pale mark is where the attack card put it.">
-        <div class="bends"><span>${esc(mine.adj)}</span><span id="ratio" class="tc-data"></span><span>${esc(theirs.adj)}</span></div>
+        <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Your army'}</span><span id="ratio" class="tc-data"></span><span>${S.offer ? esc(theirs.adj) : 'Their army'}</span></div>
         <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
         <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>
@@ -628,7 +645,8 @@ function ask(kind: 'withdraw' | 'staff'): void {
   if (kind === 'staff') {
     // The staff's chance now, from the strength each side has left (the UI director's words for ruling 226(5)).
     const b = S.b, c = b.chanceNow(), where = b.ticket.place.name;
-    const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to take ${esc(where)}.`;
+    // A practice ground is not a place to take (the UI director, after the retest).
+    const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to ${S.offer ? `take ${esc(where)}` : 'win it'}.`;
     document.getElementById('saskText')!.innerHTML = b.contactAt === null
       ? `Hand the battle to the staff? No shot has been fired: they settle the whole battle at once. ${odds}`
       : `Hand the battle to the staff? They settle the rest at once, from where it stands now. ${odds}`;
@@ -724,7 +742,12 @@ function frame(): void {
   S.wasRunning = running;
   const v = b.view(S.scene.me);
   // The opening line says the clock is stopped: once it runs, the first fact replaces it.
-  if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) { S.dispatch = { t: b.t, what: 'contact', text: `The ${b.ticket[S.scene.me].adj} army is moving.`, unit: -1 }; S.dispatchAge = 0; }
+  // With no orders given it stands, and says so (the UI director, after the retest).
+  if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) {
+    const who = !S.offer ? 'Your army' : `The ${b.ticket[S.scene.me].adj} army`;
+    const going = b.units.some((u) => u.side === S.scene.me && u.order !== null);
+    S.dispatch = { t: b.t, what: 'contact', text: going ? `${who} is moving.` : `${who} stands where it is, without orders.`, unit: -1 }; S.dispatchAge = 0;
+  }
   // His own army near breaking has its amber line that stays (fwarn); everything else comes through the strip.
   for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
   if (S.clock.speed > 0) S.dispatchAge += dt;
@@ -760,7 +783,12 @@ function showAfter(): void {
   const g = S.g;
   const settled = S.offer ? settle(g, S.offer, r) : null;
   const rep = settled?.report ?? null;
-  if (S.before && S.offer) S.before.how = !rep ? 'the attack could not be ordered.' : rep.siege ? 'under siege.' : rep.taken ? 'taken.' : 'the attack was thrown back.';
+  if (S.before && S.offer) {
+    S.before.how = !rep ? 'the attack could not be ordered.' : rep.siege ? 'under siege.' : rep.taken ? 'taken.' : 'the attack was thrown back.';
+    // Whether the defenders lost the larger share of their strength, for why the odds rose after a defeat.
+    const share = (us: { men: number; lost: number }[]): number => us.reduce((a, u) => a + u.lost, 0) / Math.max(1, us.reduce((a, u) => a + u.men, 0));
+    S.before.heavier = !!rep && share(rep.defenders) > share(rep.attackers);
+  }
   const won = rep ? rep.taken || !!rep.siege : r.winner === 'att';
   const level = rep ? rep.level : r.level;
   const chance = diceChance(k.odds, k.dice);

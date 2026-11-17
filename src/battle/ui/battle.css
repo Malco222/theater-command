@@ -24,11 +24,12 @@ button { cursor: pointer; }
 .offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
 .offer { display: grid; gap: 4px; text-align: left; color: var(--paper-100); font-family: var(--font-serif); }
 .offer .otop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.offer .otop > .tc-data { white-space: nowrap; }
 .offer .omid { color: var(--paper-200); font-size: 13px; }
 .offer .olow { color: var(--text-muted); font-size: 12px; }
 .none { color: var(--text-muted); }
 .again { margin-top: 12px; }
-.grounds { display: flex; flex-wrap: wrap; gap: 8px; }
+.grounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
 
 /* ---- The battle ---- */
 .battle { height: 100%; display: grid; grid-template-rows: auto 1fr auto auto; min-height: 0; }

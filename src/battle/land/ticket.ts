@@ -61,6 +61,8 @@ export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket
     def: sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))),
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice) },
     lines: a.lines, limit: LAND.limit,
+    // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
+    attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,
   };
 }
 
