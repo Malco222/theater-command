@@ -67,7 +67,8 @@ if (v.sha1 && sha1 !== v.sha1) { console.error(`${title}: the file fetched is no
 
 // Keep the sound, not the film: the sound track is lifted out exactly as it was encoded (nothing re-encoded, so
 // nothing lost and the file stays small). Only if that cannot be done is it stored as FLAC.
-const info = probe(whole);
+let info;
+try { info = probe(whole); } catch (e) { fs.unlinkSync(whole); console.error(`${title}: not kept: ${e.message.split(': ').pop()}`); process.exit(3); }
 let kept = path.join(raw, id + ext), form = 'as fetched';
 if (info.hasVideo) {
   kept = path.join(raw, id + '.mka'); form = `sound track of a film clip, lifted out untouched (${info.codec})`;
