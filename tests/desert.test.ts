@@ -570,16 +570,16 @@ describe('the Libya convoys', () => {
 
 describe("the Eighth Army's guns (the design director's ruling 171)", () => {
   const guns = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'UK' && c.kind === 'art' && !c.dead && c.name.startsWith('Royal Artillery'));
-  const MAY_42 = 33, SEPTEMBER_42 = 37;
+  const JULY_42 = 35, SEPTEMBER_42 = 37;
 
-  it('two artillery corps arrive in Egypt in the grand campaign, in May and September 1942, for a computer and for a player', () => {
+  it('two artillery corps arrive in Egypt in the grand campaign, in July and September 1942, for a computer and for a player', () => {
     for (const human of [null, 'UK']) {
       const g = startOpen(createGame(1, human));
       declareWar(g, 'ITA', 'UK');
-      g.turn = MAY_42 - 1;
+      g.turn = JULY_42 - 1;
       startPhase(g, 'UK');
       expect(guns(g)).toHaveLength(0);
-      g.turn = MAY_42;
+      g.turn = JULY_42;
       startPhase(g, 'UK');
       expect(guns(g)).toHaveLength(1);
       g.turn = SEPTEMBER_42 - 1;
@@ -599,12 +599,12 @@ describe("the Eighth Army's guns (the design director's ruling 171)", () => {
 
   it('wait for the war with Italy, and are no part of the campaigns of history', () => {
     const peace = startOpen(createGame(1, null));
-    peace.turn = MAY_42;
+    peace.turn = JULY_42;
     startPhase(peace, 'UK');
     expect(guns(peace)).toHaveLength(0);
     const history = createGame(1, null);
     declareWar(history, 'ITA', 'UK');
-    for (const t of [MAY_42, SEPTEMBER_42]) { history.turn = t; startPhase(history, 'UK'); }
+    for (const t of [JULY_42, SEPTEMBER_42]) { history.turn = t; startPhase(history, 'UK'); }
     expect(guns(history)).toHaveLength(0);
   });
 

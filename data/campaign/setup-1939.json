@@ -414,7 +414,7 @@
     [64, "GER", "Fifth Panzer Army: XLVII Panzer Corps (2nd Panzer, Panzer Lehr and 26th Volksgrenadier Divisions)", "arm", 3, "Eifel", {"join": 1, "gen": "Hasso von Manteuffel", "trait": "panzer", "xp": 0.4, "from": ["Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)"], "war": ["USA", "GER"], "ifLost": ["Paris"]}],
     [64, "GER", "Fifth Panzer Army: LVIII Panzer Corps (116th Panzer and 560th Volksgrenadier Divisions)", "arm", 2, "Eifel", {"join": 1, "xp": 0.3, "war": ["USA", "GER"], "ifLost": ["Paris"]}],
     [64, "GER", "Seventh Army: LXXXV Corps (5th Parachute and 352nd Volksgrenadier Divisions)", "inf", 2, "Eifel", {"join": 1, "gen": "Erich Brandenberger", "xp": 0.2, "war": ["USA", "GER"], "ifLost": ["Paris"]}],
-    [33, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", {"open": 1, "xp": 0.2, "war": ["UK", "ITA"]}],
+    [35, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", {"open": 1, "xp": 0.2, "war": ["UK", "ITA"]}],
     [37, "UK", "Royal Artillery, X Corps", "art", 2, "Alexandria", {"open": 1, "xp": 0.2, "war": ["UK", "ITA"]}]
   ]
 }
