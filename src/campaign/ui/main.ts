@@ -8117,13 +8117,13 @@ function pickFleetMark(ids: number[]): void {
   pickFleet(ids[(at + 1) % ids.length]);
 }
 
-/** The player's fleet being given orders, if it is still theirs to order. */
 /** Why a fleet's PORT order is off: it is there already. And why it cannot be split: it is one ship. (An off button says why, ruling 204(d).) */
 const inHarbour = (f: Fleet): string => `The ${f.name} is in harbour at ${f.port}.`;
 const oneShip = (f: Fleet): string => `The ${f.name} is a single ship: there is nothing to split off.`;
 /** A fleet's work at sea, in a sentence. */
 const seaWork = (s: Stance): string => (s === 'raid' ? 'raid shipping' : s === 'hunt' ? 'hunt submarines' : 'patrol');
 
+/** The player's fleet being given orders, if it is still theirs to order. */
 function myFleet(): Fleet | null {
   if (ui.fleet < 0 || !humanUp(g)) return null;
   const f = g.fleets.find((x) => x.id === ui.fleet);
@@ -9727,6 +9727,16 @@ function wireMap(): void {
         const flag = flagFirst() ? flagAt(e.clientX, e.clientY) : -1;
         if (flag >= 0) onRegion(flag);
         else if (z >= 0) onSea(z);
+        else {
+          // A fleet's piece lying in harbour stands for its port: while the map is choosing a place (and so does not
+          // pick the fleet up), the click is for the port's province, or else for the ground under the pointer. It
+          // used to be lost (the grid of 2026-11-17).
+          const ids = ((piece ?? foe)?.dataset.fleets ?? foe?.dataset.foe ?? '').split(',').map(Number);
+          const lying = g.fleets.find((x) => ids.includes(x.id) && !atSea(x) && x.base >= 0);
+          const ground = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.classList.contains('reg')) as HTMLElement | undefined;
+          const at = lying ? lying.base : ground ? Number(ground.dataset.id) : -1;
+          if (at >= 0) onRegion(at);
+        }
       }
     }
     if (pts.size === 0) start = null;
