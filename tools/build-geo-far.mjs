@@ -98,15 +98,70 @@ let land = [];
   }
 }
 
+// The clerk's tables (data/campaign/tables/*.csv; --tables=folder copies them in fresh from the map tables folder):
+// one row to a province, by name. Once a province has a row, the row is the source for its owner, ground, victory
+// points, factories and the flags port, col, cap, depot, oil and fort. The seed's own values stand until then, and
+// 'islet' is always the seed's: how large an island is drawn is the map's business.
+const tables = new Map();
+{
+  const dir = new URL('../data/campaign/tables/', import.meta.url);
+  if (arg('tables')) {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of ['islands-draft.csv', 'pacific.csv', 'globe.csv']) { const from = `${arg('tables')}/${f}`; if (fs.existsSync(from)) fs.copyFileSync(from, new URL(f, dir)); }
+  }
+  const parse = (text) => {
+    const rows = [[]];
+    let cell = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quoted) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else quoted = false; } else cell += ch; }
+      else if (ch === '"') quoted = true;
+      else if (ch === ',') { rows[rows.length - 1].push(cell); cell = ''; }
+      else if (ch === '\n') { rows[rows.length - 1].push(cell); cell = ''; rows.push([]); }
+      else if (ch !== '\r') cell += ch;
+    }
+    if (cell || rows[rows.length - 1].length) rows[rows.length - 1].push(cell);
+    return rows.filter((r) => r.length > 1);
+  };
+  if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.csv')).sort()) {
+    const rows = parse(fs.readFileSync(new URL(f, dir), 'utf8'));
+    const head = rows.shift().map((h) => h.trim());
+    for (const row of rows) {
+      const r = Object.fromEntries(head.map((h, i) => [h, (row[i] ?? '').trim()]));
+      if (tables.has(r.name)) warn(`! the tables have two rows for ${r.name}`);
+      tables.set(r.name, r);
+    }
+  }
+}
+const GROUND = new Set(['plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert']);
+let tabled = 0;
+function fromTable(name, owner, terrain, vp, fac, flags) {
+  const r = tables.get(name);
+  if (!r) return { owner, terrain, vp, fac, flags };
+  tabled++;
+  const f = { ...flags };
+  const set = (key, on) => { if (on) f[key] = 1; else delete f[key]; };
+  if (r.feeds_troops !== undefined && r.feeds_troops !== '') set('port', r.feeds_troops === '1');
+  if (r.colony !== undefined && r.colony !== '') set('col', r.colony === '1');
+  if (r.capital !== undefined && r.capital !== '') set('cap', r.capital === '1');
+  if (r.depot !== undefined && r.depot !== '') set('depot', r.depot === '1');
+  if (r.oil !== undefined && r.oil !== '') set('oil', Number(r.oil) > 0);
+  if (r.works !== undefined && r.works !== '') { if (Number(r.works) > 0) f.fort = [Number(r.works), ...(r.works_face ?? '').split(/[;, ]+/).filter(Boolean)]; else delete f.fort; }
+  if (r.ground && !GROUND.has(r.ground)) warn(`! the tables give ${name} ground the game does not have: ${r.ground}`);
+  const num = (v, d) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
+  return { owner: r.owner || owner, terrain: GROUND.has(r.ground) ? r.ground : terrain, vp: num(r.vp, vp), fac: num(r.factories, fac), flags: f };
+}
+
 // The seeds of every slice, in order: a province keeps its number for good.
 const first = core.regions.length + today.regions.length;
 const taken = new Set([...core.regions, ...today.regions].map((r) => r.name));
 const seeds = [];
 FAR_SLICES.forEach((slice, k) => {
-  for (const [name, lat, lon, owner, terrain, vp, fac, flags] of slice.regions) {
+  for (const [name, lat, lon, owner0, terrain0, vp0, fac0, flags0] of slice.regions) {
     if (taken.has(name)) warn(`! two provinces are called ${name}`);
     taken.add(name);
     const [x, y] = proj([lon, lat]);
+    const { owner, terrain, vp, fac, flags } = fromTable(name, owner0, terrain0, vp0, fac0, flags0 ?? {});
     seeds.push({ id: first + seeds.length, name, owner, terrain, vp, fac, flags, lat, lon, x, y, slice: k });
   }
 });
@@ -116,9 +171,11 @@ FAR_SLICES.forEach((slice, k) => {
 });
 
 // An island too small to see or to click is drawn larger than life, centred on its true place: a round shape laid
-// over whatever the atlas has there. Its province carries the flag 'islet'.
+// over whatever the atlas has there. Its province carries the flag 'islet'. 'disc' lays the same round shape under a
+// seed whose province is more than that shape (Samoa: the naval station's small island, with the two large ones
+// beside it) and is not carried into the chart.
 for (const s of seeds) {
-  if (!s.flags.islet) continue;
+  if (!s.flags.islet && !s.flags.disc) continue;
   const [rx, ry] = ISLET_SIZE[s.name] ?? ISLET_SIZE._default;
   const ring = Array.from({ length: 20 }, (_, i) => [s.x + rx * Math.cos((i * Math.PI) / 10), s.y + ry * Math.sin((i * Math.PI) / 10)]);
   const disc = [[...ring, ring[0]]];
@@ -254,6 +311,7 @@ for (const s of seeds) {
   if (!polys.length) warn(`! ${s.name} has no land`);
   const flags = { ...s.flags };
   if (flags.islet) flags.islet = 1;
+  delete flags.disc;
   regions.push({ id: s.id, name: s.name, owner: s.owner, terrain: s.terrain, vp: s.vp, fac: s.fac, flags, x: r1(s.x), y: r1(s.y), polys, nb: [] });
 }
 const regionOfId = (id) => regions[id - first];
@@ -712,6 +770,7 @@ fs.writeFileSync(new URL(`../src/generated/${arg('out') ?? 'world-next'}.json`, 
 
 const pts = regions.reduce((s, r) => s + r.polys.reduce((t, p) => t + p.reduce((u, q) => u + q.length, 0), 0), 0);
 console.log(`\nfar side: ${regions.length} new provinces (${first} to ${first + regions.length - 1}), ${pts} points, ${land.length} new coasts, ${zones.length - nOld} new seas (${nOld} to ${zones.length - 1}), ${out.frame.x0} to ${out.frame.x1} by ${out.frame.y1}, ${(JSON.stringify(out).length / 1024).toFixed(0)} KB`);
+console.log(`${tabled} of ${regions.length} new provinces have a row in the tables`);
 if (!quiet) {
   if (pieces.length) console.log(`pieces across the water: ${pieces.join(', ')}`);
   if (joined.length) console.log(`islands joined to: ${[...new Set(joined)].join(', ')}`);

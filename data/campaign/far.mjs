@@ -4,16 +4,22 @@
 // chart are made, and writes src/generated/world-next.json. The provinces follow today's in number (576 up), in
 // the order of the slices below and of each slice's list. Add new ones at the end of the last slice.
 //
-// [name, lat, lon, owner, terrain, victory points, factories, flags]   (flags as in regions.mjs, and 'islet')
+// [name, lat, lon, owner, terrain, victory points, factories, flags]   (flags as in regions.mjs, and 'islet', 'disc')
 // Longitudes are written as an atlas writes them, east positive: the tool counts them eastward from today's west
 // edge (141 W), so Hawaii and Alaska lie at the far east end of the chart, beside the America they belong to.
 //
-// islet: 1 marks an island too small to see or to click. It is drawn larger than life, a round shape centred on
-// its true place (ISLET_SIZE below), in the chart's coast and in its own province.
+// The seed is the province's centre, and the rules measure every distance from it (air.ts, km). An island group is
+// seeded on the airfield that matters, as the Pacific planner's table has it (ruling 181): the Ellice group at
+// Nanumea, the eastern Marshalls at Maloelap, Formosa's south by Takao.
 //
-// Who owns and holds each province at each start year, its harbour, airfield, works and the rest are the map
-// tables' business (the clerk's table, one row to a province by name). The owner, ground and flags written here
-// are what the map needs to be drawn: the table is the source once a row exists.
+// islet: 1 marks an island too small to see or to click. It is drawn larger than life, a round shape centred on
+// its true place (ISLET_SIZE below), in the chart's coast and in its own province, and the flag goes into the chart.
+// disc: 1 lays the same round shape under a seed and no flag: the province is more than the shape.
+//
+// Owner, ground, victory points, factories and the flags port, col, cap, depot, oil and fort are the clerk's
+// table's business (data/campaign/tables, one row to a province by name): the table is the source once a row
+// exists, and what is written here stands until then. Who holds a province at each start year, its harbour,
+// airfield and the rest are in the table for the rules.
 
 export const PACIFIC_REGIONS = [
   // ---- Hawaii. Oahu is two provinces: the fleet's harbour with the army's fields behind it, and the city.
@@ -37,24 +43,43 @@ export const PACIFIC_REGIONS = [
   ['Juneau', 57.9, -134.4, 'USA', 'forest', 1, 0, { port: 1, col: 1 }],
   ['Ketchikan', 55.45, -131.5, 'USA', 'forest', 0, 0, { port: 1, col: 1 }],
   // The Aleutians, from the fleet's base in the east to the two islands Japan took in June 1942.
-  ['Dutch Harbor', 53.6, -166.9, 'USA', 'hills', 0, 0, { port: 1, col: 1 }],
-  ['Adak', 51.88, -176.65, 'USA', 'hills', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Dutch Harbor', 53.6, -166.9, 'USA', 'mountain', 0, 0, { port: 1, col: 1 }],
+  ['Adak', 51.88, -176.65, 'USA', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Kiska', 51.97, 177.5, 'USA', 'hills', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Attu', 52.9, 172.9, 'USA', 'hills', 0, 0, { col: 1, islet: 1 }],
-  // ---- The central road (the historian's table, ruling 173): Hawaii to the Ryukyus.
-  ['Midway', 28.2, -177.37, 'USA', 'plains', 0, 0, { col: 1, islet: 1 }],
-  ['Wake', 19.28, 166.65, 'USA', 'plains', 0, 0, { col: 1, islet: 1 }],
-  ['Tarawa', 1.42, 173.0, 'UK', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Funafuti', -8.52, 179.2, 'UK', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Kwajalein', 9.0, 167.6, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Eniwetok', 11.5, 162.25, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Eastern Marshalls', 7.6, 171.0, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Attu', 52.9, 173.2, 'USA', 'mountain', 0, 0, { port: 1, col: 1 }],
+  // ---- The central road (the historian's table, ruling 173; the planner's seeds, ruling 181): Hawaii to the Ryukyus.
+  ['Midway', 28.21, -177.37, 'USA', 'plains', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Wake', 19.28, 166.65, 'USA', 'plains', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Tarawa', 1.35, 172.93, 'UK', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Funafuti', -5.67, 176.1, 'UK', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Kwajalein', 8.72, 167.73, 'JAP', 'plains', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Eniwetok', 11.5, 162.33, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Eastern Marshalls', 8.7, 171.23, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
   ['Truk', 7.42, 151.78, 'JAP', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
-  ['Saipan', 15.1, 145.72, 'JAP', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
-  ['Guam', 13.45, 144.78, 'USA', 'hills', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Palau', 7.35, 134.5, 'JAP', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Saipan', 15.19, 145.75, 'JAP', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Guam', 13.45, 144.78, 'USA', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
+  ['Palau', 7.3, 134.5, 'JAP', 'hills', 1, 0, { port: 1, col: 1, islet: 1 }],
   ['Ulithi', 10.0, 139.7, 'JAP', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
-  ['Iwo Jima', 24.78, 141.32, 'JAP', 'hills', 0, 0, { col: 1, islet: 1 }],
+  ['Iwo Jima', 24.78, 141.32, 'JAP', 'hills', 1, 0, { port: 1, islet: 1 }],
+  ['Chichi Jima', 27.07, 142.2, 'JAP', 'hills', 0, 0, { port: 1, islet: 1 }],
+  ['Yap', 9.5, 138.1, 'JAP', 'hills', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Ponape', 6.9, 158.2, 'JAP', 'hills', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Nauru', -0.53, 166.93, 'AUS', 'plains', 0, 0, { port: 1, col: 1, islet: 1 }],
+  ['Marcus Island', 24.29, 153.98, 'JAP', 'plains', 0, 0, { port: 1, islet: 1 }],
+  // ---- The islands of the south-west road and of the lifeline to Australia. The large ones are the atlas's own
+  // shapes; the small islands beside each go with it (Malaita and Santa Isabel with Guadalcanal, Vanua Levu with Fiji).
+  ['Guadalcanal', -9.43, 160.05, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['New Georgia', -8.3, 157.3, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Bougainville', -6.2, 155.3, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Admiralty Islands', -2.05, 147.3, 'AUS', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Espiritu Santo', -15.4, 166.9, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['New Caledonia', -21.5, 165.5, 'FRA', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Fiji', -17.8, 178.0, 'UK', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Samoa', -14.3, -170.7, 'USA', 'hills', 0, 0, { port: 1, col: 1, disc: 1 }],
+  ['Biak', -1.0, 136.0, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Morotai', 2.3, 128.4, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Halmahera', 1.2, 127.9, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Okinawa', 26.5, 127.95, 'JAP', 'hills', 2, 0, { port: 1 }],
 ];
 
 /** Land of the Pacific slice that belongs to no province: seeds that take their share so the provinces beside them keep their shape. [what, lat, lon] */
@@ -88,6 +113,7 @@ export const FAR_LAKES = [
 /** How large an islet is drawn: half its width and half its height in map units (a unit is 2.8 km north to south). */
 export const ISLET_SIZE = {
   _default: [5, 5],
-  // The eastern Marshalls are four atolls and Majuro, 300 km from end to end; Truk's lagoon is 60 km across.
-  'Eastern Marshalls': [6, 9], Truk: [6, 7],
+  // The eastern Marshalls are four atolls 300 km from end to end; Truk's lagoon is 60 km across; Saipan stands with
+  // Tinian south of it; Guam and Babeldaob are long islands.
+  'Eastern Marshalls': [6, 9], Truk: [6, 7], Saipan: [4, 7], Guam: [5, 6], Palau: [4, 7],
 };
