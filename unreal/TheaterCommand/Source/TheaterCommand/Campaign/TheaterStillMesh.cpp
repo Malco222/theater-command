@@ -47,7 +47,7 @@ namespace
 
 		explicit FTheaterStillProxy(UTheaterStillMesh* Component)
 			: FPrimitiveSceneProxy(Component)
-			, MaterialRelevance(Component->GetMaterialRelevance(GetScene().GetFeatureLevel()))
+			, MaterialRelevance(Component->GetMaterialRelevance(GetScene().GetShaderPlatform()))
 		{
 			// (as the procedural mesh's own proxy: the sections' drawing orders use this proxy's own uniform buffer, so a
 			// move only updates that buffer and the kept orders stand)
