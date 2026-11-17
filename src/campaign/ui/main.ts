@@ -2335,7 +2335,7 @@ function drawFleetTray(f: Fleet): void {
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can
-    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a fleet of their own.">Split</button>` : ''}</div>`
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? FLEETS.orders.port.blurb : inHarbour(f))}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="${fleetOptions(g, f.id)?.split ? 'Send some of its ships off as a fleet of their own.' : esc(oneShip(f))}">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
@@ -5164,7 +5164,7 @@ function fleetOrders(f: Fleet): string {
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
   let out = `<div class="orders">
-    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>`;
+    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? 'A fleet in harbour refits quickly.' : inHarbour(f))}">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>`;
   const wings = wingsOfFleet(g, f.id);
   if (wings.length) {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
@@ -8116,6 +8116,12 @@ function pickFleetMark(ids: number[]): void {
 }
 
 /** The player's fleet being given orders, if it is still theirs to order. */
+/** Why a fleet's PORT order is off: it is there already. And why it cannot be split: it is one ship. (An off button says why, ruling 204(d).) */
+const inHarbour = (f: Fleet): string => `The ${f.name} is in harbour at ${f.port}.`;
+const oneShip = (f: Fleet): string => `The ${f.name} is a single ship: there is nothing to split off.`;
+/** A fleet's work at sea, in a sentence. */
+const seaWork = (s: Stance): string => (s === 'raid' ? 'raid shipping' : s === 'hunt' ? 'hunt submarines' : 'patrol');
+
 function myFleet(): Fleet | null {
   if (ui.fleet < 0 || !humanUp(g)) return null;
   const f = g.fleets.find((x) => x.id === ui.fleet);
@@ -8567,8 +8573,11 @@ function onClick(e: MouseEvent): void {
       ui.stance = t.dataset.stance as Stance;
       const f = myFleet();
       // A fleet at sea changes its work where it is. One in harbour, or bound to a lane, waits to be told which sea.
-      if (f && atSea(f) && f.stance !== 'escort') orderFleet(g, f.id, f.zone, ui.stance);
-      else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`;
+      if (f && atSea(f) && f.stance !== 'escort') {
+        // The piece does not move when only its work changes, so the line says what was ordered, as a click on its sea does.
+        // (The order it is already under is the lit button: pressed again, it stands.)
+        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
+      } else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;
       refresh(); break;
     }
     case 'fleetsec': {
@@ -8633,7 +8642,12 @@ function onClick(e: MouseEvent): void {
       if (myFleet()) onSea(Number(t.dataset.zone)); else refresh();
       break;
     }
-    case 'toport': { const f = myFleet(); if (f) orderFleet(g, f.id, f.home, 'port'); ui.rebase = false; refresh(); break; }
+    case 'toport': {
+      // The order is said as it is given (ruling 204(d)): the piece may not move on the map at this zoom.
+      const f = myFleet();
+      if (f) ui.msg = !atSea(f) ? inHarbour(f) : orderFleet(g, f.id, f.home, 'port') ? `Ordered: the ${f.name} returns to ${f.port}.` : `The ${f.name} cannot be given orders now.`;
+      ui.rebase = false; refresh(); break;
+    }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
     case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
     case 'seareport': openModal({ kind: 'seareport', id, back: monthBack() }); break;
