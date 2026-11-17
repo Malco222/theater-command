@@ -69,6 +69,38 @@ export function tiedPair(g: Game, a: string, b: string): boolean {
   return c !== null && farOn(g) && tieHolds(g, c, c === a ? b : a);
 }
 
+/**
+ * True for a war a client's row gives it while its tie reads: it makes no separate peace (the third rider to ruling
+ * 209(c)). The war ends when the patron's does, and the armistice of a quiet year passes the pair over (staff.ts).
+ */
+export function tieWar(g: Game, a: string, b: string): boolean {
+  if (!ANY || !farOn(g)) return false;
+  for (const [c, e] of [[a, b], [b, a]]) {
+    const row = CLIENTS[c];
+    if (row && row.wars.includes(e) && g.nations[row.patron]?.atWar.includes(e) && tieHolds(g, c, row.patron)) return true;
+  }
+  return false;
+}
+
+/**
+ * No sanctuary (T5; the second rider): a corps standing on the ground of its client or its patron strikes from it
+ * only into a war that country is in too. A Soviet army in Mongolia does not march on a neighbour Mongolia is at
+ * peace with. Read wherever a way between two provinces is asked after (rivers.ts blocked).
+ */
+export function tieBars(g: Game, c: Corps, to: Region, from = c.reg): boolean {
+  if (!ANY) return false;
+  const host = g.regions[from]?.ctrl, lord = to.ctrl;
+  if (host === undefined || host === c.nat || lord === host || clientOf(host, c.nat) === null) return false;
+  return farOn(g) && atWar(g, c.nat, lord) && !atWar(g, host, lord) && tiedPair(g, host, c.nat);
+}
+
+/** The plain reason for it, for either interface to show, or null. */
+export function whyTieBars(g: Game, c: Corps, to: Region, from = c.reg): string | null {
+  if (!tieBars(g, c, to, from)) return null;
+  const H = g.nations[g.regions[from].ctrl], L = g.nations[to.ctrl];
+  return `${c.name} stands on ${theName(H)}'s ground, and ${theName(H)} is at peace with ${theName(L)}. An army strikes from the ground of its client or its patron only into a war that country is in too.`;
+}
+
 /** A war the client's row made: the month it began. */
 const tieFlag = (client: string, e: string): string => `tie:${client}:${e}`;
 /** A war the patron took up for its client: the month it began. */

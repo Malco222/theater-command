@@ -35,6 +35,7 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
+import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, lineOwners, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -2038,6 +2039,7 @@ export function stalemates(g: Game): [string, string][] {
     const B = g.nations[b];
     if (!(A.id < b) || !B?.alive || B.dormant) continue;
     if (me !== null && (A.id === me || b === me || atWar(g, me, A.id) || atWar(g, me, b))) continue;
+    if (tieWar(g, A.id, b)) continue; // the far side: a client makes no separate peace while its patron fights on (far.ts)
     const sa = sideOf(g, A.id), sb = sideOf(g, b);
     const since = Math.max(lastBattle(sa, sb), massed(sa, sb), massed(sb, sa), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
     if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;

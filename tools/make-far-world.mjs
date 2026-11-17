@@ -193,7 +193,7 @@ const out = {
   grand: {
     nations: [{
       id: 'JAP',
-      years: { 1939: "Two years into a war in China that will not end. The coast, the railways and the great cities are yours, and the interior is not. The strongest fleet in the Pacific, six carriers, and oil for two years at most. Choose where the next blow falls, and when." },
+      years: { 1939: "Two years into a war in China that will not end. The coast, the railways and the great cities are yours, and the interior is not. The strongest fleet in the Pacific, six carriers, and oil for two years. Choose where the next blow falls." },
     }],
   },
   world: {

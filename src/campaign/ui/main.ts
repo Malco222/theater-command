@@ -11,7 +11,7 @@ import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMa
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
 import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
-import '../far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
+import { FAR_PATHS } from '../far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import grandData from '../../../data/campaign/grand.json';
 import {
   DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, standersAt, standersLine, theWords, weather, whyNotEvacuate,
@@ -6834,7 +6834,7 @@ function startCard(): string {
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
     <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</h4>
-      <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
+      <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${FAR_PATHS[pick.nat] ? ` ${esc(FAR_PATHS[pick.nat])}` : smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
       ${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
