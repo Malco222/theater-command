@@ -12,7 +12,7 @@ import { homeAlarms } from '../src/campaign/danger';
 import { addCorps, atWar, bloc, createGame, declareWar, thornGround } from '../src/campaign/game';
 import { whyNotShip } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, humanUp, orderDesk, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
 const A = DIPLOMACY.americas!;
@@ -35,9 +35,15 @@ function wonOf(g: Game, id: string): number {
 }
 
 describe('the Axis courts the Americas (ruling 223)', () => {
-  it('the figures sit in the data: the eleven neighbours, the shares by stop, the months', () => {
-    expect(A).toMatchObject({ backer: 'USA', months: 6, join: { 1: 0, 2: 0, 3: 0.03, 4: 0.06, 5: 0.1 } });
-    expect(A.of).toEqual(['MEX', 'CUB', 'HAI', 'DOM', 'GUA', 'ELS', 'HON', 'NIC', 'COS', 'PAN', 'ARG']);
+  it('the figures sit in the data: the twelve, the shares by stop and by readiness, the months, one a campaign', () => {
+    expect(A).toMatchObject({ backer: 'USA', months: 6, most: 1, join: { 1: 0, 2: 0, 3: 0.03, 4: 0.06, 5: 0.1 }, readiness: { MEX: 1, ARG: 1, CHL: 1 } });
+    expect(A.of).toEqual(['MEX', 'CUB', 'HAI', 'DOM', 'GUA', 'ELS', 'HON', 'NIC', 'COS', 'PAN', 'ARG', 'CHL']);
+    // (b391: the eight of the Caribbean and Central America, at war with the Axis from December 1941, a third.)
+    const g = playing();
+    g.flags.hist = 5;
+    expect(americasShare(g, 'MEX')).toBe(0.1);
+    expect(americasShare(g, 'CHL')).toBe(0.1);
+    expect(americasShare(g, 'CUB')).toBeCloseTo(0.0333, 3);
   });
 
   it('it opens on the wider world while America leans to the Allies, and never in a history campaign', () => {
@@ -54,7 +60,7 @@ describe('the Axis courts the Americas (ruling 223)', () => {
       for (const id of A.of) expect(wonOf(g, id)).toBe(0);
     }
     g.flags.hist = 3;
-    for (const id of A.of) { expect(americasShare(g, id)).toBe(0.03); expect(wonOf(g, id)).toBeLessThanOrEqual(7); }
+    for (const id of A.of) { expect(americasShare(g, id)).toBeLessThanOrEqual(0.03); expect(wonOf(g, id)).toBeLessThanOrEqual(7); }
     g.flags.hist = 5;
     const mex = wonOf(g, 'MEX');
     expect(mex).toBeGreaterThanOrEqual(5);
@@ -159,5 +165,30 @@ describe('the Axis courts the Americas (ruling 223)', () => {
     const home = Object.values(g.byName).find((r) => r.owner === 'USA' && !r.overseas && r.nb.some((j) => g.regions[j].owner === 'MEX'))!;
     addCorps(g, 'MEX', 'Northern military zones (test)', 'inf', 1, home.id, {});
     expect(homeAlarms(g, 'USA').some((a) => a.region === home.id && a.by === 'MEX')).toBe(true);
+  });
+
+  it('no more than one country of the Americas joins the Axis in a campaign (b391)', () => {
+    const g = playing('USA', 3, 5);
+    g.flags['americas:in:ARG'] = g.turn - 1;
+    g.nations.ARG.align = 'axis';
+    let seed = 0;
+    for (let s = 1; s < 400 && !seed; s++) { g.seed = s; if (americasWon(g, 'MEX')) seed = s; }
+    g.seed = seed;
+    g.flags['americas:months:MEX'] = A.months - 1;
+    g.nations.GER.pc = 30;
+    expect(court(g, 'GER', 'MEX')).toBe(true);
+    expect(bloc(g.nations.MEX)).not.toBe('axis');
+    expect(g.flags['americas:in:MEX']).toBeUndefined();
+  });
+
+  it("the words: each capital reads as a city, and a player's America that hands diplomacy to its staff hears it courted back", () => {
+    const g = playing();
+    expect(A.of.map((id) => g.regions[g.nations[id].capital].name)).toEqual(['Mexico City', 'Havana', 'Port-au-Prince', 'Ciudad Trujillo', 'Guatemala City', 'San Salvador', 'Tegucigalpa', 'Managua', 'San Jose', 'Panama City', 'Buenos Aires', 'Santiago']);
+    g.flags['court:GER:MEX'] = g.turn;
+    g.nations.USA.pc = 0;
+    orderDesk(g, 'diplomacy', true);
+    const said = g.headlines.filter((h) => h.desk === 'diplomacy' && h.turn === g.turn).map((h) => h.text).join(' ');
+    expect(said).toMatch(/courted Mexico back against the German envoys, at no cost\./);
+    expect(g.nations.USA.pc).toBe(0);
   });
 });
