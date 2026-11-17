@@ -4,7 +4,7 @@
 // (the design director, 2026-11-17 17:55Z): the computer against the computer averages the raid card within a tenth;
 // what a fought raid hands back to the rules stays inside the dice's own run (fly()'s luck, plus or minus 15 per cent).
 import { describe, expect, it } from 'vitest';
-import { afterCard, settleFought } from '../src/campaign/airfought';
+import { afterCard, rosterWords, settleFought } from '../src/campaign/airfought';
 import { launchRaid, planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
 import { airAct } from '../src/campaign/airpages';
 import { createGame, setWar } from '../src/campaign/game';
@@ -305,7 +305,7 @@ describe('handed to the staff (the design director, log b368): the rules\' own d
           const row = rep[x.side].find((y) => y.fleet === x.name)!;
           const flew = s.units.filter((u) => u.corps === row.id).reduce((n, u) => n + u.n0, 0);
           expect(x.flew).toBe(flew);
-          expect(x.words).toBe(`lost ${x.lostFtr + x.lostBmr || 'none'} of the ${flew} that flew`);
+          if (flew > 1) expect(x.words).toBe(`lost ${x.lostFtr + x.lostBmr || 'none'} of the ${flew} that flew`);
         }
         // One reckoning line, against the chance the raid card gave, in the land and sea cards' words.
         expect(card.reckoning).toMatch(/^(As the staff expected|As the staff feared|You did better than the staff expected|You did worse than the staff expected|Better than the staff expected|Worse than the staff expected): they /);
@@ -322,6 +322,13 @@ describe('the dispatches\' grammar (the UI director, air review 10)', () => {
     expect(told('Jagdgeschwader 4', '{N} [is|are] in a fight.')).toBe('Jagdgeschwader 4 is in a fight.');
     expect(told('No. 11 Group', '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.')).toBe('No. 11 Group breaks: it jettisons its bombs and turns for home.');
     expect(told('Home Fleet strike wing', '{N} [lands|land].')).toBe('Home Fleet strike wing lands.');
+  });
+
+  it('a roster row spells a lone aircraft', () => {
+    expect(rosterWords(0, 1)).toBe('lost none of the one that flew');
+    expect(rosterWords(1, 1)).toBe('lost the one that flew');
+    expect(rosterWords(0, 175)).toBe('lost none of the 175 that flew');
+    expect(rosterWords(25, 175)).toBe('lost 25 of the 175 that flew');
   });
 
   it('every dispatch in a battle reads without a bracket or a stray brace', () => {

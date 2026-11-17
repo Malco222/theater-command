@@ -10,6 +10,17 @@
 .air .bbal { flex: 1 1 200px; min-width: 180px; max-width: 360px; }
 .air .bratio { font-size: 12px; line-height: 14px; color: var(--paper-200); text-align: center; white-space: nowrap; }
 @media (max-width: 1279px) { .air .bbar { flex-wrap: wrap; } }
+/* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z). */
+/* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z); to leave
+   it the room for the longest ("The fight for the sky over Alsace"), the two orders at the right take the small
+   buttons the clock's already are, and the balance gives way first. */
+@media (max-width: 1439px) {
+  .air .bbar { gap: 10px; }
+  .air .btitle { flex: 1 1 auto; }
+  .air .btitle .tc-title-3 { font-size: 16px; line-height: 20px; white-space: nowrap; }
+  .air .bbal { flex: 0 1 190px; min-width: 170px; }
+  .air .bacts .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
+}
 
 /* A group's card: its name, then what it flies underneath ("Kampfgeschwader 5" / "Bombers"). */
 .air .ucard { min-width: 216px; }

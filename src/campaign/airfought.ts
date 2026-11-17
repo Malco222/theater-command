@@ -133,6 +133,8 @@ export function reckoned(carried: boolean, chance: number): string {
 
 /** A roster row: what a group lost of what it sent up, one form for every row (the design director, 19:29Z). */
 export function rosterWords(lost: number, flew: number): string {
+  // A lone aircraft is spelled (the UI director, 19:36Z): "lost none of the one that flew", "lost the one that flew".
+  if (flew === 1) return lost ? 'lost the one that flew' : 'lost none of the one that flew';
   return `lost ${lost === 0 ? 'none' : lost} of the ${flew} that flew`;
 }
 
