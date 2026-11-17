@@ -91,7 +91,7 @@ describe('who holds a sea', () => {
     expect(g.seas[fleet(g, 'U-boat Arm').zone].key).toBe('wapp');
     // The German surface fleet waits in port, and Italy is not yet at war.
     expect(fleet(g, 'Battle Fleet').stance).toBe('port');
-    expect(fleet(g, '1st Squadron').stance).toBe('port');
+    expect(fleet(g, '1st Fleet').stance).toBe('port');
     expect(fleetPower(g, home)).toBeGreaterThan(2 * fleetPower(g, fleet(g, 'Battle Fleet')));
   });
 
@@ -125,7 +125,7 @@ describe('who holds a sea', () => {
     expect(reach).not.toContain('black');
     // The Italian fleet cannot pass Gibraltar once it is at war with Britain.
     declareWar(g, 'ITA', 'UK');
-    for (const name of ['1st Squadron', '2nd Squadron']) expect(fleetReach(g, fleet(g, name)).map((z) => g.seas[z].key)).not.toContain('iberia');
+    for (const name of ['1st Fleet', '2nd Fleet']) expect(fleetReach(g, fleet(g, name)).map((z) => g.seas[z].key)).not.toContain('iberia');
   });
 });
 
@@ -209,7 +209,7 @@ describe('fleet actions', () => {
 
   it('a fleet whose base falls moves to another port, or is scuttled when there is none', () => {
     const g = createGame(1, null);
-    const sq = fleet(g, 'Atlantic Squadron');
+    const sq = fleet(g, 'Atlantic Fleet');
     const brest = g.byName['Brittany'];
     expect(sq.base).toBe(brest.id);
     capture(g, brest, 'GER');

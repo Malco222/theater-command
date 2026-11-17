@@ -50,11 +50,11 @@
     {"nat": "GER", "name": "U-boat Arm", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "wapp", "duty": "raid", "admiral": "Karl Donitz", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 27}},
     {"nat": "GER", "name": "Baltic Station", "base": "Stettin", "port": "Swinemunde", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Rolf Carls", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 6, "ss": 6}},
 
-    {"nat": "FRA", "name": "Atlantic Squadron", "base": "Brittany", "port": "Brest", "home": "biscay", "zone": "biscay", "duty": "patrol", "admiral": "Marcel Gensoul", "ships": {"bb": 2, "cv": 1, "ca": 3, "dd": 10, "ss": 12}},
-    {"nat": "FRA", "name": "Mediterranean Squadron", "base": "Marseille", "port": "Toulon", "home": "wmed", "zone": "wmed", "duty": "patrol", "admiral": "Jean-Pierre Esteva", "ships": {"bb": 3, "cv": 0, "ca": 10, "dd": 28, "ss": 40}},
+    {"nat": "FRA", "name": "Atlantic Fleet", "base": "Brittany", "port": "Brest", "home": "biscay", "zone": "biscay", "duty": "patrol", "admiral": "Marcel Gensoul", "ships": {"bb": 2, "cv": 1, "ca": 3, "dd": 10, "ss": 12}},
+    {"nat": "FRA", "name": "Mediterranean Fleet", "base": "Marseille", "port": "Toulon", "home": "wmed", "zone": "wmed", "duty": "patrol", "admiral": "Jean-Pierre Esteva", "ships": {"bb": 3, "cv": 0, "ca": 10, "dd": 28, "ss": 40}},
 
-    {"nat": "ITA", "name": "1st Squadron", "base": "Apulia", "port": "Taranto", "home": "ionian", "zone": "ionian", "duty": "patrol", "admiral": "Inigo Campioni", "ships": {"bb": 4, "cv": 0, "ca": 12, "dd": 30, "ss": 0}},
-    {"nat": "ITA", "name": "2nd Squadron", "base": "Naples", "port": "Naples", "home": "tyrr", "zone": "tyrr", "duty": "patrol", "admiral": "Riccardo Paladini", "ships": {"bb": 0, "cv": 0, "ca": 7, "dd": 25, "ss": 0}},
+    {"nat": "ITA", "name": "1st Fleet", "base": "Apulia", "port": "Taranto", "home": "ionian", "zone": "ionian", "duty": "patrol", "admiral": "Inigo Campioni", "ships": {"bb": 4, "cv": 0, "ca": 12, "dd": 30, "ss": 0}},
+    {"nat": "ITA", "name": "2nd Fleet", "base": "Naples", "port": "Naples", "home": "tyrr", "zone": "tyrr", "duty": "patrol", "admiral": "Riccardo Paladini", "ships": {"bb": 0, "cv": 0, "ca": 7, "dd": 25, "ss": 0}},
     {"nat": "ITA", "name": "Submarine Command", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 60}},
 
     {"nat": "SOV", "name": "Baltic Fleet", "base": "Leningrad", "port": "Kronstadt", "home": "finland", "zone": "finland", "duty": "patrol", "tied": true, "admiral": "Vladimir Tributs", "ships": {"bb": 2, "cv": 0, "ca": 2, "dd": 20, "ss": 50}},
@@ -82,7 +82,7 @@
     [16, "UK", "Mediterranean Fleet", {"cv": 1}, "the carrier Formidable"],
     [21, "UK", "Home Fleet", {"bb": 1, "cv": 1}, "the battleship Prince of Wales and the carrier Victorious"],
     [21, "GER", "Battle Fleet", {"bb": 1}, "the battleship Bismarck"],
-    [12, "ITA", "1st Squadron", {"bb": 2}, "the battleships Littorio and Vittorio Veneto"],
+    [12, "ITA", "1st Fleet", {"bb": 2}, "the battleships Littorio and Vittorio Veneto"],
     [30, "GER", "Battle Fleet", {"bb": 1}, "the battleship Tirpitz"]
   ]
 }

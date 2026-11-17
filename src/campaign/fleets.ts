@@ -430,9 +430,9 @@ export function bombardTargets(g: Game, f: Fleet, viewer: string | null = null):
 
 const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
 
-/** A name for a squadron split off from a fleet, by what it is made of: "2nd Escort Group". */
+/** A name for ships split off from a fleet, by what they are made of: "2nd Escort Fleet". Every group of ships is called a fleet. */
 export function squadronName(g: Game, nat: string, s: Ships): string {
-  const word = s.ss > 0 && shipCount(s) === s.ss ? 'Submarine Flotilla' : s.bb + s.cv > 0 ? 'Battle Squadron' : s.dd >= s.ca ? 'Escort Group' : 'Cruiser Squadron';
+  const word = s.ss > 0 && shipCount(s) === s.ss ? 'Submarine Fleet' : s.bb + s.cv > 0 ? 'Battle Fleet' : s.dd >= s.ca ? 'Escort Fleet' : 'Cruiser Fleet';
   for (let k = 0; ; k++) {
     const name = `${ORD[k] ?? `${k + 1}th`} ${word}`;
     if (!g.fleets.some((f) => f.nat === nat && f.name === name)) return name;
