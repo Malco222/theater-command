@@ -1,0 +1,4 @@
+first-hour-america.steps.txt on file:///home/user/tc842/dist/play.html
+steps 66: DID 55, SAID WHY 3, DEAD 0, MUTE 0, MISSING 1, ERROR 0; checks passed 0, failed 0
+
+MISSING  step 36 (line 53): press Court  --  no button reads "Court"
