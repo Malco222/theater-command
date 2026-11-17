@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -497,6 +497,8 @@ function view() {
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
       marchTo: marchOf(s, c), marchMonths: marchState(s, c)?.months ?? 0,
+      // (One voice after a press, 17 November) and whether that march is still to set off, as the next month opens
+      marchNext: marchOf(s, c) >= 0 && s.flags[`marchLegs:${c.id}`] === 0,
       canOrder: up && canOrder(s, c), noOrders: whyNotOrder(s, c) ?? '', supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0,
       // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
       works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
@@ -1557,7 +1559,7 @@ function barredSeas(s: Game, f: Game['fleets'][number]): number[] {
  * how long it would take, the road, and the line for the pointer. All of it is the rules' own (marches.ts); for more
  * than one corps the line speaks of them together. Nothing in the game is changed by asking.
  */
-function marchPlanOf(ids: number[], to: number) {
+function marchPlanOf(ids: number[], to: number, army = '', armyIds: number[] = []) {
   const none = { ok: false, spent: false, now: false, months: 0, road: [] as number[], line: '' };
   try {
     const s = game();
@@ -1565,12 +1567,14 @@ function marchPlanOf(ids: number[], to: number) {
     const lead = cs[0];
     if (!lead || !s.regions[to]) return none;
     const p = planMarch(s, lead, to);
-    let line = p.line, months = p.months;
+    let line = p.line.split(lead.name).join(shortName(lead.name)), months = p.months;
     if (p.ok && !p.now && cs.length > 1) {
       for (const c of cs.slice(1)) { const q = planMarch(s, c, to); if (q.ok && !q.now) months = Math.max(months, q.months); }
       const all = cs.every((c) => c.ap <= 0);
-      line = all ? `These ${cs.length} corps march here from next month, ${inMonths(months)}.`
-        : `These ${cs.length} corps march here over ${inMonths(months)}, going on by themselves as each month opens.`;
+      // (One voice after a press) named as the order's own sentence will name them: the army, or so many corps of it
+      const { who, many } = whoOf(cs, army, armyIds);
+      line = all ? `${leading(who)} ${many ? 'march' : 'marches'} here from next month, ${inMonths(months)}.`
+        : `${leading(who)} ${many ? 'march' : 'marches'} here over ${inMonths(months)}, going on by ${many ? 'themselves' : 'itself'} as each month opens.`;
     }
     return { ok: p.ok, spent: p.spent, now: p.now, months, road: p.road, line };
   } catch { return none; }
@@ -1579,10 +1583,31 @@ function marchPlanOf(ids: number[], to: number) {
 /** (Version 65) The swap last offered: asked once, done when the same march is ordered again. */
 let swapAsked = '';
 
-function move(ids: number[], to: number) {
+/** A corps' own name, without the divisions in brackets that some names in the data still carry ("First Army (1st Division)" is First Army). */
+const shortName = (name: string): string => name.replace(/\s*\([^()]*Division[^()]*\)\s*$/, '');
+/** A sentence's first letter made a capital ("the American army" leading a sentence). */
+const leading = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * (One voice after a press; the UI director's brief, ruled by the design director at 17:16 UTC on 17 November.) Who
+ * an order speaks of: the whole army in hand by the army's own name, as the tray's head names it ("the American
+ * army", "Heinz Guderian's army"); part of it as "2 corps of the American army"; one corps alone by its own name.
+ * `army` and `armyIds` are the table's: the army's name and the corps it has in the field there.
+ */
+function whoOf(cs: Corps[], army: string, armyIds: number[]): { who: string; many: boolean } {
+  if (cs.length === 1) return { who: shortName(cs[0].name), many: false };
+  const has = new Set(cs.map((c) => c.id));
+  if (army && armyIds.length > 0 && armyIds.every((id) => has.has(id))) return { who: army, many: false };
+  return { who: army ? `${cs.length} corps of ${army}` : `${cs.length} corps`, many: true };
+}
+
+function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
   const s = game();
   const moved: { id: number; path: number[] }[] = [];
   let note = '';
+  // (One voice after a press) the corps whose march is kept, said of together once they are all ordered
+  const kept: Corps[] = [];
+  let keptMonths = 0, setOff = false;
   // (Version 65) A friendly province next door that is full: the corps can change places with one that stands
   // there. It is asked once, and done when the same march is ordered again.
   const trySwap = (c: Corps): void => {
@@ -1615,9 +1640,9 @@ function move(ids: number[], to: number) {
         const done = orderMarch(s, c, to);
         if (done.moved > 0) moved.push({ id: c.id, path: plan.road.slice(0, done.moved) });
         if (done.kept) {
-          note = plan.spent
-            ? `${c.name} has no moves left this month. It marches for ${s.regions[to].name} as next month opens, ${inMonths(done.months)}, and goes on by itself until it arrives. Any other order stops the march.`
-            : `${c.name} marches for ${s.regions[to].name}, ${inMonths(done.months)} more. It goes on by itself as each month opens, and halts if the enemy comes to bar its way. Any other order stops the march.`;
+          kept.push(c);
+          keptMonths = Math.max(keptMonths, done.months);
+          if (done.moved > 0) setOff = true;
         }
         continue;
       }
@@ -1630,6 +1655,15 @@ function move(ids: number[], to: number) {
     const n = orderMove(s, c, to);
     if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
     else trySwap(c);
+  }
+  if (kept.length) {
+    // One sentence answers the press, of everyone whose march is kept. (a) It set off this month and goes on; (b) it
+    // was laid for next month, nobody having stirred yet. A march that arrives says nothing: the piece moving is the answer.
+    const { who, many } = whoOf(kept, army, armyIds), place = s.regions[to].name;
+    const said = setOff
+      ? `${leading(who)} ${many ? 'are' : 'is'} on the march to ${place}: ${inMonths(keptMonths)} more, going on as each month opens. Any other order ends the march.`
+      : `${leading(who)} will march to ${place} from next month, ${inMonths(keptMonths)}. Any other order ends the march.`;
+    note = note ? `${said} ${note}` : said;
   }
   return { moved, note, view: view() };
 }
@@ -2482,7 +2516,29 @@ function rail(ids: number[], to: number) {
  * dot (none on the steepest ground for armour, and none on a cut, which has its lamp); the lit lines that stop at a
  * cut; and the cuts engineers in hand can be carried to.
  */
-function railShow(ids: number[], march: number[]) {
+/**
+ * (One voice after a press: the design director's note of 17 November.) The tray's rail line names whom it is true
+ * of. Where no corps in hand can ride, each for the same reason, it speaks of them together ("No train for the
+ * American army this month: ..."), never of one corps of three; where it names one corps, that corps goes by its own
+ * name. Any other line stands as the rules give it.
+ */
+function trainWho(s: Game, cs: Corps[], line: string, army: string, armyIds: number[]): string {
+  const head = 'No train for \u0000 this month:';
+  if (cs.length > 1) {
+    const lines = cs.map((c) => { const no = whyNoTrain(s, c); return no ? no.line.split(c.name).join('\u0000') : null; });
+    const first = lines[0];
+    if (first && first.startsWith(head) && lines.every((l) => l === first)) {
+      const { who, many } = whoOf(cs, army, armyIds);
+      const rest = first.slice(head.length);
+      return `No train for ${who} this month:${many ? rest.replace(/\bit has\b/g, 'they have').replace(/\bits month\b/g, 'their month') : rest}`;
+    }
+  }
+  let out = line;
+  for (const c of cs) if (shortName(c.name) !== c.name) out = out.split(c.name).join(shortName(c.name));
+  return out;
+}
+
+function railShow(ids: number[], march: number[], army = '', armyIds: number[] = []) {
   const s = game();
   const none = { can: false, strong: '', line: '', tracks: [] as number[][], reach: [] as number[], dots: [] as number[], tint: [] as number[], bars: [] as number[][], ringed: [] as number[] };
   try {
@@ -2505,7 +2561,7 @@ function railShow(ids: number[], march: number[]) {
       for (const b of railsAt(a)) if (cuts.has(b) && !pair.has(`${Math.min(a, b)}:${Math.max(a, b)}`)) bars.push([a, b]);
     }
     return {
-      can: !!said?.can, strong: said?.strong ?? '', line: said?.line ?? '', tracks, reach,
+      can: !!said?.can, strong: said?.strong ?? '', line: said ? trainWho(s, cs, said.line, army, armyIds) : '', tracks, reach,
       dots: beyond.filter((id) => !cuts.has(id) && !(barred && steep.has(s.regions[id].name))),
       tint: beyond, bars, ringed: reach.filter((id) => cuts.has(id)),
     };

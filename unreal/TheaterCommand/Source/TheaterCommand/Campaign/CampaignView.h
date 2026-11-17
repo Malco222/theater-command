@@ -99,6 +99,7 @@ struct FViewCorps
 	int32 MovesMax = 0;
 	int32 MarchTo = INDEX_NONE; // (release 1) the province it is marching to on a standing order
 	int32 MarchMonths = 0; // and about how many months it has still to go
+	bool bMarchNext = false; // (one voice after a press) and that it has still to set off, as the next month opens
 	bool bCanOrder = false; // the player may give this corps orders right now
 	FString NoOrders; // (rules 84.1, ruling 176(c)) why a corps of his own never takes orders, in the rules' sentence: "Fortress troops man their works and do not move."
 	int32 Experience = 0; // 0 to 100

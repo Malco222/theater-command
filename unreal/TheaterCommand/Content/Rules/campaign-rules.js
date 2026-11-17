@@ -30853,6 +30853,8 @@
           // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
           marchTo: marchOf(s, c),
           marchMonths: marchState(s, c)?.months ?? 0,
+          // (One voice after a press, 17 November) and whether that march is still to set off, as the next month opens
+          marchNext: marchOf(s, c) >= 0 && s.flags[`marchLegs:${c.id}`] === 0,
           canOrder: up && canOrder(s, c),
           noOrders: whyNotOrder(s, c) ?? "",
           supplied: c.supplied,
@@ -31901,7 +31903,7 @@
     }
     return out;
   }
-  function marchPlanOf(ids2, to) {
+  function marchPlanOf(ids2, to, army = "", armyIds = []) {
     const none3 = { ok: false, spent: false, now: false, months: 0, road: [], line: "" };
     try {
       const s = game();
@@ -31909,14 +31911,15 @@
       const lead2 = cs[0];
       if (!lead2 || !s.regions[to]) return none3;
       const p = planMarch(s, lead2, to);
-      let line = p.line, months3 = p.months;
+      let line = p.line.split(lead2.name).join(shortName(lead2.name)), months3 = p.months;
       if (p.ok && !p.now && cs.length > 1) {
         for (const c of cs.slice(1)) {
           const q = planMarch(s, c, to);
           if (q.ok && !q.now) months3 = Math.max(months3, q.months);
         }
         const all = cs.every((c) => c.ap <= 0);
-        line = all ? `These ${cs.length} corps march here from next month, ${inMonths2(months3)}.` : `These ${cs.length} corps march here over ${inMonths2(months3)}, going on by themselves as each month opens.`;
+        const { who, many } = whoOf(cs, army, armyIds);
+        line = all ? `${leading(who)} ${many ? "march" : "marches"} here from next month, ${inMonths2(months3)}.` : `${leading(who)} ${many ? "march" : "marches"} here over ${inMonths2(months3)}, going on by ${many ? "themselves" : "itself"} as each month opens.`;
       }
       return { ok: p.ok, spent: p.spent, now: p.now, months: months3, road: p.road, line };
     } catch {
@@ -31924,10 +31927,20 @@
     }
   }
   var swapAsked = "";
-  function move(ids2, to) {
+  var shortName = (name) => name.replace(/\s*\([^()]*Division[^()]*\)\s*$/, "");
+  var leading = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+  function whoOf(cs, army, armyIds) {
+    if (cs.length === 1) return { who: shortName(cs[0].name), many: false };
+    const has = new Set(cs.map((c) => c.id));
+    if (army && armyIds.length > 0 && armyIds.every((id) => has.has(id))) return { who: army, many: false };
+    return { who: army ? `${cs.length} corps of ${army}` : `${cs.length} corps`, many: true };
+  }
+  function move(ids2, to, army = "", armyIds = []) {
     const s = game();
     const moved = [];
     let note4 = "";
+    const kept = [];
+    let keptMonths = 0, setOff = false;
     const trySwap = (c) => {
       let others = [];
       try {
@@ -31959,7 +31972,9 @@
           const done = orderMarch(s, c, to);
           if (done.moved > 0) moved.push({ id: c.id, path: plan.road.slice(0, done.moved) });
           if (done.kept) {
-            note4 = plan.spent ? `${c.name} has no moves left this month. It marches for ${s.regions[to].name} as next month opens, ${inMonths2(done.months)}, and goes on by itself until it arrives. Any other order stops the march.` : `${c.name} marches for ${s.regions[to].name}, ${inMonths2(done.months)} more. It goes on by itself as each month opens, and halts if the enemy comes to bar its way. Any other order stops the march.`;
+            kept.push(c);
+            keptMonths = Math.max(keptMonths, done.months);
+            if (done.moved > 0) setOff = true;
           }
           continue;
         }
@@ -31972,6 +31987,11 @@
       const n = orderMove(s, c, to);
       if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
       else trySwap(c);
+    }
+    if (kept.length) {
+      const { who, many } = whoOf(kept, army, armyIds), place2 = s.regions[to].name;
+      const said = setOff ? `${leading(who)} ${many ? "are" : "is"} on the march to ${place2}: ${inMonths2(keptMonths)} more, going on as each month opens. Any other order ends the march.` : `${leading(who)} will march to ${place2} from next month, ${inMonths2(keptMonths)}. Any other order ends the march.`;
+      note4 = note4 ? `${said} ${note4}` : said;
     }
     return { moved, note: note4, view: view2() };
   }
@@ -32837,7 +32857,25 @@
     const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place2} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? "One corps stays" : `${left} corps stay`} behind: ${place2} has no room for more.` : ""}` : "";
     return { moved, said, view: view2() };
   }
-  function railShow(ids2, march3) {
+  function trainWho(s, cs, line, army, armyIds) {
+    const head = "No train for \0 this month:";
+    if (cs.length > 1) {
+      const lines = cs.map((c) => {
+        const no = whyNoTrain(s, c);
+        return no ? no.line.split(c.name).join("\0") : null;
+      });
+      const first2 = lines[0];
+      if (first2 && first2.startsWith(head) && lines.every((l) => l === first2)) {
+        const { who, many } = whoOf(cs, army, armyIds);
+        const rest = first2.slice(head.length);
+        return `No train for ${who} this month:${many ? rest.replace(/\bit has\b/g, "they have").replace(/\bits month\b/g, "their month") : rest}`;
+      }
+    }
+    let out = line;
+    for (const c of cs) if (shortName(c.name) !== c.name) out = out.split(c.name).join(shortName(c.name));
+    return out;
+  }
+  function railShow(ids2, march3, army = "", armyIds = []) {
     const s = game();
     const none3 = { can: false, strong: "", line: "", tracks: [], reach: [], dots: [], tint: [], bars: [], ringed: [] };
     try {
@@ -32866,7 +32904,7 @@
       return {
         can: !!said?.can,
         strong: said?.strong ?? "",
-        line: said?.line ?? "",
+        line: said ? trainWho(s, cs, said.line, army, armyIds) : "",
         tracks,
         reach: reach3,
         dots: beyond.filter((id) => !cuts.has(id) && !(barred3 && steep2.has(s.regions[id].name))),

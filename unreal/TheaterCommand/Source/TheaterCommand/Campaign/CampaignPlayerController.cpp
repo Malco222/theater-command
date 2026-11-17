@@ -2765,7 +2765,9 @@ void ACampaignPlayerController::ShowEndAsk()
 
 bool ACampaignPlayerController::IsMarchSlipShown() const
 {
-	return bHandSpent && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
+	// (One voice after a press.) The first lesson for an army picked up with no moves left: never the result of an
+	// order, and any order to that army puts it away.
+	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
 }
 
 void ACampaignPlayerController::DismissMarchSlip()
@@ -2784,7 +2786,7 @@ const FMarchPlan& ACampaignPlayerController::PlanFor(int32 RegionId)
 	{
 		KeptPlanRegion = RegionId;
 		FCampaignSession* Session = GetSession();
-		KeptPlan = (Session && RegionId != INDEX_NONE && ArmyRegion != INDEX_NONE && RegionId != ArmyRegion) ? Session->PlanMarch(PickedCorps, RegionId) : FMarchPlan();
+		KeptPlan = (Session && RegionId != INDEX_NONE && ArmyRegion != INDEX_NONE && RegionId != ArmyRegion) ? Session->PlanMarch(PickedCorps, RegionId, HandArmy, HandArmyIds) : FMarchPlan();
 	}
 	return KeptPlan;
 }
@@ -5500,9 +5502,10 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		}
 	}
 	Tray.HintLead = FText::GetEmpty();
-	if (bHandSpent && !bBySea && !bByRail)
+	if (bHandSpent && !bHandOrdered && !bBySea && !bByRail)
 	{
-		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens.
+		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens. (One voice
+		// after a press: only before any order is given to it, the one time the foot speaks of next month.)
 		Tray.HintLead = FText::FromString(TEXT("No moves left this month."));
 		Tray.Hint = FText::FromString(TEXT("Right-click a friendly place and they march there from next month."));
 		// (The playtester's run of 17 November: a garrison always reads "no moves", and was promised a march here.)
@@ -5515,9 +5518,10 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 	}
 	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
 	{
-		// (the order is given: the card says so, and how to change it)
-		Tray.HintLead = FText::FromString(bHandSpent ? TEXT("They march from next month.") : TEXT("On the march."));
-		Tray.Hint = FText::FromString(TEXT("They go on by themselves as each month opens. Right-click another place to change the order."));
+		// (One voice after a press.) The order is given and the paper line has said so: the foot says only what a press
+		// would do now, with no brass lead.
+		Tray.HintLead = FText::GetEmpty();
+		Tray.Hint = FText::FromString(TEXT("Right-click another place to change the order."));
 	}
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
@@ -5652,6 +5656,10 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	}
 	const bool bNewInHand = ArmyRegion != RegionId;
 	PutDownAgent(); // (an army in hand: the agent is let go)
+	if (bNewInHand)
+	{
+		bHandOrdered = false; // (one voice after a press: a new hand, and no order given it yet)
+	}
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
@@ -5727,6 +5735,7 @@ void ACampaignPlayerController::PutDownArmy()
 	}
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
+	bHandOrdered = false;
 	RefreshOrders();
 }
 
@@ -5857,7 +5866,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.MovesMax = Unit.MovesMax;
 		if (Unit.MarchTo != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Unit.MarchTo))
 		{
-			Card.Marching = FString::Printf(TEXT("Marching to %s, about %s"), *Map->GetData().Regions[Unit.MarchTo].Name,
+			// (One voice after a press.) The lasting fact is each corps' own line: on its way, or set off from next month.
+			Card.Marching = Unit.bMarchNext ? FString::Printf(TEXT("Marches to %s from next month"), *Map->GetData().Regions[Unit.MarchTo].Name)
+				: FString::Printf(TEXT("Marching to %s, about %s"), *Map->GetData().Regions[Unit.MarchTo].Name,
 				Unit.MarchMonths <= 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), Unit.MarchMonths));
 		}
 		Card.bCanOrder = Unit.bCanOrder;
@@ -5900,6 +5911,24 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
+	// (One voice after a press.) The army as the tray's head names it, for the rules' sentences, and the corps it has in
+	// the field (the town's garrison where nobody stands outside), as an army is picked up.
+	HandArmy = General.IsEmpty() ? FString::Printf(TEXT("the %s army"), *Adjective) : FString::Printf(TEXT("%s's army"), *General);
+	HandArmyIds.Reset();
+	{
+		TArray<int32> InTown;
+		for (const FViewCorps& Unit : View.Corps)
+		{
+			if (Unit.Region == ArmyRegion && Unit.Nation == View.Human && Unit.bCanOrder)
+			{
+				(Unit.bInTown ? InTown : HandArmyIds).Add(Unit.Id);
+			}
+		}
+		if (HandArmyIds.Num() == 0)
+		{
+			HandArmyIds = MoveTemp(InTown);
+		}
+	}
 	Mix.ValueSort([](int32 A, int32 B) { return A > B; });
 	TArray<FString> Made;
 	for (const TPair<FString, int32>& Kind : Mix)
@@ -6011,7 +6040,7 @@ void ACampaignPlayerController::RefreshOrders()
 				Walked.Add(Step.Region);
 			}
 		}
-		FRailShow Trains = Session->RailShow(PickedCorps, Walked);
+		FRailShow Trains = Session->RailShow(PickedCorps, Walked, HandArmy, HandArmyIds);
 		Trains.Light.From = ArmyRegion;
 		RailBeyond = TSet<int32>(Trains.Light.Tint);
 		Tray.bRailCan = Trains.bCan;
@@ -6424,6 +6453,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
 			return;
 		}
+		bHandOrdered = true;
 		ShowWar(Session->GetView(), Trains, CarriedFrom);
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
@@ -6448,12 +6478,14 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		AdviserSaw(1);
 		FString Said;
 		const bool bWasSpent = bHandSpent;
-		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
+		// (One voice after a press.) The rules' one sentence answers the press, naming the army as the tray's head does.
+		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said, HandArmy, HandArmyIds);
 		if (Said.IsEmpty() && Marches.Num() == 0)
 		{
 			Notify(TEXT("They cannot march there."), 5.0);
 			return;
 		}
+		bHandOrdered = true; // (the slip is put away, and the foot says only how to change the order)
 		if (bWasSpent && !bMarchSlipDone)
 		{
 			bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
@@ -6516,6 +6548,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
 			return;
 		}
+		bHandOrdered = true;
 		ShowWar(Session->GetView(), Trains, CarriedFrom);
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
@@ -6549,7 +6582,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 
 	AdviserSaw(1);
 	FString Said;
-	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
+	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said, HandArmy, HandArmyIds);
 	if (Said.IsEmpty() && Marches.Num() > 0 && Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; }))
 	{
 		Said = MarchSays; // (said once the army is there)
@@ -6560,6 +6593,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		Notify(Said.IsEmpty() ? FString(TEXT("They cannot get there this month.")) : Said, Said.IsEmpty() ? 5.0 : 9.0);
 		return;
 	}
+	bHandOrdered = true;
 	if (!Said.IsEmpty())
 	{
 		Notify(Said, 7.0);

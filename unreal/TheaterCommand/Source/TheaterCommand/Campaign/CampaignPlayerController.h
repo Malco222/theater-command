@@ -1025,6 +1025,11 @@ private:
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
+	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
+	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
+	bool bHandOrdered = false;
+	FString HandArmy; // the army in hand as its tray's head names it, for the rules' sentences: "the American army", "Heinz Guderian's army"
+	TArray<int32> HandArmyIds; // and the corps it has in the field there
 	bool bNightTold = false; // (ruling 205(c)) this campaign's first night has said that it is night, and which key holds the hour
 	FMarchPlan KeptPlan; // the rules' plan for a march to the place last asked about
 	int32 KeptPlanRegion = -2;
