@@ -61,8 +61,11 @@ export function saveGame(g: Game): string {
     // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
     supply: Object.fromEntries(Object.entries(g.supply).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
-    // The order corps stand in within a region is kept too: battles and retreats take them in that order.
-    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
+    // The order corps stand in within a region is kept too: battles and retreats take them in that order. So is the
+    // order of the corps inside its town, as an eighth entry where there is a garrison (Version 84.3): it decides who
+    // defends a storm, who is turned out of a full town and what becomes of each corps when the town falls. A
+    // province with nobody inside its town is written as it always was.
+    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id), ...(r.garr?.length ? [r.garr.map((c) => c.id)] : [])]),
     corps: g.corps,
     generals: g.generals,
     fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
@@ -174,9 +177,12 @@ export function loadGame(text: string): Game | null {
   g.regions.forEach((r, i) => {
     const ids = d.regions[i][6] as number[] | undefined;
     if (ids) for (const id of ids) { const c = byId.get(id); if (c && c.reg === r.id && !c.town) { r.units.push(c); byId.delete(id); } }
+    // The corps inside the town, in the order they stood there (a save from Version 84.3 on).
+    const inside = d.regions[i][7] as number[] | undefined;
+    if (inside) for (const id of inside) { const c = byId.get(id); if (c && c.reg === r.id && c.town) { (r.garr ??= []).push(c); byId.delete(id); } }
   });
-  // Anything a save from an older build did not list goes in as it comes. A corps in garrison (the grand campaign)
-  // is on no field's list: it goes back inside its town, in the order it was saved.
+  // Anything a save from an older build did not list goes in as it comes. A corps in garrison that such a save
+  // did not list goes back inside its town in the order of the corps' roll.
   for (const c of g.corps) if (byId.has(c.id)) { const r = g.regions[c.reg]; if (c.town) (r.garr ??= []).push(c); else r.units.push(c); }
   // A carved place that finds itself in the front line is not left empty: if the ground it was cut from has two
   // or more corps free to move, the first of them takes post there.
