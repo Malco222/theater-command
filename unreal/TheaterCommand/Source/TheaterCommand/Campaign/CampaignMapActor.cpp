@@ -7266,7 +7266,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		if (WoodsMaterial)
 		{
 			// (and the woods are cooled and dimmed with it, or the yellows of autumn shine like lamps in the blackout)
-			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.56f, 0.8f), Moon));
+			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, ACampaignEnvironment::MoonLook().Trees, Moon));
 		}
 		// (the grey floor a wood keeps under the snow: the art director's ruling of round 19)
 		LandVector(TEXT("SnowWoodFloor"), SnowWoodFloor);
@@ -13319,7 +13319,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// The woods are one dense canopy from working height and above (the nation's stain lies over it at half
 	// strength, so a wood is still seen to be its owner's); close to, where single trees stand on it, the cloth
 	// under them is laid a little thinner.
-	const float Woods = FMath::Lerp(0.8f, 0.86f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)); // (close to it is the dark floor of the forest)
+	// (By moonlight the cloth is laid thinner: a wood on the player's own ground was as dark as the fog of war beside
+	// it, and read as fog. See FMoonLook::Woods.)
+	const float WoodsMoon = bLamplightNow ? 0.0f : ACampaignEnvironment::MoonOf(NightNow);
+	const float Woods = FMath::Lerp(0.8f, 0.86f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)) // (close to it is the dark floor of the forest)
+		* FMath::Lerp(1.0f, ACampaignEnvironment::MoonLook().Woods, WoodsMoon);
 	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
 	{
 		WoodsShown = Woods;

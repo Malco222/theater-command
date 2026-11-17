@@ -91,6 +91,11 @@ const ACampaignEnvironment::FMoonLook& ACampaignEnvironment::MoonLook()
 			{
 				Kept.HazeFloor = Number(17);
 			}
+			if (Parts.Num() >= 22)
+			{
+				Kept.Woods = Number(18);
+				Kept.Trees = FLinearColor(Number(19), Number(20), Number(21));
+			}
 		}
 	}
 	return Kept;
