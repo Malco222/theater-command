@@ -36,7 +36,7 @@ Think of a house with every guard sent to the far fence. One burglar with a ladd
 
 ## Other things seen on the way
 
-1. After the relief the beaten guns retreat **deeper into America**, to Cleveland, which the relieving army had just left, and lay siege to it the same month. A beaten army should fall back toward its own ground.
+1. **Corrected 16:50Z (I misread this; the retreat is sound).** I wrote that the beaten guns retreat deeper into America. Played again and stopped straight after the battle (report 73, January 1941 week 4), the guns stand at **Buffalo**, which Canada holds, with no move left. At the month's end they march forward again, alone, from Buffalo to Cleveland, which the relieving army had just left, and lay siege to it (the news line is dated January week 2, though it comes after the relief of week 4). That is fix 1's fault (guns going forward alone), not the retreat's.
 2. The battle card for guns standing alone says "Massed guns stand in the defence: the other defenders fight 9% stronger under their own guns." There are no other defenders.
 3. "American troops tear up the railway at Buffalo as they fall back" and the same at Washington: only the town guard was there, and it is America's own railway at its own capital.
 4. "the capital of United States is under siege": it wants "the United States".
@@ -48,11 +48,12 @@ Think of a house with every guard sent to the far fence. One burglar with a ladd
 1. **Guns do not attack alone.** An artillery corps with no other fighting corps beside it may not open an attack or storm a town, for the computer and the player alike. The rules already say it cannot probe.
 2. **The warning comes a month sooner and names the cure.** When an enemy army stands on home ground with no army of yours within reach, the tray says so that month, in red, with who it is, what it can take next and the nearest army that can come ("the army round Vancouver, by rail, a month"). This is the red row the design director has ruled, with one more month of warning.
 3. **The siege panel counts the storm.** "Stores for one more month" is untrue when the besieger can storm the guard this month.
-4. **A beaten army falls back toward its own ground,** not past the victor into his country.
+4. ~~A beaten army falls back toward its own ground.~~ **Withdrawn 16:50Z:** it already does (see the corrected line above). Four fixes stand.
 5. **The month card's fronts row** says "besieged" for a town besieged, and never "LOST against" with nothing after it.
 
 ## Files
 
 - Pictures: `/mnt/project-files/playtest/feel/pictures/brian-december-1940-buffalo.png`, `brian-january-1941-pittsburgh-besieged.png`, `brian-january-1941-relief-card.png`, `brian-march-1941-washington-besieged.png`.
 - Step lists: `/mnt/project-files/playtest/harness/feel/brian/` (nothing done; the order in December; the order in January; the relief fought).
+- The retreat checked: `brian-retreat.steps.txt` with the saves `brian-relief-straight-after-the-battle.save.txt` (guns at Buffalo) and `brian-relief-after-the-months-end.save.txt` (guns round Cleveland), in the same folder.
 - The month card's words: `/mnt/project-files/playtest/harness/feel/brian/brian-monthcard-dec.txt`.

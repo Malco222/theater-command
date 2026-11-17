@@ -1,0 +1,5 @@
+load	out/click/brel1.save.txt
+select-province	Cleveland
+order-province	Pittsburgh
+press	AUTO-RESOLVE
+close
