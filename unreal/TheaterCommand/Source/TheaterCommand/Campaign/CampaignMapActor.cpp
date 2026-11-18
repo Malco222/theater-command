@@ -14613,9 +14613,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const FVector Lean = Right * FMath::Cos(Skew) + Up * FMath::Sin(Skew);
 				const FVector Athwart = FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up));
 				bDrawingLight = true;
-				DrawSmear(FlashAt + Lean * (0.05 * W), Lean, 0.15 * W, 0.1 * W, FLinearColor(FColor(196, 52, 14)), 0.85f * Lit0, 0.6);
-				DrawSmear(FlashAt - Lean * (0.06 * W) + Athwart * (0.04 * W), Athwart, 0.1 * W, 0.075 * W, FLinearColor(FColor(222, 78, 18)), 0.9f * Lit0, 0.6);
-				Draw(FlashAt - Athwart * (0.03 * W), 0.05 * W, FLinearColor(FColor(240, 112, 26)), 0.95f * Lit0);
+				// (Measured in the first picture of it, through its own smoke: 212, 119, 77 at its brightest, a dull
+				// orange on the way to peach. A bright ink is paled by the screen; these are laid deeper and redder.)
+				DrawSmear(FlashAt + Lean * (0.05 * W), Lean, 0.15 * W, 0.1 * W, FLinearColor(FColor(178, 30, 6)), 0.9f * Lit0, 0.6);
+				DrawSmear(FlashAt - Lean * (0.06 * W) + Athwart * (0.04 * W), Athwart, 0.1 * W, 0.075 * W, FLinearColor(FColor(204, 46, 8)), 0.95f * Lit0, 0.6);
+				Draw(FlashAt - Athwart * (0.03 * W), 0.05 * W, FLinearColor(FColor(226, 74, 12)), 0.95f * Lit0);
 				bDrawingLight = false;
 			}
 		}
