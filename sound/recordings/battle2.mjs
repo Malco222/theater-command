@@ -260,8 +260,8 @@ export default function battle2(def) {
   }, (take) => clean(eased(fs(take, 143560, 2.5, 11.5), 1, 1.5), { low: 30 }));
   def('b17_drone_loop', {
     family: 'air', group: AIR, loop: true, title: 'A B-17\'s four engines drone', battle: 'Heavy bombers overhead (loop)',
-    about: 'A B-17\'s four engines in steady flight, from an old effects library given away free (craigsmith).',
-  }, (take) => clean(loopFrom(fs(take, 437862, 6, 34), { from: 1, seconds: 12, overlap: 2.5 }), { low: 30 }));
+    about: 'A B-17\'s four engines in steady flight, from an old effects library given away free (craigsmith). It starts at 0:07, where Brian asked for it to start: before that the drone drops out twice.',
+  }, (take) => clean(loopFrom(fs(take, 437862, 7, 34), { from: 0, seconds: 12, overlap: 2.5 }), { low: 30 }));
   def('stuka_drone_loop', {
     family: 'air', group: AIR, loop: true, title: 'A Stuka\'s engine drones', battle: 'German dive bombers overhead (loop)',
     about: 'A Ju 87 Stuka\'s engine in steady flight, from the same old effects library (craigsmith).',
