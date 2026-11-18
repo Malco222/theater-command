@@ -3,6 +3,7 @@
 BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name] says whose it is, what it does on the
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
+import armoured_cars
 import carriers
 import guns
 import guns_at
@@ -44,6 +45,7 @@ BUILDERS = {
     "Truck": carriers.truck,
     "Hanomag": carriers.hanomag,
     "M3Halftrack": carriers.m3_halftrack,
+    "SdKfz222": armoured_cars.sdkfz222,
 }
 
 ABOUT = {
@@ -73,6 +75,7 @@ ABOUT = {
     "Truck": {"nation": "any", "role": "lorry", "years": "1936-45", "units": "carrier (every nation but Germany and the United States), and what tows the guns"},
     "Hanomag": {"nation": "GER", "role": "armoured half-track", "years": "1939-45", "units": "carrier (Germany)"},
     "M3Halftrack": {"nation": "USA", "role": "armoured half-track", "years": "1941-45", "units": "carrier (United States)"},
+    "SdKfz222": {"nation": "GER", "role": "armoured car", "years": "1938-45", "units": "scouts ahead of Germany's armor and motorized infantry"},
 }
 
 
@@ -88,6 +91,7 @@ FACES = {
     "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "StuG3": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Pak40": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "SdKfz222": [("1938 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Truck": [("Under her tilt", {}), ("The tilt stowed: her benches", {"tilt": False})],
 }
 
