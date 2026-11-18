@@ -3,7 +3,7 @@
 Mixes an air clip's sound track, and (given a video) lays it under the picture. `ends`: the fade at its start and at
 its end in seconds.
 
-soundtrack.py film <sound pack's wav folder> <mix.json> <out.wav> <log .json> <log .json> ...
+soundtrack.py film <sound pack's wav folder> <mix.json> <out.wav> <log .json> <log .json> ... [ends=0.05,1.2]
 
 Mixes several clips cut end to end as one film: the engines cross over each cut, what rings rings on, one trim for all.
 
@@ -475,6 +475,9 @@ def save(out, m, out_wav):
 
 
 def main():
+    for a in [a for a in sys.argv if a.startswith("ends=")]:     # (ends=0.05,1.2: a film that ends under gunfire wants a longer fade, or it reads as cut off)
+        ENDS[:] = [float(v) for v in a[5:].split(",")]
+        sys.argv.remove(a)
     if len(sys.argv) > 5 and sys.argv[1] == "film":           # soundtrack.py film <pack wav folder> <mix.json> <out.wav> <log> <log> ...
         folder, rules_path, out_wav = sys.argv[2:5]
         with open(rules_path) as f:
@@ -486,9 +489,6 @@ def main():
         out, m = film(logs, folder, rules)
         save(out, m, out_wav)
         return
-    for a in [a for a in sys.argv if a.startswith("ends=")]:     # (ends=0.02,0.02: a clip that is cut straight onto the next in a longer film)
-        ENDS[:] = [float(v) for v in a[5:].split(",")]
-        sys.argv.remove(a)
     if len(sys.argv) < 5:
         raise SystemExit(__doc__)
     log_path, folder, rules_path, out_wav = sys.argv[1:5]
