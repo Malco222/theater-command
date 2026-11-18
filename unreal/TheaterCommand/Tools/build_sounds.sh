@@ -11,7 +11,8 @@ REPO="$(cd "$PROJECT/../.." && pwd)"
 ENGINE="${UE_ROOT:-/Users/Shared/Epic Games/UE_5.8}"
 # What the sounds are made from, as one stamp: the synthesiser's script and every real recording in Sounds/Real.
 # ("build_sounds.sh --stamp" prints it and does nothing else: the launcher asks, to know when to make them again.)
-STAMP="$( (cat "$HERE/make_sounds.mjs"; cat "$PROJECT"/Sounds/Real/*.wav 2> /dev/null || true) | shasum | cut -d' ' -f1)"
+# (LC_ALL=C: the order of the files, and so the stamp, is the same in every shell and from every window)
+STAMP="$( (export LC_ALL=C; cat "$HERE/make_sounds.mjs"; cat "$PROJECT"/Sounds/Real/*.wav 2> /dev/null || true) | shasum | cut -d' ' -f1)"
 if [ "${1:-}" = "--stamp" ]; then
   echo "$STAMP"
   exit 0

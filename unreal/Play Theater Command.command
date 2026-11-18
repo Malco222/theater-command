@@ -26,7 +26,8 @@ fi
 
 # Make the music the first time, and again whenever the piece has been rewritten (it is not kept in the
 # repository). It takes about half a minute.
-PIECE="$(cat Tools/make_music*.mjs | shasum | cut -d' ' -f1)"
+# (and when one of the score's recordings is added to Music/Score: the stamp covers the scripts and the recordings)
+PIECE="$(./Tools/build_music.sh --stamp 2> /dev/null)"
 if [ ! -f Content/Campaign/Music/Theme.uasset ] || [ ! -f Content/Campaign/Music/Battle.uasset ] || [ "$(cat Saved/Music/made-from.txt 2> /dev/null)" != "$PIECE" ]; then
   echo "Making the music (only when it is new)..."
   ./Tools/build_music.sh > /tmp/theater-command-music.log 2>&1 || true

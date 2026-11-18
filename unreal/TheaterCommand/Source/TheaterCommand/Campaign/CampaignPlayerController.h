@@ -849,6 +849,9 @@ public:
 	void AskAlliesToJoin();
 	/** A town order from the army's own tray: 0 storms the town it besieges (its card first), 1 sends the corps in hand into the town, 2 brings them out. */
 	void TrayTownOrder(int32 Which);
+	// (the score: whose wars were counted last, how many, and in which month, to hear one of them end)
+	FString MusicWarsOf;
+	int32 MusicWars = 0, MusicWarsTurn = 0;
 	void SendBackCorps(int32 CorpsId);
 	/** The nation the player leads; empty when nobody is led. */
 	FString GetPlayerTag() const;

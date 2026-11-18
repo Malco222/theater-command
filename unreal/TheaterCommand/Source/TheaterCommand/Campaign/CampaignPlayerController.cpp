@@ -5236,8 +5236,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		const FCampaignSession* Now = GetSession();
 		const bool bFighting = FPlatformTime::Seconds() < BattleMusicUntil || FaceOff.bVisible;
-		Mode->SetMusicMood(bFighting ? TEXT("battle") : (Now && !Opening.bVisible && !Now->GetView().bAtWar && !Now->GetView().Human.IsEmpty()) ? TEXT("quiet") : TEXT("theme"));
+		// (Brian's score, 18 November 2026: the theme is the opening screen's; a country at war has its own two pieces.)
+		const bool bInPlay = Now && !Opening.bVisible && !Now->GetView().Human.IsEmpty();
+		Mode->SetMusicMood(bFighting ? TEXT("battle") : !bInPlay ? TEXT("theme") : Now->GetView().bAtWar ? TEXT("war") : TEXT("quiet"));
 		Mode->DuckMusic(Newsreel.bOn);
+		// One of his wars has ended: The Long Walk Home. (Counted from one month to the next of the same chair; a game
+		// loaded or begun anew starts the count again.)
+		if (bInPlay)
+		{
+			const FCampaignView& Seen = Now->GetView();
+			int32 Mine = 0;
+			for (int32 K = 0; K + 1 < Seen.Wars.Num(); K += 2)
+			{
+				Mine += Seen.Wars[K] == Seen.Human || Seen.Wars[K + 1] == Seen.Human ? 1 : 0;
+			}
+			if (MusicWarsOf == Seen.Human && Seen.Turn >= MusicWarsTurn && Seen.Turn <= MusicWarsTurn + 1 && Mine < MusicWars)
+			{
+				Mode->PlayHomecoming();
+			}
+			MusicWarsOf = Seen.Human;
+			MusicWars = Mine;
+			MusicWarsTurn = Seen.Turn;
+		}
+		else
+		{
+			MusicWarsOf.Reset();
+		}
 	}
 
 	// The first time evening comes on in the room, it is said what is happening and how to hold the day.
