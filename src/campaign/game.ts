@@ -44,7 +44,7 @@ import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
@@ -962,6 +962,11 @@ export interface Assessment {
   /** True where the defenders are guns with no fighting corps in front of them, caught in the field (ruling 146, the grand campaign): they are overrun, and the odds say so. */
   overrun?: boolean;
   /**
+   * The town's guard fighting beside the field army, in divisions' worth (ruling 232, the grand campaign): where no
+   * garrison stands in the town, the guard is in this battle behind its walls, and the town falls with the field.
+   */
+  guard?: number;
+  /**
    * What the attack faces (the grand campaign; null everywhere else): the defence's anti-tank strength and what it is
    * made of, who pays (what each arm in the attack loses, as a multiple of the usual share), and the facts the battle
    * card tells before the attack and after.
@@ -1004,6 +1009,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
   let turned = false, turnedTo = 1, fewGuns = false;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
+  // (pAll and pFaced: the attack's weight, and the part of it the fortress works face, for the town guard's walls.)
+  let pAll = 0, pFaced = 0;
   let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, armorAlone = 0, aloneOver = 1, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
   for (const c of attackers) sources.add(c.reg);
@@ -1110,7 +1117,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // What the guns and the engineers between them leave of the works. With neither, the works count in full, as they always did.
     const eased = breach ? 1 - (1 - soften) * (1 - breach) : soften;
     // (In an assault on the town itself the works ring it: they are counted with the town, for its defenders.)
-    if (target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
+    pAll += p;
+    if (target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { pFaced += p; p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -1179,8 +1187,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - mortar) * (1 - caught) * (1 - pierced) : 0;
   const dice: [number, number] = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]]
     : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
-  // The town's own guard stands with whoever is inside.
-  const watch = town ? guardPower(g, target) * walls : 0;
+  // The town's own guard stands with whoever is inside. Where nobody is inside, it fights beside the army in the field,
+  // behind its walls, and the town falls with the field (ruling 232): the fortress works, where they already stand
+  // against every attacker, are not counted for it twice.
+  const guarded = !town && !opts.sally && defenders.length > 0 ? guardInField(g, target, attNat) : 0;
+  const guardWalls = guarded > 0 ? fieldWalls(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
+  const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   let airEdge = (aAir - dAir) / (aAir + dAir + 1);
@@ -1206,14 +1218,19 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
   } else {
-    lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men` });
+    lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men${guarded > 0 ? `, and the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({ label: 'Terrain', value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : 'Open ground, no help to the defender' });
     // The grand campaign: what winning here does and does not win.
     if (opts.sally) lines.push({ label: 'The sortie', value: `The garrison of ${townName(target)} comes out against the army round it`, effect: 'Win, and the siege is raised. Lose, and the garrison goes back inside the weaker for it' });
     else if (sally.power > 0) lines.push({ label: 'The garrison', value: `The garrison of ${townName(target)} sallies out as the relief comes up: ${sally.corps} corps`, effect: `It adds ${Math.round(SIEGE.sortie * 100)}% of its strength to the attack` });
+    else if (guarded > 0) lines.push({
+      label: 'The town', value: `${townName(target)} is held by its own guard: ${guardWorth(guarded)}, behind its walls`,
+      effect: `The guard fights beside the army, ${Math.round((guardWalls - 1) * 100)}% stronger behind the walls. Win, and the town falls with the country round it`,
+    });
     else if (siegeRules(g) && !allied(g, attNat, target.ctrl) && townHeld(g, target)) lines.push({
       label: 'The town', value: garrisonOf(target).length ? `${townName(target)} is garrisoned` : `${townName(target)} is held by its own guard`,
-      effect: 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
+      effect: driveOut(g) && garrisonOf(target).length ? 'Winning here wins the country round it. The garrison holds the town after: it must then be stormed or starved out'
+        : 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
     });
   }
   if (wide && defenders.length) {
@@ -1450,9 +1467,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Guns caught alone in the field are overrun (ruling 146, the grand campaign): with no infantry or tanks in front
   // of them they make no stand, whatever the figures say. The odds are at least what the worst of the day's luck
   // still makes a decisive win, so the forecast is certain and the battle is fought on the same ticket.
-  const overrun = gunsRule(g) && !town && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
+  // (The town's guard fighting beside them (ruling 232) stands in front of them.)
+  const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -1667,10 +1685,13 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   // In the grand campaign the country is won, and the town with it only if nobody holds it.
   const got = arrive(g, target, attNat);
   if (!got) closeRound(g, target, attackers);
+  // (Ruling 232: an army that gave up the field without a fight left its guard behind the walls, to be stormed or starved.)
+  const lines = a.guard && !got ? a.lines.map((l) => l.label === 'The town' ? { label: 'The town', value: `${townName(target)} is held by its own guard`, effect: 'The army gave up the field without a fight, so the guard never fought beside it: the town must now be stormed or starved out' }
+    : l.label === 'Forces' ? { ...l, value: l.value.replace(/, and the town guard of about [\d,]+$/, '') } : l) : a.lines;
   g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
   const rep: BattleReport = {
     id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat: gone[0].nat,
-    attackers: attU, defenders: gone, lines: [...a.lines, { label: 'Orders', value: 'The defenders gave ground before the attack', effect: 'No battle was fought' }],
+    attackers: attU, defenders: gone, lines: [...lines, { label: 'Orders', value: 'The defenders gave ground before the attack', effect: 'No battle was fought' }],
     aPower: a.A, dPower: a.D, odds: a.odds, level: 'Close victory', taken: true, attLost: 0, defLost: 0, prisoners: 0, yielded: true,
   };
   if (!got) rep.siege = true;
@@ -1746,10 +1767,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const defNat = defenders[0]?.nat ?? target.ctrl;
   const AN = g.nations[attNat];
   // An enemy's capital, for the records of the corps that take it: known before the fight, since its fall may end the war with him.
-  // (Where its town is held, winning the field outside it does not take the capital: storming the town does.)
-  const enemyCapital = target.cap && atWar(g, attNat, target.owner) && (town || !sieges || !townHeld(g, target));
+  // (Where its town is held, winning the field outside it does not take the capital: storming the town does. Where
+  // only its guard holds it and the guard fights in this battle (ruling 232), the field takes it.)
+  const inField = !town && (a.guard ?? 0) > 0;
+  const enemyCapital = target.cap && atWar(g, attNat, target.owner) && (town || inField || !sieges || !townHeld(g, target));
   const relief = sieges && !town && allied(g, attNat, target.ctrl);
-  const watchMen = town ? guardMen(g, target) : 0, watch = town ? guardOf(g, target) : 0;
+  const watchMen = town || inField ? guardMen(g, target) : 0, watch = town || inField ? guardOf(g, target) : 0;
   for (const d of new Set(defenders.map((c) => c.nat))) {
     const first = AN.lastFight[d] === undefined;
     if (first || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
@@ -1838,14 +1861,15 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       const N = g.nations[c.nat];
       const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
-      // and nobody leaves his own capital while it can still be held.
-      if (!town && !overrun && sieges && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
+      // and nobody leaves his own capital while it can still be held. Under ruling 232 a beaten field army never goes
+      // into the town: it falls back to open country, or with nowhere to go and no ship to lift it, lays down its arms.
+      if (!town && !overrun && sieges && !driveOut(g) && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
         target.units.splice(target.units.indexOf(c), 1);
         joinTown(g, target, c);
         defU[i].fate = 'sheltered';
         tallySiege(g, 'sheltered');
       }
-      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; }
+      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; }
       else if (away) {
         // Backs to the sea: the navy takes off what it can.
         const dest = refuge(g, c, target);
@@ -1856,6 +1880,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       } else {
         const left = men(c);
         defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
+        // (Ruling 232: with no ground of its side to go to and no ship to lift it, a beaten field army lays down its arms.)
+        if (driveOut(g) && !town && !overrun && c.str >= 0.15) defU[i].cut = true;
         defU[i].lost += left;
         prisoners += left;
         storyFallen(g, c, c.str < 0.15 ? 'destroyed' : 'surrendered', attNat, target.id);
@@ -1869,6 +1895,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
     }
+    else if (inField) {
+      // Ruling 232: the guard fought beside the field army and is taken with it. The town falls, and the province
+      // changes hands, in this one order.
+      prisoners += watchMen;
+      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.max(0.1, Math.round(watch * 10) / 10), men: watchMen, lost: watchMen, fate: 'surrendered', guard: true });
+      fall(g, target, attNat, 'field');
+    }
     else {
       // A town with only its guard may open its gates to the army that has just won the field outside.
       const walls = sieges && !relief && townHeld(g, target);
@@ -1880,13 +1913,14 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     const spent = !town && a.prepared >= DEFENCE.prepared.spentAt && a.prepared > 0;
     for (const c of attackers) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
     if (town) tallySiege(g, 'repulsed');
-    if (town && watch > 0) {
-      // The guard has its losses too, and they are not made good while the siege lasts.
+    if ((town || inField) && watch > 0) {
+      // The guard has its losses too, and they are not made good while the siege lasts. (Beside the field army, ruling
+      // 232, it pays as it would for a storm thrown back.)
       const share = clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
       const lost = Math.round(watchMen * share);
       guardAfter(g, target, share);
       defLost += lost;
-      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost, fate: '', guard: true });
+      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: inField ? Math.max(0.1, Math.round(watch * 10) / 10) : Math.round(watch * 10) / 10, men: watchMen, lost, fate: '', guard: true });
     }
   }
   // Battles are numbered through the whole war, so a saved game carries the count on.
@@ -1897,6 +1931,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost, defLost, prisoners,
   };
   if (town) rep.town = true;
+  if (inField) rep.guarded = true;
   if (held) rep.siege = true;
   if (gates) rep.gates = true;
   if (relief) rep.relief = true;
