@@ -422,7 +422,9 @@ def Bunker(fine=True, nation="_default", name="Bunker"):
     m.socket("gun", gun_at, (1, 0, 0), part="bunker",
              note="the anti-tank or field gun's place: its origin on the floor under the middle of its axle, x toward the muzzle. "
                   "Room: the throat (2.6 m wide, 1.1 m high, its sill 0.7 m above the floor) is 1.45 m ahead of the axle; 2.4 m clear either side; "
-                  "3.15 m to the back wall for the trails; 1.9 m under the ceiling. The embrasure's steps let the barrel traverse 30 degrees either way.")
+                  "3.15 m to the back wall for the trails; 1.9 m under the ceiling. The embrasure's steps let the barrel traverse 30 degrees either way. "
+                  "Of the vehicle modeller's towed guns as measured in action: Gun75, 25pdr and ZiS3 stand clear, the leFH18's spades touch the back wall, "
+                  "the Howitzer105 is 0.4 m too long and does not go in.")
     m.socket("embrasure.main", (XF - 1.44, 0.0, (EZ0 + EZ1) / 2), (1, 0, 0), part="bunker", note="the throat of the main embrasure: where the gun's muzzle stands when laid")
     bits.crew(m, "layer", gun_at + Vector((-0.55, 0.55, 0.0)), (1, 0, 0), "kneel", "bunker", "kneeling at the left of the breech, eye to the sight, working the elevation")
     bits.crew(m, "loader", gun_at + Vector((-0.75, -0.55, 0.0)), (1, 0.2, 0), "kneel", "bunker", "kneeling at the right of the breech, a round in his arms")

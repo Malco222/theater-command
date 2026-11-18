@@ -45,6 +45,14 @@ def dust(fx, t0, at, size=1.0, n=14, col=(0.56, 0.48, 0.36), up=0.6, out=5.0, li
     fx.once(t0, (at, Z), make)
 
 
+def seen_only(p, on=True):
+    """A flame that is seen but lights nothing (its light is a lamp's, placed and measured): a burst's own glow on
+    the wall and ground beside it washed the whole picture white."""
+    p["ob"].visible_diffuse = not on
+    p["ob"].visible_glossy = not on
+    return p
+
+
 def muzzle(fx, t0, where, bore=0.088, light=True, smoke=1.0):
     """A gun on land fires: a ragged tongue of flame down the bore's line with licks thrown sideways, a white-hot heart
     at the muzzle for an instant, and a cloud of grey-brown smoke that rolls out, hangs and drifts."""
@@ -55,14 +63,18 @@ def muzzle(fx, t0, where, bore=0.088, light=True, smoke=1.0):
         side = facing.cross(Z).normalized()
         up = side.cross(facing)
         L = 1.3 * k
-        p = fx.puff(t, at + facing * L * 0.9, vel=facing * 5.0, life=0.14, r=(L * 0.75, L * 1.1), col=(0.62, 0.25, 0.05), col2=(0.5, 0.13, 0.025), alpha=1.0, kind="tongue", drag=6.0,
+        # (flame and its light live for less than a frame of a 12 a second clip: on the frame after the shot there is
+        # only young smoke, thin and already strung out, which thickens as it rolls. Flame held into that frame, in
+        # smoke still bunched at the muzzle, read as a balloon)
+        p = fx.puff(t, at + facing * L * 0.9, vel=facing * 5.0, life=0.09, r=(L * 0.75, L * 1.1), col=(0.62, 0.25, 0.05), col2=(0.5, 0.13, 0.025), alpha=1.0, kind="tongue", drag=6.0,
                     wind=0.0, squash=(1.0, 0.45, 0.45), fade_in=0.01, grow=0.4)
         p["ob"].rotation_euler = facing.to_track_quat("X", "Z").to_euler()
+        seen_only(p, False)
         for i in range(4):
             a = g.uniform(0, 2 * math.pi)
             d = (facing * g.uniform(0.5, 1.0) + (side * math.cos(a) + up * math.sin(a)) * g.uniform(0.5, 0.9)).normalized()
             R = g.uniform(0.35, 0.6) * k
-            p = fx.puff(t, at + d * R * 0.9, vel=d * 3.0, life=g.uniform(0.09, 0.13), r=(R * 0.8, R * 1.2), col=(0.55, 0.2, 0.04), col2=(0.42, 0.1, 0.02), alpha=0.95, kind="lick",
+            p = fx.puff(t, at + d * R * 0.9, vel=d * 3.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.55, 0.2, 0.04), col2=(0.42, 0.1, 0.02), alpha=0.95, kind="lick",
                         drag=6.0, wind=0.0, squash=(1.0, 0.5, 0.5), fade_in=0.01, grow=0.4)
             p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
         fx.puff(t, at + facing * 0.25 * k, life=0.09, r=(0.22 * k, 0.42 * k), col=(1.0, 0.86, 0.6), col2=(1.0, 0.6, 0.25), alpha=0.9, kind="glow", wind=0.0, fade_in=0.01)
@@ -70,10 +82,19 @@ def muzzle(fx, t0, where, bore=0.088, light=True, smoke=1.0):
             sp = g.uniform(5.0, 24.0) * k
             v = facing * sp + side * g.uniform(-3.5, 3.5) * k + up * g.uniform(-1.5, 3.5) * k
             c = g.uniform(0.62, 0.8)
-            fx.puff(t + 0.03, at + facing * 0.3 * k, vel=v, life=g.uniform(4.0, 7.0), r=(0.3 * k, g.uniform(1.2, 2.3) * k), col=(0.66, 0.48, 0.28), col2=(c, c * 0.95, c * 0.87),
-                    alpha=g.uniform(0.4, 0.62), drag=g.uniform(2.6, 3.6), rise=0.35, fade_in=0.05, grow=0.5, wind=0.9)
+            fx.puff(t + 0.03, at + facing * 0.3 * k, vel=v, life=g.uniform(4.0, 7.0), r=(0.2 * k, g.uniform(1.2, 2.3) * k), col=(0.5, 0.4, 0.29), col2=(c, c * 0.95, c * 0.87),
+                    alpha=g.uniform(0.4, 0.62), drag=g.uniform(2.6, 3.6), rise=0.35, fade_in=0.2, grow=0.5, wind=0.9)
         if light:
-            fx.light(t, at + facing * 1.2 * k, 9000.0 * k * k, 0.14, r=0.5)
+            # (the flash lights the gun and its pit for one frame and falls away over the ground beyond: a lamp with a
+            # wide soft cone turned back on the gun's foot. It is out before the next frame, and the smoke ahead of
+            # the muzzle stands outside the cone: lit from within, the young smoke was a cream balloon)
+            fx.light(t, at + facing * 1.4 * k, 9000.0 * k * k, 0.08, r=0.5)
+            ob = fx.lights[-1]["ob"]
+            ob.data.type = "SPOT"
+            ob.data.spot_size, ob.data.spot_blend = math.radians(120.0), 1.0
+            foot = at - facing * 4.6 * k
+            foot.z = max(0.0, foot.z - 1.2 * k)
+            ob.rotation_euler = (foot - ob.location).to_track_quat("-Z", "Y").to_euler()
     fx.once(t0, where, make)
 
 
@@ -105,40 +126,60 @@ def chimney(fx, where, start=0.0, end=1e9, size=1.0, dark=0.06):
 
 
 def flames(fx, where, start=0.0, end=1e9, size=1.0):
+    """Fire in an opening: ragged tongues rooted where it burns and licking upward, never loose balls of light."""
     g = fx.rng
 
     def make(t, at, facing):
-        fx.puff(t, at + Vector((g.uniform(-0.4, 0.4), g.uniform(-0.4, 0.4), 0.1)) * size, vel=(0, 0, g.uniform(1.5, 3.0)), life=g.uniform(0.4, 0.7), r=(0.5 * size, 0.2 * size),
-                col=(1.0, 0.62, 0.2), col2=(1.0, 0.3, 0.06), alpha=0.95, kind="glow", wind=0.3, fade_in=0.05, squash=(1.0, 1.0, 1.7))
+        d = (Z + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), 0.0))).normalized()
+        R = g.uniform(0.3, 0.5) * size
+        root = at + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), 0.0)) * size
+        p = fx.puff(t, root + d * R * 0.8, vel=d * g.uniform(0.3, 0.9), life=g.uniform(0.22, 0.4), r=(R * 0.7, R * 1.15), col=(0.6, 0.24, 0.05), col2=(0.42, 0.1, 0.02), alpha=0.95,
+                    kind="tongue" if g.random() < 0.4 else "lick", wind=0.15, fade_in=0.04, grow=0.5, squash=(1.0, 0.5, 0.5))
+        p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
+        seen_only(p)
     fx.stream(where, 0.07, make, start=start, end=end)
 
 
-def shell_hit(fx, t0, at, size=1.0, earth=True):
-    """A shell bursting on a work or the ground: flash, a fan of thrown earth and dust, grey-brown smoke."""
+def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.0):
+    """A shell bursting on a work or the ground: a wink of ragged flame, a fan of thrown earth and dust, grey-brown
+    smoke. Give t0 a fiftieth of a second before a frame. `lamp` is where the burst's light stands from the burst
+    (off a wall it has struck, or it burns the wall white), `glare` its strength for a burst of size 1, `flame` the size of its tongues of flame beside the burst's own."""
     g = fx.rng
     at = Vector(at)
+    lamp = Vector(lamp) if lamp is not None else Z * 0.6
 
     def flash(t, p0, facing):
-        # (a field gun's shell, not a battleship's: a wink of flame and a knot of dark smoke that thins in seconds;
-        # the sea's burst at this size hung an orange fog over the whole picture)
-        fx.puff(t, p0 + Z * 0.3, life=0.16, r=(0.7 * size, 2.0 * size), col=(1.0, 0.82, 0.5), col2=(1.0, 0.45, 0.12), alpha=1.0, kind="glow", wind=0.0, fade_in=0.01, grow=0.4)
-        for i in range(7):
-            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.3, 1.4))).normalized() * g.uniform(4, 11) * size ** 0.5
+        # (a field gun's shell, not a battleship's: a wink of flame and a knot of dark smoke that thins in seconds.
+        # The flame is a star of ragged tongues thrown up and out, gone before the next frame: a ball of light here
+        # read as a cream balloon, and its light, held over two frames, lit the young smoke into bubbles)
+        for i in range(8):
+            a = g.uniform(0, 2 * math.pi)
+            h = g.uniform(0.15, 0.8)         # (how far it leans from upright: never level, for one thrown at the camera is a ball)
+            d = Vector((math.cos(a) * h, math.sin(a) * h, 1.0)).normalized()
+            R = g.uniform(0.38, 0.7) * size * flame
+            root = p0 + Z * 0.1 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size      # (roots apart: heaped on one point their hot hearts make a ball)
+            p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.56, 0.21, 0.04), col2=(0.45, 0.11, 0.02), alpha=1.0,
+                        kind="tongue" if i < 1 else "lick", drag=6.0, wind=0.0, squash=(1.0, 0.36, 0.36), fade_in=0.01, grow=0.4)
+            p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
+            seen_only(p)
+        for i in range(13):      # (many small puffs kept close make one ragged knot; a few big ones, or small ones flung apart, read as balls)
+            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.5, 1.6))).normalized() * g.uniform(1.2, 4.6) * size ** 0.5
             c = g.uniform(0.08, 0.16)
-            fx.puff(t + 0.04, p0 + Z * 0.3, vel=v, life=g.uniform(2.6, 4.4), r=(0.5 * size, g.uniform(1.3, 2.1) * size), col=(0.2, 0.15, 0.11), col2=(c, c * 0.97, c * 0.93),
+            fx.puff(t + 0.04, p0 + Z * 0.3, vel=v, life=g.uniform(2.6, 4.4), r=(0.32 * size, g.uniform(0.75, 1.35) * size), col=(0.2, 0.15, 0.11), col2=(c, c * 0.97, c * 0.93),
                     alpha=g.uniform(0.45, 0.65), drag=2.8, rise=0.9, fade_in=0.04, grow=0.45, wind=0.9)
-        fx.light(t, p0 + Z * 1.2, 2.5e4 * size * size, 0.14, r=0.5)
+        # (its light is the near ground's for one frame: the whole field must not jump)
+        fx.light(t, p0 + lamp, glare * size * size, 0.08, r=0.8)
     fx.once(t0, (at, Z), flash)
 
     def make(t, p0, facing):
-        for i in range(16):      # thrown earth: up and out, falling back
-            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.9, 2.6))).normalized() * g.uniform(7, 16) * size ** 0.5
-            c = g.uniform(0.8, 1.1)
-            fx.puff(t, p0 + Z * 0.2, vel=v, life=g.uniform(1.6, 2.6), r=(0.3 * size, g.uniform(0.7, 1.4) * size), col=(0.3 * c, 0.24 * c, 0.17 * c), alpha=0.75, gravity=9.8,
-                    drag=0.5, fade_in=0.02, grow=0.4, wind=0.2, hold=0.5)
+        for i in range(34):      # thrown earth: up and out, falling back (clods: small, dark and many; soft balls of it hung in the sky like rings)
+            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.9, 2.6))).normalized() * g.uniform(4, 12.5) * size ** 0.5
+            c = g.uniform(0.7, 1.05)
+            fx.puff(t, p0 + Z * 0.2, vel=v, life=g.uniform(1.2, 2.0), r=(0.04 * size, g.uniform(0.06, 0.15) * size), col=(0.2 * c, 0.155 * c, 0.105 * c), alpha=0.95, gravity=9.8,
+                    drag=0.5, fade_in=0.02, grow=0.4, wind=0.2, hold=0.7)
     if earth:
         fx.once(t0, (at, Z), make)
-    dust(fx, t0 + 0.05, at, size=1.2 * size, n=12, out=6.0, alpha=0.24)
+    dust(fx, t0 + 0.05, at, size=0.9 * size, n=16, out=6.0, alpha=0.24)
 
 
 class Case:
@@ -273,20 +314,24 @@ def breach(fx, cam, have):
     if "Hedgehogs" in have:
         s.put("Hedgehogs", (15.0, -3.0), 0.0)
     if "Fieldworks" in have:
-        s.put("Fieldworks", (-1.0, 9.0), 0.0)
-        s.put("Fieldworks", (-1.0, -17.0), 0.0)
+        # (a line never stops in a cut: the run on either hand of the pillbox is closed by its end pieces)
+        for y in (16.0, -16.0):
+            s.put("FieldworksEnd_start", (-1.0, y - 10.0), 0.0)
+            s.put("Fieldworks", (-1.0, y), 0.0)
+            s.put("FieldworksEnd", (-1.0, y + 10.0), 0.0)
     s.lay(seed=5, flat=60.0, fine=33.0, sun_turn=120.0, sun_elev=36.0, trees=True, grass_area=44.0, grass_count=160000)
-    hit = 2.0
-    near = [(0.5, (7.0, 3.5, 0.0)), (1.25, (5.0, -2.5, 0.0))]
+    hit = 1.98                                # (each burst a fiftieth before a frame, so the frame catches its flame young)
+    near = [(0.48, (6.5, 1.5, 0.0)), (1.23, (5.0, -2.5, 0.0))]     # (both where the camera sees them fall)
     for t0, at in near:
         shell_hit(fx, t0, at, size=1.0)
     at_hit, _ = box.where("hit")
-    shell_hit(fx, hit, at_hit, size=1.5, earth=False)
+    shell_hit(fx, hit, at_hit, size=1.5, earth=False, lamp=(1.6, 0.0, 0.4), glare=180.0, flame=0.6)
     dust(fx, hit + 0.1, at_hit, size=1.5, n=16, col=(0.6, 0.6, 0.57), out=5.0, alpha=0.3)
     chimney(fx, lambda: (box.where("hit")[0] + Vector((-0.4, 0, 0.5)), Vector((1, 0, 0.3))), start=hit + 0.25, size=0.9)
     chimney(fx, lambda: (box.where("smoke")[0] + Vector((0, 0, 0.6)), Z), start=hit + 0.5, size=0.5)
     flames(fx, lambda: (box.where("fire")[0] + Vector((1.2, 0, 0.2)), Z), start=hit + 0.7, size=0.8)
-    fx.light(hit + 0.7, at_hit + Vector((-0.6, 0, 0.3)), 900.0, long=30.0, col=(1.0, 0.5, 0.2), r=0.5)
+    # (the fire within glows in the broken opening; strong enough to burn the walls white, it read as a lantern)
+    fx.light(hit + 0.7, at_hit + Vector((-0.9, 0, 0.2)), 100.0, long=30.0, col=(1.0, 0.42, 0.14), r=0.5)
     mg_until = 1.75
 
     def step(t):
@@ -307,14 +352,22 @@ def breach(fx, cam, have):
         kit.look_at(cam, eye, Vector((0.6, 0.0, 1.3 + shake)))
         fx.at(t)
 
-    # the machine gun's flashes while it still fires
+    # the machine gun's flashes while it still fires: a small ragged tongue at the muzzle, alive for less than a frame,
+    # so the burst flickers (a ball of light here read as a pale egg in the embrasure)
     g = random.Random(2)
+
+    def mg_flash(t, at, facing):
+        R = g.uniform(0.11, 0.17)
+        p = fx.puff(t, at + facing * (0.06 + R * 0.9), vel=facing * 2.0, life=g.uniform(0.05, 0.065), r=(R * 0.8, R * 1.15), col=(0.62, 0.27, 0.06), col2=(0.5, 0.14, 0.03), alpha=1.0,
+                    kind="tongue", drag=6.0, wind=0.0, squash=(1.0, 0.42, 0.42), fade_in=0.008, grow=0.4)
+        p["ob"].rotation_euler = facing.to_track_quat("X", "Z").to_euler()
+        seen_only(p)
+
     k = 0
     while k * 0.1 < mg_until - 0.25:
         tt = k * 0.1
         if (tt % 1.1) < 0.65:
-            fx.once(tt, lambda: box.where("muzzle"), lambda t, at, facing: fx.puff(t, at + facing * 0.25, vel=facing * 3.0, life=0.09, r=(0.1, 0.28), col=(1.0, 0.8, 0.4),
-                                                                                    col2=(1.0, 0.5, 0.15), alpha=1.0, kind="glow", wind=0.0, fade_in=0.01, squash=(1.8, 1.0, 1.0)))
+            fx.once(tt - 0.02, lambda: box.where("muzzle"), mg_flash)
         k += 1
     return step, 7.0
 

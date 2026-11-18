@@ -759,7 +759,7 @@ def GunPit(fine=True, nation="_default", name="GunPit"):
             case(m, p, Vector((math.cos(ya), math.sin(ya), 0.0)), 0.044, 0.42, 8)
     ammo_box(m, V2(115, 1.95) + Z * -D, 115 + 90, (0.72, 0.3, 0.16), 4, lid=True, rounds=3, cal=0.075, long=0.6)
     m.rod(V2(-60, 3.1) + Z * 0.5, V2(-25, 3.2) + Z * 0.55, 0.02, "timber", sides=8)
-    m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags, the parapet top 0.9 m above the floor; its trail spades rest against the two logs about 2.8 m behind")
+    m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags, the parapet top 0.9 m above the floor; two logs lie 2.8 m behind, 0.7 m apart: a single trail's spade (Gun75, 25pdr) beds between them, a split trail's legs (ZiS3, leFH18, Howitzer105, up to 3.9 m wide and 3.55 m back) pass outside their ends into the open rear. All five of the vehicle modeller's towed guns have room")
     m.socket("hit", (3.3, 0.0, 0.4), (1, 0, 0), note="where a shell strikes the parapet")
     m.socket("ground", (4.0, 0.0, 0.05), (1, 0, 0), note="where the muzzle blast lifts dust off the scorched ground")
     bits.crew(m, "ammo", V2(NA, R - 0.4) + Z * -D, V2(NA), "kneel", "pit", "kneeling at the ammunition niche, passing rounds to the loader")
@@ -1020,7 +1020,18 @@ def MortarPit(fine=True, nation="_default", name="MortarPit"):
     niche(m, NA, RF - 0.01, -D, -0.17, 0.32, 0.6, seed=5, fill=fill)
     # the collar: three courses two bags thick on the rim, a gap at the steps; earth banked low outside
     gh = math.degrees(math.asin(0.45 / 1.5))
-    bag_wall(m, bits.arc(0, 0, 1.5, -180 + gh, 180 - gh, 40), 3, 0.025, seed=9, batter=0.015, thick=2, inward=-1.0, q=lambda t, c: (6, 10) if t == 0 else (5, 8), tie=0.3)
+    # (the sandbag wall's own bag, slumped and tied at the neck: the pits' lighter bag read as cushions here, where
+    # the collar is seen from above and close)
+    top = bits.bag_wall(m, bits.arc(0, 0, 1.5, -180 + gh, 180 - gh, 40), 2, 0.025, seed=9, batter=0.015, thick=2, inward=-1.0)
+    # (the top course is headers: bags laid across both rows, each sagging over the course beneath, its tied neck
+    # outward. Seen from above, a course of stretchers pressed flat read as a ring of cushions)
+    n = 31
+    for k in range(n):
+        # (laid by tired men: none quite square to the rim, some pushed in, some out)
+        a = -180 + gh + 1.5 + (k + 0.5 + g.uniform(-0.16, 0.16)) / n * (360 - 2 * gh - 3.0)
+        at = V2(a, 1.635 + g.uniform(-0.06, 0.06)) + Z * (top - 0.012 + g.uniform(-0.004, 0.008))
+        size = (bits.BAG[0] * g.uniform(0.9, 1.04), bits.BAG[1] * g.uniform(0.94, 1.06), bits.BAG[2])
+        bits.sandbag(m, at, a + g.uniform(-11, 11), size=size, seed=g.randrange(1 << 30), droop=g.uniform(0.04, 0.062), pitch=g.uniform(-2.5, 2.5), roll=g.uniform(-4.0, 4.0))
 
     def cut(x, y):
         return smooth((abs(y) - 0.65) / 0.4) if x < -1.0 else 1.0

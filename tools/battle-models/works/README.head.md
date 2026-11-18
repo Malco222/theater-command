@@ -37,8 +37,10 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
 2. **`takes`**: `{socket: model}`: another model stands at that socket, facing the socket's way (the flak tower's
    four `HeavyFlakTwin` and eight `LightFlak`, a flak pit's gun). Each is its own model so it can be laid, fired and
    knocked out by itself. A socket named `gun` with no entry in `takes` is for the vehicle modeller's towed gun
-   (`../land/gun/Gun75` and its kin: origin on the ground under the axle, x toward the muzzle). A `GunPit` or a
-   `Bunker` is never shown empty: the pictures stand `Gun75` at the socket in its owner's paint, and so should the game.
+   (`Gun75`, `25pdr`, `ZiS3`, `leFH18`, `Howitzer105` under `../land/`: origin on the ground under the axle, x toward
+   the muzzle). The `GunPit` has room for all five; the `Bunker` takes `Gun75`, `25pdr` and `ZiS3` freely and the
+   `leFH18` with its spades at the back wall, but not the `Howitzer105` (0.4 m too long). A `GunPit` or a `Bunker` is
+   never shown empty: the pictures stand `Gun75` at the socket in its owner's paint, and so should the game.
    The heavy and the light flak gun are built to stand in a pit, a sandbag ring or the tower, never bare on open
    ground (the art director's note of review 2).
 3. **Crew places.** A socket `crew.<role>` is where a man of the crew stands, kneels, sits or lies, facing the
