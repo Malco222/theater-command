@@ -86,7 +86,7 @@ export const AIRWAR = warData as unknown as {
   /** Ruling 227 (b433): what a won sky lends the land battle in the air war; see the note in the data. */
   sky: { land: number; attack: number; defence: number; own: number; radar: string };
   success: { k: number; factory: number };
-  ai: { escortReady: number; basing: { better: number; least: number; presence?: number; fields?: number }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
+  ai: { escortReady: number; basing: { better: number; least: number; presence?: number; fields?: number; idle?: boolean }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -1817,6 +1817,13 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
     }
     return v;
   };
+  /** What a group would serve from a base of all that is asked within its reach there, whoever else covers it already. */
+  const serves = (f: AirFleet, base: number): number => {
+    const R = reach(f, g).ftrRange;
+    let v = 0;
+    for (const [i, d] of nearOf(base)) { const c = cover(d, R); if (c > 0) v += Math.min(f.ftr * c, ask[i]); }
+    return v;
+  };
   for (const f of fighters) if (stays(f)) meets(f, f.base, true);
   // The airfields open to this nation's groups (whyNotBase, leaving out each group's own base and how far it can fly in a month).
   const open = g.regions.filter((r) => whyNotBase(g, free[0], r, true) === null || r.id === free[0].base);
@@ -1851,6 +1858,14 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
       let step: Region | null = null, sd = km(g, f.base, far.r.id);
       for (const r of open) { if (!inFerry(r)) continue; const d = km(g, r.id, far.r.id); if (d < sd) { sd = d; step = r; } }
       if (step && rebaseAir(g, f, step)) { meets(f, step.id, true); continue; }
+    }
+    // Ruling 52(a), b489: a group left where nothing within its reach asks for fighters at all (a campaign that is
+    // over, a front that has moved on) does not stand idle there, though every ask is met without it. It goes to the
+    // open field within a month's flight from which it would serve the most of what is asked.
+    if (P > 0 && K.idle !== false && here <= 0 && serves(f, f.base) <= 0) {
+      let back: Region | null = null, most = 0;
+      for (const r of open) { if (!inFerry(r)) continue; const v = serves(f, r.id); if (v > most) { most = v; back = r; } }
+      if (back && rebaseAir(g, f, back)) { meets(f, back.id, true); continue; }
     }
     meets(f, f.base, true);
   }
