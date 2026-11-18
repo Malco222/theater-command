@@ -289,11 +289,11 @@ void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const
 	}
 }
 
-void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond)
+void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
 {
 	if (IsReady())
 	{
-		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond);
+		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
 	}
 }
 
@@ -311,6 +311,46 @@ void FBattleEffects::AirGunStop(int32 Gun)
 	if (IsReady())
 	{
 		Core.AirGunStop(Gun);
+	}
+}
+
+void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.AirHit(Now, ToFx(At), ToFxWay(Normal), ToFx(AircraftVelocity), Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::TrailStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.TrailStop(Id);
+	}
+}
+
+void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.AirFlak(Now, ToFx(At), Named(Kind).c_str());
 	}
 }
 
@@ -468,7 +508,7 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 
 	// the lamps: the strongest flashes now, out the moment they are spent
 	TheaterFx::Battle::Lamp Lit[MostLamps];
-	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse);
+	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Core.DayOf(Sight.SmokeLight)); // (after Draw: a flash's lamp goes by the frames it is drawn in)
 	for (int32 Index = 0; Index < LampsInUse; ++Index)
 	{
 		UPointLightComponent* Lamp = LampLights[Index].Get();
@@ -529,6 +569,7 @@ void FBattleEffects::RunTest(const FVector& Centre)
 	Add(15.5, 4, -36.0, -10.0, TEXT("mg"), TEXT("")); // a machine gun's burst, tracer
 	Add(16.0, 5, 24.0, 18.0, TEXT(""), TEXT("")); // a wreck burning
 	Add(18.0, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
+	Add(19.0, 6, 0.0, 60.0, TEXT("heavy"), TEXT("")); // a heavy flak burst hanging 60 m up over the far row
 }
 
 void FBattleEffects::PlayTest(double Now)
@@ -570,11 +611,14 @@ void FBattleEffects::PlayTest(double Now)
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 0.6 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(20.0, 20.0, 0.5) * UnitsPerMetre;
-			Shots(7, Gun, Target, Shot.Size, 25, 15.0f);
+			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TEXT("earth")); // (gun 13's belt starts on a tracer, so the first frames show one)
 			break;
 		}
 		case 5:
 			Burn(Where, 3.0f, 12.0f);
+			break;
+		case 6:
+			AirFlak(Now, Where + FVector(0.0, 0.0, 60.0 * UnitsPerMetre), Shot.Size);
 			break;
 		default:
 			break;

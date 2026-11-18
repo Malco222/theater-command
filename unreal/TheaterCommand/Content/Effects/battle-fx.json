@@ -1037,14 +1037,21 @@
    "smoke_s": [
     6,
     10
-   ]
+   ],
+   "day_lamp": 1
   },
   "mortar": {
    "flame_m": 0.4,
    "light": "small",
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
-  }
+  },
+  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z)."
+ },
+ "bullet_strike": {
+  "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About three rounds in ten kick one (pre-check 21:34Z: at one in two a firing gun cost about 16 puffs): a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
+  "spurt_chance": 0.3,
+  "spread_mil": 12
  },
  "tracer": {
   "_how": "Brian 2026-11-18: 'i want tracer fire shown as well. 1 out of every 5 bullets with yellow'. As a belt was loaded: every fifth round of a gun is a tracer; the four between are not seen. Out of step between guns.",
@@ -1077,7 +1084,9 @@
    240,
    210
   ],
-  "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay."
+  "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay.",
+  "whole_path_below_m": 100,
+  "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
  },
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",
@@ -1146,6 +1155,143 @@
   ],
   "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is."
  },
+ "air_hit": {
+  "_how": "Rounds striking an aircraft (AirHit, at the point hit, carried with that aircraft): a hot spit on the skin with two or three short tongues, sparks thrown off and slowed by the air so they fall away behind, a scrap or two of skin tumbling off (some bare metal catching the light), and a small dark puff left hanging where the hit was. All scale with the hitting gun's air_guns.<kind>.strike_m, so 20 mm hits are about twice a .50's. No ball of fire: a hit that sets fuel alight is the battle's call (a fire trail).",
+  "spark_colour": [
+   255,
+   236,
+   180
+  ],
+  "sparks": [
+   3,
+   6
+  ],
+  "scraps": [
+   1,
+   2
+  ],
+  "scrap_colour": [
+   70,
+   72,
+   70
+  ],
+  "bare_colour": [
+   150,
+   152,
+   156
+  ],
+  "smoke_colour": [
+   70,
+   68,
+   64
+  ],
+  "smoke_alpha": 0.55,
+  "smoke_s": [
+   0.8,
+   1.5
+  ]
+ },
+ "air_trails": {
+  "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer behind it so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. Each frame the young end is drawn from the point back to the newest puff, so a trail starts at the engine. A trail comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m as it hangs for life_s (grow: below 1 widens early, above 1 late) and pales toward colour_old. lumpy (0 to 1) makes some puffs bigger lumps and the rest smaller and shorter lived, and the smear shrinks over smear_s, so an old trail breaks into uneven lumps; rise_mps lifts the smoke. Fire adds ragged tongues streaming back about flame_m from the root, and its smoke starts at the flame's tips.",
+  "smoke": {
+   "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
+   "life_s": 7,
+   "spacing_m": 9,
+   "r0_m": 0.4,
+   "r1_m": 4.5,
+   "alpha": 0.5,
+   "colour": [
+    92,
+    90,
+    87
+   ],
+   "colour_full": [
+    50,
+    48,
+    46
+   ],
+   "colour_old": [
+    140,
+    137,
+    133
+   ],
+   "darken_s": 3,
+   "ramp_s": 1.5,
+   "smear": 1.6,
+   "carried": 0.05,
+   "flame_m": 0,
+   "grow": 1.1,
+   "lumpy": 0.7,
+   "smear_s": 5,
+   "rise_mps": 0
+  },
+  "fire": {
+   "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
+   "life_s": 8,
+   "spacing_m": 8,
+   "r0_m": 0.7,
+   "r1_m": 6.0,
+   "alpha": 0.7,
+   "colour": [
+    44,
+    41,
+    39
+   ],
+   "colour_full": [
+    34,
+    32,
+    31
+   ],
+   "colour_old": [
+    80,
+    78,
+    76
+   ],
+   "darken_s": 1,
+   "ramp_s": 0.8,
+   "smear": 1.6,
+   "carried": 0.05,
+   "flame_m": 3.0,
+   "flame_lift_m": [
+    0.3,
+    0.6
+   ],
+   "grow": 1.0,
+   "lumpy": 0.6,
+   "smear_s": 5,
+   "rise_mps": 1.2
+  },
+  "glycol": {
+   "_what": "a holed radiator: a thin white vapour that soon thins out",
+   "life_s": 2.2,
+   "spacing_m": 8,
+   "r0_m": 0.3,
+   "r1_m": 2.0,
+   "alpha": 0.4,
+   "colour": [
+    236,
+    237,
+    240
+   ],
+   "colour_full": [
+    236,
+    237,
+    240
+   ],
+   "colour_old": [
+    225,
+    227,
+    230
+   ],
+   "darken_s": 1,
+   "ramp_s": 0.4,
+   "smear": 1.5,
+   "carried": 0.05,
+   "flame_m": 0
+  },
+  "_art_director": "21:27Z: 20 mm hits, glycol and the fire trail at distance PASS. Engine fire: ragged tongues tearing free of the cowl and streaming aft past the wing root, a pale yellow heart at the cowl and deep orange along the tongues, a new length and shape every frame, black smoke rising from the flame tips. Smoke: thin and dark at the engine, about three times wider by 2 s and still widening, breaking into uneven lumps, paler and thinner with age, each lump hanging where it was laid. 21:37Z: the smoke trail, the 10 s fire trail and the glycol start PASS. The fire's tongues stand off the skin as they stream aft (flame_lift_m, above or below), so a few break the outline; the heart hugs the cowl.",
+  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first."
+ },
  "dust": {
   "vehicles": {
    "when": "dry ground and roads, not snow, mud or wet weather",
@@ -1208,7 +1354,7 @@
   "max_puffs": 3000,
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
-  "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 is worked out from the map's key light of about 7 lux so that the ground 3 m from a 105 lifts about 1.24 times; set it on the Mac by measuring frames until the ground within 15 m lifts 1.1 to 1.3 times.",
+  "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
   "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
@@ -1225,6 +1371,86 @@
   ],
   "puff_sides": 12,
   "_sides": "Points round each puff's ring (6 to 24). 12, so no eight-sided edge shows on a large near puff (art director 19:36Z asked 12 to 16). Each puff is 2 x sides + 1 points: 16 is rounder still if the Mac's frame time allows; 8 was the old shape.",
-  "_shade_1936": "shade_lit raised from 0.18 to 0.32 (art director 19:36Z): the sunward side of earth smoke shows as lit brown-grey; the shadow side stays charcoal (shade_dark 0.28)."
+  "_shade_1936": "shade_lit raised from 0.18 to 0.32 (art director 19:36Z): the sunward side of earth smoke shows as lit brown-grey; the shadow side stays charcoal (shade_dark 0.28).",
+  "day_light_from": 0.38,
+  "day_light_full": 0.9,
+  "day_lamp_share": 0.25,
+  "day_lamp_colour": [
+   255,
+   240,
+   215
+  ],
+  "_day": "How much the hour is day, from the light handed to Tick (its luminance): 0 at or below day_light_from, 1 at day_light_full. The campaign map's deepest night is about 0.377 (pre-check 21:16Z), so night is 0 there. By day (art director 21:16Z, build 1690) a lamp is day_lamp_share as strong and warm white (day_lamp_colour), and small guns (machine guns, rifles, guns under 75 mm, tank muzzles, aircraft guns and hits) light no ground at all; dust skirts stay. Tracer day widening reads the same Day.",
+  "_lamp_frames": "Art director 21:16Z, build 1690: a lamp never comes before its flash. A flash's lamp is full on the first frame drawn after the flash is born, about half on the next, then out. A light shorter than a frame (a flash, a flicker, a close tracer) is kept until a frame has drawn it once, so 30 frames a second and less still see every one."
+ },
+ "air_flak": {
+  "_how": "A flak shell bursting at the bombers' height (AirFlak). Five to eight see-through lobes in a crooked chain about long_m along the wind and across_m across it, each lobe_r of half the length, growing grow times; its two ends draw apart along the wind at stretch_mps for each half length out, and the whole drifts downwind at downwind_mps on top of the wind. Three to five thin wisps trail downwind. Opacity falls to half by half_by_s, then fades out; each piece lives life_s. Colour greys from colour to colour_old; cloud_shade lights its sunward side and shadows the far side, as the ground smoke. The lobes also spread across and up at spread_mps, their dark heart thins to heart_end of its middle as they age, and far off each lobe is held at least least_px across and made thinner to match. The flash: a torn orange glow gone in flash_glow_s with flash_spikes short bright spikes thrown out, and a white-hot heart in a hotter orange, a third to half the glow's radius off its middle, gone in flash_heart_s (radii in metres); off-centre and laid in front of the smoke; its lamp is lamp (a 105 is 1) reaching lamp_reach_m.",
+  "_art_director": "Hanging-smoke brief, 2026-11-16 03:44Z, the look Brian picked (\"its solid\", \"looks like a ball\" of the first): smoke, never a body; uneven, torn, see-through at the edges, never round, softly shaded. Sizes from the brief's table in a B-17's wingspan (31.6 m): new 0.7 by 0.5 (22 by 16 m), 8 s 2.1 by 0.8 (66 by 25 m); heart opacity 0.96 new to 0.49 at 8 s; gone by about 9 s; drift about half a wingspan over its life. Flash about 0.2 s, no sparks: heart 255,245,215 about a tenth of a wingspan across, in 255,170,60, inside an orange glow 150,70,14 about half a wingspan across. Ruling 21:47Z: the clouds and colours PASS. Mends: the flash read as a ball (heart moved off the middle, the glow's edge torn at least 2 to 1 with two or three spikes, the glow gone in 0.1 s and the heart in 0.05 s); old bursts reach the full 2.7 times width and about 1.5 times height, lose their dark core first, and never shrink below about 12 px at range.",
+  "heavy": {
+   "_what": "an 88 mm class burst",
+   "long_m": 22,
+   "across_m": 16,
+   "lobes": [
+    5,
+    8
+   ],
+   "wisps": [
+    3,
+    5
+   ],
+   "lobe_r": [
+    0.3,
+    0.5
+   ],
+   "grow": 2.4,
+   "stretch_mps": 6.0,
+   "downwind_mps": 0.6,
+   "life_s": [
+    8.5,
+    9.5
+   ],
+   "alpha": 0.75,
+   "half_by_s": 8,
+   "colour": [
+    46,
+    43,
+    42
+   ],
+   "colour_old": [
+    128,
+    122,
+    116
+   ],
+   "cloud_shade": 4.0,
+   "heart_end": 0.4,
+   "spread_mps": 1.1,
+   "least_px": 9,
+   "flash_glow_s": 0.1,
+   "flash_heart_s": 0.05,
+   "flash_spikes": [
+    2,
+    3
+   ],
+   "flash_heart": [
+    255,
+    245,
+    215
+   ],
+   "flash_heart_m": 1.6,
+   "flash_mid": [
+    255,
+    170,
+    60
+   ],
+   "flash_mid_m": 3.5,
+   "flash_glow": [
+    150,
+    70,
+    14
+   ],
+   "flash_glow_m": 8.0,
+   "lamp": 0.35,
+   "lamp_reach_m": 60
+  }
  }
 }

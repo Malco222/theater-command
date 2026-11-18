@@ -101,8 +101,11 @@ namespace TheaterFx
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
+		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
-		double LeastPx = 0.0;
+		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
+		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
+		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
 		uint32_t LumpSeed = 0;
@@ -112,6 +115,8 @@ namespace TheaterFx
 		double CloudShade = 0.0, CloudR = 1.0, CentreRise = 0.0;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
+		mutable bool bShown = false; // (laid at least once: a light shorter than a frame is kept until it has been)
+		bool bWhole = false; // (a light: however late its first frame comes, that frame shows it whole, as one shorter than a frame is)
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
@@ -142,7 +147,7 @@ namespace TheaterFx
 		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun);
 		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
 		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
-		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond);
+		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* Ground = "earth");
 		/** A gun on an aircraft firing, called every frame while its trigger is down. Muzzle is where the gun is now;
 		 * Aim the point this gun is laid on (the battle decides lead and convergence, so wing guns converge where it
 		 * says); Carry the aircraft's own velocity (metres a second). Kind is an air_guns row ("rifle", "hmg",
@@ -153,6 +158,23 @@ namespace TheaterFx
 		void AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin = 0.0, double MuzzleMps = 0.0);
 		/** The trigger let go: the gun's next AirGun starts a new burst (its belt goes on where it was). */
 		void AirGunStop(int Gun);
+		/** Rounds striking an aircraft at At: Normal the skin's outward way there, Carry that aircraft's velocity (m/s),
+		 * Kind the air_guns row of the gun that hit. A bright spit with sparks, a dark scrap or two torn off and left
+		 * behind in the air, a puff of smoke; all bigger for cannon (the row's strike_m). */
+		void AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
+		/** A trail from a moving point on an aircraft (an engine): TrailStart once, TrailMove every frame with where the
+		 * point is and its velocity, TrailStop when it ends; what is already in the air fades on its own. Id: any
+		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
+		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
+		 * trail changes its kind (smoke catching fire). */
+		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind);
+		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
+		void TrailStop(int Id);
+		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
+		 * see-through lobes of smoke in a crooked chain, longer along the wind, with thin wisps trailing downwind; it
+		 * hangs where it burst, drifts with the wind, greys and stretches, and is gone by about 9 s. Kind is an
+		 * air_flak row ("heavy"). */
+		void AirFlak(double Now, const Vec& At, const char* Kind = "heavy");
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds);
 
@@ -185,8 +207,12 @@ namespace TheaterFx
 			double Strength = 0.0; // 1 is a 105 mm shell's flash
 			double Radius = 30.0;
 		};
-		/** The strongest lamps lit at Now, at most Room of them. */
-		int Lamps(double Now, Lamp* Into, int Room) const;
+		/** The strongest lamps lit at Now, at most Room of them. Day (DayOf the hour's light, 0 at night, 1 by day)
+		 * turns them down to a share and toward a warm white, and puts out small guns' altogether. A flash's lamp is full
+		 * on the first frame drawn after it, half on the next, then out: call it after Draw. */
+		int Lamps(double Now, Lamp* Into, int Room, double Day = 0.0) const;
+		/** How much the hour's light (View::SmokeLight) is day: 0 at night, 1 in full day (game.day_light_from, _full). */
+		double DayOf(const Rgb& HourLight) const;
 
 		struct Jolt
 		{
@@ -211,6 +237,25 @@ namespace TheaterFx
 			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0;
 			int OneIn = 5, SmokeEvery = 3, Licks = 0;
 		};
+		/** An air_trails row, read once a kind. */
+		struct TrailRow
+		{
+			std::string Name;
+			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
+			Span FlameLift; // (metres a fire's tongue stands off the skin)
+			Rgb Col, ColFull, ColOld;
+		};
+		/** A trail being laid: where its point was at the last call, and how far it has gone since its last puff. */
+		struct Trailing
+		{
+			int Id = 0;
+			bool bOn = false;
+			std::string Kind;
+			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
+			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
+			Vec At, Carry, LastPuffAt;
+		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
 		{
@@ -224,6 +269,8 @@ namespace TheaterFx
 			Vec At;
 			Rgb Col;
 			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
+			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
+			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 		};
 		struct Knock
 		{
@@ -267,8 +314,13 @@ namespace TheaterFx
 		std::vector<int> GunRounds; // rounds fired by each gun so far
 		std::vector<AirRow> AirRows;
 		std::vector<Firing> Firings; // the air guns
+		std::vector<TrailRow> TrailRows;
+		std::vector<Trailing> Trails; // the aircraft trails being laid
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
-		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5;
+		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5, WholePathBelow = 100.0;
+		double DayFrom = 0.38, DayFull = 0.9, DayLampShare = 0.25;
+		Rgb DayLampCol;
+		int FrameNo = 0; // (frames drawn: flashes' lamps go by frames, not seconds)
 		Rgb TracerCol, TracerPale, TracerDayCore, FlameCol, FlashCoreCol, GunSmokeCol, CannonHeartCol;
 		std::vector<Vec> Out;
 		std::vector<uint8_t> OutRgba;
@@ -278,6 +330,7 @@ namespace TheaterFx
 			double Deep;
 		};
 		std::vector<Order> Sorted;
+		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
 		double Num(const std::string& Path, double Fallback) const;
 		double Pick(Dice& D, const std::string& Path, double Low, double High) const; // a number in the recipe's range
@@ -297,10 +350,12 @@ namespace TheaterFx
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
 		/** A tracer's streak (two layers, paler along its middle), its tail at Start when born, flying at Vel along Way;
 		 * Drag and Drop (gravity) slow and bend it, for the air guns' long flights. */
-		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop);
+		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half = -1.0, double AlphaK = 1.0);
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
+		const TrailRow& TrailRowOf(const std::string& Kind);
+		void TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
 		void Prune(double Now);
 

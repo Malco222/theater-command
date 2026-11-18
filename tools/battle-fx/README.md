@@ -35,9 +35,17 @@ const FBattleJolt Jolt = Blasts->Tick(GetWorld()->GetTimeSeconds(), CameraLocati
 // a field battle's shell
 Blasts->Shell(Where, TEXT("howitzer"), TEXT("earth"), /*bOnArmour*/ false);
 
+// a machine gun's burst at a target (Ground: what the rounds kick up, earth if left out)
+Blasts->Shots(Gun, Muzzle, Target, TEXT("mg"), 25, 15.0f, TEXT("snow"));
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
+
+Lamps and day: a flash's lamp is full on the first frame drawn after the flash, about half on the next, then out
+(Tick draws first, then lights; call Tick once a frame, or a lamp lasts a single frame). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
+warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
+shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
 Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are matched in lower case, as in the recipe:
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
@@ -61,7 +69,38 @@ Blasts->AirGunStop(Gun);
   override (rounds a minute, world units a second).
 - Every round flickers at the muzzle; one in five is the ruled tracer. Cannon also throw licks and light the wing.
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
-  `target`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn).
+  `target`, `hit`, `trail`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`).
+
+## Hits on aircraft and trails
+
+```cpp
+// a round striking an aircraft (Kind: the gun that hit)
+Blasts->AirHit(AirNow, HitPointWorld, SkinNormal, TargetVelocity, TEXT("cannon20"));
+// an engine trailing: once, then every frame, then when it ends
+Blasts->TrailStart(AirNow, EngineId, EngineSocketWorld, TargetVelocity, TEXT("smoke"));
+Blasts->TrailMove(AirNow, EngineId, EngineSocketWorld, TargetVelocity);
+Blasts->TrailStop(EngineId);
+```
+
+- `TrailStart` again on a running trail changes its kind, such as smoke catching fire (`fire`).
+- A trail not moved for 30 s is forgotten; call `TrailStart` again to bring it back.
+- Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
+- The same clock rule applies as for `AirGun`.
+
+## Flak at height
+
+```cpp
+// a heavy flak shell bursting near the bombers (the battle picks where and how often)
+Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
+```
+
+- Smoke, never a ball: a soft flash, then five to eight see-through lobes in a crooked chain down the wind, with wisps.
+  It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
+- The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
+  ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
+  for home. Each burst is about 12 to 19 puffs.
+- The preview: `./fxpreview recipe.txt out air hmg 6,20,95,245 960x540 burst` (one burst, close) or `... 360 960x540
+  flak` (heavy guns round a flying aircraft).
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
