@@ -375,27 +375,149 @@ def _tree(name, at, h, seed, mats, near=False):
     return objs
 
 
+def _fieldstone_material():
+    """Fieldstone: warm brown-grey, each stone its own shade, darker weathering in the hollows and patches of pale
+    green-yellow and dark lichen."""
+    m = bpy.data.materials.get("fieldstone")
+    if m:
+        return m
+    m = bpy.data.materials.new("fieldstone")
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = 0.93
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    tone = nt.nodes.new("ShaderNodeAttribute")
+    tone.attribute_name = "tone"
+    base = nt.nodes.new("ShaderNodeValToRGB")
+    els = base.color_ramp.elements
+    els[0].color = (*kit.hex_rgb("6F675B"), 1)
+    els[1].color = (*kit.hex_rgb("9A8F7C"), 1)
+    mid = els.new(0.5)
+    mid.color = (*kit.hex_rgb("857A68"), 1)
+    nt.links.new(tone.outputs["Fac"], base.inputs["Fac"])
+
+    def noise_tex(scale, detail):
+        n = nt.nodes.new("ShaderNodeTexNoise")
+        n.inputs["Scale"].default_value = scale
+        n.inputs["Detail"].default_value = detail
+        nt.links.new(tc.outputs["Object"], n.inputs["Vector"])
+        return n
+
+    def mix(a, b, fac, kind="MIX"):
+        x = nt.nodes.new("ShaderNodeMix")
+        x.data_type = "RGBA"
+        x.blend_type = kind
+        nt.links.new(a, x.inputs["A"])
+        if isinstance(b, tuple):
+            x.inputs["B"].default_value = b
+        else:
+            nt.links.new(b, x.inputs["B"])
+        if isinstance(fac, float):
+            x.inputs["Factor"].default_value = fac
+        else:
+            nt.links.new(fac, x.inputs["Factor"])
+        return x.outputs["Result"]
+
+    def mask(n, lo, hi):
+        r = nt.nodes.new("ShaderNodeMapRange")
+        r.inputs["From Min"].default_value = lo
+        r.inputs["From Max"].default_value = hi
+        nt.links.new(n.outputs["Fac"], r.inputs["Value"])
+        return r.outputs["Result"]
+
+    grain = noise_tex(9.0, 8)
+    shade = nt.nodes.new("ShaderNodeValToRGB")
+    shade.color_ramp.elements[0].color = (0.7, 0.7, 0.7, 1)
+    shade.color_ramp.elements[1].color = (1.15, 1.15, 1.15, 1)
+    nt.links.new(grain.outputs["Fac"], shade.inputs["Fac"])
+    col = mix(base.outputs["Color"], shade.outputs["Color"], 0.8, "MULTIPLY")
+    pale = noise_tex(2.3, 6)
+    col = mix(col, (*kit.hex_rgb("A2A275"), 1), mask(pale, 0.58, 0.64))          # pale lichen
+    dark = noise_tex(3.1, 6)
+    col = mix(col, (*kit.hex_rgb("3F3B33"), 1), mask(dark, 0.62, 0.68))          # dark lichen and damp
+    nt.links.new(col, bsdf.inputs["Base Color"])
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.5
+    bump.inputs["Distance"].default_value = 0.02
+    nt.links.new(grain.outputs["Fac"], bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    return haze(m)
+
+
 def _stone_wall(stage, a, b, mats, seed=1):
+    """A dry-stone field wall of gathered fieldstone: rounded stones of every size, two faces battered in toward a
+    rough top, settled into the grass with weeds at its foot, a few stones gone from the top and the far end tumbled
+    down into a spill on the grass."""
     rnd = random.Random(seed)
-    a, b = Vector(a), Vector(b)
-    n = int((b - a).length / 0.55)
+    a, b = Vector((a[0], a[1], 0.0)), Vector((b[0], b[1], 0.0))
+    length = (b - a).length
     d = (b - a).normalized()
+    side = Vector((-d.y, d.x, 0.0))
     yaw = math.atan2(d.y, d.x)
-    for i in range(n):
-        p = a + d * (i * 0.55)
-        for course in range(3):
-            if rnd.random() < 0.08 * course:           # a few stones fallen out of the top
-                continue
-            sx, sy, sz = rnd.uniform(0.45, 0.65), rnd.uniform(0.38, 0.5), rnd.uniform(0.22, 0.3)
-            z = stage.height(p.x, p.y) + 0.12 + course * 0.25
-            bpy.ops.mesh.primitive_cube_add(size=1, location=(p.x + rnd.uniform(-0.05, 0.05), p.y + rnd.uniform(-0.05, 0.05), z))
-            s = bpy.context.object
-            s.scale = (sx, sy, sz)
-            s.rotation_euler = (rnd.uniform(-0.08, 0.08), rnd.uniform(-0.08, 0.08), yaw + rnd.uniform(-0.15, 0.15))
-            bev = s.modifiers.new("bevel", "BEVEL")
-            bev.width = 0.05
-            bev.segments = 2
-            s.data.materials.append(mats["stone"])
+    tumble = length - rnd.uniform(2.5, 4.0)          # past here the wall has come down
+    bm = bmesh.new()
+    tone = bm.verts.layers.float.new("tone")
+    off = Vector((rnd.uniform(0, 99), rnd.uniform(0, 99), 0))
+
+    def stone(at, lx, ly, lz, turn, tilt):
+        ret = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.5)
+        vs = ret["verts"]
+        k = rnd.random()
+        flat = rnd.uniform(0.65, 1.0)
+        o = Vector((rnd.uniform(0, 50), rnd.uniform(0, 50), rnd.uniform(0, 50)))
+        rot = Matrix.Rotation(yaw + turn, 4, "Z") @ Matrix.Rotation(tilt, 4, "X") @ Matrix.Rotation(rnd.uniform(-0.15, 0.15), 4, "Y")
+        for v in vs:
+            p = Vector(v.co)
+            p.z *= flat if p.z > 0 else flat * 0.7    # flatter beds, rounder tops
+            p *= 1.0 + 0.34 * noise.noise(p * 1.6 + o) + 0.09 * noise.noise(p * 5.0 + o)
+            v.co = at + rot @ Vector((p.x * lx, p.y * ly, p.z * lz))
+            v[tone] = k
+
+    def lay_course(z0, height, width, inset, gap_chance, max_s, start=0.0):
+        s = start + rnd.uniform(0.0, 0.2)
+        while s < min(length, max_s):
+            lx = rnd.choice((rnd.uniform(0.18, 0.32), rnd.uniform(0.3, 0.6), rnd.uniform(0.3, 0.6), rnd.uniform(0.55, 0.85)))
+            for face in (-1, 1):
+                if rnd.random() < gap_chance:
+                    continue
+                ly = rnd.uniform(0.6, 1.0) * width / 2
+                lz = height * rnd.uniform(0.85, 1.25)
+                at = a + d * (s + lx / 2) + side * face * (width / 4 + inset * 0 + rnd.uniform(-0.03, 0.03))
+                g = stage.height(at.x, at.y)
+                stone(Vector((at.x, at.y, g + z0 + lz * 0.42 + rnd.uniform(-0.05, 0.05))), lx * 1.05, ly * 1.1, lz,
+                      rnd.uniform(-0.25, 0.25),
+                      face * rnd.uniform(0.0, 0.12))
+            s += lx * rnd.uniform(0.82, 0.95)
+
+    # base course sunk a little into the turf, then narrower courses, then a broken rough top
+    z, width = -0.06, 0.78
+    for c, (h, gap) in enumerate(((0.32, 0.0), (0.28, 0.02), (0.26, 0.03), (0.24, 0.06), (0.22, 0.2))):
+        lay_course(z, h, width, 0, gap, tumble if c < 1 else tumble - rnd.uniform(0.3, 1.5) * c)
+        z += h * 0.78
+        width *= 0.88
+    # the tumbled end: low remains and stones spilled onto the grass on both sides
+    lay_course(-0.06, 0.26, 0.7, 0, 0.35, length, start=tumble)
+    s = tumble
+    while s < length + 1.2:
+        for _ in range(rnd.randint(1, 3)):
+            at = a + d * (s + rnd.uniform(-0.3, 0.3)) + side * rnd.uniform(-1.6, 1.6)
+            g = stage.height(at.x, at.y)
+            lz = rnd.uniform(0.15, 0.28)
+            stone(Vector((at.x, at.y, g + lz * 0.2)), rnd.uniform(0.25, 0.55), rnd.uniform(0.2, 0.4), lz,
+                  rnd.uniform(-1.5, 1.5), rnd.uniform(-0.4, 0.4))
+        s += rnd.uniform(0.3, 0.6)
+    me = bpy.data.meshes.new("fieldwall")
+    bm.to_mesh(me)
+    bm.free()
+    for poly in me.polygons:
+        poly.use_smooth = True
+    ob = bpy.data.objects.new("fieldwall", me)
+    bpy.context.scene.collection.objects.link(ob)
+    me.materials.append(_fieldstone_material())
+    # weeds and long grass at its foot, thicker than the field's
+    _grass(stage, None, 0, mats, seed + 11, line=(a, b, 0.3, 0.8, int(length * 45)))
+    return ob
 
 
 def _farm(stage, at, yaw, mats):
@@ -568,13 +690,24 @@ def _crater(stage, x, y, r, mats, seed=0):
     return c
 
 
-def _grass(stage, area, count, mats, seed=7, holes=()):
-    """Tufts of long grass scattered near the camera, so the ground has depth at a low angle."""
+def _grass(stage, area, count, mats, seed=7, holes=(), line=None):
+    """Tufts of long grass scattered near the camera, so the ground has depth at a low angle. With `line`
+    (a, b, near, far, n) they grow instead in a band from `near` to `far` metres either side of the line a-b."""
     rnd = random.Random(seed)
     bm = bmesh.new()
-    (x0, y0), (x1, y1) = area
-    for _ in range(count):
-        x, y = rnd.uniform(x0, x1), rnd.uniform(y0, y1)
+
+    def spot():
+        if line:
+            la, lb, near, far, _n = line
+            dd = (lb - la)
+            sd = Vector((-dd.y, dd.x, 0)).normalized()
+            p = la + dd * rnd.uniform(-0.03, 1.03) + sd * rnd.choice((-1, 1)) * rnd.uniform(near, far)
+            return p.x, p.y
+        (x0, y0), (x1, y1) = area
+        return rnd.uniform(x0, x1), rnd.uniform(y0, y1)
+
+    for _ in range(line[4] if line else count):
+        x, y = spot()
         if road_distance(x, y, ROAD) < 3.0:
             continue
         if any((x - hx) ** 2 + (y - hy) ** 2 < (1.3 * hr) ** 2 for hx, hy, hr in holes):   # no grass in a fresh crater
