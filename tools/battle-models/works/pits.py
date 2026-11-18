@@ -689,10 +689,11 @@ def SandbagRing(fine=True, nation="_default", name="SandbagRing"):
     return m
 
 
-def bough(m, pts, side, seed=0, wilt=0.0):
+def bough(m, pts, side, seed=0, wilt=0.0, rise=(-0.05, 0.3)):
     """A cut branch lying along `pts` (butt first): a woody stem, twigs to left and right of it in the spray's own
     plane (`side` lies in that plane, across the stem), sprigs off the twigs, and leaves of one shape along them all.
-    `wilt` 0..1 is how far the leaves have dulled and drooped: cut boughs wilt in a day."""
+    `wilt` 0..1 is how far the leaves have dulled and drooped: cut boughs wilt in a day. `rise` is how far the twigs
+    stand up out of the spray's plane (a bough lying down a slope keeps them low)."""
     g = rnd(seed)
     pts = [Vector(q) for q in pts]
     spans = [(b - a).length for a, b in zip(pts, pts[1:])]
@@ -760,7 +761,7 @@ def bough(m, pts, side, seed=0, wilt=0.0):
         sg = 1.0 if i % 2 == 0 else -1.0
         ang = math.radians(g.uniform(34.0, 56.0))
         long = g.uniform(0.3, 0.52) * (1.12 - 0.62 * f) * min(1.25, 0.55 + L * 0.33)
-        way = (d * math.cos(ang) + s * sg * math.sin(ang) + up * g.uniform(-0.05, 0.3)).normalized()
+        way = (d * math.cos(ang) + s * sg * math.sin(ang) + up * g.uniform(*rise)).normalized()
         sag = wilt * g.uniform(0.25, 0.6)
         tip = p + way * long - Z * long * (0.1 + sag)
         mid = p + way * long * 0.5 + Z * long * 0.04
@@ -896,8 +897,9 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
                     return (h0 + (h1 - h0) * (off - o0) / (o1 - o0)) * taper(x, y)
             return 0.0
 
-        def lay(butt, tip, lift0, lift1, n=7):
-            # a stiff branch resting on what lies under it: it bridges the hollows, it does not follow them
+        def lay(butt, tip, lift0, lift1, n=7, give=0.015):
+            # a stiff branch resting on what lies under it: it bridges the hollows, it does not follow them (`give` is
+            # how far it bends over a crest between one point and the next)
             pts = []
             for i in range(n):
                 t = i / (n - 1)
@@ -905,15 +907,15 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
                 pts.append(Vector((q.x, q.y, top_at(q.x, q.y) + lift0 + (lift1 - lift0) * t)))
             for _ in range(6):
                 for i in range(1, n - 1):
-                    pts[i].z = max(pts[i].z, (pts[i - 1].z + pts[i + 1].z) / 2 - 0.015)
+                    pts[i].z = max(pts[i].z, (pts[i - 1].z + pts[i + 1].z) / 2 - give)
             return pts
 
-        def laid(a, r, a2, long, roll, wilt, lift=(0.035, 0.2)):
+        def laid(a, r, a2, long, roll, wilt, lift=(0.035, 0.2), give=0.015, rise=(-0.05, 0.3)):
             butt = V2(a, r)
             way = V2(a2)
-            pts = lay(butt, butt + way * long, lift[0], lift[1])
+            pts = lay(butt, butt + way * long, lift[0], lift[1], give=give)
             side = Vector((-way.y, way.x, 0.0)) * math.cos(math.radians(roll)) + Z * math.sin(math.radians(roll))
-            bough(m, pts, side, gb.randrange(1 << 30), wilt)
+            bough(m, pts, side, gb.randrange(1 << 30), wilt, rise)
 
         def wilted():
             return gb.choice((0.0, 0.0, 0.0, 0.15, 0.55, 0.85, 1.0))
@@ -923,10 +925,10 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
                 flat = abs(a) < 8.0                    # (under the barrel they lie flat)
                 laid(a, gb.uniform(2.44, 2.62), a + gb.uniform(-26, 26), gb.uniform(1.35, 2.0), gb.uniform(-8, 8) if flat else gb.uniform(-26, 26), wilted(),
                      (0.035, gb.uniform(0.08, 0.16) if flat else gb.uniform(0.12, 0.32)))
-            for sy in (-1, 1):                        # over the shoulders, where the wall steps up
-                for k in range(4):
-                    a = sy * (NOTCH + 6.0 + 44.0 * (k + gb.uniform(0.1, 0.9)) / 4)
-                    laid(a, gb.uniform(2.46, 2.6), a * gb.uniform(0.4, 0.8), gb.uniform(1.5, 2.1), gb.uniform(-20, 20), wilted(), (0.035, gb.uniform(0.1, 0.25)))
+            for sy in (-1, 1):                        # over the shoulders, where the wall steps up: bent over the crest
+                for k in range(4):                    # and lying down the outer slope, their twigs low (stood up, they
+                    a = sy * (NOTCH + 6.0 + 44.0 * (k + gb.uniform(0.1, 0.9)) / 4)          # read as saplings planted there)
+                    laid(a, gb.uniform(2.66, 2.8), a * gb.uniform(0.4, 0.8), gb.uniform(1.5, 2.1), gb.uniform(-7, 7), wilted(), (0.04, gb.uniform(0.05, 0.1)), 0.06, (-0.12, 0.05))
         # leaned on the gun: butts hooked over the shield's top edge, tips down on the low front either side of the barrel
         SX, SZ = 0.05, 0.8 + 0.015                    # (the Pak 40's shield top, 1.2 m above the pit floor)
         m.part("boughs", "pit", (SX, 0.0, SZ), kind="free", note="cut boughs leaned from the gun's shield down to the low front, and one laid across her barrel: loose, the game takes them off when the pit stands without its gun, and may let them fall at her first shots. Fitted to the Pak40 (shield top 1.20 m above the pit floor, 0.05 m ahead of the socket); for the AntiTankGun move the part 0.15 m forward and 0.06 m down")
@@ -936,15 +938,21 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
             tip = Vector((xt + gb.uniform(-0.1, 0.1), yt + gb.uniform(-0.08, 0.08), 0.0))
             tip.z = top_at(tip.x, tip.y) + gb.uniform(0.2, 0.3)
             way = (tip - rest).normalized()
-            pts = [rest - way * gb.uniform(0.08, 0.16) + Z * 0.01, rest, rest.lerp(tip, 0.35) - Z * 0.015, rest.lerp(tip, 0.7) - Z * 0.03, tip]
+            # (the butt is tucked down behind the shield's top edge: a row of butts standing proud of it is a crown of sticks)
+            pts = [rest + Vector((-0.05, 0.0, -0.07)), rest, rest.lerp(tip, 0.35) - Z * 0.015, rest.lerp(tip, 0.7) - Z * 0.03, tip]
             roll = math.radians(gb.uniform(-16, 16))
             side = Vector((-way.y, way.x, 0.0)).normalized() * math.cos(roll) + Z * math.sin(roll)
             bough(m, pts, side, gb.randrange(1 << 30), (0.0, 0.7, 0.1, 0.0, 0.9, 0.3)[k])
         # (one across the barrel: it rests on the shield and on the barrel's top, 1.04 m above the floor)
         rest, over = Vector((SX, -0.3, SZ + 0.01)), Vector((1.25, 0.0, 1.04 - D + 0.012))
         way = (over - rest).normalized()
-        pts = [rest - way * 0.12, rest, over, over + way * 0.7 - Z * 0.03, over + way * 1.3 - Z * 0.1]
+        pts = [rest + Vector((-0.05, 0.0, -0.07)), rest, over, over + way * 0.7 - Z * 0.03, over + way * 1.3 - Z * 0.1]
         bough(m, pts, Vector((-way.y, way.x, 0.0)).normalized(), gb.randrange(1 << 30), 0.2)
+        # (two sprigs hung over the shield's top edge, their leaves down its face: they break its straight line)
+        for yb, lean in ((-0.4, 0.12), (0.31, -0.1)):
+            top = Vector((SX, yb, SZ + 0.004))
+            pts = [top + Vector((-0.16, -lean * 0.4, -0.12)), top, top + Vector((0.13, lean * 0.5, -0.17)), top + Vector((0.27, lean, -0.4)), top + Vector((0.36, lean * 1.3, -0.56))]
+            bough(m, pts, Y, gb.randrange(1 << 30), 0.25 if yb < 0 else 0.0, (-0.02, 0.22))
         m.use("pit")
     if low_front:
         m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the anti-tank gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags; across the front 44 degrees the bags stand five courses (0.56 m above the floor) and the earth beyond is lower still, so a bore 0.8 m up or more fires flat over it and traverses 20 degrees either way; at the sides the parapet top is 0.9 m above the floor. Two logs lie 2.8 m behind, 0.7 m apart: split trails (up to 4.0 m wide, 3.1 m back) pass outside their ends into the open rear. Of the vehicle modeller's guns: Pak40 (bore 0.96 m up) and AntiTankGun (0.86 m) both have room")
