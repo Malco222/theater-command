@@ -900,12 +900,6 @@ export interface FortRules { works: number; dig?: { orders: number; top: number;
  * The player's own building staff does neither: his fortifications are his to order.
  */
 export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
-  fortify(g, nat, watch, C);
-  // Its ships and aircraft come last of all (rulings 68(b) and 70(a)): after the corps, the guns and the works.
-  aiProgramme(g, nat);
-}
-
-function fortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
   const n = g.nations[nat];
   if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
   const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;

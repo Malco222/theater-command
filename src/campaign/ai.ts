@@ -9,7 +9,7 @@ import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyN
 import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { aiArsenal, aiFortify } from './arsenal';
+import { aiArsenal, aiFortify, aiProgramme } from './arsenal';
 import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
@@ -163,6 +163,8 @@ export function runAI(g: Game, nat: string): void {
   aiProduction(g, nat);
   aiArsenal(g, nat);
   aiFortify(g, nat, Object.keys(coastWatch(g, nat)), coastRules());
+  // Its ships and aircraft come last of all (rulings 68(b) and 70(a)): after the corps, the guns and the works.
+  aiProgramme(g, nat);
   civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
 }
 
