@@ -77,15 +77,29 @@ namespace
 				Size = FIntPoint(FCString::Atoi(*Width), FCString::Atoi(*Height));
 			}
 		}
+		bool bSuited = false;
 		if (Size.X < 640 || Size.Y < 400)
 		{
+			// (18 November 2026. The window took 86 and 84 hundredths of the screen. On Brian's Mac, whose screen is 1470
+			// by 924 points under the menu bar, that is 1264 by 776: every card and every line of type at 78 hundredths of
+			// the 1600 by 1000 frame the game is drawn and reviewed at, and the small type about seven points high. It
+			// takes nearly all of the screen now, leaving room for the window's own title bar: 1440 by 878 there, and
+			// the type an eighth larger. "-TheaterWindow=1264x776" opens it as it was.)
 			const FIntPoint Desktop = Settings->GetDesktopResolution();
-			Size.X = FMath::Clamp(FMath::RoundToInt32(Desktop.X * 0.86f), 1100, 2240);
-			Size.Y = FMath::Clamp(FMath::RoundToInt32(Desktop.Y * 0.84f), 700, 1260);
+			Size.X = FMath::Clamp(FMath::RoundToInt32(Desktop.X * 0.98f), 1100, 2240);
+			Size.Y = FMath::Clamp(FMath::RoundToInt32(Desktop.Y * 0.95f), 700, 1260);
+			bSuited = true;
 		}
 		Settings->SetScreenResolution(Size);
 		Settings->SetFullscreenMode(EWindowMode::Windowed);
 		Settings->ApplyResolutionSettings(false);
+		{
+			// (said in the log, so that the size a player really plays at is known: the test pictures are 1600 by 1000,
+			// and for a long time nobody had looked at the game at the size of his own window)
+			const FIntPoint Desktop = Settings->GetDesktopResolution();
+			UE_LOG(LogTheater, Display, TEXT("Window: the screen is %d by %d and the game's window %d by %d%s"), Desktop.X, Desktop.Y, Size.X, Size.Y,
+				bSuited ? TEXT(" (98 and 95 hundredths of the screen)") : TEXT(" (asked for on the command line)"));
+		}
 	}
 }
 
