@@ -189,7 +189,7 @@ def matilda(fine=True, tag="UK"):
     roof = zt + th
     cup = v.cupola((x0 - 0.20, 0.30, roof - 0.01), 0.27, 0.22, slits=0)
     v.hatch_round("hatch_commander", "turret", cup, 0.20, Z, -X, thick=0.028, opens=100.0, split=True)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_rect("hatch_loader", "turret", (x0 - 0.16, -0.36, roof), (0.44, 0.36), Z, X, hinge="right", opens=100.0, thick=0.026)
     v.use("turret")
     v.periscope((x0 + 0.38, 0.30, roof - 0.01), X, (0.07, 0.14, 0.07))

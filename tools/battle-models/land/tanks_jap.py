@@ -152,7 +152,7 @@ def type97(fine=True, tag="JAP"):
     ring_rivets(v, mix(0.90), zt + 0.02 + (th - 0.045) * 0.90, 38, part="turret")
     cup = v.cupola((x0 - 0.14, y0 + 0.04, roof - 0.01), 0.31, 0.11, slits=0)
     v.hatch_round("hatch_commander", "turret", cup, 0.25, Z, -X, thick=0.028, opens=100.0, split=True)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.periscope((x0 + 0.34, y0 - 0.22, roof - 0.005), X, (0.06, 0.12, 0.06))
     # the rail aerial: a tube round the front and sides of the roof on short posts, open at the back

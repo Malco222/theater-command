@@ -92,7 +92,7 @@ def stug3(fine=True, tag="GER", paint=None):
     v.use("hull")
     cup = v.cupola((-0.42, 0.62, zr), 0.30, 0.25, slits=7, start=0.0)
     v.hatch_round("hatch_commander", "hull", cup, 0.22, Z, -X, thick=0.03, opens=105.0)
-    v.socket("commander", cup + Z * -0.25, X, part="hull", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="hull", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_rect("hatch_loader", "hull", (-0.46, -0.60, zr), (0.46, 0.50), Z, X, hinge="back", opens=100.0)
     v.use("hull")
     sx = -0.10
@@ -213,7 +213,7 @@ def su85(fine=True, tag="SOV"):
     v.use("hull")
     cup = v.cupola((0.26, -0.42, zc), 0.26, 0.15, slits=4, start=0.4)
     v.hatch_round("hatch_commander", "hull", cup, 0.2, Z, -X, thick=0.028, opens=100.0)
-    v.socket("commander", cup + Z * -0.25, X, part="hull", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="hull", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_rect("hatch_loader", "hull", (-0.12, 0.22, zc), (0.46, 0.56), Z, X, hinge="back", opens=100.0)
     v.use("hull")
     v.slab((0.52, 0.22, zc), (0.74, 0.42, zc + 0.15), coat, 0.03, segs=2)                # the gunner's sight under its hood

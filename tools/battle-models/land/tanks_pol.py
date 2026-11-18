@@ -138,7 +138,7 @@ def tp7(fine=True, tag="POL"):
             rivets(v, (x0 - 0.98, y0 + s * 0.341, zt + 0.27), (x0 - 0.66, y0 + s * 0.341, zt + 0.27), Y * s, 0.1)
             rivets(v, (x0 - 0.98, y0 + s * 0.341, zt + 0.57), (x0 - 0.66, y0 + s * 0.341, zt + 0.57), Y * s, 0.1)
     v.hatch_rect("hatch_commander", "turret", (x0 - 0.20, y0, roof), (0.46, 0.56), Z, X, hinge="back", opens=100.0, thick=0.022, split=True)
-    v.socket("commander", (x0 - 0.20, y0, roof - 0.25), X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", (x0 - 0.20, y0, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.lathe((x0 + 0.20, y0 + 0.20, roof - 0.005), Z, [(0.09, 0.0), (0.09, 0.05), (0.07, 0.065), (0.0, 0.07), (0.0, 0.0)], "upper", v.n(16, 6))     # his all-round periscope
     v.vent((x0 + 0.18, y0 - 0.20, roof - 0.005), 0.07, 0.03)

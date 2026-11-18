@@ -317,7 +317,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     # the commander's cupola and its lid
     cup = v.cupola((x0 - 0.56, 0.0, 2.285), 0.335, 0.34, slits=5, start=math.radians(36))
     v.hatch_round("hatch_commander", "turret", cup + Z * 0.0, 0.25, Z, -X, thick=0.03, opens=105.0)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.vent((x0 + 0.42, -0.2, 2.245), 0.12, 0.05)
     v.port((x0 + 0.2, 0.32, 2.262), Z, 0.05)
@@ -486,7 +486,7 @@ def panther(fine=True, tag="GER", paint=None):
     roof = zt + th
     cup = v.cupola((x0 - 0.42, 0.36, roof), 0.36, 0.27, slits=7, start=0.2)
     v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, Y, thick=0.03, opens=105.0)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.vent((x0 + 0.42, -0.1, roof), 0.12, 0.05)
     v.periscope((x0 + 0.45, -0.42, roof), X, (0.08, 0.16, 0.06))
@@ -618,7 +618,7 @@ def tiger(fine=True, tag="GER", paint=None):
     roof = zt + th
     cup = v.cupola((x0 - 0.36, 0.5, roof), 0.36, 0.2, slits=7, start=0.2)
     v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, -Y, thick=0.03, opens=105.0)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_rect("hatch_loader", "turret", (x0 + 0.12, -0.5, roof), (0.52, 0.44), Z, X, hinge="front", opens=100.0, thick=0.028)
     v.use("turret")
     v.vent((x0 - 0.5, -0.1, roof), 0.13, 0.05)

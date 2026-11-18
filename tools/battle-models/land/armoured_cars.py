@@ -583,7 +583,7 @@ def armoured_car(fine=True, tag="_"):
     roof = zr + th
     riveted_prism(v, plan_w, top_w, zr + 0.02, roof, part="turret")
     v.hatch_round("hatch_commander", "turret", (x0 - 0.12, 0.0, roof), 0.2, Z, -X, thick=0.022, opens=100.0)
-    v.socket("commander", (x0 - 0.12, 0.0, roof - 0.25), X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", (x0 - 0.12, 0.0, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.vent((x0 + 0.24, 0.2, roof), 0.06, 0.03)
     if fine:

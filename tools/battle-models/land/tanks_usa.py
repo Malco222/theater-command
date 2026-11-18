@@ -199,7 +199,7 @@ def sherman(fine=True, tag="USA"):
     # the commander's round hatch in its ring on the right, the loader's lid on the left, the ventilator behind
     cup = v.cupola((x0 - 0.30, -0.44, roof - 0.01), 0.35, 0.085, slits=0, start=0.3)
     v.hatch_round("hatch_commander", "turret", cup, 0.27, Z, Y, thick=0.03, opens=95.0, split=True)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_rect("hatch_loader", "turret", (x0 - 0.30, 0.46, roof), (0.52, 0.36), Z, X, hinge="left", opens=100.0, thick=0.028)
     v.use("turret")
     v.vent((x0 - 0.98, 0.0, roof - 0.01), 0.14, 0.06)

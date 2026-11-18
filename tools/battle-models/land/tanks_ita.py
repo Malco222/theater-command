@@ -140,7 +140,7 @@ def m13(fine=True, tag="ITA"):
     roof = zt + th
     riveted_prism(v, plan_w, top_w, zt + 0.02, roof, part="turret", every=0.105)
     v.hatch_rect("hatch_commander", "turret", (x0 - 0.16, 0.0, roof), (0.52, 0.70), Z, X, hinge="back", opens=100.0, thick=0.024, split=True)
-    v.socket("commander", (x0 - 0.16, 0.0, roof - 0.25), X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", (x0 - 0.16, 0.0, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     for s in (LEFT, RIGHT):
         v.periscope((x0 + 0.30, s * 0.30, roof), X, (0.06, 0.12, 0.06))

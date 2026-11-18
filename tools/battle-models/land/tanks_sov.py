@@ -134,7 +134,7 @@ def t34(fine=True, tag="SOV"):
     # two round lids side by side, the gunner's sight and the loader's periscope ahead of them, a ventilator between
     v.hatch_round("hatch_commander", "turret", (x0 - 0.40, 0.36, roof), 0.26, Z, X, thick=0.03, opens=95.0)
     v.hatch_round("hatch_loader", "turret", (x0 - 0.40, -0.36, roof), 0.26, Z, X, thick=0.03, opens=95.0)
-    v.socket("commander", (x0 - 0.40, 0.36, roof - 0.25), X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", (x0 - 0.40, 0.36, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.periscope((x0 + 0.42, 0.40, roof), X, (0.09, 0.13, 0.11))
     v.periscope((x0 + 0.42, -0.40, roof), X, (0.09, 0.13, 0.11))
@@ -189,7 +189,7 @@ def t34_85(fine=True, tag="SOV"):
     roof = zt + th
     cup = v.cupola((x0 - 0.52, 0.44, roof - 0.01), 0.34, 0.25, slits=5, start=0.3)
     v.hatch_round("hatch_commander", "turret", cup, 0.25, Z, X, thick=0.03, opens=95.0, split=True)
-    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.hatch_round("hatch_loader", "turret", (x0 - 0.50, -0.42, roof), 0.25, Z, X, thick=0.03, opens=95.0)
     v.use("turret")
     v.periscope((x0 + 0.40, 0.42, roof - 0.01), X, (0.09, 0.13, 0.11))
