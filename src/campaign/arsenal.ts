@@ -243,6 +243,7 @@ function bestField(g: Game, nat: string): Region | null {
  * are already in the order of battle history left, so their rows are marked as come.
  */
 export function openSmallAir(g: Game): void {
+  g.flags.gifts = 1;
   SMALL().gifts.forEach(([month], i) => { if (month < g.turn) g.flags[`gift:${i}`] = 1; });
 }
 

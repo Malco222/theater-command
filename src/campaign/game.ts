@@ -750,9 +750,10 @@ export function corpsNamed(g: Game, nat: string, name: string): string {
 }
 /**
  * Ground of a country of the Americas that joined the Axis by its courting (ruling 223(c), diplomacy.ts): it keeps
- * its own small army, and no computer-run country ships a corps to its harbours or bases an air group on its fields.
+ * its own small army, and no computer-run country of its side ships a corps to its harbours or bases an air group on
+ * its fields. Its enemies are not barred from what they take of it.
  */
-export const thornGround = (g: Game, r: Region, nat: string): boolean => nat !== r.owner && nat !== g.human && g.flags[`americas:in:${r.owner}`] !== undefined;
+export const thornGround = (g: Game, r: Region, nat: string): boolean => nat !== r.owner && nat !== g.human && g.flags[`americas:in:${r.owner}`] !== undefined && allied(g, nat, r.owner);
 
 export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
 /** The sentence wherever guns are sent forward alone (ruling 146). */

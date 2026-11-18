@@ -19,6 +19,7 @@ import worldMap from '../generated/world-americas.json';
 import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
+import { seedFields } from './air';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
 
@@ -218,6 +219,9 @@ export function settleNewGround(g: Game, from: number): void {
     if (o.str !== undefined) c.str = o.str;
   }
   for (const row of WORLD.fleets) if (fresh(row.base) && g.nations[row.nat]?.alive && g.byName[row.base!].ctrl === row.nat) addFleet(g, row);
+  // Its first-day airfields too, where the air war is already running; the old provinces keep theirs, and the air
+  // groups based on them.
+  if (g.flags.airwar === 1) seedFields(g, Math.max(from, WORLD_FIRST));
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
   g.supplyDirty = true;
 }
@@ -281,7 +285,17 @@ export function peaceFooting(g: Game, nat: string): number | null {
  */
 export function warFooting(g: Game, nat: string): number | null {
   if (!worldOn(g) || WORLD.warWork[nat] === undefined) return null;
-  return Math.min(1, g.flags[`ww:${nat}`] ?? peaceFooting(g, nat) ?? 1);
+  // (At war before its first month's step is taken, a climb stands where the calendar has it.)
+  return Math.min(1, g.flags[`ww:${nat}`] ?? (g.nations[nat]?.atWar.length ? climbStart(g, nat) : peaceFooting(g, nat) ?? 1));
+}
+
+/**
+ * Where a country's climb to war work starts in the month its war comes: the peace table, or, for a climb that waits
+ * for a named month (Canada's, world.json 'climbFrom'), as far up as the calendar has it by then.
+ */
+function climbStart(g: Game, id: string): number {
+  const table = peaceFooting(g, id) ?? 1, from = WORLD.climbFrom?.[id], step = WORLD.warWork[id] ?? 0;
+  return from === undefined ? table : table + step * Math.max(0, g.turn - from);
 }
 
 /** The month's step in war work for the countries that climb to it: for the player's country and the computer's alike. */
@@ -294,7 +308,7 @@ export function warWorkMonth(g: Game): void {
     // A climb that waits for a named month (Canada's, world.json 'climbFrom') stands at the peace table until then;
     // a campaign that opens after it finds the share where the calendar has it.
     const table = peaceFooting(g, id) ?? 1, was = g.flags[key], from = WORLD.climbFrom?.[id];
-    const start = from === undefined ? table : table + step * Math.max(0, g.turn - from);
+    const start = climbStart(g, id);
     const climbed = was === undefined ? start : from !== undefined && g.turn <= from ? table : was + step;
     const now = Math.min(1, Math.max(table, climbed >= 1 - 1e-9 ? 1 : climbed));
     g.flags[key] = now;
@@ -304,9 +318,12 @@ export function warWorkMonth(g: Game): void {
 
 /** How many months of war are left before a country that climbs to full war work gets there: 0 when it is there, or has no climb to make. */
 export function warWorkLeft(g: Game, nat: string): number {
-  const share = warFooting(g, nat), step = WORLD.warWork[nat];
+  const step = WORLD.warWork[nat];
+  if (warFooting(g, nat) === null || !step) return 0;
+  // At peace, from where a war begun this month would start (warWorkMonth).
+  const share = Math.min(1, g.flags[`ww:${nat}`] ?? climbStart(g, nat));
   const wait = Math.max(0, (WORLD.climbFrom?.[nat] ?? 0) - g.turn);
-  return share === null || share >= 1 || !step ? 0 : wait + Math.ceil((1 - share) / step - 1e-9);
+  return share >= 1 ? 0 : wait + Math.ceil((1 - share) / step - 1e-9);
 }
 
 /** What a country's small wells and plants at home yield, where the wider world puts its oilfields on the map; null where the ordinary figure stands. */

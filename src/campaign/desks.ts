@@ -537,7 +537,12 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     }
     case 'diplomacy': {
       const b = bloc(n);
-      if (!b || b === 'league') return 'Only a member of the Axis or the Allies courts neutrals.';
+      if (!b || b === 'league') {
+        // (Out of the blocs, the backer of the Americas still courts back, at no cost, the neighbours the Axis courts: ruling 223(d).)
+        const back = Object.values(g.nations).filter((T) => T.id !== nat && freeCourt(g, nat, T.id)).map(the);
+        if (back.length) return `The Axis is courting ${back.length > 1 ? `${back.slice(0, -1).join(', ')} and ${back[back.length - 1]}` : back[0]}: your envoys court ${back.length > 1 ? 'them' : 'it'} back each month, at no cost. Only a member of the Axis or the Allies courts other neutrals.`;
+        return 'Only a member of the Axis or the Allies courts neutrals.';
+      }
       const open = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T)).length;
       // Who the envoys are with, while they are at it: the news speaks only when they begin and when the country moves.
       const who = staffRuns(g, nat, 'diplomacy') ? Object.values(g.nations).filter((T) => (g.flags[`court:${nat}:${T.id}`] ?? -9) >= g.turn - 1).sort((x, y) => g.flags[`court:${nat}:${y.id}`] - g.flags[`court:${nat}:${x.id}`])[0] : undefined;

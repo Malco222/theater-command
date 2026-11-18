@@ -140,6 +140,10 @@ describe('the Axis courts the Americas (ruling 223)', () => {
     g.flags['americas:in:MEX'] = g.turn;
     expect(thornGround(g, Vera, 'GER')).toBe(true);
     expect(thornGround(g, Vera, 'MEX')).toBe(false);
+    // Its enemies are not barred from it: the United States ships to and flies from what it takes (the cities
+    // version's review).
+    expect(thornGround(g, Vera, 'USA')).toBe(false);
+    expect(thornGround(g, Vera, 'UK')).toBe(false);
     const port = Object.values(g.byName).find((r) => r.owner === 'GER' && r.port && !r.overseas)!;
     const c = addCorps(g, 'GER', 'Test infantry', 'inf', 2, port.id, {});
     expect(whyNotShip(g, c, Vera)).toBe('Mexico keeps its own army: no corps of its allies is shipped there.');
