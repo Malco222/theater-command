@@ -20,6 +20,17 @@ describe('build 1668 words', () => {
     expect(town.value).not.toMatch(/Capital of/);
   });
 
+  it('names any other town as the place, then what it is, and keeps its works (build 1678)', () => {
+    const g = startOpen(createGame(3, 'GER'));
+    const c = addCorps(g, 'GER', 'Ticket Corps', 'inf', 2, 'Masuria', {});
+    const lodz = assess(g, [c], g.byName.Lodz, { town: true }).lines.find((l) => l.label === 'The town')!;
+    expect(lodz.value).toMatch(/^Lodz, a (city|town)/);
+    expect(lodz.value).not.toMatch(/(City|Town|Village) of/);
+    const silesia = g.byName['Polish Silesia'];
+    const s = assess(g, [c], silesia, { town: true }).lines.find((l) => l.label === 'The town')!;
+    expect(s.value).toMatch(/^Katowice, a city, with fortress works of level \d/);
+  });
+
   it('tells a garrison out of a siege that it does not take the train', () => {
     const g = startOpen(createGame(3, 'GER'));
     setWar(g, 'GER', 'POL');
