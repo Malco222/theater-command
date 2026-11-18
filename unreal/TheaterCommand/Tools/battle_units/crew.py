@@ -3516,25 +3516,26 @@ ISSUES = [
     "FlakTruck's, M16's and SU76's crew.gunner too); the stood men are on the floor at their feet, the M7's and the "
     "Sexton's kneeling crew.gunner on the floor under his hips. crew.json `measure` has every socket; `posed` has every "
     "socket no clip fits, with the crew.pose call that puts a man there and his check.",
-    "M3Halftrack (the 09:57 export): `gunner` stands 0.77 behind the pedestal now, the spade grips 0.40 ahead of his "
+    "M3Halftrack (the 17:10 export): `gunner` stands 0.77 behind the pedestal now, the spade grips 0.40 ahead of his "
     "feet and 1.08 up, as stand_mg has them: it goes on the socket as it is (no root_offset; 0.1 cm).",
     "Truck: her cab is shut and its glass dark, no man shown in it (her sockets' notes): sit_drive/sit_cab are not "
     "placed there. Its benches are 0.455 over the floor (the M3's 0.44): sit_bench there leaves the boots 1.5 cm above "
     "the floor.",
-    "Hanomag and FlakHalftrack (the 12:08 export; the footwell block gone, the seat backs 0.175 behind the seat point): "
-    "the benches fit sit_bench as they are (1.0 cm; rider.5 1.2 cm, his chest at the stern). `driver` and `rider.cab` "
-    "nearly fit: sit_drive's left boot goes 1.5 cm into the footwell's outer wall (0.48 ahead of the seat point, 0.23 "
+    "Hanomag (the 17:58 export) and FlakHalftrack (the 12:08 export; the footwell block gone, the seat backs 0.175 "
+    "behind the seat point): the benches fit sit_bench as they are (1.0 cm; rider.5 1.2 cm, his chest at the stern). "
+    "The Hanomag's belt boxes now lie across the hull against the step by the left wall: rider.1 is clear of them (1.0 "
+    "cm, his seat, as on the other benches) and so is a man stood at `gunner` (crew.pose; 0.1 cm, his soles). "
+    "`driver` and `rider.cab` nearly fit: sit_drive's left boot goes 1.5 cm into the footwell's outer wall (0.48 ahead of the seat point, 0.23 "
     "outboard, 0.10 over the footwell's floor; its faces are the track_l part's), and sit_cab's right calf and boot 1.5 cm "
     "into the same wall on the right (0.41-0.59 ahead, 0.23 outboard, from the seat's height down): each footwell 2 cm "
-    "wider outboard mends both. The Hanomag's `gunner` shoulders his gun (no grips): no clip of ours; a man stood there "
-    "(crew.pose) is clear.",
+    "wider outboard mends both. The Hanomag's `gunner` shoulders his gun (no grips): no clip of ours.",
     "FlakHalftrack and FlakTruck `crew.gunner` (seat 0.31 over the platform; crew.pose seated, hands on grip.gunner.l/r): "
     "his lower back goes 2.2 cm into the seat's back (0.19 behind the seat point, 0.31 up), wherever along the seat he "
     "sits, and his right hand stops 3.8 cm short of grip.gunner.r (the laying wheel's handle, 0.39 ahead, 0.37 to his "
     "right and 0.10 over the seat) with his left on grip.gunner.l. The seat's back 0.03 further back, and the laying "
     "handle 0.05 nearer him (or the wheel 0.05 inboard), would seat him. `commander`, `crew.loader`, `crew.loader2` "
     "stand clear (1.0 cm at most). The FlakTruck's cab is shut: no driver shown.",
-    "M16: `driver` and `rider.cab` fit sit_drive and sit_cab as they are (0.7 and 0.6 cm). `crew.gunner` (seat 0.29 over "
+    "M16 (the 17:10 export): `driver` and `rider.cab` fit sit_drive and sit_cab as they are (0.7 and 0.6 cm). `crew.gunner` (seat 0.29 over "
     "the turntable; crew.pose seated, both hands on the column's grips): his lower back goes 2.0 cm into the seat's back "
     "(0.18 behind the seat point, 0.3 up): the back 0.03 further back mends it. `commander` and the loaders stand clear.",
     "M7 (the 12:08 export): `crew.mg` on the raised pulpit takes stand_mg and stand_mg_burst with no root_offset, but "
@@ -3551,13 +3552,13 @@ ISSUES = [
     "hip). SU-76: `crew.gunner` seated (seat_h 0.40) is clear, but his right hand stops 4.2 cm short of grip.gunner.r "
     "(0.16 ahead, 0.19 right, 0.09 over the seat, by his right knee) with his left on grip.gunner.l: the traversing "
     "handle 0.05 higher or nearer his shoulder would do. Their commanders and loaders stand clear (crew.pose).",
-    "M10 (the 12:08 export): `commander` stands with his toes under a shelf 0.23 over his floor (both shins 2.7 cm into "
+    "M10 (the 17:10 export): `commander` stands with his toes under a shelf 0.23 over his floor (both shins 2.7 cm into "
     "its edge, 0.04 ahead of him): 0.15 further back he is clear (crew.json `posed` has him there). `crew.loader`'s hip "
     "is 2.5 cm in the turret's wall on his right: 0.03 to the left he is clear. `crew.gunner` (his seat 0.28 over the "
     "floor ahead, no grips): his left shin goes 1.8 cm into the turret and the gun's mount beside it (0.34-0.47 ahead, "
     "0.12-0.21 left, about his shin's middle), however his feet are set: 3 cm more room to the left of his feet mends it. "
     "commander_hatch does not fit: the open turret's wall is 0.65-0.96 over his feet.",
-    "M8 (the 12:08 export): `commander` stands clear, his socket 3 cm over the floor under it (his boots 4 cm off it) and "
+    "M8 (the 16:33 export): `commander` stands clear, his socket 3 cm over the floor under it (his boots 4 cm off it) and "
     "his right boot over a step 0.29 lower. `crew.gunner` (seat 0.26 over the floor ahead): his left shin and boot 1.6 "
     "cm into the turret (0.41 ahead, 0.17 left) and his right toe 1.5 cm into the gun's mount (0.62 ahead, 0.10 right), "
     "however his feet are set. SdKfz222: `commander` stands 7 cm over the floor under the socket's middle (1.62), and his "
@@ -3618,10 +3619,10 @@ POSE_LIMITS_TEXT = {
               "feet= on a footrest",
     "reach": "the hands go on any two grips the leaned (to 60 degrees), turned and side-bent body brings them to, "
              "measured from the root for a pair of grips 0.3 apart before him: standing, 0.7 to 1.8 up (no crouch: "
-             "lower, kneel), to 0.5 ahead at 0.7 up, 0.8 at 0.9-1.4, 0.4 at 1.8; kneeling (the root at his feet, his "
-             "hips 0.21 behind it), 0.2 to 1.3 up, to 0.6 ahead at 0.3-0.8 up, 0.3 at 1.1; seated, 0.2 to 1.0 over the "
-             "seat point, to 0.7 ahead at 0.4-0.6, 0.3 at 1.0. Past that a hand stops short (pose_report says by how "
-             "much); grips off to one side reach less far",
+             "lower, kneel), to 0.5 ahead at 0.7 up, 0.8 at 1.0-1.4, 0.7 at 1.5-1.6, 0.4 at 1.8; kneeling (the root "
+             "at his feet, his hips 0.21 behind it), 0.2 to 1.3 up, to 0.6 ahead at 0.3-0.9 up, 0.4 at 1.1, 0.1 at "
+             "1.3; seated (a 0.44 seat), 0.2 to 1.0 over the seat point, to 0.7 ahead at 0.4-0.7, 0.4 at 1.0 (measured "
+             "again after the arm fix of 18 November: 1-3 cm more than before). Past that a hand stops short (pose_report says by how much); grips off to one side reach less far",
     "feet": "feet={'l': point, 'r': point}: where each boot stands (the floor under the ankle, the piece's axes); either "
             "may be left out. Standing, a foot below his root lets the hips down as far; a foot on a step bends its knee. "
             "Seated, they replace the feet the seat height puts on the floor (a footrest). Kneeling, 'l' is the forward "

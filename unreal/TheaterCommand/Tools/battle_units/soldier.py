@@ -4023,14 +4023,15 @@ def reset_pose(arm):
 # and our weapon bone is keyed to it. The weapon work (firing, the bolt, the grenade, kneeling) stays keyed by hand.
 MOCAP = {
     # our clip: dict(src = the mocap clip, carry = the rifle carry laid over it, until/blend = when the arms go back to
-    # the capture and over how long, rifle = what the rifle does: rides the hand, is laid down, or is dropped)
+    # the capture and over how long, rifle = what the rifle does: rides the hand, is laid down, is dropped, or is held
+    # by the drill)
     "idle": dict(src="idle", carry="port"),
     "walk": dict(src="walk", carry="port"),
     "run": dict(src="run", carry="port"),
     "advance": dict(src="advance", carry="ready"),
     "creep": dict(src="creep", carry="ready"),
     "crawl": dict(src="crawl"),                     # (the keyed low crawl holds the rifle in its own arms)
-    "go_prone": dict(src="go_prone", carry="ready", until=0.25, blend=0.45, rifle="lay"),
+    "go_prone": dict(src="go_prone", carry="ready", until=0.25, blend=0.45, rifle="drill"),
     "die_forward": dict(src="fall_forward", carry="ready", until=0.06, blend=0.3, rifle="drop", release=0.13, throw=(0.7, -0.25, 0.5)),
     "die_back": dict(src="fall_back", carry="ready", until=0.04, blend=0.25, rifle="drop", release=0.2, throw=(0.6, -0.3, 1.0)),
 }
@@ -4076,6 +4077,7 @@ def mo_prepare(rig, name):
         W[:, b] = (W[:, p] if p >= 0 else np.eye(3)) @ D @ r.local(b)
     m = mocap.Motion(r, W, r.head[r.i("pelvis")] + np.array(c["pelvis_loc"]) * k, fps)
     held = {"r": np.zeros(F), "l": np.zeros(F)}
+    m_cap, mc = m, None
     if spec.get("carry"):
         mc, _, err = mocap.carry_rifle(m.copy(), spec["carry"], cyclic=loop)
         held["r"][:] = 1.0
@@ -4089,14 +4091,17 @@ def mo_prepare(rig, name):
             held["l"][:] = 1.0
     elif name == "crawl":
         held["r"][:] = 1.0
+    mode = spec.get("rifle", "hand")
+    if mode == "drill":                         # (the drill places the rifle and puts the hands on it)
+        m, Dg, Pg = _prone_drill(rig, m, m_cap, mc, t, held)
     hd = m.heads()
     h = r.i("hand_r")
     G, gl = mocap.hand_grips(r)["r"]
-    Dg = m.W[:, h] @ G.T @ GUN_AXES
-    Pg = hd[:, h] + np.einsum("fij,j->fi", m.W[:, h], gl)
+    if mode != "drill":
+        Dg = m.W[:, h] @ G.T @ GUN_AXES
+        Pg = hd[:, h] + np.einsum("fij,j->fi", m.W[:, h], gl)
     out = {"F": F, "fps": fps, "loop": loop, "long": (F - 1) / fps, "k": k, "stride": float(c["stride"]) * k,
            "end": [float(v) * k for v in c.get("end_offset", (0.0, 0.0, 0.0))], "events": []}
-    mode = spec.get("rifle", "hand")
     if mode in ("drop", "lay"):
         # (where he ends up: each bone as a segment, so the rifle can be put down clear of him)
         bones = [b for b in range(len(r.names)) if r.parent[b] >= 0]
@@ -4113,6 +4118,322 @@ def mo_prepare(rig, name):
     out["held"] = held
     rig.mo[name] = out
     return out
+
+
+# go_prone's rifle drill (the coordinator's review of 18 November 2026: a soldier never lets go of his rifle going
+# prone): the rifle stays in the right hand the whole way. As he drops, the right hand slides to the rifle's balance
+# while the left still holds; the rifle swings butt-down and the butt meets the ground first, ahead of his knees, and
+# he comes down on it as it tips forward; the left hand takes the catch the capture gives both hands; the fist comes
+# down on its knuckles, the rifle level beside him, as the capture's right hand steps forward; the rifle slides
+# forward through the fist to the small of the stock as he goes down on his belly; then he comes up on his elbows
+# (his trunk, neck and head going to fire_prone's) and the rifle is brought forward into fire_prone's aim, the left
+# hand coming off the ground to take it, so the clip ends in fire_prone's first pose. Times are the capture's seconds,
+# places its metres (x forward, y left, z up, the ground at 0).
+DRILL = {
+    "slide": (0.25, 0.50),                          # the right hand to the balance
+    "swing": (0.30, 0.58),                          # swung butt-down until the butt meets the ground
+    "butt": ((0.16, -0.26, 0.03), 12.0, 50.0),      # the butt's point there, and the rifle's yaw and pitch (degrees)
+    "pivot": (0.58, 0.92, 5.0, 18.0),               # tipping forward on the butt, to this yaw and pitch
+    "down": (0.92, 1.12, (0.80, -0.47, 0.06), -4.0, 2.0),   # the fist on its knuckles: the hold's point, yaw, pitch
+    "back": (1.12, 1.25),                           # the rifle slid forward through the fist to its small of the stock
+    "rise": (1.45, 1.85),                           # up on his elbows: the trunk, neck and head to fire_prone's
+    "aim": (1.25, 1.80),                            # brought forward into the aim, the arm turning joint by joint
+    "grab": (1.36, 1.88),                           # the left hand off the ground and onto the rifle, the same way
+    "swing_out": 3.0,                               # (how early in the aim the right arm swings forward: 1 = evenly)
+    "arm_world": True,                              # (the right arm's bones turned in the world over the aim)
+    "push": 1.0,                                    # (the fist's speed along the rifle's line as the aim begins, of
+                                                    # his shoulder's: it is pushed forward on the ground before that)
+}
+DRILL_TRUNK = ("spine_01", "spine_02", "chest", "neck", "head", "clavicle_l", "clavicle_r")
+DRILL_REPORT = {}                                   # (how far each hand fell short of its place on the rifle, m)
+
+
+def _rifle_R(yaw, pitch):
+    """Our rifle's turn (x barrel, y left, z up) at a yaw (left +) and pitch (muzzle up +), sights up."""
+    return R_axis((0.0, 0.0, 1.0), yaw) @ R_axis((0.0, 1.0, 0.0), -pitch)
+
+
+def _prone_drill(rig, m, m_cap, mc, t, held):
+    """go_prone's arms and rifle by the drill (DRILL). m is the capture with the carry eased off it (the left hand
+    leaving the rifle), m_cap the bare capture, mc the carry. Returns the Motion (the right arm on the rifle
+    throughout, the trunk going to fire_prone's and the left hand onto the rifle at the end) and the rifle's turn
+    (F, 3, 3, our gun's axes) and grip point (F, 3)."""
+    r = m.rest
+    F = len(t)
+    Dr = DRILL
+    W_ = WEAPONS["rifle"]
+    butt, bal = np.array(W_["butt"]), np.array(W_["carry"])
+    G, gl = mocap.hand_grips(r)["r"]
+    hr, hl = r.i("hand_r"), r.i("hand_l")
+    ch, pv = r.i("chest"), r.i("pelvis")
+    sh_r, sh_l = r.i("upperarm_r"), r.i("upperarm_l")
+    s = lambda a, b: _sm_arr((t - a) / (b - a))
+    nz = lambda v: v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-9)
+    hv = np.outer(s(*Dr["slide"]) - s(*Dr["back"]), bal)       # (the hold's place on the rifle, from the grip)
+    # fire_prone's first pose, set where his pelvis lies at the end
+    fp = clip_state(rig, "fire_prone", 0.0, "rifle")
+    shift = m.heads()[-1, pv] - fp["H"]["pelvis"]
+    Re, Pe = fp["W"][:3, :3], fp["W"][:3, 3] + shift
+    rel = lambda n: Re.T @ (fp["H"][n] - fp["W"][:3, 3])
+    rel_l, rel_Rl = rel("hand_l"), Re.T @ fp["D"]["hand_l"]
+    rel_r, rel_Rr = rel("hand_r"), Re.T @ fp["D"]["hand_r"]
+    E_r, E_l = fp["H"]["lowerarm_r"] + shift, fp["H"]["lowerarm_l"] + shift
+    # up on his elbows: the trunk's bones turned to fire_prone's, the capture's pelvis and legs kept
+    mT = m.copy()
+    for n in DRILL_TRUNK:
+        mT.W[:, r.i(n)] = fp["D"][n] @ r.R[r.i(n)]
+    L0, LT = mocap.to_local(m), mocap.to_local(mT)
+    wT = s(*Dr["rise"])
+    for n in DRILL_TRUNK:
+        L0[:, r.i(n)] = mocap.slerp_mats(L0[:, r.i(n)], LT[:, r.i(n)], wT)
+    m = mocap.from_local(r, L0, m.H, m.fps)
+    hd = m.heads()
+    # the rifle as the carry has it (its grip point and turn)
+    hdc = mc.heads()
+    Rc = mc.W[:, hr] @ G.T @ GUN_AXES
+    Pc = hdc[:, hr] + np.einsum("fij,j->fi", mc.W[:, hr], gl)
+    # the rifle's path
+    R = Rc.copy()
+    P = Pc.copy()
+    B0, yaw1, pit1 = Dr["butt"]
+    B0 = np.array(B0, float)
+    R1 = _rifle_R(yaw1, pit1)
+    P1 = B0 - R1 @ butt
+    a0, a1 = Dr["swing"]
+    p0, p1, yaw2, pit2 = Dr["pivot"]
+    R2 = _rifle_R(yaw2, pit2)
+    P2 = B0 - R2 @ butt
+    d0, d1, H3, yaw3, pit3 = Dr["down"]
+    H3 = np.array(H3, float)
+    R3 = _rifle_R(yaw3, pit3)
+    P3 = H3 - R3 @ bal
+    g0, g1 = Dr["aim"]
+    ua = np.clip((t - g0) / (g1 - g0), 0.0, 1.0)
+    f0, f1 = int(np.searchsorted(t, g0)), min(int(np.searchsorted(t, g1)), F - 1)
+    # (the fist pushed forward along the ground, along the rifle's line, as he goes down onto his belly: from still
+    # to his shoulder's speed, so it is already moving with the shoulder when the aim's arm swing takes it up)
+    bx = nz(R3[:, 0] * np.array((1.0, 1.0, 0.0)))
+    vS = bx * float((hd[f0 + 1, sh_r] - hd[f0 - 1, sh_r]) @ bx) / (t[f0 + 1] - t[f0 - 1]) * Dr["push"]
+    Ts = t[f0] - d1
+    tau = np.clip((t - d1) / Ts, 0.0, 1.0)
+    H3f = H3 + np.outer((tau ** 2 - tau ** 3 / 3.0) * Ts, vS)
+    for f in range(F):
+        x = t[f]
+        if x <= a0:
+            continue
+        if x <= a1:
+            u = sm((x - a0) / (a1 - a0))
+            R[f] = mocap.slerp_mats(Rc[f], R1, u)
+            P[f] = Pc[f] + (P1 - Pc[f]) * u
+        elif x <= p1:
+            R[f] = mocap.slerp_mats(R1, R2, sm((x - p0) / (p1 - p0)))
+            P[f] = B0 - R[f] @ butt                     # (the butt stays where it met the ground)
+        elif x <= d1:
+            u = sm((x - d0) / (d1 - d0))
+            R[f] = mocap.slerp_mats(R2, R3, u)
+            P[f] = P2 + (P3 - P2) * u
+        elif x <= g0:                               # (the fist on the ground, the rifle sliding forward in it)
+            R[f], P[f] = R3, H3f[f] - R3 @ hv[f]
+        else:                                       # (in the aim at its end: the way there is the arm's, below)
+            R[f], P[f] = (R3, H3f[f]) if ua[f] < 1.0 else (Re, Pe)
+    # the right hand on it (the agreed grip, at the hold; fire_prone's own hold in the aim); the elbow as the carry has
+    # it, then down (the rifle upright), then as the capture's (out to his right a little), then where fire_prone has it
+    wh = (ua >= 1.0)[:, None]
+    Rh = np.where(wh[..., None], R @ rel_Rr @ r.R[hr], R @ GUN_AXES.T @ G)
+    wrist = np.where(wh, P + np.einsum("fij,j->fi", R, rel_r),
+                     P + np.einsum("fij,fj->fi", R, hv) - np.einsum("fij,j->fi", R @ GUN_AXES.T @ G, gl))
+    right = np.einsum("fij,j->fi", m_cap.W[:, ch] @ r.R[ch].T, np.array((0.0, -1.0, 0.0)))
+    hcap = m_cap.heads()
+    pole_c = nz(hdc[:, r.i("lowerarm_r")] - hdc[:, sh_r])
+    pole_k = nz(nz(hcap[:, r.i("lowerarm_r")] - hcap[:, sh_r]) + 0.6 * right)
+    pole_s = nz(np.array((0.0, 0.0, -1.0)) + 0.5 * right)
+    pole_e = nz(E_r - hd[:, sh_r])
+    w1, w2 = s(0.25, 0.45)[:, None], s(0.85, 1.0)[:, None]
+    pole = np.where(wh, pole_e, nz(nz(pole_c * (1 - w1) + pole_s * w1) * (1 - w2) + pole_k * w2))
+    mR = m.copy()
+    short_r = mocap.solve_arm(mR, "r", wrist, pole)
+    _set_hand(mR, "r", Rh)
+    wR = s(0.08, 0.20)                              # (from the carry's arm onto the solved one)
+    m2 = mocap.from_local(r, mocap.slerp_mats(mocap.to_local(m), mocap.to_local(mR), wR[:, None]), m.H, m.fps)
+    # over the aim the right arm goes from its pose with the fist on the ground to fire_prone's joint by joint (a
+    # real arm's way, inside its range), the rifle riding the hand, its hold going over from the agreed grip to
+    # fire_prone's
+    lin = np.clip((t - t[f0]) / (t[f1] - t[f0]), 0.0, 1.0)
+    uj = 1.0 - (1.0 - _sm_arr(lin)) ** Dr["swing_out"]  # (the arm swings forward early, while his shoulder is high)
+    if Dr.get("arm_world"):                         # (each bone's turn in the world, so the hand rises as he goes down)
+        for n in ("upperarm_r", "lowerarm_r", "hand_r"):
+            b = r.i(n)
+            m2.W[f0 + 1:f1, b] = mocap.slerp_mats(m2.W[f0, b][None], m2.W[f1, b][None], uj[f0 + 1:f1])
+        _set_hand(m2, "r", m2.W[:, hr].copy())
+    else:
+        L2 = mocap.to_local(m2)
+        for n in ("upperarm_r", "lowerarm_r", "hand_r"):
+            b = r.i(n)
+            L2[f0 + 1:f1, b] = mocap.slerp_mats(L2[f0, b][None], L2[f1, b][None], uj[f0 + 1:f1])
+        m2 = mocap.from_local(r, L2, m.H, m.fps)
+    Wh, hj = m2.W[:, hr], m2.heads()[:, hr]
+    A0, A1 = Wh[f0].T @ R[f0], Wh[f1].T @ R[f1]
+    q0, q1 = Wh[f0].T @ (P[f0] - hj[f0]), Wh[f1].T @ (P[f1] - hj[f1])
+    on_hand = lambda f, W_, h_: (W_ @ mocap.slerp_mats(A0, A1, uj[f]), h_ + W_ @ (q0 + (q1 - q0) * uj[f]))
+    W_pts = np.array([W_["butt"], (0.0, 0.0, 0.0), MUZZLE])
+
+    def low_r(f, hd_):
+        Rf_, Pf_ = on_hand(f, m2.W[f, hr], hd_[hr])
+        c_ = 0.02 + 0.02 * float(_sm_arr((t[f] - t[f0]) / 0.15))   # (from lying, 2 cm up, to 4 cm clear)
+        return [(hd_[hr], 0.03), (hd_[r.i("fingers_r")], 0.02)] + [(Pf_ + Rf_ @ q, c_) for q in W_pts]
+    _clear_ground(m2, "r", range(f0 + 1, f1), low_r)    # (the hand and rifle raised where they would dip)
+    Wh, hj = m2.W[:, hr], m2.heads()[:, hr]
+    for f in range(f0 + 1, f1):
+        R[f], P[f] = on_hand(f, Wh[f], hj[f])
+    # the left arm from the capture's (the hand on the ground) to fire_prone's on the rifle joint by joint, the arm
+    # raised at the shoulder where the hand would dip into the ground on the way
+    wl = s(*Dr["grab"])
+    mL = m2.copy()
+    short_l = mocap.solve_arm(mL, "l", P + np.einsum("fij,j->fi", R, rel_l), nz(E_l - m2.heads()[:, sh_l]))
+    _set_hand(mL, "l", R @ rel_Rl @ r.R[hl])
+    wL = wl
+    m3 = mocap.from_local(r, mocap.slerp_mats(mocap.to_local(m2), mocap.to_local(mL), wl[:, None]), m.H, m.fps)
+    _lift_clear(m3, "l", [f for f in range(F) if 0.0 < wl[f] < 1.0],
+                lambda f, hd_: [(hd_[hl], 0.03), (hd_[r.i("fingers_l")], 0.02), (hd_[r.i("lowerarm_l")], 0.02)])
+    held["r"][:] = 1.0
+    held["l"] = np.maximum(held["l"], wl)
+    # (the capture's own left hand takes the catch on its edge, fingers first, the knuckles and fingertips into the
+    # ground: the arm raised at the shoulder till the hand is over it, measured on our man as mo_state will pose him,
+    # the fingers and thumb as curled there)
+    a_l, _, n_l = rig.hand0["l"]
+    tips = {b: (np.cross(a_l, n_l) if b == "fingers_l" else np.cross(rig.T0[b] - rig.H0[b], n_l), rig.T0[b] - rig.H0[b])
+            for b in ("fingers_l", "thumb_l")}
+
+    def hand_pts(mm, f):
+        J = _rig_heads(rig, mm, f)
+        pts = [(J["hand_l"][0], 0.03), (J["fingers_l"][0], 0.012)]
+        for b, (ax_, off) in tips.items():
+            pts.append((J[b][0] + J[b][1] @ R_axis(ax_, GRIP_CURL * float(held["l"][f])) @ off, 0.012))
+        return pts, J["upperarm_l"][0]
+    _lift_clear(m3, "l", [f for f in range(F) if wl[f] < 1.0], None, ours=hand_pts)
+    under_l = np.array([max(0.0, max(c - p[2] for p, c in hand_pts(m3, f)[0])) for f in range(F) if wl[f] < 1.0])
+    DRILL_REPORT.update(short_r=float(np.max(short_r * (wR > 0.5) * (1 - (uj > 0) * (uj < 1)))),
+                        short_l=float(np.max(short_l * (wL > 0.5))), under_l=float(np.max(under_l)))
+    return m3, R, P
+
+
+def _lift_clear(m, side, frames, low, steps=12, most=6.0, k=3, ours=None):
+    """Raise an arm about its shoulder, frame by frame, just so far that each point low(f, heads) gives ((point,
+    clearance), ...) is that far over the ground (z 0): the whole arm turned in the vertical plane through the
+    shoulder and the lowest point, a few degrees at a time; each frame's turn then eased out over k frames each side
+    (a cos-squared bump, the largest of the bumps over a frame taken), so the arm does not jerk where the ground
+    starts or stops pushing it up, and is not held up long after (a hand going on to something above would rise
+    past it). ours(mm, f), if given, gives the points and the shoulder instead, measured as they will be on our man
+    ([(point, clearance)], shoulder; mm the arm as turned so far)."""
+    r = m.rest
+    sh = r.i("upperarm_" + side)
+    arm = mocap.subtree(r, "upperarm_" + side)
+    up = np.array((0.0, 0.0, 1.0))
+    mm = m.copy()
+    V = np.zeros((len(m), 3))
+    for f in frames:
+        Qt = np.eye(3)
+        for _ in range(steps):
+            if ours is None:
+                hd = mm.heads()[f]
+                pts, shp = low(f, hd), hd[sh]
+            else:
+                pts, shp = ours(mm, f)
+            p, c = min(pts, key=lambda pc: pc[0][2] - pc[1])
+            need = c - p[2]
+            if need <= 1e-4:
+                break
+            d = p - shp
+            reach = max(float(np.hypot(d[0], d[1])), 0.2)
+            ax = np.cross(d, up)
+            ax = ax / max(float(np.linalg.norm(ax)), 1e-9)
+            Q = mocap.axis_angle(ax, min(need / reach * 1.05, math.radians(most)))
+            Qt = Q @ Qt
+            for b in arm:
+                mm.W[f, b] = Q @ mm.W[f, b]
+        V[f] = mocap.rot_log(Qt[None])[0]
+    n = np.linalg.norm(V, axis=1)
+    Vs = np.zeros_like(V)
+    for f in range(len(V)):
+        js = np.arange(max(f - k, 0), min(f + k + 1, len(V)))
+        e = n[js] * np.cos(np.pi / 2 * np.abs(js - f) / (k + 1)) ** 2
+        j = int(np.argmax(e))
+        if e[j] > 0.0:
+            Vs[f] = V[js[j]] * (e[j] / n[js[j]])
+    for f in frames:
+        if np.linalg.norm(Vs[f]) > 1e-6:
+            Q = mocap.rot_exp(Vs[f][None])[0]
+            for b in arm:
+                m.W[f, b] = Q @ m.W[f, b]
+
+
+def _rig_heads(rig, m, f):
+    """Frame f of a carried capture (m, on human.py's rest) put on our man as mo_state puts it: {bone: (head, world
+    turn from rest)} (the fingers' grip curl not in it)."""
+    r = m.rest
+    out = {}
+    for b in rig.names:
+        p = rig.parent[b]
+        if p is None or b in ("weapon", "bolt", "bipod"):
+            continue
+        D = m.W[f, r.i(b)] @ r.R[r.i(b)].T if b in r.names else out[p][1]
+        out[b] = (m.H[f] if b == "pelvis" else out[p][0] + out[p][1] @ (rig.H0[b] - rig.H0[p]), D)
+    return out
+
+
+def _clear_ground(m, side, frames, low, elbow=0.045):
+    """Keep an arm off the ground, frame by frame: the wrist raised (the hand keeping its turn, so what it holds goes
+    up with it, level) just so far that each point low(f, heads) gives ((point, clearance), ...) is that far over the
+    ground (z 0), and the elbow swung round the shoulder-wrist line, the least it takes, to `elbow` over it."""
+    r = m.rest
+    ua, la, ha = r.i("upperarm_" + side), r.i("lowerarm_" + side), r.i("hand_" + side)
+    arm = mocap.subtree(r, "upperarm_" + side)
+    L1 = np.linalg.norm(r.head[la] - r.head[ua])
+    L2 = np.linalg.norm(r.head[ha] - r.head[la])
+    lifted = np.zeros(len(m))
+    for f in frames:
+        hd = m.heads()[f]
+        need = max(0.0, max(c - p[2] for p, c in low(f, hd)))
+        S, E = hd[ua], hd[la]
+        wr = hd[ha] + np.array((0.0, 0.0, need))
+        d = wr - S
+        dist = float(np.linalg.norm(d))
+        dh = d / max(dist, 1e-9)
+        ca = np.clip((L1 ** 2 + dist ** 2 - L2 ** 2) / (2 * L1 * max(dist, 1e-9)), -1.0, 1.0)
+        u = (E - S) - dh * float((E - S) @ dh)
+        u = u / max(float(np.linalg.norm(u)), 1e-9)
+        v = np.cross(dh, u)
+        best = None
+        for k in range(0, 181, 5):                  # (the elbow's way round, nearest its own first)
+            for sg in ((1.0,) if k == 0 else (1.0, -1.0)):
+                ph = math.radians(sg * k)
+                n_ = math.cos(ph) * u + math.sin(ph) * v
+                e_ = S + L1 * (ca * dh + math.sqrt(1.0 - ca * ca) * n_)
+                if e_[2] >= elbow or k == 180:
+                    best = n_
+                    break
+            if best is not None:
+                break
+        if need < 1e-4 and best is u:
+            continue
+        Wh = m.W[f, ha].copy()
+        mm = m.slice(f, f + 1)
+        mocap.solve_arm(mm, side, wr[None], best[None])
+        _set_hand(mm, side, Wh[None])
+        for b in arm:
+            m.W[f, b] = mm.W[0, b]
+        lifted[f] = need
+    return lifted
+
+
+def _set_hand(m, side, Wh):
+    """A hand bone turned to Wh (F, 3, 3, world), the fingers and thumb with it as in the rest pose."""
+    r = m.rest
+    h = r.i("hand_" + side)
+    m.W[:, h] = Wh
+    for b in mocap.subtree(r, "hand_" + side)[1:]:
+        p = r.parent[b]
+        m.W[:, b] = m.W[:, p] @ r.R[p].T @ r.R[b]
 
 
 def _clear_of(body, at, R, clear=0.24):
@@ -4136,16 +4457,16 @@ def _clear_of(body, at, R, clear=0.24):
     return np.array(at, float)
 
 
-def _gun_falls(Dg, Pg, held, t, t0, fps, throw, body):
+def _gun_falls(Dg, Pg, held, t, t0, fps, throw, body, lie_yaw=None):
     """The rifle let go at t0: it flies on with the hand's speed and a throw, falls, turns over and lies on its left
-    side, clear of where he lands."""
+    side (its yaw 25 degrees past what it had, or lie_yaw), clear of where he lands."""
     i0 = int(round(t0 * fps))
     v = (Pg[i0 + 1] - Pg[i0 - 1]) * fps / 2 + np.array(throw)
     p0, R0 = Pg[i0].copy(), Dg[i0].copy()
     g = 9.81
     T = max((v[2] + math.sqrt(max(v[2] ** 2 + 2 * g * (p0[2] - GUN_LIE), 0.0))) / g, 0.25)
-    yaw = math.degrees(math.atan2(R0[1, 0], R0[0, 0]))
-    Rg = R_axis((0, 0, 1), yaw + 25.0) @ R_axis((1, 0, 0), -90.0)
+    yaw = math.degrees(math.atan2(R0[1, 0], R0[0, 0])) + 25.0 if lie_yaw is None else lie_yaw
+    Rg = R_axis((0, 0, 1), yaw) @ R_axis((1, 0, 0), -90.0)
     land = _clear_of(body, p0[:2] + v[:2] * T * 0.7, Rg)
     for f in range(i0 + 1, len(t)):
         tau = t[f] - t[i0]
@@ -4216,6 +4537,39 @@ def mo_state(rig, name, t, kind="rifle"):
     return st
 
 
+# keyed clips in which he lets the rifle go: it rides his right hand (as it lies in it at the clip's start) until
+# `release` (s), then flies on with the hand's speed and a throw (m/s: forward, left, up), falls, turns onto its left
+# side and lies clear of where he lies, as in the mocap falls (_gun_falls)
+KEYED_DROP = {"die_kneel": dict(release=0.1, throw=(0.3, -1.2, 0.4), lie_yaw=-10.0)}   # (lie_yaw: as it comes to lie)
+
+
+def keyed_drop(rig, name):
+    """The rifle's way in a KEYED_DROP clip, worked out once per man: (t, turn (F, 3, 3), grip point (F, 3), its
+    events) at 60 frames a second."""
+    cache = rig.__dict__.setdefault("keyed_drops", {})
+    if name not in cache:
+        c, spec, fps = CLIPS[name], KEYED_DROP[name], 60
+        t = np.arange(int(round(c["long"] * fps)) + 1) / fps
+        sts = []
+        for x in t:
+            P = c["fn"](float(x))
+            P["weapon_kind"] = "rifle"
+            sts.append(rig.solve(P))
+        D0, H0_, W0 = sts[0]["D"]["hand_r"], sts[0]["H"]["hand_r"], sts[0]["W"]
+        A, q = D0.T @ W0[:3, :3], D0.T @ (W0[:3, 3] - H0_)
+        Dg = np.array([s_["D"]["hand_r"] @ A for s_ in sts])
+        Pg = np.array([s_["H"]["hand_r"] + s_["D"]["hand_r"] @ q for s_ in sts])
+        last = sts[-1]
+        bones = [b for b in rig.names if rig.parent[b] is not None and b not in ("weapon", "bolt", "bipod")]
+        a_ = np.array([last["H"][b] for b in bones])
+        b_ = a_ + np.array([last["D"][b] @ (rig.T0[b] - rig.H0[b]) for b in bones])
+        held = {"r": np.ones(len(t))}
+        evs = _gun_falls(Dg, Pg, held, t, spec["release"], fps, spec["throw"], (a_[:, :2], b_[:, :2]),
+                         spec.get("lie_yaw"))
+        cache[name] = (t, Dg, Pg, evs)
+    return cache[name]
+
+
 def clip_state(rig, name, t, kind=None):
     """Any clip's solved pose at time t: from the capture, or from our keyed poses through the solver."""
     c = CLIPS[name]
@@ -4225,7 +4579,18 @@ def clip_state(rig, name, t, kind=None):
     P["weapon_kind"] = kind or P.get("weapon_kind", c["weapon"])
     if c["weapon"] == "lmg":
         P["weapon_kind"] = "lmg"
-    return rig.solve(P)
+    st = rig.solve(P)
+    if name in KEYED_DROP:                          # (the rifle let go: its own way, not the keys')
+        ts, Dg, Pg, _ = keyed_drop(rig, name)
+        u = float(np.clip(t * 60.0, 0.0, len(ts) - 1.0))
+        i = min(int(u), len(ts) - 2)
+        a = u - i
+        D = mocap.slerp_mats(Dg[i], Dg[i + 1], a)
+        W = M4(D, Pg[i] + (Pg[i + 1] - Pg[i]) * a - D @ np.array(WEAPONS[P["weapon_kind"]]["grip_r"]))
+        st["D"]["weapon"], st["H"]["weapon"], st["W"] = W[:3, :3], W[:3, 3].copy(), W
+        st["D"]["bolt"] = st["D"]["weapon"]
+        st["H"]["bolt"] = st["H"]["weapon"] + st["D"]["weapon"] @ (rig.H0["bolt"] - rig.H0["weapon"])
+    return st
 
 
 def clip_stride(rig, name):
@@ -4310,13 +4675,18 @@ use_mocap()
 
 
 def fill_mocap_events(rig):
-    """The mocap clips' events and strides, read off this man (the export's)."""
+    """The mocap clips' events and strides, read off this man (the export's); and where the rifle lands in the keyed
+    clips that let it go."""
     for name in MOCAP:
         c = CLIPS[name]
         c["events"] = mo_events(rig, name)
         d = mo_prepare(rig, name)
         c["stride"] = round(d["stride"], 3)
         c["end"] = [round(v, 3) for v in d["end"]]
+    for name in KEYED_DROP:
+        c = CLIPS[name]
+        c["events"] = sorted([e for e in c["events"] if e["fx"] != "rifle_drop"] + keyed_drop(rig, name)[3],
+                             key=lambda e: e["t"])
 
 
 # ---- a man playing clips one after another (the movies and the hero clip)
@@ -5578,7 +5948,7 @@ CLIP_ABOUT = {
     "crawl": "keyed by the mocap animator (mocap.py; CMU has no belly crawl): the low crawl under fire, rifle across the forearms",
     "kneel_down": "keyed: from standing to kneeling on the right knee, rifle coming up to the aim",
     "stand_up": "keyed: from kneeling (aimed) back to standing at port",
-    "go_prone": "motion capture (CMU 77_16, played backwards): from the ready down onto a knee, the hands, and flat on the belly; the rifle is laid down beside him as his hand reaches the ground (fire_prone takes it up)",
+    "go_prone": "motion capture (CMU 77_16, played backwards): from the ready down onto a knee, the hands, and flat on the belly, the rifle by the drill: never out of his right hand, butt to the ground first, the fist on its knuckles as he lies down, then rolled forward into the aim with the left hand coming onto it (it ends in fire_prone's aim)",
     "fire_stand": "keyed: standing, aimed: shot, recoil, works the bolt, back on aim",
     "fire_kneel": "keyed: kneeling, aimed: the same",
     "fire_prone": "keyed: lying, aimed, elbows on the ground: shot, recoil, works the bolt",
@@ -5587,7 +5957,7 @@ CLIP_ABOUT = {
     "cower": "keyed: crouched low behind the rifle held upright, head down, flinching (pinned)",
     "die_back": "motion capture (CMU 90_18): hit in front, the feet go from under him and he lands flat on his back; the rifle flies from his hands",
     "die_forward": "motion capture (CMU 140_01, played backwards and faster): hit on the move, a jolt, the knees buckle and he falls on his face; the rifle is thrown ahead",
-    "die_kneel": "keyed: hit: doubles over, sinks to his knees, falls to the side",
+    "die_kneel": "keyed: hit: doubles over, sinks to his knees, falls to the side; the rifle falls from his hands to his right",
 }
 
 
@@ -5622,12 +5992,18 @@ LIMITS = [
     "rolls differ), so they keep mocap.py's own flaws (see its README: the run is an easy jog, the advance is fast, the "
     "falls are reversed or slip-like takes). The hands hold the rifle by mocap.py's grip, the fingers 12 degrees more "
     "curled than at rest; up close the fingers do not wrap the stock exactly.",
-    "In die_forward and die_back the rifle leaves the hand and falls by a simple throw (its speed, gravity, a turn onto "
-    "its left side) and lies where it lands, put clear of where he lies; in go_prone it is laid down beside him. There "
-    "is no bounce, and it can lie a centimetre into or above uneven ground.",
+    "In die_forward, die_back and die_kneel the rifle leaves the hand and falls by a simple throw (its speed, "
+    "gravity, a turn onto its left side) and lies where it lands, put clear of where he lies. There is no bounce, and "
+    "it can lie a centimetre into or above uneven ground. In go_prone it never leaves his right hand (the drill, "
+    "below).",
     "Going from a mocap clip to a keyed one (go_prone into fire_prone, the advance into kneel_down) the game blends the "
-    "two; the pictures blend 0.1 to 0.6 s. go_prone ends with the rifle on the ground and fire_prone takes it up in the "
-    "blend.",
+    "two; the pictures blend 0.1 to 0.6 s. go_prone ends in fire_prone's aim (trunk, arms and rifle; the capture lies "
+    "3 cm lower and its legs are its own), so the blend into fire_prone hardly moves the rifle.",
+    "go_prone's arms are not the capture's: the capture lets go of the rifle, so the right arm is solved onto the "
+    "rifle by the drill (the right hand slides to the balance, the butt meets the ground first and he falls forward "
+    "over it, the fist comes down on its knuckles with the rifle level, then the rifle is rolled forward into the aim) "
+    "and the left arm comes off its catch onto the rifle at the end. Where that would put a hand, the elbow or the "
+    "rifle into the ground the arm is raised just clear; the left hand comes onto the rifle from up to 5 cm above it.",
     "The hero clip's men stand on the stage's rolling ground by their root only: on a slope a foot can float or sink a "
     "centimetre or two (the stubble hides most of it).",
 ]
@@ -5761,8 +6137,9 @@ def write_readme(info):
       "battle-models/land/soldier/mocap/), carried onto our rig by world turns and resampled from 30 to 60 frames a second. "
       "Over it the rifle is held in both hands by mocap.carry_rifle (at the port in idle, walk and run; at the ready in "
       "advance and creep, and at the start of go_prone and the falls), and our `weapon` bone is keyed to where the right "
-      "hand holds it. The low crawl holds the rifle in its own arms. In the falls the rifle leaves his hand, and in "
-      "go_prone it is laid down beside him.")
+      "hand holds it. The low crawl holds the rifle in its own arms. In the falls the rifle leaves his hand. In "
+      "go_prone it never does: the capture lets go of it, so his right arm is solved onto it by the drill (the butt "
+      "down first, the fist on its knuckles, then rolled forward into the aim) and his left hand takes it at the end.")
     w("- **Keyed** (the weapon work and the rest: " + ", ".join(f"`{n}`" for n in CLIPS if n not in MOCAP) + "): posed "
       "by the script, feet planted and hands put on the weapon by two-bone IK solved in soldier.py.")
     w(f"- **A real body's range**: every joint of every clip (and of every man in the hero clip) is measured on every 60th of a "
@@ -5818,7 +6195,7 @@ def write_readme(info):
       "its socket or its bone. The events are in soldier_GER.json's clips and on every animation of the .glb files as "
       "extras (`events`, a JSON string), with `loop` and `stride`.")
     w("- Firing loops end where they start, so a man can fire round after round; kneel_down ends on fire_kneel's first frame "
-      "and stand_up starts on it. go_prone ends lying with the rifle on the ground: blend into fire_prone (about 0.4 s) from "
+      "and stand_up starts on it. go_prone ends lying in fire_prone's aim: blend into fire_prone (about 0.25 s) from "
       "its end_offset. The deaths end lying still: hold the last frame.")
     w("- lmg_burst is made for the gunner (soldier_GER_lmg.glb): the weapon bone sits the gun on its bipod and the bipod bone "
       "unfolds it. On a rifleman it would put his rifle where the gun's should be.\n")
