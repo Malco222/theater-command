@@ -231,7 +231,7 @@ namespace
 namespace
 {
 	/** A new picture of this size and kind, with no pixels in it yet. */
-	UTexture2D* NewPicture(int32 Width, int32 Height, bool bColour, bool bTile, const FName& Name)
+	UTexture2D* NewPicture(int32 Width, int32 Height, bool bColour, bool bTile, const FName& Name, bool bSharp = false)
 	{
 		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8, Name);
 		if (!Texture)
@@ -239,7 +239,7 @@ namespace
 			return nullptr;
 		}
 		Texture->SRGB = bColour;
-		Texture->Filter = TF_Trilinear;
+		Texture->Filter = bSharp ? TF_Nearest : TF_Trilinear;
 		Texture->AddressX = bTile ? TA_Wrap : TA_Clamp;
 		Texture->AddressY = bTile ? TA_Wrap : TA_Clamp;
 		Texture->NeverStream = true;
@@ -248,13 +248,13 @@ namespace
 	}
 }
 
-UTexture2D* CampaignTextures::Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name)
+UTexture2D* CampaignTextures::Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name, bool bSharp)
 {
 	if (Width <= 0 || Height <= 0 || Pixels.Num() != Width * Height)
 	{
 		return nullptr;
 	}
-	UTexture2D* Texture = NewPicture(Width, Height, bColour, bTile, Name);
+	UTexture2D* Texture = NewPicture(Width, Height, bColour, bTile, Name, bSharp);
 	if (!Texture)
 	{
 		return nullptr;
@@ -299,13 +299,13 @@ void CampaignTextures::MakeLevels(int32 Width, int32 Height, const TArray<FColor
 	}
 }
 
-UTexture2D* CampaignTextures::CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name)
+UTexture2D* CampaignTextures::CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp)
 {
 	if (Levels.Each.Num() == 0 || Levels.Each.Num() != Levels.Sizes.Num())
 	{
 		return nullptr;
 	}
-	UTexture2D* Texture = NewPicture(Levels.Width, Levels.Height, Levels.bColour, bTile, Name);
+	UTexture2D* Texture = NewPicture(Levels.Width, Levels.Height, Levels.bColour, bTile, Name, bSharp);
 	if (!Texture)
 	{
 		return nullptr;

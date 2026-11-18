@@ -1965,10 +1965,14 @@ void ACampaignMapActor::PaintGround()
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
 	CoverPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Cover, false, false, TEXT("TableCover"));
-	LiePicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Lie, false, false, TEXT("TableLie"));
-	if (LiePicture)
+	// (an angle half way between two provinces' angles is neither's: no smoothing)
+	// (Speed, tc.Speed.PictureOnce: made unsmoothed from the first, not made and then made again, which waits for the
+	// drawing thread. The same picture either way.)
+	const bool bPictureOnce = TheaterSpeed::PictureOnce();
+	LiePicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Lie, false, false, TEXT("TableLie"), bPictureOnce);
+	if (LiePicture && !bPictureOnce)
 	{
-		LiePicture->Filter = TF_Nearest; // (an angle half way between two provinces' angles is neither's: no smoothing)
+		LiePicture->Filter = TF_Nearest;
 		LiePicture->UpdateResource();
 	}
 	{
@@ -2000,8 +2004,8 @@ void ACampaignMapActor::PaintGround()
 		const double Share = Pixels.Num() > 0 ? 2.0 / (255.0 * Pixels.Num()) : 0.0;
 		QuiltMean = Pixels.Num() > 0 ? FLinearColor(Sum[0] * Share, Sum[1] * Share, Sum[2] * Share) : FLinearColor::White;
 	}
-	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"));
-	if (FieldsPicture)
+	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"), bPictureOnce);
+	if (FieldsPicture && !bPictureOnce)
 	{
 		FieldsPicture->Filter = TF_Nearest;
 		FieldsPicture->UpdateResource();
@@ -2665,14 +2669,15 @@ void ACampaignMapActor::BuildWorld()
 		});
 	}
 	WorldPictures.Reset();
-	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name, bool bSharp = false)
 	{
-		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, Name);
+		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, Name, bSharp);
 		WorldPictures.Add(Made);
 		return Made;
 	};
-	UTexture2D* Lie = Picture(WorldPaint.Lie, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldLie"));
-	if (Lie)
+	const bool bPictureOnce = TheaterSpeed::PictureOnce(); // (speed: see PaintGround)
+	UTexture2D* Lie = Picture(WorldPaint.Lie, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldLie"), bPictureOnce);
+	if (Lie && !bPictureOnce)
 	{
 		Lie->Filter = TF_Nearest;
 		Lie->UpdateResource();
@@ -3033,15 +3038,15 @@ void ACampaignMapActor::PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& H
 void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 {
 	THEATER_SPEED_SCOPE(DressFineSheet);
-	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name, bool bSharp = false)
 	{
 		// (Speed.) Made with the sheet where that is still this very picture: the same size and kind, and the same pixels
 		// at full size, which the repaint of ground that changed hands may have changed since. Otherwise made here.
 		const FName Called(*FString::Printf(TEXT("Fine%s_%d_%d"), Name, Sheet.Key.X, Sheet.Key.Y));
 		const CampaignTextures::FLevels* Ready = Sheet.Ahead.Find(FName(Name));
 		UTexture2D* Made = Ready && Ready->Fits(Wide, High, bColour, Pixels)
-			? CampaignTextures::CreateFromLevels(*Ready, false, Called)
-			: CampaignTextures::Create(Wide, High, Pixels, bColour, false, Called);
+			? CampaignTextures::CreateFromLevels(*Ready, false, Called, bSharp)
+			: CampaignTextures::Create(Wide, High, Pixels, bColour, false, Called, bSharp);
 		Sheet.Kept.Add(Made);
 		FineKeep.Add(Made);
 		return Made;
@@ -3057,11 +3062,18 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	if (Sheet.DressStage == 0)
 	{
 		THEATER_SPEED_SCOPE(DressPaint);
-		UTexture2D* Lie = Picture(Painted.Lie, Painted.NX, Painted.NY, false, TEXT("Lie"));
-		if (Lie)
+		// (Speed, tc.Speed.PictureOnce: made unsmoothed from the first. Made smoothed and then again unsmoothed, the
+		// second making waited for the drawing thread: about 32 ms of every sheet in the builder's logs, 110 at worst.)
+		const bool bPictureOnce = TheaterSpeed::PictureOnce();
+		UTexture2D* Lie = nullptr;
 		{
-			Lie->Filter = TF_Nearest;
-			Lie->UpdateResource();
+			THEATER_SPEED_SCOPE(DressLie);
+			Lie = Picture(Painted.Lie, Painted.NX, Painted.NY, false, TEXT("Lie"), bPictureOnce);
+			if (Lie && !bPictureOnce)
+			{
+				Lie->Filter = TF_Nearest;
+				Lie->UpdateResource();
+			}
 		}
 		Sheet.LandPaint = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 		Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
