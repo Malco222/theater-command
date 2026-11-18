@@ -8,18 +8,19 @@
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson,
   doneCount, firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, pickupPlace, putAway, readNotebook, showAgain, siegeOf,
-  waitingCount, type Deed, type Lesson, type Moment, type Notebook,
+  trainGround, waitingCount, type Deed, type Lesson, type Moment, type Notebook,
 } from '../lessons';
 import { markFor, monthCard } from '../monthcard';
 import { railReach } from '../game';
 import { cutThroughGuns } from '../rails';
-import { humanUp, onEve, reach } from '../turn';
+import { humanUp, onEve, reach, stormChoice } from '../turn';
+import { planRaid, type RaidKind } from '../airwar';
 import type { Corps, Game } from '../types';
 
 /** What the page lends the notes. */
 export interface Page {
   game(): Game;
-  ui: { sel: number; sea: number; picked: Set<number>; tab: string; modal: null | { kind: string; [k: string]: any }; mark: any; lastCard: any; live: boolean; menu: string };
+  ui: { sel: number; sea: number; raid: string; lead: number; picked: Set<number>; tab: string; modal: null | { kind: string; [k: string]: any }; mark: any; lastCard: any; live: boolean; menu: string };
   /** The corps the player has in hand. */
   held(): Corps[];
   /** True while a desk's tab is tucked away because the staff runs it. */
@@ -28,6 +29,8 @@ export interface Page {
   busy(): boolean;
   openModal(m: { kind: string; [k: string]: any } | null): void;
   refresh(): void;
+  /** Brings these provinces into view, as SHOW ON MAP does. */
+  look(ids: number[]): void;
   esc(s: string): string;
 }
 
@@ -77,6 +80,7 @@ export function initFirstHour(p: Page): void {
   // (Capture: the notes' own buttons are theirs alone, and a line of the month card is read before the page acts on it.)
   document.addEventListener('click', onClick, true);
   addEventListener('resize', () => redraw());
+  document.addEventListener('scroll', (e) => { if ((e.target as Element | null)?.id === 'pane') awayCheck = true; }, true);
   requestAnimationFrame(follow);
 }
 
@@ -132,6 +136,9 @@ function readDeeds(): void {
         moved = true;
         if (!keptIds.has(c.id) && !h.reach.has(c.reg) && h.rail.has(c.reg)) rail = true; else march = true;
       }
+      // (Lesson 3's words send an army "farther off", which at home is often a train: while it is the lesson to do,
+      // the ride is its march, and lesson 8 waits to be taught.)
+      if (rail && !isDone(book, 'march')) { rail = false; march = true; }
       // (Any order he gives puts away a tip that came before it.)
       if (tip && (fought.length || moved || kept.length || g.airReports.length > s.air || (g.nations[me]?.queue.length ?? 0) !== s.queue.size)) tip.acts++;
       if (!fought.length) {
@@ -194,6 +201,9 @@ export function lessonsBegun(first: boolean): void {
     save();
   }
   stamped = null; tip = null; snap = null; laid = false; lastDrawn = '';
+  // (The game as it stands now is the picture deeds are read against: a month ended at once after CONTINUE is then
+  // seen to turn, though the next drawing comes while the others move.)
+  readDeeds();
   // (A war played from its first month has no card until its second: lesson 1 needs one, so the first card is
   // opened as his first month comes up, headed "As September 1939 opens", as a campaign taken over later opens with its own.)
   opening = g.turn === 1 && lessonsOn(g, book) && !isDone(book, 'month');
@@ -357,6 +367,7 @@ let aimAt: { el: Element; map: boolean; spot?: DOMPoint } | null = null;
  * A point inside a province's lit ground that shows on the screen and takes a click: its middle where it can, else
  * the nearest point to it that is not hidden. Returned on the screen and in the map's own measure.
  */
+const CORNERS: [number, number][] = [[-24, -24], [24, -24], [-24, 24], [24, 24]];
 function openSpot(path: SVGGeometryElement): { x: number; y: number; user: DOMPoint } | null {
   const r = path.getBoundingClientRect();
   const ctm = path.getScreenCTM();
@@ -371,6 +382,9 @@ function openSpot(path: SVGGeometryElement): { x: number; y: number; user: DOMPo
     const user = new DOMPoint(x, y).matrixTransform(inv);
     if (!path.isPointInFill(user)) continue;
     if (!document.elementFromPoint(x, y)?.closest('#map')) continue;
+    // (The clamps stand 22 px round the spot: each corner must be on the map too, not under the zoom buttons, the
+    // compass, a tray or the legend, and not off the screen's edge.)
+    if (!CORNERS.every(([dx, dy]) => document.elementFromPoint(x + dx, y + dy)?.closest('#map'))) continue;
     return { x, y, user };
   }
   return null;
@@ -405,9 +419,10 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
   const flag = (reg: number): typeof aimAt => { const e = vis(q(`#units .army[data-reg="${reg}"][data-nat="${g.human}"]`)); return e ? { el: e, map: true } : null; };
   const tab = (t: string): Element | null => vis(q(`#tabs [data-tab="${t}"]`));
   if (open) {
-    if (id === 'card' && kind === 'news') return pick(q('#card .mc-go:not(.none)'));
+    if (id === 'card' && kind === 'news') return pick(q('#card .mc-go:not(.none)')) ?? pick(q('#card .mc-banner .mc-alt'));
     if (id === 'attack' && kind === 'attack') return pick(q('#card footer [data-act="attack"]'));
-    if (id === 'city' && kind === 'siege') return pick(q('#card footer [data-act="dosiege"], #card footer [data-act="dotake"]'));
+    // (The order the card lights by the staff's verdict: the storm, or keeping up the siege. Either earns the lesson.)
+    if (id === 'city' && kind === 'siege') return pick(q('#card footer .btn.go:is([data-act="dosiege"], [data-act="close"], [data-act="dotake"], [data-act="domarch"])'));
     if (id === 'raid' && kind === 'raid' && BOMBING.includes(page.ui.modal?.raid)) return pick(q('#card footer .btn.go[data-act="doraid"], #card footer [data-act="doraid"]'));
     return null;
   }
@@ -426,17 +441,23 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
     case 'end': return pick(q('#barbtns [data-act="end"]'));
     case 'city': {
       const s = siegeOf(g);
+      // (A storm the staff would not order is not pointed at: holding the siege a month is the deed then, at END MONTH.)
+      if (s && !stormFavoured(g, s.region)) return pick(q('#barbtns [data-act="end"]'));
       const storm = vis(q('#pane [data-act="storm"]'));
       return storm ? pick(storm) : s ? flag(s.region) : null;
     }
-    case 'rail': return ground('railfar');
+    case 'rail': {
+      const at = ground('railfar');
+      if (!at) lookForRail();
+      return at;
+    }
     case 'raid': {
       if (page.tucked('air')) return page.ui.tab === 'staff' ? pick(q('#pane [data-act="desk"][data-desk="air"][data-on="0"]')) : pick(tab('staff'));
       if (page.ui.tab !== 'air') return pick(tab('air'));
       // The planner: PLAN A RAID, then the bombing raid, then a target. (Another kind open, Fight for the sky: back
       // to the bombing raid, since only a bombing raid earns the lesson.)
       const open = (q('#pane .planner [data-act="raidkind"].on') as HTMLElement | null)?.dataset.kind ?? '';
-      return pick((BOMBING.includes(open) ? vis(q('#pane .planner [data-act="raidtarget"]')) : null) ?? vis(q('#pane .planner [data-act="raidkind"][data-kind="bomb"]:not([disabled]):not(.on)')) ?? vis(q('#pane .btn.go[data-act="raidmenu"][data-id="-1"]:not([disabled])')));
+      return pick((BOMBING.includes(open) ? bestRaid(open) : null) ?? vis(q('#pane .planner [data-act="raidkind"][data-kind="bomb"]:not([disabled]):not(.on)')) ?? vis(q('#pane .btn.go[data-act="raidmenu"][data-id="-1"]:not([disabled])')));
     }
     case 'build': {
       if (page.ui.tab === 'build') return pick(vis(q('#pane button[data-act="arsenal"]:not([disabled])')));
@@ -445,6 +466,48 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
     }
   }
   return null;
+}
+/**
+ * Lesson 8 with no lit railway in view (off the screen's edge, or only under the map's own buttons): the map is
+ * brought round to the army and the nearest ground a train takes it to, once for each army picked up.
+ */
+let lookedFor = '';
+function lookForRail(): void {
+  const g = page.game();
+  const held = page.held();
+  const key = `${g.turn}:${held.map((c) => c.id).join(',')}`;
+  if (!held.length || key === lookedFor) return;
+  lookedFor = key;
+  const from = g.regions[held[0].reg];
+  const to = [...trainGround(g, held)].sort((a, b) => Math.hypot(g.regions[a].x - from.x, g.regions[a].y - from.y) - Math.hypot(g.regions[b].x - from.x, g.regions[b].y - from.y))[0];
+  if (to === undefined) return;
+  page.look([from.id, to]);
+  setTimeout(() => redraw(), 450);
+}
+/** Whether the staff would storm the town now (the card's lit order), asked once a month and place. */
+let stormMemo: { g: Game; key: string; yes: boolean } | null = null;
+function stormFavoured(g: Game, region: number): boolean {
+  const key = `${g.turn}:${region}:${g.reports.length}`;
+  if (stormMemo?.g !== g || stormMemo.key !== key) stormMemo = { g, key, yes: stormChoice(g, region)?.favours === 'storm' };
+  return stormMemo.yes;
+}
+/** The planner's row with the best chance of success for the kind of raid open, as the raid card would give it. */
+let raidMemo: { g: Game; key: string; id: string } | null = null;
+function bestRaid(kind: string): Element | null {
+  const g = page.game();
+  const rows = [...document.querySelectorAll<HTMLElement>('#pane .planner [data-act="raidtarget"]')].filter((e) => e.getClientRects().length);
+  if (!rows.length) return null;
+  const lead = page.ui.lead;
+  const key = `${g.turn}:${kind}:${lead}:${g.airReports.length}:${rows.map((e) => e.dataset.target).join(',')}`;
+  if (raidMemo?.g !== g || raidMemo.key !== key) {
+    let id = rows[0].dataset.target ?? '', best = -1;
+    for (const e of rows) {
+      const p = planRaid(g, kind as RaidKind, Number(e.dataset.target), lead >= 0 ? [lead] : undefined);
+      if (!p.why && p.success > best) { best = p.success; id = e.dataset.target ?? ''; }
+    }
+    raidMemo = { g, key, id };
+  }
+  return rows.find((e) => e.dataset.target === raidMemo!.id) ?? rows[0];
 }
 const pick = (e: Element | null): typeof aimAt => (e && (e as HTMLElement).getClientRects().length ? { el: e, map: false } : null);
 
@@ -462,7 +525,14 @@ function aim(d: ReturnType<typeof onDesk>): void {
     const box = aimAt.el.closest('#pane, #card');
     if (box) {
       const r = aimAt.el.getBoundingClientRect(), b = box.getBoundingClientRect();
-      if (r.top < b.top || r.bottom > b.bottom) (aimAt.el as HTMLElement).scrollIntoView({ block: 'center' });
+      if (r.top < b.top || r.bottom > b.bottom) {
+        // (In the panel the note is the first thing: the panel goes to its top where the button shows with it, else
+        // only as far as brings the button up from the bottom, so that as much of the note stays in view as can.)
+        const pane = box as HTMLElement;
+        const bottom = pane.scrollTop + r.bottom - b.top + 16;
+        if (box.id === 'pane') pane.scrollTop = bottom <= pane.clientHeight ? 0 : bottom - pane.clientHeight;
+        else (aimAt.el as HTMLElement).scrollIntoView({ block: 'center' });
+      }
     }
   }
   drawPointer();
@@ -473,6 +543,32 @@ function hidePointer(): void {
   document.getElementById('fhground')?.remove();
 }
 
+/**
+ * The note in the panel scrolled out of view (a long STAFF, AIR or BUILD page): it stands as the slip at the map's
+ * left edge until it is back (ruling 147(a): where its home would hide it, it becomes the slip at the left edge). Not
+ * while the pointer is on the map, where the slip could lie on the thing pointed at.
+ */
+let awayCheck = false;
+function keepNote(): void {
+  const note = document.querySelector<HTMLElement>('#pane > .fh-note');
+  const copy = document.getElementById('fhaway');
+  const map = document.getElementById('map')?.getBoundingClientRect();
+  const pane = note?.parentElement?.getBoundingClientRect();
+  const r = note?.getBoundingClientRect();
+  const away = !!note && !!map && !!pane && !!r && r.bottom - pane.top < Math.min(r.height, 90) && !aimAt?.map;
+  if (!away) { copy?.remove(); return; }
+  if (copy && copy.dataset.note === note!.dataset.note && copy.dataset.done === String(note!.classList.contains('is-done'))) return;
+  copy?.remove();
+  const el = note!.cloneNode(true) as HTMLElement;
+  el.id = 'fhaway';
+  el.dataset.done = String(note!.classList.contains('is-done'));
+  el.classList.remove('fh-in');
+  el.classList.add('fh-slip', 'tc-note--slip', 'fh-away');
+  el.style.left = `${map!.left + 14}px`;
+  el.style.top = `${map!.top + 14}px`;
+  document.body.appendChild(el);
+}
+
 /** Each frame: the pointer follows its thing as the page scrolls and the map moves. */
 function follow(): void {
   if (due) {
@@ -481,7 +577,12 @@ function follow(): void {
     if (toTop) { toTop = false; const pane = $('#pane'); if (pane && pane.scrollTop > 0) pane.scrollTop = 0; }
     placeSlip();
     aim(d);
-  } else if (aimAt) {
+    keepNote();
+  } else if (awayCheck) {
+    awayCheck = false;
+    keepNote();
+  }
+  if (aimAt && !due) {
     if (!aimAt.el.isConnected) aim(onDesk());
     else drawPointer();
   }
@@ -505,7 +606,10 @@ function drawPointer(): void {
   let p = document.getElementById('fhpointer');
   if (!p) { p = document.createElement('div'); p.id = 'fhpointer'; p.innerHTML = '<div class="tc-pointer"></div>'; document.body.appendChild(p); }
   p.style.display = '';
-  p.style.left = `${r.left}px`; p.style.top = `${r.top}px`; p.style.width = `${r.width}px`; p.style.height = `${r.height}px`;
+  // (At the screen's edge the clamps close in on the part of the thing that shows, so that none hangs off it.)
+  const L = Math.max(r.left, 12), T = Math.max(r.top, 12), R = Math.min(r.right, innerWidth - 12), B = Math.min(r.bottom, innerHeight - 12);
+  const fit = R - L >= 8 && B - T >= 8;
+  p.style.left = `${fit ? L : r.left}px`; p.style.top = `${fit ? T : r.top}px`; p.style.width = `${fit ? R - L : r.width}px`; p.style.height = `${fit ? B - T : r.height}px`;
   p.firstElementChild!.classList.toggle('tc-pointer--lg', r.width >= 60 && r.height >= 60);
   // (It breathes out 4 px a side: the scale that takes its frame, 9 px clear, to 13.)
   p.style.setProperty('--fh-s', ((Math.min(r.width, r.height) + 26) / (Math.min(r.width, r.height) + 18)).toFixed(3));

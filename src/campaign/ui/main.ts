@@ -9896,7 +9896,7 @@ function wireMap(): void {
 
 g = createGame(1939, null);
 initFirstHour({
-  game: () => g, ui, held: heldCorps, esc, openModal, refresh,
+  game: () => g, ui, held: heldCorps, esc, openModal, refresh, look: (ids) => glide(viewFor(ids)),
   tucked: (tab) => !!commandOf(g)?.desks.some((d) => d.tab === tab && d.staff),
   busy: () => !!passing || !!working || !!tour,
 });

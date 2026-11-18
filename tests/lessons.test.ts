@@ -45,7 +45,7 @@ describe('the list', () => {
   });
 
   it('keeps every note to 30 words, the raid to 36, in each game\'s own words', () => {
-    for (const game of ['shared', 'browser']) {
+    for (const game of ['shared', 'browser', 'unreal']) {
       for (const l of LESSONS) {
         const n = wordCount(namedWords(l.text, game, game === 'browser' ? ' under STAFF' : ''));
         expect(n, `${l.id} in ${game}`).toBeLessThanOrEqual(l.id === 'raid' ? WORDS_MOST_RAID : WORDS_MOST);
@@ -65,7 +65,15 @@ describe('the list', () => {
 
   it('swaps in the browser game\'s own words for its controls, and every swap is used', () => {
     const all = [...LESSONS.flatMap((l) => [l.text, l.deed]), CLOSING.text].join('\n');
-    for (const [from] of LESSON_NAMES.browser) expect(all.includes(from), from).toBe(true);
+    for (const game of ['browser', 'unreal']) for (const [from] of LESSON_NAMES[game]) expect(all.includes(from), `${game}: ${from}`).toBe(true);
+    // The 3D game's own words (ruling b425): YOUR STAFF, the aircraft on the map, the card's pins.
+    expect(namedWords(LESSONS.find((l) => l.id === 'raid')!.text, 'unreal')).toContain('In YOUR STAFF, take the air war yourself. Click your aircraft on the map');
+    expect(namedWords(LESSONS.find((l) => l.id === 'card')!.deed, 'unreal')).toBe('Click the pin on one line of the card.');
+    // Ruling b429: one closing text in both games, YOUR STAFF in 3D at 29 words; the verdict and the button's own words.
+    expect(namedWords(CLOSING.text, 'unreal')).toMatch(/^YOUR STAFF hands you each desk when you want it: research, building, envoys, agents, air, navy\./);
+    expect(wordCount(namedWords(CLOSING.text, 'unreal'))).toBe(29);
+    expect(LESSONS.find((l) => l.id === 'attack')!.text).toContain('Attack when its verdict favours you.');
+    expect(LESSONS.find((l) => l.id === 'end')!.text).toContain('When it reads NEXT IN THE REAR, END THE MONTH.');
     const byId = (id: string): string => namedWords(LESSONS.find((l) => l.id === id)!.text, 'browser', ' under STAFF');
     expect(byId('month')).toContain('END MONTH carries out');
     expect(byId('rail')).toContain('Right-click blue ground to ride there');
@@ -195,6 +203,25 @@ describe('FIRST COMMAND, played', () => {
     expect(rides).toBeDefined();
     rides![0].ap = 3;
     expect(lessonDue(g, b, rail, { inHand: rides!.map((c) => c.id) })).toBe(false);
+  });
+
+  it('teaches NEXT ARMY and the month\'s end at peace too: lesson 5 comes in the second month without a battle', () => {
+    const g = firstHour();
+    const b = book(upTo('attack'));
+    const end = LESSONS.find((l) => l.id === 'end')!;
+    expect(lessonReady(g, b, end)).toBe(false);
+    month(g);
+    expect(lessonReady(g, b, end)).toBe(true);
+  });
+
+  it('names for lesson 2 at peace an army that does not stand in the capital', () => {
+    const g = startOpen(createGame(5, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+    beginHuman(g);
+    const at = pickupPlace(g);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at).not.toBe(g.nations.ITA.capital);
+    expect(g.regions[at].units.some((c) => c.nat === 'ITA')).toBe(true);
   });
 
   it('owes the closing note once all ten are done, and only once', () => {
