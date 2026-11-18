@@ -175,12 +175,13 @@ describe('the rows as they wait', () => {
       expect(nat, name).toBe('AUS');
       expect(turn, name).toBeGreaterThan(1);
       expect(Object.keys(KIND), name).toContain(kind);
-      // A battalion or a brigade: one division on paper at the floor of strength, never a full one.
+      // A battalion or a brigade: one division on paper at the record's own weight, never a full one, and it draws
+      // to no more (ruling 234(b)1: the record's numbers first. Rider b534(a): Lark Force 0.15. Rider b541: Port
+      // Moresby 0.25 in all, the 49th Battalion 0.1 and the 30th Brigade's two battalions 0.15).
       expect(divs, name).toBe(1);
-      // (Ruling 234's rider b534(a): Lark Force at Rabaul reads the record's 0.15, and draws to no more.)
-      const lark = name.startsWith('Lark Force');
-      expect(o.str, name).toBe(lark ? 0.15 : 0.2);
-      expect(o.est, name).toBe(lark ? 0.15 : undefined);
+      const weight = name.startsWith('Lark Force') ? 0.15 : name.startsWith('49th Battalion') ? 0.1 : 0.15;
+      expect(o.str, name).toBe(weight);
+      expect(o.est, name).toBe(weight);
       expect(Object.keys(o).every((k) => ['xp', 'str', 'hold', 'est'].includes(k)), name).toBe(true);
     }
     // They are 'formations' and never 'reinforcements': a computer-run country orders nothing new until its last

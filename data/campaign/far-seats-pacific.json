@@ -1278,8 +1278,9 @@
     "Port Moresby",
     {
      "xp": 0,
-     "str": 0.2,
-     "hold": 1
+     "str": 0.1,
+     "hold": 1,
+     "est": 0.1
     }
    ],
    [
@@ -1291,7 +1292,8 @@
     "Port Moresby",
     {
      "xp": 0,
-     "str": 0.2
+     "str": 0.15,
+     "est": 0.15
     }
    ]
   ]
