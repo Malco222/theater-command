@@ -5,7 +5,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import airwar from '../data/campaign/airwar.json';
 import carriers from '../data/campaign/carriers.json';
-import { AIR, AIRWAR, CARRIERS, airAI, airFleetsOf, airRange, cover, hasAirfield, km } from '../src/campaign/air';
+import { AIR, AIRWAR, CARRIERS, airAI, airFleetsOf, airRange, cover, hasAirfield, km, whyNotBase } from '../src/campaign/air';
 import { aiArsenal, bareFront } from '../src/campaign/arsenal';
 import { searchOf, seaStaff } from '../src/campaign/carriers';
 import { PRODUCTION } from '../src/campaign/economy';
@@ -39,6 +39,7 @@ describe('the data', () => {
     expect(airwar.ai.basing.presence).toBeGreaterThan(0);
     expect(airwar.ai.basing.presence).toBeLessThan(1);
     expect(airwar.ai.basing.fields).toBeGreaterThanOrEqual(1);
+    expect(airwar.ai.basing.idle).toBe(true);
     expect(CARRIERS.ai.searches).toBe(carriers.ai.searches);
     expect(AIRWAR.ai.basing.fields).toBe(airwar.ai.basing.fields);
   });
@@ -169,6 +170,37 @@ describe('a computer staff\'s fighters', () => {
     for (let m = 0; m < 3; m++) { g.turn++; airAI(g, 'ITA'); }
     const R = Math.min(...landFighters(g, 'ITA').map((f) => airRange(f, g).ftr));
     expect(landFighters(g, 'ITA').filter((f) => km(g, f.base, bardia.id) <= R).length).toBeGreaterThan(0);
+  });
+
+  it('do not stand idle where nothing within their reach asks for fighters, though every ask is met without them', () => {
+    const g = grand();
+    for (const e of [...g.nations.GER.atWar]) if (e !== 'POL') peace(g, 'GER', e);
+    g.airFleets = g.airFleets.filter((f) => !atWar(g, 'GER', f.nat));
+    airAI(g, 'GER');
+    const front = frontOf(g, 'GER');
+    const inReach = (h: Game, f: AirFleet): boolean => front.some((id) => cover(km(h, f.base, id), airRange(f, h).ftr) > 0);
+    // A month on, one group has been left on the far side of Germany, at the open field furthest from the front.
+    const last = landFighters(g, 'GER').length - 1;
+    const f0 = landFighters(g, 'GER')[last];
+    const field = g.regions.filter((r) => r.ctrl === 'GER' && hasAirfield(g, r.id) && whyNotBase(g, f0, r, true) === null)
+      .map((r) => ({ id: r.id, d: Math.min(...front.map((id) => km(g, r.id, id))) })).sort((a, b) => b.d - a.d)[0];
+    expect(field.d).toBeGreaterThan(2 * airRange(f0, g).ftr);
+    const month = (idle: boolean): { h: Game; f: AirFleet } => {
+      const h = loadGame(saveGame(g))!;
+      h.turn++;
+      const f = landFighters(h, 'GER')[last];
+      f.base = field.id;
+      AIRWAR.ai.basing.idle = idle;
+      try { airAI(h, 'GER'); } finally { AIRWAR.ai.basing.idle = true; }
+      return { h, f };
+    };
+    // The others meet all that the front asks, so the old rule leaves it where it is; the new one brings it up.
+    const off = month(false);
+    expect(off.f.base).toBe(field.id);
+    expect(inReach(off.h, off.f)).toBe(false);
+    const on = month(true);
+    expect(on.f.base).not.toBe(field.id);
+    expect(inReach(on.h, on.f)).toBe(true);
   });
 
   it('stay where they are in a nation at peace', () => {
