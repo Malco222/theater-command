@@ -14604,7 +14604,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// peach". It was a fifth of a second of two warm smears with a cream heart. It is three lumps of red and
 			// orange, a little off one another, the smallest the hottest and still orange; by dusk and night, when
 			// the eye is wide open, it is let down so that it does not bleach.)
-			if (Age < 0.25 && Burst.Born >= 0.0 && Burst.Flashed < 2 && !bTop)
+			// ("-TheaterFlakFlashHeld" holds every flash for six tenths of a second, so that a still catches some: a
+			// flash of two frames is in one still in ten.)
+			static const bool bFlashHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld"));
+			if ((bFlashHeld ? Age < 0.6 : (Age < 0.25 && Burst.Flashed < 2)) && Burst.Born >= 0.0 && !bTop)
 			{
 				++Burst.Flashed;
 				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit);
