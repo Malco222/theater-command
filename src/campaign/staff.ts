@@ -500,6 +500,15 @@ const flag = (g: Game, k: string): number => g.flags[k] ?? 0;
 const onKey = (nat: string, e: string, where: string): string => `st:on:${nat}:${e}${where}`;
 
 /** The month this nation's offensive against the enemies on a front began, or 0 if there is none. */
+/**
+ * Whether this nation's staff is on the attack against `e` in a war it began itself, its offensive against `e` still
+ * on (ruling 139, the design director's b519(m)). A war is its own when the last declaration between the two was its.
+ */
+export function onTheAttack(g: Game, nat: string, e: string): boolean {
+  const mine = flag(g, `war:${nat}:${e}`);
+  return mine > 0 && mine >= flag(g, `war:${e}:${nat}`) && flag(g, onKey(nat, e, '')) > 0;
+}
+
 function onSince(g: Game, nat: string, f: Front, where = ''): number {
   let t = 0;
   for (const e of f.enemies) { const v = flag(g, onKey(nat, e, where)); if (v && (!t || v < t)) t = v; }
