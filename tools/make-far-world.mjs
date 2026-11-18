@@ -15,7 +15,9 @@
 //   who holds what on 1 September 1939 where that is not the owner (the clerk's held_1939)
 //   Japan's character as a staff: where its budget leans (paper 14, ruled with 181 to 202; the planner's base-seats.json)
 //   the far side's shipyards (ruling b445; the planner's far-yards.md, the list between its ```json marks)
-//   two towns of the old chart that share a name with a far-side province (the planner's paper 21)
+//   the far side's oilfields and the Soviet home row (rulings 194 and 231; the planner's far-oil.md, the same way)
+//   two towns of the old chart that share a name with a far-side province, and the oil mark the far side takes off
+//     the old chart (the planner's paper 21)
 //
 //   node tools/make-far-world.mjs            write the file
 //   node tools/make-far-world.mjs --check    exit 1 if the file on disk is not what the sources give today
@@ -48,11 +50,20 @@ const yardsBlock = yardsPaper.match(/```json\n([\s\S]*?)```/);
 const yards = yardsBlock ? JSON.parse(`{${yardsBlock[1]}}`) : null;
 // The whole world's data gaps (the planner's paper 21, 18 November, answering the suite run with the far switch on).
 // It carries its rows the same way, each between ```json marks: a "towns" block (two provinces of the old chart whose
-// chief town is a far-side province's name once the whole world is on the chart).
+// chief town is a far-side province's name once the whole world is on the chart), and an "oil" block with an "unmark"
+// list beside it (ruling 231, 1: the oil marks the far side takes off; the chart tool takes off the far side's own).
 const gapsPaper = fs.readFileSync(path.join(SRC, 'pacific-planner/21-whole-world-data-gaps.md'), 'utf8');
 const gapsBlocks = [...gapsPaper.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1].trim());
 const gapsBlock = (key) => { const b = gapsBlocks.find((x) => x.startsWith(`"${key}"`)); return b ? JSON.parse(`{${b}}`) : null; };
 const townNames = gapsBlock('towns')?.towns?.names ?? null;
+const unmarkAll = gapsBlock('oil')?.unmark ?? null;
+// The far side's oil (rulings 194 and 231; the planner's far-oil.md): what each far-side oilfield yields, and the
+// Soviet home row, which falls as its fields come onto the chart. One block between ```json marks.
+const oilPaper = fs.readFileSync(path.join(SRC, 'pacific-planner/far-oil.md'), 'utf8');
+const oilBlock = oilPaper.match(/```json\n([\s\S]*?)```/);
+const oilRows = oilBlock ? JSON.parse(`{${oilBlock[1].trim().replace(/,$/, '')}}`) : null;
+const oilFields = oilRows?.fields ?? null;
+const oilHome = oilRows?.home ?? null;
 const chinaSetup = read(path.join(ROOT, 'data/campaign/china-setup.json'));
 const stop3 = read(path.join(ROOT, 'data/campaign/china-stop3.json'));
 const chart = read(path.join(ROOT, 'src/generated/world-whole.json'));
@@ -233,10 +244,46 @@ for (const [prov, town] of Object.entries(townNames)) {
 }
 notes.push(`towns: ${Object.entries(townNames).map(([p, t]) => `${p}: ${oldTowns[p]} becomes ${t}`).join(', ')}`);
 
+// The oilfields (rulings 194 and 231): each a far-side province with the oil mark and no yield of its own in
+// resources.json, and every far-side province with the mark has a row. A field on colony ground gives nothing at
+// home (194 point 1, resources.ts); the note says which are. The home rows are of countries resources.json gives one.
+const oldOil = read(path.join(ROOT, 'data/campaign/resources.json')).oil;
+const oldFields = oldOil.fields;
+const farFirst = chart.first + chart.stages[1];
+need(oilFields && Object.keys(oilFields).length > 0, "the planner's far-oil.md has no \"fields\" between ```json marks");
+for (const [name, y] of Object.entries(oilFields)) {
+  const r = chart.regions.find((x) => x.name === name);
+  need(r && r.id >= farFirst, `far-oil.md, fields: ${name} is not a far-side province`);
+  need(r.flags?.oil, `far-oil.md, fields: ${name} has no oil mark on the chart`);
+  need(typeof y === 'number' && y > 0, `far-oil.md, fields: ${name} yields ${y}`);
+  need(!(name in oldFields), `far-oil.md, fields: ${name} has a yield in resources.json already`);
+}
+const unnamed = chart.regions.filter((r) => r.id >= farFirst && r.flags?.oil && !(r.name in oilFields)).map((r) => r.name);
+need(unnamed.length === 0, `far-oil.md, fields: no row for ${unnamed.join(', ')}`);
+need(oilHome && Object.keys(oilHome).length > 0, "the planner's far-oil.md has no \"home\" row");
+for (const [nat, v] of Object.entries(oilHome)) need(nat in oldOil.home && typeof v === 'number' && v >= 0, `far-oil.md, home: ${nat} ${v}`);
+// The marks that come off: a far-side province's is the chart tool's and must be off already; an old-chart
+// province's is the far setup's to take off as the chart is attached (far.ts), and it must carry one today.
+need(Array.isArray(unmarkAll) && unmarkAll.length > 0, "the planner's paper 21 has no \"unmark\" list beside its \"oil\" block");
+const unmark = [];
+for (const name of unmarkAll) {
+  const far = chart.regions.find((x) => x.name === name), old = oldChart.regions.find((x) => x.name === name);
+  need(far || old, `paper 21, unmark: ${name} is not a province of the chart`);
+  if (far) need(!far.flags?.oil, `paper 21, unmark: ${name} still carries the oil mark on the far chart (tools/build-world-whole.mjs takes it off)`);
+  else { need(old.flags?.oil, `paper 21, unmark: ${name} carries no oil mark on the old chart`); unmark.push(name); }
+}
+// The Soviet sum (ruling 231, 1(f)): what her own fields and her home row give, the old chart against the whole world.
+const sovOff = oldChart.regions.filter((r) => r.owner === 'SOV' && r.flags?.oil).reduce((s, r) => s + (oldFields[r.name] ?? oldFields._default), 0) + oldOil.home.SOV;
+const sovOn = oldChart.regions.filter((r) => r.owner === 'SOV' && r.flags?.oil && !unmark.includes(r.name)).reduce((s, r) => s + (oldFields[r.name] ?? oldFields._default), 0)
+  + chart.regions.filter((r) => r.id >= farFirst && owner.get(r.name) === 'SOV' && r.flags?.oil && !r.flags?.col).reduce((s, r) => s + oilFields[r.name], 0) + (oilHome.SOV ?? oldOil.home.SOV);
+need(sovOn === sovOff + 1, `the Soviet Union's oil is ${sovOff} on the old chart and ${sovOn} on the whole world: ruling 231 asks for one more (North Sakhalin)`);
+notes.push(`oil: ${Object.entries(oilFields).map(([n, y]) => `${n} ${y} (${owner.get(n)}${chart.regions.find((x) => x.name === n).flags.col ? ', colony' : ''})`).join(', ')}`);
+notes.push(`oil: home ${Object.entries(oilHome).map(([n, v]) => `${n} ${v} (was ${oldOil.home[n]})`).join(', ')}; the old chart's mark off: ${unmark.join(', ')}; the Soviet Union's own oil ${sovOff} on the old chart, ${sovOn} on the whole world`);
+
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'pacific-planner/far-yards.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -265,6 +312,8 @@ const out = {
   arsenal: { yards },
   // Two chief towns of the old chart whose names far-side provinces carry as their own: the old provinces take another town's (the planner's paper 21).
   towns: { names: townNames },
+  // What each far-side oilfield yields, and the Soviet home row once its fields are on the chart (rulings 194 and 231; the planner's far-oil.md).
+  resources: { oil: { fields: oilFields, home: oilHome } },
   // A great power founds and joins no League. The two clients are barred by their tie (league.ts), and keep a small country's own path.
   league: { never: ['JAP'] },
   traits: {
@@ -288,7 +337,7 @@ const out = {
     ],
   },
   manpower: { pool, class: klass },
-  setup: { held: Object.fromEntries(Object.entries(held).sort(([a], [b]) => (a < b ? -1 : 1))) },
+  setup: { held: Object.fromEntries(Object.entries(held).sort(([a], [b]) => (a < b ? -1 : 1))), unmark },
   'setup-1939': dated,
 };
 

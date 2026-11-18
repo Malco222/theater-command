@@ -20,7 +20,7 @@ import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
-import { fieldYield, resRules } from './resources';
+import { fieldOverseas, fieldYield, resRules } from './resources';
 import { whyNoReturn, whyNotFreedBy } from './liberation';
 
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
@@ -234,7 +234,7 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
     items.push({ key: 'income', label: 'Money', text: `${income} a month to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });
-  if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });
+  if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) && !fieldOverseas(r) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });
   if (r.port) items.push({ key: 'harbour', label: 'Harbour', text: yard > 0 ? `A harbour with a shipyard of level ${yard}: a base for fleets, and a port for supply and for landings` : 'A harbour: a base for fleets, and a port for supply and for landings' });
   if (airfield > 0) items.push({ key: 'airfield', label: 'Airfield', text: `An airfield of level ${airfield} to fly from` });
   if (rails >= 3) items.push({ key: 'rail', label: 'Railway', text: `A junction where ${rails} lines meet` });

@@ -26,10 +26,11 @@ import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, sameS
 import { setStop } from '../src/campaign/history';
 import { small } from '../src/campaign/league';
 import { NAVY } from '../src/campaign/navy';
+import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { stalemates, startOpen } from '../src/campaign/staff';
-import { townName } from '../src/campaign/towns';
+import { prizeOf, townName } from '../src/campaign/towns';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
@@ -406,5 +407,68 @@ describe("the whole world's names and marks (the planner's paper 21)", () => {
     for (const id of marked) expect(g.regions[id].ctrl, g.regions[id].name).toBe('VIC');
     for (const id of free) expect(g.regions[id].ctrl, g.regions[id].name).toBe('UK');
     for (const name of ['New Caledonia', 'Fort-Lamy', 'Douala', 'Brazzaville']) expect(free).toContain(g.byName[name].id);
+  });
+});
+
+describe("the whole world's oil (rulings 194 and 231)", () => {
+  const line = (g: Game, nat: string, key: string) => stores(g, nat)!.oil.income.find((l) => l.key === key)!;
+
+  it('gives every oilfield on the chart a yield of its own, and stands the Caspian\'s oil at Baku', () => {
+    const g = grand();
+    const far = g.regions.filter((r) => r.id >= FAR_FIRST && r.oil);
+    expect(far.length).toBe(17);
+    expect(Object.keys(FW.resources.oil.fields).sort()).toEqual(far.map((r) => r.name).sort());
+    for (const r of g.regions) if (r.oil) expect(RES.oil.fields[r.name], r.name).toBeGreaterThan(0);
+    // Kirovabad stood for Baku while Baku was off the chart's edge: its mark is off, on a fresh game and on a load.
+    expect(FAR_SETUP.unmark).toEqual(['Kirovabad']);
+    expect([g.byName['Kirovabad'].oil, g.byName['Baku'].oil]).toEqual([false, true]);
+    expect([RES.oil.fields.Baku, RES.oil.fields.Kirovabad]).toEqual([40, 40]);
+    expect(fieldYield(g, g.byName['Kirovabad'])).toBe(0);
+    const again = loadGame(saveGame(g))!;
+    expect([again.byName['Kirovabad'].oil, again.byName['Baku'].oil]).toEqual([false, true]);
+    // The Gulf's oil reaches Britain by its route and through Iraq's 12, as on the old chart (231, 1(d)).
+    expect([g.byName['Ahwaz'].oil, g.byName['Dhahran'].oil, g.byName['Iraq'].oil]).toEqual([false, false, true]);
+    // The Soviet home row stood for Emba, Turkmenia and Bashkiria, which are fields on the chart now.
+    expect(RES.oil.home.SOV).toBe(1);
+  });
+
+  it("leaves each of the six powers the oil it makes at home on the old chart, to the unit, save the Soviet Union's one from North Sakhalin (194(j))", () => {
+    const g = grand();
+    // What each power's own fields and its wells at home gave on the first day with the far side off: fields, home.
+    const old: Record<string, [number, number]> = { GER: [0, 14], UK: [0, 0], FRA: [0, 1], ITA: [0, 2.5], SOV: [60, 4], USA: [100, 20] };
+    expect(Object.keys(old).sort()).toEqual([...RES.nations].sort());
+    for (const [nat, [fields, home]] of Object.entries(old)) {
+      const now = (line(g, nat, 'fields')?.amount ?? 0) + (line(g, nat, 'home')?.amount ?? 0);
+      expect(now, nat).toBe(fields + home + (nat === 'SOV' ? 1 : 0));
+      expect(line(g, nat, 'taken')?.amount ?? 0, nat).toBe(0);
+    }
+    expect(line(g, 'SOV', 'fields')).toMatchObject({ amount: 64, count: 7 });
+    expect(line(g, 'SOV', 'home').amount).toBe(1);
+  });
+
+  it('draws nothing at home from a field on colony ground, for its owner or for a conqueror (194, point 1)', () => {
+    const g = grand();
+    const colony = g.regions.filter((r) => r.oil && r.overseas);
+    expect(colony.map((r) => r.name).sort()).toEqual(['Bahrain', 'Balikpapan', 'Brunei', 'Dibrugarh', 'Hurghada', 'Medan', 'Palembang', 'Rawalpindi', 'Soerabaja', 'Tarakan', 'Yenangyaung']);
+    for (const r of colony) expect(fieldOverseas(r), r.name).toBe(true);
+    for (const r of g.regions) if (r.id < FAR_FIRST) expect(fieldOverseas(r), r.name).toBe(false);
+    // Britain owns and holds six of them, and has no oilfield at home.
+    const hers = colony.filter((r) => r.owner === 'UK' && r.ctrl === 'UK');
+    expect(hers.length).toBe(6);
+    expect(line(g, 'UK', 'fields')?.count ?? 0).toBe(0);
+    expect(line(g, 'UK', 'fields')?.amount ?? 0).toBe(0);
+    // Taken, they give the conqueror nothing at home either; a field on home ground gives him his share.
+    const before = stores(g, 'GER')!.oil.made;
+    const brunei = g.byName['Brunei'], baku = g.byName['Baku'];
+    brunei.ctrl = 'GER';
+    expect(stores(g, 'GER')!.oil.made).toBe(before);
+    baku.ctrl = 'GER';
+    expect(stores(g, 'GER')!.oil.made).toBeCloseTo(before + 40 * RES.oil.occupied, 9);
+    // The prize card promises no oil for the depots from a colony's field, and still calls it an oilfield.
+    const words = (name: string): string => prizeOf(g, g.byName[name].id, 'GER')!.items.find((i) => i.key === 'oil')!.text;
+    brunei.ctrl = 'UK'; baku.ctrl = 'SOV';
+    setWar(g, 'GER', 'UK'); setWar(g, 'GER', 'SOV');
+    expect(words('Brunei')).toBe('An oilfield');
+    expect(words('Baku')).toMatch(/^An oilfield: 24 a month to your depots/);
   });
 });

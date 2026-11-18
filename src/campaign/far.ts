@@ -238,7 +238,8 @@ function parts(g: Game, client: string, patron: string): void {
 
 /**
  * The far side's ground as it stood on 1 September 1939, set as the chart is attached and before its countries are
- * made (world.ts): the provinces another than their owner holds, and the capitals that move.
+ * made (world.ts): the provinces another than their owner holds, the capitals that move, and the oil marks the old
+ * chart gives up to the far side.
  */
 export function farGround(g: Game): void {
   if (!farOn(g)) return;
@@ -252,6 +253,12 @@ export function farGround(g: Game): void {
     for (const r of g.regions) if (r.owner === id && r.cap && r !== to) r.cap = false;
     to.cap = true;
     n.capital = to.id;
+  }
+  // The oil the old chart marked one province short of where it lay, because the place was off its edge (ruling 231,
+  // 1(b): Kirovabad stood for Baku). The mark is the chart's and no save keeps it, so it comes off on a load as well.
+  for (const name of FAR_SETUP.unmark) {
+    const r = g.byName[name];
+    if (r && r.id < FAR_FIRST) r.oil = false;
   }
 }
 

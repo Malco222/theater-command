@@ -9,6 +9,7 @@
   "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
   "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z",
   "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
+  "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
   "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
@@ -2027,6 +2028,32 @@
    "Dagestan": "Buynaksk"
   }
  },
+ "resources": {
+  "oil": {
+   "fields": {
+    "Palembang": 14,
+    "Balikpapan": 5,
+    "Medan": 3,
+    "Soerabaja": 3,
+    "Brunei": 3,
+    "Yenangyaung": 3,
+    "Tarakan": 2,
+    "Akita": 1,
+    "North Sakhalin": 1,
+    "Guryev": 1,
+    "Krasnovodsk": 1,
+    "Sterlitamak": 1,
+    "Baku": 40,
+    "Bahrain": 3,
+    "Hurghada": 3,
+    "Rawalpindi": 1,
+    "Dibrugarh": 1
+   },
+   "home": {
+    "SOV": 1
+   }
+  }
+ },
  "league": {
   "never": [
    "JAP"
@@ -2287,7 +2314,10 @@
    "Tungkun": "JAP",
    "Wuhu": "JAP",
    "Yochow": "JAP"
-  }
+  },
+  "unmark": [
+   "Kirovabad"
+  ]
  },
  "setup-1939": {
   "expeditions": [
