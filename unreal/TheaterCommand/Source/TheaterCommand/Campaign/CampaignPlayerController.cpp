@@ -7976,11 +7976,12 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		{
 			// (A guard, 18 November 2026. Rules Version 85 read 339 provinces more than the table drew, and an army
 			// that marched into one of them was nowhere to be seen; nothing said so. The rules' picture holds one
-			// holder for every province they know: if that is not the number the table has, it is said once, as an
-			// error, so that the picture check stops on it.)
+			// holder for every province they know: if that is more than the table has, it is said once, as an error,
+			// so that the picture check stops on it. (Fewer is as it should be: a history scenario's rules know
+			// Europe's 375 alone, and the world beyond them is the table's backdrop.)
 			static int32 SaidFor = -1;
 			const int32 Known = View.RegionHolder.Num(), Drawn = Map->GetData().Regions.Num();
-			if (Known != Drawn && SaidFor != Known)
+			if (Known > Drawn && SaidFor != Known)
 			{
 				SaidFor = Known;
 				UE_LOG(LogTheater, Error, TEXT("The rules know %d provinces and the table draws %d: an army in a province the table does not have cannot be seen. The map files the table reads are not the ones the rules were built from."), Known, Drawn);
