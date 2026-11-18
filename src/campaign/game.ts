@@ -3637,6 +3637,22 @@ export function sovietEvent(g: Game): void {
     for (const c of [...r.units]) if (c.nat === 'POL') removeCorps(g, c);
     r.ctrl = 'SOV';
   }
+  // In the grand campaign, with Poland still standing, the pact's line holds all the same: ground east of it that the
+  // German army has already overrun is handed over as the Red Army comes in, and the Germans there fall back west of
+  // the line, as they gave up Brest and the approaches to Lwow in September 1939. (Ruling 232 lets the German army
+  // sweep the whole zone in its first month while Warsaw holds out, rider b566; without this the Red Army found its
+  // six places in German hands and stayed at home, and the Winter War was never fought in earnest.) The design
+  // director's b571: only where a computer-run power keeps the pact. A player's ground and a player's corps are never
+  // moved by it: with a player's Germany the zone stays as he left it.
+  if (!fallen && g.flags.open === 1) {
+    const mine = (r: Region): boolean => g.human !== null && (r.ctrl === g.human || [...r.units, ...garrisonOf(r)].some((c) => c.nat === g.human));
+    const over = g.regions.filter((r) => r.sov && r.owner === 'POL' && r.ctrl !== 'SOV' && r.ctrl !== 'POL' && !atWar(g, 'SOV', r.ctrl) && !mine(r));
+    for (const r of over) {
+      for (const c of [...r.units, ...garrisonOf(r)]) if (c.nat === 'POL') removeCorps(g, c);
+      r.ctrl = 'SOV';
+    }
+    for (const r of over) for (const c of [...r.units, ...garrisonOf(r)]) if (c.nat !== 'SOV') sendHome(g, c);
+  }
   const fronts = g.corps.filter((c) => c.nat === 'SOV' && !c.hold);
   const dest = ['Wilno', 'Brest', 'Lwow', 'Volhynia', 'Bialystok', 'Polesie'];
   fronts.forEach((c, i) => { const r = g.byName[dest[i % dest.length]]; if (r.ctrl === 'SOV') place(g, c, r); });
