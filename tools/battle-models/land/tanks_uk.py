@@ -206,7 +206,7 @@ def matilda(fine=True, tag="UK"):
         v.slab((x0 + 0.10, -0.80, zt + 0.20), (x0 + 0.26, -0.76, zt + 0.44), "upper", 0.006)
     v.aerial("aerial", "turret", (x0 - 0.56, -0.36, roof - 0.03), 2.0)
     for s in (LEFT, RIGHT):
-        v.mark("UK-TANK", (x0 - 0.06, s * 0.796, zt + 0.33), Y * s, 0.15, part="turret")
+        v.mark("UK", (0.45, s * 0.901, zg + 0.19), Y * s, 0.14, part="hull")
 
     # ---- the gun: the 2-pounder in a rounded shield, a machine gun on its right ---------------------------------
     tx, tz = x0 + 0.60, zt + 0.30

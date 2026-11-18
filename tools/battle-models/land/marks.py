@@ -64,12 +64,6 @@ def shapes(tag):
         return [ring(0.0, 1.0, BLUE), ring(0.0, 0.62, WHITE), ring(0.0, 0.3, RED)]
     if tag == "UK-B":
         return [ring(0.0, 1.0, BLUE), ring(0.0, 0.42, RED)]
-    if tag == "ITA":                                    # a company's sign: its colour, a white bar for the platoon
-        return [rect(-1, 1, -0.6, 0.6, RED), rect(-0.14, 0.14, -0.6, 0.6, WHITE)]
-    if tag == "FRA":
-        return [ring(0.0, 1.0, RED), ring(0.0, 0.66, WHITE), ring(0.0, 0.33, "2B4C8C")]
-    if tag == "UK-TANK":                                # the red-white-red flash British tanks wore, 1941 and 1942
-        return [rect(-1, -0.333, -0.56, 0.56, RED) + rect(-0.333, 0.333, -0.56, 0.56, WHITE) + rect(0.333, 1, -0.56, 0.56, RED)]
     if tag == "UK-FIN":
         return [rect(0.25, 0.75, -0.9, 0.9, RED) + rect(-0.25, 0.25, -0.9, 0.9, WHITE) + rect(-0.75, -0.25, -0.9, 0.9, BLUE)]
     if tag == "JAP-PLAIN":
