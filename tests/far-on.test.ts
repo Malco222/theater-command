@@ -623,5 +623,36 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(man.length).toBeGreaterThan(0);
     for (const r of man) expect(r.overseas, r.name).toBe(false);
   });
+
+  it("pays an ally that keeps it for a fallen country a tenth of a keeper's share: the Indies are no purse of London's", () => {
+    const g = grand();
+    const palembang = g.byName['Palembang'], batavia = g.byName['Batavia'];
+    expect(palembang).toMatchObject({ owner: 'NED', ctrl: 'NED', overseas: true, oil: true });
+    expect(batavia).toMatchObject({ owner: 'NED', overseas: true, port: true });
+    const whole = g.regions.filter((r) => r.owner === 'NED' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK', true).total, 0);
+    // May 1940: the Netherlands fall to Germany, and their colonies beyond the old chart pass into Britain's keeping.
+    // (Attacked, they stand with Germany's enemies: that is what makes Britain their keeper and no conqueror.)
+    if (!atWar(g, 'UK', 'GER')) setWar(g, 'UK', 'GER');
+    declareWar(g, 'GER', 'NED');
+    capitulate(g, 'NED', 'GER');
+    expect(g.nations.NED.alive).toBe(false);
+    expect([palembang.ctrl, batavia.ctrl]).toEqual(['UK', 'UK']);
+    expect(allied(g, 'UK', 'NED')).toBe(true);
+    const kept = provinceYield(g, palembang, 'UK');
+    expect(kept.oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied * 0.1, 9);
+    expect(kept.port).toBeCloseTo(palembang.port ? BUDGET.port * BUDGET.occupied * landFactor(palembang) * 0.1 : 0, 9);
+    expect(provinceYield(g, batavia, 'UK').port).toBeCloseTo(BUDGET.port * BUDGET.occupied * landFactor(batavia) * 0.1, 9);
+    // All the Indies together: under one a month to their keeper, where a conqueror's share was near seven.
+    const keeping = g.regions.filter((r) => r.owner === 'NED' && r.ctrl === 'UK' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK').total, 0);
+    expect(whole).toBeGreaterThan(6);
+    expect(keeping).toBeCloseTo(whole * 0.1, 6);
+    // A conqueror is paid as ever: Japan is no ally of the Netherlands.
+    expect(allied(g, 'JAP', 'NED')).toBe(false);
+    expect(provinceYield(g, palembang, 'JAP').oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied, 9);
+    // A colony of the fallen country nearer home, kept the same way, pays its keeper as it always has.
+    const near = g.regions.find((r) => r.owner === 'NED' && r.overseas && shoreOf(r) === 1 && r.ctrl === 'UK')!;
+    expect(near).toBeDefined();
+    expect(provinceYield(g, near, 'UK').land).toBeCloseTo(BUDGET.land[near.terrain] * BUDGET.occupied * landFactor(near) * landShare(near), 9);
+  });
 });
 

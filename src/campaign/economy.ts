@@ -170,7 +170,9 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   // A colony on the far side of the world keeps its purse: a tenth of what it pays reaches its own country (rider
   // b462 to ruling 231: India's purse paid for India's army, which comes by its rows). The colonies of the old chart
   // and of the Americas pay as they always have, and so does ground a conqueror has taken.
-  const far = own && farColony(r) ? BUDGET.farColony : null;
+  // (An ally that keeps such a colony for its fallen country is no conqueror: the Indies in Britain's keeping after
+  // May 1940 are no more a purse of London's than India is, and pay her a tenth of a keeper's share.)
+  const far = farColony(r) && (own || allied(g, nat, r.owner)) ? BUDGET.farColony : null;
   const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
   const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
   const worth = bare || !budgeted(g) ? 1 : landFactor(r);
