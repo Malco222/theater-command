@@ -4885,10 +4885,12 @@ namespace
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
+								// (The UI director, 11:19 on build 1638: the mark rises to the label size, and as a mark it is the
+								// one label that keeps its wide tracking. The binding grows round it.)
 								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 3.0f, 19.0f, 3.0f))
 								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 8, 320)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
+									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Typed(9.0f, true, 80)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 6.0f, 24.0f, 8.0f))
