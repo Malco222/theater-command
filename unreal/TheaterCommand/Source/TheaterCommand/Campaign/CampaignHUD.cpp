@@ -1587,15 +1587,26 @@ namespace
 	}
 
 	/**
+	 * (The UI director's review of build 1628, item 2.) How wide a line is drawn, in the widget's own units, at the
+	 * scale it is painted at. Lettering is laid at the size it is shown (at 1,441 by 878 a card paints below its own
+	 * size), and each letter's step rounds to a whole pixel there, so a line measured at scale 1 can be drawn a twentieth
+	 * wider than it measured: the defender's roster, set to the right, ran a letter past its column.
+	 */
+	double PaintWide(const FString& Words, const FSlateFontInfo& Face, double Scale = 1.0)
+	{
+		const double At = Scale > 0.01 ? Scale : 1.0;
+		return static_cast<double>(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Face, static_cast<float>(At)).X) / At;
+	}
+
+	/**
 	 * (The UI director, check 19: no word is cut at an edge, and no line begins or ends with a dot.) A phrase set to a
 	 * measure: where it is wider it folds at its spaces, and with bBracket a name folds before its bracket first
 	 * ("Third Army" over "(2nd Division and 1st Cavalry Division)"). A word is never cut: one wider than the measure
-	 * stands alone on its line.
+	 * stands alone on its line. Scale is the one it is painted at (PaintWide).
 	 */
-	void FoldWords(const FString& Phrase, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, bool bBracket = false)
+	void FoldWords(const FString& Phrase, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, bool bBracket = false, double Scale = 1.0)
 	{
-		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		auto Wide = [&Face, Scale](const FString& Words) { return PaintWide(Words, Face, Scale); };
 		TArray<FString> Pieces;
 		int32 Bracket = INDEX_NONE;
 		if (bBracket && Wide(Phrase) > Room && Phrase.FindChar(TEXT('('), Bracket) && Bracket > 0)
@@ -1665,9 +1676,9 @@ namespace
 	 * (Check 19.) A line of phrases parted by dots ("Odds of 1.5 to 1 in your favour  ·  about 62% to take Mexico
 	 * City"), folded to a measure. A fold falls where a dot stands, and the dot goes with it: the fold parts the two
 	 * facts already, so no line begins or ends with a dot. A phrase wider than the measure on its own folds at a space.
-	 * A line break in the text stays one.
+	 * A line break in the text stays one. Scale is the one it is painted at (PaintWide).
 	 */
-	void FoldPhrases(const FString& Text, const FSlateFontInfo& Face, double Room, TArray<FString>& Out)
+	void FoldPhrases(const FString& Text, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, double Scale = 1.0)
 	{
 		TArray<FString> Paragraphs;
 		Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
@@ -1676,8 +1687,7 @@ namespace
 			Out.Append(Paragraphs); // (not laid out yet: nothing to fold to)
 			return;
 		}
-		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		auto Wide = [&Face, Scale](const FString& Words) { return PaintWide(Words, Face, Scale); };
 		const TCHAR Dot = static_cast<TCHAR>(0x00B7);
 		for (const FString& Paragraph : Paragraphs)
 		{
@@ -1725,7 +1735,7 @@ namespace
 					Line.Reset();
 				}
 				TArray<FString> Folded;
-				FoldWords(Phrase, Face, Room, Folded);
+				FoldWords(Phrase, Face, Room, Folded, false, Scale);
 				for (int32 K = 0; K + 1 < Folded.Num(); ++K)
 				{
 					Out.Add(Folded[K]);
@@ -1766,15 +1776,14 @@ namespace
 			Room = FMath::Max(static_cast<double>(Args._Guess), 24.0);
 		}
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
 			TArray<FString> Lines;
-			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines, LayoutScale);
 			double Widest = 0.0;
 			for (const FString& Line : Lines)
 			{
-				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Line, Face).X));
+				Widest = FMath::Max(Widest, PaintWide(Line, Face, LayoutScale));
 			}
 			return FVector2D(FMath::Min(Widest, Room), Lines.Num() * Step());
 		}
@@ -1784,14 +1793,13 @@ namespace
 			// (the width it is given is the width it folds to from now on)
 			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
 			TArray<FString> Lines;
-			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines, Geometry.Scale);
 			const double High = Step();
 			const FLinearColor Shown = Style.GetColorAndOpacityTint() * Ink;
 			double Y = 0.0;
 			for (const FString& Line : Lines)
 			{
-				const double Wide = static_cast<double>(Measure->Measure(Line, Face).X);
+				const double Wide = PaintWide(Line, Face, Geometry.Scale);
 				const double X = Justify == ETextJustify::Center ? 0.5 * (Room - Wide) : Justify == ETextJustify::Right ? Room - Wide : 0.0;
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, High), FSlateLayoutTransform(FVector2D(FMath::Max(X, 0.0), Y))), Line, Face, ESlateDrawEffect::None, Shown);
 				Y += High;
@@ -1818,8 +1826,10 @@ namespace
 	 * card, in the roster's two forms. Where every corps of the side fits its column on one line, each stands as on the
 	 * kit: "XIX Corps · armoured, 2 divisions · 30,000 men". Where any does not, every corps of that side takes two
 	 * lines: the name alone in the lighter paper (folded before its bracket, else at a space, where it is wider than
-	 * the column) and under it the figures in the darker, which never fold, with no dot between the two, and 5 between
-	 * one corps and the next. The right side is set to the right. Typed 12 on 17, the sheet's pixels.
+	 * the column) and under it the figures in the darker, with no dot between the two, and 5 between one corps and the
+	 * next. The right side is set to the right. Typed 12 on 17, the sheet's pixels. (The UI director's review of build
+	 * 1628, item 2: every line wraps inside its half of the card, at any width; the figures too fold, at their dots,
+	 * where they are wider than the column, and every width is measured at the scale the card is painted at.)
 	 */
 	class SRosterBlock : public SLeafWidget
 	{
@@ -1837,15 +1847,14 @@ namespace
 
 		static constexpr double LineHigh = 17.0, Between = 5.0;
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
 			TArray<FRow> Rows;
-			const double High = Lay(Room, Rows);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const double High = Lay(Room, Rows, LayoutScale);
 			double Widest = 0.0;
 			for (const FRow& Row : Rows)
 			{
-				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Row.Words, Type()).X));
+				Widest = FMath::Max(Widest, PaintWide(Row.Words, Type(), LayoutScale));
 			}
 			return FVector2D(FMath::Min(Widest, Room), High);
 		}
@@ -1854,13 +1863,12 @@ namespace
 		{
 			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
 			TArray<FRow> Rows;
-			Lay(Room, Rows);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			Lay(Room, Rows, Geometry.Scale);
 			const FLinearColor Paper300(FColor::FromHex(TEXT("CDBF9C")));
 			const FSlateFontInfo Face = Type();
 			for (const FRow& Row : Rows)
 			{
-				const double Wide = static_cast<double>(Measure->Measure(Row.Words, Face).X);
+				const double Wide = PaintWide(Row.Words, Face, Geometry.Scale);
 				const double X = bOurs ? 0.0 : FMath::Max(Room - Wide, 0.0);
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, LineHigh), FSlateLayoutTransform(FVector2D(X, Row.Y))), Row.Words, Face,
 					ESlateDrawEffect::None, Style.GetColorAndOpacityTint() * (Row.bFigures ? Paper300 : Cream));
@@ -1878,8 +1886,8 @@ namespace
 
 		static FSlateFontInfo Type() { return Typed(9.0f); } // (typed 12: the sheet's pixels are three quarters of a point)
 
-		/** The rows at a width, top to bottom; returns the height they take. */
-		double Lay(double Width, TArray<FRow>& Rows) const
+		/** The rows at a width and the scale they are painted at, top to bottom; returns the height they take. */
+		double Lay(double Width, TArray<FRow>& Rows, double Scale) const
 		{
 			if (!Player.IsValid())
 			{
@@ -1888,13 +1896,12 @@ namespace
 			const FFaceOff& Face = Player->GetFaceOff();
 			const TArray<FRosterLine>& Roster = bOurs ? Face.OurRoster : Face.TheirRoster;
 			const FSlateFontInfo With = Type();
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 			auto Whole = [](const FRosterLine& Corps) { return Corps.Figures.IsEmpty() ? Corps.Name : Corps.Name + TEXT(" \u00B7 ") + Corps.Figures; };
 			// One form for the whole side: one line a corps only where every corps fits.
 			bool bOneLine = true;
 			for (const FRosterLine& Corps : Roster)
 			{
-				bOneLine = bOneLine && static_cast<double>(Measure->Measure(Whole(Corps), With).X) <= Width;
+				bOneLine = bOneLine && PaintWide(Whole(Corps), With, Scale) <= Width;
 			}
 			auto Add = [&Rows](const FString& Words, bool bFigures, double Y)
 			{
@@ -1915,7 +1922,7 @@ namespace
 				}
 				Y += Index > 0 ? Between : 0.0;
 				TArray<FString> Name;
-				FoldWords(Corps.Name, With, Width, Name, true);
+				FoldWords(Corps.Name, With, Width, Name, true, Scale);
 				for (const FString& Line : Name)
 				{
 					Add(Line, false, Y);
@@ -1923,8 +1930,14 @@ namespace
 				}
 				if (!Corps.Figures.IsEmpty())
 				{
-					Add(Corps.Figures, true, Y); // (the figures never fold: forty letters at most)
-					Y += LineHigh;
+					// (the figures fold where they are wider than the column, at a dot, and the dot goes with the fold)
+					TArray<FString> Figures;
+					FoldPhrases(Corps.Figures, With, Width, Figures, Scale);
+					for (const FString& Line : Figures)
+					{
+						Add(Line, true, Y);
+						Y += LineHigh;
+					}
 				}
 			}
 			return Y;
@@ -1986,8 +1999,7 @@ namespace
 			const FFaceOff& Face = Player->GetFaceOff();
 			static const FSlateColorBrush Solid(FLinearColor::White);
 			const FSlateFontInfo Sentence = Serif(TEXT("Regular"), 11.5f), Slanted = Serif(TEXT("Italic"), 10.5f), Head = Typed(8.5f, true, 140);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& With) { return static_cast<double>(Measure->Measure(Words, With).X); };
+			auto Wide = [&Geometry](const FString& Words, const FSlateFontInfo& With) { return PaintWide(Words, With, Geometry.Scale); };
 			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& With, const FLinearColor& Ink)
 			{
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(900.0, 30.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, With, ESlateDrawEffect::None, Ink);
@@ -4141,51 +4153,6 @@ namespace
 	};
 
 	/**
-	 * (The UI director, 18 November 2026, on build 1596: every great power in sight.) Where a list on the opening card
-	 * runs on below what shows, it ends in a fade into the card's own leather: thin bands, clear at the top and nearly
-	 * solid at the foot, under the plate that counts what is below.
-	 */
-	class SListFade : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SListFade) : _Fill(FLinearColor::Black) {}
-			SLATE_ARGUMENT(FLinearColor, Fill)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Fill = Args._Fill;
-		}
-
-		virtual FVector2D ComputeDesiredSize(float) const override
-		{
-			return FVector2D::ZeroVector;
-		}
-
-		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
-		{
-			const FVector2D Size = Geometry.GetLocalSize();
-			const int32 Bands = 14;
-			const double Band = Size.Y / Bands;
-			const FSlateRoundedBoxBrush Plain(FLinearColor::White, 0.0f);
-			for (int32 Step = 0; Step < Bands; ++Step)
-			{
-				// (eased: most of the change near the foot, so the last whole row still reads)
-				const float Share = static_cast<float>(Step + 1) / Bands;
-				// (each band from its own top to the next band's, edge to edge: none laid over another, which would
-				// tint the strip between them twice and show as a faint line)
-				const double Top = Step * Band, Bottom = Step + 1 == Bands ? Size.Y : (Step + 1) * Band;
-				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X, Bottom - Top), FSlateLayoutTransform(FVector2D(0.0, Top))), &Plain,
-					ESlateDrawEffect::None, Fill.CopyWithNewOpacity(0.94f * Share * Share));
-			}
-			return LayerId + 1;
-		}
-
-	private:
-		FLinearColor Fill;
-	};
-
-	/**
 	 * (Rules 84.3.3; the art director's look brief, section 6; the kit's tc-panel, tc-step, tc-seg and tc-close.) The
 	 * Guide's first page: a kit panel 640 wide, THE GUIDE · FIRST COMMAND over "The ten lessons" and one line of state,
 	 * then the ten in rows 38 high under a small label for each month. Done: a brass-700 edge, a brass-500 disc with a
@@ -4857,14 +4824,16 @@ namespace
 							.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? FText::FromString((bOurs ? F->OurName : F->TheirName).ToString().ToUpper()) : FText::GetEmpty(); })
 						]
 					]
-					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					// (The UI director's review of build 1628, item 2: every line wraps inside its half of the card, the
+					// defender's set to the right; the slots give each the column's whole width.)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(Justify)
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurGeneral : F->TheirGeneral) : FText::GetEmpty(); })
 					]
-					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+						SNew(SPhraseText).Face(Font(TEXT("Regular"), 11)).Ink(Muted).Justify(Justify).Guess(370.0f)
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurStrength : F->TheirStrength) : FText::GetEmpty(); })
 					]
 					// (Check 19.) The corps, in the roster's two forms; the slot gives it the column's whole width.
@@ -7234,10 +7203,13 @@ namespace
 					// and e09457e.) The card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12
 					// (48) above and below, its type at full size, so that under the title band (FIRST COMMAND on its own
 					// row, CONTINUE at the end of the pages' row) the seven great powers, the three settings and BEGIN AS ...
-					// all show without scrolling; the smaller nations take what height is left, down to their MORE plate
-					// alone. Where even that is more than the screen less its 48s (a pick whose sentence runs long, on a
-					// short frame), the card stands taller, as tall as it needs, and the 48s give, down to 16; only past
-					// that is it drawn smaller, and never under 0.95 of its size (04:00). (See LookAtList for what it needs.)
+					// all show without scrolling; the smaller nations take what height is left. (The give order of 07:10,
+					// and the review of build 1628, item 4.) The smaller nations give down to one whole row and the MORE
+					// plate in its band under it, never less; where even that is more than the screen less its 48s, the
+					// card stands taller, as tall as it needs, and the 48s give, down to 16; only past that is it drawn
+					// smaller, and never under 0.95 of its size; and only past that, on the smallest frame (1,280 by 720),
+					// does the list go down to its plate alone. The summary at the foot is as tall for every nation, so what
+					// the card needs does not change with the pick. (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
@@ -7358,49 +7330,60 @@ namespace
 										]
 									]
 									// What the page offers. (The UI director, on build 1596.) The list stands above the settings, never
-									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, it ends
-									// in a fade and a plate counting what is below ("24 MORE ▼"); a click on the plate scrolls it down by
-									// one row of cards. (03:48: the full triangle, a size under the plate's type, so that it sits at the
-									// letters' height and not above them. The small one is in neither the typewriter nor, for certain, the
-									// face of signs it falls back on, and a sign no face has is drawn as an empty box.)
+									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, a plate
+									// counts what is below ("24 MORE ▼"); a click on the plate scrolls it down by one row of cards. (03:48:
+									// the full triangle, a size under the plate's type, so that it sits at the letters' height and not
+									// above them. The small one is in neither the typewriter nor, for certain, the face of signs it falls
+									// back on, and a sign no face has is drawn as an empty box.) (The UI director's review of build 1628,
+									// items 4 and 5.) The list shows whole rows only, no half row: it is as high as the rows that fit
+									// whole, and the plate sits in its own band under the last of them, never on a card; what room is
+									// over stands under the plate (see LookAtList).
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(SOverlay)
-										+ SOverlay::Slot()
+										SAssignNew(ListArea, SBox).VAlign(VAlign_Top)
 										[
-											SAssignNew(StartsScroll, SScrollBox)
-											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
 											[
-												SAssignNew(Starts, SVerticalBox)
-											]
-										]
-										+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 0.0f)
-										[
-											SNew(SBox).HeightOverride(40.0f)
-											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-											[
-												SNew(SListFade).Fill(Leather)
-											]
-										]
-										+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 4.0f)
-										[
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 3.0f, 14.0f, 4.0f)).IsFocusable(false)
-											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
-											.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
-											[
-												SNew(SHorizontalBox)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+												SNew(SBox)
+												.HeightOverride_Lambda([this]()
+												{
+													// (until the list is first measured, the whole area: see LookAtList; and never quite nothing, so
+													// that it is still laid out and measured where the list is down to its plate alone)
+													return FOptionalSize(FMath::Max(ListViewHigh >= 0.0f ? ListViewHigh : ListArea.IsValid() ? static_cast<float>(ListArea->GetTickSpaceGeometry().GetLocalSize().Y) : 0.0f, 1.0f));
+												})
 												[
-													SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
-													.Text_Lambda([this]()
-													{
-														return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE"), ListBelow) : FString(TEXT("MORE")));
-													})
+													SAssignNew(StartsScroll, SScrollBox)
+													.OnUserScrolled_Lambda([this](float Offset) { SnapList(Offset); })
+													+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+													[
+														SAssignNew(Starts, SVerticalBox)
+													]
 												]
-												// (on the letters' line: both lines are measured by the typewriter's face, so their feet meet)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+											[
+												SNew(SBox).HeightOverride(PlateBand).HAlign(HAlign_Center).VAlign(VAlign_Center)
+												.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
 												[
-													SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(BrightBrass).Text(FText::FromString(TEXT("\u25BC")))
+													SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 3.0f, 14.0f, 4.0f)).IsFocusable(false)
+													.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
+													[
+														SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+														[
+															SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
+															.Text_Lambda([this]()
+															{
+																return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE"), ListBelow) : FString(TEXT("MORE")));
+															})
+														]
+														// (on the letters' line: both lines are measured by the typewriter's face, so their feet meet)
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+														[
+															SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(BrightBrass).Text(FText::FromString(TEXT("\u25BC")))
+														]
+													]
 												]
 											]
 										]
@@ -9827,8 +9810,9 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()[Top]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 				[
-					// (cut, where it must be, after a whole word: the art director's round 38)
-					SNew(SWordLine).Words(Told.Text).Face(Font(TEXT("Regular"), 11)).Ink(Cream.CopyWithNewOpacity(0.88f)).ToolTipText(FText::FromString(Told.Text))
+					// (The UI director's review of build 1628: no sentence is cut with three dots. The rules give it whole,
+					// and it wraps to a second line and the row grows; a dot falls at a fold, as check 19 has it.)
+					SNew(SPhraseText).Text(FText::FromString(Told.Text)).Face(Font(TEXT("Regular"), 11)).Ink(Cream.CopyWithNewOpacity(0.88f)).Guess(420.0f)
 				]
 			];
 			for (const FMonthFigure& Figure : Told.Figures)
@@ -10244,10 +10228,10 @@ namespace
 				if (!Card.Foot.IsEmpty() || bMore)
 				{
 					TSharedRef<SHorizontalBox> Under = SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, bMore ? 12.0f : 0.0f, 0.0f)
 						[
-							// (no line is cut mid-word: where it must be cut, it is cut after a whole word)
-							SNew(SWordLine).Words(Card.Foot).Face(Font(TEXT("Regular"), 11)).Ink(Muted).ToolTipText(FText::FromString(Card.Foot))
+							// (no line is cut: it wraps, the UI director's review of build 1628)
+							SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
 						];
 					if (bMore)
 					{
@@ -12992,45 +12976,58 @@ namespace
 
 		/**
 		 * (The UI director, on build 1596.) Whether the opening card's list runs on below what shows, how many cards are
-		 * not wholly in sight below, and how far one row of them is: looked at once a frame, from where the list's rows
+		 * not wholly in sight below, and how high the list stands: looked at once a frame, from where the list's rows
 		 * stand inside it now. Rows scrolled out of sight are not painted, so their places are worked out afresh here
-		 * rather than read from their last painting.
+		 * rather than read from their last painting. (The UI director's review of build 1628, items 4 and 5.) The list
+		 * shows no half row: where it runs on, it stands as high as the lines that fit whole above the plate's band, and
+		 * the plate sits in that band under the last of them; what room is over stands under the plate. A line is each
+		 * of the list's own parts: a heading, a row of cards, a line of the controls.
 		 */
 		void LookAtList()
 		{
 			bListRunsOn = false;
 			ListBelow = 0;
-			ListStep = 0.0f;
-			if (!StartsScroll.IsValid() || !Starts.IsValid() || !Controller.IsValid() || !Controller->GetOpening().bVisible)
+			if (!StartsScroll.IsValid() || !Starts.IsValid() || !ListArea.IsValid() || !Controller.IsValid() || !Controller->GetOpening().bVisible)
 			{
 				return;
 			}
 			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
 			const FGeometry& Along = Starts->GetTickSpaceGeometry();
+			const double Area = ListArea->GetTickSpaceGeometry().GetLocalSize().Y;
 			// (The checker's note C: the first frame the card shows, the list and its scroll have not been laid out yet,
 			// and a scroll with no size takes its whole list for what runs on below. Until they have a width, nothing is
 			// measured and no plate is shown. A list squeezed to no height still has its width, and is measured.)
-			if (View.GetLocalSize().X <= 0.0f || Along.GetLocalSize().X <= 0.0f || (OpeningCardBox.IsValid() && OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f))
+			if (View.GetLocalSize().X <= 0.0f || Along.GetLocalSize().X <= 0.0f || ListArea->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f
+				|| (OpeningCardBox.IsValid() && OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f))
 			{
 				return;
 			}
 			FArrangedChildren Arranged(EVisibility::Visible);
 			Starts->ArrangeChildren(Along, Arranged);
-			// (The UI director, 03:53.) What the card needs: all it holds outside the list, and the list down to the foot
-			// of its first row of cards (the great powers, on the grand campaign's page) with the fade and its plate under
-			// it. The rest of the card does not change with the card's height, so this holds still as the card grows.
+			// Each line's top and foot inside the list, wherever the list is scrolled to.
+			ListTops.Reset();
+			ListFeet.Reset();
+			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+			{
+				const FGeometry& Each = Arranged[Index].Geometry;
+				ListTops.Add(static_cast<float>(Along.AbsoluteToLocal(Each.GetAbsolutePosition()).Y));
+				ListFeet.Add(static_cast<float>(Along.AbsoluteToLocal(Each.LocalToAbsolute(FVector2D(0.0, Each.GetLocalSize().Y))).Y));
+			}
+			// (The UI director, 03:53 and 07:10.) What the card needs: all it holds outside the list, and the list down to
+			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
+			// or of its first row on another page, with the plate's band under it. The rest of the card does not change
+			// with the card's height, or with the nation picked, so this holds still as the card grows.
 			float Need = 0.0f;
-			const TSharedPtr<SWidget> FirstRow = ListRows.Num() > 0 ? ListRows[0].Key.Pin() : TSharedPtr<SWidget>();
-			if (OpeningCardBox.IsValid() && FirstRow.IsValid())
+			const int32 Keep = Controller->GetOpening().Tab == 0 && ListRows.Num() > 1 ? 1 : 0;
+			const TSharedPtr<SWidget> KeptRow = ListRows.IsValidIndex(Keep) ? ListRows[Keep].Key.Pin() : TSharedPtr<SWidget>();
+			if (OpeningCardBox.IsValid() && KeptRow.IsValid())
 			{
 				for (int32 Index = 0; Index < Arranged.Num(); ++Index)
 				{
-					const FArrangedWidget& Each = Arranged[Index];
-					if (&Each.Widget.Get() == FirstRow.Get())
+					if (&Arranged[Index].Widget.Get() == KeptRow.Get())
 					{
-						const double Foot = Along.AbsoluteToLocal(Each.Geometry.LocalToAbsolute(FVector2D(0.0, Each.Geometry.GetLocalSize().Y))).Y;
-						const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - View.GetLocalSize().Y;
-						Need = static_cast<float>(FMath::CeilToDouble(Outside + Foot + 40.0)); // (40: the fade, the plate within it)
+						const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - Area;
+						Need = static_cast<float>(FMath::CeilToDouble(Outside + ListFeet[Index] + PlateBand));
 						break;
 					}
 				}
@@ -13047,12 +13044,30 @@ namespace
 			{
 				--OpeningSettle;
 			}
-			bListRunsOn = StartsScroll->GetScrollOffset() < StartsScroll->GetScrollOffsetOfEnd() - 1.0f;
-			if (!bListRunsOn)
+			// Where the list's view begins inside the list (how far it is scrolled), and whether what is left below it
+			// fits in the list's area: then it shows all of it, and there is no plate.
+			const double Top = FMath::Max(static_cast<double>(Along.AbsoluteToLocal(View.GetAbsolutePosition()).Y), 0.0);
+			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+			ListViewTop = static_cast<float>(Top);
+			if (End - Top <= Area + 0.5)
 			{
+				ListViewHigh = static_cast<float>(Area);
 				return;
 			}
-			const double Bottom = View.GetAbsolutePosition().Y + View.GetAbsoluteSize().Y;
+			bListRunsOn = true;
+			// As high as the lines that fit whole above the plate's band; none at all, only on the smallest frame.
+			const double Room = FMath::Max(Area - static_cast<double>(PlateBand), 0.0);
+			double Fit = 0.0;
+			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
+			{
+				const double Foot = static_cast<double>(ListFeet[Index]) - Top;
+				if (Foot > 0.5 && Foot <= Room + 0.5)
+				{
+					Fit = FMath::Max(Fit, Foot);
+				}
+			}
+			ListViewHigh = static_cast<float>(FMath::Min(FMath::CeilToDouble(Fit), Room));
+			// The cards not wholly in sight below, for the plate's count.
 			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
 			{
 				const FArrangedWidget& Each = Arranged[Index];
@@ -13060,31 +13075,85 @@ namespace
 				{
 					return Kept.Key.Pin().Get() == &Each.Widget.Get();
 				});
-				if (!Row)
-				{
-					continue;
-				}
-				if (Each.Geometry.GetAbsolutePosition().Y + Each.Geometry.GetAbsoluteSize().Y > Bottom + 0.5)
+				if (Row && static_cast<double>(ListFeet[Index]) - Top > static_cast<double>(ListViewHigh) + 0.5)
 				{
 					ListBelow += Row->Value;
-					if (ListStep <= 0.0f)
-					{
-						ListStep = static_cast<float>(Each.Geometry.GetLocalSize().Y) + 8.0f; // (a row and the gap under it)
-					}
 				}
-			}
-			if (ListStep <= 0.0f)
-			{
-				ListStep = static_cast<float>(View.GetLocalSize().Y) * 0.6f;
 			}
 		}
 
-		/** The plate's click: the list down by one row of cards, never past its end. */
+		/**
+		 * The plate's click: the list down until the first line not wholly in sight shows whole at the foot, its top on
+		 * a line's top (by one row of cards, where the rows below are of one height), never past its end.
+		 */
 		void ScrollListOn()
 		{
-			if (StartsScroll.IsValid())
+			if (!StartsScroll.IsValid() || !bListRunsOn)
 			{
-				StartsScroll->SetScrollOffset(FMath::Min(StartsScroll->GetScrollOffset() + FMath::Max(ListStep, 24.0f), StartsScroll->GetScrollOffsetOfEnd()));
+				return;
+			}
+			float To = -1.0f;
+			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
+			{
+				if (ListFeet[Index] - ListViewTop > ListViewHigh + 0.5f)
+				{
+					To = ListViewTop + (ListFeet[Index] - (ListViewTop + ListViewHigh));
+					break;
+				}
+			}
+			if (To < 0.0f)
+			{
+				return;
+			}
+			for (const float Line : ListTops)
+			{
+				if (Line > ListViewTop + 0.5f && Line >= To - 0.5f)
+				{
+					To = Line;
+					break;
+				}
+			}
+			StartsScroll->SetScrollOffset(FMath::Min(To, StartsScroll->GetScrollOffsetOfEnd()));
+		}
+
+		/**
+		 * (Items 4 and 5.) A scroll by the wheel or the bar comes to rest with a line's top at the list's top, the next
+		 * one the way it went, so that the foot of the list stays on a whole line and the plate's band does not move
+		 * under the pointer as the rows go by.
+		 */
+		void SnapList(float Offset)
+		{
+			if (!StartsScroll.IsValid() || ListTops.Num() == 0)
+			{
+				return;
+			}
+			float To = Offset;
+			if (Offset > ListViewTop + 0.5f)
+			{
+				for (const float Line : ListTops)
+				{
+					if (Line >= Offset - 0.5f)
+					{
+						To = Line;
+						break;
+					}
+				}
+			}
+			else if (Offset < ListViewTop - 0.5f)
+			{
+				for (int32 Index = ListTops.Num() - 1; Index >= 0; --Index)
+				{
+					if (ListTops[Index] <= Offset + 0.5f)
+					{
+						To = ListTops[Index];
+						break;
+					}
+				}
+				To = Offset <= ListTops[0] + 0.5f ? 0.0f : To;
+			}
+			if (!FMath::IsNearlyEqual(To, Offset, 0.5f))
+			{
+				StartsScroll->SetScrollOffset(FMath::Clamp(To, 0.0f, StartsScroll->GetScrollOffsetOfEnd()));
 			}
 		}
 
@@ -13517,90 +13586,102 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("JUST WATCH"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
 					]
 				];
-				if (bChosen)
-				{
-					Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				// (Without a pick the BEGIN button keeps its room, unseen, so that the row is as high either way.)
+				Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
+					.Visibility(bChosen ? EVisibility::Visible : EVisibility::Hidden)
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
 					[
-						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
-						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
+						// (the UI director's 84.3 check, item 6: the door's lit button takes Enter, and says so)
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
-							// (the UI director's 84.3 check, item 6: the door's lit button takes Enter, and says so)
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
-								.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
+							.Text(FText::FromString(bChosen ? FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper()) : FString(TEXT("BEGIN"))))
 						]
-					];
-				}
-				if (bChosen)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+					]
+				];
+				// (The UI director's review of build 1628, item 4: the list shows the same rows whichever nation is picked,
+				// so that nothing jumps under the pointer as the player chooses.) The summary stands as high as the tallest
+				// nation's: every nation's lines stand in it, one over another, folded at the summary's own width, and only
+				// the picked one's show; the others keep their room unseen. Nothing picked, none show, in the same room.
+				// (The summary is laid out afresh at every pick; its width is the same at every pick, and is kept, so that a new
+				// pick folds at once at the width the last one had.)
+				auto Wide = [this]() -> float
 				{
-					const FOpeningNation& Nation = Opening.Nations[Opening.NationIndex];
-					TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-							[
-								SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[
-								Buttons
-							]
-						];
+					const float Had = FootSaid.IsValid() ? static_cast<float>(FootSaid->GetTickSpaceGeometry().GetLocalSize().X) : 0.0f;
+					FootWide = Had > 1.0f ? Had : FootWide;
+					return FootWide > 1.0f ? FootWide : 1000.0f; // (before it is first laid out: about the summary's width on the card)
+				};
+				TSharedRef<SOverlay> Said = SAssignNew(FootSaid, SOverlay);
+				for (int32 Index = 0; Index < Opening.Nations.Num(); ++Index)
+				{
+					const FOpeningNation& Nation = Opening.Nations[Index];
+					const bool bShown = Index == Opening.NationIndex;
+					TSharedRef<SVerticalBox> Part = SNew(SVerticalBox).Visibility(bShown ? EVisibility::Visible : EVisibility::Hidden);
 					if (!Nation.Standing.IsEmpty())
 					{
-						Lines->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						Part->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+							SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Brass).WrapTextAt_Lambda(Wide)
 						];
 					}
 					if (!Nation.Blurb.IsEmpty())
 					{
-						Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						Part->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).WrapTextAt_Lambda(Wide)
 						];
 					}
-					Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					Part->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).WrapTextAt_Lambda(Wide)
 						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
 					];
 					// What the country does in its own way: its abilities and its special formation, by name.
 					// What each one does is said when the mouse rests on the line, and in the game's own guide.
-					Lines->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
-						.Visibility(Nation.Abilities.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
-						.ToolTipText(FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))))
-						.Text(FText::FromString(AbilityNames(Nation.Abilities)))
-					];
-					Foot = SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 4.0f, 16.0f, 0.0f)
+					if (Nation.Abilities.Num() > 0)
+					{
+						Part->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 						[
-							MakeFlag(Nation.Tag, 96.0f)
-						]
-						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
-						[
-							Lines
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).WrapTextAt_Lambda(Wide)
+							.ToolTipText(bShown ? FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))) : FText::GetEmpty())
+							.Text(FText::FromString(AbilityNames(Nation.Abilities)))
 						];
+					}
+					Said->AddSlot()[Part];
 				}
-				else
-				{
-					Foot = SNew(SHorizontalBox)
+				TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
+							bChosen
+								? StaticCastSharedRef<SWidget>(SNew(STextBlock).Text(Opening.Nations[Opening.NationIndex].Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream))
+								: StaticCastSharedRef<SWidget>(SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted))
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							Buttons
-						];
-				}
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Said
+					];
+				Foot = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 4.0f, 16.0f, 0.0f)
+					[
+						// (the flag's room is kept without a pick, so that the lines fold at the same width)
+						bChosen ? MakeFlag(Opening.Nations[Opening.NationIndex].Tag, 96.0f) : StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(96.0f, 1.0f)))
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+					[
+						Lines
+					];
 				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
 				[
 					SNew(SVerticalBox)
@@ -14336,9 +14417,18 @@ namespace
 		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
 		bool bListRunsOn = false;
 		int32 ListBelow = 0;
-		float ListStep = 0.0f;
+		// (The UI director's review of build 1628, items 4 and 5.) The list's whole area, the height its view stands at (the
+		// whole rows that fit; under 0 until it is first measured, when it takes the whole area), how far it is scrolled,
+		// each line's top and foot inside it, and the plate's own band under the last whole row.
+		TSharedPtr<SBox> ListArea;
+		float ListViewHigh = -1.0f;
+		float ListViewTop = 0.0f;
+		TArray<float> ListTops, ListFeet;
+		static constexpr float PlateBand = 28.0f; // (the plate, about 21 high, with 3 or 4 above and below it)
 		TSharedPtr<SHorizontalBox> OpeningTabs;
 		TSharedPtr<SBox> OpeningFoot;
+		TSharedPtr<SOverlay> FootSaid; // (item 4: every nation's lines, one over another, the picked one's shown)
+		float FootWide = 0.0f; // (and the width they fold at, as last laid out)
 		FSlateBrush FootBrush;
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;

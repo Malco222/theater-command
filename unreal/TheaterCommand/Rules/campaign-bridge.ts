@@ -2801,7 +2801,9 @@ function endMonth() {
   try {
     const freed = cards.filter((c) => c.kind === 'freed').map((c) => ({ nat: c.nat, text: c.text, region: typeof c.region === 'number' ? c.region : -1 }));
     void freed;
-    month = fallen || !s.human ? null : shownCard(s, cardOfRules(s, monthBook ?? markBackTo(s, month0)));
+    // (The UI director's review of build 1628: no sentence is cut with three dots. The card's rows and boxes wrap and
+    // grow here, so the rules give every line whole.)
+    month = fallen || !s.human ? null : shownCard(s, cardOfRules(s, monthBook ?? markBackTo(s, month0), s.human, { whole: true }));
   } catch { month = null; }
   lastCard = month;
   try { openMonthBook(s); } catch { monthBook = null; }
@@ -6049,7 +6051,7 @@ function lessonGuide(moment: LessonMoment = {}) {
 function openingCard() {
   const s = game();
   if (!s.human || !s.nations[s.human]) return { ok: false };
-  try { lastCard = { ...shownCard(s, cardOfRules(s, markOfRules(s), s.human, { opening: true })), opening: true }; } catch { return { ok: false }; }
+  try { lastCard = { ...shownCard(s, cardOfRules(s, markOfRules(s), s.human, { opening: true, whole: true })), opening: true }; } catch { return { ok: false }; }
   return { ok: true };
 }
 

@@ -9088,7 +9088,10 @@ namespace
 
 namespace
 {
-	/** The Battle Ticket as text: every line of it, and the lines that matter most, which a long ticket opens folded to. */
+	/**
+	 * The Battle Ticket as text: every line of it, and the lines that matter most, which a long ticket opens folded to.
+	 * (The UI director's review of build 1628: no dashes in the game's words; a line's parts join with the game's own dot.)
+	 */
 	void WriteTicket(const TArray<FTicketLine>& Ticket, FFaceOff& Out)
 	{
 		static const TCHAR* const Key[] = { TEXT("Forces"), TEXT("Troops"), TEXT("Dug in"), TEXT("Supply"), TEXT("Earlier attacks"), TEXT("Weight of attack") };
@@ -9097,7 +9100,7 @@ namespace
 		{
 			const FString Text = Line.Effect.IsEmpty()
 				? FString::Printf(TEXT("%s:  %s"), *Line.Label, *Line.Value)
-				: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect);
+				: FString::Printf(TEXT("%s:  %s  \u00B7  %s"), *Line.Label, *Line.Value, *Line.Effect);
 			Lines.Add(Text);
 			for (const TCHAR* Label : Key)
 			{
