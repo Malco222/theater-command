@@ -450,8 +450,7 @@ def sexton(fine=True, tag="UK"):
     xb = v.piece(2.47, 0.0876, 0.8, 0.118, 0.07, 0.5, brake="double", steps=((0.5, 0.095),), ring=(0.27, 0.3, 0.31), block="down", lug=0.5)
     v.handwheels((px - 0.37, 0.38, zt - 0.12), (px - 0.49, 0.31, zt - 0.26), r=0.11, grips="gunner")
     v.sight((px - 0.29, 0.3, zt + 0.02), high=0.22)
-    v.seat((px - 0.67, 0.44, zt - 0.42), 1.0, part="turret")
-    v.tube([(px - 0.67, 0.24, zt - 0.62), (px - 0.4, 0.22, zt - 0.62), (px - 0.14, 0.18, pz + 0.04)], 0.018, coat, 6)       # the arm that carries it from the saddle
+    # (her wheels are 0.56 and 0.70 over the floor: the layer kneels at them, the sight at his eye; a seat would put the traversing wheel in his lap)
     v.shift(here, (0.0, gy, 0.0))
     # ---- inside her: the rounds along each sponson, seats, the wireless, the detachment's kit ----------------------
     v.rounds(-0.92, 0.50, 0.90, sw - 0.05, zs, 0.44, r=0.046, gap=0.115)
@@ -494,7 +493,8 @@ def sexton(fine=True, tag="UK"):
         v.shovel(r_at(0.30, -0.5) + rn * 0.02, 90.0, 0.95)
         v.axe(r_at(0.50, -0.38) + rn * 0.02, 90.0, 0.78)
     v.aerial("aerial", "hull", (-0.9, -(sw - th / 2), zw), 2.4)
-    _open_sockets(v, h, zw, gunner=(px - 0.6, 0.48 + gy, fl), loaders=[(xb - 0.6, -0.35 + gy, fl), (xb - 0.45, 0.45 + gy, fl)], commander=(-0.74, 0.10, fl), case=(xb - 0.5, -0.2 + gy, fl))
+    _open_sockets(v, h, zw, gunner=(px - 0.68, 0.50 + gy, fl), loaders=[(xb - 0.6, -0.35 + gy, fl), (xb - 0.45, 0.45 + gy, fl)], commander=(-0.74, 0.10, fl), case=(xb - 0.5, -0.2 + gy, fl),
+                  notes={"crew.gunner": "the layer kneels here on her floor, left of the breech (the point is the floor under his hips): the handwheels' handles are 0.58 and 0.70 over the floor, 0.20 and 0.42 ahead of him, the sight at his eye (his hands: grip.gunner.l, grip.gunner.r)"})
     v.tank_clips(recoil=0.5, kick=0.6, gun_low=-9.0, hatches=["hatch_driver"], traverse=4.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
     return v
@@ -691,7 +691,8 @@ def hummel(fine=True, tag="GER"):
              rollers=[(-1.62, 0.905), (-0.56, 0.905), (0.50, 0.905), (1.56, 0.905)], dust_x=-3.05)
     # ---- the detachment's places, and what happens to her ---------------------------------------------------
     v.socket("commander", (-2.55, 0.0, zg), X, part="hull", note="the gun's commander stands here at the back of the open box")
-    v.socket("crew.gunner", (px - 0.6, 0.55, zg), X, part="hull", note="the layer, at the sight and the handwheels on the left of the breech")
+    v.socket("crew.gunner", (px - 0.72, 0.55, zg), X, part="hull",
+             note="the layer stands here, left of the breech: the handwheels' handles are at his waist, 0.72 and 0.86 over the floor and 0.27 and 0.51 ahead of him (his hands: grip.gunner.l, grip.gunner.r)")
     v.socket("crew.loader", (xb - 0.95, -0.38, zg), X, part="hull", note="a loader stands here, behind the breech")
     v.socket("crew.loader2", (xb - 0.75, 0.42, zg), X, part="hull", note="the second loader, with the cartridge")
     v.socket("case", (xb - 0.6, -0.2, zg), -X, part="hull", note="where the empty case falls, on her floor")
@@ -841,8 +842,8 @@ def su76(fine=True, tag="SOV"):
     for x, y, yaw in ((-1.75, 0.25, 20.0), (-1.0, 0.38, -50.0), (-2.0, 0.02, 80.0)):
         v.spent((x, y, zg + 0.008), yaw, 0.045, 0.385)
     v.use("hull")
-    v.rod((-0.40, 0.88, zg), (-0.40, 0.88, zg + 0.34), 0.02, "steel", 8)                              # the layer's seat
-    v.box((0.3, 0.3, 0.055), (-0.40, 0.88, zg + 0.37), "canvas.seat", 0.02)
+    v.rod((-0.40, 0.76, zg), (-0.40, 0.76, zg + 0.34), 0.02, "steel", 8)                              # the layer's seat, the wheels by his right knee
+    v.box((0.3, 0.3, 0.055), (-0.40, 0.76, zg + 0.37), "canvas.seat", 0.02)
     v.box((0.34, 0.3, 0.05), (-1.25, -0.80, zg + 0.34), "canvas.seat", 0.02)                           # a seat folded down from the right rack
     v.slab((-1.4, -0.96, zg + 0.3), (-1.1, -0.66, zg + 0.318), coat, 0.004)
     v.crate((-0.92, 1.04, zg), (0.62, 0.3, 0.2), 0.0)                                                  # boxes of rounds, a helmet left on them
@@ -877,7 +878,8 @@ def su76(fine=True, tag="SOV"):
         v.lathe((2.15, s * (hw - 0.02), 0.68), Y * s, [(0.16, 0.0), (0.16, 0.14), (0.1, 0.2), (0.0, 0.22), (0.0, 0.0)], "upper", v.n(22, 8))
     # ---- the detachment's places, and what happens to her ---------------------------------------------------
     v.socket("commander", (-2.05, -0.5, zg), X, part="hull", note="the gun's commander stands here at the back of the open box, on the right")
-    v.socket("crew.gunner", (px - 0.55, gy + 0.5, zg), X, part="hull", note="the layer, at the sight and the handwheels on the left of the breech")
+    v.socket("crew.gunner", (-0.40, 0.76, zg + 0.3975), X, part="hull",
+             note="the layer, seated left of the breech: the top of his seat, 0.40 over the floor; the handwheels are by his right knee, their handles 0.16 and 0.36 ahead, 0.19 to his right, 0.09 and 0.22 over the seat (his hands: grip.gunner.l, grip.gunner.r)")
     v.socket("crew.loader", (xb - 0.58, gy - 0.5, zg), X, part="hull", note="the loader stands here, right of the breech and clear of its run back")
     v.socket("case", (xb - 0.5, gy - 0.2, zg), -X, part="hull", note="where the empty case falls, on her floor")
     v.socket("engine", (0.70, -0.81, zr + 0.05), Z, part="hull", note="the engines' grille on the right: smoke and the first fire")
