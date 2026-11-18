@@ -391,13 +391,20 @@ describe('the landing card\'s line', () => {
 describe('one war at the history stop, nobody playing', () => {
   it('a staff refused on the mainland builds up for it sooner than spend its landing force on an island that passes', () => {
     // (Seed 39 as first measured: every beach in France refused America's three corps in June 1944, the staff put
-    // them on Malta that month, the quay stood empty through the summer and Germany fell before it came back.)
-    const g = startOpen(createGame(39, null));
+    // them on Malta that month, the quay stood empty through the summer and Germany fell before it came back. The
+    // realism version's crowded airfields changed that war, and America lost its Italian corps in 1943 and had no
+    // landing force in 1944 at all; seed 17 is the same story now: every beach in France refuses the force in May
+    // 1944, and in June it lands at Bordeaux.)
+    const g = startOpen(createGame(17, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
+    const refused = new Set<number>();
     landingWatch.tell = (e) => { if (!e.wave) landings.push({ turn: g.turn, nat: e.nat, to: e.to, corps: e.force.length }); };
-    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; }
+    strengthWatch.tell = (e) => { if (e.nat === 'USA' && g.turn >= 57 && e.force.length >= 3 && e.at.owner === 'FRA' && e.at.nb.length > 0 && e.R.chance < e.ask) refused.add(g.turn); };
+    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; }
     const usa = landings.filter((l) => l.nat === 'USA' && l.turn >= 57);
+    // It was refused on the mainland first, in a month before its landing there.
+    expect([...refused].some((t) => usa.some((l) => l.turn > t))).toBe(true);
     // No American first wave of 1944 goes to an island; its landing of that summer is in France.
     expect(usa.filter((l) => l.to.nb.length === 0)).toEqual([]);
     expect(usa.some((l) => l.to.owner === 'FRA' && !l.to.overseas)).toBe(true);
