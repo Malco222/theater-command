@@ -13831,6 +13831,12 @@ namespace
 						}
 					}
 				}
+				// ("-TheaterOptionsEnd" shows this page from its end: for a picture of the credits, which the replay tool cannot scroll to)
+				static const bool bFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOptionsEnd"));
+				if (bFromEnd && StartsScroll.IsValid())
+				{
+					StartsScroll->ScrollToEnd();
+				}
 				return;
 			}
 
