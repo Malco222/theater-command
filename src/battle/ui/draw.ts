@@ -206,6 +206,16 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     } else { x.beginPath(); x.arc(ex, ey, held ? 2.8 : 2.2, 0, Math.PI * 2); x.fill(); }
   }
 
+  // Wrecks (b477): a knocked-out tank stays where she stood to the end of the fight, drawn plainly as a small ink cross
+  // under the blocks. The look (fire, smoke) is the 3D game's.
+  if (b.wrecks.length) {
+    const r = Math.max(2, Math.min(5, 4 * s.cam.z));
+    x.strokeStyle = INK; x.lineWidth = 1.2;
+    x.beginPath();
+    for (const z of b.wrecks) { const [wx, wy] = toScreen(s, z.x, z.y); x.moveTo(wx - r, wy - r); x.lineTo(wx + r, wy + r); x.moveTo(wx + r, wy - r); x.lineTo(wx - r, wy + r); }
+    x.stroke();
+  }
+
   // The blocks: the dead and the departed are not drawn.
   const order = [...b.units].filter(live).sort((a, c) => (a.side === s.me ? 1 : 0) - (c.side === s.me ? 1 : 0));
   for (const u of order) drawBlock(x, s, u, colour[u.side], byId, b);

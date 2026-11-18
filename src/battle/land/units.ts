@@ -6,6 +6,7 @@
 // another (ruling 226(10)). Each side's blocks share out exactly the power the attack card counted (A and D), so the
 // card's odds are the field's.
 
+import type { CrewMarks } from './crews';
 import type { ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { digWorks, type LandField } from './field';
 import { LAND, type Kind } from './rules';
@@ -72,6 +73,8 @@ export interface LandUnit extends UnitBase {
   reserve?: 'held' | 'sent';
   /** Models on its tray at full strength: a division's, or a third of them for a regiment. */
   tray: number;
+  /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
+  crew?: CrewMarks;
   /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
   pressing?: number;
   /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */

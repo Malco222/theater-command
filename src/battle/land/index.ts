@@ -6,3 +6,4 @@ export * from './ai';
 export * from './ticket';
 export * from './sample';
 export * from './offered';
+export * from './crews';

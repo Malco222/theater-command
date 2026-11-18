@@ -9,9 +9,10 @@ import { ONE_SHOTS, ORDER_CUES } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side } from '../core/types';
+import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
 import { thinkFor } from './ai';
 import { buildField, coverAt, groundAt, GROUNDS, heightAt, slopeAt, type Ground, type LandField, type LandPlace } from './field';
+import { crewFor } from './crews';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
 import { deploy, makeBlocks, type LandUnit } from './units';
 
@@ -25,6 +26,8 @@ interface Way { m: Motion; goal: number; pts: [number, number][]; whole: boolean
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
+/** A number from 0 to under 1 fixed by a whole number: where a wreck lies, never drawn from the battle's dice. */
+const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 
 export class LandBattle implements BattleSim<LandUnit> {
   readonly domain = 'land' as const;
@@ -49,6 +52,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private broke: Record<Side, boolean> = { att: false, def: false };
   /** When the first blow fell between the lines (guns firing from far back do not count): null until then. */
   contactAt: number | null = null;
+  /** The tanks knocked out on the field, where each stands, to the end of the fight (b477): what the view sends as zones. */
+  wrecks: Zone[] = [];
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
   /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
@@ -73,6 +78,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.units = [...att, ...def];
     const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
     this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
+    // Tank crews name their tanks after their unit's third battle (b477): data only, nothing in the fight reads it.
+    for (const u of this.units) { const c = crewFor(u, ticket[u.side].forces.find((f) => f.corps === u.corps)?.battles ?? 0); if (c) u.crew = c; }
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
@@ -573,6 +580,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const aspect = aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
     let take = LAND.cover[gt];
+    // Men on foot beside a wreck take light cover, either army's (b477).
+    const ws = this.wreckShare(t);
+    if (ws > 0) take = take * (1 - ws) + Math.min(take, LAND.cover[LAND.wreck.cover]) * ws;
     if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
@@ -583,13 +593,35 @@ export class LandBattle implements BattleSim<LandUnit> {
   private suffer(t: LandUnit, dmg: number, nerveMul: number): void {
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
-    const before = t.str;
+    const before = t.str, had = t.figures;
     t.str = Math.max(0, t.str - share * t.str0);
     const lost = (before - t.str) / t.str0;
     const steady = 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+    if (t.kind === 'arm') for (let k = t.figures; k < had; k++) this.wreck(t);
+  }
+
+  /**
+   * A tank knocked out: her wreck stays where she stood, within the block's frontage, to the end of the fight (b477). Where
+   * on the tray is fixed by the block and the count, never by the battle's dice, so the fight's own luck does not move.
+   */
+  private wreck(t: LandUnit): void {
+    const n = this.wrecks.filter((z) => z.unit === t.id).length;
+    const across = (mix(t.id * 977 + n * 131 + 7) - 0.5) * t.w * 0.9, along = (mix(t.id * 613 + n * 389 + 3) - 0.5) * t.d * 0.8;
+    const c = Math.cos(t.face), s = Math.sin(t.face);
+    const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);
+    this.wrecks.push({ id: this.wrecks.length + 1, kind: 'wreck', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id });
+  }
+
+  /** The share of a block on foot that wrecks shelter: one model's worth for each within its frontage or beside it (b477). */
+  private wreckShare(u: LandUnit): number {
+    if (!this.wrecks.length || MOTION[u.kind] !== 'foot') return 0;
+    const c = Math.cos(u.face), s = Math.sin(u.face), hw = u.w / 2 + LAND.wreck.beside, hd = u.d / 2 + LAND.wreck.beside;
+    let n = 0;
+    for (const z of this.wrecks) { const dx = z.x - u.x, dy = z.y - u.y; if (Math.abs(dx * c - dy * s) <= hw && Math.abs(dx * s + dy * c) <= hd) n++; }
+    return Math.min(1, n / Math.max(1, u.tray));
   }
 
   private generalOf(s: Side): number { return this.ticket[s].general?.level ?? 0; }
@@ -1132,7 +1164,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
   }
 }
 

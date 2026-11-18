@@ -31,6 +31,7 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number):
     // Each block is one of these divisions, named as the army tray names it (the UI and design directors, b358).
     divisions: divisionsOf(g, c).map((d) => ({ name: d.name, short: d.short, str: d.str, xp: d.xp, men: d.men })),
     share: w[i] / tot,
+    battles: c.rec?.battles ?? 0,
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;

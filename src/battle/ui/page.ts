@@ -17,6 +17,7 @@ import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
 import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
+import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
@@ -426,7 +427,9 @@ function updateTray(force = false): void {
       rs.className = `rstate${u.fellBack ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
       // Its hover carries what the small battle's card says (the UI director, 3b): "16th Infantry · Strength 92 · attacking".
       const doingR = u.fellBack ? '' : b.over ? (live(u) ? 'battle over' : '') : live(u) ? doingWord(u) : '';
-      el.title = [el.querySelector('.rname')!.textContent, `Strength ${Math.round(u.str * 100)}`, word, doingR].filter(Boolean).join(' · ');
+      // A tank block's named tanks, on a line of their own (b477(6)).
+      const crew = crewLine(u.crew ?? null);
+      el.title = [el.querySelector('.rname')!.textContent, `Strength ${Math.round(u.str * 100)}`, word, doingR].filter(Boolean).join(' · ') + (crew ? `\n${crew}` : '');
       const k = u.str / Math.max(1e-6, u.str0);
       const bar = el.querySelector<HTMLElement>('.rbar b')!;
       bar.style.width = `${Math.round(Math.max(0, Math.min(1, u.str)) * 100)}%`;

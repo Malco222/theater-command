@@ -146,6 +146,14 @@ export const LAND = {
    */
   fresh: { str: 0.9, upTo: 5 },
   /**
+   * Burning wrecks stay (b477, Brian's pick): every tank a block loses leaves a wreck where it stood, to the end of the
+   * fight. Men on foot beside one take light cover, either army's, at the field's own figure for broken ground: a block
+   * takes it for the share of its tray that wrecks within its frontage, or 'beside' metres of it, can shelter (one wreck,
+   * one model's worth), never better than its ground gives already. 'r' is how far a wreck's shelter reaches, for the 3D
+   * game's mark.
+   */
+  wreck: { cover: 'rough' as Ground, beside: 10, r: 12 },
+  /**
    * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
    * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
    * falls back to the lines it came from: the campaign's own bill has the same shape (resolveBattle in game.ts).
