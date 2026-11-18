@@ -139,18 +139,50 @@ class SpWorks(GunWorks):
                            (0.0, r * 0.55), (0.0, 0.0)], paint, self.n(14, 7))
 
     def shells(self, x0, x1, y0, y1, z0, r, high, gap, paint="shade.shell"):
-        """Shells standing on their bases in a rack: a frame of plate round their feet, the noses above it."""
+        """Shells standing on their bases in a rack: a low frame of plate round their feet, the copper driving band
+        just over it, the noses above. high: a shell's own height."""
         self.use("hull")
-        self.slab((x0, min(y0, y1), z0), (x1, max(y0, y1), z0 + high * 0.34), coat, 0.006)
+        self.slab((x0, min(y0, y1), z0), (x1, max(y0, y1), z0 + high * 0.2), coat, 0.006)
         nx, ny = max(1, int((x1 - x0 - 0.03) / gap)), max(1, int((abs(y1 - y0) - 0.03) / gap))
         n = self.n(14, 7)
         for i in range(nx):
             for j in range(ny):
                 x = x0 + (x1 - x0) * (i + 0.5) / nx
                 y = y0 + (y1 - y0) * (j + 0.5) / ny
-                self.lathe((x, y, z0 + high * 0.3), Z, [(high * 0.7, 0.0), (high * 0.69, r * 0.2), (high * 0.6, r * 0.52), (high * 0.46, r * 0.82), (high * 0.3, r), (0.0, r), (0.0, 0.0)], paint, n)
+                zf = z0 + 0.04                                                                       # (its base, on the rack's floor)
+                self.lathe((x, y, zf), Z, [(high, 0.0), (high * 0.985, r * 0.2), (high * 0.86, r * 0.52), (high * 0.66, r * 0.82), (high * 0.43, r), (0.0, r), (0.0, 0.0)], paint, n)
+                self.lathe((x, y, z0 + high * 0.225), Z, [(high * 0.05, 0.0), (high * 0.05, r * 1.035), (0.0, r * 1.035), (0.0, 0.0)], "brass.band", n)     # the copper driving band, just over the rack
                 if self.fine:
-                    self.lathe((x, y, z0 + high * 0.97), Z, [(0.03, 0.0), (0.03, r * 0.16), (0.0, r * 0.26), (0.0, 0.0)], "brass", 8)       # the fuze
+                    self.lathe((x, y, zf + high - 0.008), Z, [(0.03, 0.0), (0.03, r * 0.16), (0.0, r * 0.26), (0.0, 0.0)], "brass", 8)     # the fuze
+                    a = math.radians(180.0 + 34.0 * ((i + 2 * j) % 3 - 1))                               # its stencil: two short lines of lettering, turned as it was stood
+                    for k, wide in ((0.36, 0.040), (0.40, 0.028)):
+                        self.box((0.0012, wide, 0.008), (x + (r + 0.0003) * math.cos(a), y + (r + 0.0003) * math.sin(a), z0 + high * k), "shade.stencil", turn=rot(math.degrees(a)))
+
+    def spent(self, at, yaw, r, long, paint="brass"):
+        """An empty case lying on her floor where it was thrown: at is the floor under its middle."""
+        axis = Vector((math.cos(math.radians(yaw)), math.sin(math.radians(yaw)), 0.0))
+        base = Vector(at) + Z * r * 1.1 - axis * long / 2
+        n = self.n(14, 7)
+        self.use("hull")
+        self.lathe(base, axis, [(long, 0.0), (long, r), (0.012, r), (0.012, r * 1.1), (0.0, r * 1.1), (0.0, 0.0)], paint, n)
+        self.lathe(base + axis * (long + 0.0006), axis, [(0.0006, 0.0), (0.0006, r * 0.88), (0.0, r * 0.88), (0.0, 0.0)], "black", n)       # its open mouth
+
+    def trodden(self, patches, z, paint="torn.mud", edge="torn.mud2"):
+        """Mud trodden onto her floor in a path the men wear from the racks to the breech: thin lobed patches
+        (x, y, half-length, half-width, yaw each), a shade off the floor's own colour and never a black spill.
+        Each lies in a wider patch of a colour halfway to the floor's (`edge`), so the path has no hard rim."""
+        self.use("hull")
+        for grow, colour, up in ((1.22, edge, 0.0), (1.0, paint, 0.003)):
+            for n, (px, py, rx, ry, yaw) in enumerate(patches):
+                c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+                p = (px * 7.3 + py * 3.1) % 6.283                                # each patch its own outline
+                plan = []
+                for i in range(30):
+                    a = 2.0 * math.pi * i / 30
+                    k = grow * (1.0 + 0.17 * math.sin(3 * a + p) + 0.10 * math.sin(5 * a + 2.1 * p) + 0.06 * math.sin(8 * a + 0.7 * p))
+                    x, y = rx * k * math.cos(a), ry * k * math.sin(a)
+                    plan.append((px + x * c - y * s, py + x * s + y * c))
+                self.prism(plan, z, z + 0.001 + up + 0.0003 * n, colour)
 
 
 def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag="USA"):
@@ -468,7 +500,7 @@ def hummel(fine=True, tag="GER"):
     under the gun, a tall open box of thin plate over her back half, the drivers' cab across her front. 7.17 m over
     the gun, 2.97 m wide, 2.81 m high. She came after the grey: dark yellow from her first day."""
     v = SpWorks("Hummel", "Hummel, 15 cm self-propelled howitzer", "tank", tag, fine, paint=GER_COATS["yellow"][0],
-                paints={"canvas.seat": "4A4638", "canvas.tarp": "5E5A44", "shade.shell": "3E4436"})
+                paints={"canvas.seat": "4A4638", "canvas.tarp": "5E5A44", "shade.shell": "5A624C", "shade.stencil": "B4B094", "brass.band": "8E5A3A", "torn.mud": "52472F", "torn.mud2": "5B5135"})
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
     hw, zg, xr, th = 0.925, 1.10, -3.04, 0.03            # half-width between the tracks; the guards; her tail; the box's plate
@@ -606,7 +638,12 @@ def hummel(fine=True, tag="GER"):
     # ---- inside her: the cartridge cases standing at the back on the left, the shells on the right, a locker along
     #      the left wall that the detachment sits on, the box's canvas cover rolled along the right, their kit ------
     v.rounds(-2.9, -1.75, 0.82, 1.24, zg, 0.5, r=0.075, gap=0.19)
-    v.shells(-2.9, -1.75, -1.24, -0.82, zg, 0.074, 0.62, 0.19)
+    v.shells(-2.9, -1.75, -1.24, -0.82, zg, 0.074, 0.60, 0.19)
+    # her floor between the racks and the breech: the path the loaders have trodden, the empty cases they threw down
+    v.trodden(((-1.5, -0.75, 0.42, 0.24, 40.0), (-1.5, 0.72, 0.40, 0.22, -40.0), (-1.25, -0.3, 0.45, 0.26, 35.0),
+               (-1.3, 0.25, 0.42, 0.25, -30.0), (-1.5, 0.0, 0.5, 0.3, 0.0), (-2.3, -0.1, 0.36, 0.24, 15.0)), zg + 0.008)
+    for x, y, yaw in ((-1.10, -0.70, 65.0), (-1.50, -0.68, -12.0), (-2.2, 0.47, -20.0), (-2.72, -0.52, 110.0)):
+        v.spent((x, y, zg + 0.008), yaw, 0.079, 0.26)
     v.use("hull")
     v.bin((-1.62, 0.92, zg), (-0.30, 1.26, zg + 0.42), bevel=0.012, lid_side=(0, -1, 0), latches=3)
     for x in (-1.3, -0.62):
@@ -673,7 +710,7 @@ def su76(fine=True, tag="SOV"):
     """SU-76M of 1943: the 76 mm divisional gun on a lengthened light tank's hull, six small wheels a side, in an
     open box over her back half, the gun a little left of her middle with a plate box over its recoil gear, the
     driver under a hood in the middle of her glacis. 4.97 m long, 2.72 m wide, 2.10 m high."""
-    v = SpWorks("SU76", "SU-76", "tank", tag, fine, paints={"canvas.seat": "4A4638", "canvas.tarp": "5A5A40", "cloth.sack": "6A6448"})
+    v = SpWorks("SU76", "SU-76", "tank", tag, fine, paints={"canvas.seat": "4A4638", "canvas.tarp": "5A5A40", "cloth.sack": "6A6448", "torn.mud": "4C402C", "torn.mud2": "3E3D29"})
     v.root(hull_pivot=(0.0, 0.0, 0.70))
     hw, zg, zr, xr, th = 0.98, 1.00, 1.26, -2.45, 0.028     # half-width between the tracks; the guards; the roof ahead of the box; her tail
     gz = lambda x: 0.74 + (2.44 - x) * (zr - 0.74) / (2.44 - 0.95)       # noqa: E731  (the glacis: one plate from her nose to the roof)
@@ -793,6 +830,11 @@ def su76(fine=True, tag="SOV"):
     #      of rounds and the detachment's sacks along the left wall -------------------------------------------------
     v.rounds(-2.3, -0.6, -1.22, -0.96, zg, 0.44, r=0.045, gap=0.105)
     v.rounds(-2.3, -1.3, 0.96, 1.22, zg, 0.44, r=0.045, gap=0.105)
+    # her floor between the racks and the breech: the path the loader has trodden, the empty cases he threw down
+    v.trodden(((-1.35, -0.6, 0.36, 0.22, 60.0), (-1.6, 0.6, 0.36, 0.2, -45.0), (-1.15, -0.1, 0.42, 0.24, 30.0),
+               (-1.25, 0.25, 0.38, 0.22, -20.0), (-1.85, -0.2, 0.3, 0.2, 10.0)), zg + 0.008)
+    for x, y, yaw in ((-1.75, 0.25, 20.0), (-1.0, 0.38, -50.0), (-2.0, 0.02, 80.0)):
+        v.spent((x, y, zg + 0.008), yaw, 0.045, 0.385)
     v.use("hull")
     v.rod((-0.40, 0.88, zg), (-0.40, 0.88, zg + 0.34), 0.02, "steel", 8)                              # the layer's seat
     v.box((0.3, 0.3, 0.055), (-0.40, 0.88, zg + 0.37), "canvas.seat", 0.02)
