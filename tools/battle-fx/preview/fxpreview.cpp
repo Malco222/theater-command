@@ -5,11 +5,13 @@
 //   SRC=../../../unreal/TheaterCommand/Source/TheaterCommand
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
-//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target]
+//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail]
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
-// FX_DUSK=1 darkens the sky and the smoke to dusk.
+// FX_DUSK=1 darkens the sky and the smoke to dusk. The hit and trail shots turn it round: the aircraft is struck by
+// that kind of gun along its wing and nose from 0.2 s to 1 s, and its engine trails FX_TRAIL (smoke, fire, glycol)
+// from 0.3 s; hit looks from the side, trail from above and behind.
 //
 // It draws what the game's mesh would carry: the same puffs, in the same order, with the same colours and alphas,
 // laid over a plain field (grass, a gentle swell, a sky) with five men of 1.75 m standing round the hit. The flash's
@@ -413,6 +415,10 @@ namespace
 		}
 		auto Place = [](const Frame& F, const Vec& L) { return F.At + F.Fw * L.X + F.Right * L.Y + F.Up * L.Z; };
 		const double Meet = 300.0;
+		const bool bStruck = ShotName == "hit" || ShotName == "trail";
+		const char* TrailIs = std::getenv("FX_TRAIL");
+		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
+		TheaterFx::Dice Spots(11);
 		std::sort(Frames.begin(), Frames.end());
 		int Step = 0;
 		Battle::View View;
@@ -423,6 +429,25 @@ namespace
 			{
 				const double T = Step / 60.0;
 				const Frame F = Fly(T);
+				if (bStruck)
+				{
+					// (struck: a hit every 0.07 s or so along the right wing and the nose; the engine trails from 0.3 s)
+					if (T >= 0.2 && T <= 1.0 && Step % 4 == 0)
+					{
+						const Vec Spot(Spots.U(-1.0, 3.5), Spots.U(-0.5, 4.5), Spots.U(-0.2, 0.4));
+						Fx.AirHit(T, Place(F, Spot), (F.Up + F.Right * 0.3).Unit(), F.Fw * Speed, Kind.c_str());
+					}
+					const Vec Engine = Place(F, Vec(2.9, 0.75, -0.35)); // (an exhaust on the cowling's near side)
+					if (Step == 18)
+					{
+						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str());
+					}
+					if (Step >= 18)
+					{
+						Fx.TrailMove(T, 1, Engine, F.Fw * Speed);
+					}
+					continue;
+				}
 				for (size_t G = 0; G < Guns.size(); ++G)
 				{
 					const Vec Muzzle = Place(F, Guns[G]);
@@ -447,6 +472,16 @@ namespace
 			{
 				Cam.Eye = F.At + Level * 520.0 + LevelRight * 260.0 + ZUp * 40.0;
 				Cam.Forward = (F.At + Level * 260.0 - Cam.Eye).Unit();
+			}
+			else if (ShotName == "hit")
+			{
+				Cam.Eye = F.At + LevelRight * 26.0 - Level * 6.0 + ZUp * 7.0;
+				Cam.Forward = ((F.At - Cam.Eye).Unit() - Level * 0.15).Unit();
+			}
+			else if (ShotName == "trail")
+			{
+				Cam.Eye = F.At - Level * 120.0 + LevelRight * 160.0 + ZUp * 60.0;
+				Cam.Forward = (F.At - Level * 80.0 - Cam.Eye).Unit();
 			}
 			else if (ShotName == "target")
 			{
@@ -523,7 +558,7 @@ namespace
 			}
 			Puffs(C, Cam, Fx, N);
 			char Name[256];
-			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s-f%03d.ppm", OutDir.c_str(), Kind.c_str(), ShotName.c_str(), bDusk ? "-dusk" : "", FrameNo);
+			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s%s-f%03d.ppm", OutDir.c_str(), Kind.c_str(), ShotName.c_str(), bStruck ? ("-" + TrailKind).c_str() : "", bDusk ? "-dusk" : "", FrameNo);
 			C.Save(Name);
 			std::printf("frame %d: %d puffs\n", FrameNo, N);
 		}

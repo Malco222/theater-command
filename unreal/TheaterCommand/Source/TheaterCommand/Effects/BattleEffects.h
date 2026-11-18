@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -96,6 +96,19 @@ public:
 	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f);
 	/** That gun's trigger let go. */
 	void AirGunStop(int32 Gun);
+	/** Rounds striking an aircraft, on the same clock as AirGun: At the point hit, Normal the skin's outward way there,
+	 * AircraftVelocity that aircraft's velocity (world units a second), Kind the hitting gun's row ("rifle", "hmg",
+	 * "cannon20"). A hot spit with sparks, a scrap or two of skin left tumbling behind, a small dark puff; bigger for
+	 * cannon. */
+	void AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind);
+	/** A trail from a moving point on an aircraft, such as an engine socket: TrailStart once, TrailMove every frame
+	 * with the point and its velocity (world units a second), TrailStop when it ends; what is in the air fades on
+	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
+	 * darkening), "fire" (flame at the root, black smoke) or "glycol" (thin white vapour); TrailStart again on a
+	 * running Id changes its kind (smoke catching fire). */
+	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind);
+	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
+	void TrailStop(int32 Id);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */

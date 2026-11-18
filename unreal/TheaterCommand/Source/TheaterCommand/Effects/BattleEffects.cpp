@@ -314,6 +314,38 @@ void FBattleEffects::AirGunStop(int32 Gun)
 	}
 }
 
+void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.AirHit(Now, ToFx(At), ToFxWay(Normal), ToFx(AircraftVelocity), Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::TrailStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.TrailStop(Id);
+	}
+}
+
 void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds)
 {
 	if (IsReady())

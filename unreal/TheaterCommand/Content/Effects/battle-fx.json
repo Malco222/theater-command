@@ -1146,6 +1146,129 @@
   ],
   "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is."
  },
+ "air_hit": {
+  "_how": "Rounds striking an aircraft (AirHit, at the point hit, carried with that aircraft): a hot spit on the skin with two or three short tongues, sparks thrown off and slowed by the air so they fall away behind, a scrap or two of skin tumbling off (some bare metal catching the light), and a small dark puff left hanging where the hit was. All scale with the hitting gun's air_guns.<kind>.strike_m, so 20 mm hits are about twice a .50's. No ball of fire: a hit that sets fuel alight is the battle's call (a fire trail).",
+  "spark_colour": [
+   255,
+   236,
+   180
+  ],
+  "sparks": [
+   3,
+   6
+  ],
+  "scraps": [
+   1,
+   2
+  ],
+  "scrap_colour": [
+   70,
+   72,
+   70
+  ],
+  "bare_colour": [
+   150,
+   152,
+   156
+  ],
+  "smoke_colour": [
+   70,
+   68,
+   64
+  ],
+  "smoke_alpha": 0.55,
+  "smoke_s": [
+   0.8,
+   1.5
+  ]
+ },
+ "air_trails": {
+  "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer along the path so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. A trail starts thin and pale and comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m and pales toward colour_old as it hangs for life_s. Fire adds tongues streaming back flame_m from the root.",
+  "smoke": {
+   "_what": "a damaged engine: thin and grey, thickening and darkening",
+   "life_s": 7,
+   "spacing_m": 8,
+   "r0_m": 0.5,
+   "r1_m": 4.0,
+   "alpha": 0.45,
+   "colour": [
+    130,
+    128,
+    124
+   ],
+   "colour_full": [
+    58,
+    56,
+    54
+   ],
+   "colour_old": [
+    120,
+    118,
+    115
+   ],
+   "darken_s": 5,
+   "ramp_s": 2,
+   "smear": 1.5,
+   "carried": 0.05,
+   "flame_m": 0
+  },
+  "fire": {
+   "_what": "an engine or tank on fire: flame at the root, black smoke",
+   "life_s": 8,
+   "spacing_m": 7,
+   "r0_m": 0.8,
+   "r1_m": 5.5,
+   "alpha": 0.7,
+   "colour": [
+    44,
+    41,
+    39
+   ],
+   "colour_full": [
+    34,
+    32,
+    31
+   ],
+   "colour_old": [
+    80,
+    78,
+    76
+   ],
+   "darken_s": 1,
+   "ramp_s": 0.8,
+   "smear": 1.5,
+   "carried": 0.05,
+   "flame_m": 3.0
+  },
+  "glycol": {
+   "_what": "a holed radiator: a thin white vapour that soon thins out",
+   "life_s": 2.2,
+   "spacing_m": 8,
+   "r0_m": 0.3,
+   "r1_m": 2.0,
+   "alpha": 0.4,
+   "colour": [
+    236,
+    237,
+    240
+   ],
+   "colour_full": [
+    236,
+    237,
+    240
+   ],
+   "colour_old": [
+    225,
+    227,
+    230
+   ],
+   "darken_s": 1,
+   "ramp_s": 0.4,
+   "smear": 1.5,
+   "carried": 0.05,
+   "flame_m": 0
+  }
+ },
  "dust": {
   "vehicles": {
    "when": "dry ground and roads, not snow, mud or wet weather",

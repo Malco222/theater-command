@@ -102,6 +102,7 @@ namespace TheaterFx
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
+		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer along Along, so puffs metres apart join in one line)
 		double LeastPx = 0.0;
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
@@ -153,6 +154,18 @@ namespace TheaterFx
 		void AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin = 0.0, double MuzzleMps = 0.0);
 		/** The trigger let go: the gun's next AirGun starts a new burst (its belt goes on where it was). */
 		void AirGunStop(int Gun);
+		/** Rounds striking an aircraft at At: Normal the skin's outward way there, Carry that aircraft's velocity (m/s),
+		 * Kind the air_guns row of the gun that hit. A bright spit with sparks, a dark scrap or two torn off and left
+		 * behind in the air, a puff of smoke; all bigger for cannon (the row's strike_m). */
+		void AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
+		/** A trail from a moving point on an aircraft (an engine): TrailStart once, TrailMove every frame with where the
+		 * point is and its velocity, TrailStop when it ends; what is already in the air fades on its own. Id: any
+		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
+		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
+		 * trail changes its kind (smoke catching fire). */
+		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind);
+		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
+		void TrailStop(int Id);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds);
 
@@ -211,6 +224,22 @@ namespace TheaterFx
 			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0;
 			int OneIn = 5, SmokeEvery = 3, Licks = 0;
 		};
+		/** An air_trails row, read once a kind. */
+		struct TrailRow
+		{
+			std::string Name;
+			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			Rgb Col, ColFull, ColOld;
+		};
+		/** A trail being laid: where its point was at the last call, and how far it has gone since its last puff. */
+		struct Trailing
+		{
+			int Id = 0;
+			bool bOn = false;
+			std::string Kind;
+			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
+			Vec At, Carry;
+		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
 		{
@@ -267,6 +296,8 @@ namespace TheaterFx
 		std::vector<int> GunRounds; // rounds fired by each gun so far
 		std::vector<AirRow> AirRows;
 		std::vector<Firing> Firings; // the air guns
+		std::vector<TrailRow> TrailRows;
+		std::vector<Trailing> Trails; // the aircraft trails being laid
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
 		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5;
 		Rgb TracerCol, TracerPale, TracerDayCore, FlameCol, FlashCoreCol, GunSmokeCol, CannonHeartCol;
@@ -301,6 +332,8 @@ namespace TheaterFx
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
+		const TrailRow& TrailRowOf(const std::string& Kind);
+		void TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
 		void Prune(double Now);
 

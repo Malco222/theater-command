@@ -61,7 +61,22 @@ Blasts->AirGunStop(Gun);
   override (rounds a minute, world units a second).
 - Every round flickers at the muzzle; one in five is the ruled tracer. Cannon also throw licks and light the wing.
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
-  `target`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn).
+  `target`, `hit`, `trail`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`).
+
+## Hits on aircraft and trails
+
+```cpp
+// a round striking an aircraft (Kind: the gun that hit)
+Blasts->AirHit(AirNow, HitPointWorld, SkinNormal, TargetVelocity, TEXT("cannon20"));
+// an engine trailing: once, then every frame, then when it ends
+Blasts->TrailStart(AirNow, EngineId, EngineSocketWorld, TargetVelocity, TEXT("smoke"));
+Blasts->TrailMove(AirNow, EngineId, EngineSocketWorld, TargetVelocity);
+Blasts->TrailStop(EngineId);
+```
+
+- `TrailStart` again on a running trail changes its kind, such as smoke catching fire (`fire`).
+- Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
+- The same clock rule applies as for `AirGun`.
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
