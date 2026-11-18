@@ -79,6 +79,8 @@ interface State {
   /** The clock was running at the last frame, and the armies had met: for the tags when either changes. */
   wasRunning: boolean;
   met: boolean;
+  /** The player chose a speed before the armies met: the rush is over and that speed runs (the UI director, b467). */
+  rushByHand: boolean;
   /** Each side's colour on this field (sideColours). */
   colours: Record<Side, string>;
   /** What the chooser offered before the last battle, and how it went: for SINCE YOUR LAST BATTLE (ruling 226(11)). */
@@ -101,7 +103,7 @@ const S: State = {
   g: null as unknown as Game, screen: 'choose', offer: null, ground: null, b: null, field: null, clock: new Clock(),
   scene: { cam: { x: 1500, y: 1000, z: 0.3 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, colours: null },
   guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, resume: null, last: 0, trayAt: 0,
-  holding: new Set(), trayFrom: 0, tag: null, wasRunning: false, met: false, before: null, colours: { att: '#888', def: '#888' },
+  holding: new Set(), trayFrom: 0, tag: null, wasRunning: false, met: false, rushByHand: false, before: null, colours: { att: '#888', def: '#888' },
   active: false, home: null,
 };
 /**
@@ -119,6 +121,14 @@ type SideTicketLike = { nat: string; color: string };
 /** How much faster time runs on its own until the armies meet (ruling 226(1)): the clock at least this fast. */
 const RUSH = 4;
 const now = (): number => performance.now() / 1000;
+/**
+ * A speed chosen by the player, by its button or its key (1, 2, 3). Before the armies meet it ends the rush at once and
+ * that speed runs, so the press is never lost (the UI director, b467, one rule with the fleet action); the pause does not.
+ */
+function setSpeed(sp: Speed): void {
+  if (sp > 0 && S.b && S.b.contactAt === null) S.rushByHand = true;
+  S.clock.set(sp);
+}
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
 
 // ---- Choosing a battle --------------------------------------------------------------------------------------------
@@ -222,7 +232,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null;
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false;
+  S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
   const place = t.place.town ? `before ${t.place.town}` : `in ${t.place.name}`;
   S.dispatch = { t: 0, what: 'contact', text: `Your army stands ${place}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
@@ -475,7 +485,10 @@ function updateTop(force = false): void {
     if (ratio.dataset.said !== said) { ratio.innerHTML = said; ratio.dataset.said = said; }
   }
   const sp = S.clock.speed;
-  root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
+  // While the rush runs no speed button is lit: the tag on the field is the one sign of the speed, and its key cap says
+  // what ends it (the UI director, b467). The pause lights as ever.
+  const rushing = sp > 0 && b.contactAt === null && !S.rushByHand && sp < RUSH;
+  root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', !rushing && Number(x.dataset.speed) === sp));
   // Paused means paused (ruling 226(8)): the clock's label is the state, and the first segment reads Paused when lit.
   const cs = el('clockState');
   cs.textContent = sp === 0 ? 'Paused' : 'Running';
@@ -492,8 +505,7 @@ function updateTop(force = false): void {
   // The tag on the field: PAUSED with its key while stopped, or a passing word; never while a question stands.
   const tag = el('ftag');
   const passing = S.tag && now() < S.tag.until ? S.tag.text : '';
-  const rushing = sp > 0 && b.contactAt === null && sp < RUSH;
-  const tagHtml = S.asking || b.over ? '' : sp === 0 ? 'Paused <span class="tc-key">Space</span>' : rushing ? `×${RUSH} until the armies meet` : esc(passing);
+  const tagHtml = S.asking || b.over ? '' : sp === 0 ? 'Paused <span class="tc-key">Space</span>' : rushing ? `×${RUSH} until the armies meet <span class="tc-key">1</span>` : esc(passing);
   if (tag.innerHTML !== tagHtml) tag.innerHTML = tagHtml;
   tag.hidden = !tagHtml;
   if (force || S.dispatch) {
@@ -656,7 +668,7 @@ function wireBattle(): void {
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
 
-  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking) return; S.clock.set(Number(el.dataset.speed) as Speed); updateTop(); }));
+  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking) return; setSpeed(Number(el.dataset.speed) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
@@ -772,9 +784,9 @@ window.addEventListener('keydown', (e) => {
   const pan = 120 / sc.cam.z;
   switch (key) {
     case ' ': e.preventDefault(); if (!S.asking) S.clock.toggle(); break;
-    case '1': if (!S.asking) S.clock.set(1); break;
-    case '2': if (!S.asking) S.clock.set(2); break;
-    case '3': if (!S.asking) S.clock.set(4); break;
+    case '1': if (!S.asking) setSpeed(1); break;
+    case '2': if (!S.asking) setSpeed(2); break;
+    case '3': if (!S.asking) setSpeed(4); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
     // Esc changes nothing: it closes the question if one is open, else drops the blocks in hand.
@@ -819,7 +831,7 @@ function frame(): void {
   S.scene.now = t;
   const b = S.b;
   // Fast until the armies meet, then the speed he set, with a word on the field each way (ruling 226(1)).
-  S.clock.rush = b.contactAt === null && S.clock.speed > 0 && S.clock.speed < RUSH ? RUSH / S.clock.speed : 1;
+  S.clock.rush = b.contactAt === null && !S.rushByHand && S.clock.speed > 0 && S.clock.speed < RUSH ? RUSH / S.clock.speed : 1;
   S.clock.advance(b, dt);
   const running = S.clock.speed > 0;
   if (running && !S.wasRunning && b.contactAt === null && S.clock.speed >= RUSH) S.tag = { text: `Running ×${S.clock.speed}`, until: t + 2 };
