@@ -5353,6 +5353,47 @@ void ACampaignMapActor::BuildWaterways()
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
+		// (The art director, 18 November 2026, at Quebec on build 1668: past the town the St Lawrence's ribbon carried on
+		// across the estuary's open water, a river drawn on top of the sea. The coarse sheet of ground, which is what
+		// "the land stops" is asked of below, is too coarse to show that estuary; a fine sheet shows it. Beyond
+		// Europe a ribbon is not drawn where it lies wholly over open water as the chart draws it (or, outside the
+		// chart's frame, as the world's real heights have it): it ends where it meets the estuary, widening into it,
+		// and is taken up again only where its course crosses land the sheets show, under a bridge of the rules.)
+		TArray<bool> OverWater;
+		int32 MeetsWater = MAX_int32;
+		if (bRiverBeyond)
+		{
+			auto OpenWater = [this](const FVector2D& At)
+			{
+				if (Data.FindRegionAt(At.X, At.Y) != INDEX_NONE)
+				{
+					return false;
+				}
+				if (Data.IsCharted(At.X, At.Y))
+				{
+					for (const TArray<FVector2D>& Ring : Data.Land)
+					{
+						if (FCampaignMapData::PointInRing(Ring, At.X, At.Y))
+						{
+							return false; // (land no province claims, or a lake cut out of it: the rule below is the lakes')
+						}
+					}
+					return true;
+				}
+				return WorldTerrain.HasElevation() && WorldTerrain.MetresAt(WrapX(At.X), At.Y) <= 0.0f;
+			};
+			OverWater.Init(false, Path.Num());
+			for (int32 K = Path.Num() / 2 + 1; K < Path.Num(); ++K)
+			{
+				const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[K - 1]).GetSafeNormal();
+				const FVector2D Side(Along.Y, -Along.X);
+				OverWater[K] = OpenWater(Path[K]) && OpenWater(Path[K] + Side * Broad) && OpenWater(Path[K] - Side * Broad);
+				if (OverWater[K] && MeetsWater == MAX_int32)
+				{
+					MeetsWater = K;
+				}
+			}
+		}
 		// (how far along the river each point lies, how broad the river is there and how brown: for its sand bars)
 		TArray<double> RunAt, HalfAt;
 		TArray<float> BrownAt;
@@ -5374,11 +5415,22 @@ void ACampaignMapActor::BuildWaterways()
 			const double Wander = FMath::Clamp(1.7 * FMath::PerlinNoise1D(static_cast<float>(Run * 0.031 + RiverIndex * 13.7)), -1.0, 1.0);
 			const double Flare = RiverUnderFrom[RiverIndex] < Path.Num() ? 1.0 + 0.6 * FMath::SmoothStep(static_cast<double>(RiverUnderFrom[RiverIndex] - 5), static_cast<double>(RiverUnderFrom[RiverIndex]), static_cast<double>(K)) : 1.0;
 			const double Wanders = (1.0 + FMath::SmoothStep(0.08f, 0.34f, JungleHere) * (Wander > 0.0 ? 0.4 * Wander : 0.3 * Wander)) * (bRiverBeyond ? Flare : 1.0);
-			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders;
+			// (it widens into the open water it meets: to a little over twice its breadth, over its last seven points)
+			const double Widens = MeetsWater < Path.Num() && K <= MeetsWater ? 1.0 + 1.2 * FMath::SmoothStep(static_cast<double>(MeetsWater - 7), static_cast<double>(MeetsWater), static_cast<double>(K)) : 1.0;
+			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders * Widens;
 			// A river does not run over the sea: stop where the land does.
 			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
 				break;
+			}
+			if (OverWater.IsValidIndex(K) && OverWater[K])
+			{
+				// (open water: the ribbon is broken off, and begins afresh where its course next crosses land)
+				for (int32 P = 0; P < 5; ++P)
+				{
+					Previous[P] = INDEX_NONE;
+				}
+				continue;
 			}
 			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
 			FLinearColor MidstreamHere = MidstreamRuns, BankHere = BankRuns;
@@ -6783,6 +6835,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 		// "-TheaterTownsAsBuilt" leaves every town its first size.)
 		TownHumbled.Init(false, Data.Regions.Num());
 		TownClear.Reset();
+		TownKeepOff.Reset();
 		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterTownsAsBuilt")))
 		{
 			auto RankOf = [](const FCampaignRegion& Region)
@@ -6886,6 +6939,15 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					{
 						// (the lesser town builds no nearer the greater than a row of green beyond the greater's last roofs)
 						TownClear.FindOrAdd(Lesser.Id).Add(FVector(Greater.Center.X, Greater.Center.Y, TheirRun + Row));
+						// (The art director, 18 November 2026, on build 1668: Amsterdam's and Rotterdam's streets still met in
+						// a thin grey band, so that the two read as one long city. A ring round the greater's middle
+						// keeps a row clear on the line between the two middles and less and less to either side of it,
+						// where the greater's streets run out along its roads past its own measure. The open ground is
+						// kept from both sides: the greater's arm toward the lesser stops at its own measure, and the
+						// lesser builds no nearer than a row to any ground of the greater's province its roofs may
+						// reach. The lesser's own middle always stays clear, as it did.)
+						TownClear.FindOrAdd(Id).Add(FVector(Lesser.Center.X, Lesser.Center.Y, Apart - TheirRun));
+						TownKeepOff.FindOrAdd(Lesser.Id).Add(FVector4(Greater.Center.X, Greater.Center.Y, FMath::Min(1.22 * Theirs, Apart - Row - 0.8), static_cast<double>(Id)));
 					}
 				}
 				++Gave;
@@ -7407,13 +7469,33 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
 	// (and a greater town leaves green beside a lesser one that gave way to it: the art director's rule for close towns)
 	const TArray<FVector>* const Green = TownClear.Find(Region.Id);
-	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>()](double X, double Y)
+	const TArray<FVector4>* const Off = TownKeepOff.Find(Region.Id);
+	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>(), KeepOff = Off ? *Off : TArray<FVector4>()](double X, double Y)
 	{
 		for (const FVector& Each : Clear)
 		{
 			if (FMath::Square(X - Each.X) + FMath::Square(Y - Each.Y) < FMath::Square(Each.Z))
 			{
 				return false;
+			}
+		}
+		// (a town that kept its size beside a greater one: no nearer than a row of green to the ground of the greater's
+		// province that the greater's roofs may reach, looked for a row away and half a row away, all round)
+		const double Row = 4.2;
+		for (const FVector4& Each : KeepOff)
+		{
+			if (FMath::Square(X - Each.X) + FMath::Square(Y - Each.Y) >= FMath::Square(Each.Z + Row))
+			{
+				continue;
+			}
+			for (int32 K = 0; K < 16; ++K)
+			{
+				const double Turn = (K % 8) * UE_DOUBLE_PI / 4.0, Out = K < 8 ? Row : 0.5 * Row;
+				const double Px = X + FMath::Cos(Turn) * Out, Py = Y + FMath::Sin(Turn) * Out;
+				if (FMath::Square(Px - Each.X) + FMath::Square(Py - Each.Y) < FMath::Square(Each.Z) && Data.FindRegionAt(Px, Py) == static_cast<int32>(Each.W))
+				{
+					return false;
+				}
 			}
 		}
 		return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id;
@@ -7542,6 +7624,7 @@ void ACampaignMapActor::BuildTowns()
 	TownQuarters.Reset();
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
+	TownQuays.Reset();
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -7584,6 +7667,10 @@ void ACampaignMapActor::BuildTowns()
 		// of Europe. Its houses are the size houses always were: it is the town that is larger, not the houses.)
 		FMiniatureMesh::FTownSite Site;
 		FillTownSite(Region, Site);
+		if (Site.bQuay)
+		{
+			TownQuays.Add(Region.Id, Site.Quay);
+		}
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
 		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
@@ -8991,7 +9078,7 @@ void ACampaignMapActor::BuildWords()
 {
 	THEATER_SPEED_SCOPE(BuildWords);
 	MapWords.Reset();
-	int32 NamesMoved = 0;
+	int32 NamesMoved = 0, NamesOffShore = 0;
 	FString NamesOnWater, NamesOverRoofs;
 	// A province's own name, small, lying on its ground: for every province that has no plate, and for every one
 	// whose plate carries its town's name instead.
@@ -9044,7 +9131,67 @@ void ACampaignMapActor::BuildWords()
 				}
 				return true;
 			};
-			if (!Clear(At))
+			// (The art director, 18 November 2026, on build 1668: Holland's "H" sat on Amsterdam's harbour crane at the
+			// coast. A name keeps off the coast and the quays: every part of it lies on dry land with a letter's
+			// height of land round it, and clear of its own harbour and its neighbours', whose cranes, sheds and
+			// ships stand up in front of what lies north of them. A province with no such place keeps the place it
+			// had by the rule above.)
+			auto OffShore = [&](const FVector2D& Spot)
+			{
+				for (const double End : { -1.0, -0.5, 0.0, 0.5, 1.0 })
+				{
+					for (const double Up : { -1.0, 0.0, 1.0 })
+					{
+						if (GroundAt(Spot.X + End * (HalfWide + 0.8), Spot.Y + Up * Tall) <= 0.0f)
+						{
+							return false;
+						}
+					}
+				}
+				auto BehindQuay = [&](int32 Port)
+				{
+					const FVector2D* const Quay = TownQuays.Find(Port);
+					// (beside the quay, or within five units north of it, where the crane stands in front of the word)
+					return Quay && FMath::Abs(Spot.X - Quay->X) < HalfWide + 3.0 && Spot.Y - Quay->Y > -6.0 && Spot.Y - Quay->Y < 3.0;
+				};
+				if (BehindQuay(Region.Id))
+				{
+					return false;
+				}
+				for (const int32 Next : Region.Neighbors)
+				{
+					if (BehindQuay(Next))
+					{
+						return false;
+					}
+				}
+				return true;
+			};
+			const bool bWasClear = Clear(At);
+			bool bPlaced = bWasClear && OffShore(At);
+			for (double Out = Roofs + 1.5; Out < Roofs + 26.0 && !bPlaced; Out += 3.0)
+			{
+				for (const double Bearing : { 0.0, -45.0, 45.0, -90.0, 90.0, 180.0, -135.0, 135.0 })
+				{
+					const double Turn = FMath::DegreesToRadians(Bearing);
+					const FVector2D Spot = Region.Center + FVector2D(FMath::Sin(Turn) * (Out + FMath::Abs(FMath::Sin(Turn)) * HalfWide), -FMath::Cos(Turn) * Out);
+					if (Clear(Spot) && OffShore(Spot))
+					{
+						At = Spot;
+						bPlaced = true;
+						if (bWasClear)
+						{
+							++NamesOffShore;
+						}
+						else
+						{
+							++NamesMoved;
+						}
+						break;
+					}
+				}
+			}
+			if (!bPlaced && !bWasClear)
 			{
 				// (The art director, the same day: "a province with no name is a bigger loss than a name over a few
 				// roofs". The nearest open field of its own first; failing that, the water off its own shore; failing
@@ -9126,10 +9273,10 @@ void ACampaignMapActor::BuildWords()
 		Word.From = Word.To = At;
 		Word.bRegion = true;
 	}
-	if (NamesMoved > 0 || !NamesOnWater.IsEmpty() || !NamesOverRoofs.IsEmpty())
+	if (NamesMoved > 0 || NamesOffShore > 0 || !NamesOnWater.IsEmpty() || !NamesOverRoofs.IsEmpty())
 	{
-		UE_LOG(LogTheater, Display, TEXT("Names: %d provinces' names are moved onto open ground clear of their towns' roofs; on their own water: %s; over their roofs, smaller and shadowed: %s"),
-			NamesMoved, NamesOnWater.IsEmpty() ? TEXT("none") : *NamesOnWater, NamesOverRoofs.IsEmpty() ? TEXT("none") : *NamesOverRoofs);
+		UE_LOG(LogTheater, Display, TEXT("Names: %d provinces' names are moved onto open ground clear of their towns' roofs, and %d more off the coast and the quays; on their own water: %s; over their roofs, smaller and shadowed: %s"),
+			NamesMoved, NamesOffShore, NamesOnWater.IsEmpty() ? TEXT("none") : *NamesOnWater, NamesOverRoofs.IsEmpty() ? TEXT("none") : *NamesOverRoofs);
 	}
 	// Seas: across the middle of each, in spaced italic capitals.
 	for (const FCampaignSeaZone& Sea : Data.Seas)
