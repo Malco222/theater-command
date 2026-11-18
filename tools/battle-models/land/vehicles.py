@@ -4,7 +4,9 @@ BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name]
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
 import tanks_any
+import tanks_fra
 import tanks_ger
+import tanks_ita
 import tanks_sov
 import tanks_uk
 import tanks_usa
@@ -17,6 +19,8 @@ BUILDERS = {
     "T34-85": tanks_sov.t34_85,
     "Sherman": tanks_usa.sherman,
     "Matilda": tanks_uk.matilda,
+    "CharB1": tanks_fra.char_b1,
+    "M13": tanks_ita.m13,
     "LightTank": tanks_any.light_tank,
     "MediumTank": tanks_any.medium_tank,
 }
@@ -29,6 +33,8 @@ ABOUT = {
     "T34-85": {"nation": "SOV", "role": "medium tank", "years": "1944-45", "units": "armor (Soviet Union, from 1944)"},
     "Sherman": {"nation": "USA", "role": "medium tank", "years": "1942-45", "units": "armor (United States from 1942; Britain and the Commonwealth from 1943, in their own paint)"},
     "Matilda": {"nation": "UK", "role": "infantry tank", "years": "1939-42", "units": "armor (Britain and the Commonwealth to 1942; Australia throughout)"},
+    "CharB1": {"nation": "FRA", "role": "heavy tank", "years": "1936-40", "units": "armor (France, Vichy France, Free France)"},
+    "M13": {"nation": "ITA", "role": "medium tank", "years": "1940-43", "units": "armor (Italy)"},
     "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
     "MediumTank": {"nation": "any", "role": "medium tank", "years": "1940-45", "units": "armor (every nation without a tank of its own, once it has researched medium tanks)"},
 }
