@@ -42,6 +42,7 @@ import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
 import { prizeOf, townName, townSize } from './towns';
+import { skyView, type SkyView } from './weather';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
@@ -215,6 +216,12 @@ export interface MonthCard {
   letters: CardLetter[];
   /** Lines of the month's news that are not on the card. They are all in the newsreel. */
   more: number;
+  /**
+   * THE SKY (weather, rulings 127 and 143(b)): after the rows of news and before AT HOME, never a warning. Closed zones
+   * where he flies or fights first, a line each; cloud on one line; then one line for the clear sky, always. Only in a
+   * campaign with weather.
+   */
+  sky?: SkyView;
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -1162,6 +1169,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
   }
   card.home = [...done, ...coming].map((x) => { if (x.bare) return x; const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
+  // Weather (ruling 143(b)): THE SKY, this month's and next month's chances, and last month's grounded groups.
+  const sky = skyView(g, me);
+  if (sky) card.sky = sky;
   const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;

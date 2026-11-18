@@ -2354,7 +2354,7 @@ function drawFleetTray(f: Fleet): void {
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
   articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
@@ -5895,7 +5895,7 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
     ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${x.ashore >= 0 ? ' <span class="tag">Carrier wing</span>' : ''}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''}${x.ship >= 0 && whose ? ` · aboard the ${esc(x.baseName)}` : ''} · reach ${num(x.range)} km</span>
     ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${inkSign(x.ship >= 0 ? 'cv' : 'ftr')}${esc(x.where)}${x.ashore >= 0 && x.fleetName ? ` · of the ${esc(x.fleetName)}` : ''}</span>` : ''}
-    <span class="meta">${esc(x.doing)}</span>
+    <span class="meta">${esc(x.doing)}</span>${x.sky ? `<span class="meta">${x.sky.map(esc).join(' ')}</span>` : ''}
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
 }
@@ -6092,7 +6092,7 @@ function raidCard(): string {
   }
   const meets = p.meets.length ? p.meets.map((x) => `<div class="pickrow">${groupIcon('ftr', x.nat)}<span class="grow"><b>${esc(x.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.nat].adj}, ${x.afloat ? 'from the carriers of the' : 'from'} ${esc(x.baseName)} · ${num(x.ftr)} fighters, about ${num(x.able)} able to meet the raid</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
-    <div class="body">${head}
+    <div class="body">${p.sky ? `<div class="note"><b>The sky.</b> ${esc(p.sky)}</div>` : ''}${head}
       <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}${stayers}
       ${could.length || daytime ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}${daytime}` : ''}
       ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
@@ -8081,6 +8081,8 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   // design director's ruling 117, point 2.)
   ui.mark = g.human && humanUp(g) ? (g.turn === 1 && from.mark?.turn === 1 && from.mark.before.length === g.regions.length ? from.mark : markFor(g)) : null;
   if (card) { ui.lastCard = card; ui.monthAll = false; }
+  // The sky's tip is told once, on the card that first shows a closed sky where he flies or fights (ruling 143(g)).
+  if (card?.sky?.tip) g.flags['wx:tip'] = g.turn;
   refresh();
   if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });

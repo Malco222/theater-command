@@ -32,6 +32,7 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openFooting } from './footing';
+import { openWeather } from './weather';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
@@ -115,6 +116,7 @@ export function startOpen(g: Game, wide = true): Game {
   openTrade(g);
   openGovernment(g);
   openFooting(g);
+  openWeather(g);
   openManpower(g);
   numberDivisions(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.

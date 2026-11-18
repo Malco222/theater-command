@@ -47,6 +47,7 @@ import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
+import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -1194,6 +1195,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const skyLost = byNumbers === 'def' || (S.both && sky !== null && !skyWon && [...dN].some((n) => allied(g, n, sky)));
   if (skyWon) airEdge = Math.min(1, airEdge + S.land);
   if (skyLost) airEdge = Math.max(-1, airEdge - S.land);
+  // Weather (ruling 127): a closed sky over the battle grounds both air forces, and cloud halves what they lend.
+  const wxSky = weatherOn(g) ? skyAt(g, target.id) : 'clear';
+  if (wxSky !== 'clear') airEdge *= skySupport(wxSky);
   A *= 1 + S.attack * airEdge;
   D *= 1 - S.defence * airEdge;
   D = Math.max(D, 0.01);
@@ -1339,7 +1343,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
-  lines.push({ label: 'Air', value: byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
+  const wxLine = wxSky !== 'clear' ? skyBattleLine(g, zoneOfRegion(g, target.id), target.name) : null;
+  if (wxLine) lines.push({ label: 'The sky', value: wxLine });
+  if (wxSky !== 'closed') lines.push({ label: 'Air', value: byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
   const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
   if (gens || dgens) {
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;

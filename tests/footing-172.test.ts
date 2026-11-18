@@ -333,4 +333,18 @@ describe('the computer staffs', () => {
     footingMonth(g);
     expect(footingId(g, 'GER')).toBe('war');
   });
+
+  it('rearm at peace only at stops 4 and 5, with cause, and the Soviet Union keeps its peace table there (the rider\'s (p))', () => {
+    expect(FOOTING.judge.peaceKept).toEqual(['SOV']);
+    const at = (stop: number): Game => {
+      const g = free(7);
+      setFooting(g, true, true);
+      setStop(g, stop, true);
+      for (const n of Object.values(g.nations)) n.pc = 30;
+      footingMonth(g);
+      return g;
+    };
+    for (const stop of [3, 4, 5]) expect(footingId(at(stop), 'SOV')).toBe('peace');
+    expect(Object.values(at(3).nations).some((n) => n.foot?.step === 'rearm')).toBe(false);
+  });
 });

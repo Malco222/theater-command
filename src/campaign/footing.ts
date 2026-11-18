@@ -50,7 +50,8 @@ export const FOOTING = data as unknown as {
   rearm: StepRule & { lift: number };
   allout: StepRule & { share: number; wear: number; most: number; mend: number; amberAt: number };
   names: Record<FootingId, string>;
-  judge: { margin: number; rearmStops: number[] };
+  /** 'peaceKept': countries whose staffs keep their peace table at the stops of judgment (the rider's (p): the Soviet Union). */
+  judge: { margin: number; rearmStops: number[]; peaceKept: string[] };
   book: Record<string, BookRow>;
   tips: { door: string; allout: string };
 };
@@ -344,7 +345,7 @@ function staffFooting(g: Game, n: Nation, near: Set<string>): void {
   if (!war) {
     if (now === 'rearm') return;
     const want = book ? (bookOf(g, nat)?.rearm ?? Infinity) <= g.turn
-      : FOOTING.judge.rearmStops.includes(stopOf(g)) && (near.has(nat) || HISTORY.ambitions.some((a) => a.nat === nat && readable(g, a)));
+      : FOOTING.judge.rearmStops.includes(stopOf(g)) && !FOOTING.judge.peaceKept.includes(nat) && (near.has(nat) || HISTORY.ambitions.some((a) => a.nat === nat && readable(g, a)));
     if (want && affords(g, nat, 'rearm')) orderFooting(g, nat, 'rearm');
     return;
   }

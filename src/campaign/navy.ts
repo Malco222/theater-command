@@ -12,6 +12,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
+import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -222,6 +223,9 @@ export function fleetPower(g: Game, f: Fleet): number {
 export function airOver(g: Game, z: number, nat: string, hostile = false): number {
   const zone = g.seas[z];
   if (!zone.coast.length) return 0;
+  // Weather (ruling 127): no aircraft cover a sea under a closed sky, and cloud halves what they do.
+  const wx = seaSkyMul(g, z);
+  if (wx === 0) return 0;
   let s = 0;
   for (const id of zone.coast) {
     const r = g.regions[id];
@@ -233,8 +237,11 @@ export function airOver(g: Game, z: number, nat: string, hostile = false): numbe
     if (hostile ? atWar(g, r.ctrl, nat) : allied(g, r.ctrl, nat)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
     else if (sky && (hostile ? atWar(g, sky, nat) : allied(g, sky, nat))) s += g.nations[sky].air * AIR.sky.seaOwn;
   }
-  return (s / zone.coast.length) * zone.air;
+  return (s / zone.coast.length) * zone.air * wx;
 }
+
+/** What the sky over a sea leaves of the aircraft over it (weather, ruling 127): none when closed, half under cloud, all with no weather. */
+const seaSkyMul = (g: Game, z: number): number => (weatherOn(g) ? skySupport(skyAtSea(g, z)) : 1);
 
 export interface SeaBalance { ships: number; air: number; total: number }
 
@@ -346,12 +353,14 @@ export class SeaPicture {
   private air(z: number, nat: string, hostile: boolean): number {
     const g = this.g, zone = g.seas[z];
     if (!zone.coast.length) return 0;
+    const wx = seaSkyMul(g, z);
+    if (wx === 0) return 0;
     let s = 0;
     for (const c of this.coastsOf(z)) {
       if (hostile ? atWar(g, c.ctrl, nat) : allied(g, c.ctrl, nat)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
       else if (c.sky && (hostile ? atWar(g, c.sky, nat) : allied(g, c.sky, nat))) s += c.skyAir * AIR.sky.seaOwn;
     }
-    return (s / zone.coast.length) * zone.air;
+    return (s / zone.coast.length) * zone.air * wx;
   }
 }
 
@@ -1406,6 +1415,8 @@ function ownAirOver(g: Game, z: number, nat: string): number {
   const zone = g.seas[z];
   const n = g.nations[nat];
   if (!zone.coast.length || !n || !n.alive || !n.atWar.length) return 0;
+  const wx = seaSkyMul(g, z);
+  if (wx === 0) return 0;
   let s = 0;
   for (const id of zone.coast) {
     const r = g.regions[id];
@@ -1414,7 +1425,7 @@ function ownAirOver(g: Game, z: number, nat: string): number {
     if (r.ctrl === nat) s += n.air * (sky ? AIR.sky.seaFoe : 1);
     else if (sky === nat) s += n.air * AIR.sky.seaOwn;
   }
-  return (s / zone.coast.length) * zone.air;
+  return (s / zone.coast.length) * zone.air * wx;
 }
 
 /** The share of the enemy submarines at sea in one place that hunters of this weight sink in a month. */

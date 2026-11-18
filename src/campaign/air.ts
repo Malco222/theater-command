@@ -33,6 +33,7 @@ import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit,
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope } from './world';
+import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -359,9 +360,13 @@ function comesUp(g: Game, f: AirFleet, m: AirMission, target: number, zone: numb
 /** The fighters that would come up over a region against this nation: every enemy group left to defend that guards it (guardsLand), as far as its range and airfields allow. */
 export function fightersOver(g: Game, region: number, against: string): number {
   const holder = g.regions[region].ctrl;
+  // Weather (ruling 127): under a closed sky nothing comes up, and a group whose own sky is closed stays down.
+  const wx = weatherOn(g);
+  if (wx && skyAt(g, region) === 'closed') return 0;
   let n = 0;
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
+    if (wx && grounded(g, f)) continue;
     n += f.ftr * cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
   }
   return n;
@@ -393,9 +398,13 @@ export function airOverBattle(g: Game, side: Set<string>, foes: Set<string>, reg
     return v;
   };
   const weight = new Map<string, number>();
+  // Weather (ruling 127): nothing flies over a battle under a closed sky, nor from an airfield under one.
+  const wx = weatherOn(g);
+  if (wx && skyAt(g, region) === 'closed') return 0;
   let n = 0;
   for (const f of g.airFleets) {
     if (f.ftr + f.bmr <= 0 || !ours(f.nat)) continue;
+    if (wx && grounded(g, f)) continue;
     const d = kmTo(g, f, region), R = reach(f, g);
     let w = weight.get(f.nat);
     if (w === undefined) { w = airWeight(g, f.nat) ?? 1; weight.set(f.nat, w); }
@@ -954,10 +963,19 @@ function shipping(g: Game, nat: string, z: number): boolean {
   return g.seas[z].coast.some((id) => g.regions[id].port && atWar(g, nat, g.regions[id].ctrl));
 }
 
+/** The weather zone a mission's target lies in: a sea's, a fleet's sea's, or a province's (ruling 127). */
+export function skyZone(g: Game, m: AirMission, target: number): number {
+  if (m === 'strike') return zoneOfSea(g, target);
+  if (m === 'fleet') { const t = g.fleets.find((x) => x.id === target); return t && atSea(t) ? zoneOfSea(g, t.zone) : -1; }
+  return zoneOfRegion(g, target);
+}
+
 /** Why a fleet cannot fly this mission against this target, or null if it can. */
 export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: number): string | null {
   if (m === 'support' || m === 'rest') return null;
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // Weather (ruling 127): a mission needs an open sky at its base and at its target.
+  if (weatherOn(g)) { const why = whyNotSky(g, f, skyZone(g, m, target)); if (why) return why; }
   const R = reach(f, g);
   // An air group of fighters goes on a day raid as its escort, as far as its fighters reach.
   const escort = f.kind === 'ftr' && f.ftr > 0 && m !== 'night';
@@ -1170,6 +1188,10 @@ export interface AirAssess {
   again: number;
   /** A harbour caught unready in the month war was declared. */
   surprise: boolean;
+  /** The sky over the target (weather, ruling 127): clear with no weather. */
+  sky: Sky;
+  /** What cloud leaves of the bombs that find the target: 1 under a clear sky. */
+  aim: number;
 }
 
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
@@ -1217,8 +1239,12 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const zone = m === 'fleet' ? quarry?.zone ?? -1 : target;
   const nat = fleets[0]?.nat ?? '';
   const place = sea ? `the ${g.seas[zone]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
+  // Weather (ruling 127): the sky over the target, and the groups whose own sky is closed stay on the ground.
+  const wx = weatherOn(g);
+  const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
+  if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${place}.`; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
   if (m === 'fleet') out.ships = [quarry!];
   else if (m === 'harbour') out.ships = shipsInPort(g, target, nat);
@@ -1227,6 +1253,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   out.surprise = m === 'harbour' && out.ships.some((x) => g.flags[`war:${nat}:${x.nat}`] === g.turn);
   const unready = out.surprise ? CARRIERS.harbour.unready : 1;
   for (const f of fleets) {
+    if (wx && grounded(g, f)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     const R = reach(f, g);
     const esc = night ? 0 : cover(d, R.ftrRange);
@@ -1253,6 +1280,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, nat)) continue;
     if (!comesUp(g, f, m, target, zone)) continue;
+    if (wx && grounded(g, f)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     let w = cover(d, reach(f, g).ftrRange) * crowding(g, f);
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
@@ -1261,6 +1289,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (night) w *= C.night.fighters;
     if (!out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
     w *= unready;
+    // Under cloud fewer of the defenders find the bombers.
+    if (wx) w *= cloudMet(sky);
     if (w <= 0) continue;
     out.def.push({ f, d, w });
     out.D += f.ftr * w;
@@ -1278,14 +1308,16 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const most = mostBomberLoss(g, night);
   // The air war counts its losses nearer history's: an escort saves far more than its numbers.
   const L = airWar(g) ? (night ? AIRWAR.losses.night : AIRWAR.losses) : null;
-  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * I + (night ? C.night.flak : C.flak) * I) : 0;
+  // Under cloud the guns bring down fewer of the bombers (weather, ruling 127): 1 under a clear sky.
+  const gun = cloudGuns(sky, night);
+  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * I + (night ? C.night.flak : C.flak) * gun * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.
   out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? gunsAt(g, target) : 0;
-  if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready);
+  if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * gun);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
   if (out.ships.length) {
-    out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready;
+    out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready * gun;
     if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
     out.spoil = CARRIERS.cap.spoil * Math.sqrt(met);
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
@@ -1293,7 +1325,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.again = Math.pow(CARRIERS.strike.again, before);
   }
   // What of the bombers' loss is the guns' doing, for the raid card (the player's ask of 2026-11-16).
-  if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) + out.aa * WORKS.aa.flak * unready + out.flak) * I);
+  if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) * gun + out.aa * WORKS.aa.flak * unready * gun + out.flak) * I);
 
   // The Battle Ticket.
   const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
@@ -1457,7 +1489,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers');
+  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
@@ -2156,7 +2188,7 @@ export function foundShare(g: Game, a: AirAssess, nat: string): number {
 export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): AirForecast {
   const C = AIR.combat, I = intensity(m);
   const nat = a.att[0]?.f.nat ?? '';
-  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers');
+  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
   const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
   // The fighter battle as the flight settles it, at even luck.
   const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
