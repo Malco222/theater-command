@@ -17,7 +17,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, opensSoon, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheDay, opensNow, opensOn, opensSoon, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
@@ -1041,6 +1041,9 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const quay = seaBase(g, nat, slot);
   if (!quay) return;
   const sfx = slot ? ':o' : '';
+  // (History's list picks the day, ruling 233(u): a staff that has planned for a shore of the list since the first
+  // month of its lead lands on it in the shore's month without the monthly dice, where every test passes.)
+  const day = sea.second && onTheDay(g, nat, you, sfx);
   const ready = quay.units
     .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
     // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
@@ -1114,13 +1117,16 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // (Against an enemy on the staff's own side of the ocean nobody waits for a day to be picked: he is attacked the
   // month the force stands ready. Version 81.)
   const atOnce = sea.second && neighbourAcrossTheWater(g, nat, you);
-  if (!atOnce && hashString(`descent:${g.seed}:${g.turn}:${nat}${sfx}`) / 4294967296 >= L.chance) return;
+  const diced = !atOnce && hashString(`descent:${g.seed}:${g.turn}:${nat}${sfx}`) / 4294967296 >= L.chance;
+  if (diced && !day) return;
   const men = force.reduce((s, c) => s + c.divs * c.str, 0);
   let best: Region | null = null, bv = 0, bw = false, bz = -1, bf = force, weak = false, weakMain = false;
   // (An island taken whole, or a colony overseas: the lesser prize beside a beach on a mainland.)
   const lesser = (r: Region): boolean => r.nb.length === 0 || !!r.overseas;
   for (const r of landingTargets(g, force)) {
     if (r.ctrl !== you || !r.port) continue;
+    // (The dice said no and the list picked the day: the list's shore of this month and no other.)
+    if (diced && !opensNow(g, nat, r)) continue;
     // (A staff with history's list of shores opens its second front on those and nowhere else. A shore of the list
     // whose month comes within the lead is reckoned through like any other and not landed on: where only its
     // strength stands in the way the staff builds up for it beforehand. Ruling 233(q).)
@@ -1150,6 +1156,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // builds the ships to lift what stands there. staff.ts, the staging of the quay.)
   // And a beach on a mainland comes before an island or a colony that passes: for as long as it would rest after
   // a landing ('every' months) the staff builds up for the mainland sooner than spend its force on the lesser prize.
+  // (Where a test refused the list's shore in its month, the dice are back the month after, as before.)
+  if (diced && !best) return;
   const since = `st:moreFrom:${nat}${sfx}`;
   if ((g.flags[`st:more:${nat}${sfx}`] ?? 0) < g.turn - 2) delete g.flags[since];
   const waits = !!best && weakMain && lesser(best) && g.turn - (g.flags[since] ?? g.turn) < L.every;

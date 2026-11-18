@@ -76,7 +76,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; lead?: number; wait?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1279,6 +1279,31 @@ export function opensSoon(g: Game, nat: string, r: Region): boolean {
   const from = P?.from?.[r.owner];
   if (!P || from === undefined || !dated(g) || r.overseas || !r.nb.length || ownShore(g, nat, r)) return false;
   return P.open.includes(r.owner) && !P.not?.includes(r.name) && g.turn < from && g.turn >= from - lead && !opensOn(g, nat, r);
+}
+/** True for a mainland harbour of a staff's list in the very month history's list opens it (at the stops where the dates hold). */
+export function opensNow(g: Game, nat: string, r: Region): boolean {
+  const P = planned(g, nat);
+  return !!P && dated(g) && !r.overseas && r.nb.length > 0 && P.open.includes(r.owner) && !P.not?.includes(r.name) && P.from?.[r.owner] === g.turn;
+}
+/**
+ * True in the month history's list opens a mainland shore this enemy holds, for a staff that has planned for it since
+ * the first month of the lead (open.json, 'descent.day'; ruling 233(u)): the list picked the day, and the staff lands
+ * that month without the monthly dice where every test passes. Asked once a month for each army of a staff with that
+ * enemy across the sea (`sfx` names the army): the month the lead begins it is noted that the plan stood.
+ */
+export function onTheDay(g: Game, nat: string, you: string, sfx: string): boolean {
+  const D = OPEN.descent, lead = D?.lead ?? 0;
+  const P = D?.day && lead > 0 && dated(g) ? planned(g, nat) : null;
+  const key = `st:led:${nat}${sfx}`;
+  let m = 0;
+  if (P?.from) for (const r of harbours(g, you)) {
+    const f = P.from[r.owner];
+    if (f === undefined || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name) || ownShore(g, nat, r)) continue;
+    if (g.turn >= f - lead && g.turn <= f && (!m || f < m)) m = f;
+  }
+  if (m && g.turn === m - lead) g.flags[key] = m;
+  else if (flag(g, key) && flag(g, key) < g.turn) delete g.flags[key];
+  return m === g.turn && flag(g, key) === m;
 }
 /**
  * The build-up (open.json, 'descent.planned', 'with'): a staff with history's list opens no front of its own on a

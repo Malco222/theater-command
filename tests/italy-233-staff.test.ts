@@ -1,4 +1,4 @@
-// Ruling 233, riders (j), (k), (q) and (r) (the design director's b506 and b510; the grand campaign, computer staffs only).
+// Ruling 233, riders (j), (k), (q), (r), (s) and (u) (the design director's b506 to b516; the grand campaign, computer staffs only).
 // (j) History's list of shores has an order: when the month comes for a later shore of the list, a staff's home army
 //     turns to the enemy who holds it nearest the home ports, though its first enemy across the sea still stands.
 //     Britain turns to France in 1944 while Italy fights on. (Before it a staff kept one enemy across the sea for as
@@ -10,6 +10,8 @@
 //     plan (open.json 'descent.wait'): America's army in Britain, the months the Western Mediterranean is shut.
 // (s) The test of strength (b514): only the holder of a beach brings reserves from his own country. An ally's army
 //     standing in its own home stays there (open.json 'descent.strength.own'): Italy's, against a landing in Brittany.
+// (u) History's list picks the day (b516): a staff that has planned for a shore of the list since the first month of
+//     its lead lands on it in the shore's month without the monthly dice, where every test passes (open.json 'descent.day').
 import { describe, expect, it } from 'vitest';
 import fleetData from '../data/campaign/fleets.json';
 import openData from '../data/campaign/open.json';
@@ -17,11 +19,11 @@ import { reckon, type Reckoning } from '../src/campaign/ashore';
 import { allied, createGame, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { atSea, closedTo, fleetsOf, keepsHarbour, navalAI, sortieAgainst } from '../src/campaign/navy';
-import { lodgment, opensOn, opensSoon, seaBase, seaFoe, startOpen } from '../src/campaign/staff';
+import { lodgment, onTheDay, opensNow, opensOn, opensSoon, seaBase, seaFoe, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 const FRANCE_44 = 57;
-const DESCENT = openData.descent as unknown as { lead: number; wait: boolean };
+const DESCENT = openData.descent as unknown as { lead: number; wait: boolean; day: boolean };
 const LEAD = DESCENT.lead;
 /** A grand war nobody plays: Britain at war with Germany and Italy, France fallen, and Britain's staff set on Italy since last year. */
 const war = (turn: number, stop = 3, human: string | null = null): Game => {
@@ -127,6 +129,40 @@ describe('the lead holds for the whole plan (233(q), b513)', () => {
     // The quay lies on a sea a harbour of the list lies on, or next to one.
     const seas = new Set(list.flatMap((r) => r.seas));
     expect(quay.seas.some((z) => seas.has(z) || g.seas[z].adj.some((y) => seas.has(y)))).toBe(true);
+  });
+  it('history\'s list picks the day (233(u)): a staff that planned through the whole lead lands in the shore\'s month without the dice', () => {
+    expect(DESCENT.day).toBe(true);
+    // The very month the list opens the shore, and no other; nothing at the stops where the list is put away.
+    for (const [turn, now] of [[FRANCE_44 - 1, false], [FRANCE_44, true], [FRANCE_44 + 1, false]] as const) { const g = alone(turn); expect(opensNow(g, 'UK', beachOf(g)), `month ${turn}`).toBe(now); }
+    for (const stop of [4, 5]) { const g = alone(FRANCE_44, stop); expect(opensNow(g, 'UK', beachOf(g)), `stop ${stop}`).toBe(false); }
+    expect(opensNow(alone(FRANCE_44), 'UK', alone(FRANCE_44).byName.Sardinia)).toBe(false);
+    // Asked month by month from the first month of the lead: the day is the shore's month, and it is one month long.
+    const g = alone(FRANCE_44 - LEAD);
+    for (let t = FRANCE_44 - LEAD; t <= FRANCE_44 + 1; t++) { g.turn = t; expect(onTheDay(g, 'UK', 'GER', ''), `month ${t}`).toBe(t === FRANCE_44); }
+    expect(g.flags['st:led:UK']).toBeUndefined();
+    // A staff that came to the plan a month late has not kept the full lead: the dice decide, as before.
+    const late = alone(FRANCE_44 - LEAD + 1);
+    for (let t = FRANCE_44 - LEAD + 1; t <= FRANCE_44; t++) { late.turn = t; expect(onTheDay(late, 'UK', 'GER', ''), `late, month ${t}`).toBe(false); }
+    // Each army of a staff keeps its own note: the army abroad did not plan because the home army did.
+    const two = alone(FRANCE_44 - LEAD);
+    expect(onTheDay(two, 'UK', 'GER', '')).toBe(false);
+    two.turn = FRANCE_44;
+    expect(onTheDay(two, 'UK', 'GER', ':o')).toBe(false);
+    expect(onTheDay(two, 'UK', 'GER', '')).toBe(true);
+    // At stops 4 and 5 the dice stay, and with the dial off everywhere.
+    for (const stop of [4, 5]) {
+      const x = alone(FRANCE_44 - LEAD, stop);
+      expect(onTheDay(x, 'UK', 'GER', '')).toBe(false);
+      x.turn = FRANCE_44;
+      expect(onTheDay(x, 'UK', 'GER', ''), `stop ${stop}`).toBe(false);
+    }
+    const off = alone(FRANCE_44 - LEAD);
+    DESCENT.day = false;
+    try {
+      expect(onTheDay(off, 'UK', 'GER', '')).toBe(false);
+      off.turn = FRANCE_44;
+      expect(onTheDay(off, 'UK', 'GER', '')).toBe(false);
+    } finally { DESCENT.day = true; }
   });
 });
 
