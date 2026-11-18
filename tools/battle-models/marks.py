@@ -110,7 +110,7 @@ def shapes(tag):
     if tag == "KILL-FRA":
         return [ring(0.0, 1.0, RED, 20), ring(0.0, 0.66, WHITE, 20), ring(0.0, 0.33, BLUE, 20)]
     if tag == "KILL-CHI":
-        return [ring(0.0, 1.0, BLUE, 20), star(0.72, WHITE, 0.6, 12)]           # (China's white sun on blue)
+        return [ring(0.0, 1.0, "0A1C8C", 20), star(0.82, WHITE, 0.6, 12)]       # (China's white sun on blue, as the game draws it on her own aircraft)
     if tag == "KILL-ITA":
         return [rect(-1.0, -0.34, -0.66, 0.66, GREEN, 1.0) + rect(-0.34, 0.34, -0.66, 0.66, WHITE, 1.0) + rect(0.34, 1.0, -0.66, 0.66, RED, 1.0)]
     if tag == "KILL-STAR":                                                       # (the Soviet habit: a small red star a kill)
