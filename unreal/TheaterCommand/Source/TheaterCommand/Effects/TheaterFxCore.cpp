@@ -197,6 +197,9 @@ namespace TheaterFx
 		Out_.Smoke = Picture(P + "smoke", Rgb::FromPicture(72, 62, 52));
 		Out_.bFirst = Has(P + "first.0");
 		Out_.First = Picture(P + "first", Out_.Dust);
+		Out_.Grain = std::max(0.2, Num(P + "grain", 1.0));
+		Out_.FirstAtFoot = Num(P + "first_share.0", 0.0);
+		Out_.FirstAtTip = Num(P + "first_share.1", 1.0);
 		Out_.bSplinter = Has(P + "splinter.0");
 		Out_.Splinter = Picture(P + "splinter", Out_.Clod);
 		return Out_;
@@ -457,7 +460,7 @@ namespace TheaterFx
 			const bool bFront = I < NOut;
 			const int N = bFront ? NOut : NIn;
 			const int Place = bFront ? I : I - NOut;
-			const double Speed = bFront ? 1.0 : D.U(0.15, 0.9); // (the inner ones fill back toward the hole: one skirt, not a ring)
+			const double Speed = bFront ? 1.0 : std::sqrt(D.U(0.02, 0.85)); // (the inner ones fill back toward the hole, evenly over its round: one skirt, not a ring)
 			const double A = 2.0 * Pi * (Place + D.U(-0.4, 0.4)) / std::max(N, 1);
 			const Vec Outward(std::cos(A), std::sin(A), 0.0);
 			const double Drag = Num(Sk + "drag", 8.0) * D.U(0.85, 1.15);
@@ -472,7 +475,7 @@ namespace TheaterFx
 			B.Windage = 0.6;
 			B.Life = Pick(D, Sk + "life_s", 2.5, 3.5) * std::min(2.0, K);
 			B.R0 = Num(Sk + "start_radius_m", 0.5) * K;
-			B.R1 = Num(Sk + "end_radius_m", 1.5) * K * D.U(0.7, 1.3) * (bFront ? 1.0 : 0.85);
+			B.R1 = Num(Sk + "end_radius_m", 1.5) * K * D.U(0.7, 1.3);
 			B.Grow = Num(Sk + "grow", 0.25);
 			B.Stretch = Num(Sk + "stretch_along_ring", 1.7);
 			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
@@ -485,7 +488,7 @@ namespace TheaterFx
 			B.HazeBy = Num(Sk + "haze_by_s", 1.0);
 			B.HazeAlpha = std::min(B.Alpha, HazeAlpha);
 			B.ShadeK = Num(Sk + "shade", 1.8); // (a lit top and a shadowed foot, so it shows its height)
-			B.Heart = 0.55;
+			B.Heart = Num(Sk + "heart", 0.55);
 			B.Rim = 0.0;
 			Bits.push_back(B);
 		}
@@ -532,17 +535,19 @@ namespace TheaterFx
 			double F = D.U(0.0, 0.05);
 			while (F < 1.0)
 			{
-				const double Rl = Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8);
+				const double Rwhole = Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8);
+				const double Rl = Rwhole * P.Grain; // (granular grounds: smaller pieces, more of them)
 				const bool bTip = bHeavy && F >= TipAt;
 				const double OnTip = bTip ? (F - TipAt) / std::max(1.0 - TipAt, 1e-6) : 0.0;
 				const double Sp = V * (0.05 + 0.95 * std::pow(F, 0.9));
 				const double Rr = Rl * (D.U() < Lumps ? D.U(1.4, 2.0) : D.U(0.8, 1.1));
 				Rgb Col = bHeavy ? P.Heavy * Shade : P.Soil.Mix(P.Dust, DustShare) * Shade;
-				if (P.bFirst && F > 0.45)
+				const bool bGrained = P.Grain < 0.999;
+				if (P.bFirst && D.U() < P.FirstAtFoot + (P.FirstAtTip - P.FirstAtFoot) * F)
 				{
-					Col = P.First; // (snow: white thrown up first, the dark earth under it)
+					Col = P.First * D.U(0.84, 1.04); // (snow: thrown up first, never two grains the same shade, earth showing through)
 				}
-				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rl * (bTip ? 1.1 : Jitter) * KD); // (ragged, clumpy sides)
+				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rwhole * (bTip ? 1.1 : Jitter) * KD * (bGrained ? 1.5 : 1.0)); // (ragged, clumpy sides; grains scattered wider, never a string of beads)
 				Bit B;
 				B.Born = T0 + 0.01 + 0.025 * (1.0 - F);
 				B.From = At + ZUp * 0.1 + Dir * (0.25 * K);
@@ -555,19 +560,19 @@ namespace TheaterFx
 				B.R1 = Rr * D.U(1.8, 2.4);
 				B.Grow = 0.5;
 				B.Along = Dir;
-				B.Stretch = bTip ? Along0 + (TipStretch - Along0) * OnTip : Along0;
+				B.Stretch = 1.0 + ((bTip ? Along0 + (TipStretch - Along0) * OnTip : Along0) - 1.0) * P.Grain; // (grains are not drawn out)
 				B.Point = bTip ? TipPoint : 0.3; // (torn and pointed, never rounded)
 				B.Tail = 0.15;
 				B.Col = Col;
 				B.Col2 = P.bFirst ? Col : P.Dust;
 				B.Cool = 0.7;
-				B.Alpha = bHeavy ? (bTip ? 1.0 - (1.0 - TipAlpha) * OnTip : 1.0) : FillAlpha * (1.0 - 0.3 * F);
+				B.Alpha = (bHeavy ? (bTip ? 1.0 - (1.0 - TipAlpha) * OnTip : 1.0) : FillAlpha * (1.0 - 0.3 * F)) * (bGrained ? D.U(0.7, 1.0) : 1.0);
 				B.FadeIn = 0.01;
 				B.Hold = 0.4;
-				B.Heart = bHeavy ? 0.8 : 0.5;
-				B.Rim = bHeavy ? 0.15 : 0.0;
+				B.Heart = bHeavy ? (bGrained ? 0.65 : 0.8) : 0.5;
+				B.Rim = bHeavy && !bGrained ? 0.15 : 0.0; // (grains have soft edges, so no jet has a clean blade's side)
 				Bits.push_back(B);
-				F += Rl * Along0 * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2);
+				F += Rl * (1.0 + (Along0 - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2); // (stepped by the length it is drawn)
 			}
 			if (bHeavy && ClodK > 0.05)
 			{
@@ -1397,16 +1402,26 @@ namespace TheaterFx
 			break;
 		case Bit::Shape::Upright:
 		{
+			// A low flattened ball on the ground, drawn as its outline from where the eye is: from the side a low wall
+			// (as high as Flatten), from above the whole round it covers, so a skirt is one haze from any height,
+			// never a ring of separate dabs.
 			const Vec Flat_ = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
-			double Wide = 1.0;
+			const Vec Ahead = Vec(-Flat_.Y, Flat_.X, 0.0); // (level, square to Flat_)
+			double Wide = 1.0, Deep = 1.0;
 			if (B.Stretch > 1.0001)
 			{
 				const Vec Al = Vec(B.Along.X, B.Along.Y, 0.0).Unit(Flat_);
 				Wide += (B.Stretch - 1.0) * std::fabs(Al.Dot(Flat_));
+				Deep += (B.Stretch - 1.0) * std::fabs(Al.Dot(Ahead));
 			}
+			const double Down = Clamp01(-Eye.Forward.Z); // (the sine of how steeply the eye looks down)
+			const double Across = Rad * Deep; // (its reach on the ground away from the eye: from above, its height on the screen)
+			const double High = Rad * B.Flatten;
+			const double Tall = std::sqrt(Across * Across * Down * Down + High * High * (1.0 - Down * Down));
+			const Vec Upward = Flat_.Cross(Eye.Forward).Unit(ZUp);
 			AxA = Flat_ * (Rad * Wide);
-			AxB = ZUp * (Rad * B.Flatten);
-			Middle = P + ZUp * (Rad * B.Flatten * 0.8);
+			AxB = (Upward.Z < 0.0 ? -Upward : Upward) * Tall;
+			Middle = P + ZUp * (High * 0.8);
 			break;
 		}
 		case Bit::Shape::Flat:

@@ -198,6 +198,8 @@ namespace TheaterFx
 		{
 			Rgb Soil, Heavy, Dust, Clod, Smoke, First, Splinter;
 			bool bFirst = false, bSplinter = false;
+			double Grain = 1.0; // (the crown's puffs as a share of their size: under 1, broken and granular, as snow)
+			double FirstAtFoot = 1.0, FirstAtTip = 1.0; // (how much of a jet is the ground's first colour, foot to tip)
 		};
 
 		const Recipe* Book = nullptr;

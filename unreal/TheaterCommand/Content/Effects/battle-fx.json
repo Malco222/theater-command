@@ -57,16 +57,16 @@
    "height_m": 1.2,
    "colour_from_ground": 0.85,
    "skirt": {
-    "puffs_outer": 70,
-    "puffs_inner": 110,
+    "puffs_outer": 90,
+    "puffs_inner": 160,
     "inner_speed": 0.6,
-    "end_radius_m": 1.8,
+    "end_radius_m": 2.3,
     "start_radius_m": 0.7,
     "stretch_along_ring": 1.7,
     "flatten": 0.75,
     "alpha": [
-     0.55,
-     0.7
+     0.4,
+     0.55
     ],
     "drag": 8.0,
     "life_s": [
@@ -80,7 +80,9 @@
     "grow": 0.25,
     "front_billow": 1.35,
     "shade": 1.8,
-    "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)"
+    "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)",
+    "heart": 0.3,
+    "_mend_1931": "Art director 19:31Z: the skirt must be one low continuous haze, never puffs. Its pieces are now drawn as low flattened balls seen from where the eye is (a low wall from the side, the whole round they cover from above, where they used to be thin upright cards that read as separate dabs), larger, more of them, softer and fainter, so they run together."
    },
    "grass": "flattens outward, springs back over 0.6 s",
    "heat_shimmer_frames": 2,
@@ -535,9 +537,9 @@
   },
   "snow": {
    "thrown_first": [
-    236,
-    238,
-    240
+    198,
+    203,
+    211
    ],
    "thrown_then_from_ground": 0.4,
    "clods": 0.7,
@@ -561,9 +563,9 @@
      34
     ],
     "dust": [
-     222,
-     226,
-     232
+     200,
+     205,
+     213
     ],
     "clod": [
      48,
@@ -576,11 +578,17 @@
      50
     ],
     "first": [
-     236,
-     238,
-     240
+     198,
+     203,
+     211
+    ],
+    "grain": 0.5,
+    "first_share": [
+     0.35,
+     0.8
     ]
-   }
+   },
+   "_mend_1931": "Art director 19:31Z on the first in-game frames: the snow crown was smooth pure-white blades like a paper flower, ringed by cotton puffs. Now broken and granular (grain: its pieces half the size, twice as many, soft-edged, not drawn out), off-white (about 188,193,201 in shade; each grain its own shade) with dark earth showing in the jets (first_share: a third of the pieces snow at the jet's foot, four fifths at its tip)."
   },
   "mud": {
    "thrown_from_ground": 0.45,
