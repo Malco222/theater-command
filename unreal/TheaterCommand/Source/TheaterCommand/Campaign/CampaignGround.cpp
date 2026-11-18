@@ -1638,6 +1638,15 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			{
 				Big = FMath::Lerp(Big, LookBig[Idx], Beyond); // (the largest on the prairie, the smallest in rice country)
 			}
+			// (The art director's review of build 1608: where the fields beyond Europe are not squares they were read
+			// half on the small fields' grid and half on the great ones', two patterns laid over each other, and came
+			// out as soft streaks. They are whole plots on one grid: the great one, about thirty-seven dots by twelve
+			// from playing height; rice country keeps the small one, its paddies. With "-TheaterNewFields" only.)
+			static const bool bWholePlots = FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
+			if (bWholePlots && Beyond > 0.5f && !(LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0))
+			{
+				Big = LookRice[Idx] > 0.5f ? 0.0f : 1.0f;
+			}
 			// The rim of a wood: its sunward edge catches the light, and it throws a strip of shade on the open
 			// ground behind it. (The sun stands in the west-north-west: the grid point toward it is the one to the west.)
 			const float Sunward = Ground[Terrain.Index(FMath::Max(I - 1, 0), J)].A / 255.0f;

@@ -1414,6 +1414,28 @@ void ACampaignMapActor::DressBeyond(UMaterialInstanceDynamic* Sheet) const
 	// wood there as a slow thinning-out, and here each tree-top is let stand or fall by itself across it. (Europe's
 	// woods keep their firm edge.)
 	Sheet->SetScalarParameterValue(TEXT("WoodsFringe"), 1.2f);
+	// (and with the new lie of the fields, "-TheaterNewFields", each whole plot beyond Europe has a thin light edge)
+	// (and a plot there is under three times as long as it is wide: Europe's strips, at 2.2 rows to the field's
+	// length, came out six to one once two or three of a tone lay end to end. "-TheaterPlots=strip,edge" tries others.)
+	static const bool bPlotEdges = FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
+	static float PlotStrip = 1.3f, PlotEdge = 0.5f; // (a plot about thirty-seven dots by twenty from playing height, its edge half as light again)
+	static bool bPlotsRead = false;
+	if (!bPlotsRead)
+	{
+		bPlotsRead = true;
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPlots="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 2)
+		{
+			PlotStrip = FCString::Atof(*Parts[0]);
+			PlotEdge = FCString::Atof(*Parts[1]);
+		}
+	}
+	Sheet->SetScalarParameterValue(TEXT("PlotEdge"), bPlotEdges ? PlotEdge : 0.0f);
+	if (bPlotEdges)
+	{
+		Sheet->SetScalarParameterValue(TEXT("FieldStrip"), PlotStrip);
+	}
 	if (Sheet == WorldLandMaterial)
 	{
 		// (the coarse sheet is what is seen from high up: there a wood's edge is feathered over a few points of the

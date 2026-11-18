@@ -790,6 +790,26 @@ def build_land():
     c = lerp(m, c, wild_colour, wild, -1200, -150)
     c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
     c = lerp(m, c, vector(m, "SquareRoadColour", (0.552, 0.479, 0.262, 1.0), -1750, -200), road, -1550, -330)
+    # (The art director's review of build 1608: beyond Europe the crooked fields read as brushed cloth. There they are
+    # whole plots on the great open fields' grid, about thirty-seven dots by twelve from playing height, and each has
+    # a thin light edge: the plot's own colour, lifted. "PlotEdge" is nothing on Europe's own sheet, whose small
+    # fields keep their hedges; the game sets it on the sheets beyond.)
+    plot_grid = plus(m, times(m, rows, 0.42, -1300, 3300), 0.37 * 64.0, -1150, 3300)
+    plot_part = one_in(m, unreal.MaterialExpressionFrac, plot_grid, -1000, 3300)
+    plot_back = one_in(m, unreal.MaterialExpressionOneMinus, plot_part, -850, 3380)
+    plot_near = node(m, unreal.MaterialExpressionMin, -700, 3300)
+    connect(plot_part, "", plot_near, "A")
+    connect(plot_back, "", plot_near, "B")
+    plot_u = node_from(m, unreal.MaterialExpressionComponentMask, plot_near, -550, 3300, r=True, g=False, b=False, a=False)
+    plot_v = node_from(m, unreal.MaterialExpressionComponentMask, plot_near, -550, 3380, r=False, g=True, b=False, a=False)
+    # (a plot is about three times as long as it is wide: the edge is as thin across the narrow way as along the long)
+    plot_to = node(m, unreal.MaterialExpressionMin, -400, 3340)
+    connect(times(m, plot_u, scalar(m, "PlotEdgeFine", 62.0, -550, 3460), -450, 3300), "", plot_to, "A")
+    connect(times(m, plot_v, times(m, scalar(m, "PlotEdgeFine", 62.0, -550, 3520), 1.0 / (2.2 * 1.389), -450, 3520), -350, 3420), "", plot_to, "B")
+    plot_line = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, unreal.MaterialExpressionSaturate, plot_to, -250, 3340), -100, 3340)
+    plot_edge = times(m, times(m, plot_line, scalar(m, "PlotEdge", 0.0, -100, 3440), 50, 3380),
+                      times(m, times(m, (cover, "R"), big, 50, 3500), slant, 200, 3480), 350, 3420)
+    c = times(m, c, plus(m, plot_edge, 1.0, 500, 3420), -1400, -330)
 
     # Woods are one dark cloth laid over the paint: a standing mass with a ragged edge, thick enough to read as
     # woods on any nation's colour, fir-dark in the north and on the high ground. The woods take the nation's
