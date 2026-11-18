@@ -69,6 +69,10 @@ export interface LandUnit extends UnitBase {
   tray: number;
   /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
   pressing?: number;
+  /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */
+  yieldTo?: number;
+  /** Where its attack has it stand, as last worked out: its own stretch, which a friend coming on later stands beside (b439). */
+  stand?: [number, number];
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };

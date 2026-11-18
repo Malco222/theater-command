@@ -143,7 +143,9 @@ export class LandBattle implements BattleSim<LandUnit> {
           if (us.length > 1 && Math.abs(lane) > t.w / 2 + u.w / 2) {
             const px = t.x + rx * lane, py = t.y + ry * lane;
             const e = foes.reduce((m, f) => (dist(f.x, f.y, px, py) < dist(m.x, m.y, px, py) ? f : m), t);
-            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true }); return; }
+            // Still in its own lane, now before the block it falls on: each block its own stretch of their front (and
+            // of the far bank, over a river), never every block on one enemy's middle (the art director, b439).
+            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true, lane: lane - ((e.x - t.x) * rx + (e.y - t.y) * ry), axis }); return; }
           }
           this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}) });
         });
@@ -183,6 +185,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     o.x = clamp(o.x, u.w / 2, this.field.w - u.w / 2);
     // A block falling back makes for its own edge of the field itself, where it leaves (b418: it stopped 10 m short).
     if (o.kind !== 'withdraw') o.y = clamp(o.y, 10, this.field.h - 10);
+    // Sent to stand in the river: it stands on the nearest bank instead (a bridge it may hold).
+    if (o.kind === 'move' && this.wet(u, o.x, o.y, false) && groundAt(this.field, o.x, o.y) !== 'bridge') {
+      search: for (let r = 8; r <= 240; r += 8) for (let a = 0; a < 16; a++) {
+        const x = clamp(o.x + Math.sin((a * Math.PI) / 8) * r, u.w / 2, this.field.w - u.w / 2), y = clamp(o.y + Math.cos((a * Math.PI) / 8) * r, 10, this.field.h - 10);
+        if (!this.wet(u, x, y, false)) { o.x = x; o.y = y; break search; }
+      }
+    }
     u.order = o;
     u.keepFace = o.face ?? null;
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
@@ -417,8 +426,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private spread(): void {
     const us = this.units.filter((u) => fighting(u) && u.kind !== 'fort');
-    const can = (u: LandUnit, ux: number, uy: number, push: number): boolean =>
-      LAND.pace[MOTION[u.kind]][groundAt(this.field, clamp(u.x + ux * push, 5, this.field.w - 5), clamp(u.y + uy * push, 5, this.field.h - 5))] > 0;
+    // Never eased onto ground it can hardly cross (into the river off a bridge, tanks into a marsh), unless it stands on such already.
+    const can = (u: LandUnit, ux: number, uy: number, push: number): boolean => {
+      const x = clamp(u.x + ux * push, 5, this.field.w - 5), y = clamp(u.y + uy * push, 5, this.field.h - 5), pace = LAND.pace[MOTION[u.kind]];
+      const to = pace[groundAt(this.field, x, y)];
+      return to > LAND.queue.hard || (to > 0 && to >= pace[groundAt(this.field, u.x, u.y)]);
+    };
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
       if (can(u, ux, uy, push)) { u.x = clamp(u.x + ux * push, 5, this.field.w - 5); u.y = clamp(u.y + uy * push, 5, this.field.h - 5); }
     };
@@ -433,9 +446,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
       const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
       if (pl <= 0 || pd <= 0) continue;
-      // A queue, not a pile (the art director, b418): at a bridge or a pass, a block marching into a friend's ground
-      // has it make way, away from it by whichever way the ground lets it, so the one goes on and the other gives ground
-      // and comes on behind, each on its own ground. Two marching into each other: the one with less to go goes on.
+      // A queue, not a pile (the art director, b418, b439): a block marching into a friend's ground has it make way,
+      // away from it by whichever way the ground lets it, so the one goes on and the other gives ground and comes on
+      // behind, each on its own ground; at a bridge or a pass as everywhere. Two marching into each other: the one with
+      // less to go goes on. A friend that cannot give way at all, the marching block steps round.
       if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
         const into = (u: LandUnit, ox: number, oy: number): boolean => u.pressing !== undefined && ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) > 0;
         const pa = into(a, dx, dy), pb = into(b, -dx, -dy);
@@ -447,7 +461,19 @@ export class LandBattle implements BattleSim<LandUnit> {
           const ways: [number, number][] = pl < pd ? [[rx * sl, ry * sl], [fx * sd, fy * sd]] : [[fx * sd, fy * sd], [rx * sl, ry * sl]];
           ways.push([dx / d1, dy / d1]);
           const w = ways.find(([wx, wy]) => can(y, wx * sy, wy * sy, p));
-          if (w) { go(y, w[0] * sy, w[1] * sy, p); continue; }
+          if (w) { go(y, w[0] * sy, w[1] * sy, p); y.yieldTo = mover.id; continue; }
+          if (can(mover, -rx * sl * sy, -ry * sl * sy, p)) { go(mover, -rx * sl * sy, -ry * sl * sy, p); continue; }
+        }
+      }
+      // In the open, a block on the march slides a friend in its way aside as fast as it comes on, and slides aside
+      // itself, so the two pass side by side and no box is drawn on another (the art director, b439).
+      if (a.side === b.side && (a.pressing !== undefined || b.pressing !== undefined) && !this.narrows(a, a.x, a.y) && !this.narrows(b, b.x, b.y)) {
+        const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
+        if (can(a, -rx * sl, -ry * sl, p) && can(b, rx * sl, ry * sl, p)) {
+          go(a, -rx * sl, -ry * sl, p); go(b, rx * sl, ry * sl, p);
+          // Two on the march into each other: the one with further to go waits a moment for the other to pass.
+          if (a.pressing !== undefined && b.pressing !== undefined) { const wa = this.toGo(a) > this.toGo(b) || (this.toGo(a) === this.toGo(b) && a.id > b.id); (wa ? a : b).yieldTo = (wa ? b : a).id; }
+          continue;
         }
       }
       // Side by side where neither can step aside (on a bridge, in a gap): one behind the other instead.
@@ -552,6 +578,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private move(u: LandUnit): void {
     const k = u.kind;
     u.pressing = undefined;
+    const gave = u.yieldTo !== undefined ? this.unit(u.yieldTo) : undefined;
+    u.yieldTo = undefined;
     let to: [number, number] | null = null, run = false;
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') {
@@ -566,13 +594,18 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.order.press && t && !fighting(t) && !this.ai[u.side]) {
         const next = this.units.filter((e) => e.side !== u.side && fighting(e) && dist(e.x, e.y, u.x, u.y) < LAND.press)
           .reduce<LandUnit | null>((m, e) => (!m || dist(e.x, e.y, u.x, u.y) < dist(m.x, m.y, u.x, u.y) ? e : m), null);
-        if (next) { this.send(u, { kind: 'attack', x: next.x, y: next.y, target: next.id, press: true }); t = next; }
+        if (next) {
+          // Where it stands across the attack's front, it stays: the next block is taken in front of it, not in its middle.
+          const ax = u.order.axis, lane = ax === undefined ? undefined : (u.x - next.x) * Math.sin(ax + Math.PI / 2) + (u.y - next.y) * Math.cos(ax + Math.PI / 2);
+          this.send(u, { kind: 'attack', x: next.x, y: next.y, target: next.id, press: true, ...(ax === undefined ? {} : { lane, axis: ax }) }); t = next;
+        }
       }
       if (!t || !live(t)) { u.order = null; u.path = []; }
       else {
         // Close until it is well in reach, then stand and fight.
+        // Never stands in the water to fight, or on the bridge: it presses on to its own ground on the far bank.
         const want = this.closeTo(u);
-        if (this.gap(u, t) > want) {
+        if (this.gap(u, t) > want || this.wet(u, u.x, u.y)) {
           const [ax, ay] = this.lanePoint(u, t, want);
           u.path = this.route(u, ax, ay); to = u.path[0];
         } else { u.path = []; to = null; }
@@ -610,6 +643,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       return;
     }
     const head = bearing(u.x, u.y, to[0], to[1]);
+    // It made way for a friend with the road last tick: it waits, rather than step straight back into that friend's way
+    // (never in the river: there it presses on to the bank).
+    if (gave && !run && !this.wet(u, u.x, u.y) && Math.sin(head) * (gave.x - u.x) + Math.cos(head) * (gave.y - u.y) > 0) { u.speed = 0; u.act = 'idle'; return; }
     const off = turn(u.face, head);
     // Blocks wheel before they march; a runner just runs.
     if (!run && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
@@ -690,14 +726,86 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private lanePoint(u: LandUnit, t: LandUnit, want: number): [number, number] {
     const o = u.order!;
-    if (o.lane === undefined || o.axis === undefined) return [t.x, t.y];
-    const [fx, fy] = ahead(o.axis), [rx, ry] = ahead(o.axis + Math.PI / 2);
+    const lone = o.lane === undefined || o.axis === undefined;
+    // A block with no lane makes straight for its target, to stand before it on the way it comes.
+    const axis = lone ? bearing(u.x, u.y, t.x, t.y) : o.axis!, lane = lone ? 0 : o.lane!;
+    const [fx, fy] = ahead(axis), [rx, ry] = ahead(axis + Math.PI / 2);
     const lim = t.w / 2 + u.w / 2;
-    const off = Math.min(Math.abs(o.lane), lim) * Math.sign(o.lane);
-    const back = Math.max(0, want * 0.8 + t.d / 2 + u.d / 2 - Math.max(0, Math.abs(o.lane) - lim));
-    const p: [number, number] = [t.x + rx * off - fx * back, t.y + ry * off - fy * back];
+    const off = Math.min(Math.abs(lane), lim) * Math.sign(lane);
+    const back = Math.max(0, want * 0.8 + t.d / 2 + u.d / 2 - Math.max(0, Math.abs(lane) - lim));
+    let p: [number, number] = [t.x + rx * off - fx * back, t.y + ry * off - fy * back];
+    // Its own ground to stand on, never the river or the bridge: on into the far bank, short of the block it attacks;
+    // else back to the nearer bank.
+    if (this.wet(u, p[0], p[1])) {
+      const room = Math.max(0, back - (t.d / 2 + u.d / 2 + LAND.apart));
+      let dry: [number, number] | null = null;
+      for (let k = 8; k <= Math.max(room, 8) && !dry; k += 8) { const q: [number, number] = [p[0] + fx * Math.min(k, room), p[1] + fy * Math.min(k, room)]; if (!this.wet(u, q[0], q[1])) dry = q; }
+      for (let k = 8; k <= 240 && !dry; k += 8) { const q: [number, number] = [p[0] - fx * k, p[1] - fy * k]; if (!this.wet(u, q[0], q[1])) dry = q; }
+      if (dry) p = dry;
+    }
+    // Its own stretch: where a friend already stands there, it stands beside it, on the side it comes from, a little
+    // room between the two (the art director, b439: no box drawn on another), never in the river.
+    const face = bearing(p[0], p[1], t.x, t.y), [sx, sy] = ahead(face + Math.PI / 2);
+    for (let k = 0; k < 4; k++) {
+      const f = this.claimed(u, p[0], p[1], face);
+      if (!f) break;
+      const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, side = Math.sign(lat) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
+      const by = (u.w + f.w) / 2 + LAND.room - Math.abs(lat), q: [number, number] = [p[0] + sx * side * by, p[1] + sy * side * by];
+      if (this.wet(u, q[0], q[1]) || this.units.some((e) => e.side !== u.side && live(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2)) break;
+      p = q;
+    }
+    u.stand = p;
     return dist(u.x, u.y, p[0], p[1]) < 12 ? [t.x, t.y] : p;
   }
+
+  /**
+   * The friend whose ground this block's box would stand on at x, y facing so (with LAND.room between), or null: one
+   * standing there, or one whose attack has it stand there and is nearer to it than this block is to x, y.
+   */
+  private claimed(u: LandUnit, x: number, y: number, face: number): { id: number; x: number; y: number; w: number } | null {
+    const [fx, fy] = ahead(face), [rx, ry] = ahead(face + Math.PI / 2), mine = dist(u.x, u.y, x, y);
+    for (const f of this.units) {
+      if (f === u || f.side !== u.side || !fighting(f)) continue;
+      let at: [number, number] | null = f.speed <= 0.5 ? [f.x, f.y] : null;
+      if (!at && f.order?.kind === 'attack' && f.stand) {
+        const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
+        if (theirs < mine || (theirs === mine && f.id < u.id)) at = f.stand;
+      }
+      if (!at) continue;
+      const dx = at[0] - x, dy = at[1] - y;
+      if (Math.abs(dx) > 300 || Math.abs(dy) > 300) continue;
+      const c = Math.abs(Math.cos(f.face - face)), s = Math.abs(Math.sin(f.face - face));
+      const pl = u.w / 2 + (f.w / 2) * c + (f.d / 2) * s + LAND.room / 2 - Math.abs(dx * rx + dy * ry);
+      const pd = u.d / 2 + (f.w / 2) * s + (f.d / 2) * c - Math.abs(dx * fx + dy * fy);
+      if (pl > 0 && pd > 0) return { id: f.id, x: at[0], y: at[1], w: f.w };
+    }
+    return null;
+  }
+
+  /**
+   * Ground a block may not stand on: the river, a bridge and the road off either end of it (kept clear for those
+   * coming over), or ground it can hardly cross (LAND.queue.hard). A block sent to stand there by its own order
+   * (mouth false) may stand at a bridge's end.
+   */
+  private wet(u: LandUnit, x: number, y: number, mouth = true): boolean {
+    if (MOTION[u.kind] === 'fixed') return false;
+    const g = groundAt(this.field, clamp(x, 5, this.field.w - 5), clamp(y, 5, this.field.h - 5));
+    if (g === 'bridge' || g === 'water' || g === 'blown' || LAND.pace[MOTION[u.kind]][g] <= LAND.queue.hard) return true;
+    if (!mouth) return false;
+    if (!this.mouths) {
+      const f = this.field, C = f.cols, R = f.rows, n = Math.round(LAND.mouth / f.cell);
+      const m = this.mouths = new Uint8Array(C * R);
+      for (let i = 0; i < C * R; i++) {
+        const k = GROUNDS[f.ground[i]];
+        if (k !== 'bridge' && k !== 'blown') continue;
+        const c0 = i % C, r0 = Math.floor(i / C);
+        for (let r = Math.max(0, r0 - n); r <= Math.min(R - 1, r0 + n); r++) for (let c = Math.max(0, c0 - n); c <= Math.min(C - 1, c0 + n); c++) m[r * C + c] = 1;
+      }
+    }
+    return this.mouths[this.cellAt(x, y)] === 1;
+  }
+  /** The cells within LAND.mouth of a bridge, worked out once. */
+  private mouths: Uint8Array | null = null;
 
   private turnTo(u: LandUnit, want: number): void {
     const r = LAND.turn[u.kind] * DT;
