@@ -4,7 +4,7 @@
 // The cuts were chosen by reading each recording with tools/timeline.mjs and tools/draw.mjs: stretches with voices,
 // a public-address system, a clipped microphone or a second sound over the wanted one were passed over.
 
-import { fade } from '../kit/dsp.mjs';
+import { fade, around } from '../kit/dsp.mjs';
 import { clean, weight, punch, glue, grit, away, tuned, tone, layers, even, sustain, beats, steady, loopFrom } from '../kit/film.mjs';
 
 /** A cut with its ends eased, so that it neither clicks in nor stops dead. */
@@ -94,7 +94,8 @@ export default function recipes(def) {
     const at = beats(run, { period: 0.45 });
     const period = 0.43, n = 24;                      // six turns of the wheels, four beats a turn
     const even4 = steady(run, at.slice(0, n + 4 + 1), period);
-    return weight(clean(loopFrom(even(even4, { window: 2.5, strength: 0.8 }), { from: 0, seconds: n * period, overlap: 4 * period - 0.01 }), { low: 38 }), { hz: 90, lift: 2, harmonics: -16 });
+    // The filters run round the finished loop (around), so its end flows into its start with no click.
+    return around(loopFrom(even(even4, { window: 2.5, strength: 0.8 }), { from: 0, seconds: n * period, overlap: 4 * period - 0.01 }), (y) => weight(clean(y, { low: 38 }), { hz: 90, lift: 2, harmonics: -16 }));
   });
 
   // ---- The ground -----------------------------------------------------------------------------------------

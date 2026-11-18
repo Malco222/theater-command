@@ -6,7 +6,7 @@
 // Every cut was chosen with tools/bursts.mjs (where each shot or burst starts and ends, and whether a voice is near)
 // and tools/draw.mjs. Shouted orders on the ranges fall before most bursts, so cuts start at the burst itself.
 
-import { fade, rng, seedOf } from '../kit/dsp.mjs';
+import { fade, rng, seedOf, around, add, db, loudness, isStereo } from '../kit/dsp.mjs';
 import { clean, weight, punch, glue, grit, away, tuned, tone, layers, even, loopFrom, ring, bend, shorten, tailOff } from '../kit/film.mjs';
 
 const eased = (x, fadeIn, fadeOut) => fade(x, fadeIn, fadeOut);
@@ -18,7 +18,9 @@ export default function battle(def) {
   const single = (take, [a, b]) => eased(take('rifle_mg_range_singapore', { from: a, to: b }), 0.001, 0.3);
   const rifleman = (x) => grit(weight(punch(clean(x, { low: 60 }), 0.3), { hz: 110, lift: 2.5, harmonics: -14 }), { amount: 2, under: -18, low: 300, high: 5000 });
   SINGLES.forEach((span, i) => def(`rifle_shot_0${i + 1}`, {
-    family: 'guns', title: `A rifleman fires (${i + 1} of 4)`, finish: { fadeOut: 0.2 }, battle: 'A soldier fires, standing, kneeling or lying down',
+    // A single shot's blast lasts only a few hundredths of a second, so it cannot reach the guns' loudness without
+    // clipping: all four are set to one lower level instead (they sat 3 dB apart), and serve as the farther rifles.
+    family: 'guns', lufs: -21, title: `A rifleman fires (${i + 1} of 4)`, finish: { fadeOut: 0.2, squash: 6 }, battle: 'A soldier fires, standing, kneeling or lying down',
     about: 'One real rifle shot on a firing range, with its crack and the slap back off the range. Four takes, so that a line of riflemen never fires the same shot twice running.',
   }, (take) => rifleman(single(take, span))));
 
@@ -70,7 +72,8 @@ export default function battle(def) {
     about: 'The diesel of a real wartime T-34, kept running by a museum in Estonia, ticking over: its slow swells evened out so that it can go round.',
   }, (take) => {
     const run = even(clean(take('t34_estonia_museum', { from: 0.5, to: 14.5 }), { low: 30 }), { window: 1.5, strength: 0.85 });
-    return weight(loopFrom(run, { from: 1, seconds: 8, overlap: 2.5 }), { hz: 80, lift: 3, harmonics: -14 });
+    // Every filter runs round the loop (around), so that the end flows into the start with no click.
+    return around(loopFrom(run, { from: 1, seconds: 8, overlap: 2.5 }), (y) => weight(y, { hz: 80, lift: 3, harmonics: -9 }));
   });
   def('tank_gun_01', {
     family: 'guns', title: 'A tank fires its main gun', finish: { fadeOut: 0.6 }, battle: 'A tank fires its main gun',
@@ -81,7 +84,7 @@ export default function battle(def) {
     about: 'A real burst from the kind of machine gun mounted beside a tank\'s gun, a second long, and its echo.',
   }, (take) => gunner(eased(shorten(mg(take, 146.2, 148.9), 0.95, 1.6), 0.001, 0.6)));
   def('tank_knocked_out', {
-    family: 'guns', title: 'A tank is knocked out', finish: { fadeOut: 0.6 }, battle: 'A tank is knocked out',
+    family: 'guns', lufs: -17.5, title: 'A tank is knocked out', finish: { fadeOut: 0.6 }, battle: 'A tank is knocked out',
     about: 'Three real explosions laid together: the hit, a smaller one as the hatch blows, and the ammunition going up in a roll behind them.',
   }, (take) => {
     const hit = punch(eased(take('explosions_ls100152', { from: 2.72, to: 3.33 }), 0.001, 0.25), 0.4);
@@ -100,37 +103,46 @@ export default function battle(def) {
   const BURSTS = [[43.17, 0.78], [81.06, 0.72], [146.2, 1.75], [137.635, 1.2]], LONG = [[39.345, 2.6], [97.835, 5.1], [278.545, 2.8]];
   const burstIn = (take, [a, len]) => gunner(tailOff(mg(take, a, a + len + 1.5), len, 0.3));
   const shotIn = (take, s) => rifleman(tailOff(single(take, s), 0.06, 0.15));
-  def('far_guns_01', {
-    family: 'guns', lufs: -22, loop: true, title: 'A battery firing a long way off', battle: 'Guns in action',
-    about: 'Seven real shots from a battery of heavy guns, heard from a kilometre and more, falling at a battery\'s uneven pace.',
-  }, (take) => {
-    const r = rng(seedOf('far_guns_01')), L = 12;
-    const at = [0.2, 1.9, 3.1, 5.0, 7.3, 8.0, 10.1];
-    return weight(clean(ring(BATTERY.map((t, i) => ({ x: away(farShot(take, t), r.range(900, 1800)), at: at[i], db: -r.range(0, 5) })), L), { low: 25 }), { hz: 65, lift: 3, harmonics: -14 });
-  });
+  // Guns in action: single far salvos, one dropped in every 6 to 20 seconds by the game, rather than a loop whose
+  // level swung 21 dB from one second to the next.
+  [[59.07, 1400, 0], [110.765, 1800, -2], [187.625, 1100, -1]].forEach(([t, metres, dbs], i) => def(`far_guns_0${i + 1}`, {
+    family: 'guns', lufs: -22 + dbs, title: `A battery fires a long way off (salvo ${i + 1} of 3)`, finish: { fadeOut: 0.8 }, battle: 'Guns in action: one salvo every 6 to 20 seconds',
+    about: 'A real heavy gun heard from more than a kilometre, its report rolling away. Three, so the game can drop one in at the uneven pace of a battery.',
+  }, (take) => weight(clean(away(farShot(take, t), metres), { low: 25 }), { hz: 65, lift: 3, harmonics: -14 })));
   def('battle_loop', {
     family: 'guns', lufs: -22, loop: true, ch: 2, title: 'A firefight', battle: 'Any unit in a fight',
-    about: 'Real rifle shots and machine-gun bursts scattered across fourteen seconds, near and far and left and right, with now and then a heavy gun far behind: a company in action.',
+    about: 'Real rifle shots and machine-gun bursts scattered across thirty seconds, near and far and left and right, with now and then a heavy gun far behind, over a real distant firefight that never quite stops: a company in action.',
   }, (take) => {
-    const r = rng(seedOf('battle_loop')), L = 14, list = [];
+    const r = rng(seedOf('battle_loop')), L = 30, list = [];
     const shots = SINGLES.map((s) => shotIn(take, s)), bursts = BURSTS.map((b) => burstIn(take, b));
-    for (let i = 0; i < 26; i++) list.push({ x: away(r.pick(shots), r.range(60, 450)), at: r.range(0, L), db: -r.range(0, 7), pan: r.range(-0.8, 0.8) });
-    for (let i = 0; i < 5; i++) list.push({ x: away(r.pick(bursts), r.range(150, 600)), at: i * L / 5 + r.range(0, 1.5), db: -r.range(2, 8), pan: r.range(-0.7, 0.7) });
+    for (let i = 0; i < 56; i++) list.push({ x: away(r.pick(shots), r.range(60, 450)), at: r.range(0, L), db: -r.range(0, 7), pan: r.range(-0.8, 0.8) });
+    for (let i = 0; i < 11; i++) list.push({ x: away(r.pick(bursts), r.range(150, 600)), at: i * L / 11 + r.range(0, 1.5), db: -r.range(2, 8), pan: r.range(-0.7, 0.7) });
     // Behind it, the rest of the fight: rifles and guns further off, so that the field is never quite still.
-    for (let i = 0; i < 16; i++) list.push({ x: away(r.pick(shots), r.range(700, 1200)), at: r.range(0, L), db: -r.range(6, 12), pan: r.range(-0.8, 0.8) });
-    for (let i = 0; i < 3; i++) list.push({ x: away(farShot(take, BATTERY[i + 2]), 1800), at: i * L / 3 + r.range(0, 3), db: -6, pan: r.range(-0.4, 0.4) });
-    return weight(clean(ring(list, L, { stereo: true }), { low: 30 }), { hz: 90, lift: 2, harmonics: -15 });
+    for (let i = 0; i < 34; i++) list.push({ x: away(r.pick(shots), r.range(700, 1200)), at: r.range(0, L), db: -r.range(6, 12), pan: r.range(-0.8, 0.8) });
+    for (let i = 0; i < 6; i++) list.push({ x: away(farShot(take, BATTERY[(i + 2) % BATTERY.length]), 1800), at: i * L / 6 + r.range(0, 3), db: -6, pan: r.range(-0.4, 0.4) });
+    const fight = ring(list, L, { stereo: true });
+    // Under it all, a real far-off firefight (a re-enactment heard from a wood), so the field never falls silent
+    // between shots: 14 dB under the shots.
+    const under = loopFrom(take('fs_170478', { from: 32.5, to: 32.5 + L + 2.5 }), { from: 0, seconds: L, overlap: 2.5 });
+    const g = db(loudness(fight).integrated - loudness(under).integrated - 14);
+    add(fight.L, isStereo(under) ? under.L : under, 0, g); add(fight.R, isStereo(under) ? under.R : under, 0, g);
+    return around(fight, (y) => weight(clean(y, { low: 30 }), { hz: 90, lift: 2, harmonics: -15 }));
   });
   def('battle_far_loop', {
     family: 'guns', lufs: -27, loop: true, ch: 2, title: 'A battle somewhere ahead', battle: 'A fight further off, before contact or behind the line',
-    about: 'The same real rifles, machine guns and heavy guns set back to a kilometre and more: a fight heard over the next rise.',
+    about: 'The same real rifles, machine guns and heavy guns set back to a kilometre and more, across thirty seconds: a fight heard over the next rise.',
   }, (take) => {
-    const r = rng(seedOf('battle_far_loop')), L = 16, list = [];
+    const r = rng(seedOf('battle_far_loop')), L = 30, list = [];
     const shots = SINGLES.map((s) => tailOff(single(take, s), 0.06, 0.15));
-    for (let i = 0; i < 22; i++) list.push({ x: away(r.pick(shots), r.range(700, 1300)), at: r.range(0, L), db: -r.range(0, 8), pan: r.range(-0.6, 0.6) });
-    for (let i = 0; i < 4; i++) list.push({ x: away(burstIn(take, r.pick(LONG)), r.range(900, 1500)), at: i * L / 4 + r.range(0, 2), db: -r.range(0, 5), pan: r.range(-0.6, 0.6) });
-    for (let i = 0; i < 6; i++) list.push({ x: away(farShot(take, BATTERY[i]), r.range(2000, 3500)), at: i * L / 6 + r.range(0, 1.5), db: -r.range(0, 4), pan: r.range(-0.5, 0.5) });
-    return weight(clean(ring(list, L, { stereo: true }), { low: 25 }), { hz: 70, lift: 3, harmonics: -15 });
+    for (let i = 0; i < 44; i++) list.push({ x: away(r.pick(shots), r.range(700, 1300)), at: r.range(0, L), db: -r.range(0, 8), pan: r.range(-0.6, 0.6) });
+    for (let i = 0; i < 8; i++) list.push({ x: away(burstIn(take, r.pick(LONG)), r.range(900, 1500)), at: i * L / 8 + r.range(0, 2), db: -r.range(0, 5), pan: r.range(-0.6, 0.6) });
+    for (let i = 0; i < 11; i++) list.push({ x: away(farShot(take, BATTERY[i % BATTERY.length]), r.range(2000, 3500)), at: i * L / 11 + r.range(0, 1.5), db: -r.range(0, 4), pan: r.range(-0.5, 0.5) });
+    // Under it, the real far-off firefight in a wood set back further still, so the bed never drops into a hole.
+    const fight = ring(list, L, { stereo: true });
+    const under = away(loopFrom(take('fs_170478', { from: 2, to: 2 + L + 2.5 }), { from: 0, seconds: L, overlap: 2.5 }), 600);
+    const g = db(loudness(fight).integrated - loudness(under).integrated - 10);
+    add(fight.L, isStereo(under) ? under.L : under, 0, g); add(fight.R, isStereo(under) ? under.R : under, 0, g);
+    return around(fight, (y) => weight(clean(y, { low: 25 }), { hz: 70, lift: 3, harmonics: -15 }));
   });
 
   // ---- The air ------------------------------------------------------------------------------------------
@@ -206,11 +218,15 @@ export default function battle(def) {
   });
   def('sea_battle_loop', {
     family: 'guns', lufs: -26, loop: true, ch: 2, title: 'A fleet action over the horizon', battle: 'A fleet in a fight',
-    about: 'Real heavy guns and light anti-aircraft fire set back by kilometres over open water, falling at the uneven pace of ships in action.',
+    about: 'Real heavy guns and light anti-aircraft fire set back by kilometres over open water, falling at the uneven pace of ships in action, with the sea under them; thirty seconds.',
   }, (take) => {
-    const r = rng(seedOf('sea_battle_loop')), L = 16, list = [];
-    for (let i = 0; i < BATTERY.length; i++) list.push({ x: away(tuned(farShot(take, BATTERY[i]), r.range(0.72, 0.9)), r.range(2500, 5000)), at: i * L / BATTERY.length + r.range(0, 1.5), db: -r.range(0, 5), pan: r.range(-0.6, 0.6) });
-    for (let i = 0; i < 3; i++) list.push({ x: away(tailOff(take('oerlikon_35mm_broll', { from: [26.44, 33.1, 43.6][i], to: [26.44, 33.1, 43.6][i] + 4 }), 1.0, 0.6), r.range(1500, 2500)), at: r.range(0, L), db: -r.range(3, 8), pan: r.range(-0.6, 0.6) });
-    return weight(clean(ring(list, L, { stereo: true }), { low: 22 }), { hz: 60, lift: 3, harmonics: -15 });
+    const r = rng(seedOf('sea_battle_loop')), L = 30, list = [];
+    for (let i = 0; i < 13; i++) list.push({ x: away(tuned(farShot(take, BATTERY[i % BATTERY.length]), r.range(0.72, 0.9)), r.range(2500, 5000)), at: i * L / 13 + r.range(0, 1.5), db: -r.range(0, 5), pan: r.range(-0.6, 0.6) });
+    for (let i = 0; i < 6; i++) list.push({ x: away(tailOff(take('oerlikon_35mm_broll', { from: [26.44, 33.1, 43.6][i % 3], to: [26.44, 33.1, 43.6][i % 3] + 4 }), 1.0, 0.6), r.range(1500, 2500)), at: i * L / 6 + r.range(0, 3), db: -r.range(3, 8), pan: r.range(-0.6, 0.6) });
+    // Under it, the open sea from a ship's bow, so the water never stops between the guns.
+    const sea = loopFrom(take('fs_438837', { from: 3, to: 3 + L + 2.5 }), { from: 0, seconds: L, overlap: 2.5 });
+    const fight = ring(list, L, { stereo: true }), g = db(loudness(fight).integrated - loudness(sea).integrated - 12);
+    add(fight.L, isStereo(sea) ? sea.L : sea, 0, g); add(fight.R, isStereo(sea) ? sea.R : sea, 0, g);
+    return around(fight, (y) => weight(clean(y, { low: 22 }), { hz: 60, lift: 3, harmonics: -15 }));
   });
 }

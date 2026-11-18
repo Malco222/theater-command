@@ -34,7 +34,14 @@ for (const s of list) {
     from = path.join(out, s.name + '.padded.wav');
     writeWav(from, isStereo(x) ? { L: wrap(x.L), R: wrap(x.R) } : wrap(x));
   }
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', from, '-codec:a', 'libmp3lame', '-q:a', quality, mp3]);
+  // An MP3 can come out hotter than its master (the encoder rings round a sharp peak). Each is decoded and measured;
+  // one over -1 dB is encoded again that much quieter, so none goes past full scale on a player.
+  const encode = (cutDb) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', from, ...(cutDb ? ['-af', `volume=${-cutDb}dB`] : []), '-codec:a', 'libmp3lame', '-q:a', quality, mp3]);
+  const peakOf = () => { const raw = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', mp3, '-f', 'f32le', '-'], { maxBuffer: 1 << 30 }); const f = new Float32Array(raw.buffer, raw.byteOffset, raw.length >> 2); let p = 0; for (const v of f) if (Math.abs(v) > p) p = Math.abs(v); return 20 * Math.log10(p || 1e-9); };
+  encode(0);
+  let over = peakOf() + 1, trimmed = 0;
+  for (let k = 0; k < 3 && over > 0; k++) { trimmed += over + 0.1; encode(trimmed); over = peakOf() + 1; }
+  if (trimmed) console.log(`${s.name}: ${trimmed.toFixed(1)} dB quieter in its MP3, to stay under -1 dB`);
   if (s.loop) fs.unlinkSync(from);
   const size = fs.statSync(mp3).size; bytes += size;
   rows.push({ name: s.name, file: s.name + '.mp3', bytes: size, seconds: s.seconds, ...(s.loop ? { loop: { from: FROM, length: s.seconds } } : {}) });

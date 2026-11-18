@@ -127,14 +127,14 @@ export function finishShot(x, target, { squash = 4, ceiling = -1, fadeIn = 0.001
   let last = n - 1; const fl = p0 * db(floor); while (last > first && Math.abs(L[last]) < fl && Math.abs(R[last]) < fl) last--;
   let y = both(x, (ch) => ch.slice(first, Math.min(n, last + sec(0.08))));
   fade(y, fadeIn, fadeOut);
-  const now = loudness(y).moment;
-  let g = target - now;
-  const over = toDb(peak(y)) + g - ceiling;
-  if (over > squash) g -= over - squash;
-  gain(y, db(g));
+  const now = loudness(y).moment, p = toDb(peak(y));
+  const most = ceiling + squash - p;   // the most gain the peak allows
   const c = db(ceiling), knee = db(ceiling - squash);
-  each(y, (ch) => { for (let i = 0; i < ch.length; i++) { const v = Math.abs(ch[i]); if (v > knee) { const t = (v - knee) / (c - knee); ch[i] = Math.sign(ch[i]) * (knee + (c - knee) * Math.tanh(t)); } } });
-  return { x: y, short: +(target - loudness(y).moment).toFixed(1) };
+  const round = (g) => { const z = copy(y); gain(z, db(g)); each(z, (ch) => { for (let i = 0; i < ch.length; i++) { const v = Math.abs(ch[i]); if (v > knee) { const t = (v - knee) / (c - knee); ch[i] = Math.sign(ch[i]) * (knee + (c - knee) * Math.tanh(t)); } } }); return z; };
+  // Rounding the peak takes a little loudness with it, so the gain is found in a few steps, never past the peak's limit.
+  let g = Math.min(target - now, most), z = round(g);
+  for (let k = 0; k < 4; k++) { const miss = target - loudness(z).moment; if (miss < 0.1 || g >= most) break; g = Math.min(g + miss, most); z = round(g); }
+  return { x: z, short: +(target - loudness(z).moment).toFixed(1) };
 }
 
 /** The last step for a loop made from a recording: no sub-rumble, a set loudness, peaks rounded rather than cut. */

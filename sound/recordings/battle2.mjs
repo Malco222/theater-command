@@ -8,13 +8,15 @@
 // shot, step or line starts and ends, and whether the loud parts are clipped. Each def says which group of the
 // listening board it sits in.
 
-import { fade } from '../kit/dsp.mjs';
-import { clean, weight, punch, tuned, layers, even, loopFrom, shorten, tailOff } from '../kit/film.mjs';
+import { fade, around } from '../kit/dsp.mjs';
+import { clean, weight, punch, tuned, tone, layers, even, loopFrom, shorten, tailOff } from '../kit/film.mjs';
 
 const eased = (x, fadeIn, fadeOut) => fade(x, fadeIn, fadeOut);
 
 export default function battle2(def) {
   const fs = (take, id, from, to, o = {}) => take('fs_' + id, { from, to, ...o });
+  // A filter on a finished loop runs round it (around), so the loop's end flows into its start with no click.
+  const cleanLoop = (x, low) => around(x, (y) => clean(y, { low }));
 
   // ---- Voices -------------------------------------------------------------------------------------------
   // Real people shouting, cut line by line. The words of the English reel (95520) are not known here, since they are
@@ -33,10 +35,13 @@ export default function battle2(def) {
     family: 'calls', group: VOICES, title: '"Charge!" (a British voice)', finish: { fadeOut: 0.2 }, battle: 'A unit charges',
     about: 'A British voice shouting "Charge!".',
   }, (take) => voice(eased(fs(take, 458068, 0.35, 1.7), 0.01, 0.25)));
-  [[5.4, 6.9], [14.35, 15.9], [17.65, 19.5], [29.44, 30.8]].forEach(([a, b], i) => def(`order_english_0${i + 1}`, {
-    family: 'calls', group: VOICES, title: `A battlefield order in English (line ${i + 1} of 4)`, finish: { fadeOut: 0.15 }, battle: 'Orders shouted along a line (which line goes with which moment, once heard)',
+  // All seventeen lines of the reel, in its order: each from just before its first word to just before the next line.
+  const LINE_AT = [0.555, 2.155, 3.58, 5.445, 7.53, 9.07, 11.19, 14.405, 16.285, 17.705, 19.85, 21.75, 24.275, 27.015, 29.49, 31.07, 33.44];
+  const LINE_END = [1.39, 2.77, 4.27, 6.385, 8.31, 10.425, 13.19, 15.37, 17.04, 19.04, 21.055, 23.425, 25.52, 28.45, 30.21, 32.275, 35.06];
+  LINE_AT.forEach((a, i) => def(`order_english_${String(i + 1).padStart(2, '0')}`, {
+    family: 'calls', group: VOICES, title: `A battlefield order in English (line ${i + 1} of 17)`, finish: { fadeOut: 0.15 }, battle: 'Orders shouted along a line (which line goes with which moment, once heard)',
     about: 'One line from a reel of battlefield shouts and orders by one voice actor, put up by shawshank73. The words are for your ear to judge.',
-  }, (take) => voice(eased(fs(take, 95520, a, b), 0.01, 0.2))));
+  }, (take) => voice(eased(fs(take, 95520, a - 0.05, Math.min(LINE_END[i] + 0.4, (LINE_AT[i + 1] ?? 36.4) - 0.08)), 0.01, 0.2))));
   def('german_schnell', {
     family: 'calls', group: VOICES, title: '"Schnell, schnell!" (German)', finish: { fadeOut: 0.15 }, battle: 'A German unit is hurried forward',
     about: 'A German speaker shouting "Schnell, schnell!" (quick, quick!).',
@@ -141,7 +146,7 @@ export default function battle2(def) {
   def('marching_loop', {
     family: 'ground', group: KIT, lufs: -26, loop: true, title: 'A column marches', battle: 'A column on the march (loop)',
     about: 'Real men marching in boots, cut on the beat: twenty steps that go round without a stumble.',
-  }, (take) => foley(loopFrom(fs(take, 172369, 0, 14), { from: 2.2, seconds: 9.22, overlap: 0.04 })));
+  }, (take) => cleanLoop(loopFrom(fs(take, 172369, 0, 14), { from: 2.2, seconds: 9.22, overlap: 0.04 }), 60));
   def('body_fall_01', {
     family: 'ground', group: KIT, lufs: -22, title: 'A man falls heavily on dirt', finish: { fadeOut: 0.2 }, battle: 'A soldier is hit and falls',
     about: 'A real body fall on dirt, very heavy (its first thud is a little clipped).',
@@ -188,7 +193,9 @@ export default function battle2(def) {
   [[13.5, 20.5], [5.5, 13.0]].forEach(([a, b], i) => def(`explosion_far_0${i + 1}`, {
     family: 'guns', group: EXPL, lufs: -21, title: `An explosion a long way off (take ${i + 1})`, finish: { fadeOut: 0.8 }, battle: 'Shells land elsewhere on the field',
     about: 'Real distant explosions rolling across open country (cut from the blasts that are not clipped).',
-  }, (take) => clean(eased(fs(take, 320788, a, b), 0.01, 2), { low: 25 })));
+  // All of this recording sits under 940 Hz, so a laptop lost 12 dB of it: the 200 to 800 Hz band is lifted and the
+  // low end's own harmonics laid in, which a small speaker can play.
+  }, (take) => weight(tone(clean(eased(fs(take, 320788, a, b), 0.01, 2), { low: 25 }), 'peak', 420, 11, 0.5), { hz: 70, lift: 0, harmonics: -4, from: 140 })));
   def('mortar_fire', {
     family: 'guns', group: EXPL, title: 'A mortar fires', finish: { fadeOut: 0.3 }, battle: 'A mortar team fires',
     about: 'A real 120 mm mortar firing, taken from a US Army training film (public domain).',
@@ -207,7 +214,7 @@ export default function battle2(def) {
   def('tank_idle_sherman_loop', {
     family: 'ground', group: TANK, loop: true, title: 'A Sherman stands with its engine running', battle: 'An American tank stands still (loop)',
     about: 'The same Sherman ticking over after it has started, evened out so that it can go round.',
-  }, (take) => clean(loopFrom(even(fs(take, 368670, 12, 40), { window: 1.5, strength: 0.7 }), { from: 2, seconds: 12, overlap: 2 }), { low: 25 }));
+  }, (take) => cleanLoop(loopFrom(even(fs(take, 368670, 12, 40), { window: 1.5, strength: 0.7 }), { from: 2, seconds: 12, overlap: 2 }), 25));
   def('tank_drive_past', {
     family: 'ground', group: TANK, title: 'A Sherman drives past', finish: { fadeOut: 1 }, battle: 'A tank drives past the camera',
     about: 'A real Sherman driving up, past and away: engine, tracks and running gear.',
@@ -222,11 +229,11 @@ export default function battle2(def) {
   def('ship_engine_loop', {
     family: 'sea', group: SEA, loop: true, title: 'A big ship\'s engine runs', battle: 'A ship under way (loop, under the wash)',
     about: 'The engine of a large ship, recorded in port, idling: the deep beat that comes up through the deck.',
-  }, (take) => clean(loopFrom(fs(take, 715171, 0.5, 18), { from: 0.5, seconds: 12, overlap: 2.5 }), { low: 25 }));
+  }, (take) => cleanLoop(loopFrom(fs(take, 715171, 0.5, 18), { from: 0.5, seconds: 12, overlap: 2.5 }), 25));
   def('ship_wash_loop', {
     family: 'sea', group: SEA, loop: true, ch: 2, title: 'The bow wave of a ship under way', battle: 'A ship under way (loop)',
     about: 'The heavy bow wave of a ship, from an old effects library given away free (craigsmith). Cut to one swell, so that it goes round with the sea.',
-  }, (take) => clean(loopFrom(fs(take, 438837, 0, 40), { from: 18, seconds: 13.3, overlap: 2.5 }), { low: 30 }));
+  }, (take) => cleanLoop(loopFrom(fs(take, 438837, 0, 40), { from: 18, seconds: 13.3, overlap: 2.5 }), 30));
   def('ship_horn', {
     family: 'sea', group: SEA, title: 'A ship sounds its horn', finish: { fadeOut: 0.8 }, battle: 'A fleet sails or signals',
     about: 'A big ship\'s fog horn heard on deck at night (a modern liner\'s: the closest real horn found).',
@@ -261,24 +268,24 @@ export default function battle2(def) {
   def('b17_drone_loop', {
     family: 'air', group: AIR, loop: true, title: 'A B-17\'s four engines drone', battle: 'Heavy bombers overhead (loop)',
     about: 'A B-17\'s four engines in steady flight, from an old effects library given away free (craigsmith). It starts at 0:07, where Brian asked for it to start: before that the drone drops out twice.',
-  }, (take) => clean(loopFrom(fs(take, 437862, 7, 34), { from: 0, seconds: 12, overlap: 2.5 }), { low: 30 }));
+  }, (take) => cleanLoop(loopFrom(fs(take, 437862, 7, 34), { from: 0, seconds: 12, overlap: 2.5 }), 30));
   def('stuka_drone_loop', {
     family: 'air', group: AIR, loop: true, title: 'A Stuka\'s engine drones', battle: 'German dive bombers overhead (loop)',
     about: 'A Ju 87 Stuka\'s engine in steady flight, from the same old effects library (craigsmith).',
-  }, (take) => clean(loopFrom(fs(take, 437771, 17, 35), { from: 1, seconds: 12, overlap: 2.5 }), { low: 30 }));
+  }, (take) => cleanLoop(loopFrom(fs(take, 437771, 17, 35), { from: 1, seconds: 12, overlap: 2.5 }), 30));
   def('air_raid_siren', {
-    family: 'air', group: AIR, lufs: -22, title: 'An air raid siren wails', finish: { fadeOut: 2 }, battle: 'A raid is coming (a city under the bombers)',
+    family: 'air', group: AIR, lufs: -22, title: 'An air raid siren wails', finish: { fadeOut: 2, floor: -40 }, battle: 'A raid is coming (a city under the bombers)',
     about: 'A real air raid siren tested in Devonport, England: it winds up and wails.',
-  }, (take) => clean(eased(fs(take, 336640, 0.5, 40), 0.3, 4), { low: 40 }));
+  }, (take) => clean(eased(fs(take, 336640, 0.5, 37.4), 0.3, 3), { low: 40 }));
 
   // ---- Under a fight ------------------------------------------------------------------------------------
   const UNDER = 'Under a fight';
   def('rifles_far_loop', {
     family: 'beds', group: UNDER, loop: true, lufs: -27, ch: 2, title: 'Rifles crackle in the distance', battle: 'A fight further off (loop): rifles in a wood',
-    about: 'A Second World War re-enactment battle heard from inside a wood: rifles and the odd machine gun, far off.',
-  }, (take) => clean(loopFrom(fs(take, 170478, 30, 50), { from: 1, seconds: 16, overlap: 2 }), { low: 40 }));
+    about: 'A Second World War re-enactment battle heard from inside a wood: rifles and the odd machine gun, far off, twenty-eight seconds of it.',
+  }, (take) => cleanLoop(loopFrom(fs(take, 170478, 32.5, 63), { from: 0, seconds: 28, overlap: 2 }), 40));
   def('fire_loop', {
     family: 'fire', group: UNDER, loop: true, ch: 2, title: 'A fire roars and crackles', battle: 'A tank, a ship or a building burns (loop)',
     about: 'A large fire roaring and hissing, with the crack of what it is burning.',
-  }, (take) => clean(loopFrom(fs(take, 698209, 30, 46), { from: 1, seconds: 12, overlap: 2 }), { low: 40 }));
+  }, (take) => cleanLoop(loopFrom(fs(take, 698209, 30, 46), { from: 1, seconds: 12, overlap: 2 }), 40));
 }
