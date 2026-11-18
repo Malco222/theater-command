@@ -11,11 +11,14 @@
 // touch them.
 //
 // The rule: a class's list runs from the ships longest in the fleet to the newest. New ships join at the back, with
-// no stars; ships lost, or split off as a fleet of their own, go from the back; a fleet joined to another brings its
-// ships in at the back of the other's lists. It is the only rule under which a list that has fallen behind its
-// count mends itself the right way (a save from before the stars, or a loss written nowhere else): entries beyond
-// the count are the ships lost, and ships beyond the entries are ships with no stars. Every path mends a list the
-// same way, through mendStars, before it adds ships; a list is also mended as it is read.
+// no stars; ships split off as a fleet of their own go from the back (a fleet keeps its seasoned core, as navies
+// did); a fleet joined to another brings its ships in at the back of the other's lists. Ships lost are taken by a
+// fixed rotation (the design director, b487: newest-first losses would make a decorated ship all but unsinkable
+// while its class had newer hulls): the fleet's earlier losses of the class plus the loss's order, modulo the ships
+// there were (loseStars). A list that has fallen behind its count (a save from before the stars, or a loss written
+// nowhere else) mends from the back: entries beyond the count are taken as the ships lost, and ships beyond the
+// entries are ships with no stars. Every path mends a list that way, through mendStars, before it adds ships; a list
+// is also mended as it is read.
 //
 // Nothing here draws on a random stream, adds, orders or renames a fleet, or changes a ship count, a strength or an
 // outcome: the stars are a record and nothing more.
@@ -58,6 +61,22 @@ export function mendStars(f: Fleet, only?: ShipClass): void {
     const list = f.stars?.[c];
     if (list && list.length > Math.max(0, f.ships[c])) keep(f, c, list.slice(0, Math.max(0, f.ships[c])));
   }
+}
+
+/**
+ * Ships of one class just lost, the count already lowered by k and the fleet's tally of the class's losses already
+ * raised by k: which of the class's ships they were is a fixed rotation (the design director, b487), the fleet's
+ * earlier losses of the class plus the loss's order, modulo the ships still in the list. So a decorated ship goes
+ * down in its turn like any other. No random draw: the stars stay a record and nothing more.
+ */
+export function loseStars(f: Fleet, c: ShipClass, k: number): void {
+  if (k <= 0 || !f.stars?.[c]) return;
+  const have = f.stars[c]!, there = Math.max(0, f.ships[c]) + k;
+  // The ships there were before the loss, the list mended to them first (entries beyond them are earlier unseen losses).
+  const list = Array.from({ length: there }, (_, i) => [...(have[i] ?? [])]);
+  const from = Math.max(0, f.lost[c] - k);
+  for (let j = 0; j < k && list.length; j++) list.splice((from + j) % list.length, 1);
+  keep(f, c, list);
 }
 
 /**
@@ -107,14 +126,13 @@ export function bookSeaAction(g: Game, zone: number, winners: Fleet[] | null): n
 // ---- Reading them --------------------------------------------------------------------------------------------
 
 /**
- * How a row of n stars is drawn (the art director, b477): up to five bronze in a row; at the sixth, five bronze become
- * one silver. Five bronze turn silver only when a sixth would appear, every time alike, so a row with any star ends in
- * one to five bronze: 5 is five bronze, 6 one silver and one bronze, 10 one silver and five bronze, 11 two and one.
+ * How a row of n stars is drawn (the art director, 13:27Z): every five make one silver, as the navies wore them, and
+ * what is left over is bronze, silver first. 4 is four bronze, 5 one silver, 6 one silver and one bronze, 10 two
+ * silver, 11 two silver and one bronze.
  */
 export function starSplit(n: number): { silver: number; bronze: number } {
   const k = Math.max(0, Math.floor(n));
-  const silver = k > 0 ? Math.floor((k - 1) / 5) : 0;
-  return { silver, bronze: k - 5 * silver };
+  return { silver: Math.floor(k / 5), bronze: k % 5 };
 }
 
 const ORDINAL = ['', '', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];

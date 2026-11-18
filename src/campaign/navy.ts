@@ -15,7 +15,7 @@ import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
-import { bookSeaAction, mendStars } from './stars';
+import { bookSeaAction, loseStars, mendStars } from './stars';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -1315,8 +1315,9 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
     f.ships[c] -= k;
     f.lost[c] += k;
     out[c] = k;
+    // The ships that went down take their battle stars with them (stars.ts: a fixed rotation, b487).
+    loseStars(f, c, k);
   }
-  // The ships that went down take their battle stars with them (stars.ts: from the back of each class).
   mendStars(f);
   return out;
 }
@@ -1423,7 +1424,7 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     for (const f of quarry) {
       const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
       f.ships.ss -= k; f.lost.ss += k; sunk += k;
-      mendStars(f, 'ss');
+      loseStars(f, 'ss', k);
     }
     if (!sunk) continue;
     out[z] = sunk;
@@ -1434,7 +1435,7 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     for (const f of groups) {
       const k = Math.min(f.ships.dd, rng.roll(sunk * FLEETS.hunt.cost * (f.ships.dd / dd)));
       f.ships.dd -= k; f.lost.dd += k; cost += k;
-      mendStars(f, 'dd');
+      loseStars(f, 'dd', k);
     }
     const who = groups.length ? `Destroyers of the ${groups[0].name}` : h.fleets.length ? `The escorts of the ${h.fleets[0].name}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
@@ -1473,7 +1474,7 @@ function torpedoes(g: Game, nat: string): void {
     for (const c of heavy) { if (pick < f.ships[c]) { cls = c; break; } pick -= f.ships[c]; }
     if (f.ships[cls] <= 0) continue;
     f.ships[cls]--; f.lost[cls]++;
-    mendStars(f, cls);
+    loseStars(f, cls, 1);
     f.ready = Math.max(0, f.ready - 0.05);
     headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
@@ -1569,14 +1570,14 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
         for (const f of raiders) {
           const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
           f.ships.ss -= k; f.lost.ss += k; subsLost += k;
-          mendStars(f, 'ss');
+          loseStars(f, 'ss', k);
         }
       }
       const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
       for (const f of escorts) {
         const k = Math.min(f.ships.dd, rng.roll(raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd))));
         f.ships.dd -= k; f.lost.dd += k; escortsLost += k;
-        mendStars(f, 'dd');
+        loseStars(f, 'dd', k);
       }
     }
     g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
@@ -1668,6 +1669,7 @@ function sinkFought(f: Fleet, p: SeaFought, frac: number, rng: Rng): Ships {
     f.ships[c] -= more;
     f.lost[c] += more;
     out[c] += more;
+    loseStars(f, c, more);
   }
   mendStars(f);
   return out;

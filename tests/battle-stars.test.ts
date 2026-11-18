@@ -11,7 +11,7 @@ import { detach, fleetCard, merge } from '../src/campaign/fleets';
 import { sail, seaBattles, shipCount, sinkShips, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { bookSeaAction, mendStars, seaActionName, shipStars, starRow, starSplit } from '../src/campaign/stars';
+import { bookSeaAction, loseStars, mendStars, seaActionName, shipStars, starRow, starSplit } from '../src/campaign/stars';
 import { orderArsenal, runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game, ShipClass, Ships } from '../src/campaign/types';
 
@@ -44,25 +44,24 @@ function inStep(g: Game): void {
 }
 
 describe('how a row of stars is drawn', () => {
-  it('up to five bronze in a row; at the sixth, five bronze become one silver, every time alike', () => {
+  it('every five make one silver, as the navies wore them; what is left over is bronze (the art director, 13:27Z)', () => {
     const row = (n: number): [number, number] => { const s = starSplit(n); return [s.silver, s.bronze]; };
     expect(row(0)).toEqual([0, 0]);
     expect(row(1)).toEqual([0, 1]);
     expect(row(3)).toEqual([0, 3]);
-    expect(row(5)).toEqual([0, 5]);
+    expect(row(4)).toEqual([0, 4]);
+    expect(row(5)).toEqual([1, 0]);
     expect(row(6)).toEqual([1, 1]);
     expect(row(7)).toEqual([1, 2]);
-    // Ten is kept as five is: the five bronze turn silver only when an eleventh would make a sixth.
-    expect(row(10)).toEqual([1, 5]);
+    expect(row(10)).toEqual([2, 0]);
     expect(row(11)).toEqual([2, 1]);
-    expect(row(15)).toEqual([2, 5]);
     expect(row(16)).toEqual([3, 1]);
-    // Every count from 1 on: the row adds up, and ends in one to five bronze.
-    for (let n = 1; n <= 40; n++) {
+    // Every count from 0 on: the row adds up, and never holds five bronze.
+    for (let n = 0; n <= 40; n++) {
       const [s, b] = row(n);
       expect(5 * s + b, `${n}`).toBe(n);
-      expect(b, `${n}`).toBeGreaterThanOrEqual(1);
-      expect(b, `${n}`).toBeLessThanOrEqual(5);
+      expect(b, `${n}`).toBeGreaterThanOrEqual(0);
+      expect(b, `${n}`).toBeLessThanOrEqual(4);
     }
   });
 });
@@ -186,23 +185,44 @@ describe('the record keeps in step with the ships', () => {
     f.stars = { dd: [[0, 1], [0], [1]] };
   }
 
-  it('ships lost go from the back of their class, and new ships join there with none', () => {
+  it('ships lost are taken by a fixed rotation, so a veteran goes down in its turn; new ships join at the back with none', () => {
     const g = createGame(5, null);
     const home = fleet(g, 'Home Fleet');
     veterans(g, home);
-    // Some lost, by a path that writes the loss in the record itself: those that go are the last.
-    for (let seed = 1; home.ships.dd === 5 && seed < 50; seed++) sinkShips(home, 0.4, new Rng(seed), ['dd']);
-    expect(home.ships.dd).toBeLessThan(5);
-    expect(starsOf(home).dd).toEqual([2, 1, 1, 0, 0].slice(0, home.ships.dd));
-    expect(home.stars?.dd?.length ?? 0).toBeLessThanOrEqual(home.ships.dd);
+    // The rotation (the design director, b487): the fleet's earlier losses of the class plus the loss's order,
+    // modulo the ships in the list. With no destroyer lost before, the first to go is the oldest, the veteran of two.
+    home.lost.dd = 0;
+    home.ships.dd -= 2; home.lost.dd += 2;
+    loseStars(home, 'dd', 2);
+    // [2, 1, 1, 0, 0]: place 0 goes (the 2), then place (0 + 1) mod 4 = 1 of [1, 1, 0, 0] (a 1): [1, 0, 0].
+    expect(starsOf(home).dd).toEqual([1, 0, 0]);
     inStep(g);
-    // A loss written nowhere else (a save from before, a path that only counts) is mended the same way when it is read.
+    // Two destroyers lost before: one more goes from place 2 mod 3, a ship with none.
+    home.ships.dd -= 1; home.lost.dd += 1;
+    loseStars(home, 'dd', 1);
+    expect(starsOf(home).dd).toEqual([1, 0]);
+    inStep(g);
+    // Through sinkShips the same rotation, from the fleet's seven earlier losses (the parity test below shows no draw is added).
+    veterans(g, home);
+    home.lost.dd = 7;
+    for (let seed = 1; home.ships.dd === 5 && seed < 50; seed++) {
+      const k = sinkShips(home, 0.4, new Rng(seed), ['dd']).dd;
+      if (k > 0) {
+        const want = [2, 1, 1, 0, 0];
+        for (let j = 0; j < k; j++) want.splice((7 + j) % want.length, 1);
+        expect(starsOf(home).dd).toEqual(want);
+      }
+    }
+    expect(home.ships.dd).toBeLessThan(5);
+    inStep(g);
+    // A loss written nowhere else (a save from before, a path that only counts) is mended from the back as it is read.
     home.ships.dd = 1;
-    expect(starsOf(home).dd).toEqual([2]);
+    expect(starsOf(home).dd.length).toBe(1);
     // New ships are added only after the record is mended: they join at the back with no stars, and inherit none.
     mendStars(home, 'dd');
+    const first = starsOf(home).dd[0];
     home.ships.dd += 4;
-    expect(starsOf(home).dd).toEqual([2, 0, 0, 0, 0]);
+    expect(starsOf(home).dd).toEqual([first, 0, 0, 0, 0]);
     inStep(g);
   });
 

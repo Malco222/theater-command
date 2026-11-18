@@ -24,7 +24,7 @@ import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
-import { mendStars } from './stars';
+import { loseStars, mendStars } from './stars';
 import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
@@ -1138,6 +1138,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       for (const c of SHIPS) {
         const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]))) : 0;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k;
+        loseStars(x, c, k);
       }
       mendStars(x);
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
