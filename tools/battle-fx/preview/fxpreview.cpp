@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -384,6 +385,14 @@ int main(int Argc, char** Argv)
 	View.Up = Cam.Up;
 	View.Forward = Cam.Forward;
 	View.PixelsPerRadian = Cam.Ppr;
+	if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun; by default high behind the eye's left)
+	{
+		double X = 0.0, Y = 0.0, Z = 1.0;
+		if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+		{
+			View.Sun = Vec(X, Y, Z).Unit();
+		}
+	}
 	Fx.Draw(-0.1, View); // (the eye is known before the hit, as in the game)
 	Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
 	std::sort(Frames.begin(), Frames.end());

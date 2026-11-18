@@ -190,17 +190,29 @@
     0.3,
     0.5
    ],
-   "tip_stretch": 2.6,
-   "tip_point": 0.9,
-   "tip_alpha": 0.55,
+   "fill_rough": 0.55,
+   "fill_scatter": 1.6,
+   "fill_stretch": 1.15,
+   "tip_stretch": 1.2,
+   "tip_point": 0.45,
+   "tip_alpha": 0.7,
+   "tip_grain": 0.55,
+   "tip_rough": 0.6,
+   "heavy_heart": 0.92,
+   "heavy_inner": 0.72,
+   "tip_inner": 0.6,
    "tip_clod_speed": [
     0.9,
     1.05
    ],
    "edge_jitter": 0.9,
    "_edges": "edge_jitter: how far each puff along a jet strays sideways, as a share of the jet's width; lump_chance: how many puffs are lumps half again or twice as wide. Ragged, clumpy sides, never smooth blades or leaves (art director 17:09Z).",
-   "edge_rough": 0.3,
-   "_edge_rough": "Each jet puff's outline is lumpy by this share (fill jets 0.6 of it), so a jet's sides are clumpy, never a smooth blade, with no more puffs."
+   "edge_rough": 0.45,
+   "_edge_rough": "Each jet puff's outline is lumpy by this share (fill jets 0.6 of it), so a jet's sides are clumpy, never a smooth blade, with no more puffs.",
+   "root_solid": 0.6,
+   "_root": "Art director 19:43Z: earth flying up is heavy at the root and thins only near the tip, with side edges broken as the clods are. Up to root_solid of a heavy jet's length its puffs are denser, and at each step a dense lumpy clump bulges out of its side (side_clumps is the chance).",
+   "side_clumps": 0.7,
+   "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch)."
   },
   "debris": {
    "frames": [
@@ -303,7 +315,14 @@
     62
    ],
    "top_share": 0.8,
-   "_top": "Warm brown near the ground, charcoal grey toward the top: brown all the way up reads as dust (art director 19:36Z). Each puff mixes toward colour_top by its height in the cloud, up to top_share."
+   "_top": "Warm brown near the ground, charcoal grey toward the top: brown all the way up reads as dust (art director 19:36Z). Each puff mixes toward colour_top by its height in the cloud, up to top_share.",
+   "top_lobes": [
+    3,
+    5
+   ],
+   "cloud_shade": 4.0,
+   "cloud_r": 0.3,
+   "_cloud": "Art director 19:43Z: the cloud's sunward side about 15 to 20 levels lighter than its shadow side, and its top broken into 3 to 5 lumps, not one smooth dome. cloud_shade lights or shadows each puff by where it sits in its cloud (as game.shade_lit and shade_dark), fully beyond cloud_r of the crown's height from the cloud's leaning middle; top_lobes gathers the upper puffs into a few lumps. Preview, 105 on earth at frame 40, sun from the side: the sunward third about 15 levels lighter than the shadow third once the cloud's own thinner downwind side is taken off (about 13 by halves)."
   },
   "linger": {
    "seconds": "sizes.<kind>.linger_s",

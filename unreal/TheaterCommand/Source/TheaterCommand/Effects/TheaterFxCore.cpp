@@ -135,6 +135,24 @@ namespace TheaterFx
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
+		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
+		for (std::vector<double>* T : Tables)
+		{
+			T->assign(static_cast<size_t>(Sides), 0.0);
+		}
+		for (int K = 0; K < Sides; ++K)
+		{
+			const double Angle = K * 2.0 * Pi / Sides;
+			const size_t I = static_cast<size_t>(K);
+			RingCos[I] = std::cos(Angle);
+			RingSin[I] = std::sin(Angle);
+			Ring2Cos[I] = std::cos(2.0 * Angle);
+			Ring2Sin[I] = std::sin(2.0 * Angle);
+			Ring3Cos[I] = std::cos(3.0 * Angle);
+			Ring3Sin[I] = std::sin(3.0 * Angle);
+			Ring5Cos[I] = std::cos(5.0 * Angle);
+			Ring5Sin[I] = std::sin(5.0 * Angle);
+		}
 		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
 		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
 		Clear();
@@ -529,6 +547,16 @@ namespace TheaterFx
 		const double Lumps = Num(C + "lump_chance", 0.2);
 		const double Jitter = Num(C + "edge_jitter", 0.4);
 		const double EdgeRough = Num(C + "edge_rough", 0.3);
+		const double RootSolid = Num(C + "root_solid", 0.6); // (how far up a heavy jet stays dense)
+		const double ClumpChance = Num(C + "side_clumps", 0.7); // (the chance of a clump on the side at each step of a jet's lower part)
+		const double TipGrain = Num(C + "tip_grain", 0.55); // (a heavy jet's tip torn into smaller pieces, scattered: never one long translucent blade)
+		const double TipRough = Num(C + "tip_rough", 0.6);
+		const double HeavyHeart = Num(C + "heavy_heart", 0.92); // (how solid a heavy piece is at its heart ring)
+		const double HeavyInner = Num(C + "heavy_inner", 0.72); // (and where that ring sits: the edge band is the rest)
+		const double TipInner = Num(C + "tip_inner", 0.6);
+		const double FillRough = Num(C + "fill_rough", 0.55); // (the dust between the jets: soft, billowing, scattered; never a long clear prism)
+		const double FillScatter = Num(C + "fill_scatter", 1.6);
+		const double FillStretch = Num(C + "fill_stretch", 1.15);
 		const Vec Tilt = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0).Unit(Vec(1.0, 0.0, 0.0)) * std::tan(Radians(Pick(D, C + "tilt_deg", 4.0, 14.0)));
 		const int NHeavy = D.Whole(static_cast<int>(Num(C + "heavy_jets.0", 5.0)), static_cast<int>(Num(C + "heavy_jets.1", 8.0)));
 		const int NFill = D.Whole(static_cast<int>(Num(C + "fill_jets.0", 10.0)), static_cast<int>(Num(C + "fill_jets.1", 16.0)));
@@ -553,18 +581,18 @@ namespace TheaterFx
 			while (F < 1.0)
 			{
 				const double Rwhole = Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8);
-				const double Rl = Rwhole * P.Grain; // (granular grounds: smaller pieces, more of them)
 				const bool bTip = bHeavy && F >= TipAt;
 				const double OnTip = bTip ? (F - TipAt) / std::max(1.0 - TipAt, 1e-6) : 0.0;
+				const bool bGrained = P.Grain < 0.999;
+				const double Rl = Rwhole * (bGrained ? P.Grain : 1.0 + (std::clamp(TipGrain, 0.2, 1.0) - 1.0) * OnTip); // (granular grounds and torn tips: smaller pieces, more of them)
 				const double Sp = V * (0.05 + 0.95 * std::pow(F, 0.9));
 				const double Rr = Rl * (D.U() < Lumps ? D.U(1.4, 2.0) : D.U(0.8, 1.1));
 				Rgb Col = bHeavy ? P.Heavy * Shade : P.Soil.Mix(P.Dust, DustShare) * Shade;
-				const bool bGrained = P.Grain < 0.999;
 				if (P.bFirst && D.U() < P.FirstAtFoot + (P.FirstAtTip - P.FirstAtFoot) * F)
 				{
 					Col = P.First * D.U(0.84, 1.04); // (snow: thrown up first, never two grains the same shade, earth showing through)
 				}
-				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rwhole * (bTip ? 1.1 : Jitter) * KD * (bGrained ? 1.5 : 1.0)); // (ragged, clumpy sides; grains scattered wider, never a string of beads)
+				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rwhole * (bTip ? 1.1 : Jitter) * KD * (bGrained ? 1.5 : 1.0) * (bHeavy ? 1.0 : FillScatter)); // (ragged, clumpy sides; grains and dust scattered wider, never a string of beads)
 				Bit B;
 				B.Born = T0 + 0.01 + 0.025 * (1.0 - F);
 				B.From = At + ZUp * 0.1 + Dir * (0.25 * K);
@@ -577,21 +605,48 @@ namespace TheaterFx
 				B.R1 = Rr * D.U(1.8, 2.4);
 				B.Grow = 0.5;
 				B.Along = Dir;
-				B.Stretch = 1.0 + ((bTip ? Along0 + (TipStretch - Along0) * OnTip : Along0) - 1.0) * P.Grain; // (grains are not drawn out)
-				B.Point = bTip ? TipPoint : 0.3; // (torn and pointed, never rounded)
+				B.Stretch = 1.0 + ((bTip ? Along0 + (TipStretch - Along0) * OnTip : (bHeavy ? Along0 : FillStretch)) - 1.0) * P.Grain; // (grains are not drawn out)
+				B.Point = bTip ? TipPoint : (bHeavy ? 0.3 : 0.0); // (torn and pointed, never rounded; the dust between has no points)
 				B.Tail = 0.15;
 				B.Col = Col;
-				B.Col2 = P.bFirst ? Col : P.Dust;
+				B.Col2 = P.bFirst ? Col : (bHeavy && F < RootSolid ? P.Heavy.Mix(P.Dust, 0.35) : P.Dust); // (the root stays dark earth)
 				B.Cool = 0.7;
 				B.Alpha = (bHeavy ? (bTip ? 1.0 - (1.0 - TipAlpha) * OnTip : 1.0) : FillAlpha * (1.0 - 0.3 * F)) * (bGrained ? D.U(0.7, 1.0) : 1.0);
 				B.FadeIn = 0.01;
 				B.Hold = 0.4;
-				B.Heart = bHeavy ? (bGrained ? 0.65 : 0.8) : 0.5;
-				B.Rim = bHeavy && !bGrained ? 0.15 : 0.0; // (grains have soft edges, so no jet has a clean blade's side)
-				B.Rough = bHeavy ? EdgeRough : EdgeRough * 0.6; // (lumpy outlines: clumpy sides with no more puffs)
+				// (heavy at the root, thinning only near the tip: the lower half of a heavy jet dense, with hard lumpy
+				// edges as the clods have, never a translucent blade)
+				const double Root = bHeavy && !bGrained ? Clamp01((RootSolid - F) / std::max(RootSolid, 1e-3)) : 0.0;
+				// (a heavy piece is solid out to most of its radius and then fades in a thin soft edge; a wide see-through
+				// band with a hard rim, on a big piece, is what read as glass)
+				B.Heart = bHeavy ? (bGrained ? 0.65 : HeavyHeart + (1.0 - HeavyHeart) * 0.5 * Root) : 0.5;
+				B.Inner = bHeavy && !bGrained ? HeavyInner + (TipInner - HeavyInner) * OnTip : 0.5;
+				B.Rim = 0.0; // (soft edges everywhere: no jet has a clean blade's side)
+				B.Rough = bHeavy ? EdgeRough + (TipRough - EdgeRough) * OnTip : FillRough; // (lumpy outlines, most torn at the tip)
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
 				Bits.push_back(B);
+				if (Root > 0.0 && D.U() < ClumpChance)
+				{
+					// a dense clump of earth bulging out of the jet's side, so its lower half has a broken, lumpy
+					// edge, as the clods do, and never a straight one
+					const Vec Across_ = Dir.Cross(Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0))).Unit(Vec(1.0, 0.0, 0.0));
+					Bit Lump = B;
+					Lump.From = B.From;
+					Lump.Vel = B.Vel + Across_ * (Rl * D.U(0.8, 1.3) * KD);
+					Lump.R0 = Rl * D.U(0.35, 0.6);
+					Lump.R1 = Lump.R0 * D.U(1.4, 1.9);
+					Lump.Stretch = 1.0;
+					Lump.Point = D.U(0.0, 0.3);
+					Lump.Tail = 0.0;
+					Lump.Col = P.Heavy * (Shade * D.U(0.8, 1.05));
+					Lump.Heart = 0.95;
+					Lump.Rim = 0.55;
+					Lump.Rough = 0.4;
+					Lump.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+					Lump.ShadeK = 2.0;
+					Bits.push_back(Lump);
+				}
 				// (stepped by the length it is drawn; never less than a hundredth, so no number in the recipe can stall it)
 				F += std::max(0.01, Rl * std::max(1.0, 1.0 + (Along0 - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2));
 			}
@@ -746,6 +801,16 @@ namespace TheaterFx
 		const std::string Sm = "burst.smoke.";
 		const Rgb Top = Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62));
 		const double TopShare = Num(Sm + "top_share", 0.8);
+		// (the top breaks into a few lumps, never one smooth dome)
+		const int NLobes = D.Whole(static_cast<int>(Num(Sm + "top_lobes.0", 3.0)), static_cast<int>(Num(Sm + "top_lobes.1", 5.0)));
+		std::vector<Vec> Lobes;
+		for (int L = 0; L < NLobes; ++L)
+		{
+			const double La = 2.0 * Pi * (L + D.U(-0.3, 0.3)) / std::max(NLobes, 1);
+			Lobes.push_back(Vec(std::cos(La), std::sin(La), D.U(-0.15, 0.2)));
+		}
+		const double CloudShade = Num(Sm + "cloud_shade", 1.0);
+		const double CloudR = Num(Sm + "cloud_r", 0.3);
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -760,6 +825,13 @@ namespace TheaterFx
 			B.Born = Born;
 			B.From = At + Lean * Hgt + Vec(D.Bell() * Spread * 0.6, D.Bell() * Spread * 0.6, Hgt * 0.45);
 			B.Vel = Vec(D.Bell(), D.Bell(), 0.0) * (1.2 * K) + ZUp * (Hgt * D.U(0.6, 1.5));
+			if (F > 0.55 && !Lobes.empty())
+			{
+				const Vec& Lobe = Lobes[static_cast<size_t>(D.Whole(0, static_cast<int>(Lobes.size()) - 1))];
+				const Vec Off = Vec(Lobe.X, Lobe.Y, 0.0) * (Spread * 0.5) + Vec(D.Bell(), D.Bell(), 0.0) * (Spread * 0.22);
+				B.From = At + Lean * Hgt + Off + ZUp * (Hgt * (0.45 + Lobe.Z));
+				B.Vel = Vec(Lobe.X, Lobe.Y, 0.0) * (0.8 * K) + Vec(D.Bell(), D.Bell(), 0.0) * (0.4 * K) + ZUp * (Hgt * D.U(0.7, 1.4) * (1.0 + Lobe.Z));
+			}
 			B.Life = Linger * D.U(0.45, 1.0);
 			B.R0 = Pick(D, Sm + "puff_r.0", 0.5, 0.9) * K * Var;
 			B.R1 = Pick(D, Sm + "puff_r.1", 1.2, 2.6) * K * (1.0 + 0.5 * F) * Var;
@@ -775,6 +847,10 @@ namespace TheaterFx
 			B.Hold = 0.15;
 			B.Heart = D.U(0.4, 0.7); // (some firmer than others: a torn cloud, not one soft egg)
 			B.Rim = 0.0;
+			B.CloudShade = CloudShade;
+			B.Centre = At + (Lean + ZUp) * (CrownH * 0.45); // (the cloud's middle leans as the cloud does)
+			B.CloudR = CrownH * CloudR; // (within this of the middle a puff is only partly lit or shadowed)
+			B.CentreRise = 0.55 * std::sqrt(K);
 			Bits.push_back(B);
 		}
 		// the crater smoulders faintly for a while
@@ -1337,13 +1413,9 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
-		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles)
-		const double P2 = (LumpSeed & 1023u) * (2.0 * Pi / 1024.0);
-		const double P3 = ((LumpSeed >> 10) & 1023u) * (2.0 * Pi / 1024.0);
-		const double P5 = ((LumpSeed >> 20) & 1023u) * (2.0 * Pi / 1024.0);
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
 		{
 			Out[I] = At;
@@ -1353,10 +1425,31 @@ namespace TheaterFx
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
 		Put(First, Middle, Col, Alpha);
+		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
+		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
+		double C2 = 1.0, S2 = 0.0, C3 = 1.0, S3 = 0.0, C5 = 1.0, S5 = 0.0;
+		if (Rough > 0.0)
+		{
+			const double P2 = (LumpSeed & 1023u) * (2.0 * Pi / 1024.0);
+			const double P3 = ((LumpSeed >> 10) & 1023u) * (2.0 * Pi / 1024.0);
+			const double P5 = ((LumpSeed >> 20) & 1023u) * (2.0 * Pi / 1024.0);
+			C2 = std::cos(P2 - 2.0 * Turn);
+			S2 = std::sin(P2 - 2.0 * Turn);
+			C3 = std::cos(P3 - 3.0 * Turn);
+			S3 = std::sin(P3 - 3.0 * Turn);
+			C5 = std::cos(P5 - 5.0 * Turn);
+			S5 = std::sin(P5 - 5.0 * Turn);
+		}
+		// (unlit puffs: lighter on the side toward the sun, darker away from it, so a cloud has a lit side)
+		const double SunA = AxisA.Dot(Eye.Sun), SunB = AxisB.Dot(Eye.Sun);
+		const double AA = AxisA.Dot(AxisA), BB = AxisB.Dot(AxisB), AB = AxisA.Dot(AxisB);
+		const double SunUp = ZUp.Dot(Eye.Sun);
+		const double In = std::clamp(Inner, 0.1, 0.95);
 		for (int K = 0; K < Sides; ++K)
 		{
-			const double Angle = K * 2.0 * Pi / Sides;
-			const Vec Dir = AxisA * std::cos(Angle) + AxisB * std::sin(Angle);
+			const size_t I = static_cast<size_t>(K);
+			const double Cs = RingCos[I], Sn = RingSin[I];
+			const Vec Dir = AxisA * Cs + AxisB * Sn;
 			double Reach = 1.0;
 			if (K == 0)
 			{
@@ -1368,21 +1461,23 @@ namespace TheaterFx
 			}
 			if (Rough > 0.0)
 			{
-				const double W = Angle - Turn;
-				Reach *= std::max(0.35, 1.0 + Rough * (0.5 * std::cos(2.0 * W + P2) + 0.35 * std::cos(3.0 * W + P3) + 0.25 * std::cos(5.0 * W + P5)));
+				const double Wave2 = Ring2Cos[I] * C2 - Ring2Sin[I] * S2;
+				const double Wave3 = Ring3Cos[I] * C3 - Ring3Sin[I] * S3;
+				const double Wave5 = Ring5Cos[I] * C5 - Ring5Sin[I] * S5;
+				Reach *= std::max(0.35, 1.0 + Rough * (0.5 * Wave2 + 0.35 * Wave3 + 0.25 * Wave5));
 			}
 			Rgb Shaded = Col;
 			Rgb HeartShaded = Col;
 			if (Shade > 0.0)
 			{
-				// (unlit puffs: lighter on the side toward the sun, darker away from it, so a cloud has a lit side)
-				const double Toward = Dir.Unit(ZUp).Dot(Eye.Sun);
+				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
+				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : SunUp;
 				const double F = std::max(0.2, 1.0 + Shade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
 				Shaded = Col * F;
 				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
 			}
-			Put(First + 1 + static_cast<size_t>(K), Middle + Dir * (0.5 * Reach), HeartShaded, HeartAlpha);
-			Put(First + 1 + static_cast<size_t>(Sides) + static_cast<size_t>(K), Middle + Dir * Reach, Shaded, RimAlpha);
+			Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
 	}
 
@@ -1416,6 +1511,18 @@ namespace TheaterFx
 		if (Dist > Beyond)
 		{
 			return false;
+		}
+		if (B.CloudShade > 0.0 && !B.bLight)
+		{
+			// (the cloud's sunward side lit, its far side in its own shadow: shading each puff alone barely shows
+			// once many overlap)
+			const Vec FromMid = P - (B.Centre + Wind * (0.75 * Age) + ZUp * (B.CentreRise * Age));
+			const double Len = FromMid.Length();
+			if (Len > 1e-3)
+			{
+				const double Toward = FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3));
+				Col = Col * std::max(0.3, 1.0 + B.CloudShade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
+			}
 		}
 		const double MetresAPixel = Dist / std::max(Eye.PixelsPerRadian, 1.0);
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
@@ -1493,7 +1600,7 @@ namespace TheaterFx
 		{
 			return false;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
 		return true;
 	}
 
