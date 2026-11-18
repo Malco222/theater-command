@@ -511,6 +511,20 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	// the lamps: the strongest flashes now, out the moment they are spent
 	TheaterFx::Battle::Lamp Lit[MostLamps];
 	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Core.DayOf(Sight.SmokeLight)); // (after Draw: a flash's lamp goes by the frames it is drawn in)
+	// (-TheaterFxLampLog: a line for each frame a lamp is lit, and one for the first frame after with none)
+	static const bool bLampLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterFxLampLog"));
+	static int32 LitBefore = 0;
+	if (bLampLog && (NLit > 0 || LitBefore > 0))
+	{
+		FString Line = FString::Printf(TEXT("Battle effects lamps at %.3f s: %d lit"), Now, NLit);
+		for (int32 Index = 0; Index < NLit; ++Index)
+		{
+			const TheaterFx::Battle::Lamp& L = Lit[Index];
+			Line += FString::Printf(TEXT("; #%d at (%.0f, %.0f, %.0f) %.1f cd reach %.0f colour %.2f %.2f %.2f"), Index, L.At.X * UnitsPerMetre, L.At.Y * UnitsPerMetre, L.At.Z * UnitsPerMetre, L.Strength * LampCandela, L.Radius * UnitsPerMetre, L.Col.R, L.Col.G, L.Col.B);
+		}
+		UE_LOG(LogTheater, Log, TEXT("%s"), *Line);
+	}
+	LitBefore = NLit;
 	for (int32 Index = 0; Index < LampsInUse; ++Index)
 	{
 		UPointLightComponent* Lamp = LampLights[Index].Get();
