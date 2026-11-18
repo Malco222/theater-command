@@ -35,8 +35,8 @@ const chanceOf = (t: SeaTicket): number => diceChance(t.reckoning.odds, t.reckon
 const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
 const cap = (k: string): string => `<span class="tc-key">${k}</span>`;
 /** The hint line, in the UI director's words (ruling 226, 9): one line at 1440 and up, folding once before "Arrows"
- *  under that, where "Space pause" joins it because the clock's buttons drop their key caps there. */
-const KEYS = facts(['Click or drag a box: pick up', 'Right-click: steer there, or engage an enemy', 'Right-drag: form a line', `${cap('H')} hold`, `${cap('R')} break off`, `${cap('Tab')} next`, `${cap('Esc')} put down`, 'Arrows or two-finger drag: look round', `<span class="knarrow">${cap('Space')} pause</span>`])
+ *  under that, where "Space pause" and "1 2 3 speed" join it because the clock's buttons drop their key caps there (b467). */
+const KEYS = facts(['Click or drag a box: pick up', 'Right-click: steer there, or engage an enemy', 'Right-drag: form a line', `${cap('H')} hold`, `${cap('R')} break off`, `${cap('Tab')} next`, `${cap('Esc')} put down`, 'Arrows or two-finger drag: look round', `<span class="knarrow">${cap('Space')} pause</span>`, `<span class="knarrow">${cap('1')} ${cap('2')} ${cap('3')} speed</span>`])
   .replace('<span class="fact">Arrows', '<span class="kbreak"></span><span class="fact">Arrows');
 const CLASS_ONE: Record<SeaClass | 'ss', [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
 /** Ships by kind, a kind at 0 left out: ["1 battleship", "2 cruisers"]. */
@@ -376,15 +376,18 @@ function trayMore(): void {
 /** HAND IT TO THE STAFF's question, with the staff's chance now (the UI director's words, ruling 226, 5). */
 function handQuestion(sim: SeaSim): string {
   const p = S.scene.me === 'att' ? sim.handChance() : 1 - sim.handChance();
-  const chance = p >= 0.995 ? 'They are sure of it.' : p <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(p * 100)}% to win the action.`;
+  const chance = p >= 0.995 ? 'They are sure of it.' : p <= 0.005 ? 'They give you no chance of it.' : `They give you about ${Math.round(p * 100)}% to win the action.`;
   return sim.fired() ? `Hand the action to the staff? They settle the rest at once, from where it stands now. ${chance}`
     : `Hand the action to the staff? No shot has been fired: they settle the whole action at once. ${chance}`;
 }
 
-/** WITHDRAW's question, its label and the button that agrees; once the enemy has broken off, withdrawing lets it go and
- *  the sea is the player's (b458, 1), so the button that agrees says so too, not "Withdraw" under "the sea is yours". */
+/** WITHDRAW's question, its label and the button that agrees. Once the enemy has broken off the button ends the chase
+ *  and the sea is the player's (b458, 1), so it and its question say END THE CHASE, in plain style: ending a chase that
+ *  is won loses nothing, and "break off" at sea already means R and a beaten fleet's state (the UI director, b467). */
 const WITHDRAW_ASK = { text: 'Withdraw the fleet? The action ends and the sea is theirs.', label: 'Withdraw the fleet?', yes: 'Withdraw' };
-const LET_GO_ASK = { text: 'Break off the chase? The action ends here and the sea is yours.', label: 'Break off the chase?', yes: 'Break off' };
+const LET_GO_ASK = { text: 'End the chase? The action ends here and the sea is yours.', label: 'End the chase?', yes: 'End the chase' };
+/** The top bar's button, as it reads in the chase and out of it. */
+const WITHDRAW_WORD = 'Withdraw', END_CHASE_WORD = 'End the chase';
 /** WITHDRAW while the player's own fleet is breaking off: there is nothing left to withdraw, so the button stands down. */
 const ALREADY_GOING = 'Your fleet is already breaking off.';
 
@@ -445,6 +448,9 @@ function updateTop(force = false): void {
   // While the player's own fleet is breaking off WITHDRAW has nothing to do, so it is greyed and says why.
   const wd = document.querySelector<HTMLButtonElement>('[data-act="withdraw"]')!, going = sim.brokenSide === me;
   if (wd.disabled !== going) { wd.disabled = going; if (going) wd.title = ALREADY_GOING; else wd.removeAttribute('title'); }
+  // Once the enemy has broken off the button ends the chase, in plain style (the UI director, b467).
+  const ending = sim.brokenSide === them && !sim.over, word = ending ? END_CHASE_WORD : WITHDRAW_WORD;
+  if (wd.textContent !== word) { wd.textContent = word; wd.classList.toggle('tc-btn--grave', !ending); }
   (el('sask') as HTMLElement).hidden = !S.handing;
   if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
   // The foot of what stands over the top of the sea, so the far ports' name and the opening view keep clear of it.
@@ -456,8 +462,8 @@ function updateTop(force = false): void {
   let tag = '';
   if (!S.asking && !S.handing && !sim.over) {
     if (paused) tag = `Paused ${cap('Space')}`;
-    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the action begins`;
-    else if (S.chasing) tag = `×${APPROACH * S.clock.speed} until the action ends ${cap('1')}`;
+    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the fleets meet`;
+    else if (S.chasing) tag = `×${APPROACH} until the chase is over ${cap('1')}`;
     else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
   }
   if (tagEl.innerHTML !== tag) tagEl.innerHTML = tag;
@@ -794,8 +800,10 @@ function frame(): void {
   // 1): a strike or a raid in the air does not stop it, since they are counted, not flown (b458, 2a). Once a fleet has
   // broken off, time runs fast through the chase until the action ends, unless the player takes the chase's clock in
   // hand with a speed key (b402, 3; b458, 1: an order lets the enemy go or pursues it, and neither slows the clock).
+  // The chase runs at ×8 whatever speed the clock was set to before the break (the design director, b467): at ×32 the
+  // player could not strike or choose, and the chase should read the same every time.
   const chase = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
-  S.clock.rush = sim.quiet || chase ? APPROACH : 1;
+  S.clock.rush = chase ? APPROACH / (S.clock.speed || 1) : sim.quiet ? APPROACH : 1;
   S.clock.advance(sim, dt);
   const quiet = !sim.over && sim.quiet;
   if (S.closing && !quiet && !sim.over) S.tag = { text: `The action begins · Running ×${S.clock.speed}`, until: t + 2.5 };

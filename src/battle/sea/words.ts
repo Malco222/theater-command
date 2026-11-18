@@ -6,10 +6,11 @@ import { RULES_CLASSES, SEA } from './numbers';
 import { SEA_CLASSES, type SeaShips } from './types';
 
 /**
- * A fleet's name in a sentence (the design and UI directors, b458 6): a name that ends in "Fleet" takes "the", as
- * English does ("the Home Fleet", "the 1st Fleet"); any other stands bare ("Force H"), as the navies wrote it.
+ * A fleet's name in a sentence (the design and UI directors, b458 6 and b467): a name that ends in "Fleet" or "Navy"
+ * takes "the", as English does ("the Home Fleet", "the 1st Fleet", "the Polish Navy"); any other stands bare
+ * ("Force H"), as the navies wrote it. The campaign's headlines follow the same rule.
  */
-export const theFleet = (name: string): string => (/\bFleet$/.test(name.trim()) ? `the ${name}` : name);
+export const theFleet = (name: string): string => (/\b(?:Fleet|Navy)$/.test(name.trim()) ? `the ${name}` : name);
 
 /** "of the Home Fleet", "of Force H": a ship's fleet after its kind. */
 export const ofFleet = (name: string): string => `of ${theFleet(name)}`;

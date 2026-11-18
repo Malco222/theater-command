@@ -841,12 +841,15 @@ describe('b458, 5: a practice field is headed by its card', () => {
 });
 
 describe('b458, 6: a fleet in a sentence', () => {
-  it('a fleet whose name ends in "Fleet" takes "the"; any other stands bare', () => {
+  it('a fleet whose name ends in "Fleet" or "Navy" takes "the"; any other stands bare (b467)', () => {
     expect(theFleet('Home Fleet')).toBe('the Home Fleet');
     expect(theFleet('1st Fleet')).toBe('the 1st Fleet');
     expect(theFleet('Mediterranean Fleet')).toBe('the Mediterranean Fleet');
     expect(theFleet('Force H')).toBe('Force H');
     expect(theFleet('Striking Force')).toBe('Striking Force');
+    expect(theFleet('Polish Navy')).toBe('the Polish Navy');
+    expect(theFleet('Royal Norwegian Navy')).toBe('the Royal Norwegian Navy');
+    expect(ofFleet('Polish Navy')).toBe('of the Polish Navy');
     expect(ofFleet('Force H')).toBe('of Force H');
     expect(ofFleet('Battle Fleet')).toBe('of the Battle Fleet');
   });
