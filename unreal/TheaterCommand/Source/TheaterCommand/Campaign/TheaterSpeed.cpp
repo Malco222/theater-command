@@ -57,6 +57,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarDressSteps(
 		TEXT("tc.Speed.DressSteps"), 1,
 		TEXT("1 dresses a fine sheet a little at a time (about 8 ms a frame, one sheet at a time); 0 dresses every ready sheet whole in one frame, as before."));
+	TAutoConsoleVariable<int32> CVarFogAside(
+		TEXT("tc.Speed.FogAside"), 1,
+		TEXT("1 lays the haze beyond the map on another thread when it moves and puts it on the table a picture a frame after; 0 lays it all in the frame of the press, as before."));
 	TAutoConsoleVariable<int32> CVarFineAside(
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
@@ -304,6 +307,11 @@ namespace TheaterSpeed
 	bool DressSteps()
 	{
 		return CVarDressSteps.GetValueOnGameThread() != 0;
+	}
+
+	bool FogAside()
+	{
+		return CVarFogAside.GetValueOnGameThread() != 0;
 	}
 
 	FHoldersRead::FHoldersRead()
