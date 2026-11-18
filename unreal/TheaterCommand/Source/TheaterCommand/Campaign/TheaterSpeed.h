@@ -28,7 +28,8 @@ class APlayerController;
  * The same jobs are also timed for Unreal's own frame recorder ("-csvCaptureFrames=600", or "csvprofile start" and
  * "csvprofile stop" at the console), in its "Theater" columns, beside the engine's own game, draw and chip times.
  *
- * The switches, each a console variable so that "-TheaterTime=" can try them against each other in one run:
+ * The switches, each a console variable so that "-TheaterTime=" can try them against each other in one run, and
+ * "-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1" can set any of them for a whole run of the step player:
  *   tc.Speed.TownSquares  1 (default): the towns are cut into squares of country, so that only those in view are
  *                         drawn and only those near a change are drawn again into the shadows. 0: one piece, as before.
  *   tc.Speed.SmokeTrim    1 (default): only as much of the smoke's mesh as is in use is sent to the graphics chip

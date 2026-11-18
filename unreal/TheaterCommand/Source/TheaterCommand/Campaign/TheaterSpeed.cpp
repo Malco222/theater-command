@@ -561,6 +561,39 @@ namespace TheaterSpeed
 
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
+		// ("-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1": console variables set from the command line, once,
+		// for a run of the step player with one of the switches the other way. -TheaterTime tries settings against
+		// each other with the eye held in one place, which never takes a fine sheet down or brings new ground up.)
+		static bool bSetAsked = false;
+		if (!bSetAsked)
+		{
+			bSetAsked = true;
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSet="), Asked, false))
+			{
+				TArray<FString> Each;
+				Asked.ParseIntoArray(Each, TEXT(","), true);
+				for (const FString& One : Each)
+				{
+					FString Name, Value;
+					if (!One.Split(TEXT("="), &Name, &Value))
+					{
+						continue;
+					}
+					Name.TrimStartAndEndInline();
+					Value.TrimStartAndEndInline();
+					if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name))
+					{
+						Variable->Set(*Value, ECVF_SetByConsole);
+						UE_LOG(LogTheater, Display, TEXT("Speed: %s set to %s (-TheaterSet)"), *Name, *Value);
+					}
+					else
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Speed: -TheaterSet names no console variable called %s"), *Name);
+					}
+				}
+			}
+		}
 		// (a change of tc.Speed.StillMeshes is seen at once: every still mesh's proxy is made again, of the kind now asked for)
 		{
 			static int32 StillWas = -1;
