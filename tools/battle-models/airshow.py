@@ -37,8 +37,13 @@ def plane_look(paint, mat, nt, bsdf, mix):
     if paint == "blur":
         bsdf.inputs["Alpha"].default_value = 0.14
         bsdf.inputs["Roughness"].default_value = 0.3
-    if paint in ("upper", "upper2", "under", "nose"):
-        bsdf.inputs["Roughness"].default_value = 0.5
+    if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
+        bsdf.inputs["Roughness"].default_value = 0.38       # (a doped and polished skin: it takes a soft light along its curves)
+    if paint == "glass":                                     # (clear, so that her crew are seen: the file says so under `clear`)
+        bsdf.inputs["Alpha"].default_value = 0.3
+        bsdf.inputs["Roughness"].default_value = 0.04
+    if paint in ("lamp_red", "lamp_green", "lamp_white", "lens"):
+        bsdf.inputs["Roughness"].default_value = 0.1
 
 
 class Air:
@@ -99,7 +104,9 @@ class Plane:
         return self.at + self.q @ p, self.q @ d
 
     def where(self, socket):
-        return lambda: self.spot(socket)
+        w = lambda: self.spot(socket)
+        w.plane = self                                       # (so that what burns there knows which way she is going)
+        return w
 
     def nose(self):
         """Which way she points now (her clip's own tipping included)."""
@@ -168,28 +175,71 @@ class Chute:
 # ---- effects sized for aircraft ----------------------------------------------------------------------
 
 def trail(fx, where, start, end=1e9, kind="black", size=1.0):
+    """What a stricken machine leaves behind her from one place on her: black smoke, a thin grey streamer, or flame.
+    Flame is drawn as tongues: each a ragged streak rooted where she burns and lying along the air going past her,
+    alive for a frame or two, with a hot yellow heart at the root and scraps torn off it downstream that go dark into
+    the smoke. (Soft balls of flame run together into a smooth orange sheet; tongues do not.)"""
     g = fx.rng
+    plane = getattr(where, "plane", None)
+
+    def going():
+        """Her way against the formation, and the way the air streams past her."""
+        v = plane.vel.copy() if plane is not None else Vector()
+        u = v + X * (plane.air.speed if plane is not None else -fx.wind.x)
+        return v, (-u.normalized() if u.length > 1.0 else -X)
+
+    def across(flow, far):
+        """A step to one side of the stream."""
+        side = flow.cross(Z)
+        side = side.normalized() if side.length > 1e-6 else Y.copy()
+        up = side.cross(flow)
+        a = g.uniform(0, 6.283)
+        return (side * math.cos(a) + up * math.sin(a)) * far
 
     def black(t, at, facing):
+        v, flow = going()
         c = g.uniform(0.03, 0.09)
         big = g.uniform(0.6, 1.25)
-        fx.puff(t, at + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5))) * size, vel=(g.uniform(-5, 5), g.uniform(-3.5, 3.5), g.uniform(-3.5, 3.5)), life=g.uniform(4.5, 7.5),
-                r=(0.5 * size, g.uniform(5.0, 8.5) * size * big), col=(c * 1.5, c * 1.15, c), col2=(c * 1.7, c * 1.7, c * 1.7), alpha=g.uniform(0.5, 0.75), drag=0.45, fade_in=0.05, grow=0.6,
-                hold=0.25, wind=1.0, squash=(g.uniform(1.0, 1.6), 1.0, g.uniform(0.8, 1.1)))
+        # (it gathers a few metres behind the fire, so the flame is seen against the sky and not through its own smoke)
+        # (each puff is drawn out along the stream, so that near her they run together into one rope and never stand as a row of balls)
+        p = fx.puff(t, at + flow * 3.2 * size + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5))) * size, vel=(g.uniform(-5, 5), g.uniform(-3.5, 3.5), g.uniform(-3.5, 3.5)),
+                    life=g.uniform(4.5, 7.5), r=(0.6 * size, g.uniform(4.6, 7.6) * size * big), col=(c * 1.9, c * 1.2, c), col2=(c * 1.7, c * 1.7, c * 1.7), alpha=g.uniform(0.45, 0.7), drag=0.45,
+                    fade_in=0.08, grow=0.6, hold=0.25, wind=1.0, squash=(g.uniform(1.9, 2.7), 1.0, g.uniform(0.8, 1.1)))
+        p["ob"].rotation_euler = ((flow + across(flow, g.uniform(0.0, 0.25))).normalized().to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
     def thin(t, at, facing):
         c = g.uniform(0.45, 0.62)
         fx.puff(t, at, vel=(g.uniform(-2, 2), g.uniform(-1.5, 1.5), g.uniform(-1.5, 1.5)), life=g.uniform(2.6, 4.0), r=(0.4 * size, g.uniform(2.4, 4.0) * size), col=(c, c, c), alpha=0.38,
                 drag=0.5, fade_in=0.03, grow=0.6, wind=1.0)
 
+    def tongue(t, root, flow, v, long, kind, col, col2, life, drift, alpha=0.92, splay=0.16):
+        d = (flow + across(flow, g.uniform(0.0, splay))).normalized()
+        wide = long * g.uniform(0.2, 0.32)
+        p = fx.puff(t, root + d * (0.5 * long), vel=v, life=life, r=(0.72, 1.0), col=col, col2=col2, alpha=alpha, kind=kind, wind=drift, squash=(0.5 * long, 0.5 * wide, 0.5 * wide),
+                    fade_in=0.006, grow=0.5, hold=0.55, cool=1.0)
+        p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+
     def flame(t, at, facing):
-        # (tongues, not balls: each lick is drawn out along the stream)
-        for _ in range(3):
-            p = fx.puff(t + g.uniform(0, 0.01), at + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.22, 0.22), g.uniform(-0.18, 0.18))) * size, vel=(g.uniform(-6, 6), g.uniform(-1.2, 1.2), g.uniform(-1.2, 1.2)),
-                        life=g.uniform(0.06, 0.2), r=(0.24 * size, g.uniform(0.42, 0.72) * size), col=(0.26, 0.085, 0.012), col2=(0.16, 0.022, 0.003), alpha=0.8, kind="glow", wind=0.86,
-                        squash=(3.0, 1.0, 1.0), fade_in=0.008, grow=0.6)
-            p["ob"].rotation_euler = (g.uniform(0, 6.28), g.uniform(-0.12, 0.12), g.uniform(-0.12, 0.12))
-    make, every = {"black": (black, 0.022), "thin": (thin, 0.04), "flame": (flame, 0.011)}[kind]
+        v, flow = going()
+        gust = 0.72 + 0.5 * abs(math.sin(23.0 * t) * math.sin(7.3 * t + 1.0))        # (it flares and sinks)
+        k = g.uniform(0.85, 1.15)
+        # rooted on her, round the place that burns
+        tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.15, 0.42) * size), flow, v, g.uniform(1.7, 3.9) * size * gust, "tongue",
+               (0.30 * k, 0.082 * k, 0.009), (0.24, 0.05, 0.006), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08))
+        # torn off downstream, and going red
+        if g.random() < 0.6:
+            tongue(t, at + flow * g.uniform(2.2, 6.0) * size * gust + across(flow, g.uniform(0.0, 0.55) * size), flow, v, g.uniform(1.0, 2.5) * size, "lick",
+                   (0.25 * k, 0.062 * k, 0.007), (0.13, 0.02, 0.004), g.uniform(0.09, 0.2), g.uniform(0.22, 0.45), alpha=0.85, splay=0.24)
+        # scraps of it going out in the head of the smoke
+        if g.random() < 0.22:
+            tongue(t, at + flow * g.uniform(5.0, 8.5) * size + across(flow, g.uniform(0.0, 0.8) * size), flow, v, g.uniform(0.8, 1.6) * size, "lick",
+                   (0.15, 0.032, 0.005), (0.035, 0.012, 0.006), g.uniform(0.25, 0.45), g.uniform(0.6, 0.85), alpha=0.6, splay=0.3)
+        # the heart of it, where the petrol or the oil comes out
+        if g.random() < 0.4:
+            p = fx.puff(t, at + flow * g.uniform(0.2, 0.7) * size + across(flow, g.uniform(0.0, 0.2) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
+                        col=(0.62, 0.34, 0.07), col2=(0.4, 0.15, 0.02), alpha=0.95, kind="glow", wind=0.03, squash=(1.7, 1.0, 1.0), fade_in=0.006, grow=0.6)
+            p["ob"].rotation_euler = flow.to_track_quat("X", "Z").to_euler()
+    make, every = {"black": (black, 0.017), "thin": (thin, 0.04), "flame": (flame, 0.0115)}[kind]
     fx.stream(where, every, make, start=start, end=end)
 
 
@@ -258,8 +308,9 @@ def flypast(A, opt):
         mate.put(None, mate.play("fly", t + 1.3))
         A.at(t)
         ang = math.radians(-128.0 + 300.0 * smooth(t / T) * 0.999 + 20.0 * t / T)
-        r = span * (1.7 + 0.25 * math.sin(math.pi * t / T))
-        kit.look_at(A.cam, (math.cos(ang) * r - 1.5, math.sin(ang) * r, span * (0.42 - 0.3 * math.sin(math.pi * t / T))), (-1.5, -1.0, 0.0))
+        # (the nearest a battle's camera comes: about a wing's length off her, so her pilot and her rivets are seen)
+        r = span * (1.3 - 0.3 * math.sin(math.pi * t / T))
+        kit.look_at(A.cam, (math.cos(ang) * r - 0.8, math.sin(ang) * r, span * (0.36 - 0.24 * math.sin(math.pi * t / T))), (-0.8, -0.4, 0.0))
     A.cam.data.lens = 40.0
     return T, step
 
@@ -458,4 +509,5 @@ def main():
         print("made", os.path.join(out, f"air-{shot}.mp4"))
 
 
-main()
+if __name__ == "__main__":
+    main()

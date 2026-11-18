@@ -20,8 +20,8 @@ Ships: `Battleship_UK/GER/USA/JAP/ITA/FRA`, `Battleship`, `Cruiser_UK/GER/USA/JA
 `Destroyer_GER/USA/JAP`, `Carrier`, `Carrier_USA/JAP`, `Submarine`, `Submarine_GER/USA` (the plain name is the
 layout for any other navy). For convoys and landings (`merchants.py`): `Freighter`, `Tanker`, `Troopship`,
 `LandingCraft` (an infantry boat, 36 men in her well) and `TankLandingCraft` (three tanks on her deck). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
-`Hurricane`, `Warhawk`, `Fighter`, `Stuka`, `Sturmovik`, `He111`, `Lancaster`, `B17`, `Bomber`), plus `Parachute`
-and `Bomb`.
+`Hurricane`, `Warhawk`, `Fighter`, `Stuka`, `Sturmovik`, `He111`, `Lancaster`, `B17`, `Bomber`), the jet `Me262`
+(a battle's own, from 1944), plus `Parachute` and `Bomb`.
 
 ## The file
 
@@ -93,21 +93,50 @@ oil slick.
 ## Aircraft
 
 The fifteen are built by the game's own sculptor (`game/build_plane.py`, copied from the `unreal` branch) and
-then taken apart. Paints, colours, camouflage blend, soot, wear and markings are exactly the game's; two paints
-are added at the end, `torn` (the inside of a torn-off end) and `blur` (the disc of a turning airscrew: draw it
-nearly clear and two-sided).
+then taken apart. Her shape, colours, camouflage blend and markings are exactly the game's. For a battle the
+sculptor is run at a finer grain (`FINER` in `planes.py`: 40 points round the fuselage, a ring every 15 cm, 16
+points along the chord), so that her skin is smooth with the camera a wing's length away, and `fitout.py` then
+adds what is seen at that distance:
+
+- her crew under the glass (head, helmet, goggles, mask, shoulders, life jacket), seats, a fighter's sight;
+  a bomber's gunners in their turrets and the men in a glass nose;
+- exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
+  muzzles, cowling fasteners, wingtip and tail lamps;
+- rows of rivets along frames, stringers, spars and ribs (small dark squares, the fine model only);
+- a bomb bay behind two doors with the bombs on their racks (`He111`, `Lancaster`, `B17`, `Bomber`);
+- the black rubber along the leading edges of the `B17`, her two open waist windows with a gunner standing at each
+  gun (`WAIST` in `planes.py` cuts them out of her skin), and her tail gunner behind his windows.
+
+The aerial wire from the mast to the fin is left off every machine (Brian, 2026-11-18); the mast stays.
+
+`Me262` is a battle's own (the game has no jet): its numbers are `EXTRA_PLANES` in `planes.py`, in the game's form
+with one new key, `jets` (the pods under the wings). Three small patches (`JETS`) let the game's sculptor leave the
+airscrew off and skin the pods; `fitout.jets` adds the intake lips and bullets, the tailpipes and the cannon ports.
+She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe). She is a 1944 unit (`file.year`).
+
+Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
+and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
+`boot`, `rivet`, `rivet_under`, three lamps). **Draw `glass` and `blur` clear**: the file gives how clear under
+`file.clear` (`glass` 0.3, `blur` 0.14), and then her crew are seen through the hood.
 
 Parts: `plane` (root: the fuselage), `wing.port`, `wing.starboard` (each wing outboard of the fuselage with its
 engines and guns), `tail` (rear fuselage, tailplane, fins), `prop.N` (blades, numbered from the port side),
-`prop.N.blur`, and `bombs` where something hangs under her. Both ends of every break are closed.
+`prop.N.blur`, and `bombs` where something hangs under her or in her bay. Both ends of every break are closed.
+Moving surfaces, each a `turn` part with limits: `aileron.port/starboard`, `flap.port/starboard` (machines with
+no engines on the wing), `elevator.port/starboard`, `rudder` (or `rudder.port/starboard`), `bay.port/starboard`
+(bomb doors, plus opens). Plus on an aileron, flap or elevator is trailing edge down; plus on a rudder is
+trailing edge to starboard. Guns: `turret.N` (plus trains it clockwise seen from above) with its child
+`turret.N.guns` (plus lifts them), and `flexgun.N` (a gun on a free mounting, keyed by rotation).
 
-Sockets: `engine.N`, `gun.N` and `gun.nose` (fixed guns), `turret.N` (gunners' muzzles), `bombs`, `hatch`,
-`hatch.belly`, `wingtip.*`, `tank.*`, `stub.*`, `break.wing.*`, `break.tail`, `fuel`, `trail`.
+Sockets: `engine.N`, `jet.N` (a jet's tailpipe), `gun.N` and `gun.nose` (fixed guns), `turret.N` (gunners' muzzles, riding their guns),
+`bombs`, `hatch`, `hatch.belly`, `wingtip.*`, `tank.*`, `stub.*`, `break.wing.*`, `break.tail`, `fuel`, `trail`.
 
-Clips: `fly` (loop: discs turning, a little life), `idle`, `stopped`, `bank.port/starboard`, `peel_off`
-(fighters), `fire`, `fire.turrets`, `bombs_away`, `hit`, `smoking`, and the three ways down: `fall_burn`,
-`fall_spin` (the port wing shot off), `fall_explode` (wings and tail fly off); `bail_out` (one `chute` event for
-each of the crew who get out: spawn a `Parachute` there and play its `open`, then `drift`).
+Clips: `fly` (loop: discs turning, a little life, the controls working), `idle`, `stopped`,
+`bank.port/starboard` (ailerons over, elevators up), `peel_off` (fighters), `flaps.down`, `fire`, `fire.turrets`,
+`watch` (loop: gunners sweeping the sky), `bombs_away` (the doors open first, then the bombs go), `doors.close`,
+`hit`, `smoking`, and the three ways down: `fall_burn`, `fall_spin` (the port wing shot off), `fall_explode`
+(wings and tail fly off); `bail_out` (one `chute` event for each of the crew who get out: spawn a `Parachute`
+there and play its `open`, then `drift`).
 
 **The game flies the machine.** Clips only tip, roll and break her about her own middle. In a fall the game
 carries the wreck down: for `fall_burn` along her nose, gaining speed; for `fall_spin` and `fall_explode` as a
@@ -126,6 +155,7 @@ python export.py <out> all                     # every model: .json, .glb, .fbx,
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast, shot_down, ways_down
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side; clip=bombs_away@1.6)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
 
@@ -137,15 +167,16 @@ markings for the pictures only; the game paints its own from the model's `marks`
 ## Not done yet
 
 - Sound: events are keyed to the sound director's names where a real recording exists (`ship_gun_heavy`,
-  `ship_gun_medium`, `ship_guns`, `magazine_explosion`, `fire_loop`, `depth_charge`, `ship_wash_loop`,
-  `ship_engine_loop`, `plane_guns`, `gunner_burst`, `plane_down`, `plane_explode`, `b17_drone_loop`,
-  `bomber_heavy_loop`, `stuka_drone_loop`; table in `/mnt/project-files/sound/battle-pack/README.md`). No sound file
-  goes into the game until Brian has judged it (ruling 144). Still placeholders, waiting for recordings:
-  `aero_engine_loop` (fighters), `aero_engine_idle`, `bomb_release`, `aircraft_hit`, `aircraft_fire`,
-  `aircraft_break_up`, `parachute_open`, `explosion`, `ship_sinking`, `torpedo_launch`, `depth_charge_roll`,
-  `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`, `ramp_drop`, `ramp_winch`.
+  `ship_gun_medium`, `ship_guns`, `shell_impact_near`, `magazine_explosion`, `fire_loop`, `depth_charge`,
+  `ship_wash_loop`, `ship_engine_loop`, `plane_guns`, `gunner_burst`, `ricochet_01`, `plane_down`, `plane_explode`,
+  `fighter_engine_loop`, `aero_engine_idle_loop`, `b17_drone_loop`, `b24_drone_loop`, `bomber_medium_loop`,
+  `stuka_drone_loop`; list in `/mnt/project-files/sound/battle-pack/sound-list.json`). No sound file goes into the
+  game until Brian has judged it (ruling 144). Names with no recording yet, which stay silent: `bomb_release`,
+  `bomb_doors`, `jet_engine_loop`, `aircraft_fire`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
+  `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
+  `ramp_drop`, `ramp_winch`.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
-- Aircraft control surfaces do not move, bombers' turrets do not turn, bomb doors do not open.
+- Aircraft have no undercarriage that lowers; a carrier's deck park uses the plain models.
 - One plain mesh (`far`) per model; no third level of detail.
 - The men and tanks in the landing craft are stand-ins; the land team's soldiers and tanks should stand there.
 - No beach in the pictures' stage, so there is no clip of a landing yet.

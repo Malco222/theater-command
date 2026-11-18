@@ -9,6 +9,7 @@ import math
 import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.geometry import tessellate_polygon
 
 BLUE, RED, WHITE, YELLOW, BLACK = "1C2C55", "A82A26", "E6E4DA", "D9B03A", "141414"
 US_BLUE, DISC = "1B2A4A", "B0261E"
@@ -98,20 +99,29 @@ def put(model, ob, arm):
             r = mk["radius"]
             for layer, polys in enumerate(shapes(mk["tag"])):
                 for col, poly in polys:
-                    idx = []
-                    for (a, b) in poly:
-                        p = at + (u * (a * flip) + v * b) * r
-                        hit = tree.ray_cast(p + n * 0.6, -n, 1.2)
-                        if hit[0] is not None and hit[1].dot(n) > 0.3:
-                            p = hit[0]
-                        idx.append(len(verts))
-                        verts.append(p + n * (0.012 + 0.004 * layer))
-                        groups.append(part)
-                    a_, b_, c_ = verts[idx[0]], verts[idx[1]], verts[idx[2]]
-                    if (b_ - a_).cross(c_ - a_).dot(n) < 0:
-                        idx.reverse()
-                    faces.append(idx)
-                    cols.append(col)
+                    # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,
+                    #  and her skin comes through it)
+                    flat = [Vector((a * flip, b, 0.0)) for (a, b) in poly]
+                    tris = [[flat[i] for i in t] for t in tessellate_polygon([flat])]
+                    longest = max(((t[i] - t[(i + 1) % 3]).length for t in tris for i in range(3)), default=0.0) * r
+                    for _ in range(min(4, max(0, math.ceil(math.log2(max(longest / 0.13, 1.0)))))):
+                        tris = [piece for (a, b, c) in tris for ab, bc, ca in [((a + b) / 2, (b + c) / 2, (c + a) / 2)]
+                                for piece in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))]
+                    for tri in tris:
+                        idx = []
+                        for q in tri:
+                            p = at + (u * q.x + v * q.y) * r
+                            hit = tree.ray_cast(p + n * 0.6, -n, 1.2)
+                            if hit[0] is not None and hit[1].dot(n) > 0.3:
+                                p = hit[0]
+                            idx.append(len(verts))
+                            verts.append(p + n * (0.012 + 0.004 * layer))
+                            groups.append(part)
+                        a_, b_, c_ = verts[idx[0]], verts[idx[1]], verts[idx[2]]
+                        if (b_ - a_).cross(c_ - a_).dot(n) < 0:
+                            idx.reverse()
+                        faces.append(idx)
+                        cols.append(col)
     if not faces:
         return []
     me = bpy.data.meshes.new(model.name + "_marks")

@@ -457,7 +457,7 @@ def clips_for_ship(m, yard, mains, cls):
     # she is hit: a shudder
     m.clips["hit"] = {"long": 1.6, "loop": False, "about": "a shell or a bomb strikes: she shudders; put the burst at the nearest fire socket (a torpedo: the column of water at a hit socket)",
                       "tracks": [{"part": "ship", "rot": quat_keys(1.6, lambda t: (1.1 / big * 0.5 * math.exp(-t * 2.5) * math.sin(t * 9.0), 0.3 * math.exp(-t * 2.5) * math.sin(t * 7.0), 0), 0.05)}],
-                      "events": [{"t": 0.0, "fx": "shell_burst", "socket": "fire.1", "cue": "explosion"}]}
+                      "events": [{"t": 0.0, "fx": "shell_burst", "socket": "fire.1", "cue": "shell_impact_near"}]}
 
     def settle(t, T, a):
         return a * smooth(t / T)

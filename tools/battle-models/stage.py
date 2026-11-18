@@ -451,6 +451,19 @@ class Effects:
         for k in ("smoke", "water", "glow", "flat"):       # one ball for each kind of puff, in its own stuff
             self.meshes[k] = self.mesh.copy()
             self.meshes[k].materials.append(self._mat(k))
+        # a tongue of flame: the ball drawn out along x, blunt at its root (x = -1) and tapering to a point (x = +1),
+        # with a bend in it. "tongue" is hot at its root; "lick" is a scrap of flame torn off downstream.
+        lick = self.mesh.copy()
+        for v in lick.vertices:
+            x, y, z = v.co
+            u = min(max(0.5 * (x + 1.0), 0.0), 1.0)
+            was = math.hypot(y, z)
+            now = 1.9 * u ** 0.45 * (1.0 - u) ** 0.9
+            k = now / was if was > 1e-6 else 0.0
+            v.co = (x, y * k + 0.2 * u * math.sin(2.6 * u), z * k + 0.12 * u * u)
+        for k in ("tongue", "lick"):
+            self.meshes[k] = lick.copy()
+            self.meshes[k].materials.append(self._flame_mat(k == "tongue"))
 
     def _mat(self, kind):
         m = bpy.data.materials.new("fx_" + kind)
@@ -492,6 +505,59 @@ class Effects:
             body = nt.nodes.new("ShaderNodeBsdfDiffuse")
         if kind != "water":
             nt.links.new(info.outputs["Color"], body.inputs["Color"])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(alpha, ms.inputs[0])
+        nt.links.new(clear.outputs[0], ms.inputs[1])
+        nt.links.new(body.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
+        return m
+
+    def _flame_mat(self, hot):
+        """Flame as tongues: ragged (eaten away by noise, more toward the tip), streaked along its length, each one
+        different; deep orange, darkening to red at the tip, and with `hot` a yellow heart at the root."""
+        m = bpy.data.materials.new("fx_tongue" if hot else "fx_lick")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        out = nt.nodes["Material Output"]
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(tc.outputs["Object"], sep.inputs[0])
+        u = _math(nt, "MULTIPLY", _math(nt, "ADD", sep.outputs[0], 1.0), 0.5, clamp=True)      # 0 at the root, 1 at the tip
+        mp = nt.nodes.new("ShaderNodeMapping")
+        mp.inputs["Scale"].default_value = (0.9, 3.0, 3.0)                                    # (streaks lie along the tongue)
+        nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.noise_dimensions = "4D"
+        nz.inputs["Scale"].default_value = 1.0
+        nz.inputs["Detail"].default_value = 5.0
+        nz.inputs["Roughness"].default_value = 0.62
+        nt.links.new(mp.outputs["Vector"], nz.inputs["Vector"])
+        nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])     # (no two alike)
+        n = nz.outputs[0]
+        lw = nt.nodes.new("ShaderNodeLayerWeight")
+        lw.inputs["Blend"].default_value = 0.5
+        face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                   # 1 looking into it, 0 at its edge
+        eaten = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", n, 2.5), _math(nt, "ADD", 0.62 if hot else 0.8, _math(nt, "MULTIPLY", u, 0.85))), 3.2, clamp=True)
+        soft = _math(nt, "MULTIPLY", _math(nt, "POWER", face, 0.9), eaten, clamp=True)
+        alpha = _math(nt, "MULTIPLY", soft, info.outputs["Alpha"], clamp=True)
+        # colour: the puff's own (deep orange) through most of it, red and dim toward the tip, yellow in the heart
+        _, t_fac, t_a, t_b, col = _mix(nt)
+        t_b.default_value = (0.11, 0.012, 0.002, 1.0)
+        nt.links.new(info.outputs["Color"], t_a)
+        nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "ADD", u, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, n), 0.5)), 0.72), 2.2, clamp=True), t_fac)
+        if hot:
+            _, h_fac, h_a, h_b, heart = _mix(nt)
+            h_a.default_value = (1.45, 0.74, 0.16, 1.0)
+            nt.links.new(col, h_b)
+            cool = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.3), _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, face), 0.75), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)))
+            nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", cool, 0.12), 1.6, clamp=True), h_fac)
+            col = heart
+        body = nt.nodes.new("ShaderNodeEmission")
+        body.inputs["Strength"].default_value = 7.0
+        nt.links.new(col, body.inputs["Color"])
         clear = nt.nodes.new("ShaderNodeBsdfTransparent")
         ms = nt.nodes.new("ShaderNodeMixShader")
         nt.links.new(alpha, ms.inputs[0])
@@ -737,17 +803,28 @@ class Clouds:
             nt.nodes.remove(nt.nodes["Principled BSDF"])
             out = nt.nodes["Material Output"]
             tc = nt.nodes.new("ShaderNodeTexCoord")
-            # (four sizes of the same soft noise, each turned a little, so no row of clouds ever repeats in sight)
-            def turned(metres, name, sd, beta, turn):
+            # (five sizes of soft noise, each turned a different way, the middle ones pushed about by two more: big
+            #  uneven heaps with ragged holes, and no row of clouds that repeats in sight. Clumps of one size on one
+            #  tile lay in even rows when seen low and far off, like a ploughed field.)
+            def turned(metres, name, sd, beta, turn, coords=None):
                 mp = nt.nodes.new("ShaderNodeMapping")
                 mp.inputs["Rotation"].default_value = (0.0, 0.0, turn)
-                nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
+                nt.links.new(coords or tc.outputs["Object"], mp.inputs["Vector"])
                 return _noise(nt, mp.outputs["Vector"], metres, name, sd, beta)
+            push = nt.nodes.new("ShaderNodeCombineXYZ")
+            nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", turned(patch * 5.3, "cloud_b", seed + 1, 1.7, 2.2), 0.5), patch * 0.7), push.inputs[0])
+            nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", turned(patch * 4.1, "cloud_c", seed + 2, 1.5, 0.9), 0.5), patch * 0.7), push.inputs[1])
+            moved = nt.nodes.new("ShaderNodeVectorMath")
+            moved.operation = "ADD"
+            nt.links.new(tc.outputs["Object"], moved.inputs[0])
+            nt.links.new(push.outputs[0], moved.inputs[1])
             vast = turned(patch * 7.3, "cloud_a", seed, 2.1, 0.61)
-            big = turned((patch * 1.25, patch), "cloud_a", seed, 2.1, 0.0)
-            mid = turned(patch / 4.3, "cloud_b", seed + 1, 1.7, 1.13)
-            small = turned(patch / 17.0, "cloud_c", seed + 2, 1.5, 0.37)
-            v = _math(nt, "ADD", _math(nt, "ADD", _math(nt, "MULTIPLY", big, 0.4), _math(nt, "MULTIPLY", vast, 0.26)), _math(nt, "ADD", _math(nt, "MULTIPLY", mid, 0.24), _math(nt, "MULTIPLY", small, 0.1)))
+            big = turned((patch * 3.1, patch * 2.6), "cloud_a", seed, 2.1, 0.23, moved.outputs[0])
+            mid = turned(patch * 0.74, "cloud_b", seed + 1, 1.7, 1.13, moved.outputs[0])
+            small = turned(patch / 4.3, "cloud_c", seed + 2, 1.5, 0.37)
+            fine = turned(patch / 17.0, "cloud_c", seed + 2, 1.5, 1.9)
+            v = _math(nt, "ADD", _math(nt, "ADD", _math(nt, "MULTIPLY", big, 0.34), _math(nt, "MULTIPLY", vast, 0.3)),
+                      _math(nt, "ADD", _math(nt, "MULTIPLY", mid, 0.2), _math(nt, "ADD", _math(nt, "MULTIPLY", small, 0.11), _math(nt, "MULTIPLY", fine, 0.05))))
             edge = (1.0 - cover) * 0.62 + 0.19 + 0.035 * k          # (each sheet above is a little smaller: the tops dome)
             alpha = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", v, edge), 7.0, clamp=True)
             alpha = _math(nt, "MULTIPLY", _math(nt, "POWER", alpha, 0.8), 0.96 if k == 0 else 0.8)
