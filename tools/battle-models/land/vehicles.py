@@ -46,6 +46,8 @@ BUILDERS = {
     "Hanomag": carriers.hanomag,
     "M3Halftrack": carriers.m3_halftrack,
     "SdKfz222": armoured_cars.sdkfz222,
+    "M8": armoured_cars.m8,
+    "ArmouredCar": armoured_cars.armoured_car,
 }
 
 ABOUT = {
@@ -76,6 +78,8 @@ ABOUT = {
     "Hanomag": {"nation": "GER", "role": "armoured half-track", "years": "1939-45", "units": "carrier (Germany)"},
     "M3Halftrack": {"nation": "USA", "role": "armoured half-track", "years": "1941-45", "units": "carrier (United States)"},
     "SdKfz222": {"nation": "GER", "role": "armoured car", "years": "1938-45", "units": "scouts ahead of Germany's armor and motorized infantry"},
+    "M8": {"nation": "USA", "role": "armoured car", "years": "1943-45", "units": "scouts ahead of the United States' armor (the Free French were lent her too)"},
+    "ArmouredCar": {"nation": "any", "role": "armoured car", "years": "1936-45", "units": "scouts ahead of every other army's armor and cavalry"},
 }
 
 

@@ -4,6 +4,11 @@ and a tank's clips.
     SdKfz222      the German light armoured car: a faceted body widest at a knuckle line, pointed at both ends,
                   angular mudguards, a low ten-sided turret open to the sky under two wire screens, a 2 cm
                   automatic gun and a machine gun beside it.
+    M8            the American light armoured car: six wheels, a welded body with sponsons over them, a round
+                  open-topped turret with a 37 mm gun, a heavy machine gun on a pintle behind.
+    ArmouredCar   an armoured car as most armies had one in 1939: a lorry's chassis under riveted plate, a long
+                  bonnet behind armoured radiator doors, a tall fighting room, swept mudguards, a spare wheel on
+                  her stern, a small eight-sided turret with a 37 mm gun.
 
 PARTS   vehicle (root) > hull > turret > gun > barrel; turret > hatch_screen_l, hatch_screen_r (the wire screens:
         thrown open when her men bail out)
@@ -19,8 +24,8 @@ import math
 from mathutils import Vector
 
 from carriers import CarrierWorks, wall
-from motorpool import LEFT, RIGHT, SIDES, X, Y, Z
-from tanks_any import turn_to
+from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, inset_plan, sym_plan
+from tanks_any import riveted_prism, rivets, turn_to
 from tanks_ger import GER_COATS, coat, coats
 
 
@@ -315,4 +320,328 @@ def sdkfz222(fine=True, tag="GER", paint=None):
     return v
 
 
-_ = (RIGHT,)
+def m8(fine=True, tag="USA"):
+    """The light armoured car M8: 5.0 m long, 2.5 m wide, 2.25 m high. Six wheels, all driven; a welded body with
+    sponsons over the wheels; a round open-topped turret with a 37 mm gun, a machine gun beside it and a heavy one on
+    a pintle behind. Four men."""
+    v = CarWorks("M8", "Light armored car M8", "car", tag, fine)
+    v.root(hull_pivot=(0.0, 0.0, 0.8), rock=(-4.0, 4.0))
+    m = v.m
+    R, W, RR = 0.50, 0.24, 0.27
+    xs_w = (1.70, -0.33, -1.55)
+    yw, hw = 0.98, 0.60                                   # the wheels; the tub's half-width between them
+    zs, zr, zd = 1.08, 1.56, 1.50                         # the sponsons' floor, the roof, the head of the engine deck
+    ys, yr = 1.12, 0.94                                   # how far out she is at the sponson floor and at the roof
+    side_y = lambda z: ys - (z - zs) * (ys - yr) / (zr - zs)              # noqa: E731
+    sn = [Vector((0.0, s * (zr - zs), ys - yr)).normalized() for s in (LEFT, RIGHT)]
+
+    # ---- the body: a tub between the wheels, the fighting room and the engine room over it ------------------------
+    v.use("hull")
+    v.hull([(x, hw, z) for x, z in [(-2.36, 0.74), (-2.20, 0.62), (1.55, 0.62), (2.16, 0.72), (2.40, 1.04), (2.36, zs), (-2.44, zs)]], coat, bevel=0.012)
+    gf, rf = Vector((2.38, hw, 1.06)), Vector((1.10, yr, zr))
+    v.hull([gf, rf, (-0.80, yr, zr), (1.05, ys, zs), (-0.80, ys, zs)], coat, bevel=0.012)
+    v.hull([(-0.80, ys, zs), (-2.44, ys, zs), (-0.80, side_y(zd), zd), (-2.36, side_y(1.40), 1.40)], coat, bevel=0.012)
+    gl = Vector((rf.x - gf.x, 0.0, rf.z - gf.z)).normalized()             # up the nose plate
+    gn = Vector((gl.z, 0.0, -gl.x))
+    g_len = (Vector((rf.x, 0, rf.z)) - Vector((gf.x, 0, gf.z))).length
+    dk = Vector((-2.36 + 0.80, 0.0, 1.40 - zd)).normalized()              # back along the engine deck
+    dn = Vector((dk.z, 0.0, -dk.x))
+    g_at = lambda u, y: Vector((gf.x, y, gf.z)) + gl * u + gn * 0.002      # noqa: E731
+    d_at = lambda u, y: Vector((-0.80, y, zd)) + dk * u + dn * 0.002       # noqa: E731
+
+    # the nose plate: the two drivers' flaps with their slits, a bolted plate under them, lamps behind hoops, hooks
+    for s in (LEFT, RIGHT):
+        c = g_at(1.10, s * 0.40)
+        v.box((0.34, 0.50, 0.02), c + gn * 0.01, coat, 0.006, turn=turn_to(gl, gn))
+        v.visor(c + gn * 0.02, gn, 0.30, 0.09, 0.03, brow=False)
+        if fine:
+            for dy in (-0.16, 0.16):
+                v.hinge(c + gl * 0.17 + Y * dy + gn * 0.02 - Y * 0.05, c + gl * 0.17 + Y * dy + gn * 0.02 + Y * 0.05, 0.012)
+        lamp = g_at(0.34, s * 0.52) + gn * 0.002
+        v.headlamp(lamp, X, 0.07, stalk=0.1)
+        if fine:
+            for dy in (-0.09, 0.09):                           # the hoop that guards it
+                v.tube([lamp + Y * dy - X * 0.08, lamp + Y * dy - X * 0.06 + Z * 0.22, lamp + Y * dy + X * 0.1 + Z * 0.22, lamp + Y * dy + X * 0.14 - Z * 0.04], 0.008, coat, 5)
+        v.hook((2.40, s * 0.36, 0.92), X, 0.085)
+        v.hook((-2.44, s * 0.40, 0.92), -X, 0.085)
+    c = g_at(0.52, 0.0)
+    v.box((0.44, 0.56, 0.014), c + gn * 0.007, coat, 0.005, turn=turn_to(gl, gn))
+    if fine:
+        for du in (-0.18, 0.0, 0.18):
+            for dy in (-0.24, 0.24):
+                v.bolt(c + gl * du + Y * dy + gn * 0.014, gn, 0.012)
+    # the roof ahead of the turret: a lid over each driver, hung at its outer edge
+    v.hatch_rect("hatch_driver", "hull", (0.90, 0.42, zr), (0.34, 0.44), Z, X, hinge="left", opens=120.0, thick=0.018)
+    v.hatch_rect("hatch_radio", "hull", (0.90, -0.42, zr), (0.34, 0.44), Z, X, hinge="right", opens=120.0, thick=0.018)
+    v.use("hull")
+    # the engine deck: a grille each side, two doors behind them, a rolled sheet across her tail
+    for s in (LEFT, RIGHT):
+        v.grille(d_at(0.42, s * 0.40) + dn * 0.004, (0.60, 0.56), dn, dk, slats=9, deep=0.022)
+        c = d_at(1.10, s * 0.40)
+        v.box((0.56, 0.62, 0.014), c + dn * 0.007, coat, 0.005, turn=turn_to(dk, dn))
+        if fine:
+            v.handle(c - Y * 0.08 + dk * 0.18 + dn * 0.014, c + Y * 0.08 + dk * 0.18 + dn * 0.014, dn, 0.008, 0.035, "steel")
+            for dy in (-0.2, 0.2):
+                v.hinge(c + Y * dy - dk * 0.28 + dn * 0.014 - Y * 0.05, c + Y * dy - dk * 0.28 + dn * 0.014 + Y * 0.05, 0.012)
+        v.lathe((-2.445, s * 0.86, 1.2), -X, [(0.03, 0.0), (0.03, 0.035), (0.0, 0.04), (0.0, 0.0)], "red", 10)       # a tail lamp
+    v.roll((-2.26, -0.78, 1.5), (-2.26, 0.78, 1.5), r=0.1)
+    v.slab((-0.84, -yr + 0.04, zd), (-0.80, yr - 0.04, zr), coat, 0.004)                                               # the step down to the deck
+    v.silencer((-2.30, -0.86, 0.96), (-1.84, -0.86, 0.96), 0.07, pipe=[(-1.7, -0.7, 0.98), (-1.84, -0.86, 0.96)], tail=((-2.30, -0.86, 0.96), (-1, -0.3, -0.2)))
+    v.socket("exhaust.1", (-2.42, -0.9, 0.94), (-1, -0.3, -0.2))
+    # under the sponsons: a rack between the front and middle wheels, flaps behind the last
+    for s in (LEFT, RIGHT):
+        v.bin((0.30, s * 0.64, 0.70), (1.04, s * 1.10, zs - 0.004), lid_side=Y * s)
+        v.slab((-2.16, s * 0.64, 0.56), (-2.145, s * 1.11, zs), "rubber", 0.002)
+        v.mudguard((xs_w[0], R), R + 0.11, 0.0, 104.0, s * 0.62, s * 1.13, tail=[(1.05, zs + 0.012)])
+        v.mark(tag, (0.05, s * side_y(1.32), 1.32), sn[s < 0], 0.16, part="hull")
+        if fine:
+            v.lift_eye((0.95, s * (yr - 0.05), zr), Z, X, 0.03)
+            v.lift_eye((-2.2, s * (side_y(1.41) - 0.06), 1.41), Z, X, 0.03)
+    v.aerial("aerial", "hull", (-0.95, 0.80, zd), 2.2)
+
+    # ---- six wheels: the front pair steered, the four behind on a bogie's springs --------------------------------
+    v.use("vehicle")
+    for x in xs_w:
+        v.rod((x, -yw + 0.16, R), (x, yw - 0.16, R), 0.045, "shade", 10)
+        v.ball((x, 0.0, R), 0.14, "shade", 12, 8)
+    v.rod((xs_w[2], 0.0, R + 0.04), (xs_w[0], 0.0, R + 0.04), 0.024, "steel", 8)                                 # the shafts between them
+    v.rod((xs_w[0] - 0.17, -yw + 0.22, R - 0.03), (xs_w[0] - 0.17, yw - 0.22, R - 0.03), 0.013, "steel", 6)
+    for s in (LEFT, RIGHT):
+        v.leaf_spring(xs_w[0], s * 0.70, 0.78, R + 0.07, 0.46, leaves=6)
+        v.leaf_spring((xs_w[1] + xs_w[2]) / 2, s * 0.70, R + 0.09, 0.74, 0.6, leaves=7)
+    for letter, s in SIDES:
+        v.steered_wheel(letter, s, xs_w[0], yw, R, W, RR, lock=28.0, holes=6)
+        v.lorry_wheel(f"wheel_mid_{letter}", "vehicle", (xs_w[1], s * yw, R), s, R, W, RR, holes=6)
+        v.lorry_wheel(f"wheel_back_{letter}", "vehicle", (xs_w[2], s * yw, R), s, R, W, RR, holes=6)
+    v.socket("dust.left", (xs_w[2] - 0.3, yw, 0.05), (-1, 0, 0.3), part="vehicle")
+    v.socket("dust.right", (xs_w[2] - 0.3, -yw, 0.05), (-1, 0, 0.3), part="vehicle")
+
+    # ---- the turret: a round wall leaning in a little, no roof --------------------------------------------------
+    x0, th = -0.05, 0.56
+    r0, r1, wt = 0.74, 0.68, 0.035
+    v.use("hull")
+    v.ring_well((x0, 0.0, zr), 0.66)
+    v.part("turret", "hull", (x0, 0.0, zr), axis=(0, 0, -1), kind="turn", note="trains all round, by hand: + to the right, clockwise seen from above; the game turns it")
+    zt = zr + 0.02
+    v.lathe((x0, 0, zt), Z, [(0.02, r0 - wt), (th, r1 - wt), (th + 0.014, r1 - wt * 0.5), (th, r1), (0.0, r0)], coat, v.n(56, 16))
+    v.lathe((x0, 0, zt), Z, [(0.02, 0.0), (0.02, r0 - wt)], "shade", v.n(40, 12))                                 # her floor, in shadow
+    v.lathe((x0, 0, zr - 0.03), Z, [(0.06, r0 + 0.01), (0.0, r0 + 0.03), (0.0, 0.0)], "shade", v.n(40, 12))
+    top = zt + th
+    for at in ((x0 + 0.05, 0.36), (x0 - 0.30, -0.34)):       # two seats
+        v.rod((at[0], at[1], zt + 0.02), (at[0], at[1], zt + 0.22), 0.025, "steel", 8)
+        v.box((0.28, 0.28, 0.06), (at[0], at[1], zt + 0.25), "leather", 0.02)
+    if fine:
+        for k in range(5):                                  # ready rounds in clips along her back wall
+            a = math.radians(150.0 + 15.0 * k)
+            at = Vector((x0 + (r0 - wt - 0.06) * math.cos(a), (r0 - wt - 0.06) * math.sin(a), zt + 0.04))
+            v.rod(at, at + Z * 0.3, 0.022, "brass", 8)
+        for s in (LEFT, RIGHT):
+            v.lift_eye((x0 + 0.1, s * (r1 + 0.03), zt + th * 0.6), Vector((0, s, 0.1)), X, 0.028)
+    pin = Vector((x0 - r1 + 0.02, 0.0, top))                  # the heavy machine gun on its pintle on her back wall
+    v.rod(pin, pin + Z * 0.24, 0.02, "steel", 8)
+    v.box((0.30, 0.09, 0.11), pin + Z * 0.27 + X * 0.02, "steel", 0.008)
+    v.mg(pin + Z * 0.28 + X * 0.15, X, 0.9, r=0.02)
+    v.box((0.16, 0.11, 0.2), pin + Z * 0.22 + Y * 0.11 + X * 0.05, "upper", 0.006)
+    v.socket("mg", pin + Z * 0.28 + X * 1.07, X, part="turret", note="the heavy machine gun on her back wall")
+    for s in (LEFT, RIGHT):
+        v.mark(tag, (x0 - 0.1, s * (r0 + r1) / 2, zt + th * 0.5), Vector((0, s, 0.1)), 0.13, part="turret")
+
+    # ---- the gun: a 37 mm behind a cast shield, a machine gun on its right -----------------------------------------
+    tx, tz = x0 + 0.60, zt + 0.32
+    v.part("gun", "turret", (tx, 0.0, tz), axis=(0, -1, 0), limits=[-10.0, 20.0], kind="turn", note="lifts at the trunnions: + muzzle up; the game lays it")
+    v.hull([(tx + 0.04, 0.29, tz - 0.22), (tx + 0.04, 0.29, tz + 0.2), (tx + 0.22, 0.22, tz - 0.16), (tx + 0.22, 0.22, tz + 0.15), (tx + 0.31, 0.1, tz - 0.1), (tx + 0.31, 0.1, tz + 0.1)],
+           coat, bevel=0.03, segs=3, angle=40.0)
+    v.lathe((tx + 0.28, 0, tz), X, [(0.26, 0.0), (0.26, 0.062), (0.0, 0.075), (0.0, 0.0)], coat, v.n(20, 8))
+    v.slab((tx - 0.5, -0.07, tz - 0.08), (tx - 0.02, 0.07, tz + 0.08), "steel", 0.015)                            # her breech, in the open
+    v.mg((tx + 0.2, -0.18, tz + 0.02), X, 0.4)
+    v.socket("coax", (tx + 0.62, -0.18, tz + 0.02), X)
+    v.part("barrel", "gun", (tx + 0.5, 0.0, tz), slide=(-1, 0, 0), slide_limits=[0.0, 0.2], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
+    v.barrel((tx + 0.5, 0, tz), 1.28, 0.037, r0=0.05, r1=0.031, brake=None, sleeve=None)
+    v.socket("muzzle", (tx + 1.80, 0, tz), X)
+    m.info["bore"] = 0.037
+    m.info["brake"] = False
+
+    v.socket("commander", (x0 - 0.3, -0.34, top - 0.25), X, part="turret", note="the commander stands here in the open turret, on the right: head and shoulders over its edge")
+    v.socket("crew.gunner", (x0 + 0.05, 0.36, zt + 0.28), X, part="turret", note="the gunner sits here, on the left of the breech")
+    v.socket("engine", d_at(0.42, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
+    v.socket("fire.1", d_at(0.42, 0.4) + dn * 0.05, Z, part="hull")
+    v.socket("fire.2", (x0 - 0.1, 0.0, top), Z, part="turret", note="out of the open turret")
+    v.socket("fire.3", (0.90, 0.42, zr + 0.05), Z, part="hull", note="out of the driver's hatch")
+    v.socket("ring", (x0, 0.0, zr), Z, part="hull", note="the turret ring")
+    v.socket("hit.front", g_at(g_len * 0.5, 0.0), gn, part="hull")
+    v.socket("hit.left", (0.0, side_y(1.3), 1.3), sn[0], part="hull")
+    v.socket("hit.right", (0.0, -side_y(1.3), 1.3), sn[1], part="hull")
+    v.socket("hit.rear", (-2.44, 0.0, 1.2), -X, part="hull")
+    v.socket("hit.turret", (x0, r0, zt + 0.3), Y, part="turret")
+    v.socket("case", (x0 - 0.3, 0.0, zt + 0.05), -X, part="turret", note="where the empty case falls, on her floor")
+    v.car_clips(recoil=0.18, kick=0.5, gun_low=-10.0, hatches=["hatch_driver", "hatch_radio"], traverse=20.0, idle_cue="lorry_idle_loop", drive_cue="lorry_drive_loop",
+                gun_cue="tank_gun_01", has_turret=False, mg="coax")
+    return v
+
+
+def armoured_car(fine=True, tag="_"):
+    """An armoured car as most armies had one in 1939: 4.6 m long, 1.96 m wide, 2.3 m high. A lorry's chassis under
+    riveted plate: a long bonnet behind armoured radiator doors, a tall fighting room with a leaning front and
+    stern, swept mudguards, a spare wheel on her stern, a small eight-sided turret with a 37 mm gun and a machine
+    gun. Three men."""
+    v = CarWorks("ArmouredCar", "Armoured car", "car", tag, fine)
+    v.root(hull_pivot=(0.0, 0.0, 0.8), rock=(-4.0, 4.0))
+    m = v.m
+    R, W, RR = 0.46, 0.2, 0.26
+    xf, xr, yw = 1.45, -1.30, 0.84
+    z0, zk, zr = 1.00, 1.34, 1.80                         # the body's foot, its knuckle line, the roof
+    yk, yr = 0.86, 0.66
+    xa, xd, xe, xb = 0.80, 0.52, -1.05, -1.80             # the scuttle, the roof's front and back, the stern's knuckle
+    up_y = lambda z: yk - (z - zk) * (yk - yr) / (zr - zk)                # noqa: E731
+    up_n = [Vector((0.0, s * (zr - zk), yk - yr)).normalized() for s in (LEFT, RIGHT)]
+
+    # ---- the chassis, the bonnet, the fighting room --------------------------------------------------------------
+    v.use("hull")
+    v.hull([(x, 0.44, z) for x, z in [(-2.02, 0.76), (-1.92, 0.64), (2.08, 0.64), (2.2, 0.76), (2.2, 0.94), (-2.02, 0.94)]], "shade", bevel=0.008)
+    nose = 2.18
+    v.hull([(nose, 0.44, 0.90), (nose, 0.44, 1.30), (nose, 0.0, 1.34), (xa, 0.62, 0.90), (xa, 0.62, 1.42), (xa, 0.0, 1.47)], coat, 0.012)
+    v.hull([(xa, yk, z0), (-1.76, yk, z0), (xa, yk, zk), (xb, yk, zk), (xd, yr, zr), (xe, yr, zr)], coat, 0.012)
+    fl = Vector((xd - xa, 0.0, zr - zk)).normalized()                     # up the driver's plate
+    fn = Vector((fl.z, 0.0, -fl.x))
+    sl = Vector((xe - xb, 0.0, zr - zk)).normalized()                     # up the stern's slope
+    rn = Vector((-sl.z, 0.0, sl.x))
+    f_at = lambda u, y: Vector((xa, y, zk)) + fl * u + fn * 0.002          # noqa: E731
+    r_at = lambda u, y: Vector((xb, y, zk)) + sl * u + rn * 0.002          # noqa: E731
+    r_len = (Vector((xe, 0, zr)) - Vector((xb, 0, zk))).length
+    bn = [Vector((0.18, s * (nose - xa), 0.0)).normalized() for s in (LEFT, RIGHT)]       # the bonnet's sides face a little forward
+    bon_y = lambda x: 0.62 - (x - xa) * 0.18 / (nose - xa)                # noqa: E731
+
+    # the radiator's armoured doors, the bonnet's louvres and its hinge down the middle
+    for s in (LEFT, RIGHT):
+        v.slab((nose, s * 0.02, 0.93), (nose + 0.022, s * 0.43, 1.28), coat, 0.006)
+        if fine:
+            for z in (1.0, 1.21):
+                v.hinge((nose + 0.022, s * 0.43, z - 0.04), (nose + 0.022, s * 0.43, z + 0.04), 0.012)
+            rivets(v, (nose + 0.023, s * 0.06, 0.96), (nose + 0.023, s * 0.06, 1.25), X, 0.1)
+        v.louvres((1.5, s * bon_y(1.5), 1.13), (0.78, 0.26), bn[s < 0], count=7)
+        if fine:
+            rivets(v, (nose - 0.04, s * bon_y(nose - 0.04) + s * 0.001, 0.96), (xa + 0.05, s * bon_y(xa + 0.05) + s * 0.001, 0.96), bn[s < 0], 0.12)
+            rivets(v, (nose - 0.04, s * (bon_y(nose - 0.04) - 0.012), 1.30), (xa + 0.05, s * (bon_y(xa + 0.05) - 0.012), 1.415), bn[s < 0], 0.12)
+    v.rod((nose - 0.03, 0.0, 1.345), (xa + 0.03, 0.0, 1.473), 0.011, coat, 8)
+    if fine:
+        for x in (1.1, 1.85):
+            for s in (LEFT, RIGHT):
+                v.handle((x - 0.06, s * 0.3, 1.34 + (1.47 - 1.34) * (nose - x) / (nose - xa) - 0.022), (x + 0.06, s * 0.3, 1.34 + (1.47 - 1.34) * (nose - x) / (nose - xa) - 0.022), Z, 0.007, 0.03, "steel")
+    # the bumper on its irons, hooks, lamps on the mudguards
+    v.slab((2.27, -0.86, 0.66), (2.32, 0.86, 0.76), "shade", 0.012, 2)
+    for s in (LEFT, RIGHT):
+        v.slab((2.12, s * 0.36, 0.69), (2.28, s * 0.42, 0.73), "shade", 0.004)
+        v.hook((2.2, s * 0.3, 0.84), X, 0.07)
+        v.hook((-2.02, s * 0.3, 0.86), -X, 0.07)
+        v.mudguard((xf, R), R + 0.1, 12.0, 112.0, s * 0.5, s * 0.98, tail=[(1.0, 0.98), (0.84, 0.78)])
+        v.mudguard((xr, R), R + 0.09, 14.0, 166.0, s * 0.82, s * 0.98)
+        v.headlamp((1.62, s * 0.76, R + 0.565), X, 0.085, stalk=0.11)
+        v.slab((0.82, s * 0.5, 0.74), (-0.78, s * 0.9, 0.765), "shade", 0.006)                                    # the running board
+    # the driver's plate: his visor on the left, a second on the right
+    for s in (LEFT, RIGHT):
+        v.visor(f_at(0.27, s * 0.34) + fn * 0.004, fn, 0.36, 0.12, 0.05)
+    if fine:
+        rivets(v, f_at(0.05, -0.80), f_at(0.05, 0.80), fn)
+        rivets(v, f_at(0.49, -0.64), f_at(0.49, 0.64), fn)
+    # the sides: a door in each, a port in the upper plate, rivets along every seam
+    for i, s in enumerate((LEFT, RIGHT)):
+        c = Vector((-0.1, s * (yk + 0.002), 1.17))
+        v.box((0.62, 0.30, 0.016), c + Y * s * 0.008, coat, 0.005, turn=turn_to(X, Y * s))
+        c2 = Vector((-0.1, s * up_y(1.55), 1.55)) + up_n[i] * 0.002
+        v.box((0.62, 0.40, 0.016), c2 + up_n[i] * 0.008, coat, 0.005, turn=turn_to(X, up_n[i]))
+        if fine:
+            for z in (1.08, 1.26):
+                v.hinge((0.21, s * (yk + 0.018), z - 0.04), (0.21, s * (yk + 0.018), z + 0.04), 0.012)
+            v.handle((-0.36, s * (yk + 0.018), 1.14), (-0.36, s * (yk + 0.018), 1.24), Y * s, 0.008, 0.035, "steel")
+            v.port(Vector((-0.1, s * up_y(1.6), 1.6)) + up_n[i] * 0.016, up_n[i], 0.036)
+            v.port(Vector((-0.75, s * up_y(1.56), 1.56)), up_n[i], 0.036)
+            for z in (z0 + 0.045, zk - 0.045):
+                rivets(v, (xa - 0.05, s * (yk + 0.001), z), (-1.72, s * (yk + 0.001), z), Y * s)
+            rivets(v, (xa - 0.12, s * up_y(zk + 0.05), zk + 0.05), (xb + 0.14, s * up_y(zk + 0.05), zk + 0.05), up_n[i])
+            rivets(v, (xd - 0.04, s * up_y(zr - 0.05), zr - 0.05), (xe + 0.04, s * up_y(zr - 0.05), zr - 0.05), up_n[i])
+            for x in (xa - 0.05, -1.72):
+                rivets(v, (x, s * (yk + 0.001), z0 + 0.1), (x, s * (yk + 0.001), zk - 0.1), Y * s)
+        v.mark(tag, (-1.0, s * (yk + 0.001), 1.17), Y * s, 0.13, part="hull")
+    # the stern: the spare wheel on its slope, a door under it
+    c = r_at(r_len * 0.52, 0.0)
+    v.tyre(c + rn * 0.11, rn, R * 0.96, RR, W * 0.95)
+    v.wheel_disc(c + rn * 0.13, rn, RR * 1.05, W * 0.6, tyre=0.0, kind="dish", hub=0.42, bolts=6, holes=6, dish=0.2, cap=0.75, sides=32)
+    v.rod(c, c + rn * 0.1, 0.05, "shade", 10)
+    v.slab((-1.775, -0.3, z0 + 0.03), (-1.755, 0.3, zk - 0.03), coat, 0.005)
+    if fine:
+        v.handle((-1.776, 0.2, 1.14), (-1.776, 0.2, 1.22), -X, 0.008, 0.035, "steel")
+        for z in (1.08, 1.26):
+            v.hinge((-1.776, -0.3, z - 0.04), (-1.776, -0.3, z + 0.04), 0.012)
+        rivets(v, r_at(0.05, -0.8), r_at(0.05, 0.8), rn)
+    v.silencer((-0.9, -0.56, 0.6), (-0.3, -0.56, 0.6), 0.06, pipe=[(0.2, -0.4, 0.66), (-0.3, -0.56, 0.6)], tail=((-0.9, -0.56, 0.6), (-1, -0.4, -0.1)))
+    v.socket("exhaust.1", (-1.02, -0.62, 0.59), (-1, -0.4, -0.1))
+    if fine:
+        v.shovel((-0.9, yk + 0.02, 1.26), 0.0, 0.9, roll=90.0)
+    v.aerial("aerial", "hull", (xe + 0.1, -0.5, zr), 1.8)
+
+    # ---- the wheels and what carries them --------------------------------------------------------------------------
+    v.use("vehicle")
+    for x in (xf, xr):
+        v.rod((x, -yw + 0.14, R), (x, yw - 0.14, R), 0.04, "shade", 10)
+    v.ball((xr, 0.0, R), 0.13, "shade", 12, 8)
+    v.rod((xr + 0.12, 0.0, R + 0.02), (0.6, 0.0, 0.7), 0.022, "steel", 8)
+    v.rod((xf - 0.16, -yw + 0.2, R - 0.03), (xf - 0.16, yw - 0.2, R - 0.03), 0.012, "steel", 6)
+    for s in (LEFT, RIGHT):
+        v.leaf_spring(xf, s * 0.52, 0.72, R + 0.06, 0.5, leaves=6)
+        v.leaf_spring(xr, s * 0.56, 0.74, R + 0.06, 0.58, leaves=7)
+    for letter, s in SIDES:
+        v.steered_wheel(letter, s, xf, yw, R, W, RR, lock=30.0, holes=6)
+        v.lorry_wheel(f"wheel_back_{letter}", "vehicle", (xr, s * yw, R), s, R, W, RR, holes=6)
+    v.socket("dust.left", (xr - 0.3, yw, 0.05), (-1, 0, 0.3), part="vehicle")
+    v.socket("dust.right", (xr - 0.3, -yw, 0.05), (-1, 0, 0.3), part="vehicle")
+
+    # ---- the turret: eight plates riveted on a frame, a lid in its roof ---------------------------------------------
+    x0, th = -0.28, 0.44
+    v.use("hull")
+    v.ring_well((x0, 0.0, zr), 0.5)
+    v.part("turret", "hull", (x0, 0.0, zr), axis=(0, 0, -1), kind="turn", note="trains all round, by hand: + to the right, clockwise seen from above; the game turns it")
+    plan = sym_plan([(0.54, 0.23), (0.23, 0.54), (-0.23, 0.54), (-0.54, 0.23)])
+    top = inset_plan(plan, [0.08, 0.07, 0.07, 0.07, 0.06, 0.07, 0.07, 0.07])
+    plan_w, top_w = [(x0 + x, y) for x, y in plan], [(x0 + x, y) for x, y in top]
+    v.prism(plan_w, zr + 0.02, zr + th, coat, top=top_w, bevel=0.012, segs=2, angle=14.0)
+    v.lathe((x0, 0, zr - 0.03), Z, [(0.06, 0.55), (0.0, 0.57), (0.0, 0.0)], "shade", v.n(32, 10))
+    roof = zr + th
+    riveted_prism(v, plan_w, top_w, zr + 0.02, roof, part="turret")
+    v.hatch_round("hatch_commander", "turret", (x0 - 0.12, 0.0, roof), 0.2, Z, -X, thick=0.022, opens=100.0)
+    v.socket("commander", (x0 - 0.12, 0.0, roof - 0.25), X, part="turret", note="the commander stands here, head and shoulders out when the lid is open")
+    v.use("turret")
+    v.vent((x0 + 0.24, 0.2, roof), 0.06, 0.03)
+    if fine:
+        for s in (LEFT, RIGHT):
+            v.port(Vector((x0, s * 0.515, zr + 0.26)), Vector((0, s, 0.16)), 0.036)
+
+    # ---- the gun: a 37 mm in a boxed mantlet, a machine gun on its right ----------------------------------------------
+    tx, tz = x0 + 0.44, zr + 0.24
+    v.part("gun", "turret", (tx, 0.0, tz), axis=(0, -1, 0), limits=[-8.0, 20.0], kind="turn", note="lifts at the trunnions: + muzzle up; the game lays it")
+    v.box((0.11, 0.42, 0.3), (tx + 0.08, 0.0, tz), "upper", 0.02, segs=2)
+    v.lathe((tx + 0.07, 0, tz), Y, [(0.16, 0.0), (0.16, 0.09), (0.13, 0.12), (-0.13, 0.12), (-0.16, 0.09), (-0.16, 0.0)], "upper", v.n(24, 8))
+    if fine:
+        for y in (-0.17, 0.17):
+            for z in (-0.11, 0.11):
+                v.bolt((tx + 0.136, y, tz + z), X, 0.011)
+    v.mg((tx + 0.1, -0.13, tz + 0.02), X, 0.38)
+    v.socket("coax", (tx + 0.5, -0.13, tz + 0.02), X)
+    v.part("barrel", "gun", (tx + 0.13, 0.0, tz), slide=(-1, 0, 0), slide_limits=[0.0, 0.18], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
+    v.barrel((tx + 0.13, 0, tz), 1.15, 0.037, r0=0.047, r1=0.03, brake=None, sleeve=None)
+    v.socket("muzzle", (tx + 1.30, 0, tz), X)
+    m.info["bore"] = 0.037
+    m.info["brake"] = False
+
+    v.socket("engine", (1.5, 0.0, 1.45), Z, part="hull", note="the bonnet: smoke and the first fire")
+    v.socket("fire.1", (1.5, 0.3, 1.42), Z, part="hull")
+    v.socket("fire.2", (x0 - 0.12, 0.0, roof + 0.1), Z, part="turret", note="out of the commander's hatch")
+    v.socket("ring", (x0, 0.0, zr), Z, part="hull", note="the turret ring: where the blast comes from when her ammunition goes")
+    v.socket("hit.front", f_at(0.27, 0.0), fn, part="hull")
+    v.socket("hit.left", (-0.4, yk, 1.2), Y, part="hull")
+    v.socket("hit.right", (-0.4, -yk, 1.2), -Y, part="hull")
+    v.socket("hit.rear", r_at(r_len * 0.3, 0.0), rn, part="hull")
+    v.socket("hit.turret", (x0, 0.54, zr + 0.22), Y, part="turret")
+    v.socket("case", (x0 - 0.2, -0.5, zr + 0.25), -Y, part="turret", note="where the empty case is thrown out")
+    v.car_clips(recoil=0.15, kick=0.5, gun_low=-8.0, hatches=["hatch_commander"], traverse=18.0, idle_cue="lorry_idle_loop", drive_cue="lorry_drive_loop",
+                gun_cue="tank_gun_01", blow=(-0.6, 2.0, 0.3, 165.0), mg="coax")
+    return v
