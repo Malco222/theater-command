@@ -667,15 +667,18 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     expect(fed()).toEqual([12, 0, 12]);
     k.nations.AUS.queue.push({ id: k.nextBuild++, what: 'air', item: 'ftr', name: 'Fighter wing for Sydney', region: k.nations.AUS.capital, ordered: k.turn, eta: k.turn + 9, cost: 0, count: ARSENAL.air.ftr.count });
     expect(fed()).toEqual([0, 0, 0]);
+    // (Rider b539, 1: the orders taken back, what the works made of them in those months goes to the pool: two months
+    // of bombers and one of fighters, with the month's own.)
     k.nations.AUS.queue.length = 0;
+    expect(fed()).toEqual([24, 84, 24]);
     expect(fed()).toEqual([12, 28, 12]);
   });
 
-  it('b534, 1: a player\'s Australia ordering wings for a year ends within one wing of each kind of the staff\'s, same seed', () => {
+  it('b534, 1 and b539, 1: a player\'s Australia ordering wings stands within one wing of each kind of the staff\'s at every year\'s end, and does not drift', () => {
     // The month as turn.ts and the country's own phase run it: the works' month, what is due is handed over, then the
-    // seat's orders. The year is read from the first order to the same point of the month twelve months on.
+    // seat's orders. Three years from July 1942, same seed, read at the same point of each month.
     const WINGS = ['ftr', 'bmr'] as const;
-    const year = (human: string | null): { gain: [number, number][]; orders: [number, number] } => {
+    const years = (human: string | null): { gain: [number, number][]; building: [number, number][]; orders: [number, number] } => {
       const g = pacificWar(1, 36, human, 7);
       const n = g.nations.AUS;
       n.queue = n.queue.filter((b) => b.what !== 'air');
@@ -683,13 +686,14 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
         const p = airPool(g, 'AUS'), fs = g.airFleets.filter((f) => (f.raised ?? f.nat) === 'AUS' && f.ship === undefined);
         return [p.ftr + fs.reduce((s, f) => s + f.ftr, 0), p.bmr + fs.reduce((s, f) => s + f.bmr, 0)];
       };
-      const seen: [number, number][] = [];
+      const seen: [number, number][] = [], building: [number, number][] = [];
       const orders: [number, number] = [0, 0];
-      for (let m = 0; m <= 12; m++, g.turn++) {
+      for (let m = 0; m <= 36; m++, g.turn++) {
         smallAirMonth(g);
         deliver(g, 'AUS');
         seen.push(held());
-        if (!human || m === 12) continue;
+        building.push([g.flags['built:AUS:ftr'] ?? 0, g.flags['built:AUS:bmr'] ?? 0]);
+        if (!human || m === 36) continue;
         // The player orders a wing of each kind the month its works are free, and is never short of money for it.
         WINGS.forEach((w, i) => {
           if (n.queue.some((b) => b.what === 'air' && b.item === w)) return;
@@ -698,21 +702,35 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
           orders[i]++;
         });
       }
-      return { gain: seen.map((x) => [x[0] - seen[0][0], x[1] - seen[0][1]]), orders };
+      return { gain: seen.map((x) => [x[0] - seen[0][0], x[1] - seen[0][1]]), building, orders };
     };
-    const staff = year(null), player = year('AUS');
+    const staff = years(null), player = years('AUS');
     const wing = [ARSENAL.air.ftr.count, ARSENAL.air.bmr.count];
     // The staff's works feed the pool every month: 12 fighters and 28 bombers a month from July 1942.
-    expect(staff.gain[12]).toEqual([144, 336]);
-    // The player's works build the wing on order and nothing besides: a fighter wing in nine months, a bomber wing in
-    // four, so one fighter wing and three bomber wings are in by the year's end, with a second fighter wing building.
-    expect(player.orders).toEqual([2, 3]);
-    expect(player.gain[12]).toEqual([100, 300]);
-    [0, 1].forEach((i) => expect(Math.abs(staff.gain[12][i] - player.gain[12][i]), i ? 'bombers' : 'fighters').toBeLessThanOrEqual(wing[i]));
-    // Month by month the player's aircraft come a wing at a time, so the widest the two stand apart is on the eve of a
-    // wing: 96 fighters in the ninth month, and 108 bombers in the twelfth, with that wing in the month after.
-    const apart = [0, 1].map((i) => Math.max(...staff.gain.map((x, m) => x[i] - player.gain[m][i])));
-    expect(apart).toEqual([96, 108]);
+    expect([12, 24, 36].map((m) => staff.gain[m])).toEqual([[144, 336], [288, 672], [432, 1008]]);
+    expect(staff.building.every((x) => x[0] === 0 && x[1] === 0)).toBe(true);
+    // The player's works build the wing on order: a fighter wing in nine months, a bomber wing in four. The works make
+    // 108 fighters and 112 bombers in those months, and the 8 and the 12 beyond the wing go to the pool with it.
+    expect(player.orders).toEqual([4, 9]);
+    expect([12, 24, 36].map((m) => player.gain[m])).toEqual([[108, 336], [216, 672], [432, 1008]]);
+    for (const m of [12, 24, 36]) [0, 1].forEach((i) => expect(Math.abs(staff.gain[m][i] - player.gain[m][i]), `${i ? 'bombers' : 'fighters'} after ${m} months`).toBeLessThanOrEqual(wing[i]));
+    // Nothing built is lost, so nothing drifts: in every month the two stand apart by exactly what the player's works
+    // have made of the wing on order, never a whole wing: at the widest 96 fighters and 84 bombers, the month before a wing.
+    staff.gain.forEach((x, m) => expect([x[0] - player.gain[m][0], x[1] - player.gain[m][1]], `month ${m}`).toEqual(player.building[m]));
+    expect([0, 1].map((i) => Math.max(...player.building.map((x) => x[i])))).toEqual([96, 84]);
+    // An order taken back leaves what the works had made of it for the pool.
+    const g = pacificWar(1, 36, 'AUS', 7);
+    g.nations.AUS.queue = g.nations.AUS.queue.filter((b) => b.what !== 'air');
+    g.nations.AUS.pp = 1e6;
+    expect(orderOffer(g, 'AUS', 'air:bmr')).not.toBeNull();
+    g.turn = 37; smallAirMonth(g);
+    g.turn = 38; smallAirMonth(g);
+    expect(g.flags['built:AUS:bmr']).toBe(56);
+    const before = airPool(g, 'AUS').bmr;
+    g.nations.AUS.queue = g.nations.AUS.queue.filter((b) => b.what !== 'air');
+    g.turn = 39; smallAirMonth(g);
+    expect(airPool(g, 'AUS').bmr - before).toBe(84);
+    expect(g.flags['built:AUS:bmr']).toBeUndefined();
   });
 
   it('9: one count: where the record\'s own rows bring a country its aircraft, the rows from abroad step aside', () => {

@@ -261,16 +261,22 @@ export function smallAirMonth(g: Game): void {
   // it. What its works build this month, kind by kind from the month each opens, goes to its pool, with the men to fly
   // the fighters; its commands are made up from the pool as a great power's are. One count at every seat (rider b522):
   // while a wing of a kind is on order the works build that wing, and nothing of that kind goes to the pool besides.
+  // And nothing built is lost (rider b539, 1): what the works make in those months is counted, and what they made
+  // beyond the wing goes to the pool the month the wing is handed over (worksOver). An order taken back leaves what
+  // was made of it for the pool.
   for (const nat of AIR.works ?? []) {
     const n = g.nations[nat];
     if (!n?.alive || n.dormant) continue;
     const p = airPool(g, nat);
     for (const wing of ['ftr', 'bmr'] as Wing[]) {
       const from = worksFrom(nat, wing);
-      if (from === null || from > g.turn || n.queue.some((q) => q.what === 'air' && q.item === wing)) continue;
-      const k = Math.round(worksRate(g, nat, wing));
-      p[wing] += k;
-      if (wing === 'ftr') p.pilots += k;
+      if (from === null || from > g.turn) continue;
+      const k = Math.round(worksRate(g, nat, wing)), key = `built:${nat}:${wing}`;
+      if (n.queue.some((q) => q.what === 'air' && q.item === wing)) { g.flags[key] = (g.flags[key] ?? 0) + k; continue; }
+      const all = k + (g.flags[key] ?? 0);
+      delete g.flags[key];
+      p[wing] += all;
+      if (wing === 'ftr') p.pilots += all;
     }
   }
   // (b518, 9, one count: a receiver whose additions arrive with the date on the record's own rows takes no row from abroad besides.)
@@ -314,6 +320,22 @@ export function smallAirMonth(g: Game): void {
         : `${name} now builds ${WING_WORD[open[0]]} at home: ${open[0] === 'ftr' ? 'Fighter' : 'Bomber'} wings can be ordered on the Arsenal page.`, me);
     }
   }
+}
+
+/**
+ * The wing's remainder (ruling 234's rider b539, 1): a smaller power whose works feed its pool builds a wing in whole
+ * months, so by the month the wing is handed over its works have made a little more than the wing. That remainder goes
+ * to the pool, as the staff's output would, with the men to fly the fighters: a player who orders is never worse off
+ * than the staff, and nothing built is lost.
+ */
+function worksOver(g: Game, nat: string, wing: Wing, count: number): void {
+  if (!AIR.works?.includes(nat)) return;
+  const key = `built:${nat}:${wing}`, over = Math.max(0, (g.flags[key] ?? 0) - count);
+  delete g.flags[key];
+  if (over <= 0) return;
+  const p = airPool(g, nat);
+  p[wing] += over;
+  if (wing === 'ftr') p.pilots += over;
 }
 
 /** True if a new wing can be stationed in this region: the nation holds it and it has airfields, built or already in use by one of its fleets. */
@@ -651,6 +673,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
+    worksOver(g, nat, wing, count);
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
     const war = airWar(g);
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
