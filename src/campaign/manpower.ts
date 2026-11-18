@@ -19,6 +19,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import data from '../../data/campaign/manpower.json';
 import { turnToDate } from '../core/ticket';
 import { MEN_PER_DIV, type Game } from './types';
+import { farShare } from './economy';
 
 export const MANPOWER = data as unknown as {
   /** The reserve a great power opens a campaign of September 1939 with, in divisions' worth. */
@@ -75,12 +76,18 @@ function ensure(g: Game, nat: string): void {
   if (g.flags[kp(nat)] === undefined) g.flags[kp(nat)] = start;
 }
 
-/** The share of its homeland a nation still holds, by the worth of the provinces: where its young men are. */
+/**
+ * The share of its homeland a nation still holds, by the worth of the provinces: where its young men are. Home ground
+ * on the far side of the world counts at its share here, as it does for money, for lines and for the standing call-up
+ * (ruling b483, economy.ts farShare): the Soviet Union's 169 provinces beyond the old chart weigh 280 beside the old
+ * chart's 194 and are never lost, and counted whole they kept the month's class at nine tenths of its size where the
+ * old chart's reckoning cut it to three quarters.
+ */
 export function homeShare(g: Game, nat: string): number {
   let all = 0, held = 0;
   for (const r of g.regions) {
     if (r.owner !== nat || r.overseas) continue;
-    const w = 1 + r.vp + r.fac;
+    const w = (1 + r.vp + r.fac) * farShare(r);
     all += w;
     if (r.ctrl === nat) held += w;
   }
