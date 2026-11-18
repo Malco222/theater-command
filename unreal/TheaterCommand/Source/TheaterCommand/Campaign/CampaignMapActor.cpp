@@ -13239,6 +13239,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 	// Which way the eye is looking, to turn every puff to face it.
 	FVector Right = FVector::RightVector, Up = FVector::UpVector;
+	// (and where the eye is, with how many pixels of the window a thing of one unit takes at one unit's distance:
+	// for what must never be drawn smaller than a few pixels, a tracer)
+	FVector EyeAt = CameraFocus + FVector(0.0, 0.0, CameraDistance);
+	double PixelsAtOne = 1500.0;
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13246,6 +13250,13 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FRotationMatrix Looking(Player->PlayerCameraManager->GetCameraRotation());
 			Right = Looking.GetUnitAxis(EAxis::Y);
 			Up = Looking.GetUnitAxis(EAxis::Z);
+			EyeAt = Player->PlayerCameraManager->GetCameraLocation();
+			int32 WindowWide = 0, WindowHigh = 0;
+			Player->GetViewportSize(WindowWide, WindowHigh);
+			if (WindowWide > 0)
+			{
+				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(Player->PlayerCameraManager->GetFOVAngle()), 5.0, 150.0) * 0.5)));
+			}
 		}
 	}
 	const double Now = World->GetTimeSeconds();
@@ -13256,6 +13267,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	int32 FlakLitShapes = 0; // (and how many of those again as light, inside a searchlight's beam)
 	// (what the hour does to smoke: nothing by day, about a third and bluer in the deep of the night)
 	const FLinearColor SmokeHour = FMath::Lerp(FLinearColor(1.0f, 1.0f, 1.0f), FLinearColor(0.30f, 0.38f, 0.58f), GetMoonlight());
+	bool bDrawingLight = false;
 	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its
 	// middle, at the heart's edge and at its rim. The two axes are its half-length and half-width as the eye sees it.
 	auto DrawPuff = [&](const FVector& Where, const FVector& AxisA, const FVector& AxisB, const FLinearColor& Colour, float AtMiddle, double HeartOut, float AtHeart, float AtRim)
@@ -13270,7 +13282,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// and tracer are lights and keep their own: a light is known here by its colour, warm or very bright.)
 		const float Warm = FMath::Clamp((Colour.R - 2.2f * Colour.B - 0.03f) / 0.2f, 0.0f, 1.0f);
 		const float Bright = FMath::Clamp((0.3f * Colour.R + 0.59f * Colour.G + 0.11f * Colour.B - 0.75f) / 0.15f, 0.0f, 1.0f);
-		const FLinearColor HourLight = FMath::Lerp(SmokeHour, FLinearColor(1.0f, 1.0f, 1.0f), FMath::Max(Warm, Bright));
+		// (bDrawingLight: what is being drawn is a light whatever its colour, a yellow tracer)
+		const FLinearColor HourLight = bDrawingLight ? FLinearColor(1.0f, 1.0f, 1.0f) : FMath::Lerp(SmokeHour, FLinearColor(1.0f, 1.0f, 1.0f), FMath::Max(Warm, Bright));
 		const FLinearColor Lit(Colour.R * HourLight.R, Colour.G * HourLight.G, Colour.B * HourLight.B);
 		auto Inked = [&Lit](float Alpha) { FLinearColor Ink = Lit; Ink.A = Alpha; return Ink.ToFColor(false); };
 		const FColor MiddleInk = Inked(AtMiddle), HeartInk = Inked(AtHeart), RimInk = Inked(AtRim);
@@ -13915,7 +13928,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 	// Raids in flight: flak round the bombers over a defended target, tracer between them and the fighters that
 	// rise to meet them, and a damaged bomber trailing smoke on the way home.
-	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f), Tracer(1.0f, 0.86f, 0.35f);
+	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f);
+	const double TracerBurns = 0.6; // (seconds a tracer round is alight)
 	const double Table = UnitScale;
 	for (int32 F = 0; F < Flights.Num(); ++F)
 	{
@@ -13981,29 +13995,89 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (Flight.bEngaged)
 		{
-			// Bursts of tracer: the fighters at the bombers, and the bombers' gunners (and their escort) back at them.
-			// (The art director's round 37: round dots among the bombers read as stray lamps. Tracer is short streaks
-			// along the line of fire, each about four times as long as it is wide, three or four in a row from the
-			// fighter's nose toward its bomber, and only while that side fires.)
-			const FVector FireLine = Flight.At - Flight.RivalAt;
-			const double Lead = FMath::Frac(Now * 2.6);
-			for (int32 K = 0; K < 4; ++K)
+			// Tracer: the fighters at the bombers, and the bombers' gunners back at them.
+			// (Brian, 18 November 2026: "i want tracer fire shown as well. 1 out of every 5 bullets with yellow". The
+			// aircraft modeller's sheet for it, brought to the table's scale, where a bomber's wings span ten units
+			// and the fighters fly within a wingspan of it. Each gun fires thirteen rounds a second while its side
+			// fires. Every fifth round is a tracer and the four between are not drawn; each gun's belt starts out of
+			// step with its neighbours'. A tracer leaves along the line to its mark, a little scattered, at its own
+			// speed and its shooter's, flies straight whatever its shooter then does, and burns out after six tenths
+			// of a second, well past its mark. Every round, drawn or not, flickers at its muzzle for one frame.
+			// Before this the tracer was four amber streaks in a row that turned with the fighters.)
+			const double Small = 0.55 * Table, Metre = 0.34 * Table; // (a table unit to the metre, as the fighters and the bombers are built)
+			const double RoundsASecond = 13.0;
+			static const int32 BeltStarts[7] = { 0, 3, 1, 4, 2, 0, 3 };
+			// (the fighters fire in bursts, and the gunners back at them in the gaps and a little over)
+			auto FightersFireAt = [](double When) { return FMath::Frac(When * 0.9) < 0.6; };
+			auto GunnersFireAt = [](double When) { return FMath::Frac(When * 0.9 + 0.5) < 0.6; };
+			const FTransform Pair = Flight.Rivals ? Flight.Rivals->GetComponentTransform() : FTransform(Flight.RivalAt);
+			const FTransform Vic = Flight.Formation ? Flight.Formation->GetComponentTransform() : FTransform(Flight.At);
+			const FVector Fighters[2] = { Pair.TransformPosition(FVector::ZeroVector), Pair.TransformPosition(FVector(10.0, 9.0, 1.5) * Small) };
+			const FVector Bombers[3] = { Vic.TransformPosition(FVector::ZeroVector), Vic.TransformPosition(FVector(26.0, 22.0, 3.0) * Metre), Vic.TransformPosition(FVector(26.0, -22.0, 3.0) * Metre) };
+			// (how fast each side is going, from where it was a frame ago)
+			const double Since = Now - Flight.SeenWhen;
+			const bool bSeen = Flight.SeenWhen > 0.0 && Since > 0.0005 && Since < 0.25;
+			const FVector BomberSpeed = bSeen ? (Flight.At - Flight.SeenAt) / Since : FVector::ZeroVector;
+			const FVector FighterSpeed = bSeen ? (Flight.RivalAt - Flight.SeenRivalAt) / Since : FVector::ZeroVector;
+			auto FireGun = [&](int32 Gun, bool bFighters, const FVector& Muzzle, const FVector& Mark, const FVector& ShooterSpeed)
 			{
-				const double T = Lead - K * 0.085;
-				if (T < 0.05 || T > 0.95)
+				double& Next = Flight.NextRound[Gun];
+				if (Next <= 0.0 || Next < Now - 0.25)
 				{
-					continue;
+					Next = Now; // (the first round, or the first after the game stood still)
 				}
-				if (FMath::Frac(Now * 0.9) < 0.6)
+				bool bFlicker = false;
+				while (Next <= Now)
 				{
-					DrawSmear(FMath::Lerp(Flight.RivalAt, Flight.At, T), FireLine, 0.34 * Table, 0.085 * Table, Tracer, 0.95f, 0.6);
+					const int32 Round = Flight.RoundsFired[Gun]++;
+					if (bFighters ? FightersFireAt(Next) : GunnersFireAt(Next))
+					{
+						bFlicker = true;
+						if ((Round + BeltStarts[Gun]) % 5 == 0 && TracerRounds.Num() < 160)
+						{
+							FRandomStream Chance(Round * 7919 + Gun * 131 + F * 17);
+							const FVector Aim = (Mark - Muzzle).GetSafeNormal();
+							// (about a degree and a half of scatter; and it burns out about as far past its mark as its mark is from it)
+							const FVector Scatter(Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f));
+							const double Range = FMath::Max(2.0 * FVector::Distance(Muzzle, Mark), 9.0 * Table);
+							FTracerRound& Tracer = TracerRounds.AddDefaulted_GetRef();
+							Tracer.From = Muzzle;
+							Tracer.Velocity = (Aim + Scatter * 0.026).GetSafeNormal() * (Range / TracerBurns) + ShooterSpeed;
+							Tracer.Born = Next;
+						}
+					}
+					Next += 1.0 / RoundsASecond;
 				}
-				if (K < 3 && FMath::Frac(Now * 0.9 + 0.5) < 0.6)
+				if (bFlicker)
 				{
-					DrawSmear(FMath::Lerp(Flight.At + FVector(0.0, 0.0, 0.6 * Table), Flight.RivalAt, T), FireLine, 0.28 * Table, 0.07 * Table, FLinearColor(1.0f, 0.62f, 0.3f), 0.9f, 0.6);
+					// (the flash at the muzzle: pale, small, and gone with the frame)
+					bDrawingLight = true;
+					Draw(Muzzle, 0.3 * Table, FLinearColor(1.0f, 0.95f, 0.72f), 0.85f);
+					bDrawingLight = false;
+				}
+			};
+			for (int32 K = 0; K < 2; ++K)
+			{
+				// (each fighter at a bomber of its own: the leader's, and the nearer of the two behind it)
+				const FVector Mark = K == 0 ? Bombers[0] : (FVector::DistSquared(Fighters[1], Bombers[1]) < FVector::DistSquared(Fighters[1], Bombers[2]) ? Bombers[1] : Bombers[2]);
+				for (int32 Wing = 0; Wing < 2; ++Wing)
+				{
+					// (a gun in each wing, two metres out and a metre and a half ahead: a model's front is toward -X)
+					const FVector Muzzle = Fighters[K] + Pair.TransformVector(FVector(-1.5, Wing == 0 ? -2.0 : 2.0, 0.0) * Small);
+					FireGun(K * 2 + Wing, true, Muzzle, Mark, FighterSpeed);
 				}
 			}
+			for (int32 K = 0; K < 3; ++K)
+			{
+				// (a gunner in each bomber, from its back, at the nearer fighter)
+				const FVector Muzzle = Bombers[K] + FVector(0.0, 0.0, 0.6 * Table);
+				const FVector Mark = FVector::DistSquared(Muzzle, Fighters[0]) < FVector::DistSquared(Muzzle, Fighters[1]) ? Fighters[0] : Fighters[1];
+				FireGun(4 + K, false, Muzzle, Mark, BomberSpeed);
+			}
 		}
+		Flight.SeenAt = Flight.At;
+		Flight.SeenRivalAt = Flight.RivalAt;
+		Flight.SeenWhen = Now;
 		if (Flight.Sortie.Loss >= 0.1f && Flight.Share > 0.5)
 		{
 			// One of them has been hit: it trails smoke all the way home. (The art director's round 37: by night it is
@@ -14022,6 +14096,35 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Draw(Hit - Flight.Dir * Back + FVector(0.0, 0.0, -0.25 * Table * K + 0.4 * Table * FMath::Sin(Now * 2.0 + K)), (0.7 + 0.3 * K) * Table, Dark, 0.55f - 0.06f * K);
 			}
 		}
+	}
+
+	// The tracer rounds in flight: each a short solid streak of yellow, paler at its heart, with a tail that thins away
+	// behind it. Never drawn under about three pixels across, however high the eye stands. (The modeller's yellow is
+	// to be seen at about 213, 199, 104: not amber, and not white.)
+	{
+		const FLinearColor TracerYellow(213.0f / 255.0f, 199.0f / 255.0f, 104.0f / 255.0f), TracerPale(0.96f, 0.93f, 0.74f);
+		bDrawingLight = true;
+		for (int32 K = TracerRounds.Num() - 1; K >= 0; --K)
+		{
+			const FTracerRound& Round = TracerRounds[K];
+			const double Age = Now - Round.Born;
+			if (Age < 0.0 || Age >= TracerBurns)
+			{
+				TracerRounds.RemoveAtSwap(K, EAllowShrinking::No);
+				continue;
+			}
+			const FVector Head = Round.From + Round.Velocity * Age;
+			const FVector Flies = Round.Velocity.GetSafeNormal();
+			const double Pixel = FMath::Max(FVector::Distance(EyeAt, Head), 1.0) / PixelsAtOne; // (what one pixel of the window spans there)
+			const double HalfWide = FMath::Max(0.05 * Table, 2.0 * Pixel);
+			const double Long = FMath::Max(0.8 * Table, 9.0 * HalfWide);
+			// (it burns out over its last tenth of a second)
+			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(TracerBurns - 0.1, TracerBurns, Age));
+			DrawSmear(Head - Flies * (0.95 * Long), Flies, 0.6 * Long, 0.5 * HalfWide, TracerYellow, 0.5f * Burning, 0.5); // the tail, thinning
+			DrawSmear(Head - Flies * (0.45 * Long), Flies, 0.45 * Long, HalfWide, TracerYellow, 0.95f * Burning, 0.7, 0.9f * Burning); // the streak, solid
+			DrawSmear(Head - Flies * (0.3 * Long), Flies, 0.26 * Long, 0.5 * HalfWide, TracerPale, 1.0f * Burning, 0.6, 0.85f * Burning); // its paler heart
+		}
+		bDrawingLight = false;
 	}
 
 	// Flak: every burst in the air, as hanging smoke. Sizes are in the bombers' wingspans, long (down the wind) by

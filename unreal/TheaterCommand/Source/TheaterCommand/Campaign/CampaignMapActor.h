@@ -693,12 +693,30 @@ private:
 		double Share = 0.0; // how far through its flight it is, 0 to 1
 		bool bEngaged = false; // the defender's fighters are among the bombers
 		double NextFlak = 0.0; // when the guns under it fire next (nothing until it comes under fire)
+		// The guns of a raid that is met: the two fighters' two guns each (0 to 3) and a gunner in each bomber (4 to
+		// 6). When each fires its next round, and how many it has fired: every fifth round is a tracer.
+		double NextRound[7] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+		int32 RoundsFired[7] = { 0, 0, 0, 0, 0, 0, 0 };
+		// (where the two sides were a frame ago, and when: for the speed a round leaves its gun with)
+		FVector SeenAt = FVector::ZeroVector, SeenRivalAt = FVector::ZeroVector;
+		double SeenWhen = 0.0;
 		// (Ruling 107.) By night: each bomber again as a shell of light, shown while a searchlight holds it.
 		int32 LitMachines = 0;
 		int32 LitShown = INDEX_NONE;
 		TObjectPtr<UMaterialInstanceDynamic> LitInk;
 	};
 	TArray<FFlight> Flights;
+	/**
+	 * (Brian, 18 November 2026: "i want tracer fire shown as well. 1 out of every 5 bullets with yellow".) A tracer
+	 * round in flight over a raid: where it left its gun and when, and how it flies. It flies straight and burns out.
+	 */
+	struct FTracerRound
+	{
+		FVector From = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		double Born = 0.0;
+	};
+	TArray<FTracerRound> TracerRounds;
 	void UpdateSorties();
 	float SortieSeenFrom = 6000.0f; // (how high the eye stands: the raid's pencilled course is thinned close up)
 	/**
