@@ -599,6 +599,17 @@ describe('the pages the 3D game reads', () => {
     expect(airPage(g, `group:${b.id}`)!.sections[1].rows.every((r) => !r.buttons[0].ok)).toBe(true);
   });
 
+  it('say why a standing order cannot be given: the one it has now says so (build 1618: ITS ORDERS NOW was dim and said nothing)', () => {
+    const g = grand('GER');
+    for (const x of [mine(g, 'bmr')[0], mine(g, 'ftr')[0]]) {
+      const rows = airPage(g, `group:${x.id}`)!.sections[0].rows;
+      const now = rows.find((r) => r.buttons[0].label === 'ITS ORDERS NOW')!;
+      expect(now.buttons[0].ok).toBe(false);
+      expect(now.buttons[0].tip).toBe('This is its standing order now. Give it one of the others to change it.');
+      for (const r of rows) if (!r.buttons[0].ok) expect(r.buttons[0].tip, r.title).not.toBe('');
+    }
+  });
+
   it('take standing orders, reconnaissance and moves as actions, and leave anything else alone', () => {
     const g = grand('GER');
     const f = mine(g, 'ftr')[0], b = mine(g, 'bmr')[0];

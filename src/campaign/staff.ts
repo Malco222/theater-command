@@ -36,7 +36,7 @@ import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
-import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, lineOwners, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -105,6 +105,8 @@ export function startOpen(g: Game, wide = true): Game {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
   }
+  // (Begun after the first day: the rows whose men history's corps already brought do not come again.)
+  else carriedRows(g);
   startEngineers(g);
   openTraits(g);
   openTech(g);
@@ -1954,6 +1956,7 @@ export function afterDeclaring(g: Game, nat: string): void {
   n.align = op.join === 'allies' ? 'allies_cobelligerent' : 'axis_cobelligerent';
   n.opinion = n.home = op.join === 'allies' ? -100 : 100;
   g.supplyDirty = true;
+  joinedSide(g, nat);
 }
 
 /** This month's orders for a computer-run nation's army in a theatre overseas that keeps a staff of its own. */

@@ -370,8 +370,11 @@ describe('anything goes', () => {
 describe('the book, mended', () => {
   it('has Germany fight the Balkans beside the army it is bringing up for the east, each in its own month', () => {
     // A war at the second stop in which both are dated May 1941: the army for the east starts coming up in February,
-    // and the Balkan campaign used to be shut out by it and the book closed there in the summer.
-    const seed = 26;
+    // and the Balkan campaign used to be shut out by it and the book closed there in the summer. (Seed 26 until ruling
+    // 229: in that war France fell in January 1941, and since ruling 229 a month later, so the book closed in the west
+    // first. Of
+    // the six wars of seeds 1 to 60 with both dates in May 1941, the other five tell this story; seed 22 is the first.)
+    const seed = 22;
     const g = grand(seed, null, 2);
     const balkans = bookDate(g, 'GER', 'balkans')!, east = bookDate(g, 'GER', 'east')!;
     expect([balkans, east]).toEqual([21, 21]);

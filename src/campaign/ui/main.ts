@@ -70,7 +70,7 @@ import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
-  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
+  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
@@ -83,7 +83,8 @@ import { SIDE_NAME, shareWords } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalEndsIn, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
-import { liberate } from '../liberation';
+import { LIB, liberate } from '../liberation';
+import { guarantorsOf } from '../guarantees';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
@@ -622,7 +623,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legtrain" hidden><i style="background:rgba(78,126,190,.3);border-color:#2b4f7a"></i>By rail: the whole month</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legdir" hidden><svg width="13" height="14" viewBox="-6.5 -5.4 13 11.6" style="vertical-align:-3px;margin-right:4px"><path d="M-5.6 -4.4H5.6V2.4L0 5.4-5.6 2.4Z" fill="#d8b25a" stroke="#15120f" stroke-width=".9"/></svg>The cabinet's directive, months left</span><span id="legvow" hidden><svg width="13" height="13" viewBox="-6.5 -6.5 13 13" style="vertical-align:-2px;margin-right:4px"><circle r="5.2" fill="#9cc0e6" stroke="#15120f" stroke-width=".9"/></svg>Your promise, months left</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legprize" hidden><svg width="11" height="14" viewBox="-5 -6.6 10 12.2" style="vertical-align:-2px;margin-right:4px"><path d="M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z" fill="#e8622c" stroke="#15120f" stroke-width=".9"/></svg>Wrecked: out of use</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legtrain" hidden><i style="background:rgba(78,126,190,.3);border-color:#2b4f7a"></i>By rail: the whole month</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: hold it at a month's end to free the country</span><span id="legdir" hidden><svg width="13" height="14" viewBox="-6.5 -5.4 13 11.6" style="vertical-align:-3px;margin-right:4px"><path d="M-5.6 -4.4H5.6V2.4L0 5.4-5.6 2.4Z" fill="#d8b25a" stroke="#15120f" stroke-width=".9"/></svg>The cabinet's directive, months left</span><span id="legvow" hidden><svg width="13" height="13" viewBox="-6.5 -6.5 13 13" style="vertical-align:-2px;margin-right:4px"><circle r="5.2" fill="#9cc0e6" stroke="#15120f" stroke-width=".9"/></svg>Your promise, months left</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legprize" hidden><svg width="11" height="14" viewBox="-5 -6.6 10 12.2" style="vertical-align:-2px;margin-right:4px"><path d="M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z" fill="#e8622c" stroke="#15120f" stroke-width=".9"/></svg>Wrecked: out of use</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
         <div class="zoom"><button class="btn" id="lensbtn" data-act="lens" aria-label="Show what every province is worth" title="Show what every province is worth: the richer the ground, the more gold on it."><svg width="18" height="18" viewBox="-9 -9 18 18"><circle r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M0 -3.9V3.9M-2.3 -1.6Q-2.3 -3 0 -3T2.3 -1.6 0 0 -2.3 1.6 0 3 2.3 1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
         <div class="rslip" id="rslip" role="status" hidden></div>
@@ -2871,6 +2872,9 @@ function alertList(): Alert[] {
   // Enemy raids since the player's last month: the places hit, to visit in turn.
   const raided = ui.raidsFrom < 0 ? [] : [...new Set(g.airReports.slice(ui.raidsFrom).filter((r) => r.region >= 0 && atWar(g, r.attNat, me) && (r.defNat === me || g.regions[r.region].ctrl === me)).map((r) => r.region))];
   if (raided.length) out.push({ kind: 'raided', text: raided.length === 1 ? `Enemy aircraft raided ${g.regions[raided[0]].name}` : `Enemy aircraft raided ${raided.length} of your provinces`, regs: raided });
+  // His crowded airfields, in one row that names the worst (b448): a press opens that field's page.
+  const crowded = crowdedFields(g, me);
+  if (crowded.length) out.push({ kind: 'crowded', text: crowdedRow(g, crowded), regs: [crowded[0].region] });
   // Sieges: the player's towns shut in, and the towns his armies stand round with an assault still in hand.
   if (siegeRules(g)) {
     const sg = siegesInSight(g);
@@ -2933,7 +2937,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -3082,6 +3086,7 @@ function followAlert(kind: string): void {
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
   if (kind === 'lastact') { openModal({ kind: 'lastact' }); return; }
+  if (kind === 'crowded' && a.regs?.length) { openAirfield(a.regs[0]); return; }
   if (kind === 'directive' || kind === 'cabinetfall' || kind === 'cabinetseat' || kind === 'cabinetdoubt' || kind === 'cabinethead' || kind === 'promise') { openModal({ kind: 'cabinet' }); refresh(); return; }
   if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
   if (kind === 'men') { openModal({ kind: 'ledger', nat: g.human || '' }); document.querySelector('#card #lmen')?.scrollIntoView({ block: 'start' }); return; }
@@ -5045,8 +5050,11 @@ function nextCard(): typeof ui.modal {
   const me = g.human;
   // A nation that has fallen, or one that has come back: each is announced once, in the order it happened.
   if (me && !passing && ui.seenPass < g.passings.length) {
-    // A country set free by its conqueror's fall is told on the conqueror's card, unless it is the player's own.
-    const ids = g.passings.slice(ui.seenPass).filter((p) => !(p.kind === 'freed' && p.after && !p.player && g.passings.some((q) => q.kind === 'fell' && q.nat === p.after && q.turn === p.turn))).map((p) => p.id);
+    // A country set free by its conqueror's fall is told on the conqueror's card, unless it is the player's own: when
+    // the two are new together. (A country freed at the month's end, after its conqueror's card was read earlier in
+    // the month, has a card of its own: ruling 229, part 2.)
+    const fresh = g.passings.slice(ui.seenPass);
+    const ids = fresh.filter((p) => !(p.kind === 'freed' && p.after && !p.player && fresh.some((q) => q.kind === 'fell' && q.nat === p.after && q.turn === p.turn))).map((p) => p.id);
     ui.seenPass = g.passings.length;
     if (ids.length) return { kind: 'passing', ids };
   }
@@ -7160,16 +7168,17 @@ function wornNote(r: BattleReport): string {
   return `<div class="note wornnote"><b>${ours ? 'The line held, but its works are worn.' : 'Thrown back, but not for nothing.'}</b> The attack took ${took} off the ${ours ? '' : "defenders' "}works at ${esc(r.regionName)}${ours ? '' : `, at the price of ${num(paid.lost)} men${paid.pct ? `, ${paid.pct}% of those sent in` : ''}`}: ${now}. ${ours ? `Your troops there ${pressedPace()} this month. A quiet month builds the works up again; another attack takes off more.` : `The defenders ${pressedPace()} this month, so the next blow meets less. Guns in the attack wear works down faster.`}</div>`;
 }
 /** What one side lost in a battle, in men and as a share of those engaged: the fight itself and whoever laid down his arms after it. */
-function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number } {
+function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number; all: boolean } {
   const total = us.reduce((s, u) => s + u.men, 0);
   const lost = Math.max(fought, us.reduce((s, u) => s + u.lost, 0));
-  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0 };
+  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0, all: total > 0 && lost >= total };
 }
 /** The price of a battle in one sentence, to whichever side reads its report. */
 function priceLine(r: BattleReport): string {
   if (r.yielded) return '';
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
-  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`;
+  // (A side that lost every man reads 'all 27,989', not '27,989 (100%)': the UI director, review-1441x878 section 7.)
+  const of = (x: { lost: number; pct: number; all: boolean }): string => (x.all ? `all ${num(x.lost)}` : `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`);
   if (g.human && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human))) return `It cost you ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of theirs.`;
   if (g.human && r.defenders.some((u) => u.nat === g.human)) return `It cost the attackers ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of yours.`;
   return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;
@@ -7884,7 +7893,8 @@ function invadeCard(on: string, target: number): string {
   // the tie moves no opinion; the one rule is the roll the card states under What follows).
   const mother = motherOf(on);
   const motherRow = mother ? `<div class="frow mother">${chip(mother)}<span class="grow"><b>${esc(newsName(g.nations[mother]))}</b><small>${esc(motherLine(mother, on, natName(on)))}</small></span><small class="stand">${esc(standLabel(g.nations[mother]))}</small></div>` : '';
-  const friendRows = motherRow + f.friends.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
+  // Who stands by it (ruling 229, part 3): its guarantors only, each with what it does to you (the UI director's words).
+  const friendRows = motherRow + f.guarantors.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(newsName(g.nations[x.nat]))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
   // A third country's corps on that ground, at peace with him (rulings b341(a) and b343).
@@ -7931,7 +7941,7 @@ function invadeCard(on: string, target: number): string {
     : `${The} ${stands}.`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy · ${date(g.turn)}</div><h2>${flagIcon(on, n.color, 34, 'inh')} Declare war on ${esc(theName(on))}?</h2></header>
     <div class="body invade"><p class="lead">${lead}</p>
-    ${friendRows ? `<h3>Its friends</h3><div class="frows">${friendRows}</div>` : `<p class="sub">${The} has no close friends among the nations.</p>`}
+    ${friendRows ? `<h3>Who stands by it</h3><div class="frows">${friendRows}</div>` : `<p class="sub">No country is bound to stand by ${esc(theName(on))}.</p>`}
     <h3>What follows if you say yes</h3><ul class="follows">${what.map((x) => `<li>${x}</li>`).join('')}</ul></div>
     <footer><button class="btn" data-act="close">Not now</button><button class="btn warn" data-act="dodeclare" data-nat="${on}" data-target="${target}">${r ? 'Declare war and march ▸' : 'Declare war'}</button></footer>`;
 }
@@ -7941,17 +7951,17 @@ function motherOf(nat: string): string | null {
   const p = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
   return p && g.nations[p]?.alive ? p : null;
 }
-/** The friends the declare list names: the mother country first, as the card does. */
-function friendNames(nat: string): string[] {
+/** Who backs a country, as the declare list names them: the mother country first, as the card does, then its guarantors (ruling 229, part 3). */
+function backedBy(nat: string): string[] {
   const mother = motherOf(nat);
-  return [...(mother ? [newsName(g.nations[mother])] : []), ...friendsOf(nat).filter((f) => f.nat !== mother && g.nations[f.nat]?.alive).map((f) => theName(f.nat))];
+  return [...(mother ? [newsName(g.nations[mother])] : []), ...(g.human ? guarantorsOf(g, g.human, nat) : []).filter((x) => x.nat !== mother).map((x) => newsName(g.nations[x.nat]))];
 }
 
 function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${friendNames(id).length ? ` · friends: ${esc(listOf(friendNames(id)))}` : ''}</span></span></button>`).join('')}
+    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${backedBy(id).length ? ` · backed by ${esc(listOf(backedBy(id)))}` : ''}</span></span></button>`).join('')}
     <p class="sub" style="margin-top:8px">Pick a country to see what declaring war on it would mean. Nothing happens until you confirm.</p></div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
@@ -8220,7 +8230,9 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     const weeks = Object.values(GOALS[lost] ?? {}).some((x) => x?.outlast !== undefined) ? weeksLasted(g, lost) : null;
     const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
     const hope = nationsFallen(g).find((f) => f.nat === lost);
-    const back = hope?.canReturn ? ` If ${theName(hope.fell.to)}'s enemies take ${hope.capitalName}, ${natName(lost)} is liberated and you lead it again.` : '';
+    // (Ruling 229, part 2, in the UI director's words for the fallen country's card: a return at a month's end, with no
+    // enemy corps in or next to the capital, and never in the month it fell.)
+    const back = hope?.canReturn ? ` If a member of an alliance at war with ${theName(hope.fell.to)} holds ${hope.capitalName} ${g.turn - hope.fell.turn < LIB.gap ? 'at the end of next month or later' : 'at the end of a month'}, with no enemy corps in or next to it, ${natName(lost)} is liberated and you lead it again.` : '';
     // The head of a card names the month it reports (ruling 117, point 5): the month the country fell in, which was
     // played out to its end before this card opened.
     const fellIn = [...g.passings].reverse().find((p) => p.nat === lost && p.kind === 'fell');

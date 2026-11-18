@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
+import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
@@ -14,7 +14,7 @@ import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './diffic
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
-  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
+  endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
@@ -43,7 +43,7 @@ import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
-import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
+import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
 export { FORT_NO_ORDERS, garrisonLine, whyNotOrder, whyNotOrderGarrison } from './armies';
 export { gunsLeftAlone } from './siege';
@@ -81,12 +81,19 @@ function closePhase(g: Game, nat: string): void {
   seaBattles(g, nat);
   // Carriers lost in the month's fleet actions take their aircraft with them (the grand campaign).
   syncWings(g);
+  // A computer staff leaves no airfield of its own crowded at its month's end (b437).
+  spreadAir(g, nat);
   // The routine of the month, in one line (the grand campaign).
   foldNews(g, nat);
   endPhase(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
   if (g.phase >= g.order.length) {
+    // A fallen country whose capital its friends hold, with no enemy corps in or next to it, returns at the month's
+    // end, dated the month that ends (ruling 229, part 2; the grand campaign).
+    liberationMonth(g);
+    // (And no country is left at war with its own side's members, whatever path took it to that side: ruling 229, 3.)
+    sidesAtPeace(g);
     g.phase = 0; g.turn++; g.week = 1;
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
@@ -120,6 +127,8 @@ export function beginHuman(g: Game): void {
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
+  // A field of his that has become crowded since last month: the month card says so once (b448).
+  crowdedNews(g);
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }

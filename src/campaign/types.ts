@@ -987,6 +987,13 @@ export interface AirReport {
   surprise?: boolean;
 }
 
+/**
+ * A corps on a long passage by sea (ruling 229, part 1; the design director's b460): it left `from` in its own
+ * country's harbours and lands at `to`, or the nearest harbour its side holds on that front, in month `due`. While
+ * at sea it stands nowhere: it is off the map and out of every count but its country's field army.
+ */
+export interface Voyage { nat: string; corps: Corps; from: number; to: number; due: number }
+
 export interface Game {
   seed: number;
   rng: Rng;
@@ -1045,6 +1052,8 @@ export interface Game {
   intel: Intel;
   /** The roll of nations that have left the war and of those that came back into it, oldest first. */
   passings: Passing[];
+  /** Corps at sea on a long passage, off the map until the month they land (ruling 229, part 1: the Cape). Absent while there are none. */
+  atSea?: Voyage[];
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
