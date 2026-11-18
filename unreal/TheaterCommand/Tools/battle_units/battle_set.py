@@ -446,9 +446,10 @@ def _fieldstone_material():
 
 
 def _stone_wall(stage, a, b, mats, seed=1):
-    """A dry-stone field wall of gathered fieldstone: rounded stones of every size, two faces battered in toward a
-    rough top, settled into the grass with weeds at its foot, a few stones gone from the top and the far end tumbled
-    down into a spill on the grass."""
+    """A dry-stone field wall of gathered fieldstone. Broken stone, flat-bedded with sharp edges and flat faces:
+    blocks, slabs and wedges laid in rough courses battered in toward the top, long through-stones crossing the wall,
+    small chinking stones in the gaps, copes set on edge along the top, and only a few rounded stones. Weeds grow in
+    clumps at its foot, a few top stones are gone and the far end has tumbled onto the grass."""
     rnd = random.Random(seed)
     a, b = Vector((a[0], a[1], 0.0)), Vector((b[0], b[1], 0.0))
     length = (b - a).length
@@ -458,65 +459,133 @@ def _stone_wall(stage, a, b, mats, seed=1):
     tumble = length - rnd.uniform(2.5, 4.0)          # past here the wall has come down
     bm = bmesh.new()
     tone = bm.verts.layers.float.new("tone")
-    off = Vector((rnd.uniform(0, 99), rnd.uniform(0, 99), 0))
 
-    def stone(at, lx, ly, lz, turn, tilt):
-        ret = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.5)
-        vs = ret["verts"]
+    def place(points, at, turn, tilt, roll):
+        rot = Matrix.Rotation(yaw + turn, 4, "Z") @ Matrix.Rotation(tilt, 4, "X") @ Matrix.Rotation(roll, 4, "Y")
+        vs = [bm.verts.new(at + rot @ p) for p in points]
+        res = bmesh.ops.convex_hull(bm, input=vs, use_existing_faces=False)
+        hull = {g for g in res["geom"] if isinstance(g, bmesh.types.BMVert)}
+        junk = list({g for g in vs if g not in hull})
+        if junk:
+            bmesh.ops.delete(bm, geom=junk, context="VERTS")
         k = rnd.random()
-        flat = rnd.uniform(0.65, 1.0)
+        for g in res["geom"]:
+            if isinstance(g, bmesh.types.BMVert):
+                g[tone] = k
+
+    def broken(lx, ly, lz, wedge=0.0):
+        """A broken block: a box with its corners knocked off at random, faces a little out of square, and
+        (for a wedge) one end thinner than the other. Its convex hull gives flat faces and sharp edges."""
+        pts = []
+        for sx in (-0.5, 0.5):
+            taper = 1.0 - wedge * (sx + 0.5)
+            for sy in (-0.5, 0.5):
+                for sz in (-0.5, 0.5):
+                    cut = rnd.uniform(0.0, 0.3)
+                    pts.append(Vector((sx * lx * (1 - cut * rnd.random()), sy * ly * (1 - cut * rnd.random()),
+                                       sz * lz * taper * (1 - cut * rnd.random()))))
+        for _ in range(rnd.randint(3, 7)):                # a few extra facets on the faces
+            ax = rnd.randrange(3)
+            q = Vector((rnd.uniform(-0.45, 0.45) * lx, rnd.uniform(-0.45, 0.45) * ly, rnd.uniform(-0.45, 0.45) * lz))
+            q[ax] = math.copysign((lx, ly, lz)[ax] * rnd.uniform(0.38, 0.5), rnd.uniform(-1, 1))
+            pts.append(q)
+        return pts
+
+    def rounded(lx, ly, lz):
         o = Vector((rnd.uniform(0, 50), rnd.uniform(0, 50), rnd.uniform(0, 50)))
-        rot = Matrix.Rotation(yaw + turn, 4, "Z") @ Matrix.Rotation(tilt, 4, "X") @ Matrix.Rotation(rnd.uniform(-0.15, 0.15), 4, "Y")
-        for v in vs:
-            p = Vector(v.co)
-            p.z *= flat if p.z > 0 else flat * 0.7    # flatter beds, rounder tops
-            p *= 1.0 + 0.34 * noise.noise(p * 1.6 + o) + 0.09 * noise.noise(p * 5.0 + o)
-            v.co = at + rot @ Vector((p.x * lx, p.y * ly, p.z * lz))
-            v[tone] = k
+        pts = []
+        for i in range(26):
+            v = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))).normalized()
+            v *= 1.0 + 0.2 * noise.noise(v * 1.5 + o)
+            pts.append(Vector((v.x * lx * 0.5, v.y * ly * 0.5, v.z * lz * 0.45)))
+        return pts
 
-    def lay_course(z0, height, width, inset, gap_chance, max_s, start=0.0):
-        s = start + rnd.uniform(0.0, 0.2)
+    def stone_at(s, face, z, lx, ly, lz, width, kind):
+        at = a + d * s + side * face * (width / 2 - ly / 2 + rnd.uniform(-0.02, 0.03))
+        g = stage.height(at.x, at.y)
+        if kind == "round":
+            pts = rounded(lx, ly, lz)
+        else:
+            pts = broken(lx, ly, lz, rnd.uniform(0.2, 0.5) if kind == "wedge" else 0.0)
+        place(pts, Vector((at.x, at.y, g + z + lz / 2)), rnd.uniform(-0.12, 0.12),
+              face * rnd.uniform(0.02, 0.1), rnd.uniform(-0.08, 0.08))
+        return g
+
+    def course(z0, h, width, gap, max_s, start=0.0, top=False):
+        s = start + rnd.uniform(0.0, 0.3)
+        through_next = s + rnd.uniform(0.8, 1.6)
         while s < min(length, max_s):
-            lx = rnd.choice((rnd.uniform(0.18, 0.32), rnd.uniform(0.3, 0.6), rnd.uniform(0.3, 0.6), rnd.uniform(0.55, 0.85)))
-            for face in (-1, 1):
-                if rnd.random() < gap_chance:
-                    continue
-                ly = rnd.uniform(0.6, 1.0) * width / 2
-                lz = height * rnd.uniform(0.85, 1.25)
-                at = a + d * (s + lx / 2) + side * face * (width / 4 + inset * 0 + rnd.uniform(-0.03, 0.03))
+            if top:                                        # copes on edge, leaning a little, with gaps
+                lx = rnd.uniform(0.09, 0.2)
+                if rnd.random() > gap:
+                    at = a + d * (s + lx / 2) + side * rnd.uniform(-0.03, 0.03)
+                    g = stage.height(at.x, at.y)
+                    lz = rnd.uniform(0.22, 0.34)
+                    place(broken(lx, width * rnd.uniform(0.9, 1.15), lz), Vector((at.x, at.y, g + z0 + lz * 0.45)),
+                          rnd.uniform(-0.1, 0.1), 0.0, rnd.uniform(-0.25, 0.25))
+                s += lx * rnd.uniform(1.0, 1.15)
+                continue
+            if s > through_next and rnd.random() < 0.7:   # a long through-stone across the whole wall
+                lx = rnd.uniform(0.25, 0.4)
+                lz = h * rnd.uniform(0.55, 0.75)
+                at = a + d * (s + lx / 2)
                 g = stage.height(at.x, at.y)
-                stone(Vector((at.x, at.y, g + z0 + lz * 0.42 + rnd.uniform(-0.05, 0.05))), lx * 1.05, ly * 1.1, lz,
-                      rnd.uniform(-0.25, 0.25),
-                      face * rnd.uniform(0.0, 0.12))
-            s += lx * rnd.uniform(0.82, 0.95)
+                place(broken(lx, width * rnd.uniform(1.05, 1.2), lz), Vector((at.x, at.y, g + z0 + lz / 2)),
+                      rnd.uniform(-0.08, 0.08), rnd.uniform(-0.04, 0.04), rnd.uniform(-0.05, 0.05))
+                s += lx * 0.95
+                through_next = s + rnd.uniform(1.0, 2.0)
+                continue
+            lx = rnd.choice((rnd.uniform(0.2, 0.35), rnd.uniform(0.32, 0.6), rnd.uniform(0.32, 0.6), rnd.uniform(0.55, 0.9)))
+            for face in (-1, 1):
+                if rnd.random() < gap:
+                    continue
+                r = rnd.random()
+                kind = "round" if r < 0.08 else "wedge" if r < 0.3 else "block"
+                lz = h * (rnd.uniform(0.45, 0.7) if kind != "round" and rnd.random() < 0.4 else rnd.uniform(0.8, 1.1))
+                ly = width * rnd.uniform(0.35, 0.55)
+                zz = z0 + rnd.uniform(-0.02, 0.03)
+                stone_at(s + lx / 2, face, zz, lx * 0.98, ly, lz, width, kind)
+                if lz < h * 0.75:                          # a thin slab: bed another on it to make up the course
+                    stone_at(s + lx / 2 + rnd.uniform(-0.05, 0.05), face, zz + lz, lx * rnd.uniform(0.6, 0.95), ly,
+                             h - lz + rnd.uniform(-0.02, 0.04), width, "block")
+                for _ in range(rnd.randint(0, 2)):         # chinking stones in the joint
+                    cl = rnd.uniform(0.05, 0.11)
+                    stone_at(s + rnd.uniform(-0.04, 0.04), face, zz + rnd.uniform(0.0, h * 0.7), cl,
+                             cl * rnd.uniform(1.0, 2.0), cl * rnd.uniform(0.5, 0.9), width + 0.02, "block")
+            s += lx
 
-    # base course sunk a little into the turf, then narrower courses, then a broken rough top
-    z, width = -0.06, 0.78
-    for c, (h, gap) in enumerate(((0.32, 0.0), (0.28, 0.02), (0.26, 0.03), (0.24, 0.06), (0.22, 0.2))):
-        lay_course(z, h, width, 0, gap, tumble if c < 1 else tumble - rnd.uniform(0.3, 1.5) * c)
-        z += h * 0.78
+    # base course sunk a little into the turf, then narrower courses, then copes on edge along the top
+    z, width = -0.07, 0.8
+    for c, (h, gap) in enumerate(((0.3, 0.0), (0.26, 0.02), (0.24, 0.03), (0.22, 0.05))):
+        course(z, h, width, gap, tumble if c < 1 else tumble - rnd.uniform(0.3, 1.5) * c)
+        z += h
         width *= 0.88
-    # the tumbled end: low remains and stones spilled onto the grass on both sides
-    lay_course(-0.06, 0.26, 0.7, 0, 0.35, length, start=tumble)
+    course(z, 0.3, width, 0.12, tumble - rnd.uniform(1.5, 3.0), top=True)
+    # the tumbled end: a low base course, then stones spilled onto the grass on both sides
+    course(-0.07, 0.24, 0.72, 0.35, length, start=tumble)
     s = tumble
     while s < length + 1.2:
         for _ in range(rnd.randint(1, 3)):
             at = a + d * (s + rnd.uniform(-0.3, 0.3)) + side * rnd.uniform(-1.6, 1.6)
             g = stage.height(at.x, at.y)
-            lz = rnd.uniform(0.15, 0.28)
-            stone(Vector((at.x, at.y, g + lz * 0.2)), rnd.uniform(0.25, 0.55), rnd.uniform(0.2, 0.4), lz,
-                  rnd.uniform(-1.5, 1.5), rnd.uniform(-0.4, 0.4))
+            lz = rnd.uniform(0.1, 0.24)
+            pts = broken(rnd.uniform(0.2, 0.5), rnd.uniform(0.18, 0.4), lz) if rnd.random() > 0.15 else rounded(0.3, 0.25, lz)
+            place(pts, Vector((at.x, at.y, g + lz * 0.3)), rnd.uniform(-1.5, 1.5), rnd.uniform(-0.4, 0.4),
+                  rnd.uniform(-0.4, 0.4))
         s += rnd.uniform(0.3, 0.6)
     me = bpy.data.meshes.new("fieldwall")
     bm.to_mesh(me)
     bm.free()
-    for poly in me.polygons:
-        poly.use_smooth = True
     ob = bpy.data.objects.new("fieldwall", me)
     bpy.context.scene.collection.objects.link(ob)
+    bev = ob.modifiers.new("edges", "BEVEL")            # a small chamfer so the broken edges catch the light
+    bev.width = 0.01
+    bev.segments = 1
+    bev.limit_method = "ANGLE"
+    bev.angle_limit = math.radians(35)
     me.materials.append(_fieldstone_material())
-    # weeds and long grass at its foot, thicker than the field's
-    _grass(stage, None, 0, mats, seed + 11, line=(a, b, 0.3, 0.8, int(length * 45)))
+    # weeds and long grass in clumps at its foot
+    _grass(stage, None, 0, mats, seed + 11, line=(a, b, 0.25, 0.9, int(length * 1.6)))
     return ob
 
 
@@ -696,18 +765,22 @@ def _grass(stage, area, count, mats, seed=7, holes=(), line=None):
     rnd = random.Random(seed)
     bm = bmesh.new()
 
-    def spot():
-        if line:
-            la, lb, near, far, _n = line
-            dd = (lb - la)
-            sd = Vector((-dd.y, dd.x, 0)).normalized()
-            p = la + dd * rnd.uniform(-0.03, 1.03) + sd * rnd.choice((-1, 1)) * rnd.uniform(near, far)
-            return p.x, p.y
+    spots = []
+    if line:                                   # clumps of every size along the line, with bare stretches between
+        la, lb, near, far, n = line
+        dd = (lb - la)
+        sd = Vector((-dd.y, dd.x, 0)).normalized()
+        for _ in range(n):
+            c = la + dd * rnd.uniform(-0.03, 1.03) + sd * rnd.choice((-1, 1)) * rnd.uniform(near, far)
+            r = rnd.uniform(0.08, 0.45)
+            for _ in range(int(2 + 28 * rnd.random() ** 2.5)):
+                ang, rr = rnd.uniform(0, 2 * math.pi), r * math.sqrt(rnd.random())
+                spots.append((c.x + math.cos(ang) * rr, c.y + math.sin(ang) * rr))
+    else:
         (x0, y0), (x1, y1) = area
-        return rnd.uniform(x0, x1), rnd.uniform(y0, y1)
+        spots = [(rnd.uniform(x0, x1), rnd.uniform(y0, y1)) for _ in range(count)]
 
-    for _ in range(line[4] if line else count):
-        x, y = spot()
+    for x, y in spots:
         if road_distance(x, y, ROAD) < 3.0:
             continue
         if any((x - hx) ** 2 + (y - hy) ** 2 < (1.3 * hr) ** 2 for hx, hy, hr in holes):   # no grass in a fresh crater
