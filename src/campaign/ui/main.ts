@@ -51,7 +51,7 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
 import { CIVIC, civicSum, type CivicOffer, type PlotView } from '../buildings';
-import { dealsOf, housesOf, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
+import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
@@ -218,7 +218,7 @@ const natName = (id: string): string => g.nations[id]?.name ?? WORLD.nations[id]
 /** A nation's colour. A country of the wider world has one before any campaign on that world is open (the start screen). */
 const natColor = (id: string): string => g.nations[id]?.color ?? WORLD.nations[id]?.color ?? '#8a8676';
 /** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
-const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
+const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands|Dominican Republic)/.test(nm) ? `the ${nm}` : nm; };
 const upFirst = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
 /** "Germany", "Germany and Italy", "Germany, Italy, Hungary and 2 more". */
 function nameList(ids: string[], most = 3): string {
@@ -9956,4 +9956,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, crowded: () => `${namesCrowded} (${namesMoved} moved)`, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), war: (a: string, b: string) => { setWar(g, a, b); refresh(); }, shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };
+(window as any).theater = { game: () => g, ui, crowded: () => `${namesCrowded} (${namesMoved} moved)`, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), war: (a: string, b: string) => { setWar(g, a, b); refresh(); }, trade: (a: string, b: string, sign = true): boolean => { const ok = sign ? !!signTrade(g, a, b, new Map(), true) : endTrade(g, a, b); refresh(); return ok; }, shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };

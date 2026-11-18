@@ -168,7 +168,7 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
 
 /** A country's name as it reads in a sentence: "the United States", "Germany". */
 export function theName(n: Nation, start = false): string {
-  return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
+  return /^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
 /**
@@ -176,7 +176,7 @@ export function theName(n: Nation, start = false): string {
  * ("against the United States", "The United States against Canada": the UI director's words for ruling 211(f)).
  * Every line of news passes through it, so no line has to remember; "a Soviet Union that ..." is left as written.
  */
-const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands)\b/g;
+const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands|Dominican Republic)\b/g;
 /**
  * And the places whose names take "the" (data/campaign/places.json, the UI director's list and rule): "the Ruhr", "The
  * Ruhr" at the head of a line, "the Ruhr's output". A name inside a longer one keeps that one's form: one that runs on

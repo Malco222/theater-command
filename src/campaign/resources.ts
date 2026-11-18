@@ -190,7 +190,7 @@ const friendly = (g: Game, holder: string, nat: string): boolean => {
 };
 
 const natOf = (g: Game, id: string): string => g.nations[id]?.name ?? id;
-const the = (name: string): string => (/^(United|Soviet|Netherlands)/.test(name) ? `the ${name}` : name);
+const the = (name: string): string => (/^(United|Soviet|Netherlands|Dominican Republic)/.test(name) ? `the ${name}` : name);
 
 /** Where a sea lane runs on the map: in from the edge of the chart, through its seas, to the recipient's best port on the last of them. */
 function lanePath(g: Game, row: LaneRow): [number, number][] {
