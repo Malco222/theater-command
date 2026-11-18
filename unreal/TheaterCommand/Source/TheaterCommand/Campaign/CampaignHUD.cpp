@@ -5334,7 +5334,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SHorizontalBox)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Collapsed : EVisibility::Visible; })
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
@@ -7450,11 +7450,13 @@ namespace
 			PlaceLessonNote();
 			PlaceLessonPointer();
 			LookAtList();
-			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
+			// Where the pieces of the frame are now, for the plates and names that must keep out from under them. (A piece
+			// counts only while it is on the screen, every box it stands in shown: one in a row that is put away, as the
+			// bottom row is behind the start screen, keeps no rectangle.)
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
 			{
-				if (Each->GetVisibility().IsVisible())
+				if (IsShownNow(Each))
 				{
 					// (as it was last painted, in the window's own measure: the plates and the names are drawn in that)
 					const FSlateRect Rect = Each->GetPaintSpaceGeometry().GetLayoutBoundingRect();
