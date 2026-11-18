@@ -32,9 +32,18 @@
 //   TC.battleView()              -> view, without running the clock
 //   TC.battleChance()            -> { chance, contact }: the staff's chance now that the attack carries the ground, 0 to
 //                                   1, and whether the armies have met, for HAND IT TO THE STAFF's question (ruling
-//                                   226(5)); null where the battle has no such question (sea and air word their own)
+//                                   226(5)); null where the battle has no such question (sea and air word their own).
+//                                   Where the card did not know the defence (b453) it is { lo, hi, contact } instead:
+//                                   the staff's band moved as the fight has moved it, "between about 40% and 65%",
+//                                   never the chance at the true odds
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
-//                                   battle is over; null before that (after an air battle: what TC.act returns for the raid)
+//                                   battle is over; null before that (after an air battle: what TC.act returns for the raid).
+//                                   Where the army that broke was booked more than the field cost it, also pursuit: one
+//                                   line for the after card, under ON THE FIELD straight after the strength line (b464).
+//                                   An army pulled out after contact pays the rules' bill for that defeat times its bar
+//                                   squared where that is more than the field cost it; pursuit then says what the
+//                                   rearguard and the stragglers cost, in the same place: "As the Polish army withdrew
+//                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
@@ -45,6 +54,15 @@
 // str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does; each event's 'cue' is a one-shot, at its x and y. Sound names are the sound director's (sound-list.json).
+// Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet comes as
+// { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's
+// colour, w by d (the plain size every such block shares), with no name, strength, bar, state or arm, and no models of
+// its arm; its hover reads "Polish troops, not identified · Right-click to attack" (the last part only while the
+// player holds some of his own). act is only 'march', 'idle' or 'down', state only 'unknown', 'gone' or 'withdrawn'.
+// It comes whole, without 'known', once one of his has fought it (his guns' target too), once it has struck one of his
+// in contact (its guns firing from far back do not count), and once the battle is over. The dispatches never name it:
+// where it falls on one of his, the event reads "Polish troops are attacking your 2nd Regiment."; no other event about
+// it is sent at all, words or sound (the UI director, b464: a sound with nothing to read looks like a fault).
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
@@ -67,10 +85,10 @@ import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { LOOPS } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
-import { fieldBill, landTicket } from '../../../src/battle/land/ticket';
+import { fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
 import { staffOnly } from '../../../src/battle/land/offered';
-import { MOTION, type Kind } from '../../../src/battle/land/rules';
+import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
 import { SKY } from '../../../src/battle/air/book';
 import { AirSim } from '../../../src/battle/air/sim';
@@ -78,10 +96,10 @@ import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
-import type { Game } from '../../../src/campaign/types';
+import type { BattleReport, Game } from '../../../src/campaign/types';
 import type { FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
-import { endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
+import { attackOutlook, endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
 import { SEA_LOOPS } from '../../../src/battle/sea/cues';
 import { foughtOf, playedHook, seaAhead, type SeaAhead, type SeaPlayed } from '../../../src/battle/sea/handoff';
 import { SEA } from '../../../src/battle/sea/numbers';
@@ -104,6 +122,8 @@ interface Session {
   settled: unknown;
   /** A speed chosen before the armies met: the rush is over and that speed runs (the UI director, b467, as the page). */
   byHand?: boolean;
+  /** The card's band where it did not know the defence (b453): the staff speaks only this, never the true odds. */
+  band?: { lo: number; hi: number };
 }
 
 /** An air group's loop: its engines while it flies, nothing on the ground or once it is gone. */
@@ -130,9 +150,23 @@ function unitOut(u: UnitBase): Record<string, unknown> {
   };
 }
 
-function viewOut(s: Session, v: BattleView): Record<string, unknown> {
+/**
+ * An enemy block the player has not met, where his card did not know the defence (b464(2)): where it stands and whether
+ * it moves, as a commander sees the line he attacks; nothing that names, counts, arms or wears it.
+ */
+function hiddenOut(u: UnitBase): Record<string, unknown> {
+  const off = u.state === 'gone' || u.state === 'withdrawn';
+  const [w, d] = LAND.size.inf;
   return {
-    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map(unitOut), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
+    id: u.id, side: u.side, known: false, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
+    w, d, act: off ? 'down' : u.speed > 0.05 ? 'march' : 'idle', speed: Math.round(u.speed * 10) / 10, cover: u.cover ?? '', state: off ? u.state : 'unknown',
+  };
+}
+
+function viewOut(s: Session, v: BattleView): Record<string, unknown> {
+  const land = s.sim instanceof LandBattle ? s.sim : null;
+  return {
+    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
   };
@@ -182,10 +216,21 @@ export function battleCalls(h: BattleHooks) {
       const t = landTicket(g, corps, target);
       if (!t || staffOnly(t)) return null;
       const sim = new LandBattle(t);
+      // A defence the attack card did not know (b453), by the card's own outlook: its blocks show only where they stand
+      // until one of the player's has fought them (b464(2)).
+      const look = attackOutlook(g, corps, target);
+      sim.fog = !!look && !look.exact;
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
-      const ses = begin(sim, (r) => h.attack(ids, to, r.R, fieldBill(r)));
+      const ses = begin(sim, (r) => {
+        const out = h.attack(ids, to, r.R, fieldBill(r));
+        // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
+        const rep = (out as { report?: BattleReport | null } | null)?.report;
+        const pursuit = rep ? pursuitLine(t, r, rep) : null;
+        return pursuit && out && typeof out === 'object' ? { ...out, pursuit } : out;
+      });
+      if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
       const f = sim.field;
       return {
         field: { w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place },
@@ -219,7 +264,9 @@ export function battleCalls(h: BattleHooks) {
     battleChance() {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
-      return land ? { chance: Math.round(land.chanceNow() * 1000) / 1000, contact: land.contactAt !== null } : null;
+      if (!land) return null;
+      const r3 = (x: number): number => Math.round(x * 1000) / 1000, contact = land.contactAt !== null;
+      return ses.band ? { lo: r3(land.chanceAt(ses.band.lo)), hi: r3(land.chanceAt(ses.band.hi)), contact } : { chance: r3(land.chanceNow()), contact };
     },
     battleEnd() {
       const ses = need();

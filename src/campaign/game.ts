@@ -970,9 +970,15 @@ export interface AttackOpts {
  * What a battle fought on the field cost, for the campaign's bill (ruling 226(6)). 'corps': the share of its strength
  * each corps lost on the field, by corps id: each side's bill falls on its corps as the field had it. 'att' and 'def':
  * the share each side lost on the field. 'whole': the battle was fought to its end; handed to the staff, only the part
- * before is the field's, and the bill for the whole day is never less than it.
+ * before is the field's, and the bill for the whole day is never less than it. 'broke': the side whose army broke on
+ * the field (routed or driven from it). Where that side lost the day, the rules settle the pursuit (b464): it pays
+ * what the rules charge for the same result, R, as SEND THEM IN would, or the field's loss where that is larger.
+ * 'pulled': the side that withdrew its army after the armies met, and how near breaking it stood (its bar, 0 to 1).
+ * Where that side lost the day it pays the rules' bill for that defeat times the bar squared, or its field loss where
+ * that is larger (b474): an army that pulls out early gets away for little more than it had lost; one on the point of
+ * breaking could not get away at all, and pays the whole.
  */
-export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean }
+export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number } }
 
 /**
  * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one
@@ -989,6 +995,31 @@ function fieldScale(cs: Corps[], planned: number[], share: number | undefined, w
   if (now <= 1e-9) return 1;
   const want = Math.max(share / FIELD_HOLD, whole ? Math.min(now, share * FIELD_HOLD) : now);
   return want / now;
+}
+
+/**
+ * The scale for a side whose army broke on the field and lost the day (b464): the field settles the clash, the rules the
+ * pursuit. Its whole bill is the rules' own for R as SEND THEM IN charges it ('plain': each corps' share with no field
+ * split), or the field's ('share') where that is larger. It still falls on its corps as the field had it ('part': each
+ * corps' share with the split, before the scale), each held to 'cap' and then times 'mul': where the corps the field hit
+ * hardest reaches its cap, the rest of the bill falls on the others, so the side's whole bill is still the rules'.
+ */
+function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number, mul: number, share: number, of = 1): number {
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  if (tot <= 0 || mul <= 0) return 1;
+  // 'of': the part of the rules' bill it pays; all of it for a pursuit, the bar squared for a withdrawal (b474).
+  const want = Math.max(share / mul, of * (cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, plain[i]), 0) / tot)) * tot;
+  // The bill rises with the scale until each corps reaches its cap: a straight line between caps, so a few steps find it.
+  let k = 1;
+  for (let n = 0; n <= cs.length + 1; n++) {
+    let held = 0, free = 0;
+    cs.forEach((_c, i) => { if (k * part[i] >= cap) held += m[i] * cap; else free += m[i] * part[i]; });
+    if (free <= 1e-12) break;
+    const next = Math.max(0, (want - held) / free);
+    if (Math.abs(next - k) < 1e-9) break;
+    k = next;
+  }
+  return k;
 }
 
 /**
@@ -1797,8 +1828,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
   const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
-  // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)).
-  const attK = opts.field ? fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole) : 1;
+  // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)); an army that broke
+  // on the field and lost the day pays the rules' bill for that result, or the field's if larger (b464).
+  const attPart = (c: Corps, i: number, w = attW[i]): number => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // An army that pulled out after contact and lost the day pays that bill times its bar squared, or its field loss (b474).
+  const pulled = (s: 'att' | 'def'): number | null => (opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null);
+  const attOut = pulled('att');
+  const attK = !opts.field ? 1
+    : opts.field.broke === 'att' && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c, i) => attPart(c, i, 1)), 0.6, 1, opts.field.att)
+      : attOut !== null && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c, i) => attPart(c, i, 1)), 0.6, 1, opts.field.att, attOut)
+      : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
     const before = men(c);
     c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
@@ -1814,8 +1853,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
-  const defPart = (c: Corps, i: number): number => defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
-  const defK = opts.field ? fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole) : 1;
+  const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const defOut = pulled('def');
+  const defK = !opts.field ? 1
+    : opts.field.broke === 'def' && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c, i) => defPart(c, i, 1)), 0.8, a.weight, opts.field.def)
+      : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c, i) => defPart(c, i, 1)), 0.8, a.weight, opts.field.def, defOut)
+      : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
   defenders.forEach((c, i) => {
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
@@ -1921,16 +1964,22 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.faced) {
     const lost = { foot: 0, tanks: 0, guns: 0 };
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
-    // Fought on the field with the cost uneven, the corps that paid most is named in place of "fell evenly" (ruling 226(6)).
-    const most = (us: typeof attU, w: number[]): string | undefined => {
-      if (!opts.field || us.length < 2) return undefined;
-      const top = us.reduce((b, u, i) => (u.lost > us[b].lost ? i : b), 0);
-      const sum = us.reduce((x, u) => x + u.lost, 0);
-      return w[top] >= 1.25 && sum > 0 && us[top].lost / sum > 1 / us.length + 0.1 ? us[top].name : undefined;
-    };
-    // With one corps on a side there is nothing to say about how the cost fell among them (the UI director, slice 3).
-    const said = whoPaid(a.faced, lost, true, most(attU, attW), !!opts.field && attU.length < 2);
-    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, most(attU, attW), !!opts.field && attU.length < 2).text, ...(said.sign ? { sign: said.sign } : {}) };
+    // Fought on the field, how the cost fell is read from each corps' share of its own men, as its row gives it, never
+    // from men lost alone (ruling 226(6), b464(6)). "Evenly" only where no corps lost more than a quarter again the share
+    // another did; a corps is named only where its share stands a quarter clear of the next and it lost the most men
+    // too, so "paid most of it" holds either way. Otherwise, as with one corps on a side (the UI director, slice 3), the
+    // line says nothing of how the cost fell.
+    const fell = ((us: typeof attU): { most?: string; quiet: boolean } => {
+      if (!opts.field) return { quiet: false };
+      if (us.length < 2) return { quiet: true };
+      const of = (u: (typeof us)[number]): number => (u.men > 0 ? u.lost / u.men : 0);
+      const by = [...us].sort((x, y) => of(y) - of(x)), top = by[0];
+      if (of(top) <= 0) return { quiet: true };
+      if (of(top) <= 1.25 * of(by[by.length - 1])) return { quiet: false };
+      return of(top) >= 1.25 * of(by[1]) && us.every((u) => u === top || u.lost < top.lost) ? { most: top.name, quiet: false } : { quiet: true };
+    })(attU);
+    const said = whoPaid(a.faced, lost, true, fell.most, fell.quiet);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, fell.most, fell.quiet).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;

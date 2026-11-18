@@ -112,6 +112,34 @@ const stripesOf = (xp: number): number => {
   return k;
 };
 
+const BARE = /^\d+(?:st|nd|rd|th)$/;
+
+/**
+ * The divisions a corps' own name gives, in its order, as [name, short] (the design director, b464(3)): "7th Armoured
+ * Division" is that one division, and "Fifth Army: VI Corps (36th and 34th Infantry Divisions)" those two. A name that
+ * names no division, or a corps or a group beside its divisions, gives none. A bare number takes the words after the
+ * next one only in a pair ("5th and 11th Panzer Divisions") or where they are the corps' own arm; else it is just a
+ * division ("50th, 49th and 7th Armoured Divisions": the 50th and the 49th are not armour).
+ */
+export function namedDivisions(name: string, nat: string, kind: Kind): [string, string][] {
+  const inner = /\(([^()]*Division[^()]*)\)/.exec(name)?.[1];
+  const text = (inner ?? name.replace(/\s*\([^()]*\)/g, '')).replace(/^[^:]*:\s*/, '').replace(/\s+and\s+(?:the\s+)?[^,]*\b(?:Brigade|garrison|Guard)$/, '').trim();
+  if (/\b(?:Corps|Brigade|Group|garrison|Command|Force|Guard)\b/.test(text)) return [];
+  if (/^Division\s/.test(text) && !/\sand\s/.test(text)) return [[text, text]];
+  const list = /^(.+?)\s+Divisions?$/.exec(text)?.[1];
+  if (!list) return [];
+  const items = list.split(/\s*,\s*(?:and\s+)?|\s+and\s+/).filter(Boolean);
+  const arm = divisionWords(nat, kind).short;
+  return items.map((it, i) => {
+    let full = it;
+    const next = items.slice(i + 1).find((x) => !BARE.test(x));
+    const words = BARE.test(it) && next ? /^\d+(?:st|nd|rd|th)\s+(.+)$/.exec(next)?.[1] : undefined;
+    if (words && (items.length === 2 || words === arm || words.endsWith(` ${arm}`))) full = `${it} ${words}`;
+    // The short name drops "Division" where what is left still reads as a division: "7th Armoured", never "78th" or "3rd Army".
+    return [`${full} Division`, BARE.test(full) || /\bArmy$/.test(full) ? `${full} Division` : full];
+  });
+}
+
 /** The divisions of a corps, each with its share of the corps' strength and experience. Together they add up to exactly the corps. */
 export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   const first = firstNumber(g, c);
@@ -120,11 +148,13 @@ export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   const ds = characters(c.id, c.divs, 'ds'), dx = characters(c.id, c.divs, 'dx');
   // Each stands a little above or below the corps, within the room the corps' own figure leaves either side of it.
   const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
+  const named = DIVISIONS.historic[c.nat]?.[c.name] ?? namedDivisions(c.name, c.nat, c.kind);
   return Array.from({ length: c.divs }, (_, i) => {
     const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
     const no = first + i;
-    // The 1939 order of battle's own divisions, where the historian has them; else the nation's number for its kind.
-    const own = DIVISIONS.historic[c.nat]?.[c.name]?.[i];
+    // The 1939 order of battle's own divisions, where the historian has them, or those the corps' own name gives
+    // (b464(3)); else the nation's number for its kind. The number stays the nation's count either way.
+    const own = named[i];
     return {
       slot: i, no, name: own?.[0] ?? `${ordinal(no)} ${words.name}`, short: own?.[1] ?? `${ordinal(no)} ${words.short}`, kind: c.kind, nat: c.nat,
       str: s, men: Math.round(s * MEN_PER_DIV), xp: x, grade: grade(x), stripes: stripesOf(x), hardened: x >= DIVISIONS.hardened,

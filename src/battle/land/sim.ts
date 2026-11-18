@@ -11,7 +11,7 @@ import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result
 import { lineUp } from '../core/select';
 import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side } from '../core/types';
 import { thinkFor } from './ai';
-import { buildField, coverAt, groundAt, GROUNDS, heightAt, slopeAt, type LandField, type LandPlace } from './field';
+import { buildField, coverAt, groundAt, GROUNDS, heightAt, slopeAt, type Ground, type LandField, type LandPlace } from './field';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
 import { deploy, makeBlocks, type LandUnit } from './units';
 
@@ -21,6 +21,8 @@ const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
  * the way gets there or only as near as the block can go.
  */
 interface Way { m: Motion; goal: number; pts: [number, number][]; whole: boolean }
+/** River ground: a block may wade it, never stand in it (b464(5)). */
+const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
 
@@ -43,6 +45,13 @@ export class LandBattle implements BattleSim<LandUnit> {
   contactAt: number | null = null;
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
+  /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
+  private bar: Record<Side, number> = { att: 0, def: 0 };
+  /**
+   * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
+   * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
+   */
+  fog = false;
 
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
@@ -82,11 +91,26 @@ export class LandBattle implements BattleSim<LandUnit> {
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;
     if (!ev.cue && ONE_SHOTS[ev.what]) ev.cue = ONE_SHOTS[ev.what];
+    // A block the player has not met is never named in a dispatch, nor its state told (b464(2)). Where it falls on one of
+    // his, it is named as the hover names it; any other word of it, and its sound with it, is left out: a sound with
+    // nothing to read looks like a fault (the UI director, b464). The log keeps the event, blank.
+    const u = ev.unit !== undefined ? this.unit(ev.unit) : undefined;
+    if (u && !this.known(u)) {
+      const t = ev.what === 'contact' && u.engaged !== undefined ? this.unit(u.engaged) : undefined;
+      if (t && this.ticket[t.side].human) ev.text = `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`;
+      else { this.log.push({ ...ev, text: '', cue: undefined }); return; }
+    }
     this.events.push(ev);
     this.log.push(ev);
   }
 
   unit(id: number): LandUnit | undefined { return this.units.find((u) => u.id === id); }
+
+  /**
+   * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
+   * once one of his has fought it or it has struck one of his in contact (found), and once the battle is over.
+   */
+  known(u: LandUnit): boolean { return !this.fog || this.ticket[u.side].human || !!u.found || this.over !== null; }
 
   /** A block's name in a dispatch: the side nobody plays carries its country, so it never reads like the player's own (ruling 226(7)). */
   named(u: LandUnit): string { return this.ticket[u.side].human ? u.name : `${this.ticket[u.side].adj} ${u.name}`; }
@@ -163,6 +187,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'withdrawAll': {
         if (c.side !== by) return false;
+        // How near breaking it stood when it pulled out, before its blocks leave the count (b474).
+        this.bar[by] = this.breaking(by);
         for (const u of this.units) if (u.side === by && fighting(u)) { u.state = 'withdrawn'; u.act = 'down'; }
         this.finish(other(by), 'withdrew');
         return true;
@@ -399,6 +425,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       u.engaged = t?.id;
       if (!t) continue;
       if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
+      // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
+      // their guns firing from far back are not contact (b464(2)).
+      if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0 };
@@ -426,11 +455,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private spread(): void {
     const us = this.units.filter((u) => fighting(u) && u.kind !== 'fort');
-    // Never eased onto ground it can hardly cross (into the river off a bridge, tanks into a marsh), unless it stands on such already.
+    // Never eased onto ground it can hardly cross (into the river off a bridge, tanks into a marsh), unless it stands on such
+    // already; nor into the river off its bank, where foot could wade but would be left standing (b464(5)).
     const can = (u: LandUnit, ux: number, uy: number, push: number): boolean => {
       const x = clamp(u.x + ux * push, 5, this.field.w - 5), y = clamp(u.y + uy * push, 5, this.field.h - 5), pace = LAND.pace[MOTION[u.kind]];
-      const to = pace[groundAt(this.field, x, y)];
-      return to > LAND.queue.hard || (to > 0 && to >= pace[groundAt(this.field, u.x, u.y)]);
+      const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
+      if (inRiver(there) && !inRiver(here)) return false;
+      const to = pace[there];
+      return to > LAND.queue.hard || (to > 0 && to >= pace[here]);
     };
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
       if (can(u, ux, uy, push)) { u.x = clamp(u.x + ux * push, 5, this.field.w - 5); u.y = clamp(u.y + uy * push, 5, this.field.h - 5); }
@@ -482,7 +514,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
       const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
       const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
-      go(a, -ux, -uy, push); go(b, ux, uy, push);
+      // A block wading the river is never put back into it by an enemy on the bank: the enemy gives the room (b464(5)).
+      const wa = a.side !== b.side && inRiver(groundAt(this.field, a.x, a.y)), wb = a.side !== b.side && inRiver(groundAt(this.field, b.x, b.y));
+      if (!wa) go(a, -ux, -uy, wb ? 2 * push : push);
+      if (!wb) go(b, ux, uy, wa ? 2 * push : push);
     }
   }
 
@@ -626,6 +661,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const e = this.unit(u.engaged);
       if (e && this.gap(u, e) < 60) to = null;
     }
+    // A block may wade the river, never stand in it (b464(5)): with nothing left to walk there (told to hold, its target
+    // gone, rallied in the water, an enemy on top of its march) it wades on to the nearer bank, the one before it first.
+    const wading = !run && inRiver(groundAt(this.field, u.x, u.y));
+    if (wading && !to) to = this.shore(u);
     if (!to) {
       u.speed = 0;
       // Face what it is fighting, unless held by an enemy in front or by the facing its line was given.
@@ -647,14 +686,16 @@ export class LandBattle implements BattleSim<LandUnit> {
     // forms, and two blocks that shoved each other there without waiting stood locked till the battle ended (b453).
     if (gave && !run && !this.wet(u, u.x, u.y, false) && Math.sin(head) * (gave.x - u.x) + Math.cos(head) * (gave.y - u.y) > 0) { u.speed = 0; u.act = 'idle'; return; }
     const off = turn(u.face, head);
-    // Blocks wheel before they march; a runner just runs.
-    if (!run && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
+    // Blocks wheel before they march; a runner just runs, and one wading the river turns as it wades.
+    if (!run && !wading && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
     if (run) u.face = head; else this.turnTo(u, head);
     const m = MOTION[k];
     const g = groundAt(this.field, u.x, u.y);
     let pace = LAND.pace[m][g];
     if (k === 'mtn' && (g === 'rough' || g === 'rock')) pace = Math.min(1, pace * LAND.mountainFoot);
-    const up = heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
+    // Up a slope it slows; out of the river's bed it wades at the wading pace, which counts the bank already (b464(5):
+    // every bank read as a cliff above the bed, and foot crawled their last 20 m of the river at 0.8 m a second).
+    const up = inRiver(g) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
     pace *= up > 0 ? Math.max(0.4, 1 - (up / 20) * 1.5) : 1;
     let v = LAND.speed[k] * Math.max(0.12, pace) * (run ? 1.15 : 1) * (u.state === 'wavering' ? 0.85 : 1);
     const d = dist(u.x, u.y, to[0], to[1]);
@@ -835,6 +876,24 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** The cells within LAND.mouth of a bridge, worked out once. */
   private mouths: Uint8Array | null = null;
 
+  /**
+   * Out of the river (b464(5)): the nearest point off river ground the block can stand on, the bank before it rather
+   * than the one behind unless that is much the nearer (a turn away counts as perTurn metres a radian: 30 while it
+   * wades, none once the battle is over, so it is set down on the nearest bank). Where it stands already, that point.
+   */
+  private shore(u: LandUnit, perTurn = 30): [number, number] {
+    const pace = LAND.pace[MOTION[u.kind]], f = this.field;
+    const ok = (x: number, y: number): boolean => { const g = groundAt(f, x, y); return !inRiver(g) && pace[g] > 0; };
+    if (ok(u.x, u.y)) return [u.x, u.y];
+    let best: [number, number] = [u.x, u.y], score = Infinity;
+    for (let r = 8; r <= 240 && r < score; r += 8) for (let a = 0; a < 16; a++) {
+      const b = u.face + (a * Math.PI) / 8, x = clamp(u.x + Math.sin(b) * r, 5, f.w - 5), y = clamp(u.y + Math.cos(b) * r, 5, f.h - 5);
+      const sc = r + perTurn * Math.abs(turn(u.face, b));
+      if (sc < score && ok(x, y)) { score = sc; best = [x, y]; }
+    }
+    return best;
+  }
+
   private turnTo(u: LandUnit, want: number): void {
     const r = LAND.turn[u.kind] * DT;
     const d = turn(u.face, want);
@@ -892,6 +951,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const left = this.units.filter((u) => u.side === s && fighting(u));
       if (!left.length) { this.finish(other(s), this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed'); return; }
       const near = this.breaking(s);
+      this.bar[s] = near;
       // At three quarters, a line each army's way (the UI director's words for ruling 226(3)): the player's own in amber
       // on the page, the other's one dispatch. With nobody playing, nothing is said.
       if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
@@ -959,12 +1019,17 @@ export class LandBattle implements BattleSim<LandUnit> {
     // already, and there is no figure to give (the UI director, after the retest).
     if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
-    // The battle is over: nothing marches on (the blocks' cards and the 3D models alike).
+    // The battle is over: nothing marches on (the blocks' cards and the 3D models alike), and none is left standing in the
+    // river: one still wading it is set on the nearer bank (b464(5)). The figures above are already counted.
     for (const u of this.units) if (live(u) && u.state !== 'routing') { u.act = 'idle'; u.speed = 0; u.engaged = undefined; }
+    for (const u of this.units) if (live(u) && inRiver(groundAt(this.field, u.x, u.y))) { [u.x, u.y] = this.shore(u, 0); u.cover = groundAt(this.field, u.x, u.y); }
     this.over = {
       winner: verdict, how, seconds: Math.round(this.t), lost, men, R: Math.round(r * 1000) / 1000,
       level: levelOf(r, men.att > men.def), lines,
       forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0 })),
+      ...(how === 'rout' || how === 'destroyed' ? { broke: loser } : {}),
+      // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
+      ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
     };
     if (verdict !== winner) this.over.lines.push('The day went their way, but the campaign counts it as close as the odds allowed.');
     this.say({ what: 'end', text: lines[0] });
@@ -987,11 +1052,19 @@ export class LandBattle implements BattleSim<LandUnit> {
     return `The staff settled the rest of the ${what} from where it stood${moved ? ': what you had won stays won' : ''}.`;
   }
 
-  /** How long it broke after, counted from the first contact (ruling 226(6), the UI director's words). */
+  /**
+   * How long it broke after: the field's own time from the first contact to the break (ruling 226(6)), to the half
+   * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
+   * routs at odds the card calls sure or hopeless fall in.
+   */
   private brokeAfter(s: Side): string {
-    const m = Math.round((this.t - (this.contactAt ?? this.t)) / 60);
-    const who = this.army(s);
-    return m < 1 ? `${who} broke within a minute of the first shots.` : m === 1 ? `${who} broke after a minute of fighting.` : `${who} broke after ${m} minutes of fighting.`;
+    const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
+    // "Of fighting" on every form (the UI director, b464).
+    const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
+    if (halves === 0) return `${who} broke within half a minute of fighting.`;
+    const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
+    const span = m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`;
+    return `${who} broke after ${span} of fighting.`;
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
@@ -1013,6 +1086,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     return Math.max(0, Math.min(1, (k.dice[1] - RATIO.carry / Math.max(1e-6, now)) / (k.dice[1] - k.dice[0])));
   }
 
+  /**
+   * The staff's chance at a card's own odds, the fight having moved the balance since the card: for the staff's band
+   * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
+   */
+  chanceAt(card: number): number {
+    const k = this.ticket.reckoning, bal = this.standing(), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+    if (card * k.dice[0] >= RATIO.carry) return 1;
+    if (card * k.dice[1] < RATIO.carry) return 0;
+    const now = card * r;
+    return Math.max(0, Math.min(1, (k.dice[1] - RATIO.carry / Math.max(1e-6, now)) / (k.dice[1] - k.dice[0])));
+  }
+
   /** Hand it to the staff (ruling 217(4), the button named in b348): the rest is rolled on the dice, at the ratio then standing. */
   toDice(): void {
     if (this.over) return;
@@ -1024,7 +1109,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   view(as?: Side): BattleView<LandUnit> {
     const ev = this.events;
     this.events = [];
-    void as; // Every block on the field is in sight in the first slice. TODO(polish): fog of war on the field.
+    void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
     return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
   }
 }

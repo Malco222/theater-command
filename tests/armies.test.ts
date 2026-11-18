@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import data from '../data/campaign/divisions.json';
 import { addCorps, createGame, men, removeCorps } from '../src/campaign/game';
-import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, mixLine, mixOf, numberDivisions, ordinal } from '../src/campaign/armies';
+import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, mixLine, mixOf, namedDivisions, numberDivisions, ordinal } from '../src/campaign/armies';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { armiesAt, armyAt, corpsDetail, orderFog, runTurnAI, sight } from '../src/campaign/turn';
@@ -104,6 +104,34 @@ describe('the divisions of a corps', () => {
     expect(card.battles).toBe(6);
     expect(card.won).toBe(5);
     expect(card.service).toBe('Elite, battle-hardened · 6 battles');
+  });
+});
+
+describe('the names a corps gives its divisions (b464(3))', () => {
+  it('a corps that is one division is that division, and keeps the nation\'s number for its count', () => {
+    const g = open();
+    const seventh = g.corps.find((x) => x.nat === 'UK' && x.name === '7th Armoured Division')!;
+    const [d] = divisionsOf(g, seventh);
+    expect([d.name, d.short]).toEqual(['7th Armoured Division', '7th Armoured']);
+    expect(d.no).toBe(seventh.dn);
+    // More divisions than the name gives: the rest take the nation's numbers, as past the end of the historian's list.
+    const ds = divisionsOf(g, { ...seventh, id: 9999, name: 'Tobruk garrison (9th Australian Division)', kind: 'inf', divs: 3, dn: 40 });
+    expect(ds.map((x) => x.name)).toEqual(['9th Australian Division', '41st Infantry Division', '42nd Infantry Division']);
+  });
+
+  it('reads the divisions a name lists, and never gives a bare number an arm that is not its corps\'', () => {
+    const names = (name: string, nat: string, kind: Kind): string[] => namedDivisions(name, nat, kind).map((x) => x[0]);
+    expect(names('5th and 11th Panzer Divisions', 'GER', 'arm')).toEqual(['5th Panzer Division', '11th Panzer Division']);
+    expect(names('Fifth Army: VI Corps (36th and 34th Infantry Divisions)', 'USA', 'inf')).toEqual(['36th Infantry Division', '34th Infantry Division']);
+    expect(names('Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)', 'USA', 'inf')).toEqual(['1st Infantry Division', '9th Infantry Division', '45th Infantry Division']);
+    expect(names('Second Army: XXX Corps (50th, 49th and 7th Armoured Divisions)', 'UK', 'mot')).toEqual(['50th Division', '49th Division', '7th Armoured Division']);
+    expect(names('164th Light Division and Ramcke Brigade', 'GER', 'inf')).toEqual(['164th Light Division']);
+    expect(names('2nd Division (Santiago)', 'CHL', 'inf')).toEqual(['2nd Division']);
+    expect(names('Division von Broich', 'GER', 'inf')).toEqual(['Division von Broich']);
+    // A bare number keeps "Division" in its short name, so a regiment reads "1st Regiment, 78th Division".
+    expect(namedDivisions('First Army: 78th Division', 'UK', 'inf')).toEqual([['78th Division', '78th Division']]);
+    // A name that names no division, or a corps or a group beside one, gives none: those are numbered as before.
+    for (const n of ['XIX Corps', 'Tobruk garrison', 'Libyan Group', 'Albania Command', 'Ciamuria Corps and Julia Alpine Division', 'Nineteenth Army: LXXXV Corps and 11th Panzer Division']) expect(names(n, 'ITA', 'inf'), n).toEqual([]);
   });
 });
 

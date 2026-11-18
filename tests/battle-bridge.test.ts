@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { battleCalls } from '../unreal/TheaterCommand/Rules/battle-bridge';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
-import { orderAttack } from '../src/campaign/turn';
+import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
 function rig(): { g: Game; TC: ReturnType<typeof battleCalls>; fought: (number | undefined)[] } {
@@ -33,6 +33,34 @@ describe('the battle doorway for the 3D game', () => {
     const u = (st.view.units as { side: string; loop: string; figures0: number }[]).find((x) => x.side === 'att')!;
     expect(u.figures0).toBeGreaterThan(0);
     expect(typeof u.loop).toBe('string');
+  });
+  it('a defence the card did not know comes as plain stands until his blocks have fought it (b464(2))', () => {
+    const { g, TC } = rig();
+    const o = offers(g).find((x) => attackOutlook(g, x.corps, x.target)?.exact === false)!;
+    const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id)!;
+    // HAND IT TO THE STAFF's question gives the card's band, never the chance at the true odds (b453).
+    const look = attackOutlook(g, o.corps, o.target)!;
+    const ch = TC.battleChance() as { chance?: number; lo?: number; hi?: number; contact: boolean };
+    expect(ch.chance).toBeUndefined();
+    expect(ch.lo).toBeLessThanOrEqual(ch.hi!);
+    expect([ch.lo, ch.hi]).toEqual([look.chanceLo, look.chanceHi].map((x) => Math.round(x * 1000) / 1000));
+    type Out = { id: number; side: string; known?: boolean; name?: string; kind?: string; str?: number; figures?: number; w: number; d: number; state: string };
+    const units = st.view.units as Out[];
+    for (const u of units.filter((x) => x.side === 'def')) {
+      expect(u.known).toBe(false);
+      expect([u.name, u.kind, u.str, u.figures]).toEqual([undefined, undefined, undefined, undefined]);
+      expect([u.w, u.d, u.state]).toEqual([150, 40, 'unknown']);
+    }
+    expect(units.filter((x) => x.side === 'att').every((x) => x.known === undefined && !!x.name)).toBe(true);
+    const mine = units.filter((x) => x.side === 'att').map((x) => x.id);
+    TC.battleOrder({ do: 'attack', units: mine, target: units.find((x) => x.side === 'def')!.id });
+    TC.battleSpeed(4);
+    let v = TC.battleView() as { units: Out[]; over: unknown };
+    for (let i = 0; i < 400 && !v.over && v.units.every((x) => x.side === 'att' || x.known === false); i++) v = TC.battleTick(1) as typeof v;
+    // Met in the fight, the block comes whole, as any block does.
+    const met = v.units.find((x) => x.side === 'def' && x.known === undefined)!;
+    expect(met.name).toBeTruthy();
+    expect(met.str).toBeGreaterThan(0);
   });
   it('takes the player\'s orders, runs the clock, and settles through the campaign with the field\'s R', () => {
     const { g, TC, fought } = rig();
