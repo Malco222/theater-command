@@ -801,6 +801,16 @@ describe('at home, what his staff did, and elsewhere', () => {
     expect(said).toHaveLength(1);
     expect(said[0].replace(/\.$/, '')).toBe('No. 1 Bomber Group bombs Viipuri');
   });
+
+  it('nor one that opens with a German ordinal, and a number that ends a sentence still ends it (the third playtester, 84.3.1)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '2. Fliegerdivision bombs Rotterdam. The docks burn.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'The 10. Armee is cut down to 2. The rest are taken.', nat: 'BRA' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('2. Fliegerdivision bombs Rotterdam');
+    expect(said).toContain('The 10. Armee is cut down to 2');
+  });
 });
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {

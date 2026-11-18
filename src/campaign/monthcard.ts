@@ -221,8 +221,10 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const count = (n: number): string => WORDS[n] ?? String(n);
 /** The first sentence of a line of news, without its full stop. */
-// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.)
-const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$/;
+// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.
+// Nor does a German ordinal at the head of a name, "2. Fliegerdivision bombs Rotterdam": the third playtester, 84.3.1. It is
+// taken for one only at the head of the line, after "the" or in a bracket, so "reduced to 2. The army..." still ends there.)
+const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$|(?:^|\b[Tt]he |\()\d{1,2}\.$/;
 const first = (text: string): string => {
   const stop = /[.!?](?=\s|$)/g;
   for (let m = stop.exec(text); m; m = stop.exec(text)) {
