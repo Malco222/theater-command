@@ -14,7 +14,7 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount } from './navy';
+import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
@@ -28,7 +28,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -1295,8 +1295,12 @@ function ferry(g: Game, nat: string): void {
  * holds, the best first, by the sailing every staff's corps take, while the desert's threat outweighs home's: the
  * desert is short of men against the enemy at its edge, and shorter than home is against what can really cross the
  * Channel. The floor at home binds every corps that goes, the sealift caps how many go in a month, and no corps sails
- * over a crossing too dangerous for its staff ('risk') or by a sea the rule does not name ('by': the way round the
- * Cape is not priced). Those not yet in a harbour from which the way is open are brought to the best one by rail.
+ * over a crossing too dangerous for its staff ('risk') or by a sea the rule does not name ('by'). Those not yet in a
+ * harbour from which the way is open are brought to the best one by rail. Where no harbour at home has a way open
+ * to the theatre (the Mediterranean too dangerous for the troopships), the staff sends its spare corps round the
+ * Cape instead: put to sea from home, with no loss on the way, they land 'cape' months later by the arrival rows'
+ * own code (game.ts, putToSea and landVoyages; the design director's b460). The floor, the weighing and the sealift
+ * bind them as they bind a sailing; a corps already at sea for the theatre counts in the weighing as on its way.
  * It runs after the month's landings (`descent`), which have first call on the ships.
  */
 function reinforce(g: Game, nat: string): void {
@@ -1308,11 +1312,13 @@ function reinforce(g: Game, nat: string): void {
   const ground = theatreRegions(g)[k];
   const ports = R.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
   const by = new Set(R.by.map((nm) => g.seas.findIndex((z) => z.name === nm || z.key === nm)).filter((z) => z >= 0));
+  // (Corps already at sea for that front, on their way.)
+  const coming = (): number => voyagesOf(g, nat).reduce((s, v) => s + (ports.some((p) => p.id === v.to) ? v.corps.divs * v.corps.str : 0), 0);
   // Still short there, and shorter than at home: the harbours of that front its side holds, or none.
   const short = (): Region[] => {
     const f = theatreFront(g, nat, ground, ports);
     if (!f) return [];
-    const want = R.cover * f.threat - f.held;
+    const want = R.cover * f.threat - f.held - coming();
     if (want <= 0) return [];
     const h = homeThreat(g, nat, R.waves);
     return want > R.cover * h.threat - h.held ? ports.filter((p) => f.on.has(p.id)) : [];
@@ -1333,6 +1339,17 @@ function reinforce(g: Game, nat: string): void {
     .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax)
     .filter((c) => homeland(g.regions[c.reg], nat) && c.reg !== quay && !lone(c))
     .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+  // No harbour at home with a way open to the theatre: round the Cape (b460).
+  const harbours = g.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat);
+  if (R.cape > 0 && !to.some((p) => harbours.some((r) => way(r, p)))) {
+    for (const c of pool) {
+      if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
+      putToSea(g, c, to[0], R.cape);
+      useLift(g, nat);
+      to = short();
+    }
+    return;
+  }
   const waiting: Corps[] = [];
   for (const c of pool) {
     if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;

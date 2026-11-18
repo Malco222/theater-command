@@ -6,12 +6,12 @@
  */
 import data from '../../data/campaign/middle-east.json';
 import type { Corps, Game, Region } from './types';
-import { allied, atWar } from './game';
+import { allied, atWar, voyagesOf } from './game';
 import { NAVY, canPass } from './navy';
 import { stopOf } from './history';
 
 interface Floor { from: number; to: number; share: number }
-interface Reinforce { theatre: string; to: string[]; stop: number; risk: number; cover: number; waves: number; by: string[] }
+interface Reinforce { theatre: string; to: string[]; stop: number; risk: number; cover: number; waves: number; by: string[]; cape: number }
 
 export const MIDDLE_EAST = data as unknown as { floor: Record<string, Floor[]>; reinforce: Record<string, Reinforce> };
 
@@ -26,9 +26,9 @@ function floorShare(g: Game, nat: string): number | null {
   return MIDDLE_EAST.floor[nat]?.find((f) => g.turn >= f.from && g.turn <= f.to)?.share ?? null;
 }
 
-/** The size of a country's field army, as its staff counted it when its month began (`countField`), or now. */
+/** The size of a country's field army, as its staff counted it when its month began (`countField`), or now: with the corps at sea on a long passage, which belong to it wherever they are. */
 const counted = new WeakMap<Game, Record<string, [number, number]>>();
-const fieldNow = (g: Game, nat: string): number => g.corps.filter((c) => field(c, nat)).length;
+const fieldNow = (g: Game, nat: string): number => g.corps.filter((c) => field(c, nat)).length + voyagesOf(g, nat).filter((v) => field(v.corps, nat)).length;
 const fieldSize = (g: Game, nat: string): number => {
   const m = counted.get(g)?.[nat];
   return m && m[0] === g.turn ? m[1] : fieldNow(g, nat);

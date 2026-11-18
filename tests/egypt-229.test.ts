@@ -2,7 +2,8 @@
 // that leaves Britain by sea, and at the looser stops of the history dial the staff sails its spare field corps to
 // Egypt while the desert's threat outweighs home's. 1c: the desert's Commonwealth rows of the grand campaign.
 import { describe, expect, it } from 'vitest';
-import { addCorps, capture, createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
+import { addCorps, capture, createGame, declareWar, removeCorps, startPhase, voyagesOf } from '../src/campaign/game';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { runAI } from '../src/campaign/ai';
 import { setStop } from '../src/campaign/history';
 import { MIDDLE_EAST, homeFloor, homeThreat, homeland, mayLeave, theatreFront } from '../src/campaign/middleeast';
@@ -108,14 +109,83 @@ describe('the sailing to Egypt (ruling 229, 1a)', () => {
     expect(came.length).toBeLessThanOrEqual(g.nations.UK.sealift);
   });
 
-  it('no corps sails over a crossing too dangerous for the staff, and none goes round the Cape (no harbour of Egypt is on that way)', () => {
+  it('no corps sails over a crossing too dangerous for the staff: it goes round the Cape instead, two months at sea (b460)', () => {
     const g = grand(3, 12);
     push(g, 5);
-    const home = atHome(g).map((c) => c.id);
+    const home = atHome(g).map((c) => c.id), floor = homeFloor(g, 'UK');
     runAI(g, 'UK');
     expect(inEgypt(g).filter((c) => home.includes(c.id))).toEqual([]);
-    // (The way by the Cape ends in the Gulf of Aden, which has no coast: Suez is no harbour.)
+    const sea = voyagesOf(g, 'UK');
+    expect(sea.length).toBeGreaterThan(0);
+    expect(sea.length).toBeLessThanOrEqual(g.nations.UK.sealift);
+    for (const v of sea) {
+      expect(home).toContain(v.corps.id);
+      expect(v.due).toBe(14);
+      expect(g.regions[v.to].name).toBe('Alexandria');
+      // Off the map: on no ground, in no count but the field army's.
+      expect(g.corps.includes(v.corps)).toBe(false);
+      expect(g.regions.some((r) => r.units.includes(v.corps))).toBe(false);
+    }
+    // The floor binds the sailing, and the corps at sea still belong to the army it is measured against.
+    expect(homeFloor(g, 'UK')).toBe(floor);
+    expect(atHome(g).length).toBeGreaterThanOrEqual(floor);
+    // (The way by the Cape ends in the Gulf of Aden, which has no coast: Suez is no harbour, and no sailing could price it.)
     expect(g.byName['Suez'].port).toBe(false);
+  });
+
+  it('a corps round the Cape lands at Alexandria two months later as it was, by the arrival rows\' code, and is kept in a save', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    runAI(g, 'UK');
+    const sea = voyagesOf(g, 'UK').map((v) => ({ id: v.corps.id, str: v.corps.str, divs: v.corps.divs }));
+    expect(sea.length).toBeGreaterThan(0);
+    // Saved and loaded at sea.
+    const h = loadGame(saveGame(g))!;
+    expect(voyagesOf(h, 'UK').map((v) => v.corps.id)).toEqual(sea.map((s) => s.id));
+    for (const x of [g, h]) {
+      x.turn = 13;
+      startPhase(x, 'UK');
+      expect(voyagesOf(x, 'UK').length, 'not before its month').toBe(sea.length);
+      x.turn = 14;
+      startPhase(x, 'UK');
+      expect(voyagesOf(x, 'UK')).toEqual([]);
+      expect(x.atSea).toBeUndefined();
+      for (const s of sea) {
+        const c = x.corps.find((u) => u.id === s.id)!;
+        expect(c, `corps ${s.id} landed`).toBeDefined();
+        expect(x.regions[c.reg].units).toContain(c);
+        expect(['Alexandria', 'Port Said', 'Mersa Matruh', 'El Alamein', 'Cairo', 'Suez', 'Sinai', 'Faiyum']).toContain(x.regions[c.reg].name);
+        expect(c.str).toBe(s.str);
+        expect(c.divs).toBe(s.divs);
+      }
+    }
+  });
+
+  it('with Alexandria lost to the enemy, the corps at sea land at the nearest harbour their side holds on that front', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    runAI(g, 'UK');
+    expect(voyagesOf(g, 'UK').length).toBeGreaterThan(0);
+    hand(g, g.byName['Alexandria'], 'ITA');
+    g.turn = 14;
+    startPhase(g, 'UK');
+    expect(voyagesOf(g, 'UK')).toEqual([]);
+    const landed = g.corps.filter((c) => c.nat === 'UK' && g.regions[c.reg].name === 'Port Said');
+    expect(landed.length).toBeGreaterThan(0);
+  });
+
+  it('nobody goes round the Cape at stops 1 and 2, nor for a player\'s Britain', () => {
+    for (const stop of [1, 2]) {
+      const g = grand(stop, 12);
+      push(g, 5);
+      runAI(g, 'UK');
+      expect(voyagesOf(g, 'UK'), `stop ${stop}`).toEqual([]);
+    }
+    const p = grand(3, 12);
+    p.human = 'UK';
+    push(p, 5);
+    runAI(p, 'UK');
+    expect(voyagesOf(p, 'UK')).toEqual([]);
   });
 
   it('nobody sails at stops 1 and 2, nor while the desert is quiet (Italy at peace)', () => {

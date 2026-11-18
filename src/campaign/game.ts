@@ -64,7 +64,7 @@ export const DESERT = desertData as unknown as {
 };
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
-  type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
+  type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit, type Voyage,
 } from './types';
 
 const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'USA', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
@@ -2996,6 +2996,54 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   return best;
 }
 
+/** The corps a country has at sea on a long passage. */
+export const voyagesOf = (g: Game, nat: string): Voyage[] => (g.atSea ?? []).filter((v) => v.nat === nat);
+
+/**
+ * Puts a corps to sea on a long passage (ruling 229, part 1; the design director's b460: the Cape): it leaves the map
+ * from where it stands in its own country, with no loss on the way, and lands in `months` months at `to`, by the
+ * arrival rows' own code (landVoyages). Its general stays behind to wait for a command, as for a corps struck off.
+ * Who may sail, and when, is its staff's business (ai.ts, reinforce): this only takes it off the map.
+ */
+export function putToSea(g: Game, c: Corps, to: Region, months: number): void {
+  const gen = generalOf(g, c);
+  if (gen) { gen.corps = -1; c.general = null; }
+  const r = g.regions[c.reg];
+  if (c.town) quitTown(g, c); else r.units.splice(r.units.indexOf(c), 1);
+  g.corps.splice(g.corps.indexOf(c), 1);
+  if (c.job) delete c.job;
+  if (c.dug) delete c.dug;
+  if (c.relief) delete c.relief;
+  (g.atSea ??= []).push({ nat: c.nat, corps: c, from: r.id, to: to.id, due: g.turn + months });
+  g.supplyDirty = true;
+}
+
+/**
+ * Lands a country's corps whose passage ends this month, as its phase opens and after its arrival rows: at the
+ * harbour it sailed for, or, where the enemy has taken that, the nearest its side holds on that front (ruling 229,
+ * 1c); a full one sends it on to the nearest ground with room. One that can land nowhere stays at sea a month more:
+ * it is never lost on the way.
+ */
+function landVoyages(g: Game, nat: string): void {
+  if (!g.atSea?.length) return;
+  const n = g.nations[nat];
+  for (const v of [...g.atSea]) {
+    if (v.nat !== nat || v.due > g.turn) continue;
+    let reg: Region | null = g.regions[v.to];
+    if (!allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length) reg = atWar(g, nat, reg.ctrl) || allied(g, nat, reg.ctrl) ? fallbackHarbour(g, nat, reg) : null;
+    if (reg) reg = roomNear(g, nat, reg) ?? reg;
+    if (!reg || !allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length || friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    g.atSea = g.atSea.filter((x) => x !== v);
+    const c = v.corps;
+    c.reg = reg.id;
+    reg.units.push(c);
+    g.corps.push(c);
+    g.supplyDirty = true;
+    if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat)) && allied(g, g.human, reg.ctrl)) headline(g, 'info', `${c.name} of the ${n.adj} army has landed at ${reg.name}.`, nat, reg.id);
+  }
+  if (!g.atSea.length) delete g.atSea;
+}
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
@@ -3247,6 +3295,8 @@ export function startPhase(g: Game, nat: string): void {
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
   expeditions(g, nat);
+  // Corps whose long passage ends this month come ashore after the month's arrival rows (ruling 229, part 1).
+  landVoyages(g, nat);
   desertWorks(g, nat);
   mobilise(g, nat);
   monthlyCommand(g, nat);

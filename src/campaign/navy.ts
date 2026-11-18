@@ -495,6 +495,8 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
 const liftKey = (g: Game, nat: string): string => `lift:${nat}:${g.turn}`;
 /** How many more corps a nation's shipping can carry this month. */
 export const liftLeft = (g: Game, nat: string): number => Math.max(0, g.nations[nat].sealift - (g.flags[liftKey(g, nat)] ?? 0));
+/** Counts corps a nation's shipping has carried this month. */
+export const useLift = (g: Game, nat: string, n = 1): void => { g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + n; };
 
 /** Takes corps across the given seas and returns the men lost to enemy ships and aircraft on the way. */
 function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landingAt?: Region): number {
