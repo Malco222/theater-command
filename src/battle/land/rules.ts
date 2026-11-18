@@ -33,7 +33,7 @@ export const LAND = {
    * the quickest fights under a minute and a half.
    */
   rate: 0.00125,
-  /** Blows struck on the march, and by a block that is wavering. */
+  /** Blows struck on the march, or on a block giving ground at the brink (b496(1)), and by a block that is wavering. */
   moving: 0.4,
   wavering: 0.7,
   /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
@@ -95,9 +95,14 @@ export const LAND = {
    * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
    * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
    * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
-   * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds).
+   * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds). 1.3 to 1.2, and
+   * counted only as far as the attack's tanks and lorries cross, for b494: a river is only ever a cost, so every river
+   * attack lands at or below the same attack with no river. Men on foot cross the field's rivers at no cost the field
+   * needs to make up (the campaign's river attacks on foot, with no hold, land level with their no-river twins), while
+   * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
+   * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
    */
-  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.3, works: [1, 1.02, 1.06, 1.07] },
+  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.2, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {
@@ -143,6 +148,8 @@ export const LAND = {
    * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
    * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
    * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
+   * Held there, such an army's blocks no longer fresh give ground rather than stand to be ground down (the design
+   * director, b496(1): fought out, the Libyan Group at Mechili booked 1.27 of the staff's bill; now 1.06).
    */
   fresh: { str: 0.9, upTo: 5 },
   /**

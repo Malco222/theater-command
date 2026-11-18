@@ -2,8 +2,8 @@
 // orders, the end, replay, the fairness test against the dice (ruling 217(3)), and the hand-back to the campaign
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
-import { diceChance, runOut } from '../src/battle/core';
-import { buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { diceChance, runOut, type BreakCause } from '../src/battle/core';
+import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
@@ -525,6 +525,54 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(dryMet).toBe(battles);
   }, 60000);
 
+  it('an attack too wide for its lanes either side of the bend draws up in further rows behind, no two blocks on top of each other (b492(3))', () => {
+    for (const end of ['west', 'east'] as const) for (let s = 1; s <= 2; s++) {
+      const t = partly(s, [0], end);
+      t.att.forces = [{ ...t.att.forces[0], divs: 16 }, { ...t.att.forces[1], divs: 8 }, t.att.forces[2]];
+      const b = new LandBattle(t), f = b.field, z = f.zones.att, att = b.units.filter((u) => u.side === 'att');
+      expect(f.bend?.dry).toBe(end);
+      // Both lanes are too narrow for their foot in one line: it goes on in a row behind.
+      for (const dry of [true, false]) expect(new Set(att.filter((u) => !!u.dry === dry && u.kind === 'inf').map((u) => u.y)).size).toBeGreaterThan(1);
+      for (let i = 0; i < att.length; i++) for (let j = i + 1; j < att.length; j++) {
+        const a = att[i], c = att[j], dx = Math.abs(a.x - c.x) - (a.w + c.w) / 2, dy = Math.abs(a.y - c.y) - (a.d + c.d) / 2;
+        // Clear of each other, and GAP between two side by side in a row.
+        expect(Math.max(dx, dy)).toBeGreaterThan(0);
+        if (a.y === c.y) expect(dx).toBeGreaterThanOrEqual(40 - 1e-6);
+      }
+      for (const u of att) {
+        // Each in its own lanes, BEND.clear either side of the bend kept clear, within the attack's zone, off the river.
+        const off = (u.dry ? 1 : -1) * (end === 'west' ? f.bend!.x - u.x : u.x - f.bend!.x);
+        expect(off - u.w / 2).toBeGreaterThanOrEqual(BEND.clear - 1e-6);
+        expect(u.x - u.w / 2).toBeGreaterThanOrEqual(10 - 1e-6);
+        expect(u.x + u.w / 2).toBeLessThanOrEqual(f.w - 10 + 1e-6);
+        expect(u.y - u.d / 2).toBeGreaterThanOrEqual(z[1]);
+        expect(u.y + u.d / 2).toBeLessThanOrEqual(z[3]);
+        expect(onRiver(b, u.x, u.y)).toBe(false);
+      }
+    }
+  });
+
+
+  it('a river never makes an attack better than none: the tanks brought on over dry ground and the foot sent across win no more than with no river at all (b494)', () => {
+    // The design director's rule (b492(2), b494): every river attack, whole or partial, at or below its no-river twin,
+    // the same ticket with its river taken away. The hold the river gives the defence counts only as far as the attack's
+    // tanks and lorries must cross with it, so here, the armour dry, it adds nothing, and the wading is the river's cost.
+    let river = 0, none = 0, n = 0;
+    for (const odds of [1.2, 1.3]) for (const end of ['west', 'east'] as const) for (let s = 1; s <= 20; s++) {
+      const t = partly(s, [2], end, odds);
+      for (const [tk, wet] of [[t, true], [{ ...t, place: { ...t.place, river: null, dryEnd: undefined } }, false]] as const) {
+        const b = new LandBattle(tk);
+        b.ai.att = false; b.ai.def = true;
+        if (wet) expect(b.field.bend?.dry).toBe(end);
+        plainAttack(b);
+        runOut(b);
+        if (b.over!.winner === 'att') { if (wet) river++; else none++; }
+      }
+      n++;
+    }
+    expect(river / n).toBeLessThanOrEqual(none / n + 0.03);
+  }, 180000);
+
   it('where every corps crosses, or none does, the river does not bend: the field and the fight are those of a card with no say (b464(5))', () => {
     for (let s = 1; s <= 3; s++) {
       const t = sampleTicket('plains', 1.3, { seed: s * 7919 + 13, humanAtt: true, river: true });
@@ -602,6 +650,50 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(b.breaking('att')).toBeLessThan(0.75);
     expect(b.view().breaking!.att).toBeCloseTo(b.breaking('att'), 6);
   });
+  it('held at the brink, a small army gives ground with its worn rather than stand to be ground down (b496(1))', () => {
+    // A hopeless attack by one division, three regiments, with the plain order, fought out. Sent straight back in when
+    // it gives ground, the worn regiment stands at the brink as it did before b496(1).
+    const fight = (stand: boolean) => {
+      const t = sampleTicket('plains', 0.3, { seed: 7, humanAtt: true });
+      t.att.forces = [{ ...t.att.forces.find((f) => f.kind === 'inf')!, divs: 1, share: 1 }];
+      const b = new LandBattle(t);
+      b.ai.def = true;
+      const mine = b.units.filter((u) => u.side === 'att');
+      expect(mine.length).toBeLessThanOrEqual(LAND.fresh.upTo);
+      const cx = mine.reduce((a, u) => a + u.x, 0) / mine.length, cy = mine.reduce((a, u) => a + u.y, 0) / mine.length;
+      const foe = b.units.filter((u) => u.side === 'def').reduce((m, e) => (Math.hypot(e.x - cx, e.y - cy) < Math.hypot(m.x - cx, m.y - cy) ? e : m));
+      expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
+      const gave: { u: LandUnit; str: number; steady: boolean; bar: number; text: string }[] = [];
+      while (!b.over) {
+        b.step();
+        for (const e of b.view('att').events) {
+          if (e.what !== 'land:gives') continue;
+          const u = b.unit(e.unit!)!;
+          gave.push({ u, str: u.str / u.str0, steady: u.state === 'steady', bar: b.breaking('att'), text: e.text });
+          if (stand) b.command({ do: 'attack', units: [u.id], target: foe.id }, 'att');
+        }
+      }
+      return { b, mine, gave };
+    };
+    const { b, mine, gave } = fight(false);
+    // Once the army stood at the brink, the regiment worn past being fresh gave ground: it fell back, and the player read it.
+    expect(gave.length).toBe(1);
+    const g = gave[0];
+    expect(g.bar).toBeCloseTo(0.99, 6);
+    expect(g.str < LAND.fresh.str || !g.steady).toBe(true);
+    expect(g.text).toBe(`${g.u.name} gives ground.`);
+    expect(g.u.gives).toBe(true);
+    expect(g.u.order?.kind === 'withdraw' || g.u.state === 'withdrawn').toBe(true);
+    // Mark 2 as before: the army broke only once another regiment was worn, most of it having fought.
+    expect(b.over!.how).toBe('rout');
+    expect(mine.filter((u) => u !== g.u).some((u) => u.str < u.str0 * LAND.fresh.str || u.state !== 'steady')).toBe(true);
+    // And it cost less than standing there: the regiment that gave ground came off with more of its strength, and the army
+    // with less lost.
+    const st = fight(true);
+    const twin = st.mine.find((u) => u.id === g.u.id)!;
+    expect(g.u.str / g.u.str0).toBeGreaterThan(twin.str / twin.str0 + 0.05);
+    expect(b.over!.lost.att).toBeLessThan(st.b.over!.lost.att - 0.01);
+  });
 
   it('worn past what it will stand, a small army holds at the brink while most of it is fresh, in contact or not (b476(1), b480)', () => {
     // A small army, all in contact: the regiments worn are past what the army will stand, but most of it is fresh, so it
@@ -663,6 +755,74 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(brink(0)).toBeCloseTo(0.99, 6);
     for (const fort of [1, 2, 3]) expect(brink(fort)).toBeGreaterThanOrEqual(1);
   });
+  it('a large army that breaks says why: its bar and what drove it, as breaking() reckons them (b496(2))', () => {
+    // The fields at the break agree with the army as it stands, and come alike in the result, the 'broken' event and the view.
+    const agrees = (b: LandBattle): BreakCause => {
+      const o = b.over!, why = o.brokeBy!, s = o.broke!;
+      expect(o.how).toBe('rout');
+      expect(why.side).toBe(s);
+      const mine = b.units.filter((u) => u.side === s);
+      expect(mine.length).toBeGreaterThan(LAND.fresh.upTo);
+      expect(why.bar).toBe(1);
+      expect(b.breaking(s)).toBeGreaterThanOrEqual(1);
+      expect(why.worn).toBeCloseTo(b.wornShare(s), 3);
+      expect([why.spent, why.breaks, why.fought, why.wornAt]).toEqual([LAND.spent[s], LAND.breaks, LAND.fought, LAND.fresh.str]);
+      // The bar is the nearer of the two shares against their marks, and 'by' names it.
+      const w = why.worn / why.spent, r = why.running / why.breaks;
+      expect(Math.max(w, r)).toBeGreaterThanOrEqual(0.995);
+      expect(why.by).toBe(r >= w ? 'running' : 'worn');
+      expect(why.holding).toBe(false);
+      expect(why.small).toBe(false);
+      expect(why.fresh).toBeLessThanOrEqual(LAND.fought);
+      expect(why.blocks).toBe(mine.length);
+      expect(why.blocksWorn).toBe(mine.filter((u) => u.str < u.str0 * LAND.fresh.str).length);
+      expect(why.routing).toBe(mine.filter((u) => u.state === 'routing').length);
+      expect(why.fled).toBe(mine.filter((u) => u.state === 'gone').length);
+      expect(b.log.find((e) => e.what === 'broken')!.brokeBy).toEqual(why);
+      expect(b.view().breakingBy![s]).toEqual(why);
+      return why;
+    };
+    // Fought out, computer against computer: eight blocks worn across the line.
+    const fought = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    fought.ai.att = fought.ai.def = true;
+    runOut(fought);
+    expect(agrees(fought).by).toBe('worn');
+    // Worn out with every card Steady (the third playtester's Epirus): two blocks hard hit, the rest nine tenths or more.
+    const worn = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    const eight = worn.units.filter((u) => u.side === 'att');
+    expect(eight.length).toBe(8);
+    [1, 0.92, 0.92, 0.91, 0.99, 0.56, 0.65, 1].forEach((k, i) => { eight[i].str = eight[i].str0 * k; eight[i].met = true; });
+    worn.step();
+    const w = agrees(worn);
+    expect([w.by, w.blocksWorn, w.routing, w.held]).toEqual(['worn', 2, 0, false]);
+    expect(eight.every((u) => u.state === 'steady')).toBe(true);
+    // Half its power running, hardly worn.
+    const ran = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    const big = ran.units.filter((u) => u.side === 'att').sort((a, c) => c.power0 - a.power0);
+    const all = big.reduce((a, u) => a + u.power0, 0);
+    let off = 0;
+    for (const u of big) { if (off / all >= LAND.breaks) break; u.state = 'routing'; u.mor = 0; u.met = true; off += u.power0; }
+    ran.step();
+    const r = agrees(ran);
+    expect([r.by, r.routing, r.held]).toEqual(['running', 4, false]);
+    expect(r.worn).toBeLessThan(LAND.spent.att);
+    // Worn past its mark while most of it has not fought: held at the brink, then broken once all of it is in contact.
+    const held = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    const line = held.units.filter((u) => u.side === 'att').sort((a, c) => a.power0 - c.power0);
+    const hit: LandUnit[] = [], whole = line.reduce((a, u) => a + u.power0, 0);
+    for (const u of line) { if ((hit.reduce((a, x) => a + x.power0, 0) + u.power0) / whole >= 0.45) break; hit.push(u); }
+    for (const u of hit) u.str = u.str0 * 0.6;
+    for (let i = 0; i < 10; i++) held.step();
+    const now = held.view().breakingBy!.att;
+    expect(held.over).toBeNull();
+    expect([now.bar, now.by, now.holding, now.held, now.heldFor]).toEqual([0.99, 'worn', true, true, 1]);
+    expect(now.bar).toBeCloseTo(held.breaking('att'), 6);
+    expect(now.fresh).toBeGreaterThan(LAND.fought);
+    for (const u of line) u.met = true;
+    held.step();
+    const h = agrees(held);
+    expect([h.by, h.held, h.heldFor]).toEqual(['worn', true, 1]);
+  });
 
   // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
   // side a sure thing, on every ground and behind a river and fortress works, 40 battles at each odds. And dug in: the
@@ -699,6 +859,13 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(all.length).toBe(EVERY.length);
     expect(all.reduce((a, g) => a + g.gap, 0) / all.length).toBeLessThanOrEqual(0.1);
     expect(Math.abs(all.reduce((a, g) => a + g.bias, 0) / all.length)).toBeLessThanOrEqual(0.04);
+  });
+  it('a river never makes an attack better than the same attack with none: behind one, no more won than on open country (b494)', () => {
+    // 'a river crossing' is the plains card with a river before the defence, the same armies, odds and seeds: its twin.
+    // The rule is at or below; three points is the noise of 160 battles a side, and the old hold, 1.3 on every block that
+    // crossed, stood 7.5 points over.
+    expect(telling['a river crossing']).toBeDefined();
+    expect(telling['a river crossing'].bias).toBeLessThanOrEqual(telling.plains.bias + 0.03);
   });
 
   // Each practice ground's card is reckoned as the campaign's attack card would reckon those armies there (the design

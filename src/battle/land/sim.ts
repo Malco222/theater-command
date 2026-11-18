@@ -9,7 +9,7 @@ import { ONE_SHOTS } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
+import { DT, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
 import { thinkFor } from './ai';
 import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
@@ -34,6 +34,28 @@ const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdr
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
 /** A number from 0 to under 1 fixed by a whole number: where a wreck lies, never drawn from the battle's dice. */
 const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+
+/**
+ * Why an army breaks, in the UI director's words (/mnt/project-files/ui-director/field-battles/land-slice-3-review.md,
+ * "Why an army breaks", 14:44Z): the dispatch at the break, and in the past (past) the after card's line. 'who' is
+ * "Your army" or "The Greek army". The losses form gives the share worn along the whole line, and says the army was
+ * still steady where every part or most of it was (no clause where less was); the running form gives no figure.
+ */
+export function breakLine(why: BreakCause, who: string, past = false): string {
+  if (why.by === 'running') return past ? `${who} broke: half of it was running or gone, and the rest would not stand alone.` : `${who} breaks: half of it is running or gone, and the rest will not stand alone.`;
+  const pays = why.side === 'att' ? 'as much as an attack will pay before it is called off' : 'as much as a defence will pay before it gives up the ground';
+  const still = why.stillSteady === 'all' ? ', though every part of it was still steady' : why.stillSteady === 'most' ? ', though most of it was still steady' : '';
+  return `${who} ${past ? 'broke: it had lost' : 'breaks: it has lost'} about ${Math.round(why.worn * 100)}% of its men along the whole line, ${pays}${still}.`;
+}
+
+/**
+ * The player's own warning at three quarters of his bar, by what drives it (the UI director, 14:44Z). Worn along the
+ * whole line, pulling back the worn does not help, so it is not offered.
+ */
+export function warnLine(why: BreakCause): string {
+  return why.nearer === 'running' ? 'Your army is near breaking: nearly half of it is running or gone. Pull back the worn, or hand it to the staff.'
+    : `Your army is near breaking: its losses along the whole line are near what ${why.side === 'att' ? 'an attack' : 'a defence'} will pay. Withdraw, or hand it to the staff.`;
+}
 
 export class LandBattle implements BattleSim<LandUnit> {
   readonly domain = 'land' as const;
@@ -64,6 +86,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private warned: Record<Side, boolean> = { att: false, def: false };
   /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
   private bar: Record<Side, number> = { att: 0, def: 0 };
+  /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
+  private heldFor: Record<Side, number> = { att: 0, def: 0 };
   /**
    * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
    * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
@@ -92,6 +116,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const dry = ticket.place.dryEnd ?? 'west';
     const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : undefined;
     if (!bend) for (const u of att) delete u.dry;
+    // Read once the bend is settled: a river with none of the attack dry is crossed by all of it, armour too (b494).
+    const armour = att.filter((u) => MOTION[u.kind] === 'tracks' || MOTION[u.kind] === 'wheels'), all = armour.reduce((a, u) => a + u.power0, 0);
+    this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
     this.field = buildField(ticket.place, ticket.seed, bend);
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
@@ -113,11 +140,16 @@ export class LandBattle implements BattleSim<LandUnit> {
    * What a defender standing on its own ground takes of a blow: set per ground, and for a river or fortress works,
    * so that the field counts the ground once, as the card's odds already have (ruling 226(4)). The river's only where
    * the block striking crossed it: one that came on over dry ground has no river drawn before it to make up for (b464(5)).
+   * And only as far as the attack's tanks and lorries had to cross with it (armourWet): an attack on foot crosses at no
+   * cost the field must make up, so a river never makes an attack better than none (b494).
    */
   private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? H.river : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
   }
+
+  /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
+  private readonly armourWet: number;
 
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;
@@ -151,6 +183,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private get practice(): boolean { return this.ticket.place.region < 0; }
   /** "The Polish army", or on a practice ground "Your army" or "Their army" (the UI director, after the retest). */
   private army(s: Side): string { return this.practice ? (this.ticket[s].human ? 'Your army' : 'Their army') : `The ${this.ticket[s].adj} army`; }
+  /** "Your army" for the player's own, else as army() names it: the break lines' words (the UI director, 14:44Z). */
+  private whose(s: Side): string { return this.ticket[s].human ? 'Your army' : this.army(s); }
   /** "the Polish defence", or on a practice ground "your defence" or "the defence". */
   private sideOf(s: Side, noun: string): string { return this.practice ? `${this.ticket[s].human ? 'your' : 'the'} ${noun}` : `the ${this.ticket[s].adj} ${noun}`; }
 
@@ -584,7 +618,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     const gu = coverAt(this.field, u.x, u.y), gt = coverAt(this.field, t.x, t.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     if (u.state === 'wavering') p *= LAND.wavering;
-    if (u.order && u.path.length && u.speed > 0.5) p *= LAND.moving;
+    // A block giving ground at the brink (giveGround) leaves a rearguard facing the enemy: a blow on it lands at the
+    // weight of one struck by an enemy on the move (LAND.moving), as the enemy must come on after it, and on its front,
+    // never its turned back (b496(1)).
+    const rearguard = this.givingGround(t);
+    if ((u.order && u.path.length && u.speed > 0.5) || rearguard) p *= LAND.moving;
     let nerveMul = 1;
     if (u.kind === 'art') {
       const close = this.gap(u, t) < LAND.guns.closeAt;
@@ -594,7 +632,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
     const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
-    const aspect = aspectOf(t.face, t.x, t.y, u.x, u.y);
+    const aspect = rearguard ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
     let take = LAND.cover[gt];
     // Men on foot beside a wreck take light cover, either army's (b477).
@@ -650,7 +688,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.state === 'routing') {
       if (u.clear > N.quiet) u.mor = Math.min(u.mor0, u.mor + N.runnerRecover * DT);
       if (!this.broke[u.side] && u.clear > N.quiet && u.mor >= N.rally && u.str > N.shattered) {
-        u.state = 'wavering'; u.order = null; u.path = []; u.act = 'idle';
+        u.state = 'wavering'; u.order = null; u.path = []; u.act = 'idle'; u.gives = false;
         this.say({ what: 'rallied', unit: u.id, side: u.side, text: `${this.named(u)} has rallied.`, x: u.x, y: u.y });
       }
       return;
@@ -993,11 +1031,40 @@ export class LandBattle implements BattleSim<LandUnit> {
    * own share, so it never takes the army with it while the rest is fresh (ruling 226(2)). The army bar shows this.
    */
   breaking(s: Side): number {
-    const worn = this.wornShare(s) / LAND.spent[s];
+    return this.brink(s).bar;
+  }
+
+  /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
+  private brink(s: Side): { bar: number; worn: number; running: number; holding: boolean } {
+    const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / LAND.spent[s];
     // Worn past what it will stand, it still holds while most of it is fresh or has not been in the fight: the bar waits
-    // at the brink (b476(1)).
-    const held = worn >= 1 && this.freshShare(s) > LAND.fought ? 0.99 : 1;
-    return Math.min(held, Math.max(this.brokenShare(s) / LAND.breaks, worn));
+    // at the brink (b476(1)). A small army held there gives ground with its worn (giveGround).
+    const holding = over >= 1 && this.freshShare(s) > LAND.fought;
+    return { bar: Math.min(holding ? 0.99 : 1, Math.max(running / LAND.breaks, over)), worn, running, holding };
+  }
+
+  /**
+   * Why an army's bar stands where it does (b496(2)): the two shares breaking() takes the nearer of, each against its
+   * mark, its blocks as their cards read them, and the fresh hold. Worn across the whole line, a large army breaks at
+   * LAND.spent of its power lost (13 in 100 for an attack) while every block's card may still read Steady: these are the
+   * numbers for the words that say so. Read at the break for the result and the 'broken' event, and as it stands for the
+   * view; nothing in the fight reads it.
+   */
+  breakCause(s: Side): BreakCause {
+    const r3 = (x: number): number => Math.round(x * 1000) / 1000;
+    const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
+    const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? 'running' : 'worn';
+    const on = mine.filter((u) => u.state !== 'withdrawn'), p0 = on.reduce((a, u) => a + u.power0, 0);
+    const steady = p0 > 0 ? on.filter((u) => u.state === 'steady').reduce((a, u) => a + u.power0, 0) / p0 : 0;
+    return {
+      side: s, bar: r3(b.bar), by: Math.max(w, r) < 1 ? 'none' : nearer, nearer,
+      worn: r3(b.worn), spent: LAND.spent[s], running: r3(b.running), breaks: LAND.breaks,
+      fresh: r3(this.freshShare(s)), fought: LAND.fought, small: this.freshHold[s],
+      holding: b.holding, held: this.heldFor[s] > 0, heldFor: Math.round(this.heldFor[s] * 10) / 10,
+      blocks: mine.length, blocksWorn: mine.filter((u) => u.str < u.str0 * LAND.fresh.str).length, wornAt: LAND.fresh.str,
+      routing: mine.filter((u) => u.state === 'routing').length, fled: mine.filter((u) => u.state === 'gone').length,
+      steady: r3(steady), stillSteady: steady >= 0.9995 ? 'all' : steady > 0.5 ? 'most' : 'less',
+    };
   }
 
   /**
@@ -1008,35 +1075,72 @@ export class LandBattle implements BattleSim<LandUnit> {
    * works keep its men fresh and the card prices the works already, so the field never prices them twice (b488).
    */
   private freshShare(s: Side): number {
-    const small = this.freshHold[s];
     let n = 0;
-    for (const u of this.units) {
-      if (u.side !== s || !fighting(u)) continue;
-      if ((small && u.state === 'steady' && u.str >= u.str0 * LAND.fresh.str) || (!u.met && u.str >= u.str0 * 0.97)) n += u.power0;
-    }
+    for (const u of this.units) if (u.side === s && fighting(u) && this.fresh(u)) n += u.power0;
     return n / this.power[s];
+  }
+
+  /** A block that holds its army at the brink (freshShare): fresh, in a small army, or not yet in the fight. */
+  private fresh(u: LandUnit): boolean {
+    return (this.freshHold[u.side] && u.state === 'steady' && u.str >= u.str0 * LAND.fresh.str) || (!u.met && u.str >= u.str0 * 0.97);
+  }
+
+  /**
+   * A small army held at the brink by its fresh blocks does not stand there to be ground down (the design director,
+   * b496(1)): each block of it no longer fresh gives ground, falling back off the field while the fresh hold, and is
+   * struck only on its rearguard as it goes (blow); so is one already running, behind the fresh. The fresh still hold
+   * the army until most of it has fought. A block already falling back is not sent again, and says nothing; one the
+   * player sends in again is left to the player (gives stays set until it rallies).
+   */
+  private giveGround(s: Side, left: LandUnit[]): void {
+    for (const u of this.units) if (u.side === s && u.state === 'routing') u.gives = true;
+    for (const u of left) {
+      if (u.gives || this.fresh(u)) continue;
+      u.gives = true;
+      if (u.order?.kind === 'withdraw') continue;
+      this.send(u, { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h });
+      u.engaged = undefined;
+      this.say({ what: 'land:gives', unit: u.id, side: s, text: `${this.named(u)} gives ground.`, x: u.x, y: u.y });
+    }
+  }
+
+  /** Giving ground at the brink, and still on its way back or running (an order of the player's may send it in again). */
+  private givingGround(u: LandUnit): boolean {
+    return !!u.gives && (u.order?.kind === 'withdraw' || u.state === 'routing');
   }
 
   private judge(): void {
     for (const s of ['att', 'def'] as Side[]) {
       const left = this.units.filter((u) => u.side === s && fighting(u));
-      if (!left.length) { this.finish(other(s), this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed'); return; }
-      const near = this.breaking(s);
+      if (!left.length) {
+        const how = this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed';
+        // Driven from the field, it broke: why, as it stood when the last block left the fight (b496(2)).
+        this.finish(other(s), how, undefined, how === 'destroyed' ? this.breakCause(s) : undefined);
+        return;
+      }
+      const b = this.brink(s), near = b.bar;
       this.bar[s] = near;
+      if (b.holding) this.heldFor[s] += DT;
+      // Held at the brink, a small army gives ground with its worn (b496(1)).
+      if (b.holding && this.freshHold[s]) this.giveGround(s, left);
       // At three quarters, a line each army's way (the UI director's words for ruling 226(3)): the player's own in amber
       // on the page, the other's one dispatch. With nobody playing, nothing is said.
       if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
         this.warned[s] = true;
-        this.say({ what: 'nearBreak', side: s, text: this.ticket[s].human ? 'Your army is near breaking: pull back the worn, or hand it to the staff.' : `${this.army(s)} is near breaking.` });
+        // By what drives the bar (the UI director, 14:44Z); the enemy's stays one plain dispatch, with no fields.
+        const own = !!this.ticket[s].human, why = own ? this.breakCause(s) : undefined;
+        this.say({ what: 'nearBreak', side: s, text: why ? warnLine(why) : `${this.army(s)} is near breaking.`, ...(why ? { brokeBy: why } : {}) });
       }
       // An army breaks when half its power is running or gone, or when it has bled as much as an army of its side
       // will stand (LAND.spent): so a battle fought out costs about what the campaign bills for its result (b356).
       if (near >= 1) {
         this.broke[s] = true;
+        // Why it broke, as it stood at the break, for the result, the event and the 3D game (b496(2)).
+        const why = this.breakCause(s);
         // The blocks that broke are already running; the rest fall back in order with their army.
         for (const u of left) { u.fellBack = true; u.order = { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h }; u.path = []; u.keepFace = null; u.engaged = undefined; }
-        this.say({ what: 'broken', side: s, text: `${this.army(s)} breaks.` });
-        this.finish(other(s), 'rout');
+        this.say({ what: 'broken', side: s, text: breakLine(why, this.whose(s)), brokeBy: { ...why } });
+        this.finish(other(s), 'rout', undefined, why);
         return;
       }
     }
@@ -1053,7 +1157,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     return { att: lost.att / this.power.att, def: lost.def / this.power.def };
   }
 
-  private finish(winner: Side, how: FieldResult['how'], R?: number): void {
+  private finish(winner: Side, how: FieldResult['how'], R?: number, why?: BreakCause): void {
     if (this.over) return;
     const lost = this.lostShares();
     // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
@@ -1085,6 +1189,9 @@ export class LandBattle implements BattleSim<LandUnit> {
             : how === 'destroyed' ? `${this.army(loser)} was driven from the field.`
               : this.staffLine(),
     ];
+    // Broken, why, in the past: straight after the line that says when (the UI director, 14:44Z). So after a rout the
+    // strength line is the third, and the pursuit's line comes after it.
+    if (how === 'rout' && why && why.by !== 'none') lines.push(breakLine(why, this.whose(loser), true));
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
@@ -1098,7 +1205,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       winner: verdict, how, seconds: Math.round(this.t), lost, men, R: Math.round(r * 1000) / 1000,
       level: levelOf(r, men.att > men.def), lines,
       forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0 })),
-      ...(how === 'rout' || how === 'destroyed' ? { broke: loser } : {}),
+      ...(how === 'rout' || how === 'destroyed' ? { broke: loser, ...(why ? { brokeBy: why } : {}) } : {}),
       // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
       ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
     };
@@ -1181,7 +1288,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt };
   }
 }
 

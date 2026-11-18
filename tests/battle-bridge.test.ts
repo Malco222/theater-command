@@ -94,4 +94,28 @@ describe('the battle doorway for the 3D game', () => {
     expect(out.report!.odds).toBeCloseTo(v.over!.R);
     expect(() => TC.battleView()).toThrow();
   });
+  it('says why an army broke: each bar\'s cause in the view, and the same at the break in the event, the result and the end (b496(2))', () => {
+    const { g, TC } = rig();
+    const o = offers(g)[0];
+    const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id)!;
+    const units = st.view.units as { id: number; side: string }[];
+    TC.battleOrder({ do: 'attack', units: units.filter((x) => x.side === 'att').map((x) => x.id), target: units.find((x) => x.side === 'def')!.id });
+    TC.battleSpeed(4);
+    type Cause = { side: string; bar: number; by: string };
+    type View = { over: { broke?: string; brokeBy?: Cause } | null; events: { what: string; brokeBy?: Cause }[]; breaking: Record<string, number>; breakingBy: Record<string, Cause> };
+    let v = st.view as unknown as View;
+    expect(v.breakingBy.att.side).toBe('att');
+    const said: View['events'] = [];
+    for (let i = 0; i < 200 && !v.over; i++) {
+      v = TC.battleTick(1) as unknown as View;
+      said.push(...v.events);
+      for (const s of ['att', 'def']) expect(v.breakingBy[s].bar).toBeCloseTo(v.breaking[s], 3);
+    }
+    const why = v.over!.brokeBy!;
+    expect(why.side).toBe(v.over!.broke);
+    expect(why.bar).toBe(1);
+    expect(said.find((e) => e.what === 'broken')!.brokeBy).toEqual(why);
+    expect(v.breakingBy[why.side]).toEqual(why);
+    expect((TC.battleEnd() as { brokeBy?: Cause }).brokeBy).toEqual(why);
+  });
 });

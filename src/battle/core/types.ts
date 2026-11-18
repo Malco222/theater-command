@@ -45,6 +45,11 @@ export interface Reckoning {
   /** The run of the day's luck the dice would roll, and the odds at which the dice give an even chance. */
   dice: [number, number];
   even: number;
+  /**
+   * Where the attack card did not know the defence (b453): the odds as the card put them to the player, the middle of
+   * the staff's band, where its bar stands. Absent, the card printed 'odds' itself.
+   */
+  seen?: number;
 }
 
 /** One corps (or ship group) as the campaign hands it to the field. */
@@ -236,11 +241,83 @@ export interface FieldEvent {
   text: string;
   /** The domain's own details, for the 3D side (how a ship went down, where a barrage fell). */
   extra?: Record<string, unknown>;
+  /**
+   * On 'broken' (land): why the army broke, as it stood at the break (b496(2)); the same as the result's brokeBy. On the
+   * player's own 'nearBreak', what drives his bar as it stood at the warning (never on the enemy's, which under fog would
+   * tell more than its bar shows).
+   */
+  brokeBy?: BreakCause;
   /** The sound that answers it: a name from the sound director's list (/mnt/project-files/sound/sound-list.json). */
   cue?: string;
   /** Where on the field it happened, for the camera and for placing the sound. */
   x?: number;
   y?: number;
+}
+
+/**
+ * What drives an army's bar on the land field, and so why it broke (b496(2)): the two measures the bar takes the
+ * nearer of, its blocks as their cards read them, and the fresh hold. An army breaks when its bar reaches 1: when 'worn'
+ * reaches 'spent' and the fresh hold no longer keeps it at the brink, or when 'running' reaches 'breaks'. Shares are of
+ * the army's power at the start, each block weighted by its power, so one big block worn counts for more than a small
+ * one; all to three places. Numbers only: the words are the UI director's.
+ */
+export interface BreakCause {
+  side: Side;
+  /** Its bar, how near breaking it stands, 0 to 1, as breaking() reckons it: 1 at a break, 0.99 while the hold holds it. */
+  bar: number;
+  /**
+   * Which measure filled the bar: 'nearer' once it has reached its mark, 'none' where neither has (an army driven from
+   * the field may reach neither).
+   */
+  by: 'worn' | 'running' | 'none';
+  /**
+   * Which measure stands higher against its mark, reached or not: 'worn' (worn / spent) or 'running' (running / breaks);
+   * at a tie, 'running', and 'worn' while both are 0. The warning's words go by it (the UI director: 'losses' is 'worn').
+   */
+  nearer: 'worn' | 'running';
+  /** The share of its power worn away across the whole line: strength lost by every block, runners and fled too. */
+  worn: number;
+  /** What an army of its side will stand worn (LAND.spent: 0.13 for an attack, 0.18 for a defence). */
+  spent: number;
+  /** The share of its power in blocks running or fled from the field, each counted whole as it started. */
+  running: number;
+  /** What it will stand running (LAND.breaks, a half). */
+  breaks: number;
+  /**
+   * The share of its power that holds it at the brink: blocks still in the fight that have not met the enemy and stand
+   * near whole, and in a small army also the fresh (see 'small').
+   */
+  fresh: number;
+  /** Worn to its mark, it holds at the brink (bar 0.99) while 'fresh' is more than this (LAND.fought, a half). */
+  fought: number;
+  /**
+   * Whether its steady blocks at nine tenths of their strength or more count as fresh: an army of five blocks or fewer,
+   * not a defence behind works or in a fort (b484, b488).
+   */
+  small: boolean;
+  /** Worn to its mark, the fresh hold keeps its bar at the brink (0.99) now. Never at a break. */
+  holding: boolean;
+  /** The fresh hold had kept it at the brink at some time this battle. */
+  held: boolean;
+  /** For how many battle seconds in all the fresh hold has kept it at the brink, to a tenth. */
+  heldFor: number;
+  /** Its blocks: every one it brought, fortress works too. */
+  blocks: number;
+  /** How many of its blocks stand below 'wornAt' of their starting strength, whatever their state (runners and fled too). */
+  blocksWorn: number;
+  /** Below this share of its starting strength a block counts as worn: LAND.fresh.str, nine tenths, the hold's line. */
+  wornAt: number;
+  /** How many of its blocks are running. */
+  routing: number;
+  /** How many of its blocks have fled the field ('gone'; not those the player withdrew). */
+  fled: number;
+  /**
+   * The share of its power, counted as it started, in blocks whose card reads Steady, of all it brought but those the
+   * player withdrew; and that in the UI director's three words: 'all' every part of it steady, 'most' more than half,
+   * 'less' the rest. For the break line's "though every part of it was still steady" (the UI director, 14:44Z).
+   */
+  steady: number;
+  stillSteady: 'all' | 'most' | 'less';
 }
 
 /** How a battle ended. */
@@ -263,6 +340,11 @@ export interface FieldResult {
   forces: { corps: number; side: Side; lost: number }[];
   /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
   broke?: Side;
+  /**
+   * Why it broke (land, b496(2)): its bar and what drove it, as it stood at the break, where 'broke' is set. Driven from
+   * the field ('destroyed'), none of its blocks was left in the fight, and its bar may stand short of 1 ('none').
+   */
+  brokeBy?: BreakCause;
   /**
    * The side that withdrew its army after the armies met, and how near breaking it stood then (its bar, 0 to 1): it pays
    * the rules' bill for that defeat times the bar squared, or its field loss where that is larger (b474).
@@ -290,6 +372,8 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * The player's own army is warned at three quarters ('nearBreak').
    */
   breaking?: Record<Side, number>;
+  /** What drives each army's bar as it stands now (b496(2)): the same fields the result's brokeBy gives at the break. */
+  breakingBy?: Record<Side, BreakCause>;
   /** Battle time of the first contact between the lines, null before it: until then the screens may run the clock faster (ruling 226(1)). */
   contact?: number | null;
 }

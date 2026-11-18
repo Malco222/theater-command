@@ -273,7 +273,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="bbal" title="Each side's strength still standing. ${S.offer?.band ? 'The pale band is where the attack card put it: the defence is not fully known.' : 'The pale mark is where the attack card put it.'}">
         <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Yours'}</span><span id="ratio" class="tc-data${S.offer?.band ? ' is-band' : ''}"></span><span>${S.offer ? esc(theirs.adj) : 'Theirs'}</span></div>
         <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
-        <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
+        <div class="bbreak" title="When a bar fills, that army breaks and leaves the field. It fills with the men lost along the whole line, or with the share of it running or gone, whichever is nearer, so an army can break while every part of it is still steady."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands.">Hand it to the staff</button>
@@ -901,7 +901,11 @@ function frame(): void {
     S.dispatch = { t: b.t, what: 'contact', text: going ? `${who} is moving.` : `${who} stands where it is, without orders.`, unit: -1 }; S.dispatchAge = 0;
   }
   // His own army near breaking has its amber line that stays (fwarn); everything else comes through the strip.
-  for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
+  for (const e of v.events) {
+    // The amber line says what drives his bar (the UI director, 14:44Z): the sim's words at the warning.
+    if (e.what === 'nearBreak' && e.side === S.scene.me) { byId('fwarn')!.textContent = e.text; continue; }
+    if (e.text) { S.dispatch = e; S.dispatchAge = 0; }
+  }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = b.unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
   drawFrame(ctx, b, S.scene, S.field);
@@ -964,8 +968,10 @@ function showAfter(): void {
   const pct = (x: number): string => (x < 1e-4 ? 'none' : x < 0.005 ? 'less than 1%' : `about ${Math.round(x * 100)}%`);
   // The army that broke, booked more than the field cost it: the pursuit's line straight after the strength line (b464).
   const pursuit = rep ? pursuitLine(t, r, rep) : null;
+  // After a rout the line saying why comes second, so the strength line is the third (the sim's finish()).
+  const strengthAt = r.how === 'rout' && r.brokeBy && r.brokeBy.by !== 'none' ? 2 : 1;
   const shown = bill ? [r.lines[0], `Your attack lost ${pct(bill.att)} of its strength, the defence ${pct(bill.def)}.`, ...r.lines.slice(1)]
-    : pursuit ? [...r.lines.slice(0, 2), pursuit, ...r.lines.slice(2)] : r.lines;
+    : pursuit ? [...r.lines.slice(0, strengthAt + 1), pursuit, ...r.lines.slice(strengthAt + 1)] : r.lines;
   const fieldLines = shown.map((l) => `<li>${esc(l)}</li>`).join('');
   let told = '', price = '', sides = '';
   if (rep) {

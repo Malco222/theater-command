@@ -66,6 +66,12 @@ export interface LandUnit extends UnitBase {
    */
   fellBack?: boolean;
   /**
+   * Given ground at the brink (b496(1)): worn in a small army that its fresh blocks hold at the brink, it falls back off
+   * the field rather than stand to be ground down, and while it goes, or runs, it is struck only on its rearguard. Its
+   * order is a withdrawal; the player may send it in again.
+   */
+  gives?: boolean;
+  /**
    * A defence's reserve (the design director, b407): 'held' behind the line until the line is struck, then 'sent' at
    * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too.
    * A block that is sent no longer goes back to the ground it was drawn up on.
@@ -227,8 +233,9 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
 }
 
 /**
- * Draws blocks up in rows about cx. Between lo and hi (metres east) where they are given: a row that would run past
- * either is moved in, and closed up where it is wider than the room.
+ * Draws blocks up in rows about cx. Between lo and hi (metres east) where they are given, the attack's lanes either side
+ * of the river's bend: a row that would run past either is moved in, and a row wider than the room goes on in a further
+ * row behind it, GAP kept between its blocks, so no two are drawn up on top of each other (b492(3)).
  */
 function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: number, hi?: number): void {
   const z = f.zones[side];
@@ -236,28 +243,29 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   const front = side === 'att' ? z[3] - 40 : z[1] + 40;
   const lines = rowsOf(mine);
   const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
+  /**
+   * Where a row stands on the wings: half on each, beyond the ends of the front line. None where a wing would run off
+   * the field or past its lane (a big army's long front): the row stands centred behind the line instead, so no two blocks are drawn up
+   * on top of each other.
+   */
+  const wingsAt = (row: LandUnit[]): number[] | null => {
+    const span = (lines[0].length * (150 + GAP)) / 2;
+    const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + GAP)); });
+    return row.every((u, i) => at[i] - u.w / 2 >= x0 && at[i] + u.w / 2 <= x1) ? at : null;
+  };
   /** Draws a row up at depth y; says whether it stood on the wings (false: centred). */
   const place = (row: LandUnit[], y: number, wings: boolean): boolean => {
-    const gap = GAP;
-    if (wings) {
-      // Half on each wing, beyond the ends of the front line; where a wing would run off the field (a big army's long
-      // front), the row stands centred behind the line instead, so no two blocks are drawn up on top of each other.
-      const span = (lines[0].length * (150 + gap)) / 2;
-      const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + gap)); });
-      if (row.every((u, i) => at[i] - u.w / 2 >= x0 && at[i] + u.w / 2 <= x1)) {
-        row.forEach((u, i) => { u.x = at[i]; u.y = y; });
-        return true;
-      }
+    const at = wings ? wingsAt(row) : null;
+    if (at) {
+      row.forEach((u, i) => { u.x = at[i]; u.y = y; });
+      return true;
     }
     const width = rowWidth(row);
     let x = cx - width / 2;
-    for (const u of row) { u.x = x + u.w / 2; u.y = y; x += u.w + gap; }
+    for (const u of row) { u.x = x + u.w / 2; u.y = y; x += u.w + GAP; }
     if (lo !== undefined && hi !== undefined && row.length > 0) {
-      // Kept to its own lanes: closed up where the room is short, and moved in off the river's bend.
-      const first = row[0], last = row[row.length - 1], from = first.x, span = last.x - from;
-      const fits = x1 - x0 - first.w / 2 - last.w / 2;
-      if (span > fits && span > 0) for (const u of row) u.x = from + ((u.x - from) * Math.max(0, fits)) / span;
-      const a = first.x - first.w / 2, b = last.x + last.w / 2;
+      // Kept to its own lanes: moved in off the river's bend.
+      const a = row[0].x - row[0].w / 2, b = row[row.length - 1].x + row[row.length - 1].w / 2;
       const shift = a < x0 ? x0 - a : b > x1 ? x1 - b : 0;
       for (const u of row) u.x += shift;
     }
@@ -276,8 +284,44 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
       held.unshift(...lines[0].splice(at, 1));
     }
   }
-  place(lines[0], front, false);
-  const wide = place(lines[1], front - dir * 110, true);
-  if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
-  place(lines[2], front - dir * 230, false);
+  if (lo === undefined || hi === undefined) {
+    place(lines[0], front, false);
+    const wide = place(lines[1], front - dir * 110, true);
+    if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
+    place(lines[2], front - dir * 230, false);
+    return;
+  }
+  // In its lanes (b492(3)): each line cut into rows no wider than the room, the front ones full and the rest behind.
+  // A line's first row stands where it would with room enough (the tanks 110 m behind the front line, the guns 230 m),
+  // or further back to keep GAP behind the row before it, as each row after it does. Where the last row would stand
+  // past the back of the zone, the gaps between rows close up, 5 m at a time to no less than 10 m; past that the rows
+  // run on back toward the attacker's edge of the field.
+  const rows: { us: LandUnit[]; at: number; first: boolean; wings: boolean }[] = [];
+  const cut = (line: LandUnit[], at: number): void => line.forEach((u, i) => {
+    const r = rows[rows.length - 1];
+    if (i > 0 && rowWidth([...r.us, u]) <= x1 - x0) r.us.push(u);
+    else rows.push({ us: [u], at, first: i === 0, wings: false });
+  });
+  cut(lines[0], 0);
+  // The tanks stand on the wings only beside a front line that stands in one row.
+  const wide = rows.length <= 1 && lines[1].length > 0 && wingsAt(lines[1]) !== null;
+  if (wide) rows.push({ us: lines[1], at: 110, first: true, wings: true });
+  else cut(lines[1], 110);
+  cut(held, wide || !lines[1].length ? 110 : 170);
+  for (const u of held) u.reserve = 'held';
+  cut(lines[2], 230);
+  const deep = (us: LandUnit[]): number => Math.max(...us.map((u) => u.d));
+  const steps = (gap: number): number[] => {
+    const ys: number[] = [];
+    rows.forEach((r, i) => {
+      const behind = i ? ys[i - 1] - dir * (deep(rows[i - 1].us) / 2 + gap + deep(r.us) / 2) : front;
+      ys.push(!r.first ? behind : dir > 0 ? Math.min(front - r.at, behind) : Math.max(front + r.at, behind));
+    });
+    return ys;
+  };
+  const back = dir > 0 ? z[1] : z[3], n = rows.length - 1;
+  const past = (ys: number[]): boolean => n >= 0 && dir * (ys[n] - back) < deep(rows[n].us) / 2;
+  let ys = steps(GAP);
+  for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
+  rows.forEach((r, i) => place(r.us, ys[i], r.wings));
 }

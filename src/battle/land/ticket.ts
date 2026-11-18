@@ -11,7 +11,7 @@ import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
 import { townName, townSize } from '../../campaign/towns';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
-import { corpsKnown } from '../../campaign/intel';
+import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import type { LandPlace } from './field';
@@ -89,6 +89,9 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     ...(dry ? { dryEnd: dry } : {}),
   };
   const date = turnToDate(g.turn);
+  // The odds as the attack card put them to the player (attackOutlook in turn.ts): a band where it did not know the
+  // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it.
+  const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   return {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
@@ -96,7 +99,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // game.ts): the field lays the river before those, and no others.
     att: sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined),
     def: sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))),
-    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice) },
+    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(band.exact ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,

@@ -44,14 +44,16 @@
 //                                   squared where that is more than the field cost it; pursuit then says what the
 //                                   rearguard and the stragglers cost, in the same place: "As the Polish army withdrew
 //                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
+//                                   Where an army broke on the field, also brokeBy: why it broke, as below (b496(2)).
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //
 // A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }
-// (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)) and contact
-// (battle seconds of the first contact, null before it). Each unit: { id, side, kind, name, x, y, face,
-// str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
+// (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)), breakingBy:
+// { att, def } (what drives each bar as it stands, below) and contact (battle seconds of the first contact, null before
+// it). Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
+// cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does (its engine or its march; a block in a fight carries no fight loop of its own, as its shots by its nation's
 // weapons and the shared beds are the fight, in the sound director's plan /mnt/project-files/sound/mix/mix.json, which
@@ -63,6 +65,10 @@
 // action carry far_guns_01 to 03 every 6 to 20 s in place of a loop; a block fighting among buildings plays
 // street_battle as its loop, with mg_town_01 to 03 dropped in; a lorry idles on lorry_idle_loop and drives on
 // lorry_drive_loop. Several units playing the same bed or drops near each other should share one voice, not stack.
+// An army of five blocks or fewer that its fresh blocks hold at the brink (its bar stands at 0.99, b480) does not stand
+// there to be ground down (b496(1)): each of its blocks no longer fresh gives ground. Its order turns to 'withdraw', as
+// a block the player sends back, an event { what: 'land:gives' } says so ("1st Regiment, 4th Motorised gives ground."),
+// and it leaves the field as such a block does (state 'withdrawn'). Nothing new to draw.
 // Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet, of a corps
 // the card did not identify (a corps it names shows whole from the start, b476(3)), comes as
 // { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's
@@ -95,6 +101,31 @@
 // 'also.UK') takes the name only where her own 'fits' lists it; with no entry she is painted plain, never with the
 // name shrunk or cut to fit (the modeller, 13:38Z).
 // The block's hover may add one line naming them (crewLine in src/battle/land/crews.ts).
+// Why an army broke (b496(2)): a large army breaks worn across its whole line, 13 in 100 of its power lost attacking,
+// 18 defending, while every block's card may still read Steady, so the field gives the numbers for the words that say
+// why. The words are the UI director's, and the field speaks them already: the 'broken' event's text is the break line
+// ("Your army breaks: it has lost about 13% of its men along the whole line, as much as an attack will pay before it is
+// called off, though every part of it was still steady."), the player's own 'nearBreak' text is the warning by what
+// drives his bar, and after a rout over.lines[1] is the break line in the past, so the strength line is lines[2] and
+// pursuit goes after it. The bar's hover: "When a bar fills, that army breaks and leaves the field. It fills with the
+// men lost along the whole line, or with the share of it running or gone, whichever is nearer, so an army can break
+// while every part of it is still steady."
+// The fields come in four places: view.breakingBy[side] as each bar stands, the player's own 'nearBreak' event's
+// brokeBy at the warning, the 'broken' event's brokeBy at the break, and view.over.brokeBy (and battleEnd's brokeBy)
+// once it is over, where over.broke is set. They are BreakCause in src/battle/core/types.ts: { side, bar, by, nearer,
+// worn, spent, running, breaks, fresh, fought, small, holding, held, heldFor, blocks, blocksWorn, wornAt, routing,
+// fled, steady, stillSteady }. The bar fills when worn reaches spent (shares of the army's power: worn across the whole
+// line, against what it will stand) or running reaches breaks (half its power running or fled); by names which ('worn',
+// 'running', or 'none' where an army driven from the field reached neither), nearer which stands higher, reached or not
+// (the warning goes by it). Worn to its mark, an army holds at the brink while fresh is more than fought: held says the
+// hold had kept it there, heldFor for how many battle seconds, small whether its steady blocks counted as fresh (five
+// blocks or fewer, not behind works). A small army held there gives ground: its blocks no longer fresh fall back off
+// the field, each with a 'land:gives' event ("The 2nd Libyan Division gives ground."), and an enemy that comes on after
+// them strikes only their rearguard. blocksWorn counts its blocks below wornAt (0.9) of their strength; steady is the
+// share of its power in blocks reading Steady, and stillSteady says it in the UI director's words ('all', 'most',
+// 'less').
+// Under fog (the card did not know the defence, b453) the enemy's breakingBy is only { side, bar } until the battle is
+// over: the rest would count blocks the player has not met.
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
@@ -115,7 +146,7 @@
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
-import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
+import type { BattleSim, BattleView, BreakCause, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
 import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
@@ -202,11 +233,20 @@ function hiddenOut(u: UnitBase): Record<string, unknown> {
   };
 }
 
+/** Each army's bar and what drives it, with the enemy's cut to its bar: under fog the player sees no more of it. */
+function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<BreakCause>> {
+  const them: Side = me === 'att' ? 'def' : 'att';
+  return { [me]: by[me], [them]: { side: them, bar: by[them].bar } } as Record<Side, Partial<BreakCause>>;
+}
+
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
     t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
+    // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
+    // until the battle is over, as its blocks are hidden (hiddenOut).
+    ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
   };
 }
@@ -269,7 +309,9 @@ export function battleCalls(h: BattleHooks) {
         // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
         const rep = (out as { report?: BattleReport | null } | null)?.report;
         const pursuit = rep ? pursuitLine(t, r, rep) : null;
-        return pursuit && out && typeof out === 'object' ? { ...out, pursuit } : out;
+        // Why the army broke, for the after card's words where it broke (b496(2)).
+        const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
+        return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
       });
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
       const f = sim.field;
