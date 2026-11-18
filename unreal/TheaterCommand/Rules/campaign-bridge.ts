@@ -4985,7 +4985,9 @@ function staffPage(s: Game): Page | null {
         rows: v.depths.map((d) => ({
           nat: '', title: `${d.name}  \u00B7  ${d.under}${d.on ? '  \u00B7  where you are' : ''}`,
           lines: [d.blurb, `Yours: ${list(d.yours)}.`, `Your staff's: ${list(d.staff)}.`],
-          buttons: [{ label: d.on ? 'YOU PLAY AT THIS DEPTH' : `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: !d.on, tip: d.on ? 'The campaign stands at this depth.' : `${d.blurb} It can be changed again in any month.` }],
+          // (The UI director, 10:57 on build 1638: the depth played has no button, which read as a dead one in faint ink.
+          // Its title already says where you are.)
+          buttons: d.on ? [] : [{ label: `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: true, tip: `${d.blurb} It can be changed again in any month.` }],
         })),
       },
       ...(() => { const d = dialSection(s); return d ? [d] : []; })(),
