@@ -1185,7 +1185,7 @@ def submarine(tag, fine=True, hull_hex=None):
                         got = m.ribbon([(hx_, hand * half, top_ - long_ * i / 3.0) for i in range(4)], [(0, hand, 0)] * 4, 0.11, "upper", 0.003, taper=lambda s_: 1.0 - 0.4 * s_, core=0.6)
                         for i in range(4):
                             fade = 0.3 + 0.7 * (1.0 - i / 3.0) ** 0.7
-                            stains[key(got[2][i])], dark[key(got[2][i])] = fade, 0.6 * fade
+                            stains[key(got[2][i])], dark[key(got[2][i])] = fade, 0.8 * fade
                             for j in (1, 3):
                                 stains[key(got[j][i])], dark[key(got[j][i])] = 0.9 * fade, 0.3 * fade
             hx_ += 0.62
@@ -1352,7 +1352,7 @@ def submarine(tag, fine=True, hull_hex=None):
                 if runs_in:
                     fade = 0.4 + 0.6 * fade
                 if rust:
-                    stains[key(got[2][k])], dark[key(got[2][k])] = rust * fade, 0.6 * rust * fade
+                    stains[key(got[2][k])], dark[key(got[2][k])] = rust * fade, 0.82 * rust * fade      # (less than this and the core is as bright as her grey: orange, not dark brown)
                     for j in (1, 3):                          # (the core is dark brown out to its shoulders; from there to the edge it thins away orange-brown)
                         stains[key(got[j][k])], dark[key(got[j][k])] = 0.9 * rust * fade, 0.3 * rust * fade
                 if salt:
@@ -1411,7 +1411,7 @@ def submarine(tag, fine=True, hull_hex=None):
         while x < L * 0.47:
             for hand in (PORT, STBD):
                 if rng.random() < 0.5 and not any(a - 0.5 < x < b + 0.5 for a, b in bloomed[hand]):
-                    streak(x, yard.deck(x) - 0.03, hand, rng.uniform(0.3, 0.7), rng.uniform(0.15, 0.28), salt=rng.uniform(0.4, 0.7),
+                    streak(x, yard.deck(x) - 0.03, hand, rng.uniform(0.3, 0.7), rng.uniform(0.12, 0.22), salt=rng.uniform(0.2, 0.38),
                            floor=yard.deck(x) * (1.0 - min(r_[0] for r_ in rows)) + 0.12)
             x += rng.uniform(0.35, 0.8)
         for bx in (L * 0.36, L * 0.24, -L * 0.27, -L * 0.38):               # (under her bollards)

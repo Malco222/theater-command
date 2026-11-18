@@ -882,7 +882,7 @@ class Effects:
             self.light(t, at + Vector((0, 0, 18.0)), 6.0e4 * size * size, 0.17, r=10.0)
         self.once(t0, where, make)
 
-    def froth(self, ring, start, end, r=2.2, every=0.1):
+    def froth(self, ring, start, end, r=2.4, every=0.07):
         """Where a hull is going under: white water all along the line where the sea is climbing her side. `ring` is a
         function of nothing giving those places now, each (a place on the sea, the way outward from her there); nothing
         is laid while it gives none. (Foam laid under her, or inside the line of her side, is hidden by her: at first
@@ -897,9 +897,9 @@ class Effects:
                 side = Vector((-out[1], out[0], 0.0))
                 q = Vector((p[0], p[1], 0.0)) + out * g.uniform(0.3, 2.6) + side * g.uniform(-2.5, 2.5)
                 self.foam(t, q, r * g.uniform(0.7, 1.2), life=g.uniform(2.2, 3.6), n=2)
-                if g.random() < 0.55:        # (and it leaps up against her side)
-                    self.puff(t, q + Vector((0, 0, 0.4)), vel=(out[0] * g.uniform(0, 2), out[1] * g.uniform(0, 2), g.uniform(3.5, 7.5)), life=g.uniform(0.8, 1.3),
-                              r=(r * 0.5, r * g.uniform(1.0, 1.8)), col=(0.95, 0.97, 0.97), col2=(0.88, 0.92, 0.92), alpha=0.6, kind="water", gravity=9.8, wind=0.05,
+                if g.random() < 0.7:         # (and it leaps up against her side)
+                    self.puff(t, q + Vector((0, 0, 0.4)), vel=(out[0] * g.uniform(0, 2), out[1] * g.uniform(0, 2), g.uniform(4.5, 9.0)), life=g.uniform(0.9, 1.5),
+                              r=(r * 0.6, r * g.uniform(1.2, 2.2)), col=(0.95, 0.97, 0.97), col2=(0.88, 0.92, 0.92), alpha=0.66, kind="water", gravity=9.8, wind=0.05,
                               squash=(1.0, 1.0, 1.3), fade_in=0.05, grow=0.4, hold=0.35)
         self.stream((Vector(), Vector((0, 0, 1))), every, make, start=start, end=end)
 
@@ -918,19 +918,27 @@ class Effects:
             for _ in range(1 + int(2.0 * k + g.random())):
                 a, d = g.uniform(0, 2 * math.pi), math.sqrt(g.random())
                 q = at + Vector((math.cos(a) * d * r[0] * (0.3 + 0.7 * k), math.sin(a) * d * r[1] * (0.4 + 0.6 * k), 0.0))
-                self.foam(t, q, g.uniform(2.4, 4.4), life=g.uniform(2.6, 4.4), n=3)
+                self.foam(t, q, g.uniform(3.2, 5.6), life=g.uniform(2.8, 4.6), n=3)
 
         def burst(t, p0, facing):
             k = how(t)
-            if g.random() > 0.3 + 0.7 * k:
+            if g.random() > 0.35 + 0.65 * k:
                 return
-            a, d = g.uniform(0, 2 * math.pi), math.sqrt(g.random()) * 0.75
+            a, d = g.uniform(0, 2 * math.pi), math.sqrt(g.random()) * 0.8
             q = at + Vector((math.cos(a) * d * r[0] * (0.3 + 0.7 * k), math.sin(a) * d * r[1] * (0.4 + 0.6 * k), 0.3))
-            big = g.uniform(0.7, 1.5)
-            self.puff(t, q, vel=(g.uniform(-1.5, 1.5), g.uniform(-1.5, 1.5), g.uniform(5.0, 10.0) * big), life=g.uniform(0.9, 1.6), r=(1.2 * big, g.uniform(2.6, 4.6) * big),
-                      col=(0.95, 0.97, 0.97), col2=(0.86, 0.91, 0.9), alpha=0.68, kind="water", gravity=9.8, wind=0.05, squash=(1.0, 1.0, 1.35), fade_in=0.05, grow=0.4, hold=0.35)
+            big = g.uniform(0.8, 1.9)
+            self.puff(t, q, vel=(g.uniform(-1.5, 1.5), g.uniform(-1.5, 1.5), g.uniform(5.5, 10.5) * big), life=g.uniform(1.0, 1.8), r=(1.4 * big, g.uniform(3.0, 5.2) * big),
+                      col=(0.95, 0.97, 0.97), col2=(0.86, 0.91, 0.9), alpha=0.72, kind="water", gravity=9.8, wind=0.05, squash=(1.0, 1.0, 1.35), fade_in=0.05, grow=0.4, hold=0.35)
+
+        def mound(t, p0, facing):      # (the spray that hangs low over the boil: seen from near the sea's level this is most of its white)
+            k = how(t)
+            a, d = g.uniform(0, 2 * math.pi), math.sqrt(g.random()) * 0.85
+            q = at + Vector((math.cos(a) * d * r[0] * (0.3 + 0.7 * k), math.sin(a) * d * r[1] * (0.4 + 0.6 * k), g.uniform(0.5, 1.6)))
+            self.puff(t, q, vel=(g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.6, 1.8)), life=g.uniform(1.6, 2.8), r=(2.2, g.uniform(4.5, 7.5)), col=(0.93, 0.96, 0.96), col2=(0.86, 0.91, 0.9),
+                      alpha=0.3 + 0.22 * k, kind="water", wind=0.06, squash=(1.3, 1.3, 0.55), fade_in=0.25, grow=0.6, hold=0.3)
         self.stream((at, Vector((0, 0, 1))), 0.15, foam, start=start, end=end)
-        self.stream((at, Vector((0, 0, 1))), 0.08, burst, start=start, end=end)
+        self.stream((at, Vector((0, 0, 1))), 0.045, burst, start=start, end=end)
+        self.stream((at, Vector((0, 0, 1))), 0.09, mound, start=start, end=end)
 
     def steam(self, where, start, end, size=1.0):
         """Steam and smoke pouring from a breach in her (her back broken, her boiler rooms open to the sky): white steam
@@ -940,12 +948,12 @@ class Effects:
         def make(t, at, facing):
             if at.z < -1.5:
                 return
-            white = g.random() < 0.6
-            c = g.uniform(0.8, 0.92) if white else g.uniform(0.1, 0.2)
-            self.puff(t, at + Vector((g.uniform(-2, 2) * size, g.uniform(-7, 7) * size, g.uniform(0, 2))), vel=(g.uniform(-2.5, 2.5), g.uniform(-3, 3), g.uniform(7, 15)), life=g.uniform(3.5, 6.0),
-                      r=(2.2 * size, g.uniform(8, 13) * size), col=(c, c, c) if white else (c * 1.5, c * 1.15, c), col2=(c, c, c) if white else (c, c, c), alpha=0.5 if white else 0.75,
-                      drag=0.9, rise=2.2, fade_in=0.1, grow=0.55, wind=0.9, hold=0.25)
-        self.stream(where, 0.07, make, start=start, end=end)
+            white = g.random() < 0.55
+            c = g.uniform(0.82, 0.93) if white else g.uniform(0.08, 0.18)
+            self.puff(t, at + Vector((g.uniform(-2, 2) * size, g.uniform(-9, 9) * size, g.uniform(0, 2))), vel=(g.uniform(-3, 3), g.uniform(-4, 4), g.uniform(9, 20)), life=g.uniform(4.0, 7.0),
+                      r=(2.6 * size, g.uniform(9, 15) * size), col=(c, c, c) if white else (c * 1.5, c * 1.15, c), col2=(c, c, c) if white else (c, c, c), alpha=0.72 if white else 0.85,
+                      drag=0.8, rise=2.4, fade_in=0.08, grow=0.55, wind=0.9, hold=0.3)
+        self.stream(where, 0.035, make, start=start, end=end)
 
     def slick(self, t0, at, r=40.0):
         """What she leaves: a dark sheen of oil that wells up where she went down and spreads out from there, ragged,
@@ -953,11 +961,11 @@ class Effects:
         g = self.rng
 
         def make(t, p0, facing):
-            for i in range(9):
+            for i in range(11):
                 a = g.uniform(0, 2 * math.pi)
-                way = Vector((math.cos(a), math.sin(a) * 0.7, 0.0))
-                self.puff(t + i * 0.35, Vector((p0[0] + way.x * r * 0.08, p0[1] + way.y * r * 0.08, 0.25 - 0.004 * i)), vel=way * g.uniform(2.0, 5.0), drag=0.25, life=15.0,
-                          r=(r * 0.12, r * g.uniform(0.5, 0.85)), col=(0.035, 0.04, 0.045), alpha=0.62, kind="flat", wind=0.0, squash=(1.5, 1.0, 0.03), fade_in=1.6, grow=0.7, hold=0.9)
+                way = Vector((math.cos(a), math.sin(a) * 0.8, 0.0))
+                self.puff(t + i * 0.3, Vector((p0[0] + way.x * r * 0.1, p0[1] + way.y * r * 0.1, 0.25 - 0.004 * i)), vel=way * g.uniform(3.0, 7.0), drag=0.25, life=12.0,
+                          r=(r * 0.15, r * g.uniform(0.6, 1.0)), col=(0.03, 0.034, 0.04), alpha=0.7, kind="flat", wind=0.0, squash=(1.5, 1.0, 0.03), fade_in=1.2, grow=0.6, hold=0.9)
         self.once(t0, (Vector(at), Vector((0, 0, 1))), make)
 
 

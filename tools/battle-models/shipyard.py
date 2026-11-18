@@ -195,7 +195,7 @@ class Yard:
         us = [-1.0 + 2.0 * k / n for k in range(n + 1)]
         ub = h.u_of(self.break_x)
         if tear is None:
-            tear = min(max(0.05 * h.B, 0.5), 1.6)
+            tear = min(max(0.08 * h.B, 0.6), 2.6)
         self.tear, self.jag = tear, None
         # (frames close together either side of a step in the deck, so that the step is a wall and not a ramp)
         for sx in (h.step_at, h.step_aft_at):
@@ -390,7 +390,10 @@ class Yard:
                     rows.append([a.lerp(mid_, 0.45 * st) + shift, b.lerp(mid_, 0.45 * st) + shift])
                 flat = [p for row in rows for p in row]
                 faces = [(0, 1, 3, 2), (2, 3, 5, 4)]
+                first = len(m.verts)
                 m.add(flat, faces, paint, False, lambda mid: -inward(mid))
+                for j in range(len(flat)):                     # (scorched: more toward its torn tip)
+                    m.vsoot[first + j] = 0.35 + 0.2 * (j // 2)
                 m.add([p + inward(p) * 0.03 for p in flat], faces, "torn", False, inward)
 
     def portholes(self, x0, x1, drop, every=3.2, r=0.17, skip=()):

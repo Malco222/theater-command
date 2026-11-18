@@ -78,7 +78,7 @@ destroyers `torpedoes.port/starboard`, `depth_charges`; carriers `lift.N`; subma
 
 **Where she breaks.** The first sinking showed her parting "along a straight, clean vertical line, flat plating on
 both sides of a dark wedge, like a model sawn in two" (the art director, 2026-11-18: destruction must look broken,
-never cut away). So her halves meet along a ragged line (`Yard.hull`, `tear`: by her beam, 0.5 to 1.6 m fore and
+never cut away). So her halves meet along a ragged line (`Yard.hull`, `tear`: by her beam, 0.6 to 2.6 m fore and
 aft of the break; a submarine's is still 0, a clean cut). The frame at the break has its points thrown fore and aft
 by turns and both skins share it: whole, she shows nothing; broken, each half ends in teeth of plating that fit the
 other's. Her deck's edge is not thrown, so what stands on her deck is as it was; a scuttle or a seam near the break

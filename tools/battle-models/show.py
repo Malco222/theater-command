@@ -201,8 +201,8 @@ def sink(S, out, opt):
     # of oil spreading from there); lighter along each half's own side where the sea climbs it.
     for half in ("fore", "aft"):
         S.fx.froth(_goes_under(S, half), t_hit + 0.9, T + 2)
-    S.fx.boil((bx, 0.0), t_hit + 2.6, T + 2, r=(34.0, 20.0), rise=2.2)
-    S.fx.slick(t_hit + 3.4, (bx, 0, 0), r=46.0)
+    S.fx.boil((bx, 0.0), t_hit + 2.4, T + 2, r=(40.0, 28.0), rise=2.2)
+    S.fx.slick(t_hit + 3.0, (bx, 0, 0), r=62.0)
 
     def step(t):
         after = t - t_hit
