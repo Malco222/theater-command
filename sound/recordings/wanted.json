@@ -2,6 +2,223 @@
  "note": "Round one: recordings for the six test sounds, all from Wikimedia Commons. Licences were read from Commons when found; fetch_recording.mjs reads them again and refuses anything a game may not use.",
  "recordings": [
   {
+   "id": "desk_typewriter_wws",
+   "for": "click",
+   "title": "File:WWS Typewriter.ogg",
+   "licence": "CC BY 4.0",
+   "note": "A real typewriter at work (Work With Sounds): its key strike, cut short, for the desk click. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_rubber_stamp",
+   "for": "stamp",
+   "title": "File:Rubber seal dabbed on ink pad.ogg",
+   "licence": "CC BY 3.0",
+   "note": "A rubber stamp dabbed on an ink pad: the desk stamp. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_clock_ticking",
+   "for": "tick",
+   "title": "File:Clock ticking.ogg",
+   "licence": "Public domain",
+   "note": "A clock ticking: one tick for the desk tick. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_alarm_clock_ticking",
+   "for": "tick",
+   "title": "File:Alarm clock ticking.ogg",
+   "licence": "Public domain",
+   "note": "A wind-up alarm clock ticking: a second choice for the tick. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_coins_wooden_box",
+   "for": "coins",
+   "title": "File:Coins dropped in wooden moneybox.ogg",
+   "licence": "Public domain",
+   "note": "Coins dropped into a wooden money box: the treasury coins. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_coins_wooden_floor",
+   "for": "coins",
+   "title": "File:Coins dropped on wooden floor.ogg",
+   "licence": "Public domain",
+   "note": "Coins dropped on a wooden floor: a second choice for the coins. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_coins_palm",
+   "for": "coins",
+   "title": "File:Shaking coins in palm.ogg",
+   "licence": "Public domain",
+   "note": "Coins shaken in a palm: a third choice for the coins. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_hammer_nails",
+   "for": "hammer",
+   "title": "File:Hammer and nails (Antti Luode).mp3",
+   "licence": "CC BY 3.0",
+   "note": "A hammer driving nails: building something. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_tower_clock",
+   "for": "bell",
+   "title": "File:WWS Quarter-hourtowerclock.ogg",
+   "licence": "CC BY 4.0",
+   "note": "A tower clock striking (Work With Sounds): the month's end bell. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "desk_signal_bell",
+   "for": "bell",
+   "title": "File:WWS Signalbell.ogg",
+   "licence": "CC BY 4.0",
+   "note": "A signal bell (Work With Sounds): a second choice for the month's end. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "newsreel_projector_proyecson",
+   "for": "projector",
+   "title": "File:Cinema projector PROYECSON.mp3",
+   "licence": "CC BY 4.0",
+   "note": "A 35 mm cinema projector running: the newsreel's projector. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "newsreel_projector_ossa",
+   "for": "projector",
+   "title": "File:Cinema projector OSSA VI.mp3",
+   "licence": "CC BY 4.0",
+   "note": "A second 35 mm cinema projector running. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "newsreel_fanfare_ceremonial",
+   "for": "newsreel",
+   "title": "File:Ceremonial Fanfare - Concert Band - United States Air Force Heritage of America Band.mp3",
+   "licence": "Public domain",
+   "note": "A military band's ceremonial fanfare: the newsreel's opening sting. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "radio_static",
+   "for": "radio",
+   "title": "File:Static B.wav",
+   "licence": "CC0",
+   "note": "Radio static: the wireless tuning in. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "radio_oranje_1941_tune",
+   "for": "radio",
+   "title": "File:Radio Oranje 28-jul.-1941 OPENINGSFANFARE (=TUNE) VAN RADIO ORANJE - 12136.wav",
+   "licence": "Public domain",
+   "note": "A real wartime radio station's opening tune, 1941, as broadcast: the wireless. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "drums_four_flams",
+   "for": "drums",
+   "title": "File:Drums - Four Flams.ogg",
+   "licence": "Public domain",
+   "note": "A military snare drum: two sides drawn up on the attack card. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "drums_cadence_a",
+   "for": "drums",
+   "title": "File:Drum - Cadence A.ogg",
+   "licence": "Public domain",
+   "note": "A military drum cadence: a second choice for the drums. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "drums_military_beat",
+   "for": "drums",
+   "title": "File:Militarydrumbeat.ogg",
+   "licence": "Public domain",
+   "note": "A military drum beat: a third choice for the drums. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "bugle_to_the_colors",
+   "for": "victory",
+   "title": "File:To the Colors - Concert Band - United States Air Force Band.mp3",
+   "licence": "Public domain",
+   "note": "To the Colors played by a military band: the victory stinger. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "bugle_reveille",
+   "for": "victory",
+   "title": "File:Reveille on bugle.ogg",
+   "licence": "Public domain",
+   "note": "Reveille on a bugle: a second choice for victory. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "bugle_taps",
+   "for": "defeat",
+   "title": "File:Taps on bugle.ogg",
+   "licence": "Public domain",
+   "note": "Taps on a bugle: the defeat stinger, and a nation's fall. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "bugle_last_post",
+   "for": "defeat",
+   "title": "File:Last Post bugle call.ogg",
+   "licence": "Public domain",
+   "note": "The Last Post on a bugle: a second choice for defeat. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "sub_dive_klaxon_wwii",
+   "for": "dive_alarm",
+   "title": "File:WWII submarine dive klaxon.ogg",
+   "licence": "Public domain",
+   "note": "A real WWII US submarine dive klaxon (United States Navy). Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "sub_dive_alarm_h8",
+   "for": "dive_alarm",
+   "title": "File:Alarm - Diving - H8.ogg",
+   "licence": "Public domain",
+   "note": "A navy diving alarm: a second choice for the dive. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "carrier_lift_hyuga",
+   "for": "lift_motor",
+   "title": "File:JS Hyūga's aircraft lift, -6 Aug. 2011 a.ogv",
+   "licence": "CC BY 3.0",
+   "note": "A real carrier deck's aircraft lift running (JS Hyuga): the carrier lift motor. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "carrier_lift_ise",
+   "for": "lift_motor",
+   "title": "File:JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a.ogv",
+   "licence": "CC BY 3.0",
+   "note": "A real aircraft lift going down from a flight deck (JS Ise): a second choice. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "parachute_opening_cc0",
+   "for": "parachute_open",
+   "title": "File:Parachute opening.webm",
+   "licence": "CC0",
+   "note": "A parachute opening, filmed by the jumper. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "ship_sinking_ryou_un_maru",
+   "for": "ship_sinking",
+   "title": "File:Ryou-Un Maru sinking off Alaska 2012.ogv",
+   "licence": "Public domain",
+   "note": "A real ship sinking, filmed by the US Coast Guard (2012); its sound may be only the cutter and the wind. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "scrap_steel_truck",
+   "for": "aircraft_break_up",
+   "title": "File:WWS Emptyingsteelscrapfromatruck.ogg",
+   "licence": "CC BY 4.0",
+   "note": "Scrap steel tipped from a truck (Work With Sounds): metal breaking and falling, for an aircraft breaking up. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "crane_coal_wws",
+   "for": "ramp_winch",
+   "title": "File:WWS Coalcrane.ogg",
+   "licence": "CC BY 4.0",
+   "note": "A coal crane's winch (Work With Sounds): a landing craft's ramp winch. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
+   "id": "chain_lowering_wws",
+   "for": "ramp_winch",
+   "title": "File:WWS Wardrobechainloweringandraising.ogg",
+   "licence": "CC BY 4.0",
+   "note": "A chain lowering and raising (Work With Sounds): a second choice for the ramp winch. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
+  },
+  {
    "id": "gmc_cckw_besancon",
    "for": "lorry",
    "title": "File:GMC CCKW 353 à Besançon le 8 septembre 2026.webm",

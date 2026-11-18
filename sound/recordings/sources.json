@@ -998,5 +998,25 @@
   "seconds": 207.1,
   "fetched": "2026-11-18",
   "note": "A flying Me 262 replica's display at ILA Berlin 2014. Round four, for the Me 262."
+ },
+ {
+  "id": "desk_rubber_stamp",
+  "for": "stamp",
+  "file": "desk_rubber_stamp.ogg",
+  "title": "File:Rubber seal dabbed on ink pad.ogg",
+  "page": "https://commons.wikimedia.org/wiki/File:Rubber_seal_dabbed_on_ink_pad.ogg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9e/Rubber_seal_dabbed_on_ink_pad.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+  "licence": "CC BY 3.0",
+  "credit": "Subhashish Panigrahi",
+  "author": "Subhashish Panigrahi",
+  "about": "A rubber seal being dabbed on an ink pad in Allahabad/Prayagraj, Uttar Pradesh, India. Indistinct conversations in Hindi/Awadhi can be heard from the background.",
+  "recorded": "2019-08-05",
+  "sha1": "3314818550450bbab23f14426d325c3e931efff1",
+  "bytes": 343976,
+  "form": "as fetched",
+  "format": "vorbis 44100 Hz 2 ch",
+  "seconds": 22.4,
+  "fetched": "2026-11-18",
+  "note": "A rubber stamp dabbed on an ink pad: the desk stamp. Round five (18 November 2026), for the 3D game's last stand-in sounds and the ship and aircraft cues with no recording."
  }
 ]
