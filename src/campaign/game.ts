@@ -3153,8 +3153,8 @@ function expeditions(g: Game, nat: string): void {
         if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
         const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
         if (!x) return;
-        // (The player is told where his corps has gone: it sails with the force that has landed.)
-        if (nat === g.human) headline(g, 'event', `${x.name} leaves ${g.regions[x.reg].name} to sail with ${/^(the |[A-Z] Force|Creforce)/i.test(row[2]) ? '' : 'the '}${row[2]}.`, nat, reg.id);
+        // (The player is told where his corps has gone, in the row's own words: the UI director's.)
+        if (nat === g.human && r2[6].leaves) headline(g, 'event', r2[6].leaves.replace('{place}', g.regions[x.reg].name), nat, reg.id);
         removeCorps(g, x);
         g.supplyDirty = true;
       });

@@ -305,8 +305,8 @@ describe('the desert rows of the grand campaign (ruling 229, 1c)', () => {
       startPhase(g, 'UK');
       expect(g.corps.some((c) => c.name.startsWith('W Force') && !c.dead), 'W Force lands').toBe(true);
       expect(g.corps.some((c) => c.id === nz!.id)).toBe(false);
-      const told = g.headlines.slice(seen).filter((h) => h.text.startsWith('2nd New Zealand Division leaves'));
-      expect(told.map((h) => h.text)).toEqual(human ? [`2nd New Zealand Division leaves ${from} to sail with W Force (New Zealand Division and 1st Armoured Brigade).`] : []);
+      const told = g.headlines.slice(seen).filter((h) => /New Zealand Division sails/.test(h.text));
+      expect(told.map((h) => h.text)).toEqual(human ? [`The 2nd New Zealand Division sails from ${from} for Greece. It goes as part of W Force, which has landed there with the 1st Armoured Brigade.`] : []);
     }
   });
 
