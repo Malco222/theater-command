@@ -1070,7 +1070,14 @@
    "slower": 0.5,
    "_note": "a tracer striking the ground or armour sometimes skips up at an angle: a real sight in films and footage"
   },
-  "render_note": "airshow.py TRACER: radiance (0.15, 0.133, 0.0) at puff strength, as built for the air clips"
+  "render_note": "airshow.py TRACER: radiance (0.15, 0.133, 0.0) at puff strength, as built for the air clips",
+  "day_width": 1.5,
+  "day_core": [
+   245,
+   240,
+   210
+  ],
+  "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay."
  },
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",
@@ -1131,7 +1138,13 @@
    "smoke_alpha": 0.16,
    "strike_m": 1.6
   },
-  "_numbers": "Rates and speeds are the middle of each family: rifle calibre 900-1,200 a minute at 745-905 m/s; 12.7-13 mm 750-950 at 750-890; 20 mm 520-750 at 600-880. The battle can pass a gun's own rate and speed. drag is set so a round keeps the speed it really kept downrange: a .50 about 700 m/s at 500 m and 530 at 1,000 m (0.36), a rifle round about 520 at 450 m (0.5). tracer_s is how long the tracer burns: the .50's to about 1,450 m, the rifle round's and the 20 mm's to about 900 to 1,100 m. Each gun runs a few per cent fast or slow, so wing guns drift out of step as real ones did."
+  "_numbers": "Rates and speeds are the middle of each family: rifle calibre 900-1,200 a minute at 745-905 m/s; 12.7-13 mm 750-950 at 750-890; 20 mm 520-750 at 600-880. The battle can pass a gun's own rate and speed. drag is set so a round keeps the speed it really kept downrange: a .50 about 700 m/s at 500 m and 530 at 1,000 m (0.36), a rifle round about 520 at 450 m (0.5). tracer_s is how long the tracer burns: the .50's to about 1,450 m, the rifle round's and the 20 mm's to about 900 to 1,100 m. Each gun runs a few per cent fast or slow, so wing guns drift out of step as real ones did.",
+  "flash_heart": [
+   240,
+   220,
+   150
+  ],
+  "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is."
  },
  "dust": {
   "vehicles": {

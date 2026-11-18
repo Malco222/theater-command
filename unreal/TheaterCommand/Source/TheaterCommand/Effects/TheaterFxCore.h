@@ -112,6 +112,7 @@ namespace TheaterFx
 		double CloudShade = 0.0, CloudR = 1.0, CentreRise = 0.0;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
+		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
@@ -267,8 +268,8 @@ namespace TheaterFx
 		std::vector<AirRow> AirRows;
 		std::vector<Firing> Firings; // the air guns
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
-		double TracerHalf = 8.0, TracerLeast = 3.0;
-		Rgb TracerCol, TracerPale, FlameCol, FlashCoreCol, GunSmokeCol;
+		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5;
+		Rgb TracerCol, TracerPale, TracerDayCore, FlameCol, FlashCoreCol, GunSmokeCol, CannonHeartCol;
 		std::vector<Vec> Out;
 		std::vector<uint8_t> OutRgba;
 		struct Order
@@ -299,6 +300,7 @@ namespace TheaterFx
 		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop);
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
+		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
 		void Prune(double Now);
 

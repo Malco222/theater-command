@@ -140,6 +140,9 @@ namespace TheaterFx
 		TracerLeast = Num("tracer.least_px", 3.0);
 		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
 		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
+		TracerDayWide = Num("tracer.day_width", 1.5);
+		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
+		CannonHeartCol = Picture("air_guns.flash_heart", Rgb::FromPicture(240, 220, 150));
 		FlameCol = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		FlashCoreCol = Picture("burst.flash.core_colour", Rgb::FromPicture(236, 168, 72));
 		GunSmokeCol = Picture("air_guns.smoke_colour", Rgb::FromPicture(168, 166, 160));
@@ -1357,6 +1360,7 @@ namespace TheaterFx
 			B.Point = 0.3;
 			B.Tail = 0.7; // (thinning toward the gun)
 			B.bLight = true;
+			B.Glow = static_cast<uint8_t>(Layer + 1);
 			Bits.push_back(B);
 		}
 	}
@@ -1469,11 +1473,14 @@ namespace TheaterFx
 
 	void Battle::AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D)
 	{
-		// the flicker: a ragged tongue along the bore, under one frame, carried with the aircraft so it stays on the
-		// gun; cannon throw licks sideways too, and light the wing for a moment
-		const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
-		const Vec Over = Across.Cross(Dir).Unit(ZUp);
+		// the flicker: a tongue along the bore, under one frame, carried with the aircraft so it stays on the gun
+		// (machine guns, passed 21:07Z); cannon have their own flash
 		const double Len = Row.Flash * D.U(0.8, 1.15);
+		if (Row.Licks > 0)
+		{
+			CannonFlash(T, At, Dir, Carry, Row, D);
+		}
+		else
 		{
 			Bit B;
 			B.Born = T;
@@ -1493,30 +1500,6 @@ namespace TheaterFx
 			B.Hold = 0.5;
 			B.Heart = 0.85;
 			B.Rim = 0.2;
-			B.bLight = true;
-			Bits.push_back(B);
-		}
-		for (int I = 0; I < Row.Licks; ++I)
-		{
-			const double A = D.U(0.0, 2.0 * Pi);
-			const Vec Side = (Dir * 0.5 + (Across * std::cos(A) + Over * std::sin(A)) * D.U(0.6, 1.0)).Unit(Dir);
-			Bit B;
-			B.Born = T;
-			B.From = At + Dir * (Len * 0.3) + Side * (Len * 0.25);
-			B.Vel = Carry + Side * 1.5;
-			B.Life = D.U(0.02, 0.035);
-			B.R0 = Len * 0.1;
-			B.R1 = Len * 0.14;
-			B.Along = Side;
-			B.Stretch = 2.0;
-			B.Point = 0.8;
-			B.Col = FlameCol;
-			B.Col2 = FlameCol * 0.5;
-			B.Alpha = 0.95;
-			B.FadeIn = 0.002;
-			B.Hold = 0.4;
-			B.Heart = 0.8;
-			B.Rim = 0.1;
 			B.bLight = true;
 			Bits.push_back(B);
 		}
@@ -1560,6 +1543,65 @@ namespace TheaterFx
 			const Vec Vel = Aim * Mps + Carry;
 			Tracer(T, At, Vel.Unit(Aim), Vel, Row.TracerS, Row.Drag, Row.Drop);
 		}
+	}
+
+	void Battle::CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D)
+	{
+		// Art director 21:07Z: a hot pale heart at the muzzle with orange only toward its edges; a ragged forward
+		// tongue two to three times the side licks' length; short side licks bent aft by the airstream; soft, uneven,
+		// never the same twice; one frame at full, a second at about half (Life 0.05 with Hold 0.45), then gone.
+		const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Over = Across.Cross(Dir).Unit(ZUp);
+		const double Len = Row.Flash * D.U(0.8, 1.2);
+		auto Lick = [&](const Vec& From, const Vec& Way, double R, double Stretch, const Rgb& Col, const Rgb& Col2, double Alpha, double Heart, double Rim, double Rough)
+		{
+			Bit B;
+			B.Born = T;
+			B.From = From;
+			B.Vel = Carry;
+			B.Life = 0.05 * D.U(0.9, 1.1);
+			B.R0 = R * 0.9;
+			B.R1 = R * 1.1;
+			B.Along = Way;
+			B.Stretch = Stretch;
+			B.Point = 0.7;
+			B.Tail = 0.15;
+			B.Col = Col;
+			B.Col2 = Col2;
+			B.Alpha = Alpha;
+			B.FadeIn = 0.002;
+			B.Hold = 0.45;
+			B.Heart = Heart;
+			B.Rim = Rim;
+			B.Rough = Rough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.bLight = true;
+			Bits.push_back(B);
+		};
+		// the orange edge round the heart: see-through in its middle, strongest at its heart ring, soft at its rim
+		Lick(At + Dir * (Len * 0.14), Dir, Len * 0.3, 1.3, FlameCol, FlameCol * 0.7, 0.3, 2.6, 0.3, 0.35);
+		// the forward tongue: three ragged pieces, pale at the root and orange beyond, each a little off the line
+		const double Reach = Len * D.U(1.1, 1.4);
+		for (int K = 0; K < 3; ++K)
+		{
+			const double Along = Reach * (0.3 + 0.33 * K) * D.U(0.9, 1.1);
+			const Vec Off = (Across * D.Bell() + Over * D.Bell()) * (Len * 0.05 * (K + 1));
+			const Rgb Col = K == 0 ? CannonHeartCol.Mix(FlameCol, 0.45) : FlameCol;
+			Lick(At + Dir * Along + Off, (Dir + Off * (0.6 / std::max(Len, 1e-3))).Unit(Dir), Len * (0.2 - 0.045 * K) * D.U(0.85, 1.15), 2.2, Col, FlameCol * 0.75, 0.9, 0.8, 0.15, 0.4);
+		}
+		// short side licks, raked aft by the air the aircraft flies into; a third of the tongue or less
+		for (int I = 0; I < Row.Licks; ++I)
+		{
+			const double A = (I * 2.0 * Pi) / std::max(1, Row.Licks) + D.U(-0.6, 0.6);
+			const Vec Outward = (Across * std::cos(A) + Over * std::sin(A)).Unit(Across);
+			const Vec Way = (Outward - Dir * D.U(0.3, 0.55)).Unit(Outward);
+			const double R = Len * D.U(0.06, 0.085);
+			const double Stretch = D.U(2.2, 2.8);
+			Lick(At + Dir * (Len * 0.08) + Way * (R * Stretch * 0.8), Way, R, Stretch, FlameCol, FlameCol * 0.6, 0.85, 0.8, 0.1, 0.3);
+		}
+		// the hot heart right at the muzzle, laid last so it is pale over the orange
+		Lick(At + Dir * (Len * 0.1), Dir, Len * 0.15, 1.4, CannonHeartCol, CannonHeartCol.Mix(FlameCol, 0.5), 1.0, 0.95, 0.35, 0.2);
 	}
 
 	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds)
@@ -1869,6 +1911,18 @@ namespace TheaterFx
 					A *= Width / Least;
 				}
 				Width = Least;
+			}
+			if (B.Glow > 0)
+			{
+				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
+				// Day is read from the hour's smoke light: white by day, dim at dusk)
+				const double Lum = 0.2126 * Eye.SmokeLight.R + 0.7152 * Eye.SmokeLight.G + 0.0722 * Eye.SmokeLight.B;
+				const double Day = Clamp01((Lum - 0.3) / 0.6);
+				Width *= 1.0 + (TracerDayWide - 1.0) * Day;
+				if (B.Glow == 2)
+				{
+					Col = Col.Mix(TracerDayCore, Day);
+				}
 			}
 			Half = std::max(Half, Width);
 			AxA = Ua * Half;
