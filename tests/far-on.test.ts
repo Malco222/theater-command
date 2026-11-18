@@ -22,17 +22,18 @@ import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, atWar, bloc, capture, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small } from '../src/campaign/league';
 import { NAVY } from '../src/campaign/navy';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { stalemates, startOpen } from '../src/campaign/staff';
+import { townName } from '../src/campaign/towns';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
-import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_REGIONS, enemyAtTheDoor, farOn, overseasOf, shoreOf } from '../src/campaign/world';
+import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, WORLD_REGIONS, enemyAtTheDoor, farOn, overseasOf, shoreOf } from '../src/campaign/world';
 
 const FW = farWorld as any;
 const WD = worldData as any;
@@ -361,5 +362,49 @@ describe("the far side is not America's side of the water", () => {
     capture(g, isle, 'ITA');
     for (const nat of ['USA', 'CAN']) expect(enemyAtTheDoor(g, nat), nat).toBe(true);
     expect(overseasOf(g, 'USA')).toBeNull();
+  });
+});
+
+// ---- The whole world's data gaps (the suite with the switch on, 18 November; the planner's paper 21) -----------------
+
+describe("the whole world's names and marks (the planner's paper 21)", () => {
+  it('names no American formation with a bracket, and no town twice that was not twice before', () => {
+    const rows: [string, string][] = [...FW.world.corps.map((r: any[]) => [r[0], r[1]]), ...FW['setup-1939'].expeditions.map((r: any[]) => [r[1], r[2]]), ...FW['setup-1939'].formations.map((r: any[]) => [r[1], r[2]])];
+    const american = rows.filter(([nat]) => nat === 'USA').map(([, name]) => name);
+    expect(american.length).toBeGreaterThan(20);
+    for (const name of american) expect(name).not.toMatch(/[()]/);
+    expect(new Set(american).size).toBe(american.length);
+    // Tehran and Makhachkala are provinces of the far side: the old chart's Iran and Dagestan take another town's name.
+    const g = grand();
+    expect(g.byName['Tehran'].id).toBeGreaterThanOrEqual(FAR_FIRST);
+    expect(g.byName['Makhachkala'].id).toBeGreaterThanOrEqual(FAR_FIRST);
+    expect([townName(g.byName['Iran']), townName(g.byName['Dagestan'])]).toEqual(['Tabriz', 'Buynaksk']);
+    expect([townName(g.byName['Tehran']), townName(g.byName['Makhachkala'])]).toEqual(['Tehran', 'Makhachkala']);
+    const seen = new Map<string, number>();
+    for (const r of g.regions) seen.set(townName(r), (seen.get(townName(r)) ?? 0) + 1);
+    // (England's Birmingham and Alabama's stand as they did on the Americas' chart.)
+    expect([...seen].filter(([, n]) => n > 1).map(([t]) => t)).toEqual(['Birmingham']);
+  });
+
+  it("marks a city for Vichy as its province is marked, Indochina too, and France's fall follows the marks (ruling 199)", () => {
+    const g = grand();
+    const rows = WORLD_MAP.regions as unknown as { id: number; of?: number }[];
+    let cities = 0;
+    for (const row of rows) {
+      if (row.of === undefined) continue;
+      cities++;
+      expect(g.regions[row.id].vichy, g.regions[row.id].name).toBe(g.regions[row.of].vichy);
+    }
+    expect(cities).toBeGreaterThan(300);
+    for (const name of ['Hanoi', 'Saigon', 'Haiphong', 'Hue']) expect(g.byName[name]?.vichy, name).toBe(true);
+    const marked = g.regions.filter((r) => r.id >= FAR_FIRST && r.owner === 'FRA' && r.vichy).map((r) => r.id);
+    const free = g.regions.filter((r) => r.id >= FAR_FIRST && r.owner === 'FRA' && !r.vichy).map((r) => r.id);
+    expect([marked.length, free.length]).toEqual([75, 32]);
+    for (const [a, b] of [['FRA', 'GER'], ['UK', 'GER']]) if (!atWar(g, a, b)) setWar(g, a, b);
+    capitulate(g, 'FRA', 'GER');
+    // The marked ground is Vichy's; the rest (Chad, Cameroon, Equatorial Africa, New Caledonia) passes into British keeping.
+    for (const id of marked) expect(g.regions[id].ctrl, g.regions[id].name).toBe('VIC');
+    for (const id of free) expect(g.regions[id].ctrl, g.regions[id].name).toBe('UK');
+    for (const name of ['New Caledonia', 'Fort-Lamy', 'Douala', 'Brazzaville']) expect(free).toContain(g.byName[name].id);
   });
 });

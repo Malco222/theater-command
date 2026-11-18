@@ -2,13 +2,14 @@
  "_about": "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
  "_sources": {
   "pacific-planner/first-day-corps.json": "2026-11-17T23:51Z",
-  "pacific-planner/opening-armies.json": "2026-11-17T20:08Z",
+  "pacific-planner/opening-armies.json": "2026-11-18T06:59Z",
   "pacific-planner/pacific-fleets.json": "2026-11-17T23:11Z",
   "historian/generals-usa-japan.json": "2026-11-17T14:38Z",
   "historian/manpower-213.json": "2026-11-17T18:10Z",
   "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
   "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z",
-  "pacific-planner/far-yards.md": "2026-11-18T03:44Z"
+  "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
+  "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -765,7 +766,7 @@
    ],
    [
     "USA",
-    "Philippine Division (Fort McKinley)",
+    "Philippine Division",
     "inf",
     1,
     "Manila",
@@ -778,7 +779,7 @@
    ],
    [
     "USA",
-    "Harbor Defenses of Manila and Subic Bays (Corregidor)",
+    "Harbor Defenses of Manila and Subic Bays",
     "fort",
     1,
     "Bataan",
@@ -788,7 +789,7 @@
    ],
    [
     "USA",
-    "26th Cavalry, Philippine Scouts (Fort Stotsenburg)",
+    "26th Cavalry, Philippine Scouts",
     "cav",
     1,
     "Lingayen",
@@ -800,7 +801,7 @@
    ],
    [
     "USA",
-    "Philippine Army (cadres, regulars and trainees)",
+    "Philippine Army",
     "inf",
     1,
     "Manila",
@@ -812,7 +813,7 @@
    ],
    [
     "USA",
-    "Hawaiian Division (Schofield Barracks)",
+    "Hawaiian Division",
     "inf",
     1,
     "Pearl Harbor",
@@ -834,7 +835,7 @@
    ],
    [
     "USA",
-    "Guam (Marines and the Insular Force Guard)",
+    "Guam garrison",
     "inf",
     1,
     "Guam",
@@ -2020,6 +2021,12 @@
    "Hong Kong": 1
   }
  },
+ "towns": {
+  "names": {
+   "Iran": "Tabriz",
+   "Dagestan": "Buynaksk"
+  }
+ },
  "league": {
   "never": [
    "JAP"
@@ -3167,7 +3174,7 @@
    [
     10,
     "USA",
-    "4th Infantry Regiment (Fort Richardson)",
+    "4th Infantry Regiment",
     "inf",
     1,
     "Anchorage",
@@ -3180,7 +3187,7 @@
    [
     13,
     "USA",
-    "Marine defense battalion (Midway)",
+    "Midway defense battalion",
     "fort",
     1,
     "Midway",
@@ -3192,7 +3199,7 @@
    [
     19,
     "USA",
-    "7th Defense Battalion (Tutuila)",
+    "7th Defense Battalion",
     "fort",
     1,
     "Samoa",
@@ -3217,7 +3224,7 @@
    [
     24,
     "USA",
-    "1st Defense Battalion detachment (Wake)",
+    "Wake detachment, 1st Defense Battalion",
     "fort",
     1,
     "Wake",
@@ -3229,7 +3236,7 @@
    [
     25,
     "USA",
-    "Kodiak garrison (Fort Greely)",
+    "Kodiak garrison",
     "inf",
     1,
     "Kodiak",
@@ -3243,7 +3250,7 @@
    [
     25,
     "USA",
-    "Dutch Harbor garrison (Fort Mears)",
+    "Dutch Harbor garrison",
     "inf",
     1,
     "Dutch Harbor",
@@ -3257,7 +3264,7 @@
    [
     25,
     "USA",
-    "North Luzon Force (11th, 21st, 31st and 71st Divisions, Philippine Army)",
+    "North Luzon Force",
     "inf",
     4,
     "Lingayen",
@@ -3271,7 +3278,7 @@
    [
     25,
     "USA",
-    "91st Division, Philippine Army (USAFFE reserve, Cabanatuan)",
+    "91st Division, Philippine Army",
     "inf",
     1,
     "Lingayen",
@@ -3284,7 +3291,7 @@
    [
     25,
     "USA",
-    "41st Division, Philippine Army (South Luzon Force, Batangas)",
+    "41st Division, Philippine Army",
     "inf",
     1,
     "Manila",
@@ -3297,7 +3304,7 @@
    [
     25,
     "USA",
-    "51st Division, Philippine Army (South Luzon Force)",
+    "51st Division, Philippine Army",
     "inf",
     1,
     "Legaspi",
@@ -3310,7 +3317,7 @@
    [
     25,
     "USA",
-    "61st Division, Philippine Army (Panay)",
+    "61st Division, Philippine Army",
     "inf",
     1,
     "Panay",
@@ -3323,7 +3330,7 @@
    [
     25,
     "USA",
-    "81st Division, Philippine Army (Cebu and Negros)",
+    "81st Division, Philippine Army",
     "inf",
     1,
     "Cebu",
@@ -3336,7 +3343,7 @@
    [
     25,
     "USA",
-    "101st Division, Philippine Army (Mindanao)",
+    "101st Division, Philippine Army",
     "inf",
     1,
     "Del Monte",
@@ -3349,7 +3356,7 @@
    [
     25,
     "USA",
-    "Provisional Tank Group (192nd and 194th Tank Battalions)",
+    "Provisional Tank Group",
     "arm",
     1,
     "Lingayen",
@@ -3362,7 +3369,7 @@
    [
     26,
     "USA",
-    "25th Infantry Division (with Hawaii's two Guard regiments)",
+    "25th Infantry Division",
     "inf",
     1,
     "Honolulu",
@@ -3400,7 +3407,7 @@
    [
     28,
     "USA",
-    "4th Marines (from Shanghai)",
+    "4th Marines",
     "inf",
     1,
     "Bataan",

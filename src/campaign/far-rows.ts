@@ -7,7 +7,7 @@
 //   data/campaign/far-seats-globe.json     South Africa, Iran, Iraq, Saudi Arabia, Afghanistan, Yemen, Nepal, Liberia
 //   data/campaign/far-seats-pacific.json   China, Australia, New Zealand, Thailand, Manchukuo, Mongolia
 //   data/campaign/far-world.json           Japan, the old powers' garrisons out there, the men of rulings 213 and 218,
-//                                          the far side's shipyards (ruling b445)
+//                                          the far side's shipyards (ruling b445), two towns of the old chart renamed
 //                                          (written by tools/make-far-world.mjs from the planner's and the historian's files)
 //   data/campaign/china-line.json          ruling 215: the record's line in China
 //   data/campaign/china-setup.json         the dated rows its raids need
@@ -44,6 +44,7 @@ import manpower from '../../data/campaign/manpower.json';
 import league from '../../data/campaign/league.json';
 import navy from '../../data/campaign/navy.json';
 import arsenal from '../../data/campaign/arsenal.json';
+import towns from '../../data/campaign/towns.json';
 import globe from '../../data/campaign/far-seats-globe.json';
 import pacific from '../../data/campaign/far-seats-pacific.json';
 import farWorld from '../../data/campaign/far-world.json';
@@ -55,7 +56,7 @@ type Obj = Record<string, any>;
 
 /** The data files a seats file may name, by name without ".json". */
 const TARGETS: Record<string, Obj> = {
-  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal,
+  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns,
 };
 
 /** The seats files, in the order they are laid. */

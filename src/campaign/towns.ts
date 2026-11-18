@@ -9,6 +9,7 @@
  * Nothing here changes the war. It reads what is already true of each province and says it in one place. The names
  * and the size rules are in data/campaign/towns.json.
  */
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
