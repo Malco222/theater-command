@@ -15,7 +15,7 @@ import { RES, keepsStores, oilMonths } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
 import type { Field, Game, Nation, TechState } from './types';
-import { radarWords } from './aircampaigns';
+import { controlFirst, radarWords } from './aircampaigns';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
 
@@ -224,6 +224,9 @@ export function facesTanks(g: Game, nat: string): boolean {
 export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const s = techOf(g, nat);
   if (!s) return null;
+  // With the air campaigns on, a staff bombed by night takes Fighter control first (b569(2)).
+  const first = controlFirst(g, nat);
+  if (first && !s.done.includes(first) && !s.work.some((w) => w.id === first) && BY_ID[first].needs.every((x) => s.done.includes(x))) return first;
   const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
   const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
   let best: Tech | null = null, low = Infinity;

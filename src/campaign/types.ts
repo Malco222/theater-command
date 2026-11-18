@@ -1104,6 +1104,8 @@ export interface AirWarMemory {
   next: number;
   sky: Record<number, SkyFight>;
   stock: Record<string, BombStock>;
+  /** The last month each nation's ground was bombed by night (b569(2): its staff reaches for Fighter control). */
+  night?: Record<string, number>;
 }
 
 /**

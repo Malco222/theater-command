@@ -197,6 +197,33 @@
    "from": 12,
    "to": 13,
    "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     12,
+     0.85
+    ]
+   ],
+   "bases": [
+    [
+     12,
+     [
+      "Calais",
+      "Somme",
+      "Rouen",
+      "Normandy",
+      "Cotentin",
+      "Paris",
+      "Orleans",
+      "Brittany",
+      "Flanders",
+      "Brussels",
+      "Holland",
+      "Sorlandet",
+      "Jutland"
+     ]
+    ]
+   ],
    "note": "Adlertag 13 Aug 1940 to 6 Sep 1940. Escorted.",
    "fly": [
     {
@@ -217,8 +244,7 @@
       "Hampshire",
       "London"
      ],
-     "bombers": true,
-     "share": 0.5
+     "bombers": true
     }
    ]
   },
@@ -231,6 +257,33 @@
    "from": 13,
    "to": 14,
    "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     13,
+     0.8
+    ]
+   ],
+   "bases": [
+    [
+     13,
+     [
+      "Calais",
+      "Somme",
+      "Rouen",
+      "Normandy",
+      "Cotentin",
+      "Paris",
+      "Orleans",
+      "Brittany",
+      "Flanders",
+      "Brussels",
+      "Holland",
+      "Sorlandet",
+      "Jutland"
+     ]
+    ]
+   ],
    "note": "7 Sep 1940 to the end of September; fighter-bombers only by day in October 1940 (14).",
    "fly": [
     {
@@ -239,7 +292,6 @@
      "regions": [
       "London"
      ],
-     "share": 0.5,
      "escort": 0.5
     }
    ]
@@ -253,6 +305,29 @@
    "from": 13,
    "to": 21,
    "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     13,
+     0.5
+    ]
+   ],
+   "bases": [
+    [
+     13,
+     [
+      "Paris",
+      "Orleans",
+      "Rouen",
+      "Somme",
+      "Normandy",
+      "Brittany",
+      "Brussels",
+      "Flanders",
+      "Holland"
+     ]
+    ]
+   ],
    "note": "7 Sep 1940 to 10/11 May 1941. Ended as the bombers went east for Barbarossa.",
    "fly": [
     {
@@ -280,6 +355,52 @@
    "from": 17,
    "to": 38,
    "conf": "high",
+   "theatre": "GER-med",
+   "share": [
+    [
+     17,
+     0.7
+    ],
+    [
+     28,
+     0.6
+    ]
+   ],
+   "bases": [
+    [
+     17,
+     [
+      "Sicily"
+     ]
+    ],
+    [
+     22,
+     [
+      "Athens",
+      "Crete"
+     ]
+    ],
+    [
+     28,
+     [
+      "Sicily"
+     ]
+    ],
+    [
+     34,
+     [
+      "Crete",
+      "Derna",
+      "Benghazi"
+     ]
+    ],
+    [
+     38,
+     [
+      "Sicily"
+     ]
+    ]
+   ],
    "note": "X Fliegerkorps January to May 1941 (17-21); II Fliegerkorps December 1941 to May 1942 (28-33); the last blitz in October 1942 (38).",
    "fly": [
     {
@@ -289,8 +410,7 @@
       "Malta"
      ],
      "kind": "sky",
-     "bombers": true,
-     "share": 0.5
+     "bombers": true
     },
     {
      "from": 28,
@@ -299,8 +419,7 @@
       "Malta"
      ],
      "kind": "sky",
-     "bombers": true,
-     "share": 0.5
+     "bombers": true
     },
     {
      "from": 38,
@@ -309,8 +428,7 @@
       "Malta"
      ],
      "kind": "sky",
-     "bombers": true,
-     "share": 0.5
+     "bombers": true
     }
    ]
   },
@@ -323,6 +441,35 @@
    "from": 23,
    "to": 28,
    "conf": "high",
+   "theatre": "GER-east",
+   "share": [
+    [
+     23,
+     0.06
+    ],
+    [
+     25,
+     0.02
+    ]
+   ],
+   "bases": [
+    [
+     23,
+     [
+      "Minsk",
+      "Vitebsk",
+      "Mogilev"
+     ]
+    ],
+    [
+     26,
+     [
+      "Smolensk",
+      "Vyazma",
+      "Bryansk"
+     ]
+    ]
+   ],
    "note": "From 21/22 Jul 1941; small after the first weeks.",
    "fly": [
     {
@@ -330,8 +477,7 @@
      "to": 28,
      "regions": [
       "Moscow"
-     ],
-     "share": 0.3
+     ]
     }
    ]
   },
@@ -356,6 +502,25 @@
    "from": 32,
    "to": 34,
    "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     32,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     32,
+     [
+      "Holland",
+      "Brabant",
+      "Brussels",
+      "Somme",
+      "Rouen"
+     ]
+    ]
+   ],
    "note": "April to June 1942, after Luebeck.",
    "fly": [
     {
@@ -365,8 +530,7 @@
       "West Country",
       "Yorkshire",
       "Kent"
-     ],
-     "share": 0.3
+     ]
     }
    ]
   },
@@ -379,6 +543,24 @@
    "from": 31,
    "to": 46,
    "conf": "medium-high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     31,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     31,
+     [
+      "Calais",
+      "Somme",
+      "Normandy",
+      "Cotentin"
+     ]
+    ]
+   ],
    "note": "March 1942 to June 1943.",
    "fly": [
     {
@@ -388,8 +570,7 @@
       "Kent",
       "Hampshire",
       "West Country"
-     ],
-     "share": 0.15
+     ]
     }
    ]
   },
@@ -402,6 +583,23 @@
    "from": 46,
    "to": 46,
    "conf": "medium-high",
+   "theatre": "GER-east",
+   "share": [
+    [
+     46,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     46,
+     [
+      "Bryansk",
+      "Orel",
+      "Smolensk"
+     ]
+    ]
+   ],
    "note": "June 1943 only, then the bombers went back to the front.",
    "fly": [
     {
@@ -424,6 +622,42 @@
    "from": 53,
    "to": 57,
    "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     53,
+     0.15
+    ],
+    [
+     54,
+     0.125
+    ],
+    [
+     55,
+     0.1
+    ],
+    [
+     56,
+     0.075
+    ],
+    [
+     57,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     53,
+     [
+      "Somme",
+      "Champagne",
+      "Brussels",
+      "Brabant",
+      "Holland",
+      "Brittany"
+     ]
+    ]
+   ],
    "note": "21/22 Jan 1944 to May 1944.",
    "fly": [
     {
@@ -431,8 +665,7 @@
      "to": 57,
      "regions": [
       "London"
-     ],
-     "share": 0.5
+     ]
     }
    ]
   },
@@ -493,6 +726,47 @@
    "from": 9,
    "to": 69,
    "conf": "high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     9,
+     0.25
+    ],
+    [
+     17,
+     0.3
+    ],
+    [
+     41,
+     0.38
+    ],
+    [
+     56,
+     0.114
+    ],
+    [
+     59,
+     0.38
+    ],
+    [
+     60,
+     0.23
+    ],
+    [
+     65,
+     0.27
+    ]
+   ],
+   "bases": [
+    [
+     9,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia"
+     ]
+    ]
+   ],
    "note": "From 15/16 May 1940. Oil first in January to March 1941. The area directive of 14 Feb 1942, Harris from 22 Feb (30). Under SHAEF's direction for the invasion April to September 1944.",
    "fly": [
     {
@@ -585,6 +859,31 @@
    "from": 17,
    "to": 46,
    "conf": "medium-high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     17,
+     0.2
+    ],
+    [
+     29,
+     0.15
+    ],
+    [
+     41,
+     0.1
+    ]
+   ],
+   "bases": [
+    [
+     17,
+     [
+      "Kent",
+      "London",
+      "Hampshire"
+     ]
+    ]
+   ],
    "note": "From January 1941; cut back on 13 Nov 1941 (27); smaller in 1942 (Dieppe, August 1942, the biggest day); merged into the invasion's air plan in 1943.",
    "fly": [
     {
@@ -600,8 +899,7 @@
      "to": 46,
      "regions": [
       "Calais"
-     ],
-     "share": 0.3
+     ]
     }
    ]
   },
@@ -614,6 +912,23 @@
    "from": 60,
    "to": 69,
    "conf": "medium-high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     60,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     60,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia"
+     ]
+    ]
+   ],
    "note": "From August 1944 (Homberg, 27 Aug), when the escort and the Allied sky allowed.",
    "fly": [
     {
@@ -624,7 +939,6 @@
       "Rhineland"
      ],
      "aim": "oil",
-     "share": 0.3,
      "escort": 0.5
     }
    ]
@@ -662,6 +976,34 @@
    "from": 56,
    "to": 58,
    "conf": "high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     56,
+     0.4
+    ]
+   ],
+   "bases": [
+    [
+     56,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia",
+      "Champagne",
+      "Lille",
+      "Flanders",
+      "Kent",
+      "Hampshire",
+      "Normandy",
+      "Brussels",
+      "Brabant",
+      "Gelderland",
+      "Rhineland",
+      "Westphalia"
+     ]
+    ]
+   ],
    "note": "April to June 1944.",
    "fly": [
     {
@@ -700,6 +1042,26 @@
    "from": 36,
    "to": 69,
    "conf": "high",
+   "theatre": "USA-eur",
+   "share": [
+    [
+     36,
+     0.35
+    ],
+    [
+     41,
+     0.4
+    ]
+   ],
+   "bases": [
+    [
+     36,
+     [
+      "East Anglia",
+      "Midlands"
+     ]
+    ]
+   ],
    "note": "First raid 17 Aug 1942 (Rouen). Deep raids beyond escort June to 14 Oct 1943 (46-50), then shallow raids under escort; deep again only with escorts from 11 Jan 1944 (53); Big Week 20-25 Feb 1944 (54); Berlin from March 1944 (55).",
    "fly": [
     {
@@ -777,6 +1139,38 @@
    "from": 51,
    "to": 69,
    "conf": "high",
+   "theatre": "USA-eur",
+   "share": [
+    [
+     51,
+     0.15
+    ],
+    [
+     53,
+     0.2
+    ]
+   ],
+   "bases": [
+    [
+     48,
+     [
+      "Benghazi"
+     ]
+    ],
+    [
+     51,
+     [
+      "Tunis",
+      "Apulia"
+     ]
+    ],
+    [
+     52,
+     [
+      "Apulia"
+     ]
+    ]
+   ],
    "note": "From November 1943. The one low-level raid on Ploesti from Libya was 1 Aug 1943 (48).",
    "fly": [
     {
@@ -829,6 +1223,58 @@
    "from": 36,
    "to": 58,
    "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     36,
+     0.5
+    ],
+    [
+     41,
+     0.55
+    ],
+    [
+     53,
+     0.35
+    ]
+   ],
+   "bases": [
+    [
+     36,
+     [
+      "Port Moresby",
+      "Milne Bay",
+      "Guadalcanal",
+      "Espiritu Santo"
+     ]
+    ],
+    [
+     40,
+     [
+      "Buna"
+     ]
+    ],
+    [
+     46,
+     [
+      "Lae",
+      "New Georgia"
+     ]
+    ],
+    [
+     51,
+     [
+      "Bougainville"
+     ]
+    ],
+    [
+     54,
+     [
+      "Hollandia",
+      "Biak"
+     ]
+    ]
+   ],
    "note": "Guadalcanal from August 1942 (36); the Fifth Air Force from September 1942; Bismarck Sea March 1943 (43); Wewak August 1943 (48); Rabaul October and November 1943 (50-51).",
    "fly": [
     {
@@ -864,6 +1310,28 @@
    "from": 58,
    "to": 67,
    "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     58,
+     0.06
+    ]
+   ],
+   "bases": [
+    [
+     58,
+     [
+      "Kharagpur",
+      "Chengtu"
+     ]
+    ],
+    [
+     66,
+     [
+      "Kharagpur"
+     ]
+    ]
+   ],
    "note": "15 Jun 1944 to 15 Jan 1945 from Chengtu; from India only, February and March 1945.",
    "fly": [
     {
@@ -886,6 +1354,34 @@
    "from": 63,
    "to": 72,
    "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     63,
+     0.1
+    ],
+    [
+     65,
+     0.25
+    ]
+   ],
+   "bases": [
+    [
+     63,
+     [
+      "Saipan",
+      "Guam"
+     ]
+    ],
+    [
+     68,
+     [
+      "Saipan",
+      "Guam",
+      "Iwo Jima"
+     ]
+    ]
+   ],
    "note": "Day precision from high altitude to February 1945 (63-66); low-level night fire raids from March 1945 (67); day precision again under P-51s from Iwo Jima from April 1945 (68).",
    "fly": [
     {
@@ -919,6 +1415,22 @@
    "from": 3,
    "to": 7,
    "conf": "high",
+   "theatre": "SOV",
+   "share": [
+    [
+     3,
+     0.25
+    ]
+   ],
+   "bases": [
+    [
+     3,
+     [
+      "Leningrad",
+      "Estonia"
+     ]
+    ]
+   ],
    "note": "30 Nov 1939 to 13 Mar 1940.",
    "fly": [
     {
@@ -963,6 +1475,48 @@
    "from": 22,
    "to": 69,
    "conf": "medium-high",
+   "theatre": "SOV",
+   "share": [
+    [
+     22,
+     0.1
+    ],
+    [
+     65,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     22,
+     [
+      "Crimea"
+     ]
+    ],
+    [
+     24,
+     [
+      "Estonia"
+     ]
+    ],
+    [
+     26,
+     [
+      "Moscow",
+      "Ryazan",
+      "Tula",
+      "Yaroslavl"
+     ]
+    ],
+    [
+     51,
+     [
+      "Kursk",
+      "Kharkov",
+      "Smolensk"
+     ]
+    ]
+   ],
    "note": "Naval aviation on Romanian oil and Constanta June to August 1941 (22-24); Berlin from Saaremaa August and early September 1941 (24-25); long-range aviation as its own command from March 1942 (31); Koenigsberg April 1943 (44); Helsinki February 1944 (54). Day raids with long-range bombers ended in summer 1941 (see stand-downs).",
    "fly": [
     {
@@ -970,24 +1524,21 @@
      "to": 25,
      "regions": [
       "Berlin"
-     ],
-     "share": 0.2
+     ]
     },
     {
      "from": 44,
      "to": 44,
      "regions": [
       "Konigsberg"
-     ],
-     "share": 0.2
+     ]
     },
     {
      "from": 54,
      "to": 54,
      "regions": [
       "Helsinki"
-     ],
-     "share": 0.2
+     ]
     }
    ]
   },
@@ -1024,6 +1575,36 @@
    "from": 1,
    "to": 48,
    "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     1,
+     0.4
+    ],
+    [
+     17,
+     0.3
+    ],
+    [
+     25,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     1,
+     [
+      "Hankow"
+     ]
+    ],
+    [
+     5,
+     [
+      "Hankow",
+      "Loyang"
+     ]
+    ]
+   ],
    "note": "From February 1938 (before turn 1) to August 1943. Peaks: Operation 101, May to September 1940 (9-13), with the new long-range Zero escort from August 1940; Operation 102, July and August 1941 (23-24).",
    "fly": [
     {
@@ -1068,6 +1649,45 @@
    "from": 30,
    "to": 52,
    "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     30,
+     0.3
+    ],
+    [
+     41,
+     0.45
+    ],
+    [
+     53,
+     0.2
+    ]
+   ],
+   "bases": [
+    [
+     30,
+     [
+      "Rabaul",
+      "Lae"
+     ]
+    ],
+    [
+     36,
+     [
+      "Rabaul",
+      "Bougainville"
+     ]
+    ],
+    [
+     45,
+     [
+      "Wewak",
+      "Rabaul",
+      "Bougainville"
+     ]
+    ]
+   ],
    "note": "Port Moresby from February 1942 (30); Guadalcanal August 1942 to February 1943 (36-42); I-Go, 7-16 Apr 1943 (44); RO-Go, November 1943 (51).",
    "fly": [
     {
@@ -1090,6 +1710,23 @@
    "from": 30,
    "to": 51,
    "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     30,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     30,
+     [
+      "Koepang",
+      "Kendari",
+      "Ambon"
+     ]
+    ]
+   ],
    "note": "19 Feb 1942 to November 1943, 64 raids on Darwin.",
    "fly": [
     {
@@ -1097,8 +1734,7 @@
      "to": 51,
      "regions": [
       "Darwin"
-     ],
-     "share": 0.3
+     ]
     }
    ]
   },
@@ -1111,6 +1747,23 @@
    "from": 40,
    "to": 52,
    "conf": "medium-high",
+   "theatre": "JAP",
+   "share": [
+    [
+     40,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     40,
+     [
+      "Rangoon",
+      "Meiktila",
+      "Yenangyaung"
+     ]
+    ]
+   ],
    "note": "At night in December 1942 (40); by day in December 1943 (52).",
    "fly": [
     {
@@ -1119,16 +1772,14 @@
      "regions": [
       "Calcutta"
      ],
-     "night": true,
-     "share": 0.3
+     "night": true
     },
     {
      "from": 52,
      "to": 52,
      "regions": [
       "Calcutta"
-     ],
-     "share": 0.3
+     ]
     }
    ]
   },
@@ -1177,6 +1828,29 @@
    "from": 10,
    "to": 38,
    "conf": "high",
+   "theatre": "ITA",
+   "share": [
+    [
+     10,
+     0.12
+    ],
+    [
+     17,
+     0.1
+    ],
+    [
+     29,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     10,
+     [
+      "Sicily"
+     ]
+    ]
+   ],
    "note": "From 11 Jun 1940, high-level by day; with the Germans January to May 1941 (17-21) and December 1941 to May 1942 (28-33); the last blitz October 1942 (38).",
    "fly": [
     {
@@ -1211,6 +1885,22 @@
    "from": 11,
    "to": 40,
    "conf": "medium-high",
+   "theatre": "ITA",
+   "share": [
+    [
+     11,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     11,
+     [
+      "Rhodes",
+      "Sardinia"
+     ]
+    ]
+   ],
    "note": "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43.",
    "fly": [
     {
@@ -1221,8 +1911,7 @@
       "Alexandria",
       "Gibraltar",
       "Bahrain"
-     ],
-     "share": 0.2
+     ]
     }
    ]
   },
@@ -1235,6 +1924,22 @@
    "from": 14,
    "to": 17,
    "conf": "high",
+   "theatre": "ITA",
+   "share": [
+    [
+     14,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     14,
+     [
+      "Brussels",
+      "Flanders"
+     ]
+    ]
+   ],
    "note": "October 1940 to January 1941.",
    "fly": [
     {
@@ -1242,8 +1947,7 @@
      "to": 17,
      "regions": [
       "Kent"
-     ],
-     "share": 0.2
+     ]
     }
    ]
   },
@@ -1296,6 +2000,83 @@
    "book": "The staff flies it: support behind its main effort."
   }
  ],
+ "bookAbout": "Rider b569 (3) and (4), with the historian's shares and bases (historian/air-shares-b569.json and .md): at the stops that follow the book a row takes its 'share' (dated rows [from turn, share]) of its nation's front-line aircraft in its 'theatre', taken from the kind the row flies (a fight for the sky with bombers takes the share of each kind); its escort takes 'escort' of the theatre's fighters (the feature builder's reading). A theatre is: Germany's west, east and Mediterranean by 'split' (the historian's whole-Luftwaffe split by date); the RAF at home, its groups on British home ground; America's Europe and Pacific, its groups on either side of the world; any other nation's, its whole air force. Groups in reach of the row's targets go first. A group out of reach is moved on the row's month to the field its side holds nearest any of the row's 'bases' for that month, in reach of the targets, one with room first; if the side holds none, the row flies without it.",
+ "split": {
+  "GER": [
+   [
+    1,
+    {
+     "east": 0.5,
+     "west": 0.5,
+     "med": 0
+    }
+   ],
+   [
+    5,
+    {
+     "east": 0.05,
+     "west": 0.95,
+     "med": 0
+    }
+   ],
+   [
+    17,
+    {
+     "east": 0,
+     "west": 0.7,
+     "med": 0.3
+    }
+   ],
+   [
+    22,
+    {
+     "east": 0.6,
+     "west": 0.25,
+     "med": 0.1
+    }
+   ],
+   [
+    28,
+    {
+     "east": 0.6,
+     "west": 0.25,
+     "med": 0.15
+    }
+   ],
+   [
+    29,
+    {
+     "east": 0.55,
+     "west": 0.25,
+     "med": 0.2
+    }
+   ],
+   [
+    41,
+    {
+     "east": 0.4,
+     "west": 0.35,
+     "med": 0.25
+    }
+   ],
+   [
+    53,
+    {
+     "east": 0.35,
+     "west": 0.55,
+     "med": 0.1
+    }
+   ],
+   [
+    65,
+    {
+     "east": 0.5,
+     "west": 0.5,
+     "med": 0
+    }
+   ]
+  ]
+ },
  "sources": [
   "Tooze, The Wages of Destruction (2006); Wagenfuehr's armaments series in the US Strategic Bombing Survey, The Effects of Strategic Bombing on the German War Economy (1945)",
   "Harrison (ed.), The Economics of World War II (1998); Harrison, Accounting for War (1996)",
@@ -1307,10 +2088,11 @@
   "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
  ],
  "radar": {
-  "_about": "Ruling 236 riders b553 and b558 (Brian, 20:43Z: \"if you had radar then your fighters are much better at intercepting bombing raids\"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled.",
+  "_about": "Ruling 236 riders b553 and b558 (Brian, 20:43Z: \"if you had radar then your fighters are much better at intercepting bombing raids\"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled. (c) b569(2): at stops 3 to 5 a staff whose ground was bombed by night within 'need' months takes Fighter control first in its research, once it holds Early-warning radar, every nation alike.",
   "tech": "earlywarning",
   "control": "gci",
   "ground": 0.5,
+  "need": 3,
   "record": [
    {
     "nat": "GER",

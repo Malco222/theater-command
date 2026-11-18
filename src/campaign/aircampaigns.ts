@@ -21,7 +21,7 @@ import data from '../../data/campaign/aircampaigns.json';
 import { turnToDate } from '../core/ticket';
 import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, guardsLand, kmTo, whyNotMission,
+  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline, theWords } from './game';
 import { hasTech } from './tech';
@@ -31,9 +31,14 @@ import { majorsOf } from './diplomacy';
 import { townSize } from './towns';
 import { grounded, weatherOn } from './weather';
 import { wrecked } from './airversion';
+import { beyondEurope } from './world';
 
-interface Phase { from: number; to: number; regions: string[]; share?: number; escort?: number; bombers?: boolean; aim?: 'oil' | 'rail'; night?: boolean; kind?: 'sky' }
-interface BookRow { nat: string; kind: string; what: string; targets: string; time: 'day' | 'night' | 'both'; from: number; to: number; conf: string; note?: string; fly?: Phase[]; book?: string }
+interface Phase { from: number; to: number; regions: string[]; escort?: number; bombers?: boolean; aim?: 'oil' | 'rail'; night?: boolean; kind?: 'sky' }
+/**
+ * A row of the book. A row that flies carries its 'theatre', its 'share' of that theatre's front-line aircraft by date
+ * and the record's 'bases' by date (b569(3) and (4), from the historian's air-shares-b569).
+ */
+interface BookRow { nat: string; kind: string; what: string; targets: string; time: 'day' | 'night' | 'both'; from: number; to: number; conf: string; note?: string; fly?: Phase[]; book?: string; theatre?: string; share?: [number, number][]; bases?: [number, string[]][] }
 interface RepairRow { target: string; perMonth: number; dispersed?: number }
 
 export const AC = data as unknown as {
@@ -45,7 +50,8 @@ export const AC = data as unknown as {
   bands: { from: number; words: string }[];
   repair: Record<string, RepairRow>;
   book: BookRow[];
-  radar: { tech: string; control: string; ground: number; record: ChainRow[]; night: Record<string, [number, number][]> };
+  split: Record<string, [number, Record<string, number>][]>;
+  radar: { tech: string; control: string; ground: number; need: number; record: ChainRow[]; night: Record<string, [number, number][]> };
   gunners: { night: number; ground: number; day: Record<string, [number, number][]>; box: { nats: string[]; alone: number; escorted: number }; b29: { nat: string; vs: string[]; from: number; ratio: number; regions: string[] } };
 };
 interface ChainRow { nat: string; from: number; name: string; by: string; ground: number; plural?: boolean; regions?: string[]; where?: string }
@@ -217,6 +223,8 @@ function addStock(g: Game, r: Region, kind: 'works' | 'oil', by: string, cut: nu
  * it stops this month: Germany's works were spread out from March 1944, and a day raid on them does less.
  */
 export function bombLands(g: Game, by: string, r: Region, cut: number, night: boolean, aim: 'works' | 'oil' | 'rail'): number {
+  // A nation bombed by night reaches for Fighter control (b569(2)): the month is kept for its staff's research.
+  if (night) (mem(g).night ??= {})[r.ctrl] = g.turn;
   if (cut <= 0) return cut;
   const row = night ? AC.use.night : AC.use.day;
   const spread = dispersedAt(g, r.ctrl, row);
@@ -331,6 +339,18 @@ export function gunnerRatio(g: Game, nat: string, m: AirMission, target: number,
 }
 
 /**
+ * What a staff whose ground is bombed by night researches first (b569(2)): Fighter control, once it holds Early-warning
+ * radar, at stops 3 to 5, every nation alike (no bombed nation of the war failed to reach for it). Null otherwise: at
+ * the stops that follow the book the night rows run by date whatever is researched.
+ */
+export function controlFirst(g: Game, nat: string): string | null {
+  if (!acOn(g) || stopDef(g).book) return null;
+  const at = g.ac?.night?.[nat];
+  if (at === undefined || g.turn - at > AC.radar.need) return null;
+  return hasTech(g, nat, AC.radar.tech) && !hasTech(g, nat, AC.radar.control) ? AC.radar.control : null;
+}
+
+/**
  * The tree cards' lines for the two radar steps (b553(d); the UI director's words, ui-director/words-radar-cards.md),
  * worked out from the numbers, for any nation's card: null for any other technology, or with the switch off.
  */
@@ -356,7 +376,7 @@ export function radarWords(g: Game, nat: string, id: string): string | null {
 }
 
 /** What a defending fighter counts for by night (b553(b)): the controlled figure for a nation holding Fighter control. */
-const rowAt = (rows: [number, number][], t: number): number => {
+const rowAt = <T>(rows: [number, T][], t: number): T => {
   let v = rows[0][1];
   for (const [from, x] of rows) if (from <= t) v = x;
   return v;
@@ -603,19 +623,55 @@ export function campaignResults(g: Game, nat: string, reps: AirReport[]): void {
 const phaseOf = (row: BookRow, turn: number): Phase | null => row.fly?.find((p) => p.from <= turn && turn <= p.to) ?? null;
 const kindOf = (row: BookRow, p: Phase): CampaignKind => (p.kind === 'sky' || row.kind === 'sky' ? 'sky' : 'bomb');
 
-/** The groups of a nation free to fly a book campaign, nearest its targets first, up to the row's share of those in reach. */
-function bookGroups(g: Game, nat: string, targets: number[], bombers: boolean, share: number, taken: Set<number>): AirFleet[] {
-  const fs = airFleetsOf(g, nat).filter((f) => !afloat(f) && !taken.has(f.id) && (bombers ? f.bmr > 0 && f.kind !== 'ftr' : f.ftr > 0 && f.kind !== 'bmr'));
-  const near = (f: AirFleet): number => Math.min(...targets.map((t) => kmTo(g, f, t)));
+/**
+ * A theatre of a nation's air force (b569(3)): which of its groups belong to it, and the part of the kind it holds.
+ * Germany's west, east and Mediterranean are the historian's split of the whole Luftwaffe by date; the RAF at home is
+ * its groups on British home ground; America's Europe and Pacific are its groups on either side of the world; any
+ * other nation's theatre is its whole air force.
+ */
+function theatreOf(g: Game, nat: string, th: string | undefined): { mine: (f: AirFleet) => boolean; part: number } {
+  const side = th?.split('-')[1];
+  const split = AC.split[nat];
+  if (split && side) return { mine: () => true, part: rowAt(split, g.turn)[side] ?? 1 };
+  if (th === 'UK-home') return { mine: (f) => { const r = g.regions[f.base]; return !!r && (r.first ?? r.owner) === 'UK' && !r.overseas; }, part: 1 };
+  if (th === 'USA-eur') return { mine: (f) => !beyondEurope(f.base), part: 1 };
+  if (th === 'USA-pac') return { mine: (f) => beyondEurope(f.base), part: 1 };
+  return { mine: () => true, part: 1 };
+}
+
+/**
+ * The groups a book row takes in its month (b569(3) and (4)): 'share' of its theatre's front-line aircraft of the
+ * kind, whatever other rows hold this month, those already in reach of its targets first, the nearest first. A group
+ * out of reach is moved, as the record's air forces moved, to the field its side holds nearest the record's bases for
+ * the month that is in reach of the targets, one with room for it first; with no such field it stays where it is and
+ * the row does without it. With none of the record's bases on the chart, no group is moved.
+ */
+function bookGroups(g: Game, nat: string, targets: number[], bombers: boolean, share: number, taken: Set<number>, th: { mine: (f: AirFleet) => boolean; part: number }, bases: number[]): AirFleet[] {
+  const kind = airFleetsOf(g, nat).filter((f) => !afloat(f) && th.mine(f) && (bombers ? f.bmr > 0 && f.kind !== 'ftr' : f.ftr > 0 && f.kind !== 'bmr'));
+  const fs = kind.filter((f) => !taken.has(f.id));
+  const size = (f: AirFleet): number => (bombers ? f.bmr : f.ftr);
   const range = (f: AirFleet): number => (bombers ? airRange(f, g).bmr : airRange(f, g).ftr);
-  const can = fs.filter((f) => near(f) <= range(f)).sort((a, b) => near(a) - near(b) || a.id - b.id);
-  const all = can.reduce((s, f) => s + (bombers ? f.bmr : f.ftr), 0);
+  const nearFrom = (at: number): number => Math.min(...targets.map((t) => km(g, at, t)));
+  const near = (f: AirFleet): number => Math.min(...targets.map((t) => kmTo(g, f, t)));
+  const toBase = (at: number): number => Math.min(...bases.map((b) => km(g, at, b)));
+  const want = share * th.part * kind.reduce((s, f) => s + size(f), 0) - 1e-9;
   const out: AirFleet[] = [];
   let got = 0;
+  const can = fs.filter((f) => near(f) <= range(f)).sort((a, b) => near(a) - near(b) || a.id - b.id);
   for (const f of can) {
-    if (got >= share * all - 1e-9) break;
+    if (got >= want) return out;
     out.push(f);
-    got += bombers ? f.bmr : f.ftr;
+    got += size(f);
+  }
+  if (!bases.length) return out;
+  const rest = fs.filter((f) => !can.includes(f)).sort((a, b) => toBase(a.base) - toBase(b.base) || a.id - b.id);
+  for (const f of rest) {
+    if (got >= want) break;
+    const fields = g.regions.filter((r) => nearFrom(r.id) <= range(f) && whyNotBase(g, f, r, true) === null)
+      .sort((a, b) => Number(fieldRoom(g, b.id, f)) - Number(fieldRoom(g, a.id, f)) || toBase(a.id) - toBase(b.id) || a.id - b.id);
+    if (!fields.length || !rebaseAir(g, f, fields[0], true)) continue;
+    out.push(f);
+    got += size(f);
   }
   return out;
 }
@@ -640,12 +696,15 @@ function bookMonth(g: Game): void {
     const night = kind === 'bomb' && (p!.night ?? row.time === 'night');
     // The groups it takes this month: those in reach, up to its share, and for a fight for the sky its bombers on the fields.
     for (const f of airFleetsOf(g, row.nat)) if (f.camp === c?.id) delete f.camp;
-    const share = p!.share ?? 1;
+    // Its share of its theatre this month, and the record's bases: the groups it needs are moved up near them (b569(4)).
+    const share = row.share ? rowAt(row.share, g.turn) : 1;
+    const th = theatreOf(g, row.nat, row.theatre);
+    const bases = (row.bases ? rowAt(row.bases, g.turn) : []).map((nm) => g.byName[nm]?.id).filter((b): b is number => b !== undefined);
     const main = kind === 'sky'
-      ? [...bookGroups(g, row.nat, targets, false, share, taken), ...(p!.bombers ? bookGroups(g, row.nat, targets, true, share, taken) : [])]
-      : bookGroups(g, row.nat, targets, true, share, taken);
+      ? [...bookGroups(g, row.nat, targets, false, share, taken, th, bases), ...(p!.bombers ? bookGroups(g, row.nat, targets, true, share, taken, th, bases) : [])]
+      : bookGroups(g, row.nat, targets, true, share, taken, th, bases);
     for (const f of main) taken.add(f.id);
-    const esc = kind === 'bomb' && !night && p!.escort ? bookGroups(g, row.nat, targets, false, p!.escort, taken) : [];
+    const esc = kind === 'bomb' && !night && p!.escort ? bookGroups(g, row.nat, targets, false, p!.escort, taken, th, bases) : [];
     for (const f of esc) taken.add(f.id);
     const aim = p!.aim ?? 'works';
     if (!c) {

@@ -3,7 +3,7 @@
 // lost), bombing damage carries over and comes back at the historian's rates, and at the stops that follow the book
 // the historian's campaigns open and close on their months. The grand campaign only, behind a switch that is off.
 import { afterEach, describe, expect, it } from 'vitest';
-import { AIR, CLOSE, airAI, airBattles, airFleetsOf, airIncomeLoss, airOverBattle, fly } from '../src/campaign/air';
+import { AIR, CLOSE, airAI, airBattles, airFleetsOf, airIncomeLoss, airOverBattle, airRange, fly, kmTo } from '../src/campaign/air';
 import {
   AC, acOn, airWarMonth, bombLands, bombWorn, callOff, campaignView, chainAt, gunnerRatio, heldDown, lossBand, nightFighters, openCampaign, setAirCampaigns, skyFight, skyFought, stockLoss, whyNotCampaign,
 } from '../src/campaign/aircampaigns';
@@ -353,6 +353,55 @@ describe('a campaign is a standing order', () => {
 });
 
 describe("the book: history's campaigns on their months (b549)", () => {
+  it("takes its share of the air force and moves groups out of reach up to a field near the record's base (b569(3), (4))", () => {
+    const g = grand();
+    setStop(g, 1, true);
+    g.turn = 17;
+    const sicily = g.byName.Sicily.id, malta = g.byName.Malta.id;
+    // Before the month no German bomber is in reach of Malta.
+    const bombers = (): AirFleet[] => airFleetsOf(g, 'GER').filter((f) => f.bmr > 0 && f.kind !== 'ftr' && f.ship === undefined);
+    expect(bombers().some((f) => kmTo(g, f, malta) <= airRange(f, g).bmr)).toBe(false);
+    airWarMonth(g);
+    const c = g.ac!.campaigns.find((x) => x.book === 6 && x.off === undefined)!;
+    expect(c).toBeDefined();
+    const fs = c.groups.map((id) => g.airFleets.find((f) => f.id === id)!);
+    for (const f of fs) {
+      expect(kmTo(g, f, malta)).toBeLessThanOrEqual(airRange(f, g).bmr);
+      expect(f.moved).toBe(17);
+    }
+    expect(fs.some((f) => f.base === sicily)).toBe(true);
+    // Its share of Germany's bombers: 0.7 of the Mediterranean's, which is 0.3 of the Luftwaffe in 1941.
+    const all = bombers().reduce((s, f) => s + f.bmr, 0), took = fs.reduce((s, f) => s + f.bmr, 0);
+    const med = AC.split.GER.filter(([from]) => from <= 17).pop()![1].med;
+    expect(med).toBe(0.3);
+    // It stops once it has its share: never more than the share and one group over.
+    expect(took).toBeGreaterThan(0);
+    expect(took).toBeLessThanOrEqual(0.7 * med * all + Math.max(...fs.map((f) => f.bmr)));
+  });
+
+  it("holds the record's share of the RAF at home in August 1941, not every group in reach (b569(3))", () => {
+    const g = grand();
+    setStop(g, 1, true);
+    g.turn = 23;
+    // France has fallen: the sweeps' ground is Germany's.
+    for (const nm of ['Calais', 'Somme']) g.byName[nm].ctrl = 'GER';
+    airWarMonth(g);
+    const home = (f: AirFleet): boolean => { const r = g.regions[f.base]; return (r.first ?? r.owner) === 'UK' && !r.overseas; };
+    const raf = airFleetsOf(g, 'UK').filter((f) => f.ship === undefined && home(f));
+    const bmr = raf.filter((f) => f.bmr > 0 && f.kind !== 'ftr').reduce((s, f) => s + f.bmr, 0);
+    const ftr = raf.filter((f) => f.ftr > 0 && f.kind !== 'bmr').reduce((s, f) => s + f.ftr, 0);
+    const held = (i: number, k: 'bmr' | 'ftr'): number => {
+      const c = g.ac!.campaigns.find((x) => x.book === i && x.off === undefined);
+      return (c?.groups ?? []).reduce((s, id) => s + (g.airFleets.find((f) => f.id === id)?.[k] ?? 0), 0);
+    };
+    const big = (k: 'bmr' | 'ftr'): number => Math.max(...raf.map((f) => f[k]));
+    // The night bombing: 0.3 of the bombers at home; the sweeps: 0.2 of the fighters. Each is flown.
+    expect(held(17, 'bmr')).toBeGreaterThan(0);
+    expect(held(17, 'bmr')).toBeLessThanOrEqual(0.3 * bmr + big('bmr'));
+    expect(held(18, 'ftr')).toBeGreaterThan(0);
+    expect(held(18, 'ftr')).toBeLessThanOrEqual(0.2 * ftr + big('ftr'));
+  });
+
   it("opens the battle for the sky over southern England in August 1940 and closes it when its months are over", () => {
     const g = grand();
     setStop(g, 1, true);
@@ -524,6 +573,32 @@ describe("radar by the tree and the record (riders b553 and b558, Brian's \"if y
     };
     expect(shot(false)).toBe(0);
     expect(shot(true)).toBeGreaterThan(0);
+  });
+
+  it('a staff bombed by night takes Fighter control first at stops 3 to 5, once it holds Early-warning radar (b569(2))', async () => {
+    const { staffPick } = await import('../src/campaign/tech');
+    const g = grand();
+    g.turn = 20;
+    learn(g, 'GER', 'earlywarning');
+    const before = staffPick(g, 'GER');
+    expect(before).not.toBe('gci');
+    for (const f of g.airFleets) if (f.nat === 'GER' && f.ftr > 0 && f.ship === undefined) { f.base = g.byName.Ruhr.id; f.mission = 'support'; }
+    raid(g, 'UK', 'GER', 'Ruhr', 'night');
+    expect(g.ac?.night?.GER).toBe(20);
+    expect(staffPick(g, 'GER')).toBe('gci');
+    // Not without Early-warning radar, not months after the last raid, not at the book, and not with the switch off.
+    const h = structuredClone(g);
+    h.nations.GER.tech!.done = h.nations.GER.tech!.done.filter((x) => x !== 'earlywarning');
+    expect(staffPick(h, 'GER')).not.toBe('gci');
+    g.turn = 20 + AC.radar.need + 1;
+    expect(staffPick(g, 'GER')).not.toBe('gci');
+    g.turn = 21;
+    setStop(g, 1, true);
+    expect(staffPick(g, 'GER')).not.toBe('gci');
+    setStop(g, 3, true);
+    expect(staffPick(g, 'GER')).toBe('gci');
+    setAirCampaigns(g, false);
+    expect(staffPick(g, 'GER')).not.toBe('gci');
   });
 
   it("the gunners' ratio reads the historian's kinds from what the game knows (b559)", () => {
