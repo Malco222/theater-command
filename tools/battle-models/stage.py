@@ -905,7 +905,21 @@ class Effects:
                           alpha=0.92, kind="tongue" if i % 2 else "lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
         if heart > 0.0:
-            self.puff(t, at, life=g.uniform(0.07, 0.1), r=(0.5 * heart, heart), col=(0.2, 0.066, 0.004), col2=(0.14, 0.026, 0.004), alpha=1.0, kind="glow", wind=wind, fade_in=0.01, grow=0.45)
+            # its heart: a few short yellow tongues at the root, never a round glowing ball ("a round salmon dome").
+            # (Dice of their own; the old ball's throws are still made, so everything after it is as it was.)
+            life = g.uniform(0.07, 0.1)
+            g.uniform(0, 6.28), g.uniform(0, 6.28), g.uniform(0, 6.28)     # (the three throws that turned the old ball)
+            q = random.Random(int(at.x * 53.0 + at.y * 7.0 + at.z * 3.0) + 389)
+            for j in range(5):
+                d = Vector((q.uniform(-1, 1), q.uniform(-1, 1), q.uniform(-1, 1)))
+                d = d.normalized() if d.length > 0.05 else Vector((0.0, 0.0, 1.0))
+                if toward is not None:
+                    d = (d * spread + Vector(toward)).normalized()
+                ln = heart * q.uniform(1.3, 2.2)
+                wide = ln * q.uniform(0.22, 0.34)
+                p = self.puff(t, at + d * ln * 0.3, vel=d * q.uniform(3.0, 8.0), life=life * q.uniform(1.2, 2.0), r=(0.7, 1.0), col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95,
+                              kind="lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.5, cool=1.0, name="heart", rng=q)
+                p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), q.uniform(0, 6.283))).to_euler()
 
     # -- the effects themselves (each is a `make` for stream or once, or lays its own)
     def funnel_smoke(self, where, thick=0.5, r=2.4, start=-16.0, dark=0.3, end=1e9):

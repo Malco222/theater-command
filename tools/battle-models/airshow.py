@@ -274,8 +274,9 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
                    (0.07, 0.013, 0.003), (0.03, 0.011, 0.006), g.uniform(0.1, 0.18), g.uniform(0.3, 0.5), alpha=0.5, splay=0.16)
         # the heart of it, where the petrol or the oil comes out
         if g.random() < 0.4:
+            # (a short yellow tongue lying along the stream; as a round glowing ball it sat on the engine like a bead)
             p = fx.puff(t, at + flow * g.uniform(0.2, 0.7) * size + across(flow, g.uniform(0.0, 0.2) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
-                        col=(0.2, 0.066, 0.004), col2=(0.14, 0.026, 0.004), alpha=0.95, kind="glow", wind=0.03, squash=(1.7, 1.0, 1.0), fade_in=0.006, grow=0.6)
+                        col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95, kind="lick", wind=0.03, squash=(3.4, 0.9, 0.9), fade_in=0.006, grow=0.6, cool=1.0)
             p["ob"].rotation_euler = flow.to_track_quat("X", "Z").to_euler()
     make, every = {"black": (black, 0.017), "thin": (thin, 0.04), "flame": (flame, 0.0115)}[kind]
     fx.stream(where, every, make, start=start, end=end)
@@ -296,9 +297,21 @@ def fireball(fx, t0, where, size=1.0):
             p = fx.puff(t, at + d * long * 0.32, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
                         kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.85, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
-        for i in range(3):                                   # its yellow heart, for an instant
-            fx.puff(t, at + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.4, 0.4))) * size, life=g.uniform(0.08, 0.14), r=(0.8 * size, g.uniform(1.4, 2.0) * size),
-                    col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=1.0, kind="glow", wind=0.85, fade_in=0.01, grow=0.45)
+        # its yellow heart, for an instant: short tongues, never a round glowing ball (dice of their own; the three old
+        # balls' throws are still made, so everything after them is as it was)
+        q = random.Random(int(at.x * 53.0 + at.y * 7.0 + at.z * 3.0) + 577)
+        for i in range(3):
+            c = at + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.4, 0.4))) * size
+            life, big = g.uniform(0.08, 0.14), g.uniform(1.4, 2.0) * size
+            g.uniform(0, 6.28), g.uniform(0, 6.28), g.uniform(0, 6.28)     # (the three throws that turned the old ball)
+            for j in range(4):
+                d = Vector((q.uniform(-1, 1), q.uniform(-1, 1), q.uniform(-0.8, 0.9)))
+                d = d.normalized() if d.length > 0.05 else Z.copy()
+                long = big * q.uniform(1.0, 1.7)
+                wide = long * q.uniform(0.22, 0.34)
+                p = fx.puff(t, c + d * long * 0.3, vel=d * q.uniform(4, 10) * size, life=life * q.uniform(1.0, 1.6), r=(0.7, 1.0), col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95,
+                            kind="lick", drag=3.0, wind=0.85, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.5, cool=1.0, name="heart", rng=q)
+                p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, q.uniform(0, 6.283))).to_euler()
         # (thrown wide and thin, and soon dark: packed close and left brown, they hang behind her as one solid brown lump)
         for i in range(16):
             v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))).normalized() * g.uniform(14, 60) * size
