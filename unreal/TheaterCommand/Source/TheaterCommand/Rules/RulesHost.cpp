@@ -2,6 +2,7 @@
 
 #include "TheaterCommand.h"
 #include "Misc/FileHelper.h"
+#include "Misc/ScopeLock.h"
 
 #if PLATFORM_MAC
 
@@ -440,6 +441,7 @@ bool FRulesHost::IsAvailable() const
 
 bool FRulesHost::Evaluate(const FString& Source, const FString& SourceName, FString& OutError)
 {
+	FScopeLock Hold(&Gate);
 	if (Impl->HasHelper())
 	{
 		FString Answer, Error;
@@ -471,6 +473,7 @@ bool FRulesHost::Evaluate(const FString& Source, const FString& SourceName, FStr
 
 bool FRulesHost::LoadScript(const FString& Path, FString& OutError)
 {
+	FScopeLock Hold(&Gate);
 	if (Impl->HasHelper())
 	{
 		// (the helper reads the file itself)
@@ -493,6 +496,7 @@ bool FRulesHost::LoadScript(const FString& Path, FString& OutError)
 
 bool FRulesHost::Call(const FString& Function, const FString& ArgumentsJson, FString& OutResultJson, FString& OutError)
 {
+	FScopeLock Hold(&Gate);
 	if (!IsAvailable())
 	{
 		OutError = TEXT("The rules engine did not start");
