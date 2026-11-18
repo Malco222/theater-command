@@ -88,7 +88,7 @@ import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/inte
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
-import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, whyNotMission } from '../../../src/campaign/air';
+import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
@@ -3465,9 +3465,10 @@ function force(kind: string, id: number) {
         options.push({ key: `air:${id}:${m}:${t}`, label: `${MISSION[m].label}: ${targetName(m, t)}`, detail: MISSION[m].what, ok: up && !now, why: now ? 'It is doing so now.' : notNow });
       }
     }
-    const bases = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 5);
+    // (85.1: the player's list is moveTargets, as in the browser: the far islands of the wider world by sea included. airBases is the staffs'.)
+    const bases = moveTargets(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 5);
     for (const r of bases) {
-      options.push({ key: `airbase:${id}:${r.id}`, label: `Move to airfields in ${r.name}`, detail: 'Settling in costs it some readiness for a month.', ok: up, why: notNow });
+      options.push({ key: `airbase:${id}:${r.id}`, label: `Move to airfields in ${r.name}`, detail: overOcean(s, f, r) ? SHIP_AIR_TIP : 'Settling in costs it some readiness for a month.', ok: up, why: notNow });
     }
   }
   return {
@@ -3966,9 +3967,9 @@ function rebasePage(s: Game, id: number): Page | null {
   if (!f || f.nat !== s.human) return null;
   const up = humanUp(s) && !onEve(s);
   const base = s.regions[f.base];
-  const rows: PageRow[] = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 14).map((r) => ({
+  const rows: PageRow[] = moveTargets(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 14).map((r) => ({
     nat: r.ctrl, title: r.name, lines: [`${workLevel(s, 'field', r.id) > 0 ? `Airfields of level ${workLevel(s, 'field', r.id)}` : 'Rough landing grounds'}.${s.airFleets.some((x) => x.base === r.id && x.id !== f.id && x.ftr + x.bmr > 0) ? ' Other groups are based there already.' : ''}`],
-    buttons: [{ label: 'MOVE HERE', act: `airbase:${f.id}:${r.id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' }],
+    buttons: [{ label: 'MOVE HERE', act: `airbase:${f.id}:${r.id}`, ok: up, tip: overOcean(s, f, r) ? SHIP_AIR_TIP : 'Settling in costs it some readiness for a month.' }],
   }));
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  \u00B7  ${f.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
