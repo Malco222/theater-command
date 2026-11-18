@@ -12608,6 +12608,15 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 			Flight.Sortie.bEscort = false; // (no fighters go with the night bombers)
 		}
 	}
+	{
+		// ("-TheaterMet=FRA" has every bombing raid met by that nation's fighters, for a picture of the tracer.)
+		static FString StagedMeet;
+		static const bool bMeetAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterMet="), StagedMeet);
+		if (bMeetAsked && !StagedMeet.IsEmpty() && Sortie.bBombers)
+		{
+			Flight.Sortie.Meet = StagedMeet;
+		}
+	}
 	const bool bByNight = Flight.Sortie.bNight;
 	const bool bEscorted = Flight.Sortie.bEscort;
 	Flight.Began = GetWorld()->GetTimeSeconds();
@@ -12678,11 +12687,11 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 		}
 	}
 	// The defender's fighters, if any can reach: a pair of his own, that rise as the raid comes in.
-	if (!Sortie.Meet.IsEmpty())
+	if (!Flight.Sortie.Meet.IsEmpty())
 	{
 		FMiniatureMesh Pair;
 		const double Small = 0.55 * U;
-		const FString Theirs = FMiniatureMesh::MainFighterOf(Sortie.Meet);
+		const FString Theirs = FMiniatureMesh::MainFighterOf(Flight.Sortie.Meet);
 		Pair.Vehicle(Theirs, FVector(0.0, 0.0, 0.0), Small, 0.0, false);
 		Pair.Vehicle(Theirs, FVector(10.0 * Small, 9.0 * Small, 1.5 * Small), Small, 0.0, false);
 		if (Pair.Vertices.Num() > 0)
