@@ -339,7 +339,7 @@ export function airAct(g: Game, action: string): AirActResult | null {
   if (part[0] === 'airbase') {
     const wing = g.airFleets.find((f) => f.id === Number(part[1]) && f.ship !== undefined);
     const grp = g.airFleets.find((f) => f.id === Number(part[1])), to = g.regions[Number(part[2])];
-    const sea = !!grp && !!to && overOcean(grp, to);
+    const sea = !!grp && !!to && overOcean(g, grp, to);
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
     const where = to?.name ?? 'its new airfield';
     return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };

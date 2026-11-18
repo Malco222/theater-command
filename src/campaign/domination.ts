@@ -152,7 +152,12 @@ export function startDomination(g: Game, by: string | null = g.human): boolean {
     n.league = false;
     n.opinion = n.home = 0;
   }
-  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) setWar(g, live[i].id, live[j].id);
+  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+    const a = live[i].id, b = live[j].id;
+    // A war this act begins is dated as any declared one is: its month is the clock of a goal that waits on it.
+    if (!live[i].atWar.includes(b)) { g.flags[`war:${a}:${b}`] = g.turn; delete g.flags[`war:${b}:${a}`]; }
+    setWar(g, a, b);
+  }
   g.flags.dom = g.turn;
   g.flags['dom:n'] = live.length;
   headline(g, 'war', fill(DOMINATION.lines.open, { n: live.length, share: shareWords(DOMINATION.won.share) }), by ?? undefined);

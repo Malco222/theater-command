@@ -292,6 +292,38 @@ describe("ruling 106: the first case of ruling 95(d), rewritten", () => {
     const small = stage('30,000');
     expect(small.rows.findIndex((r) => /^The ring closes/.test(r.line))).toBeGreaterThanOrEqual(small.show);
   });
+
+  it('above news of war and peace that found no band, though never above a warning (b444)', () => {
+    // Seven items for the bands: two take them, five are rows above the battles, and the five fill every row that
+    // shows beside the lead story. Nine battles lost, each heavier than the ring.
+    const stage = (warnings: boolean): MonthCard => {
+      const g = game();
+      const mark = monthMark(g, ME);
+      const grounds = home(g);
+      for (let i = 0; i < 7; i++) {
+        if (warnings) news(g, { kind: 'event', text: `Warning number ${i + 1} of the month. It needs an answer.`, nat: ME, warn: `Warning ${i + 1}` });
+        else news(g, { kind: 'event', text: `News number ${i + 1} of the month.`, head: `News number ${i + 1}`, nat: ME });
+      }
+      grounds.slice(1, 10).forEach((r, i) => land(g, r, { taken: true, attLost: 1000, defLost: 60000 + i }));
+      ringAt(g, grounds[0], 1, '45,000');
+      return monthCard(g, mark, ME);
+    };
+    const ring = (c: MonthCard): number => c.rows.findIndex((r) => /^The ring closes/.test(r.line));
+    const byClass = (rs: CardRow[]): boolean => rs.every((r, i) => !i || rs[i - 1].cls <= r.cls);
+    const card = stage(false);
+    expect(card.bands).toHaveLength(2);
+    expect(card.show).toBe(5);
+    // The ring takes the last row that shows, and the lightest news is the first under the fold.
+    expect(ring(card)).toBe(card.show - 1);
+    expect(card.rows.slice(0, card.show - 1).map((r) => r.tag)).toEqual(['NEWS', 'NEWS', 'NEWS', 'NEWS']);
+    expect(card.rows[card.show]).toMatchObject({ cls: 2, tag: 'NEWS' });
+    expect(byClass(card.rows.slice(0, card.show)) && byClass(card.rows.slice(card.show))).toBe(true);
+    // Five warnings in the rows: the ring stays under the fold and every warning shows.
+    const warned = stage(true);
+    expect(warned.rows.slice(0, warned.show).map((r) => r.tag)).toEqual(['WARNING', 'WARNING', 'WARNING', 'WARNING', 'WARNING']);
+    expect(ring(warned)).toBeGreaterThanOrEqual(warned.show);
+    expect(byClass(warned.rows)).toBe(true);
+  });
 });
 
 describe("the art director's two rules for a band", () => {

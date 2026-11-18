@@ -192,6 +192,8 @@ const PLACED = new RegExp(`(^|[^A-Za-z])(?<![Tt]he )(?<!\\b[Aa]n? )(?<!\\b(?:${N
   const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc(l.slice(0, l.length - n.length))})`).join('');
   return `${before}${reEsc(n)}${after}`;
 }).join('|')})\\b(?! [A-Z])`, 'g');
+/** A plural name owns with the apostrophe alone: "the Midlands' output", never "Midlands's" (the third playtester, 84.3.1). */
+const PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), 'Netherlands', 'United States'].sort((a, b) => b.length - a.length).map(reEsc).join('|')})'s\\b`, 'g');
 /**
  * A line of running text with its articles. `before` is the text that runs before it in the same sentence or
  * paragraph, where the line is one piece of a longer one (a page's text, piece by piece): it decides "The" or "the"
@@ -204,7 +206,7 @@ export function theWords(text: string, before = ''): string {
     const head = /(^|[.!?]\s+)$/.test(s.slice(0, at + pre.length));
     return `${pre}${head ? 'The' : 'the'} ${name}`;
   });
-  return put(put(before + text, ARTICLED), PLACED).slice(cut);
+  return put(put(before + text, ARTICLED), PLACED).slice(cut).replace(PLURAL_OWN, "$1'");
 }
 /** A place's name as it reads in running text: "the Ruhr", "Warsaw"; `start` at the head of a sentence. */
 export function placeName(name: string, start = false): string {

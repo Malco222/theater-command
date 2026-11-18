@@ -958,6 +958,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
     lostAtSea = crossing(g, cs, path, surprise, to);
     g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
+    // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
+    g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
   }
   let taken = true;
   let report: BattleReport | null = null;
@@ -1161,6 +1163,16 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
  * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
  * army could march to is not watched for this: the war there is a land war already.
  */
+/**
+ * True when a nation has come ashore from the sea on another's homeland since their war began, and holds or stands
+ * on that ground still. A landing on some other coast of the same sea, or ground of his homeland taken by land, is not it.
+ */
+function landedOn(g: Game, att: string, d: string): boolean {
+  const since = g.flags[`war:${att}:${d}`] ?? g.flags[`war:${d}:${att}`] ?? 0;
+  return g.regions.some((r) => r.owner === d && !r.overseas && (g.flags[`landedAt:${r.id}:${att}`] ?? -1) >= since
+    && (r.ctrl === att || r.units.some((u) => u.nat === att && !u.dead)));
+}
+
 export function coastReport(g: Game, att: string): void {
   const W = NAVY.watch;
   const n = g.nations[att];
@@ -1191,6 +1203,9 @@ export function coastReport(g: Game, att: string): void {
     if (g.flags[key] === seen.quay.id + 1 && g.turn - (g.flags[at] ?? -99) < W.every) continue;
     g.flags[key] = seen.quay.id + 1;
     g.flags[at] = g.turn;
+    // A warning never comes after its event (ruling 229(e)): once this attacker has come ashore from the sea on the
+    // enemy's homeland in this war and stands on it still, the landing is not news to come, and nobody is told.
+    if (landedOn(g, att, d)) continue;
     const force = seen.corps === 1 ? 'one corps' : `${seen.corps} corps`;
     if (d === g.human) warning(g, 'Coast watch', `The coast watch reports ${n.adj} shipping gathering at ${seen.quay.name}, with troops on the quays: enough to carry ${force}. ${seen.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen.coast.id, att);
     else if (att === g.human) headline(g, 'info', `${x.adj} coast watchers have seen your shipping and troops gather at ${seen.quay.name}: ${x.name} expects a landing and is manning its harbours.`, att, seen.quay.id);
@@ -1334,7 +1349,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     const f = who === nat && turn === g.turn ? named(fleet) : undefined;
     if (!f) continue;
     for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
-    headline(g, 'info', `${cap(what)} ${/ and /.test(what) || /s$/.test(what.split(' ')[0]) ? 'join' : 'joins'} the ${f.name}.`, nat);
+    // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
+    const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
+    headline(g, 'info', `${cap(what)} ${many ? 'join' : 'joins'} the ${f.name}.`, nat);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;

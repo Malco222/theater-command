@@ -259,7 +259,10 @@ function courtsAmericas(g: Game, B: Nation, T: Nation): void {
   g.flags[key] = months;
   if (months === 1) {
     const seat = g.regions[T.capital];
-    headline(g, 'event', `${B.adj} envoys are courting ${seat ? seat.name : T.name}.`, T.id, seat?.id);
+    // (A player's America, which may court it back at no cost, has it among the news of home, where it is not crowded
+    // out by the wars abroad: b434. Anyone else reads it among the news from elsewhere.)
+    const mine = g.human === AMERICAS!.backer && freeCourt(g, g.human, T.id);
+    headline(g, mine ? 'info' : 'event', `${B.adj} envoys are courting ${seat ? seat.name : T.name}.`, mine ? g.human! : T.id, seat?.id);
   }
   // (No more than one country of the Americas joins the Axis in a campaign: b391.)
   if (months >= AMERICAS!.months && americasWon(g, T.id) && americasIn(g) < AMERICAS!.most && joinBloc(g, T, 'axis')) g.flags[`americas:in:${T.id}`] = g.turn;

@@ -59,8 +59,13 @@ export const WORDS_MOST = 30, WORDS_MOST_RAID = 36;
 
 /** What the player has learnt, kept with the player and not with the save. */
 export interface Notebook {
-  /** "Staff notes for a new commander": on by default until the ten lessons are done. */
+  /** "Staff notes for a new commander", as the player last set it in the Guide (see 'set'). */
   on: boolean;
+  /**
+   * True once the player has set the setting himself. Until then the notes open by themselves only in the campaign
+   * FIRST COMMAND began (b434, ruling 141's design): a setting switched on brings them into any other.
+   */
+  set: boolean;
   /** Lessons stamped DONE, and the closing note once it has been closed. */
   done: string[];
   /** Lessons put away with LATER: they wait in the Guide. */
@@ -68,20 +73,23 @@ export interface Notebook {
   /** Tips already shown once. */
   tips: string[];
 }
-export const freshNotebook = (): Notebook => ({ on: true, done: [], later: [], tips: [] });
+export const freshNotebook = (): Notebook => ({ on: true, set: false, done: [], later: [], tips: [] });
 /** A notebook read back from storage, made whole: anything missing is as a new player's. */
 export function readNotebook(raw: unknown): Notebook {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Notebook>;
   // (Only names the list knows: a lesson taken out of a later list is forgotten, not counted.)
   const known = new Set([...LESSONS.map((l) => l.id), CLOSING.id]), tips = new Set(TIPS.map((t) => t.id));
   const ids = (x: unknown, of: Set<string>): string[] => (Array.isArray(x) ? [...new Set(x.filter((s): s is string => typeof s === 'string' && of.has(s)))] : []);
-  return { on: o.on !== false, done: ids(o.done, known), later: ids(o.later, known), tips: ids(o.tips, tips) };
+  // (A notebook kept before b434 with the notes off was switched off by its player: the setting stays his.)
+  return { on: o.on !== false, set: o.set === true || o.on === false, done: ids(o.done, known), later: ids(o.later, known), tips: ids(o.tips, tips) };
 }
 
 /** What only an interface can see: whether a month card is open, and the corps the player has in hand. */
 export interface Moment {
   card?: boolean;
   inHand?: number[];
+  /** A deed of a month already handed over (its end, a siege standing then): the month it was, read after the turn. */
+  ended?: number;
 }
 
 export const lessonById = (id: string): Lesson | undefined => LESSONS.find((l) => l.id === id);
@@ -91,11 +99,14 @@ export const doneCount = (book: Notebook): number => LESSONS.filter((l) => isDon
 /** Notes put away with LATER and not done since: the count on the Guide's button. */
 export const waitingCount = (book: Notebook): number => book.later.filter((id) => !isDone(book, id)).length;
 
-/** The notes teach in a grand campaign with a player at the controls, while the setting is on (ruling 129(a)). */
-export const lessonsOn = (g: Game, book: Notebook): boolean => book.on && isOpen(g) && !!g.human;
-
 /** True in the campaign FIRST COMMAND opened (the flag main.ts has been waiting for, ruling 204's rider). */
 export const firstCommand = (g: Game): boolean => g.flags.firstCommand === 1;
+
+/** Whether the setting stands on in this campaign: as the player set it, or, until he has, in FIRST COMMAND's campaign alone (b434). */
+export const notesWanted = (g: Game, book: Notebook): boolean => (book.set ? book.on : firstCommand(g));
+
+/** The notes teach in a grand campaign with a player at the controls, while the setting is on (ruling 129(a), b434). */
+export const lessonsOn = (g: Game, book: Notebook): boolean => notesWanted(g, book) && isOpen(g) && !!g.human;
 /** The month the player took the campaign over, from which the lessons' months count. */
 const seat = (g: Game): number => g.flags.seat ?? 1;
 
@@ -117,7 +128,11 @@ export function siegeOf(g: Game): { region: number; province: string; city: stri
   return null;
 }
 
-/** The army lesson 2 names: the first at the front with a move left, else the first with one at all. */
+/**
+ * The army lesson 2 names: of the armies at the front with no orders, the one nearest the capital; at peace, the
+ * nearest that does not stand in the capital itself (whose garrison should not be the first thing he moves); else
+ * the first with a move at all.
+ */
 export function pickupPlace(g: Game): number {
   const round = armyRound(g);
   // (Of the armies at the front with no orders, the one nearest his capital, where the map opens: Germany's first is
@@ -125,7 +140,8 @@ export function pickupPlace(g: Game): number {
   const cap = g.human ? g.regions[g.nations[g.human]?.capital ?? -1] : undefined;
   const far = (reg: number): number => (cap ? Math.hypot(g.regions[reg].x - cap.x, g.regions[reg].y - cap.y) : 0);
   const front = round.filter((a) => a.front && a.untouched).sort((a, b) => far(a.reg) - far(b.reg));
-  return (front[0] ?? round[0])?.reg ?? -1;
+  const home = round.filter((a) => a.untouched && a.reg !== cap?.id).sort((a, b) => far(a.reg) - far(b.reg));
+  return (front[0] ?? home[0] ?? round[0])?.reg ?? -1;
 }
 
 /**
@@ -143,9 +159,14 @@ export function trainInHand(g: Game, m: Moment): boolean {
   const cs = held(g, m);
   const me = g.human;
   if (!me || !cs.length || cs.some((c) => foesBeside(g, g.regions[c.reg], me))) return false;
+  return trainGround(g, cs).size > 0;
+}
+
+/** The ground the map lights for a train for these corps in hand: where a train takes all of them and no march does. */
+export function trainGround(g: Game, cs: Corps[]): Set<number> {
   const goes = new Set<number>();
   for (const c of cs) for (const id of reach(g, c).keys()) if (id !== c.reg) goes.add(id);
-  return trainReachFor(g, cs, goes).size > 0;
+  return trainReachFor(g, cs, goes);
 }
 
 // (A raid's targets are worked out from the whole air war: asked once a month and kept.)
@@ -159,10 +180,10 @@ export function bombersInRange(g: Game): boolean {
   return yes;
 }
 
-/** Whether the lesson's turn in the order has come: the lesson before it done, or the months gone by. */
-export function lessonReady(g: Game, book: Notebook, l: Lesson): boolean {
+/** Whether the lesson's turn in the order has come: the lesson before it done, or the months gone by (as of this month). */
+export function lessonReady(g: Game, book: Notebook, l: Lesson, turn = g.turn): boolean {
   const after = l.after ? isDone(book, l.after) : null;
-  const months = l.months !== undefined ? g.turn - seat(g) >= l.months : null;
+  const months = l.months !== undefined ? turn - seat(g) >= l.months : null;
   if (after !== null && months !== null) return after || months;
   return (after ?? true) && (months ?? true);
 }
@@ -207,7 +228,9 @@ export function lessonDeed(g: Game, book: Notebook, does: Deed, m: Moment = {}):
   if (!lessonsOn(g, book)) return [];
   const out: Lesson[] = [];
   const stamp = (l: Lesson | undefined): void => {
-    if (!l || isDone(book, l.id) || !lessonReady(g, book, l)) return;
+    // (A deed of the month handed over is judged as that month stood: a first month ended without a battle does not
+    // stamp lesson 5, which only the second month brings.)
+    if (!l || isDone(book, l.id) || !lessonReady(g, book, l, m.ended ?? g.turn)) return;
     book.done.push(l.id);
     book.later = book.later.filter((x) => x !== l.id);
     out.push(l);
@@ -258,7 +281,8 @@ export function lessonWords(g: Game, l: Lesson, game: string, under = ''): { hea
   const fill = (t: string): string => t
     .split('{place}').join(at >= 0 ? placeThe(g.regions[at].name) : 'the front')
     .split('{province}').join(s ? capital(placeThe(s.province)) : 'The province')
-    // (A province named for its town is not named twice: "Vancouver is not yours until its town falls.")
-    .split('{city}').join(s && s.city !== s.province ? placeThe(s.city) : 'its town');
+    // (A province named for its city is not named twice, and with no siege the note reads the design director's words of
+    // 18 November, 01:34Z: "The province is not yours until its city falls." Where the town has a name of its own, it is said.)
+    .split('{city}').join(s && s.city !== s.province ? placeThe(s.city) : 'its city');
   return { head: l.head, text: fill(namedWords(l.text, game, under)), deed: namedWords(l.deed, game, under) };
 }

@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
+import { airBattles, airBases, airTargets, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
@@ -1691,7 +1691,7 @@ export function orderAirBase(g: Game, id: number, region: number): boolean {
   const f = myAir(g, id), r = g.regions[region];
   if (!f || !r) return false;
   // (Across an ocean a land group goes by sea, one a month: ruling 133(b).)
-  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(g, f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
 }
 
 /** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */
@@ -1706,7 +1706,7 @@ export function orderAboard(g: Game, id: number, fleet: number): boolean {
 /** Where one of the player's air fleets could be sent on a mission, and where it could be based. */
 export function airOptions(g: Game, id: number, mission: AirMission): { targets: number[]; bases: number[] } {
   const f = myAir(g, id);
-  return f ? { targets: airTargets(g, f, mission), bases: airBases(g, f).map((r) => r.id) } : { targets: [], bases: [] };
+  return f ? { targets: airTargets(g, f, mission), bases: moveTargets(g, f).map((r) => r.id) } : { targets: [], bases: [] };
 }
 
 // ---- The air war as its own game (the grand campaign): airfields, air groups, and raids planned from their target ----

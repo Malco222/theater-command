@@ -68,7 +68,7 @@ import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
-  AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
+  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
@@ -78,7 +78,7 @@ import {
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME, shareWords } from '../domination';
-import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
+import { GOALS, GOAL_KEYS, goalChecks, goalEndsIn, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
 import { liberate } from '../liberation';
@@ -560,7 +560,7 @@ function boardWing(f: AirFleet, fleet: number): void {
 }
 
 /** Where the picked group could be based this month: for a wing aboard, the airfields it could fly ashore to (ruling 175(b)). */
-const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : airBases(g, f));
+const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : moveTargets(g, f));
 const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== undefined ? whyNotAshore(g, f, r) : whyNotMoveAir(g, f, r));
 /** What the page says of a base change just ordered: a wing flies ashore, a group moves, or (across an ocean) is shipped. */
 const movedLine = (name: string, deck: boolean, sea: boolean, to: string): string => (deck ? `${name} flies ashore to ${to}.` : sea ? `${name} is shipped across the ocean to the airfield at ${to}.` : `${name} moves to the airfield at ${to}.`);
@@ -1669,7 +1669,7 @@ function rightClickElse(id: number, x: number, y: number): boolean {
   }
   const af = ui.tab === 'air' && !ui.airMode && !(ui.raid && ui.raid !== 'menu') ? myAir() : null;
   if (af) {
-    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name, sea = overOcean(af, r);
+    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name, sea = overOcean(g, af, r);
     if (why) ui.msg = `${name} cannot ${deck ? 'fly ashore' : sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
     else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); if (airWar(g)) ui.field = id; }
     refresh();
@@ -2761,6 +2761,12 @@ function alertList(): Alert[] {
     if (gv.head) out.push({ kind: 'cabinethead', text: `The war cabinet wants ${gv.head.name} dismissed: ${gv.head.left <= 1 ? 'it wants your answer this month' : 'it awaits your answer'}` });
     if (gv.promise && gv.promise.left <= 1) out.push({ kind: 'promise', text: `The last month for your promise: ${gv.promise.title}` });
   }
+  // The Axis courting a neutral of the Americas that his America may court back at no cost this month (ruling 223(b), b434).
+  const back = Object.values(g.nations).filter((T) => freeCourt(g, me, T.id) && canCourt(g, me, T.id).ok);
+  if (back.length) {
+    const names = back.map((T) => theName(T.id)), list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    out.push({ kind: 'courtback', text: `${envoysWord(g, back.map((T) => T.id))} envoys are courting ${list}: courting ${back.length === 1 ? 'it' : 'them'} back costs nothing`, tab: 'powers' });
+  }
   const cited = unseen(g).length;
   if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
   // The war between the alliances is decided and the player has not yet said what comes next.
@@ -2778,7 +2784,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -2952,7 +2958,7 @@ function goalsBlock(): string {
     const goal = GOALS[me]![key];
     const st = goalState(g, key);
     if (!goal || st === 'out') return '';
-    const when = goalWhen(goal, date);
+    const when = goalWhen(goal, date, goalEndsIn(g, me, goal), goal.war && g.nations[goal.war.with] ? theName(goal.war.with) : '');
     return `<div class="goal ${st}"><span class="gk">${key === 'short' ? 'Short campaign' : 'Long campaign'} · ${when}</span><b>${esc(goal.title)}${st === 'won' ? ' <span class="tag good">Won</span>' : st === 'lost' ? ' <span class="tag bad">Lost</span>' : ''}</b><small>${esc(goal.text)}</small><span class="gchecks">${goalChecks(g, me, goal).map((c) => `<span class="${c.done ? 'done' : ''}">${c.done ? '✓' : '○'} ${esc(c.label)}</span>`).join('')}</span></div>`;
   }).join('');
   return rows ? `<h3>Campaign goals</h3>${rows}` : '';
@@ -7742,7 +7748,12 @@ function invadeCard(on: string, target: number): string {
     : 'No surprise: its army is watching the frontier.');
   // The player's own allies are not bound to follow him into a war of his choosing.
   const hang = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && !atWar(g, x.id, on)).map((x) => x.id);
-  if (hang.length) what.push(`<b>Your allies do not follow at once.</b> ${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
+  // (Allies already in that war are named first, so a small one left at peace does not read as the whole alliance:
+  // Italy on France, with Germany at war already, the third playtester, 84.3.1.)
+  const inWar = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && atWar(g, x.id, on)).map((x) => x.id);
+  const already = inWar.length ? `${esc(upFirst(listOf(inWar.map(theName))))} ${inWar.length === 1 ? 'is' : 'are'} at war with ${esc(theName(on))} already. ` : '';
+  const whom = `Your ${inWar.length ? 'other ' : ''}${hang.length === 1 ? 'ally does' : 'allies do'}`;
+  if (hang.length) what.push(`<b>${whom} not follow at once.</b> ${already}${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
   // A country whose factories climb to war work by steps (the United States) is told so before it goes to war.
   const work = g.nations[me].atWar.length ? null : warFooting(g, me);
   if (work !== null && work < 1) what.push(`<b>Your industry will not turn over in a day.</b> ${Math.round(work * 100)} in 100 of it is on war work now. From the month you are at war it climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months.`);
@@ -8882,7 +8893,7 @@ function onClick(e: MouseEvent): void {
     case 'basepick': {
       const f = myAir();
       if (!f) break;
-      const why = whyNotBaseFor(f, g.regions[id]), sea = overOcean(f, g.regions[id]), deck = f.ship !== undefined, name = f.name;
+      const why = whyNotBaseFor(f, g.regions[id]), sea = overOcean(g, f, g.regions[id]), deck = f.ship !== undefined, name = f.name;
       if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${g.regions[id].name}. ${why}`;
       else if (orderAirBase(g, f.id, id)) { ui.msg = movedLine(name, deck, sea, g.regions[id].name); ui.airMode = ''; ui.field = id; }
       refresh(); break;
@@ -8955,7 +8966,12 @@ function onClick(e: MouseEvent): void {
     case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
     case 'teams': orderTeams(g, t.dataset.field as Field, Number(t.dataset.n)); refresh(); break;
     case 'bureau': orderBureau(g); refresh(); break;
-    case 'court': { const h = g.headlines.length; orderCourt(g, t.dataset.nat!); ui.unread += g.headlines.length - h; refresh(); break; }
+    case 'court': {
+      const h = g.headlines.length, T = g.nations[t.dataset.nat!], free = !!T && freeCourt(g, g.human!, T.id), envoys = T ? envoysWord(g, [T.id]) : '';
+      // (The press says what it did on the paper, as every order does: the feel check of Version 85.)
+      if (T && orderCourt(g, T.id)) ui.msg = free ? `You courted ${theName(T.id)} back against the ${envoys} envoys, at no cost.` : `You courted ${theName(T.id)}, for ${DIPLOMACY.court.cost} political capital.`;
+      ui.unread += g.headlines.length - h; refresh(); break;
+    }
     case 'evac': {
       // Each corps in hand is lifted or it is not, and the paper says which and why: the ones left stay in hand.
       const cs = pickedCorps();
@@ -9114,9 +9130,17 @@ function onClick(e: MouseEvent): void {
     case 'dodeclare': {
       const h = g.headlines.length;
       const to = Number(t.dataset.target ?? -1);
-      const done = orderDeclare(g, t.dataset.nat!);
+      const on = t.dataset.nat!;
+      const was = new Set(g.human ? g.nations[g.human].atWar : []);
+      const done = orderDeclare(g, on);
       ui.unread += g.headlines.length - h;
       openModal(null);
+      // The line under the map says what was done, as every order's does (the third playtester, 84.3.1: it still
+      // showed the hint from before the card).
+      if (done && g.human) {
+        const more = g.nations[g.human].atWar.filter((x) => !was.has(x) && x !== on);
+        ui.msg = `You are at war with ${theName(on)}${more.length ? `, and with ${listOf(more.map(theName))}` : ''}.`;
+      }
       refresh();
       // The army that was sent over the frontier goes now: into the attack planner if the ground is held, or straight in.
       if (done && to >= 0) orderAt(to);
@@ -9410,7 +9434,7 @@ function onRegion(id: number): void {
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'base') {
-      const why = whyNotBaseFor(af, r), sea = overOcean(af, r), deck = af.ship !== undefined, name = af.name;
+      const why = whyNotBaseFor(af, r), sea = overOcean(g, af, r), deck = af.ship !== undefined, name = af.name;
       if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
       else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); ui.airMode = ''; if (airWar(g)) ui.field = id; }
     } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
@@ -9944,7 +9968,7 @@ function wireMap(): void {
 
 g = createGame(1939, null);
 initFirstHour({
-  game: () => g, ui, held: heldCorps, esc, openModal, refresh,
+  game: () => g, ui, held: heldCorps, esc, openModal, refresh, look: (ids) => glide(viewFor(ids)),
   tucked: (tab) => !!commandOf(g)?.desks.some((d) => d.tab === tab && d.staff),
   busy: () => !!passing || !!working || !!tour,
 });
