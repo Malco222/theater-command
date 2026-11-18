@@ -13,7 +13,7 @@ import { townName, townSize } from '../../campaign/towns';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
-import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 
@@ -65,6 +65,19 @@ function dryEnd(g: Game, going: Corps[], target: Region): 'west' | 'east' | null
   return left(dry) >= left(wet) ? 'west' : 'east';
 }
 
+/**
+ * One side's fighters on call over the battle, as the attack card counted them (Brian, 2026-11-18 18:58Z; the design
+ * director, b533 and b536): the share of the side's strength they make on the card, the strikes and the groups, read
+ * straight from the card's own air row (Assessment.air in game.ts, CloseSide in air.ts) and never worked out again.
+ * Read by shape, so the field takes it from the card wherever the card carries it. Nothing where a side has nothing on
+ * call: that field is the one it was without air (b533's bar).
+ */
+type CardAir = { att?: Partial<AirOnCall>; def?: Partial<AirOnCall> };
+function onCall(s: Partial<AirOnCall> | undefined): { air: AirOnCall } | Record<string, never> {
+  if (!s || !(Number(s.share) > 0) || !(Number(s.strikes) > 0) || !s.groups?.length) return {};
+  return { air: { share: s.share!, strikes: Math.floor(s.strikes!), groups: s.groups.map((x) => ({ id: x.id, name: x.name, nat: x.nat, planes: x.planes, lose: x.lose })) } };
+}
+
 /** The ticket for an attack the player could order now, or null where there is no attack to fight. */
 export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicket<LandPlace> | null {
   // The army the attack order will send, and no other: a corps spent on a probe since it was chosen, or no longer next
@@ -92,13 +105,14 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
   // The odds as the attack card put them to the player (attackOutlook in turn.ts): a band where it did not know the
   // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it.
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
+  const cardAir = (a as { air?: CardAir }).air;
   return {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
     // The card's river line counts the corps that cross as those with the river between them and the place (assess in
     // game.ts): the field lays the river before those, and no others.
-    att: sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined),
-    def: sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))),
+    att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
+    def: { ...sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))), ...onCall(cardAir?.def) },
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(band.exact ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
@@ -114,7 +128,14 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
 export function fieldBill(result: FieldResult): FieldBill {
   const corps: Record<number, number> = {};
   for (const f of result.forces ?? []) corps[f.corps] = f.lost;
-  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective', ...(result.broke ? { broke: result.broke } : {}), ...(result.pulled ? { pulled: { ...result.pulled } } : {}) };
+  // The strikes each group flew, by group id, for the rules to book (AttackOpts.closeSorties): what was flown, not what
+  // the card offered. Only where some side had fighters on call.
+  const sorties: Record<number, number> = {};
+  for (const s of ['att', 'def'] as const) for (const f of result.air?.[s] ?? []) sorties[f.group] = (sorties[f.group] ?? 0) + f.sorties;
+  return {
+    corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective', ...(result.broke ? { broke: result.broke } : {}), ...(result.pulled ? { pulled: { ...result.pulled } } : {}),
+    ...(result.air ? { air: sorties } : {}),
+  };
 }
 
 /**

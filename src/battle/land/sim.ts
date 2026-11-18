@@ -9,9 +9,9 @@ import { ONE_SHOTS } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
+import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type Side, type Zone } from '../core/types';
 import { thinkFor } from './ai';
-import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, zonesOf, type Ground, type LandField, type LandPlace } from './field';
+import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
@@ -29,6 +29,18 @@ interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean 
  * card counts it, never through it. Only the way it chooses: a block already in the water still wades out.
  */
 type Going = Motion | 'ashore';
+/**
+ * A strike called in (air support): who called it, which of the side's groups flies it, when, and its legs, one flight
+ * each. A strike the player aims is one leg down his run, carrying all the side's bank spread along it; the staff's
+ * fly a leg down the frontage of each block the bank owes most, up to a plane each, each paying what is owed there.
+ */
+interface Strike { side: Side; by: 'you' | 'staff'; group: number; nth: number; called: number; legs: Leg[]; bombs: boolean; ended: boolean; lost: boolean }
+/**
+ * A flight's leg: its run; what it carries, in open-ground terms (owed: by block, the staff's; or all of it as 'total'
+ * spread down the run, the player's); how much of the run is flown; and the blocks it struck, for the event.
+ */
+interface Leg { flight: Flight; owed: Map<number, number>; nerve: Map<number, number>; total: number; aimed: boolean; done: number; struck: Set<number>; dropped: number; released: number; away: boolean }
+
 /** River ground: a block may wade it, never stand in it (b464(5)). */
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
@@ -102,6 +114,31 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Under fog, the corps the attack card identified: their blocks show as the card shows them (b476(3); cardKnows). */
   seen: Set<number> = new Set();
 
+  // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
+  /** Each side's fighters on call, where it has any. */
+  private airOn: Record<Side, AirOnCall | null> = { att: null, def: null };
+  /** Strikes each side has still to call; while it has any, its blows hold back the card's share for them. */
+  private airLeft: Record<Side, number> = { att: 0, def: 0 };
+  /** Battle time each side's next strike is ready: never before the armies meet. */
+  private airNext: Record<Side, number> = { att: Infinity, def: Infinity };
+  /** What each side's blows have held back, owed to the enemy block each fell on, as it would be on open ground. */
+  private airBank: Record<Side, Map<number, number>> = { att: new Map(), def: new Map() };
+  /** With it, the nerve it would have cost (held back times the nerve of the blows it was held from): paid with it. */
+  private airNerve: Record<Side, Map<number, number>> = { att: new Map(), def: new Map() };
+  /** The strikes called and not yet over. */
+  private strikes: Strike[] = [];
+  /** Strikes called so far, by side: strike n is flown by the side's group n in turn. */
+  private airCalls: Record<Side, number> = { att: 0, def: 0 };
+  /** Strikes not yet flown when the battle went to the dice: the staff fly them in the settlement, and the bill counts them. */
+  private airSettled: Record<Side, number> = { att: 0, def: 0 };
+  private flightIds = 0;
+  /**
+   * Each side's ledger, in open-ground terms: held back from its blows; landed on enemy blocks; wasted (on empty ground,
+   * or held over its own men); and dealt, what the landed share took off them for the ground they stood on. What is
+   * neither landed nor wasted is unspent: in the bank or in the air when the day ended.
+   */
+  readonly airLedger: Record<Side, { withheld: number; landed: number; wasted: number; dealt: number }> = { att: { withheld: 0, landed: 0, wasted: 0, dealt: 0 }, def: { withheld: 0, landed: 0, wasted: 0, dealt: 0 } };
+
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
     this.rng = new Rng(ticket.seed);
@@ -129,6 +166,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const armour = att.filter((u) => MOTION[u.kind] === 'tracks' || MOTION[u.kind] === 'wheels'), all = armour.reduce((a, u) => a + u.power0, 0);
     this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
     this.field = buildField(ticket.place, ticket.seed, bend);
+    // A capital's or a city's day is longer as more of its field is built (the design director, b515(g)): the march in
+    // through its streets and the fight in them take time the open field's does not.
+    if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
@@ -140,6 +180,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [d0, d1] = ticket.reckoning.dice;
     const roll = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
     this.fortune = 1 + LAND.fortune * (roll - 1);
+    // Fighters on call (air support): a side with a share, strikes and a group to fly them. None draws on the dice.
+    for (const s of ['att', 'def'] as Side[]) {
+      const a = ticket[s].air;
+      if (a && a.share > 0 && a.strikes > 0 && a.groups.length) { this.airOn[s] = a; this.airLeft[s] = Math.floor(a.strikes); }
+    }
   }
 
   /** The day's luck: the attack's blows are multiplied by it, the defence's divided. */
@@ -263,6 +308,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'withdrawAll': {
         if (c.side !== by) return false;
+        // What the fighters on call still owe lands before the army goes (air support): pulling out never escapes it.
+        this.payAir();
         // How near breaking it stood when it pulled out, before its blocks leave the count (b474).
         this.bar[by] = this.breaking(by);
         for (const u of this.units) if (u.side === by && fighting(u)) { u.state = 'withdrawn'; u.act = 'down'; }
@@ -278,8 +325,14 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.toDice();
         return true;
       }
-      default:
+      default: {
+        // Air support (below): { do: 'land:air', x0, y0, x1, y1 }, the run to strike down.
+        if (c.do === 'land:air') {
+          const r = [c.x0, c.y0, c.x1, c.y1].map(Number);
+          return r.every(Number.isFinite) && this.callAir(by, r as [number, number, number, number]);
+        }
         return false;
+      }
     }
   }
 
@@ -498,6 +551,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
     const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][] }>();
+    // What blows held back this tick for air strikes, by the block they fell on (air support).
+    const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
       if (!fighting(u)) continue;
       const t = this.targetOf(u);
@@ -509,6 +564,15 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
+      // A side with air strikes still to call holds back the card's share for them, owed to the block it fell on, in
+      // what it would be on open ground (air support, below).
+      if (this.airLeft[u.side] > 0) {
+        const held = blow.dmg * this.airOn[u.side]!.share, raw = held / blow.ground;
+        blow.dmg -= held;
+        this.airBank[u.side].set(t.id, (this.airBank[u.side].get(t.id) ?? 0) + raw);
+        this.airLedger[u.side].withheld += raw;
+        kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
+      }
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [] };
       h.dmg += blow.dmg; h.nerve += blow.nerve;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
@@ -520,7 +584,10 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
+    // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
+    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from);
+    if (this.airOn.att || this.airOn.def) this.flyAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
     this.spread();
@@ -626,8 +693,22 @@ export class LandBattle implements BattleSim<LandUnit> {
     return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
   }
 
-  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear' } {
-    const gu = coverAt(this.field, u.x, u.y), gt = coverAt(this.field, t.x, t.y);
+  /**
+   * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
+   * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
+   */
+  private groundTake(t: LandUnit): number {
+    const gt = coverAt(this.field, t.x, t.y);
+    let take = LAND.cover[gt];
+    // Men on foot beside a wreck take light cover, either army's (b477).
+    const ws = this.wreckShare(t);
+    if (ws > 0) take = take * (1 - ws) + Math.min(take, LAND.cover[LAND.wreck.cover]) * ws;
+    if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
+    return take;
+  }
+
+  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number } {
+    const gu = coverAt(this.field, u.x, u.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     if (u.state === 'wavering') p *= LAND.wavering;
     // A block giving ground at the brink (giveGround) leaves a rearguard facing the enemy: a blow on it lands at the
@@ -646,15 +727,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
     const aspect = rearguard ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
-    let take = LAND.cover[gt];
-    // Men on foot beside a wreck take light cover, either army's (b477).
-    const ws = this.wreckShare(t);
-    if (ws > 0) take = take * (1 - ws) + Math.min(take, LAND.cover[LAND.wreck.cover]) * ws;
-    if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
+    const ground = this.groundTake(t);
+    let take = ground;
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
-    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect };
+    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground };
   }
 
   /**
@@ -1057,13 +1135,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The end --------------------------------------------------------------------------------------------------
 
   /** Each side's standing power as a share of both sides' at the start: the balance bar. */
-  standing(): Record<Side, number> {
+  standing(due?: Map<number, number>): Record<Side, number> {
     const tot = this.power.att + this.power.def;
     const s = { att: 0, def: 0 };
     for (const u of this.units) {
       if (!live(u)) continue;
       const k = u.state === 'routing' ? 0.3 : 1;
-      s[u.side] += (u.power0 * (u.str / u.str0) * k) / tot;
+      // 'due': damage owed it by the enemy's fighters on call, as it would stand once paid (airDue, for the staff's chance).
+      const d = due?.get(u.id), str = d === undefined ? u.str : Math.max(0, u.str - (d / Math.max(1e-9, u.power0)) * u.str0);
+      s[u.side] += (u.power0 * (str / u.str0) * k) / tot;
     }
     return s;
   }
@@ -1216,6 +1296,9 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   private finish(winner: Side, how: FieldResult['how'], R?: number, why?: BreakCause): void {
     if (this.over) return;
+    // What the fighters on call still owe is paid where it is owed before the day's count (air support): the card counted
+    // their share, and the field delivers all of it, however soon the day ends.
+    this.payAir();
     const lost = this.lostShares();
     // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
     const men = { att: 0, def: 0 };
@@ -1267,7 +1350,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       ...(how === 'rout' || how === 'destroyed' ? { broke: loser, ...(why ? { brokeBy: why } : {}) } : {}),
       // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
       ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
+      // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
+      ...(this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}),
     };
+    this.strikes = [];
     if (verdict !== winner) this.over.lines.push('The day went their way, but the campaign counts it as close as the odds allowed.');
     this.say({ what: 'end', text: lines[0] });
   }
@@ -1305,8 +1391,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
-  private standingShares(): Record<Side, number> {
-    const st = this.standing(), tot = this.power.att + this.power.def;
+  private standingShares(due?: Map<number, number>): Record<Side, number> {
+    const st = this.standing(due), tot = this.power.att + this.power.def;
     return { att: st.att / (this.power.att / tot), def: st.def / (this.power.def / tot) };
   }
 
@@ -1316,7 +1402,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * STAFF's question (ruling 226(5)).
    */
   chanceNow(): number {
-    const k = this.ticket.reckoning, sh = this.standingShares();
+    // As toDice would roll it: what the fighters on call still owe paid first.
+    const k = this.ticket.reckoning, sh = this.standingShares(this.airDue());
     if (k.odds * k.dice[0] >= RATIO.carry) return 1;
     if (k.odds * k.dice[1] < RATIO.carry) return 0;
     const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
@@ -1328,7 +1415,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
    */
   chanceAt(card: number): number {
-    const k = this.ticket.reckoning, bal = this.standing(), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+    const k = this.ticket.reckoning, bal = this.standing(this.airDue()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
     if (card * k.dice[0] >= RATIO.carry) return 1;
     if (card * k.dice[1] < RATIO.carry) return 0;
     const now = card * r;
@@ -1339,15 +1426,409 @@ export class LandBattle implements BattleSim<LandUnit> {
   toDice(): void {
     if (this.over) return;
     const k = this.ticket.reckoning;
+    // The strikes not yet flown are the staff's to fly in the settlement: the bill counts them (the card priced them).
+    for (const s of ['att', 'def'] as Side[]) if (this.airOn[s]) this.airSettled[s] = this.airLeft[s];
+    this.payAir();
     const R = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
     this.finish(R >= RATIO.carry ? 'att' : 'def', 'objective', R);
+  }
+
+  // ---- Air support ------------------------------------------------------------------------------------------------
+  //
+  // Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call in air
+  // support where the fighters will strafe and drop bombs. the fighter squadron has to be on ground support mode where
+  // they can be called in for missions like this that turn." The design director, b533: counted on the card, placed by
+  // the player, shown as pictures. The campaign counts a side's fighters on call in its sky term (SideTicket.air.share:
+  // the part of its strength they made); on the field, while the side has strikes left to call, its blows hold that
+  // share back, owed to the block each fell on, and each strike pays it out where its run lands. So the field never
+  // adds to the card (b418): the strikes carry part of the strength the card counted, and only where they land is the
+  // player's. The first strike is ready LAND.air.first after the armies meet, each next LAND.air.every after the last
+  // call; one left ready LAND.air.wait the staff call themselves, for either side, at the blocks owed most, paying
+  // each what is owed (b533(c): the enemy's strikes are the staff's, never aimed sharper). A run is a strip of ground
+  // its guns rake, never within LAND.air.close of the caller's own men (no friendly fire, b533(d)). Planes are pictures:
+  // no flight model, no aiming, no gunnery (air-battle-paused); a plane lost is the campaign's price for a strike
+  // (AirOnCall.groups[].lose), shown as it falls. Nothing here draws on the battle's dice: where neither side has
+  // fighters on call, the battle is exactly as it was.
+
+  /** Whether this side has fighters on call over this battle. */
+  hasAir(s: Side): boolean { return this.airOn[s] !== null; }
+
+  /** This side's strike in the air, if any: one flight's strike at a time. */
+  private flying(s: Side): boolean { return this.strikes.some((k) => k.side === s && !k.ended); }
+
+  /** Whether this side has a strike ready to call now. */
+  airReady(s: Side): boolean { return this.airLeft[s] > 0 && this.t >= this.airNext[s] && !this.flying(s) && !this.over; }
+
+  /**
+   * Why this side cannot call a strike down this run now, in the UI director's words to be (b533(d)), or null where it
+   * can: none on call; all flown; before the armies meet; the next not ready yet, or one already in the air; or the run
+   * too close to its own men to fire on enough of it.
+   */
+  airWhyNot(s: Side, run?: [number, number, number, number]): string | null {
+    if (!this.airOn[s]) return 'None on call';
+    if (this.airLeft[s] <= 0) return 'All strikes flown';
+    if (this.contactAt === null) return 'After the armies meet';
+    if (this.flying(s)) return 'On the way';
+    if (this.t < this.airNext[s]) return 'Not ready yet';
+    if (run && this.clearShare(s, run) < LAND.air.least) return 'Too close to our men';
+    return null;
+  }
+
+  /**
+   * The run a strike flies when the player points at a place rather than drawing one: down the frontage of the enemy
+   * block nearest the point, from one end to the other (at least LAND.air.minRun long); with none within LAND.air.near,
+   * a run of that length across the field through the point.
+   */
+  airRunAt(s: Side, x: number, y: number): [number, number, number, number] {
+    // Only a block the player knows of (b464(2)): a run that found one he has not would tell him where it is.
+    const foes = this.units.filter((e) => e.side !== s && live(e) && e.kind !== 'fort' && this.known(e));
+    const near = foes.reduce<LandUnit | null>((m, e) => (dist(e.x, e.y, x, y) < (m ? dist(m.x, m.y, x, y) : LAND.air.near) ? e : m), null);
+    return near ? this.frontageRun(near) : this.clipRun([x - LAND.air.minRun / 2, y, x + LAND.air.minRun / 2, y]);
+  }
+
+  /** A run drawn by hand, as it will be flown: kept on the field and to its longest (what callAir flies). */
+  airRun(r: [number, number, number, number]): [number, number, number, number] { return this.clipRun(r); }
+
+  /** A run down a block's frontage, its whole width, at least LAND.air.minRun. */
+  private frontageRun(b: LandUnit): [number, number, number, number] {
+    const [cx, cy] = ahead(b.face + Math.PI / 2), half = Math.max(b.w, LAND.air.minRun) / 2;
+    return this.clipRun([b.x - cx * half, b.y - cy * half, b.x + cx * half, b.y + cy * half]);
+  }
+
+  /** A run kept on the field and to its longest, about its middle. */
+  private clipRun(r: [number, number, number, number]): [number, number, number, number] {
+    let [x0, y0, x1, y1] = r;
+    const len = dist(x0, y0, x1, y1);
+    if (len > LAND.air.len) { const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, k = LAND.air.len / len; x0 = mx + (x0 - mx) * k; y0 = my + (y0 - my) * k; x1 = mx + (x1 - mx) * k; y1 = my + (y1 - my) * k; }
+    const w = this.field.w, h = this.field.h;
+    return [clamp(x0, 0, w), clamp(y0, 0, h), clamp(x1, 0, w), clamp(y1, 0, h)].map((v) => Math.round(v * 10) / 10) as [number, number, number, number];
+  }
+
+  /** The points a run's guns rake, one a metre-step apart along it, at least two. */
+  private runPoints(r: [number, number, number, number], n: number): [number, number][] {
+    const out: [number, number][] = [];
+    for (let i = 0; i < n; i++) { const f = (i + 0.5) / n; out.push([r[0] + (r[2] - r[0]) * f, r[1] + (r[3] - r[1]) * f]); }
+    return out;
+  }
+
+  /** Whether a point is within LAND.air.close of this side's own men: its guns hold fire there. */
+  private overOwn(s: Side, x: number, y: number): boolean {
+    return this.units.some((u) => u.side === s && live(u) && dist(u.x, u.y, x, y) - Math.max(u.w, u.d) / 2 < LAND.air.close);
+  }
+
+  /** The share of a run its guns may fire on, clear of the side's own men. */
+  private clearShare(s: Side, r: [number, number, number, number]): number {
+    const pts = this.runPoints(r, 20);
+    return pts.filter(([x, y]) => !this.overOwn(s, x, y)).length / pts.length;
+  }
+
+  /** The enemy blocks a run's guns rake at a point: those whose ground the strip LAND.air.wide across covers there. */
+  private underRun(s: Side, x: number, y: number): LandUnit[] {
+    const half = LAND.air.wide / 2;
+    return this.units.filter((e) => {
+      if (e.side === s || !live(e) || e.kind === 'fort') return false;
+      const dx = x - e.x, dy = y - e.y, c = Math.cos(e.face), sn = Math.sin(e.face);
+      return Math.abs(dx * c - dy * sn) <= e.w / 2 + half && Math.abs(dx * sn + dy * c) <= e.d / 2 + half;
+    });
+  }
+
+  /** Call a strike down this run (the player's), or the staff's where run is left out. False where it cannot be called. */
+  callAir(s: Side, run?: [number, number, number, number]): boolean {
+    const r = run ? this.clipRun(run) : undefined;
+    if (this.airWhyNot(s, r) !== null) return false;
+    const on = this.airOn[s]!, bank = this.airBank[s];
+    const legs: Leg[] = [];
+    // A flight starts where its run's line puts it LAND.air.eta out, as flyStrike flies it in.
+    const flight = (r: [number, number, number, number], models: number): Flight => {
+      const len = Math.max(1, dist(r[0], r[1], r[2], r[3])), back = LAND.air.eta * LAND.air.speed;
+      return { id: ++this.flightIds, side: s, nat: on.groups[this.airCalls[s] % on.groups.length].nat, year: this.year(), models, x: r[0] - ((r[2] - r[0]) / len) * back, y: r[1] - ((r[3] - r[1]) / len) * back, alt: LAND.air.alt, face: bearing(r[0], r[1], r[2], r[3]), phase: 'in', run: r };
+    };
+    const leg = (f: Flight, aimed: boolean): Leg => ({ flight: f, owed: new Map(), nerve: new Map(), total: 0, aimed, done: 0, struck: new Set(), dropped: 0, released: 0, away: false });
+    if (r) {
+      // The player's: all the bank, spread down his run.
+      let total = 0;
+      for (const v of bank.values()) total += v;
+      const l = leg(flight(r, LAND.air.models), true);
+      l.owed = new Map(bank); l.nerve = new Map(this.airNerve[s]); l.total = total;
+      legs.push(l);
+    } else {
+      // The staff's: down the frontage of each block owed most, a plane or more each; what is owed a block past the
+      // last goes with the leg nearest it.
+      const live1 = (id: number): LandUnit | undefined => { const u = this.unit(id); return u && live(u) ? u : undefined; };
+      const owed = [...bank].filter(([id, v]) => v > 0 && live1(id)).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+      if (!owed.length) return false;
+      const top = owed.slice(0, LAND.air.legs), n = top.length;
+      top.forEach(([id], i) => {
+        const b = this.unit(id)!;
+        legs.push(leg(flight(this.frontageRun(b), Math.floor(LAND.air.models / n) + (i < LAND.air.models % n ? 1 : 0)), false));
+      });
+      for (const [id, v] of owed) {
+        const b = this.unit(id)!;
+        let at = 0;
+        top.forEach(([tid], i) => { const t = this.unit(tid)!, a = this.unit(top[at][0])!; if (dist(t.x, t.y, b.x, b.y) < dist(a.x, a.y, b.x, b.y)) at = i; });
+        legs[at].owed.set(id, v); legs[at].nerve.set(id, this.airNerve[s].get(id) ?? v); legs[at].total += v;
+      }
+      // Blocks owed that have left the field still pay it, as the count of the day still counts them.
+      for (const [id, v] of bank) if (v > 0 && !live1(id)) this.offField(s, id, v);
+    }
+    bank.clear();
+    this.airNerve[s].clear();
+    const bombs = this.year() >= (LAND.air.bombsFrom[on.groups[this.airCalls[s] % on.groups.length].nat] ?? LAND.air.bombsFrom._);
+    this.strikes.push({ side: s, by: r ? 'you' : 'staff', group: this.airCalls[s] % on.groups.length, nth: this.airCalls[s] + 1, called: this.t, legs, bombs, ended: false, lost: false });
+    this.airCalls[s]++;
+    this.airLeft[s]--;
+    this.airNext[s] = this.airLeft[s] > 0 ? this.t + LAND.air.every : Infinity;
+    const human = this.ticket[s].human;
+    // The staff's call on the player's side says so; his own needs no word, nor does the enemy's (he sees its planes).
+    this.say({ what: 'land:air-call', side: s, text: human && !r ? 'The staff called in the planes.' : '', x: legs[0].flight.run[0], y: legs[0].flight.run[1], extra: { flights: legs.map((l) => l.flight.id), runs: legs.map((l) => l.flight.run), eta: LAND.air.eta, by: r ? 'you' : 'staff' } });
+    return true;
+  }
+
+  /** The year the ticket's date falls in: which fighters fly, and whether they carry bombs. */
+  private year(): number { const m = /(\d{4})/.exec(this.ticket.date); return m ? Number(m[1]) : 1939; }
+
+  /**
+   * Each tick: the next strike comes ready once the armies have met; one left ready the staff call; and each strike in
+   * the air comes in, makes its run, paying what it carries where it lands, and pulls away.
+   */
+  private flyAir(): void {
+    for (const s of ['att', 'def'] as Side[]) {
+      const on = this.airOn[s];
+      if (!on) continue;
+      if (this.contactAt !== null && this.airNext[s] === Infinity && this.airLeft[s] > 0 && this.airCalls[s] === 0) this.airNext[s] = this.contactAt + LAND.air.first;
+      if (this.airReady(s) && this.t >= this.airNext[s] + LAND.air.wait) this.callAir(s);
+    }
+    const hurt = new Map<number, [number, number]>();
+    for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
+    for (const [id, [d, n]] of hurt) this.suffer(this.unit(id)!, d, d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve, []);
+    this.strikes = this.strikes.filter((k) => !k.ended);
+  }
+
+  /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
+  private flyStrike(k: Strike, hurt: Map<number, [number, number]>): void {
+    const A = LAND.air, at = k.called + A.eta, led = this.airLedger[k.side];
+    let over = true;
+    for (const l of k.legs) {
+      const r = l.flight.run, len = Math.max(1, dist(r[0], r[1], r[2], r[3])), secs = Math.max(DT, len / A.speed), [dx, dy] = [(r[2] - r[0]) / len, (r[3] - r[1]) / len];
+      const f = l.flight;
+      if (this.t < at) {
+        // Coming in down the line of its run, from its own side, coming down to the height of the run.
+        const back = (at - this.t) * A.speed, k0 = (at - this.t) / A.eta;
+        f.phase = 'in'; f.x = r[0] - dx * back; f.y = r[1] - dy * back; f.alt = A.low + (A.alt - A.low) * k0;
+        over = false;
+        continue;
+      }
+      if (l.done < 1) {
+        if (f.phase === 'in') {
+          // Over the start of its run: down onto it, and its guns open down the strip for the run's length.
+          f.phase = 'run';
+          this.say({ what: 'land:air-in', side: k.side, text: '', x: r[0], y: r[1], extra: { flight: f.id, run: r, models: f.models, alt: A.low, nat: f.nat, year: f.year, heading: f.face }, cue: 'fighter_pass' });
+          this.say({ what: 'land:strafe', side: k.side, text: '', x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2, extra: { flight: f.id, from: [r[0], r[1]], to: [r[2], r[3]], width: A.wide, secs: Math.round(secs * 10) / 10 }, cue: 'machine_gun' });
+        }
+        const step = Math.min(1 - l.done, DT / secs), from = l.done;
+        l.done = Math.min(1, l.done + step);
+        f.x = r[0] + (r[2] - r[0]) * l.done; f.y = r[1] + (r[3] - r[1]) * l.done; f.alt = A.low;
+        if (l.aimed) {
+          // The player's run: this tick's share of all it carries, on the blocks under the strip here; where none, or
+          // over his own men, it is lost.
+          const share = l.total * step, mx = r[0] + (r[2] - r[0]) * (from + step / 2), my = r[1] + (r[3] - r[1]) * (from + step / 2);
+          const on = this.overOwn(k.side, mx, my) ? [] : this.underRun(k.side, mx, my);
+          if (!on.length) led.wasted += share;
+          else for (const e of on) this.land(k.side, e, share / on.length, hurt, l, l.total > 0 ? this.sumOf(l.nerve) / l.total : 1);
+        } else {
+          // The staff's: each block it carries for, its share of this tick, wherever it stands; one gone, lost.
+          for (const [id, v] of l.owed) { const e = this.unit(id)!; if (live(e)) this.land(k.side, e, v * step, hurt, l, v > 0 ? (l.nerve.get(id) ?? v) / v : 1); else this.offField(k.side, id, v * step); }
+        }
+        // Bombs on the far third, pictures only (b533(f)): each let go LAND.air.toss before it lands ('land:bomb-drop'),
+        // bursting where it lands (a 'shell' of class 'bomb').
+        if (k.bombs) {
+          const fbOf = (i: number): number => 2 / 3 + ((i + 0.5) / A.bombs) / 3;
+          for (let i = l.released; i < A.bombs; i++) {
+            const fb = fbOf(i), fr = Math.max(0, fb - (A.toss * A.speed) / len);
+            if (l.done < fr) break;
+            this.say({ what: 'land:bomb-drop', side: k.side, text: '', x: Math.round(f.x * 10) / 10, y: Math.round(f.y * 10) / 10, extra: { flight: f.id, from: { x: Math.round(f.x * 10) / 10, y: Math.round(f.y * 10) / 10, alt: A.low }, to: { x: Math.round((r[0] + (r[2] - r[0]) * fb) * 10) / 10, y: Math.round((r[1] + (r[3] - r[1]) * fb) * 10) / 10 }, at: Math.round((this.t + Math.max(0, fb - l.done) * secs) * 10) / 10 } });
+            l.released = i + 1;
+          }
+          for (let i = l.dropped; i < l.released; i++) { const fb = fbOf(i); if (l.done >= fb) { this.bomb(k.side, r[0] + (r[2] - r[0]) * fb, r[1] + (r[3] - r[1]) * fb, f); l.dropped = i + 1; } }
+        }
+        if (l.done >= 1) {
+          // The run made: what it struck, in the dispatches (blocks the player knows only).
+          this.say({ what: 'land:strafed', side: k.side, text: this.strafeWords(k.side, l), x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2, extra: { flight: f.id, on: [...l.struck].filter((id) => this.known(this.unit(id)!)) } });
+        }
+        over = false;
+        continue;
+      }
+      // Pulling away: on along the run and up.
+      const gone = this.t - (at + secs);
+      if (gone < A.out) { f.phase = 'out'; f.x = r[2] + dx * gone * A.speed; f.y = r[3] + dy * gone * A.speed; f.alt = A.low + (A.alt - A.low) * (gone / A.out); over = false; }
+      else l.away = true;
+    }
+    // The planes the strike cost fall as the run ends, over the field (a picture of the price, below).
+    if (!k.lost && k.legs.every((l) => l.done >= 1)) { k.lost = true; this.planesLost(k); }
+    if (over) k.ended = true;
+  }
+
+  /**
+   * A share of a strike, in open-ground terms, landing on an enemy block: what it takes off it for its ground, and the
+   * nerve it costs as the blows it was held from would have (nerve: their weight on nerve, a unit of what was held).
+   */
+  private land(s: Side, e: LandUnit, raw: number, hurt: Map<number, [number, number]>, l: Leg, nerve: number): void {
+    const led = this.airLedger[s];
+    const d = raw * this.groundTake(e) * (e.kind === 'arm' && l.aimed ? LAND.air.armour : 1);
+    led.landed += raw; led.dealt += d;
+    // His fighters have seen what they struck (b464(2)): it is known from now on, as a block met is.
+    if (this.ticket[s].human) e.found = true;
+    const h = hurt.get(e.id) ?? [0, 0];
+    h[0] += d; h[1] += d * nerve;
+    hurt.set(e.id, h);
+    l.struck.add(e.id);
+  }
+
+  private sumOf(m: Map<number, number>): number { let n = 0; for (const v of m.values()) n += v; return n; }
+
+  /** A bomb, pictures only: a 'shell' of class 'bomb' where it lands, and its crater (shells.ts). */
+  private bomb(s: Side, x: number, y: number, f: Flight): void {
+    x = Math.round(clamp(x, 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(y, 2, this.field.h - 2) * 10) / 10;
+    // Read only from a block the player knows (b464(2)): over one he does not, a bomb bursts as on its ground.
+    const hit = this.underRun(s, x, y)[0], on = hit && this.known(hit) ? hit : undefined, ground = groundAt(this.field, x, y), armour = on?.kind === 'arm', at = Math.round(this.t * 10) / 10;
+    const ev: FieldEvent = { t: at, what: 'shell', text: '', x, y, cal: 'bomb', armour: !!armour, ground, reach: REACH.bomb, extra: { flight: f.id } };
+    if (on) ev.on = on.id;
+    this.events.push(ev);
+    if (!armour && !inRiver(ground)) this.craters.push({ id: -(this.craters.length + 1), kind: 'crater', x, y, r: CRATER.bomb / 2, until: this.ticket.limit, at, cal: 'bomb' });
+  }
+
+  /**
+   * The words a strafing run leaves in the dispatches, for the player's side only and never naming a block he does not
+   * know (b464(2)): his own run, the blocks it struck; theirs, his blocks it struck. Drafts for the UI director.
+   */
+  private strafeWords(s: Side, l: Leg): string {
+    const me: Side | null = this.ticket.att.human ? 'att' : this.ticket.def.human ? 'def' : null;
+    if (!me) return '';
+    const hit = [...l.struck].map((id) => this.unit(id)!);
+    if (s === me) {
+      const seen = hit.filter((u) => this.known(u));
+      return !hit.length ? 'Your fighters found nothing under their run.' : seen.length ? `Your fighters strafed ${seen.map((u) => this.named(u)).join(' and ')}.` : 'Your fighters strafed the enemy line.';
+    }
+    const mine = hit.filter((u) => u.side === me);
+    return mine.length ? `${this.ticket[s].adj} fighters strafed your ${mine.map((u) => u.name).join(' and your ')}.` : '';
+  }
+
+  /**
+   * The planes a strike cost its group, as the campaign prices a strike (AirOnCall.groups[].lose: no dice, fought or
+   * settled by the staff, the same): each whole plane that price comes to falls, a picture of the loss ('air:lost').
+   */
+  private planesLost(k: Strike): void {
+    // Every group on call flies every strike, as the campaign books it (bookCloseAir: each group the card's strikes).
+    let n = 0;
+    for (const g of this.airOn[k.side]!.groups) {
+      const falls = Math.floor(g.lose * k.nth + 1e-9) - Math.floor(g.lose * (k.nth - 1) + 1e-9);
+      for (let i = 0; i < falls; i++, n++) {
+        const f = k.legs[n % k.legs.length].flight;
+        const m = mix(f.id * 7919 + n * 131 + 17), kind = m < 0.3 ? 'explode' : m < 0.7 ? 'burn' : 'spin';
+        this.say({ what: 'air:lost', side: k.side, text: '', x: Math.round(f.x * 10) / 10, y: Math.round(f.y * 10) / 10, extra: { flight: f.id, kind, chutes: kind !== 'explode' && mix(f.id * 613 + n * 7) < 0.5 ? 1 : 0, over: k.side === 'att' ? 'enemy' : 'own', air: 'ftr', alt: Math.round(f.alt) }, cue: 'plane_down' });
+      }
+    }
+  }
+
+  /** What each side's fighters flew and lost, by group, for the campaign's bill (FieldResult.air). */
+  private airBill(): FieldResult['air'] {
+    const out: FieldResult['air'] = {};
+    for (const s of ['att', 'def'] as Side[]) {
+      const on = this.airOn[s];
+      if (!on) continue;
+      // Each group flies every strike (bookCloseAir's rule); handed to the dice, the strikes left are the staff's to fly.
+      const n = this.airCalls[s] + this.airSettled[s];
+      out[s] = on.groups.map((g): AirFlown => ({ group: g.id, sorties: n, lost: Math.round(g.lose * n * 1000) / 1000 }));
+    }
+    return out;
+  }
+
+  /**
+   * Handed to the staff, or the day done: what the bank still owes and what strikes in the air still carry is paid
+   * where it is owed, at once (the staff settle the rest from where the field stands, the air's share in it).
+   */
+  private payAir(): void {
+    if (!this.airOn.att && !this.airOn.def) return;
+    const hurt = new Map<number, [number, number]>();
+    for (const { s, id, raw, nerve } of this.airDues()) {
+      const e = this.unit(id), led = this.airLedger[s];
+      if (!e) { led.wasted += raw; continue; }
+      if (!live(e)) { this.offField(s, id, raw); continue; }
+      const d = raw * this.groundTake(e), h = hurt.get(id) ?? [0, 0];
+      led.landed += raw; led.dealt += d; h[0] += d; h[1] += d * nerve; hurt.set(id, h);
+    }
+    for (const s of ['att', 'def'] as Side[]) { this.airBank[s].clear(); this.airNerve[s].clear(); this.airLeft[s] = 0; }
+    for (const k of this.strikes) { for (const l of k.legs) l.done = Math.max(l.done, 1); k.ended = true; }
+    for (const [id, [d, n]] of hurt) this.suffer(this.unit(id)!, d, d > 0 ? n / d : 1, []);
+  }
+
+  /**
+   * What the fighters on call still owe, each side's, block by block: the bank, and what strikes in the air carry for
+   * the rest of their runs (an aimed run's, shared as the bank it took was). Read only: payAir pays it, airDue projects it.
+   */
+  private airDues(): { s: Side; id: number; raw: number; nerve: number }[] {
+    const out: { s: Side; id: number; raw: number; nerve: number }[] = [];
+    for (const s of ['att', 'def'] as Side[]) {
+      if (!this.airOn[s]) continue;
+      for (const [id, v] of this.airBank[s]) out.push({ s, id, raw: v, nerve: v > 0 ? (this.airNerve[s].get(id) ?? v) / v : 1 });
+      for (const k of this.strikes) if (k.side === s && !k.ended) for (const l of k.legs) {
+        const left = 1 - l.done;
+        if (left <= 0) continue;
+        const sum = this.sumOf(l.owed);
+        for (const [id, v] of l.owed) out.push({ s, id, raw: (l.aimed ? l.total * (sum > 0 ? v / sum : 0) : v) * left, nerve: v > 0 ? (l.nerve.get(id) ?? v) / v : 1 });
+      }
+    }
+    return out;
+  }
+
+  /** The damage each block on the field would take were what is owed paid now (for the staff's chance), or nothing. */
+  private airDue(): Map<number, number> | undefined {
+    if (!this.airOn.att && !this.airOn.def) return undefined;
+    const due = new Map<number, number>();
+    for (const { id, raw } of this.airDues()) {
+      const e = this.unit(id);
+      if (e && live(e)) due.set(id, (due.get(id) ?? 0) + raw * this.groundTake(e));
+    }
+    return due;
+  }
+
+  /**
+   * What is owed a block that has left the field (withdrawn, or fled off it): it still pays, in open-ground terms, as
+   * the day's count still counts what it took away (lostShares). Never wasted: only an aimed run's empty ground is.
+   */
+  private offField(s: Side, id: number, raw: number): void {
+    const e = this.unit(id), led = this.airLedger[s];
+    if (!e) { led.wasted += raw; return; }
+    led.landed += raw; led.dealt += raw;
+    e.str = Math.max(0, e.str - (raw / Math.max(1e-9, e.power0)) * e.str0);
+    e.figures = e.str <= 0 ? 0 : Math.max(1, Math.ceil(e.tray * e.str));
+  }
+
+  /** The flights over the field now, for the screens. */
+  flightsNow(): Flight[] {
+    const out: Flight[] = [];
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    for (const k of this.strikes) for (const l of k.legs) if (!k.ended && !l.away) out.push({ ...l.flight, x: r1(l.flight.x), y: r1(l.flight.y), alt: r1(l.flight.alt), face: Math.round(l.flight.face * 1000) / 1000, run: [...l.flight.run] as Flight['run'] });
+    return out;
   }
 
   view(as?: Side): BattleView<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...this.airView() };
+  }
+
+  /** Air support's part of the view, only where a side has fighters on call. */
+  airView(): Pick<BattleView, 'flights' | 'air'> {
+    if (!this.airOn.att && !this.airOn.def) return {};
+    const air: NonNullable<BattleView['air']> = {};
+    for (const s of ['att', 'def'] as Side[]) {
+      if (!this.airOn[s]) continue;
+      const k = this.strikes.find((x) => x.side === s && !x.ended);
+      air[s] = { ready: this.airReady(s) ? 1 : 0, left: this.airLeft[s], nextIn: this.airLeft[s] > 0 && this.airNext[s] !== Infinity && this.t < this.airNext[s] ? Math.round((this.airNext[s] - this.t) * 10) / 10 : null, eta: k && this.t < k.called + LAND.air.eta ? Math.round((k.called + LAND.air.eta - this.t) * 10) / 10 : null };
+    }
+    return { flights: this.flightsNow(), air };
   }
 }
 

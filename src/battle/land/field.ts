@@ -82,6 +82,11 @@ export interface LandField {
   /** A capital's or a city's one landmark, at its heart: a spire, a dome or a station (the art director). Looks only. */
   landmark?: { x: number; y: number; kind: 'spire' | 'dome' | 'station' };
   /**
+   * A capital's or a city's core: in each column, the metres north at which its blocks begin (the core's ragged edge on
+   * the attacker's side), -1 in a column it does not reach. The defence draws up a block inside it (b529).
+   */
+  streetEdge?: number[];
+  /**
    * What lay under each bunker cell before the bunker, by cell index: the screens paint that ground (a bunker in a wood
    * keeps its trees, and a bunker thinned off the screen leaves no trace, the art director), while the sim keeps the
    * bunker's cover.
@@ -208,7 +213,7 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   // (layCity below). An urban province is a city at least.
   let town: LandField['town'] = null;
   const size = streetsOf(place) ?? place.townSize;
-  let built: Pick<LandField, 'storeys' | 'landmark'> = {};
+  let built: Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> = {};
   if (size) {
     const rad = size === 'capital' ? 520 : size === 'city' ? 430 : size === 'town' ? 260 : 150;
     const tx = w * (0.4 + 0.2 * rng.next()), ty = h * (0.7 + 0.06 * rng.next());
@@ -379,8 +384,16 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
     town,
     ...(storeys ? { storeys } : {}),
     ...(built.landmark ? { landmark: built.landmark } : {}),
+    ...(built.streetEdge ? { streetEdge: built.streetEdge } : {}),
     ...(course ? { bend, course } : {}),
   };
+}
+
+/** The share of a field that is built: its houses, blocks, suburbs and industry. */
+export function builtShare(f: LandField): number {
+  let n = 0;
+  for (const k of f.ground) { const g = GROUNDS[k]; if (g === 'buildings' || g === 'suburb' || g === 'industry') n++; }
+  return n / f.ground.length;
 }
 
 /** Whether the place is fought in a capital's or a city's streets (layCity): an urban province is a city at least. */
@@ -400,49 +413,119 @@ export function streetsOf(place: LandPlace): 'capital' | 'city' | null {
  *     the first minute. About 70 per cent of the field built.
  *   - A city: a core about 800 by 600 m round the town's centre, terraces 150 m about it, suburbs out to the middle of the
  *     field. About a third of the field built.
+ * A European core grew; it was not ruled (the art director, 18:53Z): its avenues run out from the landmark like spokes
+ * and bend as they go, an old quarter tighter and taller than the rest stands round it with a boulevard where its walls
+ * were (and in a capital a second, further out), and no edge of it is a ruler's line.
  * Roads, the river and fortress works are laid over it after, as on every field. Its own stream of draws, so the rest
  * of the field (its roads, its river) is as it was. Returns the storeys of what it built and its landmark.
  */
-function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number): Pick<LandField, 'storeys' | 'landmark'> {
+function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number): Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> {
   const { w, h, cell } = FIELD, n = cols * rows;
   const cr = new Rng(seed ^ 0xc17e);
   const edge = fractal(cr, cols, rows, 6, 2), fill = fractal(cr, cols, rows, 2, 2);
   const storeys = new Array<number>(n).fill(0);
   const core = new Uint8Array(n);
   const capital = size === 'capital', front = h * 0.6;
+  // Long slow waves along an edge: a district bulges out here and is bitten back there, so no edge is a ruler's line.
+  const wave = (a: number, l: number): ((s: number) => number) => {
+    const p1 = cr.range(0, Math.PI * 2), p2 = cr.range(0, Math.PI * 2), l2 = l * cr.range(0.3, 0.45);
+    return (s) => a * (0.7 * Math.sin((s / l) * Math.PI * 2 + p1) + 0.3 * Math.sin((s / l2) * Math.PI * 2 + p2));
+  };
+  const coreFront = wave(170, 1300), termFront = wave(130, 1000), westSide = wave(110, 700), eastSide = wave(110, 700);
+  const ringAt = new Uint8Array(n);
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const i = r * cols + c, x = c * cell + cell / 2, y = r * cell + cell / 2, e = (edge[i] - 0.5) * 120;
     // Which ring the cell is in: 3 core, 2 terraces, 1 suburbs, 0 outside the city.
     let ring = 0;
     if (capital) {
-      const margin = w * 0.05 + e * 0.6;
-      ring = y >= front + e && x > margin && x < w - margin ? 3 : y >= front - 350 + e ? 2 : y >= 90 ? 1 : 0;
+      const west = w * 0.05 + westSide(y) + e * 0.6, east = w - w * 0.05 - eastSide(y) - e * 0.6;
+      ring = y >= front + coreFront(x) + e && x > west && x < east ? 3 : y >= front - 350 + termFront(x) + e ? 2 : y >= 90 ? 1 : 0;
     } else {
       // Rounded boxes about the centre (|dx|^4 + |dy|^4 < 1); the suburbs reach back to the middle of the field.
       const box = (a: number, b: number): number => ((x - tx) / a) ** 4 + ((y - ty) / b) ** 4;
       const back = Math.max(300, ty - h * 0.5 + e);
       ring = box(400 + e, 300 + e) < 1 ? 3 : box(580 + e, 480 + e) < 1 ? 2 : (((x - tx) / (1150 + e)) ** 2 + ((y - ty) / back) ** 2 < 1 || (y > ty && Math.abs(x - tx) < 1150 + e)) ? 1 : 0;
     }
+    ringAt[i] = ring;
     if (ring === 3) {
       ground[i] = G.buildings; core[i] = 1;
-      storeys[i] = 3 + (fill[i] > 0.5 ? 1 : 0) + (Math.hypot(x - tx, y - ty) < 350 ? 1 : 0);
+      storeys[i] = 3 + (fill[i] > 0.55 ? 1 : 0);
     } else if (ring === 2 && fill[i] > 0.28) { ground[i] = G.buildings; storeys[i] = 2; }
     else if (ring === 1 && fill[i] > (capital ? 0.4 : 0.3)) { ground[i] = G.suburb; storeys[i] = 1 + (fill[i] > 0.7 ? 1 : 0); }
     // The city stands on level ground: its core and terraces flatter still than its suburbs.
     if (ring) height[i] *= ring === 1 ? 0.7 : 0.4;
   }
   const inCore = (c: number, r: number): boolean => c >= 0 && r >= 0 && c < cols && r < rows && core[r * cols + c] === 1;
-  // Avenues through the core, about every 500 m up it and 250 m across it, through the centre.
-  const c0 = Math.round(tx / cell), r0 = Math.round(ty / cell), ac = Math.round(500 / cell), ar = Math.round(250 / cell);
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    if (!inCore(c, r) || !(((c - c0) % ac === 0) || ((r - r0) % ar === 0))) continue;
-    ground[r * cols + c] = G.road; storeys[r * cols + c] = 0;
+  const c0 = Math.round(tx / cell);
+  // The heart: the core's cell nearest the town's centre, where its landmark stands and its avenues meet.
+  let hub = -1, hd = Infinity;
+  for (let i = 0; i < n; i++) {
+    if (!core[i]) continue;
+    const d = Math.hypot((i % cols) * cell + cell / 2 - tx, Math.floor(i / cols) * cell + cell / 2 - ty);
+    if (d < hd) { hd = d; hub = i; }
   }
+  if (hub < 0) return { storeys };
+  const hc = hub % cols, hr = Math.floor(hub / cols), hx = hc * cell + cell / 2, hy = hr * cell + cell / 2;
+  const lay = (i: number): void => { if (i !== hub) { ground[i] = G.road; storeys[i] = 0; } };
+  // A path of cells laid as a road, where it runs inside the city: a diagonal step stays a diagonal (the corner cell
+  // between two on the slant is left out), so a street on the slant runs smooth, not as a stair.
+  const diag = (p: number, q: number): boolean => Math.abs((p % cols) - (q % cols)) === 1 && Math.abs(Math.floor(p / cols) - Math.floor(q / cols)) === 1;
+  const layPath = (path: number[], where: (i: number) => boolean): void => {
+    let last = path[0];
+    for (let j = 1; j < path.length; j++) {
+      const q = path[j + 1];
+      if (q !== undefined && diag(last, q)) continue;
+      if (where(path[j])) lay(path[j]);
+      last = path[j];
+    }
+  };
+  // An irregular round about the heart: its radius swells and shrinks as it goes round.
+  const round = (radius: number): { at: (a: number) => number; inside: (i: number) => boolean } => {
+    const p2 = cr.range(0, Math.PI * 2), p3 = cr.range(0, Math.PI * 2);
+    const at = (a: number): number => radius * (1 + 0.16 * Math.sin(2 * a + p2) + 0.1 * Math.sin(3 * a + p3));
+    return { at, inside: (i) => { const x = (i % cols) * cell + cell / 2 - hx, y = Math.floor(i / cols) * cell + cell / 2 - hy; return Math.hypot(x, y) < at(Math.atan2(y, x)); } };
+  };
+  // The old quarter, tighter and taller than the rest of the core: four and five storeys.
+  const old = round(capital ? 300 : 210);
+  for (let i = 0; i < n; i++) if (core[i] && old.inside(i)) storeys[i] = 4 + (fill[i] > 0.5 ? 1 : 0);
+  storeys[hub] = 5;
+  // A boulevard where the old quarter's walls stood, and in a capital two more further out, where the city's later walls
+  // and its railways ran: round each, inside the core.
+  for (const { at } of capital ? [old, round(720), round(1150)] : [old]) {
+    const path: number[] = [];
+    const steps = Math.ceil((at(0) * Math.PI * 2) / (cell / 2));
+    for (let t = 0; t <= steps; t++) {
+      const a = (t / steps) * Math.PI * 2, c = Math.floor((hx + Math.cos(a) * at(a)) / cell), r = Math.floor((hy + Math.sin(a) * at(a)) / cell);
+      const i = c >= 0 && r >= 0 && c < cols && r < rows ? r * cols + c : -1;
+      if (i >= 0 && i !== path[path.length - 1]) path.push(i);
+    }
+    layPath(path, (i) => core[i] === 1);
+  }
+  // The avenues: out from the heart like spokes, the first toward the attacker's side where the road comes up the
+  // field, each bending as it goes, through the core and its terraces.
+  const spokes = capital ? 8 : 5, a0 = -Math.PI / 2 + cr.range(-0.15, 0.15);
+  for (let k = 0; k < spokes; k++) {
+    const a = a0 + (k * Math.PI * 2) / spokes + (k ? cr.range(-0.22, 0.22) : 0);
+    const bend = cr.range(-0.35, 0.35), bl = cr.range(500, 900), bp = cr.range(0, Math.PI * 2);
+    const path: number[] = [hub];
+    let x = hx, y = hy;
+    for (let s = 0; s < 3000; s += cell / 2) {
+      const dir = a + bend * (Math.sin(s / bl + bp) - Math.sin(bp));
+      x += Math.cos(dir) * (cell / 2); y += Math.sin(dir) * (cell / 2);
+      const c = Math.floor(x / cell), r = Math.floor(y / cell);
+      if (c < 0 || r < 0 || c >= cols || r >= rows || ringAt[r * cols + c] < 2) break;
+      const i = r * cols + c;
+      if (i !== path[path.length - 1]) path.push(i);
+    }
+    layPath(path, () => true);
+  }
+  // A square before the landmark: the cells about the heart.
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (inCore(hc + dc, hr + dr)) lay((hr + dr) * cols + hc + dc);
   // Squares and parks: open patches in the core, two in a city, three in a capital.
   for (let k = 0; k < (capital ? 3 : 2); k++) {
     for (let tries = 0; tries < 20; tries++) {
       const pc = Math.floor(cr.next() * cols), pr = Math.floor(cr.next() * rows), pw = 3 + Math.floor(cr.next() * 2), ph = 3 + Math.floor(cr.next() * 2);
-      if (!inCore(pc, pr) || !inCore(pc + pw - 1, pr + ph - 1)) continue;
+      if (!inCore(pc, pr) || !inCore(pc + pw - 1, pr + ph - 1) || old.inside(pr * cols + pc) || old.inside((pr + ph - 1) * cols + pc + pw - 1)) continue;
       for (let r = pr; r < pr + ph; r++) for (let c = pc; c < pc + pw; c++) if (ground[r * cols + c] === G.buildings) { ground[r * cols + c] = G.park; storeys[r * cols + c] = 0; }
       break;
     }
@@ -456,16 +539,13 @@ function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number,
       if (ground[i] !== G.road) { ground[i] = G.industry; storeys[i] = 2; }
     }
   }
-  // Its landmark, on the core's cell nearest the centre.
-  let best = -1, bd = Infinity;
-  for (let i = 0; i < n; i++) {
-    if (ground[i] !== G.buildings || !core[i]) continue;
-    const d = Math.hypot((i % cols) * cell + cell / 2 - tx, Math.floor(i / cols) * cell + cell / 2 - ty);
-    if (d < bd) { bd = d; best = i; }
-  }
+  // Its landmark, at the heart.
   const kinds = ['spire', 'dome', 'station'] as const;
-  const landmark = best < 0 ? undefined : { x: (best % cols) * cell + cell / 2, y: Math.floor(best / cols) * cell + cell / 2, kind: kinds[Math.floor(cr.next() * 3)] };
-  return { storeys, ...(landmark ? { landmark } : {}) };
+  const landmark = { x: hx, y: hy, kind: kinds[Math.floor(cr.next() * 3)] };
+  // Where the core's blocks begin, column by column.
+  const streetEdge = new Array<number>(cols).fill(-1);
+  for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) if (core[r * cols + c]) { streetEdge[c] = r * cell; break; }
+  return { storeys, landmark, streetEdge };
 }
 
 /** Fieldworks dug where a defender stood dug in: the cells under its box become 'works'. */

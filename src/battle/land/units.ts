@@ -252,8 +252,15 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
 function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: number, hi?: number): void {
   const z = f.zones[side];
   const dir = side === 'att' ? 1 : -1;
-  const front = side === 'att' ? z[3] - 40 : z[1] + 40;
+  let front = side === 'att' ? z[3] - 40 : z[1] + 40;
   const lines = rowsOf(mine);
+  // In a capital's or a city's streets the defence stands a block inside the ragged edge of its core, in the outer
+  // streets, never in front of the city (the design director, b529): the core's edge along its front line, at the middle.
+  if (side === 'def' && f.streetEdge) {
+    const half = rowWidth(lines[0]) / 2;
+    const ys = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
+    if (ys.length) front = Math.max(front, ys[Math.floor(ys.length / 2)] + LAND.city.inside);
+  }
   const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
   /**
    * Where a row stands on the wings: half on each, beyond the ends of the front line. None where a wing would run off

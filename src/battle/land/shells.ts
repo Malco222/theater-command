@@ -56,15 +56,15 @@ import type { Kind } from './rules';
  * camera feels a hit. The sheet's own figure for the blast of a 105 mm shell is its shock, the ring of dust that
  * skids out along the ground to about 15 m by frame 4; the other classes are that 15 m scaled by their shake radius
  * against the 105's 40 m, so they keep the sheet's steps: three-eighths of 10, 25, 30, 40 and 60 m, to the metre.
- * 'light' is the sheet's hand grenade row.
+ * 'light' is the sheet's hand grenade row. 'bomb', a fighter's bomb in an air strike: the sheet's 250 kg row.
  */
-export const REACH: Record<Calibre, number> = { light: 4, mortar: 9, field: 11, howitzer: 15, heavy: 23 };
+export const REACH: Record<Calibre, number> = { light: 4, mortar: 9, field: 11, howitzer: 15, heavy: 23, bomb: 45 };
 
 /**
  * A crater's width across in metres, by class: the sheet's "Sizes" table (about 1.3 times real, so they read at the
  * battle camera). 'light' is the hand grenade row's "scuff only", taken as half a metre.
  */
-export const CRATER: Record<Calibre, number> = { light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3 };
+export const CRATER: Record<Calibre, number> = { light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3, bomb: 7 };
 
 /** The blocks whose blows are shells: guns, and tanks with their guns. Every other block's blows are small arms. */
 export const SHELLS_FROM: readonly Kind[] = ['art', 'arm'];

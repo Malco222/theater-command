@@ -33,7 +33,7 @@ const num = (n: number): string => Math.round(n).toLocaleString('en-GB');
 const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
 /** A practice ground's name: its ground, or the river crossing and the fortress works, as its card is headed. */
-const practiceName = (p: PracticeGround): string => (p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
+const practiceName = (p: PracticeGround): string => (p.air ? 'Air support' : p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
 /** The field's title on a practice ground: "Practice: Marsh" (b408). The after card, already headed "Practice result", gives the ground alone. */
 const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p)}`;
 /** What the staff makes of a card's chance, as the offer and practice cards say it. */
@@ -90,7 +90,8 @@ interface State {
   /** The first card the tray shows, when the army has more than fit (ruling 226(9)). */
   trayFrom: number;
   /** A tag on the field for a moment: RUNNING ×2, THE ARMIES MEET, and when it goes (real seconds). */
-  tag: { text: string; until: number } | null;
+  /** A passing word on the field; 'air' marks air support's own, shown even while paused (the player is aiming then). */
+  tag: { text: string; until: number; air?: boolean } | null;
   /** The clock was running at the last frame, and the armies had met: for the tags when either changes. */
   wasRunning: boolean;
   met: boolean;
@@ -248,7 +249,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
-  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null;
+  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null; S.scene.air = null;
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
@@ -263,7 +264,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   app.innerHTML = `<div class="battle tc">
     <header class="bbar">
       <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${esc(t.date)}</span>${placeLine(t)}</div>
-      <div class="bclock" title="At ${mmss(t.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
+      <div class="bclock" title="At ${mmss(b.ticket.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Speed">
         <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
         <button class="tc-btn tc-btn--sm" data-speed="1" title="Normal speed (1)">×1 <span class="tc-key">1</span></button>
@@ -276,6 +277,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
         <div class="bbreak" title="When a bar fills, that army breaks and leaves the field. It fills with the men lost along the whole line, or with the share of it running or gone, whichever is nearer, so an army can break while every part of it is still steady."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>
       <div class="bacts">
+        ${b.hasAir(S.scene.me) ? '<button class="tc-btn bair" data-act="air" id="airBtn" title="Your fighters on call: press, then click where to strike, or right-drag the run they fly. The staff call them in themselves if you leave them.">Air support <span class="tc-key">F</span><span class="tc-data airst" id="airState"></span></button>' : ''}
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the battle stands.">Hand it to the staff</button>
         <button class="tc-btn tc-btn--grave" data-act="withdraw">Withdraw</button>
         <div class="wask tc-paper" id="sask" hidden role="alertdialog" aria-label="Hand the battle to the staff?"><p id="saskText"></p><div class="wbtns"><button class="tc-btn" data-act="sgo">Hand it over</button><button class="tc-btn tc-btn--primary" data-act="stay">Keep fighting</button></div></div>
@@ -287,7 +289,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
@@ -529,6 +531,15 @@ function updateTop(force = false): void {
   cs.textContent = over ? 'Battle over' : sp === 0 ? 'Paused' : 'Running';
   cs.classList.toggle('is-paused', !over && sp === 0);
   el('pauseWord').textContent = !over && sp === 0 ? 'Paused' : 'Pause';
+  // Air support's state on its button: ready, on the way, next in, after the armies meet, all flown (b533).
+  const airBtn = byId('airBtn'), airSt = byId('airState');
+  if (airBtn && airSt) {
+    const a = b.airView().air?.[S.scene.me];
+    const said = !a || over ? '' : a.eta !== null ? `On the way ${mmss(a.eta)}` : a.left <= 0 ? 'All flown' : a.ready ? `Ready · ${a.left} left` : a.nextIn !== null ? `Next ${mmss(a.nextIn)} · ${a.left} left` : b.contactAt === null ? 'After the armies meet' : `${a.left} left`;
+    if (airSt.textContent !== said) airSt.textContent = said;
+    airBtn.classList.toggle('is-lit', !!S.scene.air);
+    airBtn.classList.toggle('is-off', !a?.ready || over);
+  }
   // How near to breaking (ruling 226(3)): a bar a side, no numbers.
   const v = { att: b.breaking('att'), def: b.breaking('def') };
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
@@ -540,7 +551,7 @@ function updateTop(force = false): void {
   // The tag on the field: PAUSED with its key while stopped, or a passing word; never while a question stands.
   const tag = el('ftag');
   const passing = S.tag && now() < S.tag.until ? S.tag.text : '';
-  const tagHtml = S.asking || b.over ? '' : sp === 0 ? 'Paused <span class="tc-key">Space</span>' : rushing ? `×${RUSH} until the armies meet <span class="tc-key">1</span>` : esc(passing);
+  const tagHtml = S.asking || b.over ? '' : passing && S.tag?.air ? esc(passing) : sp === 0 ? 'Paused <span class="tc-key">Space</span>' : rushing ? `×${RUSH} until the armies meet <span class="tc-key">1</span>` : esc(passing);
   if (tag.innerHTML !== tagHtml) tag.innerHTML = tagHtml;
   tag.hidden = !tagHtml;
   if (force || S.dispatch) {
@@ -631,14 +642,24 @@ function wireBattle(): void {
     const touch = e.pointerType === 'touch';
     down = { x: px, y: py, button: e.button, at: now(), touch, moved: false, px, py };
     // On a touch screen, press and hold orders, as on the campaign map.
-    if (touch) hold = window.setTimeout(() => { if (down && !down.moved) { orderAt(down.x, down.y); down = null; } }, 450);
+    // Air support armed: a touch shows the run where it is, and lifting calls it; holding gives no march or attack.
+    if (touch && sc.air && S.b) { const [fx, fy] = toField(sc, px, py), run = S.b.airRunAt(sc.me, fx, fy); sc.air = { run, ok: S.b.airWhyNot(sc.me, run) === null }; }
+    if (touch && !sc.air) hold = window.setTimeout(() => { if (down && !down.moved && !sc.air) { orderAt(down.x, down.y); down = null; } }, 450);
   });
   canvas.addEventListener('pointermove', (e) => {
     const [px, py] = pos(e);
     const b = S.b;
     if (!b) return;
     const [fx, fy] = toField(sc, px, py);
+    // Air support armed: the run a strike would fly from here, as the field lays it.
+    if (sc.air && (!down || (!down.touch && down.button === 0) || (down.button === 2 && !down.moved))) {
+      const run = b.airRunAt(sc.me, fx, fy);
+      sc.air = { run, ok: b.airWhyNot(sc.me, run) === null };
+      canvas.style.cursor = 'crosshair';
+    }
     if (!down) {
+      // Armed, the run is what he is pointing with: no block's hover over it.
+      if (sc.air) { sc.hover = null; return; }
       const u = unitAt(b.units, fx, fy, Math.max(85, 16 / sc.cam.z), sc.me);
       sc.hover = u ? u.id : null;
       canvas.style.cursor = u && u.side !== sc.me && sc.sel.size ? 'crosshair' : u && u.side === sc.me ? 'pointer' : 'default';
@@ -649,9 +670,15 @@ function wireBattle(): void {
     if (down.touch || down.button === 1) {
       // Drag the map.
       sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam();
-    } else if (down.button === 0) {
+    } else if (down.button === 0 && !sc.air) {
       const [ax, ay] = toField(sc, down.x, down.y);
       sc.box = [ax, ay, fx, fy];
+    } else if (down.button === 2 && sc.air) {
+      // Air support armed: the right-drag is the run itself.
+      const [ax, ay] = toField(sc, down.x, down.y);
+      // As the field will fly it: kept on the field and to its longest.
+      const run = b.airRun([ax, ay, fx, fy]);
+      sc.air = { run, ok: b.airWhyNot(sc.me, run) === null };
     } else if (down.button === 2) {
       const ids = chosen();
       if (ids.length) {
@@ -668,6 +695,14 @@ function wireBattle(): void {
     const [px, py] = pos(e);
     const d = down;
     down = null;
+    // Air support armed: a click (either button) strikes there; a right-drag strikes down the run drawn.
+    if (sc.air && !(d.touch && d.moved) && (d.touch || d.button === 0 || d.button === 2)) {
+      const [fx, fy] = toField(sc, px, py);
+      const run = d.button === 2 && d.moved && sc.air.run ? sc.air.run : b.airRunAt(sc.me, fx, fy);
+      sc.box = null; sc.line = null;
+      callAir(run);
+      return;
+    }
     if (d.touch) {
       if (!d.moved) pickAt(px, py, false);
       return;
@@ -710,6 +745,7 @@ function wireBattle(): void {
   }));
   // HAND IT TO THE STAFF and WITHDRAW each ask once, in place, with the clock stopped; KEEP FIGHTING, the answer that
   // changes nothing, carries the brass (and Esc) (ruling 226(5)).
+  app.querySelector('[data-act="air"]')?.addEventListener('click', () => { toggleAir(); updateTop(); });
   app.querySelector('[data-act="dice"]')!.addEventListener('click', () => { ask('staff'); updateTop(); });
   app.querySelector('[data-act="withdraw"]')!.addEventListener('click', () => { ask('withdraw'); updateTop(); });
   app.querySelectorAll<HTMLElement>('[data-act="stay"]').forEach((el) => el.addEventListener('click', () => { answered(); updateTop(); }));
@@ -783,6 +819,30 @@ function answered(): void {
   S.resume = null;
 }
 
+/**
+ * Air support (Brian, 2026-11-18; b533): F or the button arms it where a strike is ready; the next click strikes the
+ * enemy block nearest it down its frontage, a right-drag down the run drawn. Pressed again, or Esc, it puts it down.
+ * Where none can be called, a passing word says why.
+ */
+function toggleAir(): void {
+  const b = S.b, sc = S.scene;
+  if (!b || b.over || !b.hasAir(sc.me)) return;
+  if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; return; }
+  const why = b.airWhyNot(sc.me);
+  if (why) { S.tag = { text: why, until: now() + 2, air: true }; return; }
+  sc.air = { run: null, ok: true };
+  canvas.style.cursor = 'crosshair';
+}
+function callAir(run: [number, number, number, number]): void {
+  const b = S.b!, sc = S.scene;
+  const why = b.airWhyNot(sc.me, b.airRun(run));
+  if (why) { S.tag = { text: why, until: now() + 2, air: true }; return; }
+  if (give({ do: 'land:air', x0: run[0], y0: run[1], x1: run[2], y1: run[3] })) {
+    sc.ping = { x: (run[0] + run[2]) / 2, y: (run[1] + run[3]) / 2, at: now(), kind: 'attack' };
+    sc.air = null; canvas.style.cursor = 'default';
+  } else S.tag = { text: b.airWhyNot(sc.me, b.airRun(run)) ?? 'Not now', until: now() + 2, air: true };
+}
+
 function pickAt(px: number, py: number, add: boolean): void {
   const b = S.b!, sc = S.scene;
   const [fx, fy] = toField(sc, px, py);
@@ -821,10 +881,11 @@ window.addEventListener('keydown', (e) => {
     case '1': if (!S.asking && !b.over) setSpeed(1); break;
     case '2': if (!S.asking && !b.over) setSpeed(2); break;
     case '3': if (!S.asking && !b.over) setSpeed(4); break;
+    case 'f': toggleAir(); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
     // Esc changes nothing: it closes the question if one is open, else drops the blocks in hand.
-    case 'Escape': if (S.asking) answered(); else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
+    case 'Escape': if (S.asking) answered(); else if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; } else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
     case 'Tab': {
       e.preventDefault();
       const mine = b.units.filter((u) => u.side === sc.me && orderable(u));
@@ -908,6 +969,8 @@ function frame(): void {
   }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = b.unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
+  // Air support armed only while a strike can be called: once it cannot (over, called, or the battle done), put it down.
+  if (S.scene.air && (b.over || b.airWhyNot(S.scene.me) !== null)) { S.scene.air = null; canvas.style.cursor = 'default'; }
   drawFrame(ctx, b, S.scene, S.field);
   updateTop();
   updateTray();

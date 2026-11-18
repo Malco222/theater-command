@@ -91,6 +91,10 @@ button { cursor: pointer; }
 /* The staff's band where the defence is not fully known (b453), drawn as the attack card draws its doubt. */
 .btrack b.band { margin-left: 0; top: -3px; bottom: -3px; border-radius: 2px; background: repeating-linear-gradient(115deg, rgba(244, 238, 218, .5) 0 3px, rgba(244, 238, 218, .12) 3px 7px); box-shadow: 0 0 0 1px rgba(244, 238, 218, .65); }
 .bacts { position: relative; display: flex; gap: 8px; margin-left: auto; }
+/* Air support (b533): the button carries its state; lit while armed, quiet while none is ready. */
+.bacts .bair .airst { margin-left: 6px; font-size: 12px; opacity: .85; white-space: nowrap; }
+.bacts .bair.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
+.bacts .bair.is-off { opacity: .6; }
 .wask { position: absolute; right: 0; top: calc(100% + 8px); width: 320px; display: grid; gap: 10px; z-index: 5; }
 .wask[hidden] { display: none; }
 .wask p { margin: 0; font: 400 15px/22px var(--font-serif); }

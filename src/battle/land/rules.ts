@@ -194,6 +194,48 @@ export const LAND = {
   press: 600,
   /** Seconds of battle time before the defender is counted as having held. */
   limit: 360,
+  /**
+   * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
+   * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
+   * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
+   * the march in through the streets and the fight in them do not end on the clock. Measured with the line inside the
+   * edge over 555 city and capital fields x 10 seeds (b529's bars: every kind within a tenth of its card, close odds
+   * too, and none on the clock more than 1 fight in 10): 0.15 holds both, the widest forest cities at close odds +8.9
+   * and marsh cities at close odds 8.7% on the clock; 0.25 and 0.5 put the forest and marsh cities' close odds over
+   * a tenth, 0 put marsh and mountain cities on the clock 1 fight in 8.
+   */
+  city: { inside: 100, clock: 0.15 },
   /** The computer general thinks once a second. */
   think: 1,
+  /**
+   * Air support (Brian, 2026-11-18 18:58Z; the design director, b533): a side's fighters on call strike when called,
+   * the card having counted them already. While a side has strikes left, its blows hold back the card's share for them
+   * (SideTicket.air.share), owed to the block each fell on; a strike pays what is owed where its run lands (sim.ts,
+   * "Air support"). Seconds are battle time, metres field metres.
+   *   first, every: the first strike is ready this long after the armies meet, each next this long after the last call.
+   *   wait: a strike left ready this long, the staff call it themselves, for either side (b533(c): the enemy's too,
+   *     never aimed sharper).
+   *   eta: from the call to the run; speed: metres a second the flight flies, so the run takes its length over it;
+   *     out: seconds it is seen pulling away after the run.
+   *   len, minRun, wide: the run's longest and shortest, and the strip its guns rake, each side of its line half of it.
+   *   near: pointed at a place, the run takes the frontage of the enemy block nearest it within this.
+   *   close: no gun fires within this of the caller's own men; a run with less than 'least' of its line clear is refused.
+   *   armour: tanks take this much of a strafing run (guns made for men in the open).
+   *   nerve: the run's weight on nerve, as a blow from the front.
+   *   alt, low: the flight's height coming in and on the run, metres (pictures only). models: planes in a flight;
+   *     legs: the staff's strike splits into pairs, a pair down the frontage of each of the blocks owed most.
+   *   toss: seconds from a bomb let go to its burst ('land:bomb-drop' then the 'shell'), pictures only.
+   *   bombs: how many fall on the run's far third, pictures only (b533(f)): from the nation's first year of
+   *     fighter-bombers, before it the run strafes alone. bombsFrom: that year by nation, '_' for every other, from the
+   *     historian's list (/mnt/project-files/historian/fighter-bombers.md, 19:35Z): Germany from the Balkans and Russia,
+   *     1941; Britain and America 1942; the Soviets from June 1941 (the certain date); Italy 1941; Japan 1943; France
+   *     only with the Free French, 1943; Poland never in 1939; the generic fighter 1942.
+   */
+  air: {
+    first: 40, every: 40, wait: 20, eta: 12, speed: 120, out: 6,
+    len: 400, minRun: 100, wide: 60, near: 300, close: 60, least: 0.3, armour: 0.6, nerve: 1,
+    alt: 150, low: 60, models: 4, legs: 2,
+    bombs: 2, toss: 1.5,
+    bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 } as Record<string, number>,
+  },
 };

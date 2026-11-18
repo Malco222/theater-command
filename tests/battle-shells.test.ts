@@ -75,7 +75,9 @@ describe('what each block throws, by the model the 3D game draws it with', () =>
     // The blast reaches less far than the camera shakes (the sheet: 10, 25, 30, 40 and 60 m), and grows with the class.
     expect(Object.values(REACH)).toEqual([...Object.values(REACH)].sort((a, b) => a - b));
     expect(REACH.howitzer).toBe(15);
-    expect(CRATER).toEqual({ light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3 });
+    // A fighter's bomb, the 250 kg row (air support, b533(f)): only a strike drops one, never a block's gun.
+    expect(CRATER).toEqual({ light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3, bomb: 7 });
+    expect(REACH.bomb).toBe(45);
   });
   it("a tank throws the gun it is drawn with: its nation's design year where the campaign keeps one, not the calendar (the verifier, explosions)", () => {
     // A Soviet army ahead on armour in 1940 is drawn with the T-34; one held back in 1943 with its light tank still.
@@ -272,8 +274,9 @@ describe('the fight is not moved by a hair', () => {
     'practice 6 seed 2': [1.539, 222, 9404, 25997, '90ac7ec7304adae0'],
     'practice 7 seed 5': [1.129, 241, 19498, 14269, '45635242105cb477'],
     Pomorze: [5.304, 142, 131, 9945, '7a3ee283c24c69c8'],
-    // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike.
-    'Polish Silesia': [2.297, 190, 1877, 9951, '2503c86320bb8f12'],
+    // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike; and
+    // again with the defence a block inside its core (b529): a shorter fight, one shell fewer.
+    'Polish Silesia': [2.373, 171, 1956, 9951, '71c6a4668c4f12b5'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
@@ -303,6 +306,6 @@ describe('the fight is not moved by a hair', () => {
       shells += check(name, new LandBattle(landTicket(g, cs, r)!), true);
       check(name, new LandBattle(landTicket(g, cs, r)!), false);
     }
-    expect(shells).toBe(8);
+    expect(shells).toBe(7);
   });
 });

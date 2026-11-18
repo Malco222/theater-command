@@ -97,6 +97,54 @@ export interface SideTicket {
   forces: ForceTicket[];
   /** The general in command of the side's strongest corps, if any: his name and his level. */
   general: { name: string; level: number } | null;
+  /**
+   * Fighters on call over this battle (Brian, 2026-11-18 18:58Z: a fighter group on ground support, in range, strafes and
+   * bombs when called): what the campaign's sky term counted for them, and who flies. Left out, the field has no air of
+   * its own and is exactly as it was (no draw, no word, no picture).
+   */
+  air?: AirOnCall;
+}
+
+/**
+ * A side's fighters on call (src/battle/land/sim.ts, "Air support"). The card counted them already: 'share' is the part
+ * of the side's strength on the card that they made, which its blows on the field hold back and the strikes pay out
+ * where they land (b418: what the card prices, the field draws but never prices again).
+ */
+export interface AirOnCall {
+  /** The part of the side's power on the card its fighters on call made, 0 to under 1. */
+  share: number;
+  /** How many strikes they fly this battle, at most. */
+  strikes: number;
+  /**
+   * The groups that fly them, the heaviest first: strike n is flown by group n in turn. planes: its fighters; lose: the
+   * planes it loses a strike, as the campaign prices it (no dice: fought or settled by the staff, the same).
+   */
+  groups: { id: number; name: string; nat: string; planes: number; lose: number }[];
+}
+
+/** What a side's fighters on call flew, by group, for the campaign's bill: strikes flown and planes lost. */
+export interface AirFlown { group: number; sorties: number; lost: number }
+
+/**
+ * A flight over the land field (four fighters as one picture): never a unit, so nothing on the field targets it or
+ * counts it. Metres; alt above the ground; face as a unit's.
+ */
+export interface Flight {
+  id: number;
+  side: Side;
+  nat: string;
+  /** The year its fighters are drawn from (the ticket's date). */
+  year: number;
+  /** How many planes the picture flies. */
+  models: number;
+  x: number;
+  y: number;
+  alt: number;
+  face: number;
+  /** 'in': coming in to the run; 'run': strafing and bombing; 'out': pulling away off the field. */
+  phase: 'in' | 'run' | 'out';
+  /** The run it flies: from x0, y0 to x1, y1. */
+  run: [number, number, number, number];
 }
 
 /** Everything a battle needs from the campaign, and nothing it can change. P is the domain's own picture of the place. */
@@ -237,9 +285,10 @@ export type Command = CoreCommand | DomainCommand;
  * What a gun throws, as a size class of the art director's explosions sheet (art-director/explosions/explosions-look.md,
  * "Sizes"): 'mortar' 81 or 82 mm, 'field' 75 or 76 mm, 'howitzer' 105 mm, 'heavy' 150 or 155 mm, and 'light' for the
  * small tank and anti-tank guns, 37 to 57 mm, which the sheet has no row for: drawn and heard at its hand grenade row
- * until it gives them one. src/battle/land/shells.ts says which block throws which.
+ * until it gives them one. src/battle/land/shells.ts says which block throws which. 'bomb' is a fighter's bomb, dropped in
+ * an air strike (the sheet's 250 kg row).
  */
-export type Calibre = 'light' | 'mortar' | 'field' | 'howitzer' | 'heavy';
+export type Calibre = 'light' | 'mortar' | 'field' | 'howitzer' | 'heavy' | 'bomb';
 
 /** Something that happened, for the dispatches strip, the sound and the camera. */
 export interface FieldEvent {
@@ -381,6 +430,8 @@ export interface FieldResult {
   pulled?: { side: Side; bar: number };
   /** The domain's own exact results the campaign must apply as they happened (sea: ships sunk by fleet and class). */
   extra?: Record<string, unknown>;
+  /** Land: what each side's fighters on call flew and lost, by group (AirFlown); only where a side had any. */
+  air?: Partial<Record<Side, AirFlown[]>>;
 }
 
 /** The plain picture of the battle the screens draw from: the browser page and the 3D game alike. */
@@ -405,6 +456,14 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   breakingBy?: Record<Side, BreakCause>;
   /** Battle time of the first contact between the lines, null before it: until then the screens may run the clock faster (ruling 226(1)). */
   contact?: number | null;
+  /** Land: the flights over the field now (air support); left out where neither side has fighters on call. */
+  flights?: Flight[];
+  /**
+   * Land: each side's fighters on call, where it has any: strikes ready to call, strikes left in all (ready ones too),
+   * seconds until the next is ready (null when none is coming), and seconds until one called arrives (null when none is
+   * on the way).
+   */
+  air?: Partial<Record<Side, { ready: number; left: number; nextIn: number | null; eta: number | null }>>;
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

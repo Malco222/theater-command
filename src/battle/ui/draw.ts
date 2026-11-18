@@ -28,6 +28,11 @@ export interface Scene {
   now: number;
   /** A brief mark where the last order went. */
   ping: { x: number; y: number; at: number; kind: 'move' | 'attack' } | null;
+  /**
+   * Air support armed (F or the button): the run a strike would fly from where the pointer is, and whether it can be
+   * called there (false: too close to our men). Null when not armed.
+   */
+  air?: { run: [number, number, number, number] | null; ok: boolean } | null;
   /** The sides' colours on this field, where the page has settled them (sideColours); else the ticket's. */
   colours?: Record<Side, string> | null;
   /**
@@ -225,6 +230,12 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   const hot = s.hover !== null ? byId.get(s.hover) : undefined;
   if (hot && live(hot)) hoverLabel(x, s, hot, b);
 
+  // Air support, plainly (b533(f): in the browser a strike is a plain mark; strafing, bombs and smoke are the 3D game's).
+  // A run being aimed: a dashed band the width its guns rake, brass where it can be called, the alarm where it is too
+  // close to our men. A flight: a small arrowhead in its side's colour, outlined in ink, with a faint band down its run
+  // while it makes it.
+  airMarks(x, b, s, colour);
+
   // A line being drawn: the ghosts of where the blocks will stand.
   if (s.line) {
     const [a, c] = toScreen(s, s.line.x0, s.line.y0), [d, e] = toScreen(s, s.line.x1, s.line.y1);
@@ -256,6 +267,25 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     x.lineWidth = 2; x.beginPath(); x.arc(a, c, 6 + 16 * k, 0, Math.PI * 2); x.stroke();
   }
   x.restore();
+}
+
+function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {
+  const band = (r: [number, number, number, number], fill: string, stroke: string | null): void => {
+    const [a, c] = toScreen(s, r[0], r[1]), [d, e] = toScreen(s, r[2], r[3]);
+    const len = Math.hypot(d - a, e - c) || 1, half = (LAND.air.wide / 2) * s.cam.z, nx = (-(e - c) / len) * half, ny = ((d - a) / len) * half;
+    x.beginPath(); x.moveTo(a + nx, c + ny); x.lineTo(d + nx, e + ny); x.lineTo(d - nx, e - ny); x.lineTo(a - nx, c - ny); x.closePath();
+    x.fillStyle = fill; x.fill();
+    if (stroke) { x.strokeStyle = stroke; x.lineWidth = 2; x.setLineDash([6, 4]); x.stroke(); x.setLineDash([]); }
+  };
+  if (s.air?.run) band(s.air.run, s.air.ok ? 'rgba(224,184,114,.32)' : 'rgba(196,85,63,.26)', s.air.ok ? BRASS : ALARM);
+  for (const f of b.flightsNow()) {
+    if (f.phase === 'run') band(f.run, 'rgba(42,45,47,.10)', null);
+    const [px, py] = toScreen(s, f.x, f.y), k = 7;
+    x.save(); x.translate(px, py); x.rotate(f.face);
+    x.beginPath(); x.moveTo(0, -k * 1.4); x.lineTo(k, k); x.lineTo(0, k * 0.4); x.lineTo(-k, k); x.closePath();
+    x.fillStyle = colour[f.side]; x.fill(); x.strokeStyle = INK; x.lineWidth = 1.2; x.stroke();
+    x.restore();
+  }
 }
 
 function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: string, byId: Map<number, LandUnit>, b: LandBattle): void {

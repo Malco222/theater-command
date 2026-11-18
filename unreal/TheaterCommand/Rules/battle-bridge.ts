@@ -32,6 +32,12 @@
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
+//   TC.battleAirRun(x, y[, x1, y1]) -> { run, why } for the player's air support ("Air support" below): run, the strafing
+//                                   run [x0, y0, x1, y1] a strike would fly if called where he points (x, y: down the
+//                                   frontage of the enemy block he can see nearest the point), or down the run he drew
+//                                   (all four); why, null where it can be called now, else the reason in words. Call it
+//                                   as the pointer moves to show the run; the call itself is TC.battleOrder({ do:
+//                                   'land:air', x0, y0, x1, y1 }) with that run
 //   TC.battleChance()            -> { chance, contact }: the staff's chance now that the attack carries the ground, 0 to
 //                                   1, and whether the armies have met, for HAND IT TO THE STAFF's question (ruling
 //                                   226(5)); null where the battle has no such question (sea and air word their own).
@@ -156,6 +162,62 @@
 //     light, still land their shells in time (a quarter of the practice grounds' shells are the guns'). A big blow
 //     could cost a block two models in one tick: then two land in the same second.
 //   The browser page draws none of it (Brian: no look work in the browser).
+// Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
+// in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
+// fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
+// counted them in the side's strength, and on the field part of the side's blows is held back for them and paid where
+// the strikes land, never more than the card counted (b418). Nothing in the view changes where no side has any: no
+// 'flights', no 'air', no events below.
+//   view.air: { att?, def? }, one entry per side with fighters on call: { ready, left, nextIn, eta }. ready 1 when a
+//     strike can be called now; left, the strikes not yet flown; nextIn, battle seconds until the next is ready (null
+//     when ready or none left); eta, seconds until the strike called is over the field (null when none is on the way).
+//     None before the armies meet (TC.battleAirRun's why says "After the armies meet"). A strike left ready 20 s is
+//     called by the staff, so a player who forgets his planes is never short of them. The enemy's are called by its
+//     staff by the same rule, never aimed sharper.
+//   The button: "Air support" in the field's top bar where view.air[me] is set, its state beside it ("Ready · 2 left",
+//     "Next 0:31 · 2 left", "On the way 0:07", "All flown", "After the armies meet"); then the player points at the
+//     ground and the run shows as a band 60 m wide, brass where it can be flown and red where TC.battleAirRun's why is
+//     set ("Too close to our men", where our men are under too much of it); a click calls it. The browser page's
+//     battle page does all of this with plain marks: copy its behaviour, not its look. The words are the UI director's
+//     to change (b533(d)).
+//   view.flights: [{ id, side, nat, year, models, x, y, alt, face, phase, run }], each flight two to four fighters drawn
+//     as one picture (models), never a unit: nothing on the field fires at it or is hidden by it. x, y field metres,
+//     alt metres above the ground, face radians as the units'. phase 'in' (flying to the start of its run), 'run'
+//     (strafing down run [x0, y0, x1, y1] at alt LAND.air.low, 60 m) or 'out' (pulling up and away, climbing to 150 m
+//     and off the field). Draw nat's own fighter (battle-models/air: every nation has one; 62 fly the plain Fighter)
+//     at year's look; fly the fighter's 'fly' clip, 'bank.port' or 'bank.starboard' on the turns and 'peel_off' as
+//     the run ends; between view ticks, move it on its own heading at about 120 m/s.
+//   Events (all with side, t, and x, y where they happen):
+//     'land:air-call' { flights, runs, eta, by: 'you' | 'staff' } when a strike is called; x, y the first run's start.
+//       Its flights are in view.flights from then, phase 'in', eta seconds out. Text on the player's side when his
+//       staff called it: "The staff called in the planes."
+//     'land:air-in' { flight, run, models, alt, nat, year, heading }, cue 'fighter_pass': the flight is over the start
+//       of its run and drops onto it. Its engines are the 'fighter_loop' bed while it is in view.flights.
+//     'land:strafe' { flight, from, to, width, secs }, cue 'machine_gun', at the same moment: the guns open down the
+//       run from 'from' to 'to', 60 m wide, for secs seconds: the fighter's 'fire' clip and its muzzles gun.1..N, the
+//       strike of the rounds walking down the strip as the flight flies it. No words.
+//     'land:strafed' { flight, on } as the run ends: 'on' lists the blocks it struck that the player can see. Its text,
+//       on the player's side: "Your fighters strafed the 4th Rifle Division." (or "the enemy line", or "found nothing
+//       under their run"); on his own men: "Soviet fighters strafed your 1st Panzer Division." No cue.
+//     'land:bomb-drop' { flight, from: { x, y, alt }, to: { x, y }, at }: a bomb let go from the flight's 'bombs'
+//       socket, two a run, from the year its nation first flew fighter-bombers (the historian's table: Germany, the
+//       Soviets and Italy 1941; Britain and America 1942; Japan and France 1943; Poland never; others 1942); before
+//       it the run strafes alone. Spawn the 'Bomb' prop (socket 'nose', clip 'fall', 6 s) about 1.2 m either side of
+//       the belly at 'from' and fly it down to 'to' by battle second 'at' (LAND.air.toss, 1.5 s), sound
+//       'bombs_falling_01' or '_02'.
+//     'shell' with cal 'bomb' { extra: { flight } } at 'at': the burst where it lands, the 250 kg row of the
+//       sheet (reach 45 m), sound 'bomb_single_01' or '_02'. It leaves a 'crater' zone like a shell's. 'on' and
+//       'armour' only for a block the player knows; over one he does not, it bursts as on its ground. A bomb costs no
+//       model of its own: it is a picture of the strike's blow, which the field pays with the run.
+//     'air:lost' { flight, kind, chutes, over, air: 'ftr', alt }, cue 'plane_down': one fighter of the flight falls
+//       as the strike pulls away, for each whole plane the campaign's price for a strike comes to (never the dice):
+//       kind 'burn', 'spin' or 'explode' (its clips 'smoking', then 'fall_burn', 'fall_spin' or 'fall_explode');
+//       chutes, how many 'bail_out' (0 or 1). Brian, 19:33Z: "if a plane gets hit show the bullet holes or flak holes":
+//       before 'smoking', lay her <Name>Damage model on her and hold 'damage.flak' at 2 or 3 (ground fire;
+//       battle-models/air/damage-handoff.md); over 'own' or 'enemy', the side of the field it comes down on.
+//   over.air (and the view's over once the battle is over): { att?, def? } with [{ group, sorties, lost }] per group:
+//     every group on call flies every strike, as the campaign books it; handed to the staff, the strikes not yet flown
+//     count as flown (the staff fly them in the settlement). The campaign books these as flown (FieldBill.air).
 // A tank block may also carry crew (b477, Brian's pick: tank crews name their tanks): { mark: 'name', names } or
 // { mark: 'rings', rings }, one entry per tank in the block's model order. names[i] is { name, en } or null (that tank is
 // plain); paint it from the model's entry under that name in battle-models/land/names-fit.json (its rows, in Russian
@@ -318,6 +380,9 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // until the battle is over, as its blocks are hidden (hiddenOut).
     ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
+    // Air support ("Air support" above): only where a side has fighters on call.
+    ...(v.flights ? { flights: v.flights } : {}),
+    ...(v.air ? { air: v.air } : {}),
   };
 }
 
@@ -419,6 +484,14 @@ export function battleCalls(h: BattleHooks) {
     battleView() {
       const ses = need();
       return viewOut(ses, ses.sim.view(ses.me));
+    },
+    battleAirRun(x: number, y: number, x1?: number, y1?: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      if (!land) return { run: null, why: 'None on call' };
+      // A drawn run as the field will fly it (kept on the field and to its longest), or the one pointed at.
+      const run: [number, number, number, number] = x1 !== undefined && y1 !== undefined ? land.airRun([x, y, x1, y1]) : land.airRunAt(ses.me, x, y);
+      return { run, why: land.airWhyNot(ses.me, run) };
     },
     battleChance() {
       const ses = need();
