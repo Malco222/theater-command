@@ -21,6 +21,7 @@ sys.path.insert(0, HERE)
 import bpy  # noqa: E402
 from mathutils import Quaternion, Vector  # noqa: E402
 
+import damage  # noqa: E402
 import kit  # noqa: E402
 import marks  # noqa: E402
 import planes  # noqa: E402
@@ -140,6 +141,7 @@ class Plane:
         self.v_air = air.speed
         self.clip = self.m.clips
         self.load = {}
+        self.holes = None                                    # (her battle damage, once she has been hit: see `hurt`)
         self.carry("bombs" if self.f.role == "bomber" else "torpedo")      # (a land bomber is seen with her bombs, a torpedo bomber with her torpedo)
         self.put(self.at)
 
@@ -160,6 +162,25 @@ class Plane:
         self.arm.location = self.at
         self.arm.rotation_mode = "QUATERNION"
         self.arm.rotation_quaternion = self.q
+        if self.holes:                                       # (her holes lie on her, and go where her parts go)
+            dm, arm, shown = self.holes
+            rigid.apply_pose(arm, rigid.merge(self.pose, shown), model=dm)
+            arm.location = self.at
+            arm.rotation_mode = "QUATERNION"
+            arm.rotation_quaternion = self.q
+
+    def hurt(self, bullets=0, flak=0):
+        """She is seen with this many bullet hits and flak hits on her (Brian, 2026-11-18: "if a plane gets hit show
+        the bullet holes or flak holes"): the first so many of each kind in her damage model (`damage.py`)."""
+        if self.holes is None:
+            key = self.name + "Damage"
+            if key not in self.air.models:
+                self.air.models[key] = damage.overlay(self.name, True, self.m)
+            dm = self.air.models[key]
+            _, arm = rigid.to_blender(dm, damage.look, crease=50.0)
+            self.holes = [dm, arm, {}]
+        dm = self.holes[0]
+        self.holes[2] = rigid.merge(rigid.pose_of(dm, dm.clips["damage.bullets"], float(bullets)), rigid.pose_of(dm, dm.clips["damage.flak"], float(flak)))
 
     def spot(self, socket):
         p, d = rigid.place(self.m, self.pose, socket)

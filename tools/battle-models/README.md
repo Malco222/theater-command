@@ -422,6 +422,26 @@ fuselage's own turning, so it flutters away rightly if the tracks are simply pla
 `Parachute`: parts `chute` (root, the harness point), `canopy` (scaled from a streamer to full), `airman`
 (swings). Clips `open`, `drift` (loop), `collapse`. `Bomb`: clip `fall`. `Torpedo`: clips `drop`, `run`.
 
+### Battle damage: bullet holes and flak holes
+
+Brian, 2026-11-18: "if a plane gets hit show the bullet holes or flak holes". Every aircraft has a damage model of
+its own, `<Name>Damage` (`damage.py`; `air/<Name>Damage.json` and `.glb`), that lies on her skin. An aircraft that
+has not been hit has none, so nothing changes for a game that does not use it.
+
+- It has every part of the aircraft (same names, parents, pivots; no faces of their own) and every clip of hers
+  (without her events). Put it where she is and play on it whatever she plays: it follows her, wing off and all.
+- Its faces are in parts `damage.1`, `damage.2`, ...: one hit each, hanging on the part of her it struck. A hit is
+  "bullets" (a raking row of five to eight holes, each a dark hole with a raised lip of bare torn metal) or "flak"
+  (a ragged tear 30 to 55 cm across with petals of torn metal bent outward, and a scatter of splinter holes). A
+  fighter has eight or nine hits, a heavy bomber fourteen; 1,200 to 1,800 triangles. Holes are larger than life
+  (8 to 10 cm) so that a battle camera sees them.
+- Three clips show them, with seconds standing for hits: `damage.bullets` held at k shows her first k bullet hits,
+  `damage.flak` her first k flak hits (lay one over the other), `damage` the first k of all kinds. At rest all show.
+- The file's `damage` lists each hit: `part`, `kind`, `on` (her part), `at`, `facing`, `holes`.
+- The faces stand 3.5 to 12 mm off her skin, as her panel lines do. Two paints: `hole` and `torn`.
+- In the clips: `Plane.hurt(bullets, flak)` (`airshow.py`).
+- Made again with `python export.py <out> damage json glb` (six seconds an aircraft).
+
 ## Making them again, and the pictures
 
 ```
