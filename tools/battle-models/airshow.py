@@ -73,6 +73,7 @@ class Air:
         stage.sky(sun_elev=44.0, sun_turn=sun_turn, level=0.8, clouds=True, high=True)
         self.fx = stage.Effects(seed=seed, wind=(-speed, 0.0, 0.0))
         self.models = {}
+        self.far_air = (1440.0, Vector((0.4, 0.47, 0.58)))   # (for a scene to set as `fx.haze`: far smoke half way to the sky at a kilometre)
         self.cam = kit.camera("cam", 50.0)
         self.cam.data.clip_end = 120000.0
         self.clouds = stage.Clouds(-alt + 1150.0, cover=clouds, back_light=BACK_LIGHT[0]) if clouds else None
@@ -242,6 +243,7 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
     the smoke. (Soft balls of flame run together into a smooth orange sheet; tongues do not.)"""
     g = fx.rng
     plane = getattr(where, "plane", None)
+    step = 0.017 * min(max(size, 0.45), 1.0)                 # (a small black trail is laid closer: at the big one's spacing a fighter's stood as a string of beads)
 
     def going():
         """Her way against the formation, and the way the air streams past her."""
@@ -259,7 +261,6 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
 
     def black(t, at, facing):
         v, flow = going()
-        c = g.uniform(0.03, 0.09)
         # (it gathers a few metres behind the fire, so the flame is seen against the sky and not through its own smoke)
         # (each puff is drawn out along the stream, so that near her they run together into one rope and never stand as a row of balls)
         # (the art director, 2026-11-18: seen from near by, seconds later, the trail "breaks into a chain of separate
@@ -269,6 +270,17 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         #  wreck. Now: born narrow and dense; it fades from birth and greys; more than a third of it is short lived, so
         #  the old end has half the smoke of the young; it comes in thicker and thinner gusts and wanders a little, and
         #  one puff in eight strays off to the side, so its edge breaks into puffs and gaps.)
+        # (a machine falling fast lays her puffs farther apart: they are drawn out the more along her path, or the
+        #  old end of a fighter's trail is a string of beads)
+        u = v + X * (plane.air.speed if plane is not None else -fx.wind.x)       # (her way through the air)
+        more = max(1, min(4, int(round(u.length / 95.0))))
+        fast = max(1.0, u.length / (95.0 * more)) ** 1.3
+        for j in range(1, more):                             # (the ones between: where she was a part of a step ago)
+            black_one(t, at - u * (step * j / more), v, flow, fast)
+        black_one(t, at, v, flow, fast)
+
+    def black_one(t, at, v, flow, fast):
+        c = g.uniform(0.03, 0.09)
         young, stray = g.random() < 0.38, g.random() < 0.12
         big = g.uniform(0.75, 1.2) * (0.78 + 0.5 * abs(math.sin(3.1 * t + 0.7) * math.sin(1.3 * t)))
         wander = across(flow, 1.0) * 0.0 + Vector((0.0, math.sin(1.9 * t + 1.0), math.cos(2.7 * t))) * (0.55 * size)
@@ -277,7 +289,7 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         drift = 6.5 if stray else 2.5
         p = fx.puff(t, at + flow * 3.2 * size + wander + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5))) * size, vel=(g.uniform(-2.5, 2.5), g.uniform(-drift, drift), g.uniform(-drift, drift)),
                     life=life, r=(max(0.4, 0.45 * size), end), col=(c * 1.9, c * 1.2, c), col2=(c * 2.4 + 0.035, c * 2.4 + 0.035, c * 2.4 + 0.04), alpha=g.uniform(0.72, 0.9), drag=0.45,
-                    fade_in=0.06, grow=0.5, hold=0.0, cool=2.2, wind=1.0, squash=(g.uniform(1.5, 2.0), 1.0, g.uniform(0.85, 1.1)))
+                    fade_in=0.06, grow=0.5, hold=0.0, cool=2.2, wind=1.0, squash=(g.uniform(1.5, 2.0) * fast, 1.0, g.uniform(0.85, 1.1)))
         p["ob"].rotation_euler = ((flow + across(flow, g.uniform(0.0, 0.25))).normalized().to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
     def thin(t, at, facing):
@@ -295,6 +307,17 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
 
     q = random.Random(1000 + 17 * len(fx.streams))           # (the sheet's and the soot's own dice)
 
+    def out_of_skin(at):
+        """Away from her skin at the place that burns: straight out from her middle line; up, if the place is on that
+        line or out on a wing."""
+        if plane is None:
+            return Z.copy()
+        nose, up, rel = plane.q @ X, plane.q @ Z, at - plane.at
+        side = rel - nose * rel.dot(nose)
+        if side.length < 0.25 or abs(side.dot(plane.q @ Y)) > 1.6:
+            return up
+        return side.normalized()
+
     def flame(t, at, facing):
         # (its colours are thrown dim, as the sea's fires are: under the picture's tone curve a bright flame bleaches to
         #  peach whatever its hue. The art director measured this fire at about 227,169,138 where deep orange is about
@@ -302,41 +325,52 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         v, flow = going()
         gust = 0.72 + 0.5 * abs(math.sin(23.0 * t) * math.sin(7.3 * t + 1.0))        # (it flares and sinks)
         k = g.uniform(0.85, 1.15)
+        # (The art director, 2026-11-18 15:28Z: the fire "lies flat on the skin, like paint ... tongues must leave the
+        #  skin at the source and peel back into the air behind", the root "a narrow bright slit ... widening as it goes
+        #  back". Broad tongues laid along her skin stood half inside her, and what showed was a patch on her panels.
+        #  So: every tongue starts a hand off the skin and leans out from it, more the longer it is; tongues are
+        #  narrower, so the fire is narrow at its root and only as wide as its spread downstream.)
+        out = out_of_skin(at)
+        at = at + out * 0.14 * size
+        lean = lambda far: (flow + out * far).normalized()
         # rooted on her, round the place that burns: thin tongues, the streaks in the fire
-        tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.1, 0.32) * size), flow, v, g.uniform(1.7, 3.9) * size * gust, "tongue",
-               (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08))
+        tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.05, 0.2) * size), lean(g.uniform(0.08, 0.3)), v, g.uniform(1.7, 3.9) * size * gust, "tongue",
+               (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08), fat=(0.14, 0.24))
         # the body of the fire: broad tongues from the same root lying one on another along the stream, so that they are
         # one torn sheet of flame streaming back from the place that burns, and not strokes side by side. (The art
         # director, 2026-11-18: "join the strokes into one torn sheet ... into its smoke trail".)
         if q.random() < 0.62:
             kk = q.uniform(0.85, 1.12)
-            tongue(t, at + flow * q.uniform(0.0, 0.5) * size + across(flow, q.uniform(0.0, 0.16) * size, q), flow, v, q.uniform(3.3, 5.6) * size * gust, "lick" if q.random() < 0.7 else "tongue",
-                   (0.14 * kk, 0.026 * kk, 0.004), (0.1, 0.014, 0.002), q.uniform(0.09, 0.16), q.uniform(0.02, 0.06), splay=0.07, fat=(0.26, 0.4), dice=q, name="sheet")
+            tongue(t, at + flow * q.uniform(0.0, 0.5) * size + across(flow, q.uniform(0.0, 0.1) * size, q), lean(q.uniform(0.1, 0.24)), v, q.uniform(3.3, 5.6) * size * gust, "lick" if q.random() < 0.7 else "tongue",
+                   (0.14 * kk, 0.026 * kk, 0.004), (0.1, 0.014, 0.002), q.uniform(0.09, 0.16), q.uniform(0.02, 0.06), splay=0.1, fat=(0.18, 0.3), dice=q, name="sheet")
         # torn off its end, in line with it, and going red
         # (few, close and short lived: many of them, flung wide and far down the smoke, read as orange petals blowing about)
         if g.random() < 0.4:
-            tongue(t, at + flow * g.uniform(2.0, 4.6) * size * gust + across(flow, g.uniform(0.0, 0.32) * size), flow, v, g.uniform(1.0, 2.2) * size, "lick",
+            tongue(t, at + (flow + out * 0.2) * g.uniform(2.0, 4.6) * size * gust + across(flow, g.uniform(0.0, 0.32) * size), flow, v, g.uniform(1.0, 2.2) * size, "lick",
                    (0.12 * k, 0.021 * k, 0.0035), (0.07, 0.01, 0.002), g.uniform(0.07, 0.14), g.uniform(0.15, 0.3), alpha=0.85, splay=0.12, fat=(0.3, 0.46))
         # a scrap of it going out in the head of the smoke
         if g.random() < 0.09:
-            tongue(t, at + flow * g.uniform(4.2, 6.2) * size + across(flow, g.uniform(0.0, 0.4) * size), flow, v, g.uniform(0.6, 1.1) * size, "lick",
+            tongue(t, at + (flow + out * 0.2) * g.uniform(4.2, 6.2) * size + across(flow, g.uniform(0.0, 0.4) * size), flow, v, g.uniform(0.6, 1.1) * size, "lick",
                    (0.07, 0.013, 0.003), (0.03, 0.011, 0.006), g.uniform(0.1, 0.18), g.uniform(0.3, 0.5), alpha=0.5, splay=0.16)
         # the heart of it, where the petrol or the oil comes out
         if g.random() < 0.4:
             # (a short solid yellow tongue lying along the stream, inside the fire; as a round glowing ball it sat on the
             #  engine like a bead, and thin it lay over a pale skin as a peach film)
-            p = fx.puff(t, at + flow * g.uniform(0.2, 0.7) * size + across(flow, g.uniform(0.0, 0.2) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
-                        col=(0.193, 0.111, 0.0), col2=(0.17, 0.07, 0.001), alpha=0.95, kind="heart", wind=0.03, squash=(3.4, 0.9, 0.9), fade_in=0.006, grow=0.6, cool=1.0)
-            p["ob"].rotation_euler = flow.to_track_quat("X", "Z").to_euler()
+            # (and thin: the bright slit at the root)
+            p = fx.puff(t, at + flow * g.uniform(0.1, 0.5) * size + across(flow, g.uniform(0.0, 0.1) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
+                        col=(0.193, 0.111, 0.0), col2=(0.17, 0.07, 0.001), alpha=0.95, kind="heart", wind=0.03, squash=(3.6, 0.6, 0.6), fade_in=0.006, grow=0.6, cool=1.0)
+            p["ob"].rotation_euler = lean(0.12).to_track_quat("X", "Z").to_euler()
         # its smoke is born black-brown in the end of the flame, drawn out along the stream: the fire goes into its
         # trail with no gap of clear air between them
         c = q.uniform(0.014, 0.04)
-        p = fx.puff(t, at + flow * q.uniform(1.7, 4.4) * size * gust + across(flow, q.uniform(0.0, 0.35) * size, q), life=q.uniform(0.45, 0.9), r=(0.55 * size, q.uniform(1.5, 2.4) * size),
+        p = fx.puff(t, at + (flow + out * 0.2) * q.uniform(1.7, 4.4) * size * gust + across(flow, q.uniform(0.0, 0.35) * size, q), life=q.uniform(0.45, 0.9), r=(0.55 * size, q.uniform(1.5, 2.4) * size),
                     col=(c * 1.4, c, c * 0.75), col2=(c * 1.7, c * 1.6, c * 1.5), alpha=q.uniform(0.75, 0.92), fade_in=0.012, grow=0.6, hold=0.15, wind=1.0, squash=(2.4, 1.0, 1.0), name="soot", rng=q)
         p["ob"].rotation_euler = (flow.to_track_quat("X", "Z") @ Quaternion(X, q.uniform(0, 6.283))).to_euler()
-    # (a small black trail is laid closer: at the big one's spacing a fighter's stood as a string of beads)
-    make, every = {"black": (black, 0.017 * min(max(size, 0.45), 1.0)), "thin": (thin, 0.04), "flame": (flame, 0.0115)}[kind]
+    make, every = {"black": (black, step), "thin": (thin, 0.04), "flame": (flame, 0.0115)}[kind]
     fx.stream(where, every, make, start=start, end=end)
+    if kind == "flame" and callable(where):
+        # the warm light it throws on the panels round it: just off her skin, a little downstream of the root
+        fx.firelight(where, 260.0 * size * size, start, end, off=lambda at, facing: at + out_of_skin(at) * 0.7 * size + going()[1] * 0.9 * size)
 
 
 def left_behind(fx, b, share=0.8, k=2.4, way=None):
@@ -451,7 +485,7 @@ def fireball(fx, t0, where, size=1.0):
     fx.once(t0, where, make)
 
 
-TRACER = {"one_in": 5, "col": (0.15, 0.133, 0.0), "col2": (0.15, 0.12, 0.0), "long": 16.0, "thick": 0.09, "life": 0.62, "least": 2.6, "flicker": 1.3}
+TRACER = {"one_in": 5, "col": (0.15, 0.133, 0.0), "col2": (0.15, 0.12, 0.0), "long": 16.0, "thick": 0.09, "life": 1.25, "least": 2.6, "flicker": 1.3, "screen": 0.5}
 # (Brian, 2026-11-18: "i want tracer fire shown as well. 1 out of every 5 bullets with yellow". As a belt was loaded:
 #  every fifth round a tracer, the four between them not seen. Its yellow is thrown dim, like the flames: a brighter one
 #  bleaches to cream under the picture's tone curve, and cream is lost against a pale sky; and with nearly as much
@@ -459,6 +493,12 @@ TRACER = {"one_in": 5, "col": (0.15, 0.133, 0.0), "col2": (0.15, 0.12, 0.0), "lo
 #  through a soft edge over the sky it was straw (219, 189, 135 measured). It is drawn out as a film
 #  camera's shutter would draw it (16 m: a forty-eighth of a second), and its core never thinner than about three
 #  pixels, with a faint glow as wide again round it: a round a hand wide is not seen at 300 m, its light is.)
+# (The art director, 2026-11-18 15:57Z: "the dashes lie scattered at every angle like straw"; wanted, each gun a stream,
+#  "dashes evenly spaced along one path from the gun to its target". At its true 850 m/s a round goes 70 m between two
+#  pictures of a clip of twelve a second, and a pair of guns' tracers are 170 m apart: one dash or two to a gun in any
+#  picture, and no stream. So on the screen a round goes at half its speed ("screen"), and lives twice as long to reach
+#  as far: a pair's dashes are 85 m apart, four or five on the way to a fighter 400 m off, and each steps 35 m a
+#  picture, which the eye follows. A game drawing sixty pictures a second can let them fly at their true speed.)
 
 
 def guns(fx, plane, t0, t1, sockets=None, every=0.085, aim=None, speed=780.0, cue=None):
@@ -468,20 +508,26 @@ def guns(fx, plane, t0, t1, sockets=None, every=0.085, aim=None, speed=780.0, cu
     names = sockets or [s["name"] for s in plane.m.sockets if s["name"].startswith("gun.")]
     if cue and names:
         plane.air.cue(cue, t0, plane, t1=t1, kind="burst")
+    v_seen = speed * TRACER["screen"]
 
     def gun(k):
         belt = {"n": 2 * k}                                  # (the guns' belts are out of step: their tracers do not all leave together)
+        ph = 1.7 * (k // 2) + 0.9 * len(fx.streams)          # (a pair of guns in one mounting wander together)
 
         def make(t, at, facing):
             way = (aim() - at).normalized() if aim else facing
+            # (a gunner's hand: the stream wanders a little as a whole, slowly, besides each round's own scatter)
+            way = (way + Vector((math.sin(2.3 * t + ph), math.sin(1.9 * t + 2.0 * ph), math.sin(2.9 * t + 0.6 * ph))) * 0.006).normalized()
             # (a short yellow tongue along the bore: as a round bright ball each gun wore a cream bead, and a wing's guns a string of them)
             f = fx.puff(t, at + way * 0.55, vel=plane.vel, life=0.04, r=(0.8, 1.0), col=(0.193, 0.111, 0.0), col2=(0.17, 0.07, 0.001), alpha=1.0, kind="heart", wind=0.0, fade_in=0.004, hold=0.8,
                         squash=(g.uniform(0.45, 0.8), 0.16, 0.16), least=TRACER["flicker"], name="flick", rng=g)
             f["ob"].rotation_euler = (way.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
             belt["n"] += 1
             if belt["n"] % TRACER["one_in"] == 0:
-                way = (way + Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))) * 0.006).normalized()
-                p = fx.puff(t, at + way * 8.0, vel=way * speed + plane.vel, life=TRACER["life"], r=(TRACER["thick"], TRACER["thick"]), col=TRACER["col"], col2=TRACER["col2"], alpha=1.0,
+                way = (way + Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))) * 0.003).normalized()
+                go = way * v_seen + plane.vel
+                way = go.normalized()                        # (it lies along its own path as the camera's formation sees it)
+                p = fx.puff(t, at + way * 8.0, vel=go, life=TRACER["life"], r=(TRACER["thick"], TRACER["thick"]), col=TRACER["col"], col2=TRACER["col2"], alpha=1.0,
                             kind="tracer", wind=0.0, squash=(0.5 * TRACER["long"] / TRACER["thick"], 1.0, 1.0), fade_in=0.005, hold=0.9, least=TRACER["least"])
                 p["ob"].rotation_euler = way.to_track_quat("X", "Z").to_euler()
         return make
@@ -490,8 +536,10 @@ def guns(fx, plane, t0, t1, sockets=None, every=0.085, aim=None, speed=780.0, cu
 
 
 def flak(air, t0, at, size=1.0):
-    """A heavy shell bursts among them: a red-orange flash for a frame, and a black oily puff with ragged arms that is
-    left standing in the air (so a formation flies on past it). `at`: where, as the formation sees it at that moment."""
+    """A heavy shell bursts among them: an orange-red flash for a frame or two, then a ragged black cloud, densest in
+    its middle and thin and torn at its edge, with a few wisps and stubby arms, left standing in the air (so a formation
+    flies on past it) and going from black through charcoal to grey-brown as it spreads. `at`: where, as the formation
+    sees it at that moment. Returns nothing; whoever is near it is shaken by `jolt`."""
     fx = air.fx
     q = random.Random(int(at[0] * 31.0 + at[1] * 17.0 + at[2] * 7.0 + t0 * 101.0))
     at = Vector(at)
@@ -501,38 +549,69 @@ def flak(air, t0, at, size=1.0):
         return d.normalized() if d.length > 0.05 else Z.copy()
 
     def make(t, _at, facing):
-        for i in range(7):                                   # the flash: a few short tongues out of its middle, gone in a frame
+        # the flash: a lumpy orange-red ball in its middle and a few short tongues out of it, seen for a frame or two
+        # before the smoke closes over it (the smoke comes up over a tenth of a second)
+        for i in range(9):
             d = any_way()
-            long = q.uniform(1.8, 3.2) * size
-            wide = long * q.uniform(0.4, 0.58)
-            p = fx.puff(t, at + d * long * 0.3, vel=d * q.uniform(4, 10) * size, life=q.uniform(0.09, 0.14), r=(0.7, 1.0), col=(0.14, 0.026, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
-                        kind="tongue" if i % 2 else "heart", drag=3.0, wind=1.0, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.006, grow=0.5, hold=0.5, cool=1.0, name="flak", rng=q)
+            lump = i < 4
+            long = (q.uniform(2.2, 3.0) if lump else q.uniform(2.6, 4.2)) * size
+            wide = long * (q.uniform(0.7, 0.9) if lump else q.uniform(0.36, 0.5))
+            p = fx.puff(t, at + d * long * (0.12 if lump else 0.3), vel=d * q.uniform(3, 9) * size, life=q.uniform(0.15, 0.2), r=(0.75, 1.0), col=(0.14, 0.026, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.94,
+                        kind="heart" if lump else "tongue", drag=3.0, wind=1.0, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.004, grow=0.5, hold=0.6, cool=1.0, name="flak", rng=q)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, q.uniform(0, 6.283))).to_euler()
 
-        def smoke(d, reach, r0, r1, alpha, late=0.0):
-            # (thrown `reach` metres from the middle and stopped there by the air: drag 3.2, so its speed is 3.2 x reach)
-            c = q.uniform(0.008, 0.028)
-            fx.puff(t + late, at + d * q.uniform(0.1, 0.6) * size, vel=d * 3.2 * reach * size, life=q.uniform(6.0, 9.0), r=(r0 * size, r1 * size),
-                    col=(c * 1.15, c, c * 0.9), col2=(c * 2.2 + 0.03, c * 2.2 + 0.03, c * 2.2 + 0.035), alpha=alpha, drag=3.2, fade_in=0.025, grow=0.45, wind=1.0, hold=0.25, cool=1.4, name="flak", rng=q)
+        def smoke(d, reach, r0, r1, alpha, late=0.0, squash=None, thin=False):
+            # (thrown `reach` metres from the middle and stopped there by the air: drag 3.2, so its speed is 3.2 x reach.
+            #  Each is left to the air a little differently, so the cloud draws out astern as it ages; it goes from
+            #  black through charcoal to a grey-brown.)
+            #  (Its thin parts are a shade browner and lighter: thin black over a blue sky was a dark blue glass.)
+            c = q.uniform(0.022, 0.04) if thin else q.uniform(0.008, 0.024)
+            k = q.uniform(0.85, 1.2)
+            p = fx.puff(t + late, at + d * q.uniform(0.1, 0.6) * size, vel=d * 3.2 * reach * size, life=q.uniform(6.5, 9.5), r=(r0 * size, r1 * size),
+                        col=(c * 1.3, c * 1.05, c * 0.85) if thin else (c * 1.15, c, c * 0.9), col2=(0.105 * k, 0.09 * k, 0.076 * k), alpha=alpha, drag=3.2, fade_in=0.11, grow=0.45, wind=q.uniform(0.986, 1.014), hold=0.12, cool=1.25,
+                        squash=squash or (1.0, 1.0, 1.0), name="flak", rng=q)
+            if squash:
+                p["ob"].rotation_euler = ((d + any_way() * 0.5).normalized().to_track_quat("X", "Z") @ Quaternion(X, q.uniform(0, 6.283))).to_euler()
         lean = any_way()
-        # the smoke. (As three dozen small puffs thrown wide it stood as a bunch of separate dots, "frogspawn". A burst
-        # is one dense black ball, lumpy at its edge, with two or three stubby arms where the case split.)
-        for i in range(int(12 * size) + 4):                  # its heart: big puffs one on another
-            smoke(any_way(), q.uniform(0.3, 2.0), q.uniform(1.3, 1.9), q.uniform(3.6, 5.4), q.uniform(0.86, 0.97), q.uniform(0.0, 0.03))
-        for i in range(int(16 * size) + 4):                  # the lumps round it: fewer on one side than the other
+        # the smoke. (As three dozen small puffs thrown wide it stood as a bunch of separate dots, "frogspawn"; as big
+        # dense puffs one on another, "inkblots": as black at its edge as in its middle, a hard ball. Now the dense
+        # stuff is only its heart; round that, thinner lumps, more on one side; round those, a thin veil the sky shows
+        # through; and wisps and arms out of it, thinner outward. No two bursts have the same share of each.)
+        body = q.uniform(0.75, 1.25)
+        for i in range(int(7 * size * body) + 4):            # its heart
+            smoke(any_way(), q.uniform(0.2, 1.5), q.uniform(1.0, 1.5), q.uniform(2.6, 3.8), q.uniform(0.78, 0.94), q.uniform(0.0, 0.03))
+        for i in range(int(11 * size) + 4):                  # the lumps round it: fewer on one side than the other
             d = any_way()
-            if d.dot(lean) < -0.2 and q.random() < 0.6:
+            if d.dot(lean) < -0.2 and q.random() < 0.65:
                 d = -d
-            smoke(d, q.uniform(2.6, 5.4), q.uniform(0.9, 1.5), q.uniform(2.8, 4.4), q.uniform(0.6, 0.86), q.uniform(0.0, 0.05))
-        for k in range(q.choice((2, 3, 3))):                 # its arms: each a few puffs one on the next, smaller outward
+            smoke(d, q.uniform(1.8, 4.4), q.uniform(0.8, 1.3), q.uniform(2.6, 4.2), q.uniform(0.38, 0.68), q.uniform(0.0, 0.05))
+        for i in range(int(9 * size) + 3):                   # the veil: big, thin, torn
+            d = any_way()
+            if d.dot(lean) < 0.0 and q.random() < 0.5:
+                d = -d
+            smoke(d, q.uniform(3.2, 6.4), q.uniform(1.3, 2.0), q.uniform(4.2, 6.6), q.uniform(0.14, 0.3), q.uniform(0.0, 0.06), thin=True)
+        # wisps: short ragged streaks drawn out of its edge (long thin ones stood out of it like slivers of glass)
+        for i in range(q.choice((3, 4, 5))):
+            smoke(any_way(), q.uniform(3.8, 6.0), q.uniform(0.6, 0.9), q.uniform(1.7, 2.5), q.uniform(0.36, 0.56), q.uniform(0.0, 0.05), squash=(q.uniform(1.5, 2.1), 0.85, 0.8), thin=True)
+        for k in range(q.choice((1, 2, 2, 3))):              # its arms: each a few puffs one on the next, smaller and thinner outward
             d = any_way()
             n = q.choice((3, 4, 5))
             for j in range(n):
                 dd = (d + any_way() * 0.16).normalized()
-                smoke(dd, 4.6 + 1.5 * j + q.uniform(-0.4, 0.4), 1.2 - 0.14 * j, 3.2 - 0.42 * j, q.uniform(0.7, 0.88), 0.008 * j)
+                smoke(dd, 3.9 + 1.4 * j + q.uniform(-0.4, 0.4), 1.1 - 0.13 * j, 3.0 - 0.4 * j, q.uniform(0.62, 0.8) - 0.09 * j, 0.008 * j)
         fx.light(t, at, 2.5e3 * size * size, 0.1, r=2.0)
     fx.once(t0, (at, X), make)
     air.cue("flak_burst_01", t0, at, drift=True, kind="shot")
+
+
+def jolt(b, t0, at, size=1.0, reach=110.0):
+    """A burst near a bomber throws her: away from it, harder the nearer, when its blast reaches her; she rings for
+    half a second and is back in her place. (`ride` adds up what is in `b.jolts`.)"""
+    away = b.home - Vector(at)
+    far = away.length
+    if far < reach:
+        push = min(2.2, 30.0 * size / max(far, 12.0))
+        b.jolts.append((t0 + far / 340.0, away.normalized() * push + Z * (0.4 * push)))
 
 
 class Flight:
@@ -810,6 +889,12 @@ def ways_down(A, opt):
 
 
 # ---- B-17s under attack (Brian, 2026-11-18: "can i see more b-17 battle scenes in 3d with fighters?") --------------
+# What is heard, by machine (the sound director's mix.json, section air: no Bf 109 was ever recorded, so it takes the
+# nearest real engine, the Spitfire's single V12, and one heavy gun's burst; "plane_guns" is six to eight guns together).
+DRONE_DB = -5.0          # (the formation's drone, under the guns: they are to stand 8 to 10 dB over it)
+GUN_SOUND = {"Bf109": "gunner_burst", "Fw190": "plane_guns", "Mustang": "plane_guns"}
+PASS_SOUND = {"Bf109": "spitfire_pass", "Fw190": "fw190_pass", "Mustang": "p51_pass"}
+
 FRONT_GUNS = ("turret.9", "turret.10", "turret.1", "turret.2", "turret.3", "turret.4")       # top turret, chin, cheeks
 REAR_GUNS = ("turret.7", "turret.8", "turret.11", "turret.12", "turret.9", "turret.10")       # tail, ball, top turret
 
@@ -819,8 +904,8 @@ def bombers(A, spots, T, scheme="1944-01"):
     out = []
     for k, at in enumerate(spots):
         b = Plane(A, "B17", at, scheme=scheme)
-        b.home, b.phase, b.firing = Vector(at), 0.9 * k, []
-        A.cue("b17_drone_loop", 0.0, b, t1=T, kind="loop")
+        b.home, b.phase, b.firing, b.jolts = Vector(at), 0.9 * k, [], []
+        A.cue("b17_drone_loop", 0.0, b, t1=T, kind="loop", gain=DRONE_DB)
         out.append(b)
     return out
 
@@ -829,6 +914,10 @@ def ride(b, t, at=None, *more, q=None):
     """A bomber in her place in the box at t (or at `at`), her gunners watching, and working their guns while they fire."""
     ph = b.phase
     p = (b.home if at is None else Vector(at)) + Vector((0.8 * math.sin(0.31 * t + ph), 0.6 * math.sin(0.43 * t + 2.0 * ph), 0.9 * math.sin(0.52 * t + 1.3 * ph)))
+    for t0, push in b.jolts:                                 # (a near burst: thrown, and ringing back to her place)
+        if 0.0 <= t - t0 < 1.6:
+            a_ = t - t0
+            p += push * (math.exp(-3.4 * a_) * math.sin(10.5 * a_) * 1.35)
     busy = any(t0 <= t <= t1 for t0, t1 in b.firing)
     b.put(p, b.play("fly", t + ph), b.play("watch", t + ph), b.play("fire.turrets", t) if busy else {}, *more, q=q)
 
@@ -853,7 +942,7 @@ def nearest(b, foes, ahead):
         if best is None:
             return b.at + X * (600.0 if ahead else -600.0)
         f = best[1]
-        return f.at + f.vel * (best[0] / 850.0)              # (led by how far she flies while the rounds are on their way)
+        return f.at + f.vel * (best[0] / (850.0 * TRACER["screen"]))     # (led by how far she flies while the rounds are on their way)
     return pick
 
 
@@ -863,6 +952,7 @@ def b17_head_on(A, opt):
     fighter goes down through the box burning. Seen from behind and above the rear three, looking the way they fly."""
     T = 8.0
     fx = A.fx
+    fx.haze = A.far_air
     bs = bombers(A, [(0, 0, 0), (-38, 34, 7), (-38, -34, 7), (150, -80, 28), (112, -46, 35), (112, -114, 35)], T)
     lead, left, right = bs[0], bs[1], bs[2]
     runs = [  # (her path, her bank, when she fires, at whom)
@@ -886,13 +976,12 @@ def b17_head_on(A, opt):
         gunners(A, b, r0, r1, REAR_GUNS[:4], nearest(b, fs, False))
     # what the cannon do: the port wing bomber's No. 2 engine is set on fire; the leader and one ahead are hit and smoke
     strikes(fx, left, 3.0, 3.75, sockets=("engine.2", "tank.port"))
-    A.cue("bullets_incoming_01", 3.0, left)
+    A.cue("bullet_crack", 3.0, left)
     trail(fx, left.where("engine.2"), 3.3, kind="thin", size=0.9)
     trail(fx, left.where("engine.2"), 3.8, kind="flame", size=1.0)
     trail(fx, left.where("engine.2"), 3.8, kind="black", size=0.9)
-    A.cue("fire_small_loop", 3.8, left, t1=T, kind="loop")
     strikes(fx, lead, 3.1, 3.6, sockets=("fuel", "engine.3"))
-    A.cue("bullets_incoming_02", 3.1, lead)
+    A.cue("bullet_crack", 3.25, lead)
     trail(fx, lead.where("engine.3"), 3.6, kind="thin", size=0.8)
     strikes(fx, bs[3], 2.5, 3.1, sockets=("engine.1", "fuel"))
     trail(fx, bs[3].where("engine.1"), 3.0, kind="thin", size=0.8)
@@ -909,9 +998,13 @@ def b17_head_on(A, opt):
             ride(b, t, b.home + Vector((-0.5 * max(t - 4.0, 0.0) ** 2, 0, -0.25 * max(t - 4.0, 0.0) ** 2)) if b is left else None)
         for f in fs:
             fly(f, f.path, t, "fly", f.play("fire", t) if any(s["name"] == "plane_guns" and s["where"] is f and s["t0"] <= t <= s["t1"] for s in A.sounds) else {})
-        eye = Vector((-185.0 + 1.6 * t, 3.0 - 0.3 * t, 35.0 - 0.4 * t))
-        look = Vector((60.0, 0.0, 6.0))
-        A.cam.data.lens = 40.0
+        # (the art director, 2026-11-18 15:57Z: from behind and above the whole box "the bombers are small, the frame
+        #  half empty, the fighters specks". Now from inside the box: just above and behind the port wing bomber's
+        #  tail, she across the near third of the picture and the rest stacked round her, the horizon in the lower
+        #  third, and the fighters coming through close by the camera.)
+        eye = left.at + Vector((-30.0, -6.0, 6.5))
+        look = eye + Vector((180.0, -24.0 + 1.2 * t, 15.5))
+        A.cam.data.lens = 28.0
         kit.look_at(A.cam, eye, look)
         A.at(t)                                              # (after the camera: a tracer is drawn as thick as the camera needs to see it)
         A.hear(t, eye, look)
@@ -926,10 +1019,13 @@ def b17_escort(A, opt):
     the bombers' 95, a Mustang coming down at about 100 over.)"""
     T, cut, burst = 8.0, 3.0, 4.0
     fx = A.fx
+    fx.haze = A.far_air
     charlie, b2, b3 = bombers(A, [(0, 0, 0), (-66, -34, 13), (-30, -72, 20)], T)
     a, b = Plane(A, "Bf109"), Plane(A, "Bf109")
     one, two = Plane(A, "Mustang", scheme="1944-01"), Plane(A, "Mustang", scheme="1944-01")
-    a.path = Flight([(0, (-330, 5, -20)), (2.0, (-232, 4, -12)), (4.0, (-125, 2, -5)), (5.0, (-80, 2, -2))])
+    # (she comes up from low astern as she closes, so that from the bomber's tail she is seen against the sky and
+    #  not against the cloud below; and to within 100 m, where she is big in the gunner's sight)
+    a.path = Flight([(0, (-300, 5, -20)), (2.0, (-200, 4, -11)), (3.0, (-150, 3, 3)), (4.0, (-100, 2, 15)), (5.0, (-56, 2, 22))])
     b.path = Flight([(0, (-270, 28, -8)), (3.3, (-150, 26, 0)), (4.0, (-124, 38, -9)), (4.8, (-102, 80, -52)), (6.2, (-72, 198, -190)), (8.0, (-42, 368, -420))], [(3.3, 0), (3.9, -110), (6.0, -60), (8.0, -30)])
     one.path = Flight([(0, (-600, 60, 150)), (1.8, (-440, 34, 68)), (3.0, (-340, 14, 26)), (4.0, (-250, 12, 10)), (4.5, (-205, 16, 10)), (5.0, (-160, 20, 11)), (5.6, (-106, 23, 12)), (6.2, (-52, 25, 13)),
                        (7.0, (20, 28, 22)), (8.0, (110, 34, 50))], [(5.0, 0), (6.2, 360)])
@@ -937,20 +1033,20 @@ def b17_escort(A, opt):
     for f in (a, b, one, two):
         fly(f, f.path, 0.0)
     # the 109s at her; her gunners, and her neighbours', at them
-    guns(fx, a, 0.8, 3.5, aim=lambda: charlie.at + Vector((-4.0, 0.0, 0.5)), speed=760.0, cue="plane_guns")
-    guns(fx, b, 1.6, 3.2, aim=lambda: charlie.at + Vector((-2.0, 3.0, 0.0)), speed=760.0, cue="plane_guns")
+    guns(fx, a, 0.8, 3.5, aim=lambda: charlie.at + Vector((-4.0, 0.0, 0.5)), speed=760.0, cue=GUN_SOUND["Bf109"])
+    guns(fx, b, 1.6, 3.2, aim=lambda: charlie.at + Vector((-2.0, 3.0, 0.0)), speed=760.0, cue=GUN_SOUND["Bf109"])
     foes = [a, b]
     gunners(A, charlie, 0.4, 3.9, ("turret.7", "turret.8", "turret.11", "turret.12"), nearest(charlie, [a], False))
     gunners(A, charlie, 1.2, 3.5, ("turret.6", "turret.9", "turret.10"), nearest(charlie, [b], False))
     gunners(A, b2, 0.9, 3.6, ("turret.7", "turret.8", "turret.6"), nearest(b2, foes, False))
     gunners(A, b3, 1.5, 3.4, ("turret.7", "turret.8"), nearest(b3, foes, False))
     strikes(fx, charlie, 1.4, 3.3, sockets=("break.tail", "tank.port", "engine.2"))
-    A.cue("bullets_incoming_01", 1.5, charlie)
-    A.cue("bullets_incoming_02", 2.6, charlie)
+    A.cue("bullet_crack", 1.5, charlie)
+    A.cue("bullet_crack", 2.6, charlie)
     # (no smoke from her here: whatever she trails goes astern straight through the tail guns' view of the 109,
     #  and close to the camera it stood as a grey blur over a third of the picture)
     # the Mustangs
-    guns(fx, one, 3.0, 3.95, aim=lambda: a.at, speed=850.0, cue="plane_guns")
+    guns(fx, one, 3.0, 3.95, aim=lambda: a.at + a.vel * ((a.at - one.at).length / (850.0 * TRACER["screen"])), speed=850.0, cue="plane_guns")
     strikes(fx, a, 3.35, 4.0, sockets=("fuel", "engine.1", "tank.port"))
     fireball(fx, burst, a.where("fuel"), size=0.9)
     A.cue("plane_explode", burst, a)
@@ -960,12 +1056,12 @@ def b17_escort(A, opt):
     trail(fx, a.where("tank.starboard"), burst + 0.15, kind="flame", size=0.6)
     trail(fx, a.where("break.wing.port"), burst + 0.6, kind="thin")
     trail(fx, a.where("break.tail"), burst + 0.6, kind="thin")
-    guns(fx, two, 4.3, 5.3, aim=lambda: b.at, speed=850.0, cue="plane_guns")
+    guns(fx, two, 4.3, 5.3, aim=lambda: b.at + b.vel * ((b.at - two.at).length / (850.0 * TRACER["screen"])), speed=850.0, cue="plane_guns")
     strikes(fx, b, 4.9, 5.3, sockets=("engine.1",))
     trail(fx, b.where("engine.1"), 5.0, kind="thin", size=0.5)
     A.cue("p51_pass", 0.0, one, kind="pass")
     A.cue("fighter_engine_loop", 0.0, two, t1=T, kind="loop")
-    A.cue("plane_down", burst + 0.4, a)
+    # (no "plane_down" for her: a machine blown apart does not wind its engines up as it falls)
     seen = {"t": None, "at": None, "way": None}
 
     def step(t):
@@ -985,22 +1081,26 @@ def b17_escort(A, opt):
         seen["t"] = t
         if t < cut:
             # over the 109's shoulder: it low on the left and close, the bombers ahead, the second 109 beyond it
-            eye = a.at + Vector((-26.0 + 1.5 * t, -7.0, 5.0 - 0.4 * t))
-            look = charlie.at + Vector((0.0, 9.0, -14.0))
+            # (looking between her and the bomber, so her whole tail and near wing are in the picture)
+            eye = a.at + Vector((-27.0 + 1.5 * t, -7.5, 5.2 - 0.4 * t))
+            look = eye + ((charlie.at - eye).normalized() * 0.62 + (a.at - eye).normalized() * 0.38).normalized() * 100.0
             A.cam.data.lens = 40.0
         else:
             # from her tail guns. After the burst the camera holds the wreck and the smoke it left, and at the end
             # lets the wreck fall out of the picture and stays with the cloud.
-            eye = charlie.at + Vector((-19.5, 3.0, 1.7))
-            look = a.at.copy()
-            A.cam.data.lens = 85.0
+            # (the art director, 2026-11-18 15:57Z: from behind her tail the picture was "pale and empty". Now from
+            #  on her back, looking aft past her fin, which stands dark down one side of the picture; the camera looks
+            #  up a little, so the fighter comes in against the sky, and her tail guns' fire goes out from under it.)
+            eye = charlie.at + Vector((-6.4, 1.15, 2.7))
+            look = a.at + Z * (0.07 * (a.at - eye).length)
+            A.cam.data.lens = 55.0
             if seen["at"] is not None:
                 s = t - burst
                 cloud = seen["at"] + left_behind(fx, s, way=seen["way"])[0]
                 w = 0.5 * smooth(s / 0.8) + 0.5 * smooth((s - 2.4) / 1.4)
                 to_her, to_cloud = (a.at - eye).normalized(), (cloud - eye).normalized()
-                look = eye + (to_her * (1.0 - w) + to_cloud * w).normalized() * 100.0
-                A.cam.data.lens = 85.0 - 35.0 * smooth(s / 1.0)
+                look = eye + (to_her * (1.0 - w) + to_cloud * w).normalized() * 100.0 + Z * (7.0 * (1.0 - w))
+                A.cam.data.lens = 55.0 - 10.0 * smooth(s / 1.0)
         kit.look_at(A.cam, eye, look)
         A.at(t)
         A.hear(t, eye, look)
@@ -1013,30 +1113,31 @@ def b17_flak(A, opt):
     her crew take to their parachutes. Seen from off her starboard bow, going back with her."""
     T, t_hit, t_wing = 9.0, 2.3, 6.6
     fx = A.fx
+    fx.haze = A.far_air
     bs = bombers(A, [(0, 0, 0), (-38, 34, 7), (-38, -34, 7), (-150, 20, 30), (-188, 54, 37), (-188, -14, 37)], T)
     lead, her = bs[0], bs[2]
     h = her.home
     her.path = Flight([(0, h), (t_hit, h), (4.0, h + Vector((-10, -3, -5))), (6.0, h + Vector((-36, -10, -18))), (7.5, h + Vector((-66, -16, -34))), (9.0, h + Vector((-104, -24, -58))), (10.0, h + Vector((-134, -30, -78)))],
                       [(t_hit, 0), (5.0, 9), (9.0, 24)])
-    for t0, at, size in [(0.15, (70, -24, -14), 1.0), (0.5, (120, 10, 24), 1.1), (0.8, (60, 70, 12), 0.9), (1.2, (95, -30, -24), 1.0), (1.5, (20, 50, 30), 1.0), (1.9, (64, -10, 26), 1.1),
-                         (t_hit, tuple(h + Vector((8, -10, -5))), 1.2), (2.6, (110, -20, 4), 1.0), (3.1, (50, 40, -18), 0.9), (3.6, (130, 34, 16), 1.1), (4.3, (30, -6, 38), 1.0), (5.2, (90, 20, -10), 1.0),
-                         (6.1, (60, 60, 6), 1.0), (7.0, (120, -30, 34), 1.1), (7.9, (40, 10, -20), 0.9)]:
+    for t0, at, size in [(0.15, (70, -24, -14), 1.0), (0.5, (120, 10, 24), 1.3), (0.8, (60, 70, 12), 0.7), (1.2, (95, -30, -24), 0.85), (1.5, (20, 50, 30), 1.15), (1.9, (64, -10, 26), 0.65),
+                         (t_hit, tuple(h + Vector((8, -10, -5))), 1.2), (2.6, (110, -20, 4), 0.8), (3.1, (50, 40, -18), 1.35), (3.6, (130, 34, 16), 0.7), (4.3, (30, -6, 38), 1.0), (5.2, (90, 20, -10), 1.25),
+                         (6.1, (60, 60, 6), 0.75), (7.0, (120, -30, 34), 1.1), (7.9, (40, 10, -20), 0.9)]:
         flak(A, t0, at, size)
+        for k in bs:                                         # (and whoever is near it is thrown)
+            jolt(k, t0, at, size)
     strikes(fx, her, t_hit, t_hit + 0.3, sockets=("engine.4", "tank.starboard"))
     fireball(fx, t_hit + 0.02, her.where("engine.4"), size=0.3)
-    A.cue("bullets_incoming_02", t_hit, her)
     trail(fx, her.where("engine.4"), t_hit + 0.05, kind="flame", size=1.25)
     trail(fx, her.where("engine.4"), t_hit + 0.05, kind="black", size=1.15)
     trail(fx, her.where("tank.starboard"), 6.5, kind="flame", size=0.9)
-    A.cue("fire_small_loop", t_hit, her, t1=T, kind="loop")
     a, b = Plane(A, "Bf109"), Plane(A, "Bf109")
     a.path = Flight([(0, (-700, -80, 150)), (3.0, (-470, -66, 104)), (5.0, (-250, -52, 40)), (6.0, (-150, -48, 2)), (6.6, (-95, -58, 2)), (7.2, (-30, -84, 26)), (8.0, (70, -130, 70)), (9.0, (190, -190, 120))],
                     [(6.4, 0), (7.0, 60), (8.0, 0)])
     b.path = Flight([(0, (-790, -40, 170)), (3.9, (-470, -30, 104)), (5.9, (-250, -24, 36)), (6.6, (-185, -24, 12)), (7.2, (-140, -24, 0))])
     for f in (a, b):
         fly(f, f.path, 0.0)
-    guns(fx, a, 4.9, 6.2, aim=lambda: her.at, speed=760.0, cue="plane_guns")
-    guns(fx, b, 5.8, 6.5, aim=lambda: her.at, speed=760.0, cue="plane_guns")
+    guns(fx, a, 4.9, 6.2, aim=lambda: her.at, speed=760.0, cue=GUN_SOUND["Bf109"])
+    guns(fx, b, 5.8, 6.5, aim=lambda: her.at, speed=760.0, cue=GUN_SOUND["Bf109"])
     strikes(fx, her, 5.3, 6.4, sockets=("break.tail", "fuel", "tank.port"))
     foes = [a, b]
     gunners(A, her, 4.4, 7.3, ("turret.7", "turret.8", "turret.9", "turret.10", "turret.5", "turret.11", "turret.12"), nearest(her, foes, False))
@@ -1051,10 +1152,12 @@ def b17_flak(A, opt):
     trail(fx, b.where("break.wing.port"), t_wing + 0.1, kind="thin")
     A.cue("aircraft_break_up", t_wing, b)
     A.cue("plane_down", t_wing + 0.2, b)
-    A.cue("fighter_pass", 0.0, a, kind="pass")
-    crew = [Chute(A, 6.9 + 0.5 * k, her, "hatch" if k % 2 == 0 else "hatch.belly") for k in range(4)]
+    A.cue(PASS_SOUND["Bf109"], 0.0, a, kind="pass")
+    # her crew go while the fighters are still on her: the first canopies crack open inside the clip
+    crew = [Chute(A, 5.4 + 0.55 * k, her, "hatch" if k % 2 == 0 else "hatch.belly") for k in range(4)]
     for c in crew:
-        A.cue("parachute_open", c.t0 + c.delay + 1.0, (lambda c=c: c.at))
+        if c.t0 + c.delay + 0.6 <= T - 1.0:
+            A.cue("parachute_open", c.t0 + c.delay + 0.6, (lambda c=c: c.at))
     seen = {"t": None}
 
     def step(t):

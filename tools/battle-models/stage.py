@@ -520,7 +520,8 @@ class Effects:
         self.wind = Vector(wind)                 # what the air does as she sees it (her own speed and the wind's)
         self.live, self.spare = [], {}
         self.streams, self.shots = [], []
-        self.lights = []
+        self.lights, self.riders = [], []
+        self.haze = None                         # (the air between: (metres, colour) for a scene whose smoke stands at very different distances)
         self.t = None
         self.coll = bpy.data.collections.new("fx")
         bpy.context.scene.collection.children.link(self.coll)
@@ -971,6 +972,13 @@ class Effects:
             reach = rad * max(p["squash"])
             fade *= min(1.0, max(0.0, ((pos - cam.location).length - 1.1 * reach) / (1.4 * reach)))
         c = p["col"].lerp(p["col2"], min(1.0, f * p["cool"]))
+        if self.haze and cam is not None and p["kind"] == "smoke":
+            # (the art director, 2026-11-18 15:57Z: a burst a kilometre off was "as black as the one under the belly".
+            #  The air between lifts far smoke toward the sky: half way at `haze[0]` x 0.69 metres, and a little
+            #  thinner too, so a field of bursts has depth.)
+            h = 1.0 - math.exp(-(pos - cam.location).length / self.haze[0])
+            c = c.lerp(self.haze[1], h)
+            fade *= 1.0 - 0.3 * h
         ob.color = (c[0], c[1], c[2], p["alpha"] * fade)
         return True
 
@@ -995,6 +1003,18 @@ class Effects:
         self.coll.objects.link(ob)
         ob.location = at
         self.lights.append(dict(ob=ob, t0=t0, long=long, power=power))
+
+    def firelight(self, where, power, start=0.0, end=1e9, col=(1.0, 0.6, 0.3), r=0.6, off=None):
+        """The warm light a steady fire throws on what is round it, riding with the place that burns and flickering.
+        `where`: a function of nothing giving (at, facing); `off`: a function of (at, facing) giving where the light
+        stands, if not at the place itself. (The art director, 2026-11-18: the panels round a fire "get a warm light,
+        not the flame's colour".)"""
+        d = bpy.data.lights.new("firelight", "POINT")
+        d.energy, d.color, d.shadow_soft_size = 0.0, col, r
+        d.specular_factor = 0.05
+        ob = bpy.data.objects.new("firelight", d)
+        self.coll.objects.link(ob)
+        self.riders.append(dict(ob=ob, where=where, off=off, power=power, start=start, end=end))
 
     def at(self, t):
         """Everything as it is at t. Sources lay the puffs that fell due since the last call."""
@@ -1024,6 +1044,12 @@ class Effects:
             else:
                 self.spare.setdefault(p["kind"], []).append(p["ob"])
         self.live = keep
+        for l in self.riders:
+            on = l["start"] <= t <= l["end"]
+            if on:
+                w = l["where"]()
+                l["ob"].location = l["off"](Vector(w[0]), Vector(w[1])) if l["off"] else Vector(w[0])
+            l["ob"].data.energy = l["power"] * (0.65 + 0.5 * abs(math.sin(31.0 * t) * math.sin(7.3 * t + 1.0))) if on else 0.0
         for l in self.lights:
             a = t - l["t0"]
             l["ob"].data.energy = l["power"] * min(1.0, (1 - a / l["long"]) / 0.4) if 0 <= a < l["long"] else 0.0     # (full, then quickly out)
