@@ -70,6 +70,13 @@
 // in contact (its guns firing from far back do not count), and once the battle is over. The dispatches never name it:
 // where it falls on one of his, the event reads "Polish troops are attacking your 2nd Regiment."; no other event about
 // it is sent at all, words or sound (the UI director, b464: a sound with nothing to read looks like a fault).
+// A river the attack crosses in part (b464(5)): where some of the card's corps cross and some come on over dry ground
+// ("1 of the 2 attacking corps cross the Vistula"), the river lies only before those that cross and bends away to the
+// attacker's edge between the two; each force in the ticket that does not cross carries cross: false, and place.dryEnd
+// says which end of the field ('west' or 'east') they draw up on. Nothing new to read for the ground: it comes in
+// field.ground and field.height as always. The field opens with the UI director's words before the usual line: "XXI
+// Corps must cross the Vistula. XIX Corps comes on over dry ground." The title's "across the Vistula" stands while any
+// corps crosses.
 // A land view's zones are its wrecks (b477, Brian's pick: burning wrecks stay): { id, kind: 'wreck', x, y, r, until,
 // side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and

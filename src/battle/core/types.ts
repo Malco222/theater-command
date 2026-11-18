@@ -72,6 +72,13 @@ export interface ForceTicket {
   share: number;
   /** The battles it has come through before this one, staff-settled or fought (its record): from the third, a tank unit's crews name their tanks (b477). */
   battles?: number;
+  /**
+   * Land, an attack over a river: false where the card has this corps come on from ground with no river between it and
+   * the place ("1 of the 2 attacking corps cross the Vistula"). The card prices it attacking over dry ground at full
+   * strength, so the field draws it that ground: the river bends away from its lanes and lies only before the corps that
+   * cross (the design director, b464(5)). Absent, it crosses, as every corps of a practice card does.
+   */
+  cross?: boolean;
 }
 
 export interface SideTicket {

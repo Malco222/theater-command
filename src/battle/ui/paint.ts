@@ -295,7 +295,10 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   layer('#eef1ee', cs * 1.05, 0.55);
   layer('#9db2bd', cs * 0.82, 1);
   const mid: [number, number][] = [];
-  for (let c = 0; c < f.cols; c++) {
+  // Where the river bends away from the lanes of the corps that do not cross, the field gives its line (b464(5)): a
+  // column's middle would cut the corner where it turns down to the attacker's edge.
+  if (f.course) for (let i = 0; i < f.course.length; i += 2) mid.push([f.course[i][0] * PAINT, H - f.course[i][1] * PAINT]);
+  else for (let c = 0; c < f.cols; c++) {
     let sum = 0, n = 0;
     for (let rr = 0; rr < f.rows; rr++) if (wet(g(c, rr))) { sum += rr; n++; }
     if (n) mid.push([cx(c), cy(sum / n)]);

@@ -22,7 +22,7 @@ export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
   return jointForce(g, limitAttackers(g, jointForce(g, corps, target), target), target);
 }
 
-function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number): SideTicket {
+function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
   const N = g.nations[nat];
   const w = cs.map(weigh), tot = w.reduce((a, b) => a + b, 0) || 1;
   const forces: ForceTicket[] = cs.map((c, i) => ({
@@ -32,6 +32,8 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number):
     divisions: divisionsOf(g, c).map((d) => ({ name: d.name, short: d.short, str: d.str, xp: d.xp, men: d.men })),
     share: w[i] / tot,
     battles: c.rec?.battles ?? 0,
+    // A corps the card has come on with no river before it does not cross on the field either (b464(5)).
+    ...(crosses && !crosses(c) ? { cross: false } : {}),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
@@ -49,6 +51,20 @@ const CROSSINGS: Record<string, { river: string; at: number[] }> = {
   Sedan: { river: 'Meuse', at: [0.12, 0.85] },
 };
 
+/**
+ * Where some of the attack's corps come on with no river before them and others cross (b464(5)): the end of the field
+ * those that do not cross take, the end on their side as the attack faces the place, its left the field's west (the
+ * campaign map's y runs south). Null where all cross. Even, the west.
+ */
+function dryEnd(g: Game, going: Corps[], target: Region): 'west' | 'east' | null {
+  const dry = going.filter((c) => !riverBetween(g, c.reg, target.id)), wet = going.filter((c) => !dry.includes(c));
+  if (!dry.length || !wet.length) return null;
+  const mid = (cs: Corps[]): [number, number] => [cs.reduce((a, c) => a + g.regions[c.reg].x, 0) / cs.length, cs.reduce((a, c) => a + g.regions[c.reg].y, 0) / cs.length];
+  const [mx, my] = mid(going), dx = target.x - mx, dy = target.y - my;
+  const left = (cs: Corps[]): number => { const [x, y] = mid(cs); return (x - mx) * dy - (y - my) * dx; };
+  return left(dry) >= left(wet) ? 'west' : 'east';
+}
+
 /** The ticket for an attack the player could order now, or null where there is no attack to fight. */
 export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicket<LandPlace> | null {
   // The army the attack order will send, and no other: a corps spent on a probe since it was chosen, or no longer next
@@ -62,6 +78,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
   const defNat = a.defenders[0].nat;
   const crossing = going.map((c) => riverBetween(g, c.reg, target.id)).find((x) => !!x) ?? null;
   const from = g.regions[going[0].reg];
+  const dry = crossing ? dryEnd(g, going, target) : null;
   const place: LandPlace = {
     region: target.id, name: target.name, terrain: target.terrain,
     river: crossing ? riverName(crossing) : null, bridgeDown: crossing ? bridgeDown(g, crossing) : false,
@@ -69,12 +86,15 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     fort: target.fort && target.fort.vs.includes(from.owner) ? target.fort.lv : 0,
     mines: minesAt(g, target),
     ...(crossing && CROSSINGS[target.name]?.river === riverName(crossing) ? { crossings: CROSSINGS[target.name].at } : {}),
+    ...(dry ? { dryEnd: dry } : {}),
   };
   const date = turnToDate(g.turn);
   return {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
-    att: sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk),
+    // The card's river line counts the corps that cross as those with the river between them and the place (assess in
+    // game.ts): the field lays the river before those, and no others.
+    att: sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined),
     def: sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))),
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice) },
     lines: a.lines, limit: LAND.limit,
