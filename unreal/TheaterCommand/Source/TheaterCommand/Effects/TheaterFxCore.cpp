@@ -2013,6 +2013,9 @@ namespace TheaterFx
 				// this frame's tongue: its own length, its own curl sideways and lift
 				const double Len = Row.Flame * (0.45 + 0.55 * Grown) * D.U(0.55, 1.35);
 				const Vec Curl = (Side * (0.2 * D.Bell()) + Lift * D.U(-0.05, 0.1)) * Len;
+				// (art director 21:37Z: fire in a slipstream stands off the skin and spills past the silhouette, so each
+				// tongue lifts above or below as it streams aft; the heart stays on the cowl)
+				const Vec Spill = Lift * ((D.U() < 0.5 ? 1.0 : -1.0) * Pick(D, "air_trails." + Tr->Kind + ".flame_lift_m", 0.3, 0.6));
 				const int Pieces = 4;
 				for (int I = 0; I < Pieces; ++I)
 				{
@@ -2021,7 +2024,7 @@ namespace TheaterFx
 					const Vec Way = (Back * Len + Curl * (2.0 * At_)).Unit(Back);
 					Bit B;
 					B.Born = T;
-					B.From = Root + Back * (Len * At_) + Curl * (At_ * At_) + Ragged;
+					B.From = Root + Back * (Len * At_) + Curl * (At_ * At_) + Spill * std::min(1.0, 1.4 * At_) + Ragged;
 					B.Vel = Vel + Back * (Len * D.U(3.0, 6.0)); // (streaming aft off the cowl)
 					B.Life = D.U(0.045, 0.075);
 					B.R0 = Len * (0.12 - 0.065 * At_) * D.U(0.85, 1.15);
@@ -2049,7 +2052,7 @@ namespace TheaterFx
 				{
 					Bit B;
 					B.Born = T;
-					B.From = Root + Back * (Len * D.U(0.85, 1.1)) + Curl * 0.8;
+					B.From = Root + Back * (Len * D.U(0.85, 1.1)) + Curl * 0.8 + Spill;
 					B.Vel = Vel + Back * (Len * D.U(8.0, 12.0));
 					B.Life = D.U(0.07, 0.11);
 					B.R0 = Len * D.U(0.045, 0.065);
