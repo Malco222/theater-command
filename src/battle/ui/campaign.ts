@@ -18,6 +18,12 @@ export interface Offer {
   corps: Corps[];
   odds: number;
   ticket: FieldTicket<LandPlace>;
+  /**
+   * The staff's estimate of the odds where the defence is not fully known, as the attack card showed it: the field
+   * shows this band, never the card's own odds, until the fight ends (the design director, b453). None where the card
+   * knew the defence.
+   */
+  band?: { lo: number; hi: number };
 }
 
 /** A grand campaign at the player's first month. */

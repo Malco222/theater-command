@@ -222,7 +222,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.colours = col; S.scene.colours = col;
   app.innerHTML = `<div class="battle tc">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), ...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`the ${esc(t.place.river)}`] : [])])}</span></div>
+      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), ...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`across the ${esc(t.place.river)}`] : [])])}</span></div>
       <div class="bclock" title="At ${mmss(t.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Speed">
         <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
@@ -230,7 +230,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
         <button class="tc-btn tc-btn--sm" data-speed="2" title="Twice as fast (2)">×2 <span class="tc-key">2</span></button>
         <button class="tc-btn tc-btn--sm" data-speed="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
-      <div class="bbal" title="Each side's strength still standing. The pale mark is where the attack card put it.">
+      <div class="bbal" title="Each side's strength still standing. ${S.offer?.band ? 'The pale band is where the attack card put it: the defence is not fully known.' : 'The pale mark is where the attack card put it.'}">
         <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Yours'}</span><span id="ratio" class="tc-data"></span><span>${S.offer ? esc(theirs.adj) : 'Theirs'}</span></div>
         <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
         <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
@@ -432,13 +432,28 @@ function updateTop(force = false): void {
   const el = (id: string): HTMLElement => byId(id)!;
   el('time').textContent = `${mmss(b.t)} of ${mmss(b.ticket.limit)}`;
   const bal = b.standing();
-  const share = bal.att / Math.max(1e-6, bal.att + bal.def);
-  el('balA').style.width = `${(share * 100).toFixed(1)}%`;
-  el('balD').style.width = `${((1 - share) * 100).toFixed(1)}%`;
-  const k = b.ticket.reckoning;
-  el('balMark').style.left = `${((100 * k.odds) / (1 + k.odds)).toFixed(1)}%`;
+  const k = b.ticket.reckoning, band = S.offer?.band;
   // Both shares are of the same whole, so their ratio is the odds standing now (the card's at the start).
-  el('ratio').textContent = `Card ${odds(k.odds)} to 1 · now ${odds(bal.att / Math.max(1e-6, bal.def))} to 1`;
+  const nowOdds = bal.att / Math.max(1e-6, bal.def);
+  const at = (o: number): string => `${((100 * o) / (1 + o)).toFixed(1)}%`;
+  if (band) {
+    // A defence the card did not know (b453): the staff's band, moved as the fight has moved the balance since, and
+    // the bar drawn at its middle. The card's own odds are not shown until the fight ends.
+    const r = nowOdds / Math.max(1e-6, k.odds), mid = Math.sqrt(band.lo * band.hi) * r;
+    el('balA').style.width = at(mid);
+    el('balD').style.width = `${(100 - (100 * mid) / (1 + mid)).toFixed(1)}%`;
+    const mark = el('balMark');
+    mark.classList.add('band');
+    mark.style.left = at(band.lo);
+    mark.style.width = `${Math.max(0.5, (100 * band.hi) / (1 + band.hi) - (100 * band.lo) / (1 + band.lo)).toFixed(1)}%`;
+    el('ratio').textContent = `Card ${band.lo.toFixed(1)}–${band.hi.toFixed(1)} to 1 · now ${(band.lo * r).toFixed(1)}–${(band.hi * r).toFixed(1)} to 1`;
+  } else {
+    const share = bal.att / Math.max(1e-6, bal.att + bal.def);
+    el('balA').style.width = `${(share * 100).toFixed(1)}%`;
+    el('balD').style.width = `${((1 - share) * 100).toFixed(1)}%`;
+    el('balMark').style.left = at(k.odds);
+    el('ratio').textContent = `Card ${odds(k.odds)} to 1 · now ${odds(nowOdds)} to 1`;
+  }
   const sp = S.clock.speed;
   root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
   // Paused means paused (ruling 226(8)): the clock's label is the state, and the first segment reads Paused when lit.
@@ -657,9 +672,14 @@ function ask(kind: 'withdraw' | 'staff'): void {
   if (S.asking || !S.b || S.b.over) return;
   if (kind === 'staff') {
     // The staff's chance now, from the strength each side has left (the UI director's words for ruling 226(5)).
-    const b = S.b, c = b.chanceNow(), where = b.ticket.place.name;
+    const b = S.b, where = b.ticket.place.name, band = S.offer?.band;
+    // A defence the card did not know (b453): the chance as the staff's band reads it now, never the card's own.
+    const k = b.ticket.reckoning, bal = b.standing(), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+    const [lo, hi] = band ? [chanceAt(band.lo, r, k.dice), chanceAt(band.hi, r, k.dice)] : [b.chanceNow(), b.chanceNow()];
+    const pc = (x: number): number => Math.round(x * 100);
     // A practice ground is not a place to take (the UI director, after the retest).
-    const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to ${S.offer ? `take ${esc(where)}` : 'win it'}.`;
+    const what = S.offer ? `take ${esc(where)}` : 'win it';
+    const odds = lo >= 0.995 ? 'They are sure of it.' : hi <= 0.005 ? 'They give it no chance.' : pc(lo) === pc(hi) ? `They give you about ${pc(lo)}% to ${what}.` : `They give you between about ${pc(lo)}% and ${pc(hi)}% to ${what}.`;
     byId('saskText')!.innerHTML = b.contactAt === null
       // True whether or not the guns have opened before the lines meet (b409, the UI director's words).
       ? `Hand the battle to the staff? The armies have not met yet: they settle the whole battle at once. ${odds}`
@@ -789,6 +809,17 @@ function frame(): void {
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** How the day went against the chance the staff gave it, in the UI director's plain words (no dice on the player's page). */
+/**
+ * The staff's chance at a card's odds, the fight having moved the balance by r since: what chanceNow reckons from the
+ * ticket's own odds, for the staff's band where the defence was not known (b453).
+ */
+function chanceAt(card: number, r: number, dice: [number, number]): number {
+  if (card * dice[0] >= RATIO.carry) return 1;
+  if (card * dice[1] < RATIO.carry) return 0;
+  const now = card * r;
+  return Math.max(0, Math.min(1, (dice[1] - RATIO.carry / Math.max(1e-6, now)) / (dice[1] - dice[0])));
+}
+
 function reckoned(carried: boolean, chance: number, practice = false): string {
   if (chance >= 0.995) return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
   if (chance <= 0.005) return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';

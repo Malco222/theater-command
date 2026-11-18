@@ -7321,7 +7321,7 @@ declare const FIELD_CSS: string;
  * offered.ts) until the design director opens it; a page opened with ?field shows it for the directors' review.
  */
 const fieldShown = (): boolean => ON_CAMPAIGN || /[?&]field(=|&|$)/.test(location.search);
-const FIELD_HOVER = 'Fight this battle yourself on the field. Its result stands in the campaign as the staff\'s would.';
+const FIELD_HOVER = 'You command the battle on the field, at the card\'s odds, and its result stands in the campaign. You can hand it to the staff at any time.';
 
 function attackCard(): string {
   const m = ui.modal!;
@@ -9311,7 +9311,21 @@ function onClick(e: MouseEvent): void {
       const before = g.regions.map((r) => r.ctrl);
       const was = beforeBattle(m.look ?? null, 'attack', target.id);
       const css = typeof FIELD_CSS === 'string' ? FIELD_CSS : '';
-      fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket }, css, (rep) => {
+      // Opening the field commits the attack, as SEND THEM IN does (the design director, b453): until the field's own
+      // result is booked, the campaign kept in this browser is this one with the attack settled by the staff, so a page
+      // closed or reloaded in the middle of the fight comes back to that, never to the attack unmade.
+      if (ui.live) {
+        try {
+          const staffs = loadGame(saveGame(g));
+          if (staffs && orderAttack(staffs, staffs.corps.filter((c) => m.chosen.has(c.id)), staffs.regions[target.id])) {
+            if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+            localStorage.setItem(SAVE_KEY, saveGame(staffs));
+          }
+        } catch { /* storage is off or full: the game still plays */ }
+      }
+      // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453).
+      const look = m.look ?? null, band = look && !look.exact ? { lo: look.lo, hi: look.hi } : undefined;
+      fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket, ...(band ? { band } : {}) }, css, (rep) => {
         ui.unread += g.headlines.length - h;
         ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
         if (rep) {
