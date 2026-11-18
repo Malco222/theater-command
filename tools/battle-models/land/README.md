@@ -65,6 +65,19 @@ colours to put in place of `upper`, `upper2` and `shade`. Another nation's paint
 **Sockets.** `muzzle`, `coax`, `hull_mg`, `exhaust.N`, `engine`, `fire.N` (where flame comes out), `ring` (the turret
 ring: where the blast comes from), `hit.front/left/right/rear/turret`, `dust.left/right`, `commander`, `case`, `aerial`.
 
+**Where the men go.** A crew socket is a point and a facing. A seated man's socket (`driver`, `rider.cab`, `rider.N`)
+is the top of his seat under the middle of him: a bench is about 0.44 over the floor his boots are on, a driver's
+seat 0.40. Every other socket is the floor at his feet, with one exception: a tank
+commander's `commander` is 0.25 m under his hatch's rim, and the crew pack's `commander_hatch` clip puts his feet
+0.92 m under the socket. A man who serves a gun that turns is on the part that turns (the M3's `gunner` is on
+`mg_mount`). Tanks carry no driver's socket: he is shut in, and what shows under an opened lid is a dark panel, not a
+hole. The lorry's cab is shut too, its glass dark. The crew's clips: `../soldier/crew/` in the project's files.
+
+**`mark_months`.** Where a nation's marking changed with the months the file carries the table (Britain and the
+Commonwealth: none to 1941-10, the white-red-white recognition flash from 1941-11 to 1943-06, the white star from
+1943-07) and the game paints the one that fits the campaign's month at each of the file's `marks`. A mark's `shown`
+only says which of them the review pictures draw.
+
 **Clips.** `idle`, `start`, `drive`, `move_off`, `stop`, `fire` (the barrel's recoil), `fire.rock` (the hull's answer,
 made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `hull_mg_burst`, `hit`, `open_up`,
 `knocked_out`, `burn`, `brew_up` (the turret is thrown off its ring and lies beside her), `tracks.left`, `tracks.right`.
