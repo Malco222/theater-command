@@ -18,7 +18,7 @@
     { "id": "naval", "label": "Naval", "text": "Fleets, convoys and landings from the sea." },
     { "id": "industry", "label": "Industry", "text": "Factories, manpower and the laboratories themselves." },
     { "id": "doctrine", "label": "Doctrine", "text": "How the army is taught to fight." },
-    { "id": "intel", "label": "Intelligence", "text": "Agents, their cover, and the theft of the great powers' plans." }
+    { "id": "intel", "label": "Intelligence", "text": "Agents, their cover and the theft of the great powers' plans." }
   ],
   "eras": ["", "Before the war", "1940 to 1941", "1942 to 1943", "1944 to 1945"],
   "techs": [
@@ -73,7 +73,7 @@
     { "id": "amphibious", "branch": "doctrine", "tier": 3, "year": 1943, "needs": ["landingcraft"], "name": "Amphibious assault", "text": "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", "attack": 1.2, "when": { "landing": true } },
     { "id": "deep", "branch": "doctrine", "tier": 4, "year": 1944, "needs": ["combined"], "name": "Deep operations", "text": "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", "field": "doctrine" },
     { "id": "agents", "branch": "intel", "tier": 1, "year": 1939, "needs": [], "name": "Trained agents", "text": "Schools for the service's people: tradecraft, wireless and the habits that keep an agent alive.", "spy": { "caught": 0.85 } },
-    { "id": "cover", "branch": "intel", "tier": 2, "year": 1940, "needs": ["agents"], "name": "Cover identities", "text": "Papers, trades and histories ready made: after an attempt an agent becomes someone else and is back at work a month sooner.", "spy": { "rest": 1 } },
+    { "id": "cover", "branch": "intel", "tier": 2, "year": 1940, "needs": ["agents"], "name": "Cover identities", "text": "Papers, trades and histories ready made. After an attempt an agent becomes someone else and is back at work a month sooner.", "spy": { "rest": 1 } },
     { "id": "microfilm", "branch": "intel", "tier": 2, "year": 1941, "needs": ["agents"], "name": "Microfilm", "text": "A drawing office's plans photographed in an hour and carried out in a matchbox.", "spy": { "theft": 0.1 } },
     { "id": "couriers", "branch": "intel", "tier": 3, "year": 1942, "needs": ["cover"], "name": "Courier networks", "text": "Safe houses and couriers across the frontiers: the service can run more people abroad.", "spy": { "agents": 1 } },
     { "id": "counterintel", "branch": "intel", "tier": 3, "year": 1942, "needs": ["agents"], "name": "Counter-intelligence", "text": "Watchers, informers and a card index of every foreigner: the other side's saboteurs are found sooner.", "spy": { "guard": 0.1 } }

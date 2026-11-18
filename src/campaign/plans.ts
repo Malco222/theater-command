@@ -12,7 +12,7 @@
 // without the country's own research; a technology's plans put it in service as if researched. Ships a country
 // starts the war with are its own and stay. The grand campaign only (arsenal.json, 'plans').
 import data from '../../data/campaign/arsenal.json';
-import { atWar, headline } from './game';
+import { atWar, headline, theWords } from './game';
 import { grantTech, hasTech, locked } from './tech';
 import type { Game, PlanHeld, Region } from './types';
 
@@ -40,15 +40,15 @@ export const buildsOwn = (nat: string): boolean => PLANS.great.includes(nat) || 
  * The words for each weapon: one and many, where a great power keeps its plans ('yard': the capital and the great
  * naval yards; 'works': the capital and the great aircraft works, of the wing named; 'capital': the capital alone),
  * and who can use them once they are held, and how ('verb' and 'many': "lay down battleships"; 'verbs' agrees with
- * 'who': "your air force flies").
+ * 'who': "your air force flies"; 'them' stands for 'many': "rocket artillery ... has it").
  */
-export const PLAN_WORDS: Record<PlanItem, { one: string; many: string; place: 'yard' | 'works' | 'capital'; wing?: 'ftr' | 'bmr'; who: string; verb: string; verbs: string }> = {
-  bb: { one: 'battleship', many: 'battleships', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
-  cv: { one: 'carrier', many: 'aircraft carriers', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
-  heavybombers: { one: 'four-engined bomber', many: 'four-engined bombers', place: 'works', wing: 'bmr', who: 'your air force', verb: 'fly', verbs: 'flies' },
-  jets: { one: 'jet fighter', many: 'jet fighters', place: 'works', wing: 'ftr', who: 'your air force', verb: 'fly', verbs: 'flies' },
-  rockets: { one: 'rocket artillery', many: 'rocket artillery', place: 'capital', who: 'your army', verb: 'fire', verbs: 'fires' },
-  guided: { one: 'guided weapon', many: 'guided weapons', place: 'capital', who: 'you', verb: 'launch', verbs: 'launch' },
+export const PLAN_WORDS: Record<PlanItem, { one: string; many: string; them: 'them' | 'it'; place: 'yard' | 'works' | 'capital'; wing?: 'ftr' | 'bmr'; who: string; verb: string; verbs: string }> = {
+  bb: { one: 'battleship', many: 'battleships', them: 'them', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
+  cv: { one: 'carrier', many: 'aircraft carriers', them: 'them', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
+  heavybombers: { one: 'four-engined bomber', many: 'four-engined bombers', them: 'them', place: 'works', wing: 'bmr', who: 'your air force', verb: 'fly', verbs: 'flies' },
+  jets: { one: 'jet fighter', many: 'jet fighters', them: 'them', place: 'works', wing: 'ftr', who: 'your air force', verb: 'fly', verbs: 'flies' },
+  rockets: { one: 'rocket artillery', many: 'rocket artillery', them: 'it', place: 'capital', who: 'your army', verb: 'fire', verbs: 'fires' },
+  guided: { one: 'guided weapon', many: 'guided weapons', them: 'them', place: 'capital', who: 'you', verb: 'launch', verbs: 'launch' },
 };
 
 /** "lay down battleships". */
@@ -104,7 +104,7 @@ export function plansFrom(g: Game, nat: string, what: PlanItem): string | null {
   return held.length ? held[held.length - 1].from : null;
 }
 
-const howToGet = 'Take ground that belongs to one that has them, in a war with it, or send an agent to steal its plans.';
+const howToGet = (them: string): string => `Take ground that belongs to one that has ${them}, in a war with it, or send an agent to steal its plans.`;
 
 /** Why the nation cannot lay down this hull for want of its plans, or null. */
 export function whyNoPlans(g: Game, nat: string, hull: string): string | null {
@@ -118,9 +118,9 @@ export function whyNoTechPlans(g: Game, nat: string, id: string): string | null 
   const W = PLAN_WORDS[id], mother = PLANS.kin[nat];
   if (mother !== undefined) {
     const M = g.nations[mother];
-    return `${g.nations[nat]?.name ?? nat} has ${W.many} on ${M?.adj ?? mother} designs once ${M?.name ?? mother} has them.`;
+    return theWords(`${g.nations[nat]?.name ?? nat} has ${W.many} on ${M?.adj ?? mother} designs once ${M?.name ?? mother} has ${W.them}.`);
   }
-  return `Only the great powers develop ${W.many}. ${howToGet}`;
+  return `Only the great powers develop ${W.many}. ${howToGet(W.them)}`;
 }
 
 /** True when the nation lays this hull down on plans it took or stole: the tech tree does not hold it back. */

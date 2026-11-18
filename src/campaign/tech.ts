@@ -484,6 +484,9 @@ export interface TechView {
   busy: number;
   /** Of the teams, those of the secret service's laboratory, which work the Intelligence branch alone (rider b542). */
   spyTeams: number;
+  /** Teams with nothing to do: the ordinary ones, and the secret service's. */
+  free: number;
+  spyFree: number;
   done: number;
   total: number;
   branches: { id: Branch; label: string; text: string; done: number; total: number }[];
@@ -510,7 +513,8 @@ export function techView(g: Game, nat: string): TechView | null {
     };
   });
   return {
-    nat, teams: teamsOf(g, nat) + spyTeamsOf(g, nat), busy: s.work.length, spyTeams: spyTeamsOf(g, nat), done: nodes.filter((x) => x.state === 'done').length, total: nodes.length,
+    nat, teams: teamsOf(g, nat) + spyTeamsOf(g, nat), busy: s.work.length, spyTeams: spyTeamsOf(g, nat),
+    free: Math.max(0, teamsOf(g, nat) - teamWork(s).length), spyFree: Math.max(0, spyTeamsOf(g, nat) - spyWork(s).length), done: nodes.filter((x) => x.state === 'done').length, total: nodes.length,
     branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === 'done').length, total: nodes.filter((x) => x.branch === b.id).length })),
     eras: TECH.eras, nodes,
   };

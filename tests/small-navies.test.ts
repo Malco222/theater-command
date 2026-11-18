@@ -272,11 +272,15 @@ describe('rider b542: four-engined bombers, jets, rocket artillery and guided we
     for (const nat of ['ESP', 'CAN', 'GER']) techOf(g, nat)!.done.push(...['mediumbombers', 'monoplanes', 'radar', 'tanks', 'motor'].filter((x) => !techOf(g, nat)!.done.includes(x)));
     for (const id of PLANS.techs) {
       expect(whyNoTechPlans(g, 'GER', id), id).toBeNull();
-      expect(whyNoTechPlans(g, 'ESP', id), id).toMatch(/^Only the great powers develop .+\. Take ground that belongs to one that has them, in a war with it, or send an agent to steal its plans\.$/);
+      expect(whyNoTechPlans(g, 'ESP', id), id).toMatch(/^Only the great powers develop .+\. Take ground that belongs to one that has (them|it), in a war with it, or send an agent to steal its plans\.$/);
       expect(whyNotResearch(g, 'ESP', id), id).toMatch(/^Only the great powers develop/);
-      expect(whyNoTechPlans(g, 'CAN', id), id).toMatch(/on British designs once .*United Kingdom has them\.$/);
+      expect(whyNoTechPlans(g, 'CAN', id), id).toMatch(/on British designs once .*United Kingdom has (them|it)\.$/);
     }
     expect(whyNoTechPlans(g, 'ESP', 'radar')).toBeNull();
+    // (The UI director: rocket artillery takes "it".)
+    expect(whyNoTechPlans(g, 'ESP', 'rockets')).toBe('Only the great powers develop rocket artillery. Take ground that belongs to one that has it, in a war with it, or send an agent to steal its plans.');
+    expect(whyNoTechPlans(g, 'CAN', 'rockets')).toBe('Canada has rocket artillery on British designs once the United Kingdom has it.');
+    expect(whyNoTechPlans(g, 'CAN', 'jets')).toBe('Canada has jet fighters on British designs once the United Kingdom has them.');
     // No staff of a smaller nation or a dominion ever picks one, in any year.
     for (const nat of ['ESP', 'CAN', 'TUR', 'SWE']) {
       const s = techOf(g, nat);
@@ -380,6 +384,8 @@ describe('rider b542: four-engined bombers, jets, rocket artillery and guided we
     const v = techView(g, 'ESP')!;
     expect(v.spyTeams).toBe(1);
     expect(v.teams).toBe(teamsOf(g, 'ESP') + 1);
+    expect(v.spyFree).toBe(1);
+    expect(v.free).toBe(Math.max(0, teamsOf(g, 'ESP') - s.work.filter((w) => !w.spy).length));
   });
 
   it('a player\'s small nation puts its spy team on the branch, and its other teams too if it likes; a player\'s great power with its own teams', () => {
