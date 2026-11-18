@@ -23,6 +23,16 @@ def trod(m, x, y, r, s=0.8):
 
 # ---- wire helpers ---------------------------------------------------------------------------------------
 
+def patchy(m, seed, x=0.0, wide=0.7, r=(0.55, 1.2), s=(0.35, 0.8), every=1.5):
+    """Bare patches along a belt, for the stage to wear (nobody walks a belt's length, so there is no path under it:
+    the grass is trodden out only here and there, where the wiring party worked)."""
+    g = rnd(seed)
+    y = -5.0 + g.uniform(0.2, every)
+    while y < 5.0:
+        m.info.setdefault("worn", []).append((round(x + g.uniform(-wide, wide), 3), round(y, 3), round(g.uniform(*r), 3), round(g.uniform(*s), 2)))
+        y += g.uniform(0.6, 1.6) * every
+
+
 def wire(m, pts, r, paint="wire", sides=None, smooth_=True):
     """A wire bent through points: frames carried along it, faces wound outward (no test needed), ends open."""
     pts = [Vector(p) for p in pts]
@@ -331,7 +341,8 @@ def Wire(fine=True, nation="_default", name="Wire"):
     weather(m, splash=0.25, rust=0.8)
     m.info["span"] = 8.5
     m.info["high"] = 0.7
-    m.info.setdefault("worn", []).extend([(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-1.6, 3.4, 0.9)])
+    m.info.setdefault("worn", []).append((-1.6, 3.4, 0.9))
+    patchy(m, 5)
     return m
 
 
@@ -414,7 +425,8 @@ def WireFence(fine=True, nation="_default", name="WireFence"):
     weather(m, splash=0.25, rust=0.8)
     m.info["span"] = 8.0
     m.info["high"] = 0.6
-    m.info.setdefault("worn", []).extend([(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-3.8, 2.2, 1.0)])
+    m.info.setdefault("worn", []).append((-3.8, 2.2, 1.0))
+    patchy(m, 9)
     return m
 
 # ---- 3. dragon's teeth ------------------------------------------------------------------------------------
@@ -500,22 +512,26 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
     # earth and turf over it: thick and banked at both long edges (no edge of the footing shows), thinning inward
     # and broken, so the concrete shows through in ragged places between the teeth
     step = 0.2 if fine else 0.5
-    xs = [xa - 0.5 + step * i for i in range(int((xb - xa + 1.0) / step) + 1)]
-    ys = [-5.0 + 10.0 * j / int(10.0 / step) for j in range(int(10.0 / step) + 1)]
+    xs = [xa - 0.7 + step * i for i in range(int((xb - xa + 1.4) / step) + 1)]
+    ys = [-5.7 + 11.4 * j / int(11.4 / step) for j in range(int(11.4 / step) + 1)]
     verts, faces = [], []
     for i, x in enumerate(xs):
         for y in ys:
             inside = min(x - xa, xb - x)
+            ends = min(y + 5.0, 5.0 - y)          # (below 0 past either end of the length)
             lump = 0.012 * bits.fbm((x * 2.3, y * 2.3, 9.0), 0.5)
+            # how far out the cover runs before it is under the field: it wanders, so no edge is straight
+            run = 0.42 + 0.26 * bits.fbm((x * 0.45 + 3.0, y * 0.45, 8.0), 1.0)
             if inside < 0.0:
-                z = max(0.003, (SLAB_TOP + 0.055) * smooth(1.0 + inside / 0.5) + lump * smooth(1.0 + inside / 0.5))
+                z = -0.04 + (SLAB_TOP + 0.095 + lump) * smooth(1.0 + inside / run)
             else:
                 cover = 0.06 * smooth(1.0 - inside / 1.0) + 0.07 * (bits.fbm((x * 0.7, y * 0.7, 4.0), 1.0) + 0.12 * bits.fbm((x * 3.0, y * 3.0, 6.0), 0.5) + 0.015)
                 cover = max(cover, 0.045 * smooth(1.0 - inside / 0.35))
                 z = SLAB_TOP + (cover + lump if cover > 0.006 else -0.015)
-            # (the outermost points wander in and out, so the cover has no straight edge)
-            edge = smooth((-inside - 0.2) / 0.3) if inside < 0 else 0.0
-            verts.append(Vector((x + 0.03 * bits.fbm((x, y * 1.7, 2.0), 0.4) + math.copysign(0.28, -inside) * edge * bits.fbm((x * 0.5, y * 1.3, 8.0), 0.5), y, z)))
+            if ends < 0.0:
+                # past the ends the cover runs out under the field too (or under the next length's, where lengths join)
+                z = -0.04 + (max(z, SLAB_TOP + 0.03) + 0.04) * smooth(1.0 + ends / run)
+            verts.append(Vector((x + 0.03 * bits.fbm((x, y * 1.7, 2.0), 0.4), y, z)))
     ny = len(ys)
     for i in range(len(xs) - 1):
         for j in range(ny - 1):
@@ -558,10 +574,10 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
         y = g.choice([-4.0, -3.0, -1.9, 1.9, 3.0, 4.0]) + g.uniform(-0.3, 0.3)
         finish(m, chunk(g, (x, y, SLAB_TOP + 0.02), g.uniform(0.04, 0.09)), "concrete.old", root, 0.008, 0.006, 40 + k, 0.0)
     # grass and weeds grown up between the teeth: thick along both edges, round the teeth's feet, sparse in between
-    for k in range(170 if fine else 24):
+    for k in range(260 if fine else 24):
         u = g.random()
         if u < 0.45:
-            x = g.choice([xa, xb]) + g.uniform(-0.55, 0.45)
+            x = g.choice([xa, xb]) + g.uniform(-0.3, 0.45)
             y = g.uniform(-5.0, 5.0)
         elif u < 0.85:
             (px, py, _), b = g.choice(bases)
@@ -635,10 +651,12 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
     weather(m, splash=0.55)
     m.info["span"] = 9.0
     m.info["high"] = 0.6
-    # (no grass under the earth cover; its outline wanders so the stage's grass has no straight edge)
-    m.info.setdefault("worn", []).extend([(x, -5.0 + 0.7 * k, 0.9, 0.75) for x in (xa - 0.25, xb + 0.25) for k in range(15)])
-    m.info["clear"] = [[(xb + 0.35 + 0.15 * bits.fbm((0, y, 1.0), 0.7), y) for y in [-5.0 + 0.5 * k for k in range(21)]] +
-                       [(xa - 0.35 + 0.15 * bits.fbm((0, y, 2.0), 0.7), y) for y in [5.0 - 0.5 * k for k in range(21)]]]
+    # (nobody walks along a belt of teeth: no path beside it, only bare patches here and there where the cover is thin.
+    #  The field's grass stands right up onto the cover's banked edges; it is kept off the footing alone)
+    gw = rnd(77)
+    m.info.setdefault("worn", []).extend([(gw.choice([xa - 0.1, xb + 0.1]) + gw.uniform(-0.3, 0.3), gw.uniform(-4.6, 4.6), gw.uniform(0.45, 0.8), gw.uniform(0.35, 0.6)) for _ in range(6)])
+    m.info["clear"] = [[(xb - 0.3 + 0.15 * bits.fbm((0, y, 1.0), 0.7), y) for y in [-4.8 + 0.48 * k for k in range(21)]] +
+                       [(xa + 0.3 + 0.15 * bits.fbm((0, y, 2.0), 0.7), y) for y in [4.8 - 0.48 * k for k in range(21)]]]
     return m
 
 
