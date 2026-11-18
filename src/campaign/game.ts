@@ -3471,12 +3471,22 @@ export function startPhase(g: Game, nat: string): void {
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 
-/** The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. */
+/**
+ * The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. In the grand
+ * campaign, if Poland has already fallen and the pact has handed its zone over, the Red Army marches into it all the
+ * same (the design director's b502): the same corps to the same six places, so the zone is never handed over empty.
+ * (The historical scenarios are left as they were.)
+ */
 export function sovietEvent(g: Game): void {
-  if (g.flags.sovietMove || !g.nations.POL.alive || !g.nations.SOV.alive || g.turn > 3) return;
-  if (atWar(g, 'SOV', 'GER') || !atWar(g, 'GER', 'POL')) return;
-  const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
-  if (lost < 5) return;
+  if (g.flags.sovietMove || !g.nations.SOV.alive || g.turn > 3 || atWar(g, 'SOV', 'GER')) return;
+  const fallen = !g.nations.POL.alive;
+  if (fallen) {
+    if (g.flags.open !== 1 || !g.regions.some((r) => r.sov && r.owner === 'POL' && r.ctrl === 'SOV')) return;
+  } else {
+    if (!atWar(g, 'GER', 'POL')) return;
+    const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
+    if (lost < 5) return;
+  }
   g.flags.sovietMove = 1;
   g.week = 3;
   for (const r of g.regions) {
@@ -3490,5 +3500,5 @@ export function sovietEvent(g: Game): void {
   g.supplyDirty = true;
   headline(g, 'event', 'The Red Army crosses into eastern Poland under the pact with Germany.', 'SOV');
   g.week = 4;
-  checkCollapse(g, 'POL', 'GER');
+  if (!fallen) checkCollapse(g, 'POL', 'GER');
 }
