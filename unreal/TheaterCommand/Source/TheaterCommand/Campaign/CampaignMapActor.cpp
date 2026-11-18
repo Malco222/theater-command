@@ -13524,6 +13524,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 		double BlastNow = Now / FMath::Max(BlastSlow, 0.01);
+		bool bBlastTicked = false;
 		if (FVector::DistSquared2D(BlastTestAt, CameraFocus) > FMath::Square(30.0 * UnitScale))
 		{
 			BlastTestAt = CameraFocus;
@@ -13536,6 +13537,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			Blasts->Clear();
 			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
+			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 		}
 		if (BlastHold >= 0.0)
 		{
@@ -13552,7 +13554,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				UE_LOG(LogTheater, Display, TEXT("Effects: the barrage stands at frame %d of its shot at %.1f s"), Frame, BlastFrames);
 			}
 		}
-		Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+		if (!bBlastTicked)
+		{
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+		}
 	}
 	bool bDrawingLight = false;
 	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its
@@ -14720,7 +14725,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			if ((bFlashHeld ? Age < 0.6 : (Age < 0.25 && Burst.Flashed < 2)) && Burst.Born >= 0.0 && !bTop)
 			{
 				++Burst.Flashed;
-				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit);
+				// (The art director, 21:27Z on 18 November 2026: "one frame at full, one at half". Held for a still, it is
+				// at full for three tenths of a second and at half for three.)
+				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit) * ((bFlashHeld ? Age < 0.3 : Burst.Flashed < 2) ? 1.0f : 0.5f);
 				const FVector FlashAt = Heartland - Downwind * (0.12 * Long) + FVector(0.0, 0.0, 0.05 * Wide);
 				const double Skew = Shape.FRandRange(0.0f, 6.283f);
 				const FVector Lean = Right * FMath::Cos(Skew) + Up * FMath::Sin(Skew);
@@ -14731,11 +14738,31 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// ruled it too red, a red stain. Her colours, as they are to be seen: a yellow-orange heart of about
 				// 225, 150, 60, an orange body of about 205, 110, 45, and red-brown only at the torn edge, about
 				// 180, 75, 35. Each is laid a little cleaner than it is to be seen, for the smoke that veils it.)
-				const FLinearColor FlashEdge(FColor(185, 62, 22)), FlashBody(FColor(212, 104, 30)), FlashHeart(FColor(236, 152, 44));
-				DrawSmear(FlashAt + Lean * (0.04 * W), Lean, 0.16 * W, 0.11 * W, FlashEdge, 0.9f * Lit0, 0.6);
+				// (Measured again on build 1690, held and with the smoke thin: the body 190 to 209, 94 to 117, 38 to 58 and
+				// the edge 171, 77, 48, both as asked; the heart 223 to 242, 136 to 172, 5 to 10, its blue all but gone:
+				// what is laid dark in one colour comes out darker still. She set it at 21:27Z: the heart about
+				// 225, 150, 60 "with blue at least 45, about a quarter of the flash's width", then the body, the edge,
+				// "then grey-brown smoke, with no red rim". So the heart is laid with far more blue than it is to
+				// show and is a quarter of the width; the edge is a little smaller and ends more sharply, so that no
+				// thin red ring stands round the fire. "-TheaterFlakHeart=E89E5E" lays the heart in another colour,
+				// to find the one that is seen as hers.)
+				static FColor HeartLaid(232, 158, 94);
+				static bool bHeartAsked = false;
+				if (!bHeartAsked)
+				{
+					bHeartAsked = true;
+					FString Hex;
+					if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFlakHeart="), Hex, false) && Hex.Len() == 6)
+					{
+						HeartLaid = FColor::FromHex(Hex);
+						UE_LOG(LogTheater, Display, TEXT("Flak: the flash's heart is laid as %d, %d, %d (-TheaterFlakHeart)"), HeartLaid.R, HeartLaid.G, HeartLaid.B);
+					}
+				}
+				const FLinearColor FlashEdge(FColor(185, 62, 22)), FlashBody(FColor(212, 104, 30)), FlashHeart(HeartLaid);
+				DrawSmear(FlashAt + Lean * (0.04 * W), Lean, 0.15 * W, 0.105 * W, FlashEdge, 0.9f * Lit0, 0.75);
 				DrawSmear(FlashAt + Lean * (0.02 * W), Lean, 0.115 * W, 0.08 * W, FlashBody, 0.92f * Lit0, 0.65);
 				DrawSmear(FlashAt - Lean * (0.07 * W) + Athwart * (0.04 * W), Athwart, 0.07 * W, 0.055 * W, FlashBody, 0.9f * Lit0, 0.6);
-				Draw(FlashAt - Athwart * (0.02 * W), 0.05 * W, FlashHeart, 0.95f * Lit0);
+				Draw(FlashAt - Athwart * (0.02 * W), 0.04 * W, FlashHeart, 0.95f * Lit0);
 				bDrawingLight = false;
 			}
 		}
