@@ -104,6 +104,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarStandOne(
 		TEXT("tc.Speed.StandOne"), 1,
 		TEXT("1 stands one ready fine sheet a frame, the next the frame after; 0 stands every ready one in the same frame, as before. The same picture either way."));
+	TAutoConsoleVariable<int32> CVarShowSpread(
+		TEXT("tc.Speed.ShowSpread"), 80000,
+		TEXT("How many points of the towns' and the trees' squares are newly shown in one frame when the eye crosses a height at which they change (the nearest squares first, one always), the rest the frames after; 0 shows every square in the same frame, as before. The same picture either way, a few frames later."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a tenth of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -445,6 +448,11 @@ namespace TheaterSpeed
 	bool StandOne()
 	{
 		return CVarStandOne.GetValueOnGameThread() != 0;
+	}
+
+	int32 ShowSpread()
+	{
+		return FMath::Clamp(CVarShowSpread.GetValueOnGameThread(), 0, 100000000);
 	}
 
 	FQuietModelling::FQuietModelling(int32 How)
