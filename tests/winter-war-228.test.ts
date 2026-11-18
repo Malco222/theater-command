@@ -111,6 +111,11 @@ describe('the Winter War (ruling 228, 1b)', () => {
 
   it('off the book, makes peace on the frontier as it stands when Moscow has taken nothing by its last month', () => {
     const g = begun(grand());
+    // (No early draw since ruling b486: with Viipuri still Finnish the war goes on through March and April 1940.)
+    for (g.turn = MAR_40; g.turn < MAY_40; g.turn++) {
+      winterMonth(g);
+      expect(atWar(g, 'SOV', 'FIN')).toBe(true);
+    }
     g.turn = MAY_40;
     winterMonth(g);
     expect(atWar(g, 'SOV', 'FIN')).toBe(false);
