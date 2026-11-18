@@ -10,6 +10,7 @@
 //                                          the far side's shipyards (ruling b445), its oilfields (rulings 194, 231),
 //                                          two towns of the old chart renamed
 //                                          (written by tools/make-far-world.mjs from the planner's and the historian's files)
+//   data/campaign/far-pacific-war.json     rulings 197 and 200: the Pacific war's events, Japan's great choice and its marks
 //   data/campaign/china-line.json          ruling 215: the record's line in China
 //   data/campaign/china-setup.json         the dated rows its raids need
 //   data/campaign/china-stop3.json         ruling 221: what Szechwan costs when history is loose
@@ -19,7 +20,9 @@
 // key, lists appended (a row with an "id" takes the place of the row of that id; a row already there is not added
 // twice), and a value under a nation's code (two or three capital letters) replaces what was there whole. Those are
 // the far-side rig's rules (tools/trial/seats.mjs on the seat builders' branch), so a seats file that played there
-// plays here unchanged.
+// plays here unchanged. One rule is this file's own: a nation's code followed by "+" ("JAP+") lays its value over
+// what stands under that code, by the same rules, in place of replacing it: so two files can each give Japan great
+// choices, and the one laid first has the first call in a month (staff.ts takes one a month, in the list's order).
 //
 // Every module that reads one of those data files imports this one first ("import './far-rows';"), so the rows are
 // in before anything reads them. This file imports nothing of the game but the switch.
@@ -50,6 +53,7 @@ import resources from '../../data/campaign/resources.json';
 import globe from '../../data/campaign/far-seats-globe.json';
 import pacific from '../../data/campaign/far-seats-pacific.json';
 import farWorld from '../../data/campaign/far-world.json';
+import pacificWar from '../../data/campaign/far-pacific-war.json';
 import chinaLine from '../../data/campaign/china-line.json';
 import chinaSetup from '../../data/campaign/china-setup.json';
 import chinaStop3 from '../../data/campaign/china-stop3.json';
@@ -64,7 +68,7 @@ const TARGETS: Record<string, Obj> = {
 /** The seats files, in the order they are laid. */
 const FILES: [string, Obj][] = [
   ['far-seats-globe', globe], ['far-seats-pacific', pacific], ['far-world', farWorld],
-  ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
+  ['far-pacific-war', pacificWar], ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
 ];
 
 /** The first day beyond the old chart, as the seats files give it. */
@@ -90,6 +94,8 @@ export const FAR_PATHS: Record<string, string> = {};
 export const FAR_LAID: string[] = [];
 
 const CODE = /^[A-Z]{2,3}$/;
+/** A nation's code with "+": its value is laid over what stands under the code, not put in its place. */
+const MORE = /^[A-Z]{2,3}\+$/;
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 /** A copy of a seats file's value: what is laid into the data is never the seats file's own object. */
@@ -108,7 +114,10 @@ export function lay(base: any, add: any, key = ''): any {
     return base;
   }
   if (isObj(base) && isObj(add)) {
-    for (const [k, v] of Object.entries(add)) base[k] = k in base ? lay(base[k], v, k) : copy(v);
+    for (const [k0, v] of Object.entries(add)) {
+      const more = MORE.test(k0), k = more ? k0.slice(0, -1) : k0;
+      base[k] = k in base ? lay(base[k], v, more ? '' : k) : copy(v);
+    }
     return base;
   }
   return copy(add);

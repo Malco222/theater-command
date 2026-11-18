@@ -23,6 +23,7 @@ import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
 import { mapDist2 } from './wrap';
 import { guarantorsOf, type Guarantor } from './guarantees';
+import { pacificOpening, pacificSides, pactBinds } from './pacific';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -61,6 +62,15 @@ export interface DiploEvent {
   reform?: Record<string, Partial<Pick<Nation, 'quality' | 'air' | 'slowCommand' | 'maxAttack'>>>;
   /** News of something won in the month just ended: the dispatch is dated to that month's last week, not to the new one. */
   past?: boolean;
+  /**
+   * 'close': read as a month closes, once every country has moved, and dated that month (closeDiplomacy). The far
+   * side's entry of December 1941 is: Japan moves last in a month, and its blow came before Germany's declaration.
+   */
+  when?: 'close';
+  /** Other words for the news: the first row whose conditions hold as the event fires gives them in place of 'text'. */
+  says?: { if: string[]; text: string }[];
+  /** Events that follow from this one: each is read the day this one fires, where its own month and conditions have come. */
+  then?: string[];
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -590,6 +600,8 @@ export function holds(g: Game, cond: string): boolean {
     // 'taken:allies,Cassino,event:italian-armistice': the place is in that bloc's hands, and since that flag was
     // raised it has stood in other hands at a month's opening. News of a fight is told only where there was one:
     // ground that came over by a treaty's terms and was never fought for has not been taken (ruling 100).
+    // 'pact:JAP,USA': a pact binds Germany and Italy to the war between the two, begun once it bound (ruling 197; pacific.ts).
+    case 'pact': return pactBinds(g, a[0], a[1]);
     case 'taken': { const r = g.byName[a[1]], at = g.flags[a[2]]; return !!r && !!at && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0] && (g.flags[`others:${a[1]}`] ?? 0) >= at; }
     default: return false; // an unknown condition never holds, so a typo cannot fire an event
   }
@@ -631,7 +643,10 @@ function transfer(g: Game, r: Region, to: string): void {
   g.supplyDirty = true;
 }
 
-function fire(g: Game, e: DiploEvent): boolean {
+function fire(g: Game, e0: DiploEvent): boolean {
+  // (The words that fit the day, where the event has more than one telling.)
+  const words = e0.says?.find((row) => row.if.every((c) => holds(g, c)))?.text;
+  const e = words === undefined ? e0 : { ...e0, text: words };
   let did = false, told = false;
   // Ruling 99: no event takes the player's own country out of the war or deals out its ground, at any stop of the
   // dial, at any level and whatever the office setting. An event that carries a partition never fires on it.
@@ -868,6 +883,8 @@ export function monthlyDiplomacy(g: Game): void {
   }
   // The Axis courts the Americas, and the United States courts back (ruling 223).
   americasMonth(g);
+  // The far side: the Pacific war's ties, read from the state as the month opens (ruling 197; pacific.ts).
+  pacificOpening(g);
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
   worldMonth(g);
   warWorkMonth(g);
@@ -879,11 +896,14 @@ export function monthlyDiplomacy(g: Game): void {
   // than they did, it happens later.
   const open = g.flags.open === 1;
   for (const e of DIPLOMACY.events) {
+    if (e.when === 'close') continue;
     if (e.mode && (e.mode === 'open') !== open) continue;
     if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
-    if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
+    if (fire(g, e)) { g.flags[`event:${e.id}`] = g.turn; if (e.then) thenRead(g, e, open); }
   }
+  // The far side: who stands where once the month's events are in (Japan beside the Axis, China with the Allies).
+  pacificSides(g);
   // (For 'taken': each watched place that stands in other hands, now that its flag is raised, is noted.)
   for (const [side, place, flag] of WATCHED) {
     const r = g.byName[place], h = r ? g.nations[r.ctrl] : undefined;
@@ -891,6 +911,34 @@ export function monthlyDiplomacy(g: Game): void {
   }
   romeWavers(g);
   romeWaversOwn(g);
+}
+
+/** The events read as a month closes. None while the far side's switch is off. */
+const CLOSING: DiploEvent[] = DIPLOMACY.events.filter((e) => e.when === 'close');
+
+/**
+ * The month's close, once every country has moved and before the calendar turns: the events marked for it are read
+ * as the month's opening reads the others, and are dated the month that ends. Nothing while no event is so marked.
+ */
+export function closeDiplomacy(g: Game): void {
+  if (!CLOSING.length || (g.flags.dom ?? 0) > 0) return;
+  const open = g.flags.open === 1;
+  for (const e of CLOSING) {
+    if (e.mode && (e.mode === 'open') !== open) continue;
+    if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
+    if (!(e.if ?? []).every((c) => holds(g, c))) continue;
+    if (fire(g, e)) { g.flags[`event:${e.id}`] = g.turn; if (e.then) thenRead(g, e, open); }
+  }
+  pacificSides(g);
+}
+
+/** The events an event names under 'then' are read the day it fires: the republics follow America the month it enters, whenever in the month that is. */
+function thenRead(g: Game, e: DiploEvent, open: boolean): void {
+  for (const id of e.then ?? []) {
+    const f = DIPLOMACY.events.find((x) => x.id === id);
+    if (!f || (f.mode && (f.mode === 'open') !== open) || g.flags[`event:${f.id}`] || g.turn < f.from || (g.turn > f.to && !open)) continue;
+    if ((f.if ?? []).every((c) => holds(g, c)) && fire(g, f)) g.flags[`event:${f.id}`] = g.turn;
+  }
 }
 
 /** The places some event's 'taken' condition watches: [the bloc, the place, the flag]. */

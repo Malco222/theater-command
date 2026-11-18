@@ -52,6 +52,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
+import { pacificWar } from './pacific';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -409,6 +410,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   clientWar(g, a, b, tied); // the far side: war on a client is war on its patron, and a tie broken parts the two
   // A guarantee the card names is kept (ruling 229, part 3): its computer-run guarantors declare war the same day.
   honour(g, a, b, sideWas);
+  // The far side: the dominions and the Dutch are at war with Japan the day Britain is (ruling 197; pacific.ts).
+  pacificWar(g, a, b);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }

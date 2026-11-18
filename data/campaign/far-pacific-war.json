@@ -1,0 +1,29 @@
+{
+  "_about": "The Pacific war's rows (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on). Ruling 197, the offer of war (the Pacific planner's paper 12): the entry of December 1941 as the far side reads it. 'pearl-harbor-world' takes the place of the row of that name: the same month and the same conditions, read as the month closes ('when': 'close'), after every country has moved, so that Japan's blow comes before Germany's declaration as it did, and both of the month's first blows fall on countries at peace. Its words name Pearl Harbor only where Japan has struck America ('says'), and the republics that follow America are read the day it fires ('then'), as they were when the entry stood at the month's opening. 'pact-binds' is the same entry come sooner (the ruling's second tie): the month after Japan and America go to war, once a pact binds Germany and Italy to Japan and only for a war begun since it did ('pact:JAP,USA', src/campaign/pacific.ts; the months are in pacific.json). The ties that are no events (Britain and America with each other, the dominions and the Dutch with Britain, Japan beside the Axis, China with the Allies, the freeze, the Soviet month) are pacific.ts's, on pacific.json.",
+  "diplomacy": {
+    "events": [
+      {
+        "id": "pearl-harbor-world", "from": 28, "to": 99, "mode": "open", "when": "close",
+        "if": ["flag:world", "alive:GER", "alive:USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"],
+        "enter": { "nations": ["USA"], "align": "allies" },
+        "war": [["USA", "GER"], ["USA", "ITA"]],
+        "then": ["usa-italy", "cuba-war", "isthmus-war"],
+        "text": "America has entered the war: Germany and Italy declare war on the United States, and the greatest industry on earth is behind the Allies.",
+        "says": [
+          { "if": ["flag:war:JAP:USA"], "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it." }
+        ]
+      },
+      {
+        "id": "pact-binds", "from": 1, "to": 99, "mode": "open",
+        "if": ["flag:world", "alive:GER", "alive:USA", "alive:JAP", "war:JAP,USA", "pact:JAP,USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"],
+        "enter": { "nations": ["USA"], "align": "allies" },
+        "war": [["USA", "GER"], ["USA", "ITA"]],
+        "then": ["usa-italy", "cuba-war", "isthmus-war"],
+        "text": "America has entered the war: Japan and the United States are at war, and Germany and Italy stand by their pact with Japan and declare war on the United States. The greatest industry on earth is behind the Allies.",
+        "says": [
+          { "if": ["flag:war:JAP:USA"], "text": "Japan has attacked the United States, and Germany and Italy stand by their pact with Japan: they declare war on the United States. America is in the war, with the greatest industry on earth behind it." }
+        ]
+      }
+    ]
+  }
+}
