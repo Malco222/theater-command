@@ -39,5 +39,8 @@ Blasts->Shell(Where, TEXT("howitzer"), TEXT("earth"), /*bOnArmour*/ false);
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
 
+Names given to the kit (size, ground, calibre, gun, weapon) are lower case, as in the recipe: `howitzer`, `snow`,
+`bomb250`. The recipe is read exactly, so `Snow` is not found and falls back to earth, and an unknown size to how105.
+
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
