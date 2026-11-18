@@ -13502,6 +13502,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// ("-TheaterBlastHold=4.033" stops the barrage's clock that many of its own seconds after it is laid: the shell
 		// that lands at 4.0 is then held at its second frame for a still. With the slow pace the clock comes to the
 		// moment in steps of two thousandths of a second.)
+		// ("-TheaterBlastFrames=4.0" shows the shot the kit fires at 4.0 a frame at a time: the clock runs to half a frame
+		// short of it and then goes on one sixtieth of a second every five seconds, saying in the log which frame it
+		// stands at. Frame 1 is the shot's first; the stills taken meanwhile are found by their place in the log.)
+		static double BlastFrames = -1.0, BlastLaidWall = 0.0;
+		static int32 BlastFrameSaid = -1;
 		static double BlastSlow = 1.0, BlastHold = -1.0, BlastLaidAt = 0.0;
 		static FVector BlastOff = FVector::ZeroVector;
 		static bool bBlastAsked = false;
@@ -13510,6 +13515,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			bBlastAsked = true;
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastSlow="), BlastSlow);
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastHold="), BlastHold);
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastFrames="), BlastFrames);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -13522,6 +13528,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		{
 			BlastTestAt = CameraFocus;
 			BlastLaidAt = BlastNow;
+			BlastLaidWall = Now;
+			BlastFrameSaid = -1;
+			UE_LOG(LogTheater, Display, TEXT("Effects: the barrage is laid; the eye is %.0f units from what it looks at, pitched %.1f degrees, its view %.1f degrees and %d pixels wide; a metre is %.2f units"),
+				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, BlastUnitsAMetre);
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
 			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
@@ -13530,6 +13540,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		if (BlastHold >= 0.0)
 		{
 			BlastNow = FMath::Min(BlastNow, BlastLaidAt + BlastHold);
+		}
+		if (BlastFrames >= 0.0)
+		{
+			const double Elapsed = Now - BlastLaidWall, Runs = BlastFrames - 1.0 / 120.0;
+			const int32 Frame = Elapsed > Runs ? FMath::FloorToInt32((Elapsed - Runs) / 5.0) : -1;
+			BlastNow = BlastLaidAt + (Frame < 0 ? Elapsed : Runs + Frame / 60.0);
+			if (Frame != BlastFrameSaid)
+			{
+				BlastFrameSaid = Frame;
+				UE_LOG(LogTheater, Display, TEXT("Effects: the barrage stands at frame %d of its shot at %.1f s"), Frame, BlastFrames);
+			}
 		}
 		Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
 	}
