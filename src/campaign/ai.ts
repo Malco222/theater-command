@@ -17,7 +17,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheDay, opensNow, opensOn, opensSoon, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
@@ -1043,6 +1043,9 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const quay = seaBase(g, nat, slot);
   if (!quay) return;
   const sfx = slot ? ':o' : '';
+  // (History's list picks the day, ruling 233(u): a staff that has planned for a shore of the list since the first
+  // month of its lead lands on it in the shore's month without the monthly dice, where every test passes.)
+  const day = sea.second && onTheDay(g, nat, you, sfx);
   const ready = quay.units
     .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
     // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
@@ -1116,17 +1119,23 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // (Against an enemy on the staff's own side of the ocean nobody waits for a day to be picked: he is attacked the
   // month the force stands ready. Version 81.)
   const atOnce = sea.second && neighbourAcrossTheWater(g, nat, you);
-  if (!atOnce && hashString(`descent:${g.seed}:${g.turn}:${nat}${sfx}`) / 4294967296 >= L.chance) return;
+  const diced = !atOnce && hashString(`descent:${g.seed}:${g.turn}:${nat}${sfx}`) / 4294967296 >= L.chance;
+  if (diced && !day) return;
   const men = force.reduce((s, c) => s + c.divs * c.str, 0);
   let best: Region | null = null, bv = 0, bw = false, bz = -1, bf = force, weak = false, weakMain = false;
   // (An island taken whole, or a colony overseas: the lesser prize beside a beach on a mainland.)
   const lesser = (r: Region): boolean => r.nb.length === 0 || !!r.overseas;
   for (const r of landingTargets(g, force)) {
     if (r.ctrl !== you || !r.port) continue;
-    // (A staff with history's list of shores opens its second front on those and nowhere else.)
-    if (sea.second && (!opensOn(g, nat, r) || !builtUp(g, nat, r))) continue;
+    // (The dice said no and the list picked the day: the list's shore of this month and no other.)
+    if (diced && !opensNow(g, nat, r)) continue;
+    // (A staff with history's list of shores opens its second front on those and nowhere else. A shore of the list
+    // whose month comes within the lead is reckoned through like any other and not landed on: where only its
+    // strength stands in the way the staff builds up for it beforehand. Ruling 233(q).)
+    const soon = sea.second && opensSoon(g, nat, r);
+    if (sea.second && ((!soon && !opensOn(g, nat, r)) || !builtUp(g, nat, r))) continue;
     // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
-    if (!shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
+    if (!soon && !shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
     const plan = planLanding(g, force, r);
     if (plan.why || plan.risk > L.risk) continue;
     // A staff heeds its own forecast, the one a player reads on the landing card: it puts nobody on a beach where
@@ -1141,6 +1150,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
     // And it sails only with a force it expects to be still ashore three months on: the usual one, or a bigger wave.
     const wave = waveFor(r);
     if (!wave) { weak = true; if (!lesser(r)) weakMain = true; continue; }
+    if (soon) continue;
     const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (plan.defended ? 1 : 1.5) - 10 * plan.risk - 0.2 * near;
     if (!best || v > bv) { best = r; bv = v; bw = warned; bz = plan.hold?.sea ?? -1; bf = wave; }
   }
@@ -1148,6 +1158,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // builds the ships to lift what stands there. staff.ts, the staging of the quay.)
   // And a beach on a mainland comes before an island or a colony that passes: for as long as it would rest after
   // a landing ('every' months) the staff builds up for the mainland sooner than spend its force on the lesser prize.
+  // (Where a test refused the list's shore in its month, the dice are back the month after, as before.)
+  if (diced && !best) return;
   const since = `st:moreFrom:${nat}${sfx}`;
   if ((g.flags[`st:more:${nat}${sfx}`] ?? 0) < g.turn - 2) delete g.flags[since];
   const waits = !!best && weakMain && lesser(best) && g.turn - (g.flags[since] ?? g.turn) < L.every;
@@ -1440,7 +1452,9 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
   let best: Region | null = null, bv = 0;
   for (const r of g.regions) {
     if (r.ctrl !== you || !r.port || !r.seas.length || g.turn < (g.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
-    if (!opensOn(g, nat, r) || !builtUp(g, nat, r) || !shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
+    // (A beach of the list whose month comes within the lead is named beforehand, so that the fleets stand off it: ruling 233(q).)
+    const soon = opensSoon(g, nat, r);
+    if ((!soon && !opensOn(g, nat, r)) || !builtUp(g, nat, r) || (!soon && !shoreOpen(g, r.owner, !!r.overseas, r.name))) continue;
     // The way there over the water, whoever holds it now.
     if (!seaPath(g, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
     const defended = hostileUnits(g, r, nat).length > 0;
@@ -1454,7 +1468,8 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
     if (!best || v > bv) { best = r; bv = v; }
   }
   if (!best) { delete g.flags[key]; delete g.flags[at]; return; }
-  if (g.flags[key] !== best.id + 1) { g.flags[key] = best.id + 1; g.flags[at] = g.turn; return; }
+  // (The half year a beach stays named runs from the month it may be landed on, not from the lead before it.)
+  if (g.flags[key] !== best.id + 1 || opensSoon(g, nat, best)) { g.flags[key] = best.id + 1; g.flags[at] = g.turn; return; }
   if (g.turn - (g.flags[at] ?? g.turn) >= 6) { g.flags[`st:aimNo:${nat}:${best.id}`] = g.turn + 12; delete g.flags[key]; delete g.flags[at]; }
 }
 

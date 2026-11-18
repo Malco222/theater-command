@@ -76,7 +76,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1268,6 +1268,44 @@ export function opensOn(g: Game, nat: string, r: Region): boolean {
   return !!lapse && entered(g, lapse);
 }
 /**
+ * True for a mainland harbour of a staff's list whose month has not come and comes within 'lead' months (open.json,
+ * 'descent.lead'; ruling 233(q)). The staff plans for it: the enemy across the sea is chosen for it, the quay, the
+ * force gathered there, the beach named and its strength tried. It lands not before the month (`opensOn`). By the
+ * book the invasion army gathered in Britain through the first half of 1944.
+ */
+export function opensSoon(g: Game, nat: string, r: Region): boolean {
+  const lead = OPEN.descent?.lead ?? 0;
+  const P = lead > 0 ? planned(g, nat) : null;
+  const from = P?.from?.[r.owner];
+  if (!P || from === undefined || !dated(g) || r.overseas || !r.nb.length || ownShore(g, nat, r)) return false;
+  return P.open.includes(r.owner) && !P.not?.includes(r.name) && g.turn < from && g.turn >= from - lead && !opensOn(g, nat, r);
+}
+/** True for a mainland harbour of a staff's list in the very month history's list opens it (at the stops where the dates hold). */
+export function opensNow(g: Game, nat: string, r: Region): boolean {
+  const P = planned(g, nat);
+  return !!P && dated(g) && !r.overseas && r.nb.length > 0 && P.open.includes(r.owner) && !P.not?.includes(r.name) && P.from?.[r.owner] === g.turn;
+}
+/**
+ * True in the month history's list opens a mainland shore this enemy holds, for a staff that has planned for it since
+ * the first month of the lead (open.json, 'descent.day'; ruling 233(u)): the list picked the day, and the staff lands
+ * that month without the monthly dice where every test passes. Asked once a month for each army of a staff with that
+ * enemy across the sea (`sfx` names the army): the month the lead begins it is noted that the plan stood.
+ */
+export function onTheDay(g: Game, nat: string, you: string, sfx: string): boolean {
+  const D = OPEN.descent, lead = D?.lead ?? 0;
+  const P = D?.day && lead > 0 && dated(g) ? planned(g, nat) : null;
+  const key = `st:led:${nat}${sfx}`;
+  let m = 0;
+  if (P?.from) for (const r of harbours(g, you)) {
+    const f = P.from[r.owner];
+    if (f === undefined || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name) || ownShore(g, nat, r)) continue;
+    if (g.turn >= f - lead && g.turn <= f && (!m || f < m)) m = f;
+  }
+  if (m && g.turn === m - lead) g.flags[key] = m;
+  else if (flag(g, key) && flag(g, key) < g.turn) delete g.flags[key];
+  return m === g.turn && flag(g, key) === m;
+}
+/**
  * The build-up (open.json, 'descent.planned', 'with'): a staff with history's list opens no front of its own on a
  * mainland until this many of its field corps stand across the ocean: the landing force, and as many again to
  * follow it in before the enemy's reserves arrive. An island taken whole and a colony overseas need no such army.
@@ -1445,16 +1483,18 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
   const key = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
   const home = homeGround(g, nat);
   const from = [...new Set(home.list.map((id) => g.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
-  // (A staff with history's list of shores looks only at those of his harbours it may open on this month.)
-  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r))) <= NAVY.landing.range;
+  // (A staff with history's list of shores looks only at those of his harbours it may open on this month, or within the lead: `opensSoon`.)
+  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r))) <= NAVY.landing.range;
   const kept = ids[flag(g, key) - 1];
-  // (History's list has an order, ruling 233(j): when the month has come for a later shore of the list, the home
-  // army turns to the enemy who holds it nearest the home ports, unless it has men ashore with a front to hold.
-  // France in June 1944, though Italy still stands; and Germany on the Channel, not Italy at Marseille. The army
-  // abroad keeps the first: see `abroad`.)
+  // (History's list has an order, ruling 233(j): when the month comes for a later shore of the list, the home army
+  // turns to the enemy who holds it nearest the home ports, unless it has men ashore with a front to hold. France
+  // in June 1944, though Italy still stands; and Germany on the Channel, not Italy at Marseille. It turns 'lead'
+  // months before the shore's month, ruling 233(q): the invasion army gathered in Britain through the first half of
+  // 1944, and a landing takes a season to mount. It lands not before the month (`opensOn`). The army abroad keeps
+  // the first: see `abroad`.)
   const P = planned(g, nat);
   const dueOf = new Map<string, number>();
-  /** The month of the latest shore of the list an enemy holds a harbour on, within a landing of the home ports, with the hops to it taken off as a fraction: later first, then nearer. */
+  /** The month of the latest shore of the list an enemy holds a harbour on, within a landing of the home ports, with the hops to it taken off as a fraction: later first, then nearer. Nothing until 'lead' months before it. */
   const due = (e: string): number => {
     if (!P?.from || !dated(g) || !from.length) return 0;
     let m = dueOf.get(e);
@@ -1462,7 +1502,7 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
     m = 0;
     for (const r of harbours(g, e)) {
       const f = P.from[r.owner];
-      if (f === undefined || f < Math.floor(m) || g.turn < f || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name)) continue;
+      if (f === undefined || f < Math.floor(m) || g.turn < f - (D.lead ?? 0) || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name)) continue;
       const hops = seaHops(g, from, [r]);
       if (hops <= NAVY.landing.range) m = Math.max(m, f + 1 - (hops + 1) / (NAVY.landing.range + 2));
     }
@@ -1496,7 +1536,8 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
  * piece with its capital, with no enemy on it or next to it) crosses from a port there against an enemy it has not
  * fought for a season. The quay and the enemy are chosen together, by how lightly the harbours in reach are held,
  * from the ports with a landing force of its own within three marches, and looked at again every three months.
- * While the men it put ashore still have a front to hold, the same quay feeds them.
+ * While the men it put ashore still have a front to hold, the same quay feeds them. With no lane open from any of
+ * those ports it waits where it was, or at the port nearest his harbours (open.json, 'descent.wait').
  */
 function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const D = OPEN.descent, n = g.nations[nat];
@@ -1511,7 +1552,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const foes = [...n.atWar].sort().filter((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && quietWith(g, nat, e) >= (D.abroad ?? 3); });
   if (!foes.length) return drop();
   // (A staff with history's list of shores looks only at those: it does not go elsewhere because elsewhere is clear.)
-  const shores = foes.map((e) => harbours(g, e).filter((r) => opensOn(g, nat, r)));
+  const shores = foes.map((e) => harbours(g, e).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r)));
   if (!shores.some((s) => s.length)) return drop();
   const home = homeGround(g, nat).on;
   // Each far shore in turn: a piece of friendly ground away from home. One with the enemy on it or next to it has work of its own.
@@ -1537,6 +1578,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   if (!idle.length) return drop();
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
   let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity;
+  let near: { foe: string; quay: Region } | null = null, bd = Infinity;
   for (const p of idle) {
     if (!room(p)) continue;
     // The corps that could be on this quay within the season: those there now, and those within three marches that would not leave a place empty.
@@ -1555,7 +1597,18 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
     foes.forEach((e, k) => {
       const w = quayWorth(g, nat, p, shores[k], shut);
       if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; }
+      // Seas between this quay and the nearest of his harbours, by the shortest way round, whoever holds them.
+      const d = shores[k].length ? seaHops(g, p.seas, shores[k]) : Infinity;
+      if (d < bd) { bd = d; near = { foe: e, quay: p }; }
     });
+  }
+  // (Ruling 233(r): with no lane open from any quay the army waits, as the home army does (`seaBase`): at the quay
+  // it had, or at the one nearest his harbours by the shortest way round. Its beach is named from there and its own
+  // fleets stand on the way to it, which is how a closed sea is opened. Before, the plan was dropped the month the
+  // lane shut, no beach was named, and the admirals, who cover a named crossing, sent nothing.)
+  if (!best && D.wait) {
+    if (foe && quay && foes.includes(foe) && shores[foes.indexOf(foe)].length && idle.includes(quay) && room(quay)) return { foe, quay };
+    if (near !== null && bd <= NAVY.landing.range) best = near;
   }
   if (!best) return drop();
   const got = best as { foe: string; quay: Region };
@@ -1579,7 +1632,11 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const you = sea.foe;
   const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
   const lod = sea.second ? lodgment(g, nat) : null;
-  const shores = lod?.short ? [lod.at] : harbours(g, you);
+  // (The quay is chosen for the harbours the staff may land on, this month or within the lead: a staff with
+  // history's list is not sent to face a shore that is no part of it because that shore is clear. Britain's force
+  // gathered opposite Norway, once German fighters covered France. Ruling 233(q).)
+  const listed = sea.second ? harbours(g, you).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r)) : [];
+  const shores = lod?.short ? [lod.at] : listed.length ? listed : harbours(g, you);
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
   const kept = g.regions[flag(g, key) - 1];
   const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6;
