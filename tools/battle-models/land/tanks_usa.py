@@ -44,7 +44,7 @@ def sherman(fine=True, tag="USA"):
     rb = Vector((-2.58 + 2.76, 0, 1.66 - 1.18)).normalized()          # up the tail plate
     rn = Vector((-rb.z, 0, rb.x))
     dk = Vector((-2.58 + 1.60, 0, 1.66 - zr)).normalized()            # back along the engine deck
-    dn = Vector((-dk.z, 0, dk.x))                                     # up out of it
+    dn = Vector((dk.z, 0, -dk.x))                                     # up out of it
     g_at = lambda u, y: Vector((2.47, y, zs)) + gl * u + gn * 0.002       # noqa: E731  (a place on the front plate, u metres up it)
     r_at = lambda u, y: Vector((-2.76, y, 1.18)) + rb * u + rn * 0.002    # noqa: E731  (a place on the tail plate)
     d_at = lambda u, y: Vector((-1.60, y, zr)) + dk * u + dn * 0.002      # noqa: E731  (a place on the engine deck, u metres back)
@@ -82,7 +82,7 @@ def sherman(fine=True, tag="USA"):
     # the engine deck: the armoured air intake across it behind the turret, two big doors in the sloped part with their
     # hinges and handles, four filler caps, lifting eyes at the back corners
     v.slab((-1.50, -0.66, zr), (-1.20, 0.66, zr + 0.085), "upper", 0.02, segs=2)
-    v.grille((-1.35, 0.0, zr + 0.085), (0.20, 1.20), Z, Y, slats=10, deep=0.02)
+    v.grille((-1.35, 0.0, zr + 0.085), (1.20, 0.20), Z, Y, slats=3, deep=0.02)
     for s in (LEFT, RIGHT):
         c = d_at(0.52, s * 0.37)
         v.box((0.84, 0.68, 0.03), c + dn * 0.014, "upper", 0.008, turn=_turn(dk, dn))

@@ -466,9 +466,8 @@ class Fittings:
             for vs, fs, pa, shine in shape:
                 before = len(self.m.faces)
                 self.m.add([c + along * u + across * v + f * w for u, v, w in vs], fs, pa, False, None, part)
-                # (no polish: on the coat a flag is edge wear, and only the cleats' faces, where a boot or a branch
-                # rubs, carry a little)
-                self.flag(before, [x * 0.3 for x in shine] if shine else None)
+                # (no polish and no wear: on the coat a flag is edge wear, and nothing rubs a hung spare)
+                self.flag(before, None)
         if bar:
             m = Matrix((along, across, f)).transposed()
             for off in (-wide * 0.3, wide * 0.3):

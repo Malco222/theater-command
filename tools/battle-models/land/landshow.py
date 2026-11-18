@@ -234,6 +234,61 @@ def faces(name, out, opt, w, h, spp):
         print("wrote", os.path.join(out, "sheets", f"{name}-faces.png"), flush=True)
 
 
+# ---- the whole motor pool on one field ---------------------------------------------------------------
+
+def pool(names, out, opt, w, h, spp):
+    """Every vehicle named, drawn up in echelon on the battle's ground: the picture of them all together, a second
+    from the other end of the row, and a sheet of the two. `gap=` metres between neighbours, `step=` metres each
+    stands behind her neighbour, `as=` the file's name."""
+    kit.fresh()
+    t = time.time()
+    stood = []
+    for name in names:
+        v = vehicles.build(name, True)
+        ob, arm = works.to_scene(v.m, dust_hex="9A8A6A")
+        landmarks.put(v.m, ob, arm)
+        stood.append((v, arm))
+    field = ground.Battle(rut=1.2, rut_wide=0.4, ruts=False)
+    stage.render_setup(w, h, samples=spp)
+    cam = kit.camera("cam", 50.0)
+    cam.data.clip_end = 20000.0
+    n, gap, step = len(stood), float(opt.get("gap", 4.5)), float(opt.get("step", 1.5))
+    x_at = float(opt.get("x", 0.0))
+    for i, (v, arm) in enumerate(stood):
+        arm.location = (x_at - step * i, ((n - 1) / 2 - i) * gap, 0.0)
+    if "look" in opt:                                    # (what stands in the row's way: say so, do not render)
+        lo, hi = Vector((x_at - step * n - 6.0, -n * gap / 2 - 2.0, -1.0)), Vector((x_at + 6.0, n * gap / 2 + 2.0, 6.0))
+        for ob in bpy.context.scene.objects:
+            if ob.type != "MESH" or any(ob.parent == arm for _, arm in stood) or max(ob.dimensions) > 80.0:
+                continue
+            c = [ob.matrix_world @ Vector(b) for b in ob.bound_box]
+            a, b = Vector((min(p.x for p in c), min(p.y for p in c), min(p.z for p in c))), Vector((max(p.x for p in c), max(p.y for p in c), max(p.z for p in c)))
+            if all(a[k] < hi[k] and b[k] > lo[k] for k in range(3)):
+                print(f"  in the way: {ob.name}  x {a.x:.1f}..{b.x:.1f}  y {a.y:.1f}..{b.y:.1f}  z {a.z:.1f}..{b.z:.1f}", flush=True)
+    print(f"{n} vehicles staged in {time.time() - t:.1f}s", flush=True)
+    wide = (n - 1) * gap
+    mid = Vector((x_at - step * (n - 1) / 2, 0.0, 1.1))
+    name = opt.get("as", "pool")
+    shots = [("a", (mid.x + 0.62 * wide + 16.0, -(0.5 * wide + 15.0), 4.6), 38.0), ("b", (mid.x + 0.45 * wide + 15.0, 0.5 * wide + 17.0, 3.4), 40.0)]
+    lens = float(opt.get("lens", 62.0))
+    files = []
+    for key, eye, sun in shots:
+        if opt.get("views") and key not in opt["views"].split(","):
+            continue
+        cam.data.lens = lens
+        kit.look_at(cam, eye, mid)
+        field.sun.rotation_euler = (math.radians(90.0 - 36.0), 0.0, math.radians(math.degrees(math.atan2(eye[1] - mid.y, eye[0] - mid.x)) + (sun if eye[1] < 0 else -sun) + 90.0))
+        path = os.path.join(out, "sheets", "stills", f"{name}-{key}.png")
+        tick = time.time()
+        kit.still(path)
+        files.append(path)
+        print(f"  {key}: {time.time() - tick:.1f}s", flush=True)
+    if len(files) == 2:
+        kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=1, labels=[", ".join(v.m.title for v, _ in stood), "The same row from its other end"],
+                  title="The motor pool so far, drawn up on the battle's ground")
+        print("wrote", os.path.join(out, "sheets", f"{name}.png"), flush=True)
+
+
 # ---- she drives up, halts, trains and fires ----------------------------------------------------------
 
 def action(name, out, opt, w, h, spp, fps, only):
@@ -376,6 +431,8 @@ def main():
         brewup(name, out, opt, w, h, spp, fps, only)
     elif what == "faces":
         faces(name, out, opt, w if "size" in opt else 1280, h if "size" in opt else 720, int(opt.get("spp", 40)))
+    elif what == "pool":                                 # python landshow.py PanzerIV,Panther,Tiger <out> pool
+        pool(name.split(","), out, opt, w if "size" in opt else 1600, h if "size" in opt else 800, int(opt.get("spp", 40)))
 
 
 if __name__ == "__main__":

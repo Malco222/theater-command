@@ -3,6 +3,7 @@
 BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name] says whose it is, what it does on the
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
+import tanks_any
 import tanks_ger
 import tanks_sov
 import tanks_usa
@@ -14,6 +15,8 @@ BUILDERS = {
     "T34": tanks_sov.t34,
     "T34-85": tanks_sov.t34_85,
     "Sherman": tanks_usa.sherman,
+    "LightTank": tanks_any.light_tank,
+    "MediumTank": tanks_any.medium_tank,
 }
 
 ABOUT = {
@@ -23,6 +26,8 @@ ABOUT = {
     "T34": {"nation": "SOV", "role": "medium tank", "years": "1941-45", "units": "armor (Soviet Union, to 1943)"},
     "T34-85": {"nation": "SOV", "role": "medium tank", "years": "1944-45", "units": "armor (Soviet Union, from 1944)"},
     "Sherman": {"nation": "USA", "role": "medium tank", "years": "1942-45", "units": "armor (United States from 1942; Britain and the Commonwealth from 1943, in their own paint)"},
+    "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
+    "MediumTank": {"nation": "any", "role": "medium tank", "years": "1940-45", "units": "armor (every nation without a tank of its own, once it has researched medium tanks)"},
 }
 
 

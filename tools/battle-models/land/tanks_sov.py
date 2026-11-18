@@ -47,9 +47,10 @@ def t34_hull(v, fine):
     for s in (LEFT, RIGHT):
         v.hook(Vector((2.99, s * 0.62, 0.74)), X, 0.1)
         v.hook(Vector((-2.95, s * 0.62, 0.72)), -X, 0.1)
-        # the track guards: a rounded flap ahead of each track, a short one behind
-        v.plate([(2.94, s * 0.95, 0.925), (2.94, s * 1.49, 0.925), (3.20, s * 1.49, 0.80), (3.20, s * 0.95, 0.80)][::int(s)], 0.007, "upper", 0.003)
-        v.plate([(3.20, s * 0.95, 0.80), (3.20, s * 1.49, 0.80), (3.27, s * 1.49, 0.68), (3.27, s * 0.95, 0.68)][::int(s)], 0.007, "upper", 0.003)
+        # the track guards: a mudguard curved down round the front of each track, a short flap behind
+        arc = [(2.70 + 0.388 * math.cos(math.radians(a)), 0.62 + 0.388 * math.sin(math.radians(a))) for a in (51.8, 40.0, 28.0, 16.0, 4.0)]
+        for (xa, za), (xb, zb) in zip(arc, arc[1:]):
+            v.plate([(xa, s * 0.95, za), (xa, s * 1.49, za), (xb, s * 1.49, zb), (xb, s * 0.95, zb)][::int(s)], 0.007, "upper", 0.002)
         v.plate([(-3.14, s * 0.95, 0.84), (-3.14, s * 1.49, 0.84), (-2.94, s * 1.49, 0.925), (-2.94, s * 0.95, 0.925)][::int(s)], 0.007, "upper", 0.003)
     if fine:
         v.spare_links(g_at(0.26, -0.344), g_at(0.26, 0.344), 4, 0.172, 0.5, gn, style={"kind": "plate", "grouser": 0.012, "cleats": True})
@@ -66,7 +67,7 @@ def t34_hull(v, fine):
         v.slab((-1.72, s * 0.40, zr), (-0.60, s * 0.91, zr + 0.055), "upper", 0.012)
         v.grille((-1.16, s * 0.655, zr + 0.055), (1.0, 0.40), Z, X, slats=8, deep=0.02)
     v.slab((-2.19, -0.86, zr), (-1.78, 0.86, zr + 0.045), "upper", 0.012)
-    v.grille((-1.985, 0.0, zr + 0.045), (0.34, 1.56), Z, Y, slats=6, deep=0.02, mesh=True)
+    v.grille((-1.985, 0.0, zr + 0.045), (1.56, 0.34), Z, Y, slats=6, deep=0.02, mesh=True)
     # the tail plate: the round gearbox door, an exhaust in its armoured cowl each side of it
     v.lathe(r_at(0.36, 0.0), rn, [(0.035, 0.0), (0.035, 0.26), (0.0, 0.30)], "upper", v.n(26, 8))
     if fine:
@@ -92,7 +93,7 @@ def t34_hull(v, fine):
 
     # ---- the running gear: five big wheels a side, no return rollers, the drive at the back ---------
     ty, r_w = 1.22, 0.415
-    v.running([-1.90, -0.93, 0.0, 0.93, 1.86], r_w, ty, (-2.66, 0.70, 0.31), (2.70, 0.72, 0.25), drive="rear", top_on_wheels=True,
+    v.running([-1.90, -0.93, 0.0, 0.93, 1.86], r_w, ty, (-2.66, 0.58, 0.31), (2.70, 0.62, 0.25), drive="rear", top_on_wheels=True,
               wheel=dict(w=0.15, tyre=0.045, gap=0.11, bolts=10, sides=36, hub=0.36, axle=0.26, holes=0),
               sprocket_kw=dict(teeth=12, wide=0.34, tooth=0.012, holes=0, bolts=8, sides=30, hub=0.5),
               idler_kw=dict(wide=0.34, kind="dish", spokes=0, tyre=0.0, hub=0.4),
@@ -100,8 +101,8 @@ def t34_hull(v, fine):
     v.use("hull")
     for s in (LEFT, RIGHT):
         # the final drive's housing at the back, the idler's crank at the front
-        v.lathe((-2.66, s * 0.86, 0.70), Y * s, [(0.16, 0.0), (0.16, 0.16), (0.08, 0.25), (0.0, 0.28), (0.0, 0.0)], "upper", v.n(22, 8))
-        v.lathe((2.70, s * 0.88, 0.72), Y * s, [(0.12, 0.0), (0.12, 0.09), (0.0, 0.13), (0.0, 0.0)], "upper", v.n(16, 8))
+        v.lathe((-2.66, s * 0.86, 0.58), Y * s, [(0.16, 0.0), (0.16, 0.16), (0.08, 0.25), (0.0, 0.28), (0.0, 0.0)], "upper", v.n(22, 8))
+        v.lathe((2.70, s * 0.88, 0.62), Y * s, [(0.12, 0.0), (0.12, 0.09), (0.0, 0.13), (0.0, 0.0)], "upper", v.n(16, 8))
     # sockets every T-34 has
     v.socket("engine", (-1.16, 0.0, zr + 0.06), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-1.16, 0.69, zr + 0.06), Z, part="hull")
