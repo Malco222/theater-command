@@ -11,11 +11,12 @@ import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierR
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
-import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { atWar, headline } from './game';
 import { majorsOf } from './diplomacy';
+import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
@@ -41,6 +42,8 @@ export const ARSENAL = data as unknown as {
   };
   yards: Record<string, number>;
   guns: { soften: number; softenMost: number; thicken: number; thickenMost: number };
+  /** The computer staffs' own orders (see the note in the data): 'programme' is their ships and aircraft (rulings 68(b) and 70(a)). */
+  ai?: { programme?: { fromStop: number; bled: number; share: number; each: Record<string, number>; rate?: { ship: number; air: number } } };
   /** Ruling 213(d) and the works rates of 218(d): a smaller power's aircraft works and the record's aircraft from abroad (see the note in the data). */
   smallAir: {
     perPoint: number;
@@ -791,6 +794,98 @@ function aiGuns(g: Game, nat: string): void {
   if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:aa', best.id);
 }
 
+/** The aircraft a nation has bought over its air force's own establishment, with the wings on order, and that establishment, by kind. */
+function airBought(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number> } {
+  const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 };
+  for (const f of airFleetsOf(g, nat)) {
+    if (f.ship !== undefined || f.ashore !== undefined) continue;
+    for (const w of ['ftr', 'bmr'] as Wing[]) { const x = f.extra?.[w] ?? 0; over[w] += x; base[w] += Math.max(0, f.est[w] - x); }
+  }
+  for (const b of g.nations[nat].queue) if (b.what === 'air' && (b.item === 'ftr' || b.item === 'bmr')) over[b.item] += b.count ?? ARSENAL.air[b.item].count;
+  return { over, base };
+}
+
+/**
+ * What a computer staff's programme would order next, by its character and its war (rulings 68(b) and 70(a)), as
+ * the arsenal's own keys in the order it wants them:
+ *  - destroyers when its own routes are bled: a convoy route that feeds it lost 'bled' of its cargo last month;
+ *  - fighters first while its factories are being bombed;
+ *  - submarines against an enemy who lives by sea: it is at war with a nation a convoy route feeds, and has a
+ *    fleet of submarines out raiding to send them to;
+ *  - a carrier for a carrier power: a navy that has carriers already;
+ *  - and wings of fighters and of bombers, the kind it has bought least of first, until what it has bought stands
+ *    at 'share' of its air force's own establishment (as a player's own building staff, depth.json 'machines').
+ * Never more than 'each' of a kind on order at a time. Whether the yards, the factories, the technology and the
+ * treasury allow it is the arsenal's to say, as for a player.
+ */
+export function programmeWants(g: Game, nat: string): string[] {
+  const P = ARSENAL.ai?.programme, n = g.nations[nat];
+  if (!P || !n?.alive || !n.atWar.length) return [];
+  const room = (what: 'ship' | 'air', item: string): boolean => n.queue.filter((b) => b.what === what && b.item === item).length < (P.each[item] ?? 0);
+  const out: string[] = [];
+  const fleets = fleetsOf(g, nat);
+  const bled = (id: string): number => { const m = g.convoys[id]; return m && m.turn >= g.turn - 1 ? m.loss ?? 0 : 0; };
+  if (room('ship', 'dd') && NAVY.convoys.some((c) => c.to === nat && bled(c.id) >= P.bled)) out.push('ship:dd');
+  const A = airBought(g, nat);
+  const can = (w: Wing): boolean => room('air', w) && A.over[w] + ARSENAL.air[w].count <= P.share * A.base[w];
+  const raid = g.raids[nat];
+  if (raid && g.turn - raid.turn <= 2 && can('ftr')) out.push('air:ftr');
+  if (room('ship', 'ss') && fleets.some((f) => f.duty === 'raid' && f.ships.ss > 0) && NAVY.convoys.some((c) => g.nations[c.to]?.alive && atWar(g, nat, c.to))) out.push('ship:ss');
+  if (room('ship', 'cv') && fleets.some((f) => f.ships.cv > 0)) out.push('ship:cv');
+  const fill = (w: Wing): number => A.over[w] / Math.max(1, A.base[w]);
+  for (const w of (fill('ftr') <= fill('bmr') ? ['ftr', 'bmr'] : ['bmr', 'ftr']) as Wing[]) if (can(w) && !out.includes(`air:${w}`)) out.push(`air:${w}`);
+  return out;
+}
+
+/**
+ * A computer staff's programme at sea and in the air (rulings 68(b) and 70(a)): the grand campaign, from the stop
+ * of the history dial the data names (arsenal.json ai.programme; below it history's schedules are the whole of
+ * its building, as the book). It orders ships and wings from the arsenal as a player does, at his prices and
+ * under his rules, and pays for them in two ways:
+ *  - its share. While there is something the arsenal would build for it, the staff sets aside 'rate' of the
+ *    month's income for its navy and as much for its air force, never taking the treasury below its reserve and
+ *    never holding more than the dearest thing it wants costs. What is set aside is spent on nothing else.
+ *  - idle money: what the treasury holds over the price of a corps of infantry and the reserve, or over the
+ *    reserve alone while it can raise no corps for want of men (money without men).
+ * It comes after the corps, the guns and the works; one order a month for the navy and one for the air force, the
+ * first of what it wants (programmeWants) that the arsenal allows and the treasury could keep.
+ */
+export function aiProgramme(g: Game, nat: string): void {
+  const P = ARSENAL.ai?.programme, n = g.nations[nat];
+  if (!P || !budgeted(g) || nat === g.human || !n?.alive || !n.atWar.length || stopOf(g) < P.fromStop) return;
+  const wants = programmeWants(g, nat);
+  if (!wants.length) return;
+  const men = menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1);
+  const keep = PRODUCTION.aiReserve + (men ? corpsCost(g, nat, 'inf') : 0);
+  const inc = income(g, nat);
+  let spare = inc - upkeepTotal(g, nat);
+  // What the arsenal would build for it: an order it could place, or one that waits only for the money.
+  const list = offers(g, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
+  for (const arm of ['ship', 'air'] as const) {
+    const mine = wants.filter((k) => k.startsWith(`${arm}:`)).map((k) => list.find((o) => o.key === k)).filter((o): o is Offer => !!o);
+    const key = purseKey(nat, arm);
+    let purse = g.flags[key] ?? 0;
+    if (mine.length) {
+      const put = Math.min(Math.max(...mine.map((o) => o.cost)) - purse, (P.rate?.[arm] ?? 0) * inc, n.pp - PRODUCTION.aiReserve);
+      if (put > 0) { n.pp -= put; purse += put; }
+    }
+    for (const o of mine) {
+      if (spare < o.upkeep * BUDGET.debt.aiMargin) continue;
+      const set = purse >= o.cost;
+      if (!set && n.pp < o.cost + keep) continue;
+      // (What was set aside comes back to the treasury to pay for the order it was kept for.)
+      if (set) n.pp += o.cost;
+      if (orderOffer(g, nat, o.key, o.at)) { if (set) purse -= o.cost; spare -= o.upkeep; break; }
+      if (set) n.pp -= o.cost;
+    }
+    if (purse > 0.005) g.flags[key] = Math.round(purse * 100) / 100; else delete g.flags[key];
+  }
+}
+
+const purseKey = (nat: string, arm: 'ship' | 'air'): string => `pg:${nat}:${arm}`;
+/** What a computer staff has set aside for its navy and for its air force and not yet spent (aiProgramme). */
+export const programmePurse = (g: Game, nat: string): { ship: number; air: number } => ({ ship: g.flags[purseKey(nat, 'ship')] ?? 0, air: g.flags[purseKey(nat, 'air')] ?? 0 });
+
 /** The coast watch's and the diggers' numbers (open.json, 'coast'): staff.ts keeps them, ai.ts hands them over. */
 export interface FortRules { works: number; dig?: { orders: number; top: number; capital: number; keep: number } }
 
@@ -805,6 +900,12 @@ export interface FortRules { works: number; dig?: { orders: number; top: number;
  * The player's own building staff does neither: his fortifications are his to order.
  */
 export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
+  fortify(g, nat, watch, C);
+  // Its ships and aircraft come last of all (rulings 68(b) and 70(a)): after the corps, the guns and the works.
+  aiProgramme(g, nat);
+}
+
+function fortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
   const n = g.nations[nat];
   if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
   const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
