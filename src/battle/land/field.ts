@@ -34,6 +34,12 @@ export interface LandPlace {
   fort: number;
   /** Minefields on the ground, 0 up. */
   mines: number;
+  /**
+   * Where the record has the attack over its river at more places than the road's own bridge by the town: each a
+   * share of the field's width, west to east, a bridge with its road down to either bank (b439). Where its bridges are
+   * down they are down here too.
+   */
+  crossings?: number[];
 }
 
 export interface LandField {
@@ -58,6 +64,14 @@ export interface LandField {
    * bunker's cover.
    */
   beneath?: Record<number, number>;
+  /**
+   * What each fieldworks cell was dug into, by cell index: works give exactly that ground's own cover, since the card
+   * prices the works in the defence's strength already (b418: what the card prices, the field draws but never prices
+   * again). Painting is unaffected.
+   */
+  dugInto?: Record<number, number>;
+  /** Where there is a river, the metres north of its middle line in each column: which bank a point is on. */
+  riverMid?: number[];
 }
 
 export const FIELD = { w: 3000, h: 2000, cell: 25 };
@@ -187,19 +201,40 @@ export function buildField(place: LandPlace, seed: number): LandField {
   road((t) => [t * w, ty + Math.sin(t * 4 + wob) * 70]);
 
   // The river: across the field between the two armies, with its bridges where the roads cross it.
+  let riverMid: number[] | undefined;
   if (place.river) {
     const base = h * (0.46 + 0.04 * rng.next()), amp = 60 + 50 * rng.next(), ph = rng.range(0, 6);
+    riverMid = [];
+    const over = new Set((place.crossings ?? []).map((x) => Math.min(cols - 1, Math.max(0, Math.floor((x * w) / cell)))));
     for (let c = 0; c < cols; c++) {
       const yc = base + Math.sin((c / cols) * 7 + ph) * amp + Math.sin((c / cols) * 17 + ph * 2) * amp * 0.3;
+      riverMid.push(yc);
       const half = 28 + 10 * Math.sin(c * 0.3 + ph);
       for (let r = 0; r < rows; r++) {
         const y = r * cell + cell / 2;
         if (Math.abs(y - yc) <= half) {
           const i = at(c, r);
-          ground[i] = ground[i] === G.road ? (place.bridgeDown ? G.blown : G.bridge) : G.water;
+          ground[i] = ground[i] === G.road || over.has(c) ? (place.bridgeDown ? G.blown : G.bridge) : G.water;
           height[i] = Math.min(height[i], 0) - 2;
-        } else if (Math.abs(y - yc) <= half + 40 && ground[at(c, r)] === G.open && place.terrain !== 'desert') ground[at(c, r)] = G.field;
+        } else if (over.has(c) && Math.abs(y - yc) <= half + 200) ground[at(c, r)] = G.road;
+        else if (Math.abs(y - yc) <= half + 40 && ground[at(c, r)] === G.open && place.terrain !== 'desert') ground[at(c, r)] = G.field;
       }
+    }
+  }
+  // A road on the slant steps from cell to cell corner to corner, and where both cells beside such a step are rock, marsh
+  // or water a lorry cannot take it: the road takes one of them, over water the bridge does (b418: tanks and lorries
+  // stood for good where their road crossed a river or a ridge on the slant).
+  const span = place.bridgeDown ? G.blown : G.bridge;
+  const deck = (k: number): boolean => k === G.road || k === G.bridge || k === G.blown;
+  const hard = (k: number): boolean => k === G.rock || k === G.marsh || k === G.water || k === G.bunker;
+  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols; c++) {
+    if (!deck(ground[at(c, r)])) continue;
+    for (const dc of [-1, 1]) {
+      if (c + dc < 0 || c + dc >= cols || !deck(ground[at(c + dc, r + 1)])) continue;
+      const p = at(c + dc, r), q = at(c, r + 1);
+      if (!hard(ground[p]) || !hard(ground[q])) continue;
+      const k = ground[p] === G.water && ground[q] !== G.water ? q : p;
+      ground[k] = ground[k] === G.water ? span : G.road;
     }
   }
 
@@ -219,7 +254,7 @@ export function buildField(place: LandPlace, seed: number): LandField {
   }
 
   return {
-    w, h, cell, cols, rows, ground, height, beneath,
+    w, h, cell, cols, rows, ground, height, beneath, riverMid,
     zones: { att: [w * 0.12, 120, w * 0.88, 480], def: [w * 0.12, h * 0.62, w * 0.88, h * 0.9] },
     town,
   };
@@ -231,8 +266,18 @@ export function digWorks(f: LandField, x: number, y: number, w: number, d: numbe
     const c = Math.floor(xx / f.cell), r = Math.floor(yy / f.cell);
     if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
     const i = r * f.cols + c, k = GROUNDS[f.ground[i]];
-    if (k !== 'water' && k !== 'bridge' && k !== 'blown' && k !== 'buildings' && k !== 'bunker') f.ground[i] = G.works;
+    if (k !== 'water' && k !== 'bridge' && k !== 'blown' && k !== 'buildings' && k !== 'bunker' && k !== 'works') {
+      (f.dugInto ??= {})[i] = f.ground[i];
+      f.ground[i] = G.works;
+    }
   }
+}
+
+/** The ground a blow lands on for its cover: fieldworks count as what they were dug into. */
+export function coverAt(f: LandField, x: number, y: number): Ground {
+  const c = Math.min(f.cols - 1, Math.max(0, Math.floor(x / f.cell))), r = Math.min(f.rows - 1, Math.max(0, Math.floor(y / f.cell)));
+  const i = r * f.cols + c, k = f.ground[i];
+  return GROUNDS[k === G.works && f.dugInto?.[i] !== undefined ? f.dugInto[i] : k];
 }
 
 /** The ground and height under a point. */

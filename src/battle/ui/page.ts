@@ -3,8 +3,8 @@
 // browser page of its own, with no press on the campaign screen until the play version ships.
 //
 // Mouse: left picks up (drag for a box, Shift adds), right orders (on the ground to march, on an enemy to attack, drag
-// to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R fall back (the divisions in hand; WITHDRAW is the whole
-// army), Tab next, Esc puts down. A plain left click never gives an order, and Enter does nothing. The clock stops
+// to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R fall back off the field (the divisions in hand; WITHDRAW
+// is the whole army), Tab next, Esc puts down. A plain left click never gives an order, and Enter does nothing. The clock stops
 // while a question stands on the field (the design director, b358).
 
 import type { Game } from '../../campaign/types';
@@ -14,7 +14,7 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceTicket, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
@@ -32,11 +32,6 @@ const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
 const practiceName = (p: PracticeGround): string => (p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
 /** The field's title on a practice ground: "Practice: Marsh" (b408). The after card, already headed "Practice result", gives the ground alone. */
 const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p)}`;
-/**
- * How worn a practice defence stands, against the attack's 90 in 100 (b408): the card says so, so the enemy's lower
- * strength on the field is no surprise. Nothing where it stands as the attack does.
- */
-const wornWords = (s: number): string => (s >= 0.95 ? 'the defence at full strength' : s >= 0.85 ? '' : s >= 0.75 ? 'the defence worn to four fifths strength' : s >= 0.6 ? 'the defence worn to two thirds strength' : 'the defence worn to half strength');
 /** What the staff makes of a card's chance, as the offer and practice cards say it. */
 const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
@@ -242,7 +237,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = document.getElementById('field') as HTMLCanvasElement;
@@ -294,14 +289,14 @@ function card(u: LandUnit, color: string): string {
     <span class="ustate tc-data"></span></button>`;
 }
 
-const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Routing', gone: 'Fled', withdrawn: 'Withdrawn' };
+const STATE_WORD: Record<string, string> = { steady: 'Steady', wavering: 'Wavering', routing: 'Routing', gone: 'Fled', withdrawn: 'Off the field' };
 
 /** The card says the order, not the walk, the moment it is given, paused or not (the UI director's words for ruling 226(8)). */
 function doingWord(u: LandUnit): string {
   if (u.state === 'routing') return '';
   const o = u.order;
   if (o?.kind === 'attack') return 'attacking';
-  if (o?.kind === 'withdraw') return 'falling back';
+  if (o?.kind === 'withdraw') return 'falling back off the field';
   if (o?.kind === 'move') return u.act === 'run' ? 'at the double' : 'marching';
   if (S.holding.has(u.id)) return 'holding';
   return u.act === 'fight' || u.engaged !== undefined ? 'in action' : 'standing';

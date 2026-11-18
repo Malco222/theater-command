@@ -2,9 +2,9 @@
 //
 // One block is one division, named as the campaign's army tray names it (Brian's division cards, Version 46). A side
 // with fewer than six has some divisions split into their three regiments so there is something to handle (ruling
-// 217(c)), each drawn a third of a division's frontage; no division is ever folded into another (ruling 226(10)).
-// Each side's blocks share out exactly the power the
-// attack card counted (A and D), so the card's odds are the field's.
+// 217(c)), each holding its division's frontage with a third of its models (b418); no division is ever folded into
+// another (ruling 226(10)). Each side's blocks share out exactly the power the attack card counted (A and D), so the
+// card's odds are the field's.
 
 import type { ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { digWorks, type LandField } from './field';
@@ -65,6 +65,10 @@ export interface LandUnit extends UnitBase {
    * A block that is sent no longer goes back to the ground it was drawn up on.
    */
   reserve?: 'held' | 'sent';
+  /** Models on its tray at full strength: a division's, or a third of them for a regiment. */
+  tray: number;
+  /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
+  pressing?: number;
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -122,10 +126,11 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         : ds.length === 1 ? ds[0].name : ds.map((d) => d.short).join(' and ');
       const short = p.regiment !== undefined ? `${ORD(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
       const parent = p.regiment !== undefined ? ds[0].short : f.name;
-      // Drawn to its weight: a regiment's frontage a third of its division's, so three read as one division cut in three.
-      const [w0, d] = LAND.size[k];
-      const w = p.regiment !== undefined ? Math.round(w0 / LAND.blocks.regiments) : w0;
-      const full = LAND.figures[k];
+      // A regiment holds its division's frontage, thinner: a third of the models on the same tray. Cut to a third of the
+      // frontage, three regiments of a small attack crowded onto one enemy block, power packed three times as thick as the
+      // card counts it, and the desert's coast villages ran 18 points over their card (b418, b420).
+      const [w, d] = LAND.size[k];
+      const full = p.regiment !== undefined ? Math.max(1, Math.round(LAND.figures[k] / LAND.blocks.regiments)) : LAND.figures[k];
       const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
       const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
       const share = weightOf(p) / all;
@@ -134,7 +139,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         x: 0, y: 0, face: side === 'att' ? 0 : Math.PI,
         str: str0, str0, mor: mor0, mor0, xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
         state: 'steady', men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== undefined ? LAND.blocks.regiments : 1)),
-        figures0: Math.max(1, Math.ceil(full * str0)), figures: Math.max(1, Math.ceil(full * str0)),
+        figures0: Math.max(1, Math.ceil(full * str0)), figures: Math.max(1, Math.ceil(full * str0)), tray: full,
         w, d, act: 'idle', speed: 0,
         power0: power * f.share * share,
         order: null, path: [], dug: !!f.dug, home: [0, 0], still: 99, clear: 99, pinned: false, flankedAt: -99, keepFace: null, met: false,
