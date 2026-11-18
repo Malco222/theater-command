@@ -311,17 +311,55 @@ export function moreRivers({ map, all, at, byName, nb, handed, found, struck, ke
     if (dropped) knots.push({ name: r.name, by: dropped });
   }
   // A crossing stands on its river as drawn. Where the course was cut back from under it: a crossing left out on
-  // open water goes to the river's mouth; one in a narrow arm of the sea or a lake between its two provinces (the
-  // St Lawrence below Montreal) stays where the road meets the water.
-  const adrift = [], toMouth = [];
+  // open water goes to the river's mouth. One by the land, past the foot of a river that runs into the sea, has the
+  // river run on through it, nearest the foot first: the bridge stands on its river (the St Lawrence below Quebec,
+  // whose estuary the chart's coast takes from 33 units above its last crossing; the 3D game, 18 November 2026). One
+  // by a river that ends on another (the Middle Volga at the edge of the map of Europe) goes to where the road
+  // between its two chief places meets the river, or to the nearest point of it. One nearer the river's head than
+  // its foot, or more than 40 units from either, is left where it is and reported.
+  const adrift = [], toMouth = [], ranOn = [], toRoad = [];
   const byLand = ([x, y], r) => dry([x, y]) || [0, 1, 2, 3, 4, 5, 6, 7].some((n) => dry([x + r * Math.cos((n * Math.PI) / 4), y + r * Math.sin((n * Math.PI) / 4)]));
-  for (const [k, c] of found) {
+  const offOf = (pts, x, y) => {
     let best = { d: Infinity };
-    for (const w of [0, ROUND, -ROUND]) { const n = nearestOn(rivers[c[2]].pts, c[3] - w, c[4]); if (n.d < best.d) best = { d: n.d, p: [n.p[0] + w, n.p[1]] }; }
+    for (const w of [0, ROUND, -ROUND]) { const n = nearestOn(pts, x - w, y); if (n.d < best.d) best = { d: n.d, p: [n.p[0] + w, n.p[1]] }; }
+    return best;
+  };
+  const late = new Map();
+  for (const [k, c] of found) {
+    const best = offOf(rivers[c[2]].pts, c[3], c[4]);
     if (best.d <= 3) continue;
     const row = { a: at.get(c[0]).name, b: at.get(c[1]).name, river: rivers[c[2]].name, far: Math.round(best.d) };
-    if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); } else adrift.push(row);
+    if (best.d <= 40 && !byLand([c[3], c[4]], 3)) { found.set(k, [c[0], c[1], c[2], r1(best.p[0]), r1(best.p[1])]); toMouth.push(row); }
+    else (late.get(c[2]) ?? late.set(c[2], []).get(c[2])).push([k, c, row]);
+  }
+  const gap = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  for (const [i, list] of [...late].sort((p, q) => p[0] - q[0])) {
+    const r = rivers[i];
+    const toSea = !RIVER_MEET[r.name] && !rivers.some((v) => v.name === r.into) && !lakes.some((l) => l.name === r.into);
+    if (toSea) {
+      const rest = [...list];
+      while (rest.length) {
+        const foot = r.pts[r.pts.length - 1];
+        let n = 0;
+        rest.forEach(([, c], j) => { if (gap([c[3], c[4]], foot) < gap([rest[n][1][3], rest[n][1][4]], foot)) n = j; });
+        const [, c, row] = rest.splice(n, 1)[0], p = [c[3], c[4]];
+        if (offOf(r.pts, p[0], p[1]).d <= 3) continue;
+        if (gap(p, r.pts[0]) < gap(p, foot) || gap(p, foot) > 40) { adrift.push(row); continue; }
+        r.pts.push(p); r.ll.push(llOf(p));
+        ranOn.push(row);
+      }
+      continue;
+    }
+    for (const [k, c, row] of list) {
+      const A = at.get(c[0]), B = at.get(c[1]);
+      let p = null;
+      for (let j = 0; j + 1 < r.pts.length; j++) { const m = meet([A.x, A.y], [B.x, B.y], r.pts[j], r.pts[j + 1]); if (m && (!p || Math.abs(m[2] - 0.5) < Math.abs(p[2] - 0.5))) p = m; }
+      const to = p ? [p[0], p[1]] : offOf(r.pts, c[3], c[4]).p;
+      if (gap(to, [c[3], c[4]]) > 40) { adrift.push(row); continue; }
+      found.set(k, [c[0], c[1], c[2], r1(to[0]), r1(to[1])]);
+      toRoad.push(row);
+    }
   }
   for (const r of rivers) { delete r.box; delete r.real; }
-  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, met, taken, adrift, toMouth };
+  return { rivers, fresh, moved, off, gone, cutBack, runOn, fromLake, toLake, knots, met, taken, adrift, toMouth, ranOn, toRoad };
 }
