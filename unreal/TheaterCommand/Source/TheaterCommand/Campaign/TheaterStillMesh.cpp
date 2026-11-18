@@ -195,6 +195,24 @@ FPrimitiveSceneProxy* UTheaterStillMesh::CreateSceneProxy()
 	{
 		return Super::CreateSceneProxy();
 	}
+	// (Speed log: how many still models are handed to the draw thread in a frame, and their points. This is done at the
+	// frame's end, outside every timed job; where it is done on the game thread, it is timed here as one.)
+	if (TheaterSpeed::IsLogging())
+	{
+		int32 Points = 0;
+		for (int32 Index = 0; Index < GetNumSections(); ++Index)
+		{
+			const FProcMeshSection* Section = GetProcMeshSection(Index);
+			Points += Section ? Section->ProcVertexBuffer.Num() : 0;
+		}
+		TheaterSpeed::NoteMade(TheaterSpeed::EMade::StillModels);
+		TheaterSpeed::NoteMade(TheaterSpeed::EMade::StillPoints, Points);
+		if (IsInGameThread())
+		{
+			THEATER_SPEED_SCOPE(StillModelHandOver);
+			return new FTheaterStillProxy(this);
+		}
+	}
 	return new FTheaterStillProxy(this);
 }
 

@@ -331,7 +331,7 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 					Row[X] = UnclaimedLand;
 				}
 			}
-		});
+		}, TheaterSpeed::ModelLoop());
 	}
 	// (On the whole-world map a sheet is kept anywhere round the world, and a land or a province of the wider chart
 	// keeps the map's own coordinates, with North America at x below nought: each is filled where it falls on this

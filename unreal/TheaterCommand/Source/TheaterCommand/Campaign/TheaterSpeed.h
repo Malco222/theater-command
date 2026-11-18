@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/ParallelFor.h" // (EParallelForFlags)
 #include "HAL/PlatformTime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 
@@ -16,11 +17,20 @@ class APlayerController;
  * chip times, how long each of the map's jobs took a frame, and every call into the rules with what it cost. Every
  * thirty seconds it adds a count of what is drawn: how many parts, how many throw shadows, and the largest meshes;
  * and of what was on screen in that moment, kind by kind (land tiles, town squares, the pieces' parts and so on).
+ * (18 November 2026.) A long frame is followed by "made in that frame": the tiles of ground stood up, the still models
+ * handed to the draw thread and their points, the pieces whose shadow was switched, and how many fine sheets were being
+ * modelled on other threads just then. Every five seconds "made:" has their sum, how the fine sheets stand (standing,
+ * on the shelf, being modelled), how many of the long frames fell while new ground was being modelled, and how much
+ * memory the game holds. Each fine
+ * sheet says how long its modelling took. Two more jobs are timed: EngineClearOut (the engine's own clearing out of
+ * what is no longer used, about once a minute) and StillModelHandOver (the still models made ready for the draw thread
+ * at the frame's end).
  *
  * The same jobs are also timed for Unreal's own frame recorder ("-csvCaptureFrames=600", or "csvprofile start" and
  * "csvprofile stop" at the console), in its "Theater" columns, beside the engine's own game, draw and chip times.
  *
- * The switches, each a console variable so that "-TheaterTime=" can try them against each other in one run:
+ * The switches, each a console variable so that "-TheaterTime=" can try them against each other in one run, and
+ * "-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1" can set any of them for a whole run of the step player:
  *   tc.Speed.TownSquares  1 (default): the towns are cut into squares of country, so that only those in view are
  *                         drawn and only those near a change are drawn again into the shadows. 0: one piece, as before.
  *   tc.Speed.SmokeTrim    1 (default): only as much of the smoke's mesh as is in use is sent to the graphics chip
@@ -66,6 +76,28 @@ class APlayerController;
  *                         before, and the second making waits for the drawing thread to catch up with the frames it
  *                         has in hand (DressPaint, about 32 ms of every fine sheet in the builder's logs). The same
  *                         picture either way.
+ * (The second speed detective's, 18 November 2026: the whole world smooth.)
+ *   tc.Speed.SheetShelf   6 (default): a fine sheet of the world the eye has left is stood down as before (after twenty
+ *                         seconds, or one once the eye is above the height the sheets are for), but what was modelled
+ *                         for it (its heights, paint, pictures) is kept on a shelf, up to this many sheets, the longest
+ *                         unwanted dropped first. Wanted again, its tiles are stood up from the shelf in a few frames:
+ *                         it is not modelled again (some seconds on every spare core, in the builder's logs of build
+ *                         1634). The same picture either way. 0: dropped whole and modelled again, as before.
+ *                         (A sheet kept is 60 to 80 MB by the pre-checker's count of its arrays: about half a GB
+ *                         for a full shelf, which used to be given back. The log's "made:" line says what the game
+ *                         holds.)
+ *   tc.Speed.TileTime     4 (default): the tiles of ground stood up in one frame, over every sheet together, are stopped
+ *                         for that frame once they have taken this many ms (one is always stood up; never more than
+ *                         five a sheet, as before). The rest come the next frame; the tiles they replace stay until
+ *                         then, as they always have. 0: five a sheet whatever they take, as before (30 ms in one frame
+ *                         of the builder's sweep of build 1634).
+ *   tc.Speed.QuietModel   0 (default, as before): a fine sheet's modelling spreads its loops over every spare core.
+ *                         1: each sheet is modelled on its one thread, two sheets on two, and the other cores are left
+ *                         to the frame; the fine ground comes later. 2: its loops are spread as before, but at the
+ *                         background's priority. FOR MEASURING FIRST: whether the modelling is what makes the draw
+ *                         thread's long frames while new ground comes up, and which of the two cures it at the least
+ *                         wait for the ground ("Speed: fine sheet ... was modelled in ... s" says the wait). The same
+ *                         ground whichever.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -76,6 +108,9 @@ namespace TheaterSpeed
 {
 	/** True while the speed log is being written (read once a frame, on the game thread). */
 	bool IsLogging();
+
+	/** ("-TheaterSet=name=value,...") Sets the console variables the command line names, once: as the table begins to be laid. */
+	void ApplyCommandLineSets();
 
 	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
 	void NoteFrame(float DeltaSeconds, UWorld* World);
@@ -101,6 +136,47 @@ namespace TheaterSpeed
 	bool FrontWeights();
 	bool PictureOnce();
 	bool BordersKept();
+	int32 SheetShelf(); // how many fine sheets are kept on the shelf: 0 for none, as before
+	double TileTime(); // the ms of tiles stood up in a frame: 0 for no limit, as before
+	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority
+
+	/**
+	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would
+	 * spread over the cores (ModelLoop) run on that thread alone (1), or spread at the background's priority (2).
+	 * Elsewhere, and with the switch off, they spread as they always have.
+	 */
+	struct FQuietModelling
+	{
+		explicit FQuietModelling(int32 How); // (QuietModel's number, read on the game thread and brought here)
+		~FQuietModelling();
+		FQuietModelling(const FQuietModelling&) = delete;
+		FQuietModelling& operator=(const FQuietModelling&) = delete;
+
+	private:
+		int32 Was = 0;
+	};
+	/** How a loop of a sheet's modelling is to run on this thread: spread over the cores as ever, or (under an FQuietModelling) as that asks. */
+	EParallelForFlags ModelLoop();
+
+	/**
+	 * What was made in a frame, for the speed log (on any thread): a long frame is followed by a line of these, and
+	 * every five seconds has their sum. Counted only while the log is written.
+	 */
+	enum class EMade : uint8
+	{
+		Tiles, // tiles of ground stood up (BuildLandTile)
+		StillModels, // still models handed to the draw thread (a UTheaterStillMesh's proxy made)
+		StillPoints, // ...and their points
+		ShadowFlips, // pieces whose body began or stopped throwing a shadow (its model is handed over again)
+		SheetsModelled, // fine sheets whose modelling ended
+		SheetsShelved, // fine sheets stood down onto the shelf
+		SheetsFromShelf, // ...and taken off it again
+		SheetsDropped, // fine sheets dropped whole
+		Count
+	};
+	void NoteMade(EMade What, int32 HowMany = 1);
+	/** Once a frame, from the map: how many fine sheets are being modelled, stand, and lie on the shelf. */
+	void NoteSheets(int32 Modelling, int32 Standing, int32 Shelved);
 
 	/**
 	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed

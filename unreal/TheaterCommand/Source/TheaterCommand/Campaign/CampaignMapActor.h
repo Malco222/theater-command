@@ -111,7 +111,7 @@ public:
 	 * clearing on it. (A picture of the world waits for it, and for the haze beyond the map while it is being laid
 	 * on another thread, tc.Speed.FogAside.)
 	 */
-	bool AreFineSheetsComing() const { return bFineSheetsComing || FogAsideBuilding.IsValid(); }
+	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
@@ -524,6 +524,13 @@ private:
 		TSet<int32> FogFor; // (speed) the haze its fog picture among them was made for
 		int32 DressStage = 0; // (speed: tc.Speed.DressSteps) how far DressFineSheet has gone with it
 		FBox2D HoldersChanged = FBox2D(ForceInit); // (speed: tc.Speed.HoldersLock) ground that changed hands while it was being modelled, painted again before it is dressed
+		// (Speed: tc.Speed.SheetShelf.) Stood down, and kept: its tiles and its water are taken off the table and the
+		// coarse sheet lies there again, as when a sheet is dropped, but its heights, its paint, its pictures and its
+		// place among the sheets are kept (so the haze, the seasons and ground changing hands still reach it), and it
+		// is stood up from them when the eye wants it again. Always dressed, never standing.
+		bool bShelved = false;
+		double ModelSeconds = 0.0; // (speed log) how long its modelling took, written by the thread that did it before bBuilt
+		bool bModelNoted = false; // (speed log) ...and that this has been said
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
 	/**
@@ -554,6 +561,7 @@ private:
 	TArray<TObjectPtr<UObject>> FineKeep;
 	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
 	bool bFineSheetsComing = false; // the view wants fine ground that does not stand yet
+	bool bLandTilesComing = false; // (speed: tc.Speed.TileTime) ...or tiles of the map's own ground or the world's coarse sheet that are not stood up yet
 	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
@@ -561,6 +569,12 @@ private:
 	static void PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& Haze);
 	void StandFineSheet(FFineSheet& Sheet);
 	void DropFineSheet(FFineSheet& Sheet);
+	/** (Speed: tc.Speed.SheetShelf.) Stands a sheet down onto the shelf: off the table as DropFineSheet takes it, with what was modelled for it kept. */
+	void ShelveFineSheet(FFineSheet& Sheet);
+	/** (Speed: tc.Speed.SheetShelf.) Drops the sheets on the shelf that are over its number, the longest unwanted first; all of them with KeepAtMost 0. */
+	void TrimSheetShelf(int32 KeepAtMost);
+	/** Takes a sheet's tiles and its water off the table, and gives the ground back to the coarse sheet if it stood. */
+	void TakeSheetOffTable(FFineSheet& Sheet);
 	/** Stands the coarse world sheet's tiles over a box up afresh, after a hole in it has been made or closed. */
 	void RetileWorld(const FBox2D& Changed);
 	const FFineSheet* FineSheetAt(double X, double Y) const;
@@ -575,6 +589,9 @@ private:
 	void LevelLand(FLandSheet& Sheet);
 	/** Returns true while tiles the view wants are still to be stood up. */
 	bool UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
+	// (Speed: tc.Speed.TileTime.) The tiles stood up this frame over every sheet together, and what they have taken.
+	uint64 TileTimeFrame = 0;
+	double TileTimeSpent = 0.0; // (seconds)
 	UProceduralMeshComponent* BuildLandTile(FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY);
 	bool LandTileHasLand(const FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY) const;
 	/** The whole-world map, step one: the land and sea beyond today's map, on one coarse sheet (only with -TheaterWorld). */

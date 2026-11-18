@@ -12,13 +12,16 @@
 #include "SceneView.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformMemory.h"
 #include "Misc/ScopeRWLock.h" // (FRWLock)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ProceduralMeshComponent.h"
 #include "RenderTimer.h"
 #include "RHI.h"
+#include "UObject/UObjectGlobals.h" // (FCoreUObjectDelegates: the engine's clearing out of what is no longer used)
 #include "UObject/UObjectIterator.h"
+#include <atomic>
 
 CSV_DEFINE_CATEGORY(Theater, true);
 
@@ -79,7 +82,54 @@ namespace
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
 
+	TAutoConsoleVariable<int32> CVarSheetShelf(
+		TEXT("tc.Speed.SheetShelf"), 6,
+		TEXT("How many fine sheets of the world the eye has left are kept on a shelf (their modelling kept, their tiles taken down), to be stood up again without being modelled again; 0 drops them whole, as before. The same picture either way."));
+	TAutoConsoleVariable<int32> CVarTileTime(
+		TEXT("tc.Speed.TileTime"), 4,
+		TEXT("The ms of tiles of ground stood up in one frame, over every sheet together, after which the rest wait for the next frame (one is always stood up); 0 stands up five a sheet whatever they take, as before."));
+	TAutoConsoleVariable<int32> CVarQuietModel(
+		TEXT("tc.Speed.QuietModel"), 0,
+		TEXT("(for measuring first) 1 models each fine sheet on its one thread and leaves the other cores to the frame: the fine ground comes later; 2 spreads its loops as before but at the background's priority; 0 spreads them over every spare core, as before. The same ground whichever."));
+
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
+
+	thread_local int32 QuietHere = 0; // (tc.Speed.QuietModel: this thread is modelling a fine sheet quietly, and how)
+
+	// (What was made, counted on whichever thread made it; read and cleared on the game thread.)
+	std::atomic<int32> MadeNow[static_cast<int32>(TheaterSpeed::EMade::Count)];
+	int32 MadeFrame[static_cast<int32>(TheaterSpeed::EMade::Count)] = {}; // (the frame just ended)
+	int64 MadeWindow[static_cast<int32>(TheaterSpeed::EMade::Count)] = {}; // (the summary's five seconds)
+	int32 SheetsModelling = 0, SheetsStanding = 0, SheetsShelved = 0; // (as the map last said)
+	int32 WindowModelling = 0; // (frames of the five seconds in which a sheet was being modelled)
+	int32 WindowSlowModelling = 0; // (...and how many of the frames over 33 ms those were, not beside the step player's look)
+	uint64 GarbageBegan = 0; // (when the engine began clearing out what is no longer used, while logging)
+
+	/** The line of what was made: "5 tiles of ground stood up, 7 still models handed over (29575 points), ...". */
+	template <typename TCount>
+	FString MadeLine(const TCount* Made)
+	{
+		static const TCHAR* const One[] = {
+			TEXT("tile of ground stood up"), TEXT("still model handed to the draw thread"), TEXT(""), TEXT("piece's shadow switched"),
+			TEXT("fine sheet's modelling ended"), TEXT("fine sheet stood down to the shelf"), TEXT("fine sheet stood up from the shelf"), TEXT("fine sheet dropped whole") };
+		static const TCHAR* const Many[] = {
+			TEXT("tiles of ground stood up"), TEXT("still models handed to the draw thread"), TEXT(""), TEXT("pieces' shadows switched"),
+			TEXT("fine sheets' modelling ended"), TEXT("fine sheets stood down to the shelf"), TEXT("fine sheets stood up from the shelf"), TEXT("fine sheets dropped whole") };
+		FString Line;
+		for (int32 Index = 0; Index < static_cast<int32>(TheaterSpeed::EMade::Count); ++Index)
+		{
+			if (Index == static_cast<int32>(TheaterSpeed::EMade::StillPoints) || Made[Index] <= 0)
+			{
+				continue;
+			}
+			Line += FString::Printf(TEXT("%s%lld %s"), Line.IsEmpty() ? TEXT("") : TEXT(", "), static_cast<long long>(Made[Index]), Made[Index] == 1 ? One[Index] : Many[Index]);
+			if (Index == static_cast<int32>(TheaterSpeed::EMade::StillModels))
+			{
+				Line += FString::Printf(TEXT(" (%lld points)"), static_cast<long long>(Made[static_cast<int32>(TheaterSpeed::EMade::StillPoints)]));
+			}
+		}
+		return Line;
+	}
 
 	bool bLogging = false;
 	uint64 SlateBegan = 0; // (when Slate's tick began this frame, while logging)
@@ -355,6 +405,52 @@ namespace TheaterSpeed
 		return CVarBordersKept.GetValueOnGameThread() != 0;
 	}
 
+	int32 SheetShelf()
+	{
+		return FMath::Clamp(CVarSheetShelf.GetValueOnGameThread(), 0, 24);
+	}
+
+	double TileTime()
+	{
+		return FMath::Clamp(CVarTileTime.GetValueOnGameThread(), 0, 1000);
+	}
+
+	int32 QuietModel()
+	{
+		return FMath::Clamp(CVarQuietModel.GetValueOnGameThread(), 0, 2);
+	}
+
+	FQuietModelling::FQuietModelling(int32 How)
+		: Was(QuietHere)
+	{
+		QuietHere = How;
+	}
+
+	FQuietModelling::~FQuietModelling()
+	{
+		QuietHere = Was;
+	}
+
+	EParallelForFlags ModelLoop()
+	{
+		return QuietHere == 1 ? EParallelForFlags::ForceSingleThread : QuietHere == 2 ? EParallelForFlags::BackgroundPriority : EParallelForFlags::None;
+	}
+
+	void NoteMade(EMade What, int32 HowMany)
+	{
+		if (bLogging && What < EMade::Count)
+		{
+			MadeNow[static_cast<int32>(What)].fetch_add(HowMany, std::memory_order_relaxed);
+		}
+	}
+
+	void NoteSheets(int32 Modelling, int32 Standing, int32 Shelved)
+	{
+		SheetsModelling = Modelling;
+		SheetsStanding = Standing;
+		SheetsShelved = Shelved;
+	}
+
 	FHoldersRead::FHoldersRead()
 		: bHeld(!IsInGameThread())
 	{
@@ -464,8 +560,48 @@ namespace TheaterSpeed
 		}
 	}
 
+	void ApplyCommandLineSets()
+	{
+		// ("-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1": console variables set from the command line, once,
+		// for a run of the step player with one of the switches the other way. -TheaterTime tries settings against
+		// each other with the eye held in one place, which never takes a fine sheet down or brings new ground up.
+		// Done as the table begins to be laid (ACampaignMapActor::BuildMap), so that a switch read only in the laying
+		// is set in time: the pre-checker's note on 0108ac6, where it was done at the first frame, after the laying.)
+		static bool bSetAsked = false;
+		if (!bSetAsked)
+		{
+			bSetAsked = true;
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSet="), Asked, false))
+			{
+				TArray<FString> Each;
+				Asked.ParseIntoArray(Each, TEXT(","), true);
+				for (const FString& One : Each)
+				{
+					FString Name, Value;
+					if (!One.Split(TEXT("="), &Name, &Value))
+					{
+						continue;
+					}
+					Name.TrimStartAndEndInline();
+					Value.TrimStartAndEndInline();
+					if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name))
+					{
+						Variable->Set(*Value, ECVF_SetByConsole);
+						UE_LOG(LogTheater, Display, TEXT("Speed: %s set to %s (-TheaterSet)"), *Name, *Value);
+					}
+					else
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Speed: -TheaterSet names no console variable called %s"), *Name);
+					}
+				}
+			}
+		}
+	}
+
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
+		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
 		// (a change of tc.Speed.StillMeshes is seen at once: every still mesh's proxy is made again, of the kind now asked for)
 		{
 			static int32 StillWas = -1;
@@ -490,7 +626,43 @@ namespace TheaterSpeed
 			RulesTallies().Reset();
 			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 			WindowFrames = WindowSlow = WindowSlowBeside = 0;
+			for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
+			{
+				MadeNow[Index].store(0, std::memory_order_relaxed);
+				MadeFrame[Index] = 0;
+				MadeWindow[Index] = 0;
+			}
+			WindowModelling = WindowSlowModelling = 0;
 			return;
+		}
+		// (The second speed detective's, 18 November 2026. The engine clears out what is no longer used about once a
+		// minute, in one go, and with the editor's program under the game that is every object the editor has: a frame
+		// of 45 ms with no job of ours in it, twice in the builder's sweep of build 1634, 61 s apart. Timed as a job.)
+		static bool bGarbageHooked = false;
+		if (!bGarbageHooked)
+		{
+			bGarbageHooked = true;
+			const int32 GarbageSlot = SlotFor(TEXT("EngineClearOut"));
+			FCoreUObjectDelegates::GetPreGarbageCollectDelegate().AddLambda([]()
+			{
+				GarbageBegan = bLogging && IsInGameThread() ? FPlatformTime::Cycles64() : 0;
+			});
+			FCoreUObjectDelegates::GetPostGarbageCollect().AddLambda([GarbageSlot]()
+			{
+				if (GarbageBegan != 0 && IsInGameThread())
+				{
+					AddTime(GarbageSlot, FPlatformTime::Cycles64() - GarbageBegan);
+				}
+				GarbageBegan = 0;
+			});
+		}
+		// What was made in the frame just ended.
+		bool bAnyMade = false;
+		for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
+		{
+			MadeFrame[Index] = MadeNow[Index].exchange(0, std::memory_order_relaxed);
+			MadeWindow[Index] += MadeFrame[Index];
+			bAnyMade |= MadeFrame[Index] > 0;
 		}
 		// (Slate's tick, its laying out and painting of every panel, is timed from its own start and end.)
 		static bool bSlateHooked = false;
@@ -546,8 +718,18 @@ namespace TheaterSpeed
 				UE_LOG(LogTheater, Display, TEXT("Speed: a long frame, %.0f ms (game %.1f, draw %.1f, graphics chip %.1f ms)%s; its jobs in ms (inner jobs counted in their outer ones too): %s"),
 					DeltaSeconds * 1000.0, FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
 					bBeside ? TEXT(" [beside the step player's look]") : TEXT(""), Jobs.IsEmpty() ? TEXT("none of the timed jobs") : *Jobs);
+				// (A line of its own, so that the line above reads as it did: what was made in that frame, which the
+				// draw thread then has to take in, and whether new ground was being modelled on the other cores.)
+				if (DeltaSeconds > 0.0334f && (bAnyMade || SheetsModelling > 0))
+				{
+					const FString Made = MadeLine(MadeFrame);
+					UE_LOG(LogTheater, Display, TEXT("Speed: made in that frame: %s%s%d fine sheet%s being modelled on other threads"),
+						*Made, Made.IsEmpty() ? TEXT("") : TEXT("; "), SheetsModelling, SheetsModelling == 1 ? TEXT("") : TEXT("s"));
+				}
 			}
 		}
+		WindowModelling += SheetsModelling > 0 ? 1 : 0;
+		WindowSlowModelling += SheetsModelling > 0 && DeltaSeconds > 0.0334f && !bBeside ? 1 : 0;
 		// The frame just ended: its time, and each job's share of it.
 		for (FSlot& Slot : Each)
 		{
@@ -594,6 +776,14 @@ namespace TheaterSpeed
 		{
 			UE_LOG(LogTheater, Display, TEXT("Speed: ms a frame (jobs inside others are counted in both): %s"), *Line);
 		}
+		{
+			// (What was made in those five seconds; how the fine sheets stand; and how the long frames fell: in the frames
+			// while new ground was being modelled, or in the others. A line of its own, as the RHI thread's is.)
+			const FString Made = MadeLine(MadeWindow);
+			UE_LOG(LogTheater, Display, TEXT("Speed: made: %s; fine sheets now: %d standing, %d on the shelf, %d being modelled; new ground was being modelled in %d of the %d frames, and %d of the %d over 33 ms not beside the step player's look fell in those; the game holds %.0f MB of memory"),
+				Made.IsEmpty() ? TEXT("nothing") : *Made, SheetsStanding, SheetsShelved, SheetsModelling, WindowModelling, WindowFrames, WindowSlowModelling, WindowSlow - WindowSlowBeside,
+				static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0));
+		}
 		FString Rules;
 		for (const TPair<FString, FRulesTally>& Tally : RulesTallies())
 		{
@@ -615,5 +805,10 @@ namespace TheaterSpeed
 		RulesTallies().Reset();
 		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 		WindowFrames = WindowSlow = WindowSlowBeside = 0;
+		for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
+		{
+			MadeWindow[Index] = 0;
+		}
+		WindowModelling = WindowSlowModelling = 0;
 	}
 }
