@@ -1741,41 +1741,113 @@ class Rig:
         """The right shoulder's pocket (where a rifle's butt goes), riding the right clavicle."""
         return self.at(st, "clavicle_r", self.pocket0)
 
-    def head_to_sight(self, st, P, w):
-        """The head let down and tilted onto the stock until the right eye is on the sights' line (as far as `w`): the
-        neck and head bent, leaned and turned together, as little as gets it there."""
+    def head_tilt(self, st, R):
+        """The head's tilt off the sights' line (degrees): forward (+, the face toward the ground) and canted to his
+        right (+), its up axis measured from upright in the vertical plane of the bore R[:, 0]."""
+        b = R[:, 0]
+        zp = _n(np.array((0.0, 0.0, 1.0)) - b * b[2])
+        yp = np.cross(zp, b)
+        u = st["D"]["head"] @ np.array((0.0, 0.0, 1.0))
+        return math.degrees(math.atan2(u @ b, u @ zp)), math.degrees(math.atan2(-(u @ yp), u @ zp))
+
+    def sight_measures(self, st, kind="rifle"):
+        """The aim as a rifleman's instructor checks it: the right eye's distance off the sights' line and how far
+        it sits behind the rear sight's notch (cm), the head's forward tilt and its cant to the right (degrees), the
+        right cheek's height over the comb (cm) and the right elbow's drop below the shoulder (degrees)."""
         W = st["W"]
         R, o = W[:3, :3], W[:3, 3]
-        spec = WEAPONS[P.get("weapon_kind", "rifle")]
-        line0 = o + R @ np.array((0.0, 0.0, spec["sight_z"]))
+        spec = WEAPONS[kind]
+        v = self.eye(st, "r") - (o + R @ np.array((0.0, 0.0, spec["sight_z"])))
+        along = float(v @ R[:, 0])
+        pitch, cant = self.head_tilt(st, R)
+        ch = R.T @ (self.at(st, "head", self.eye0["r"] + np.array(CHEEK)) - o)
+        sh, el = st["H"]["upperarm_r"], st["H"]["lowerarm_r"]
+        return {"eye_line_cm": 100.0 * float(np.linalg.norm(v - R[:, 0] * along)),
+                "eye_behind_rear_cm": 100.0 * (REAR_NOTCH[kind] - along),
+                "head_pitch": pitch, "head_cant": cant,
+                "cheek_over_comb_cm": 100.0 * float(ch[2] - COMB_Z[kind]),
+                "elbow_r_drop": math.degrees(math.asin(float(np.clip((sh[2] - el[2]) / np.linalg.norm(el - sh), -1.0, 1.0)))),
+                "butt_slide_cm": 100.0 * float(np.linalg.norm(st.get("butt_slide", np.zeros(2))))}
+
+    def head_to_sight(self, st, P, W, w):
+        """The rifle brought to the face, not the face down to the rifle: the right eye put on the sights' line (as
+        far as `w`) with the head held as a rifleman holds it, tilted forward SIGHT_PITCH and canted onto the comb
+        SIGHT_CANT, the neck and head bent, leaned and turned together; the butt may ease up to SIGHT_SLIDE up, down or
+        across in the shoulder's pocket to meet the eye. Returns the weapon's place, eased."""
+        kind = P.get("weapon_kind", "rifle")
+        spec = WEAPONS[kind]
         bn, bh = P.get("neck", (0.0, 0.0, 0.0)), P.get("head", (0.0, 0.0, 0.0))
-        split = (np.array((0.55, 0.4, 0.5)), np.array((0.45, 0.6, 0.5)))
+        # (d: the neck's and the head's own bends forward, then the lean and the turn shared between them: the neck
+        # may bend forward while the head tips back up, the head carried forward over the stock still upright)
+        split = (np.array((0.4, 0.5)), np.array((0.6, 0.5)))
+        on_bipod = kind == "lmg" and P.get("bipod", 0.0) > 50.0
+        # (a man lying on his elbows tips his head back further on his neck than one standing: SIGHT_NOD's back limit
+        # goes from 15 to 25 degrees as his chest lies down)
+        lying = float(np.clip((0.8 - st["D"]["chest"][2, 2]) / 0.5, 0.0, 1.0))
+        nod = (SIGHT_NOD[0] - 10.0 * lying, SIGHT_NOD[1])
+
+        def eased(s):
+            """The weapon's place with its butt eased s = (across, up) in the pocket: a rifle moved bodily, a gun
+            standing on its bipod turned about its feet (its muzzle dipping as the butt comes up)."""
+            R, o = W[:3, :3], W[:3, 3]
+            if not on_bipod:
+                return M4(R, o + R[:, 1] * s[0] + R[:, 2] * s[1])
+            foot = bipod_foot()
+            arm = np.array(BUTT_AT["lmg"]) - foot
+            th = math.degrees(math.atan2(s[1], math.hypot(arm[0], arm[2])))
+            Rn = R @ R_axis((0, 1, 0), th)
+            return M4(Rn, o + R @ foot - Rn @ foot + R[:, 1] * s[0])
 
         def put(d, into):
-            self._child(into, "neck", E(*(np.asarray(bn, float) + split[0] * d)))
-            self._child(into, "head", E(*(np.asarray(bh, float) + split[1] * d)))
+            self._child(into, "neck", E(*(np.asarray(bn, float) + np.array((d[0], split[0][0] * d[2], split[0][1] * d[3])))))
+            self._child(into, "head", E(*(np.asarray(bh, float) + np.array((d[1], split[1][0] * d[2], split[1][1] * d[3])))))
             return into
 
-        def resid(d):
+        def band(x, lo, hi):
+            return max(x - hi, 0.0) + min(x - lo, 0.0)
+
+        def resid(x):
+            d, s = x[:4], x[4:]
             tmp = put(d, {"D": dict(st["D"]), "H": dict(st["H"])})
-            v = self.eye(tmp, "r") - line0
+            W2 = eased(s)
+            R = W2[:3, :3]
+            v = self.eye(tmp, "r") - (W2[:3, 3] + R @ np.array((0.0, 0.0, spec["sight_z"])))
             rel = float(v @ R[:, 0])
-            lo, hi = SIGHT_RELIEF
-            return np.array((v @ R[:, 1], v @ R[:, 2], max(rel - hi, 0.0) + min(rel - lo, 0.0),
-                             0.0003 * d[0], 0.0003 * d[1], 0.0003 * d[2]))
-        d = np.zeros(3)
-        lo_d, hi_d = np.array((-40.0, -45.0, -60.0)), np.array((65.0, 45.0, 60.0))
-        for _ in range(10):
-            r0 = resid(d)
-            J = np.stack([(resid(d + e) - r0) / 0.5 for e in np.eye(3) * 0.5], axis=1)
-            step = np.linalg.solve(J.T @ J + 1e-6 * np.eye(3), -J.T @ r0)
-            d = np.clip(d + step, lo_d, hi_d)
-            if np.linalg.norm(step) < 0.05:
-                break
+            pitch, cant = self.head_tilt(tmp, R)
+            Rn = tmp["D"]["chest"].T @ tmp["D"]["head"]               # (the neck's bend as rom.py measures it)
+            nk = math.degrees(math.atan2(Rn[0, 2], Rn[2, 2]))
+            return np.array((v @ R[:, 1] / 0.002, v @ R[:, 2] / 0.002, band(rel, *SIGHT_RELIEF) / 0.002,
+                             band(pitch, *SIGHT_PITCH) / 0.5, band(cant, *SIGHT_CANT) / 0.5,
+                             (pitch - sum(SIGHT_PITCH) / 2) / 4.0, (cant - sum(SIGHT_CANT) / 2) / 4.0,
+                             band(nk, *SIGHT_NECK) / 0.5, band(bh[0] + d[1], *nod) / 0.5,
+                             band(s[0], -SIGHT_SLIDE, SIGHT_SLIDE) / 0.002, band(s[1], -SIGHT_SLIDE, SIGHT_SLIDE) / 0.002,
+                             0.004 * d[0], 0.004 * d[1], 0.004 * (d[0] + d[1]), 0.004 * d[2], 0.004 * d[3], s[0] / 0.05, s[1] / 0.05))
+        x = np.zeros(6)
+        lo_x = np.array((-40.0, -40.0, -45.0, -60.0, -4.0 * SIGHT_SLIDE, -4.0 * SIGHT_SLIDE))
+        hi_x = np.array((40.0, 40.0, 45.0, 60.0, 4.0 * SIGHT_SLIDE, 4.0 * SIGHT_SLIDE))
+        scale = np.array((0.5, 0.5, 0.5, 0.5, 0.001, 0.001))
+        lam = 1e-3
+        r0 = resid(x)
+        for _ in range(30):
+            J = np.stack([(resid(x + e) - r0) / e.sum() for e in np.diag(scale)], axis=1)
+            A = J.T @ J
+            step = np.linalg.solve(A + lam * np.diag(np.diag(A) + 1e-9), -J.T @ r0)
+            xn = np.clip(x + step, lo_x, hi_x)
+            rn = resid(xn)
+            if rn @ rn < r0 @ r0:
+                x, r0, lam = xn, rn, max(lam * 0.3, 1e-6)
+                if np.all(np.abs(step / scale) < 0.02):
+                    break
+            else:
+                lam *= 10.0
+                if lam > 1e6:
+                    break
+        d, s = x[:4], x[4:]
         put(w * d, st)
-        r = resid(d)
-        st["sight_miss"] = float(np.hypot(r[0], r[1])) if w >= 0.999 else None
-        st["sight_turn"] = tuple(float(x) for x in w * d)
+        st["sight_miss"] = float(np.hypot(r0[0], r0[1]) * 0.002) if w >= 0.999 else None
+        st["sight_turn"] = tuple(float(v) for v in w * d)
+        st["butt_slide"] = w * s
+        return eased(w * s)
 
     def comfortable_arm(self, st, s, g, a1, n1, pole, roll_axis=None, roll=0.0, prior=ARM_PRIOR, flip=False):
         """The hand's turn and the elbow's pole for a hand gripping at g (its axes a1, n1 asked for): the elbow swung
@@ -1887,6 +1959,8 @@ class Rig:
             return self.solve(dict(P, pelvis_at=tuple(pa0)), lift_knees=lift_knees - 1)
         # the weapon
         W = P["weapon"](self, st) if callable(P["weapon"]) else P["weapon"]
+        if P.get("sight", 0.0) > 1e-3:
+            W = self.head_to_sight(st, P, W, min(float(P["sight"]), 1.0))
         st["D"]["weapon"], st["H"]["weapon"] = W[:3, :3], W[:3, 3] + W[:3, :3] @ (self.H0["weapon"] - self.H0["weapon"])
         st["H"]["weapon"] = W[:3, 3].copy()
         st["W"] = W
@@ -1894,8 +1968,6 @@ class Rig:
         st["D"]["bolt"] = st["D"]["weapon"] @ R_axis((1, 0, 0), -lift)
         st["H"]["bolt"] = st["H"]["weapon"] + st["D"]["weapon"] @ (self.H0["bolt"] - self.H0["weapon"] + np.array((-bk, 0.0, 0.0)))
         self._child(st, "bipod", R_axis((0, 1, 0), -P.get("bipod", 0.0)))
-        if P.get("sight", 0.0) > 1e-3:
-            self.head_to_sight(st, P, min(float(P["sight"]), 1.0))
         # the arms: each hand to its grip, or to a place of its own, the elbow and the hand's roll where a man's go
         for s, side in (("l", 1.0), ("r", -1.0)):
             a0, t0, n0 = self.hand0[s]
@@ -1954,8 +2026,16 @@ class Rig:
         """(axis, degrees) a hand may roll round what it holds: a grip on the weapon rolls round the weapon's own line
         (the stock's wrist, the fore-end); a hand given a place of its own, round its palm's across axis."""
         if "blend" in h:
-            hs = [hh for w, hh in h["blend"] if w > 1e-6]
-            h = max(h["blend"], key=lambda x: x[0])[1]
+            # (mixed by the blend's weights, not taken from whichever hold weighs most: a roll's axis or reach that
+            # jumped where the weights cross would swing the elbow to another basin in one frame)
+            parts = [(w, self.hand_roll(st, P, hh)) for w, hh in h["blend"] if w > 1e-6]
+            tw = sum(w for w, _ in parts)
+            axes = [(w, r[0]) for w, r in parts if r[0] is not None]
+            ax = None
+            if axes:
+                ax = sum(w * a for w, a in axes)
+                ax = ax / max(float(np.linalg.norm(ax)), 1e-9)
+            return ax, sum(w * r[1] for w, r in parts) / tw, sum(w * r[2] for w, r in parts) / tw
         pw = float(h.get("pole_weight", ARM_PRIOR))
         if "grip" in h:
             return st["W"][:3, :3] @ np.asarray(h.get("roll_axis", (1.0, 0.0, 0.0)), float), float(h.get("roll", 35.0)), pw
@@ -2969,9 +3049,22 @@ HOLD_AIM = {
     "l": {"grip": "grip_l", "a": (0.89, -0.411, 0.199), "n": (-0.15, 0.15, 0.98), "pole_world": (0.15, 0.35, -1.0), "roll": 50.0},
 }
 ARM_COMFORT = True         # (every pose's arms through comfortable_arm unless the pose says comfort=False)
-POCKET = (0.088, 0.045, -0.045)      # the right shoulder's pocket at rest from the shoulder's joint: forward, in, down (m)
-BUTT_AT = {"rifle": (-0.324, 0.0, -0.045), "lmg": (-0.358, 0.0, -0.025)}   # where the pocket bears on each butt plate
+POCKET = (0.075, 0.06, 0.02)         # the right shoulder's pocket at rest from the shoulder's joint: forward, in, up (m)
+                                     # (just under the collarbone, between the deltoid and the chest: level with the joint)
+BUTT_AT = {"rifle": (-0.324, 0.0, -0.06), "lmg": (-0.358, 0.0, -0.025)}    # where the pocket bears on each butt plate
+                                     # (the rifle's low on its plate: the heel stands up about level with the shoulder)
 SIGHT_RELIEF = (-0.22, -0.06)      # how far behind the stock's wrist the eye may sit on the sights' line (m)
+# The head on the sights as a rifleman holds it (the coordinator's review, 18 November): the rifle lifted to the face,
+# the head only 10-20 degrees forward and canted a little right, the right cheekbone over the comb; the butt may
+# ease a centimetre or so about the shoulder's pocket (soft, a few centimetres across) to meet the eye.
+SIGHT_PITCH = (10.0, 20.0)         # the head's forward tilt off upright in the plane of the bore (degrees)
+SIGHT_CANT = (2.0, 12.0)           # its cant to his right, onto the comb (degrees)
+SIGHT_SLIDE = 0.012                # (m) how far the butt may ease across or up and down in the pocket
+SIGHT_NECK = (-55.0, 45.0)         # the neck's bend chest to head kept inside rom.py's range (extension 60, flexion 50)
+SIGHT_NOD = (-15.0, 20.0)          # the head's own nod on the neck's top (back -, forward +): no craned, turtled head
+REAR_NOTCH = {"rifle": 0.177, "lmg": 0.11}       # the rear sight's notch along each weapon (m; build_rifle, build_lmg)
+COMB_Z = {"rifle": 0.035, "lmg": 0.05}           # the comb's top under the cheek (m over the bore's axis)
+CHEEK = (-0.013, -0.019, -0.037)                 # the right cheekbone's underside from the right eye, at rest (m)
 
 
 # The arms at the port as rom.py measures them (elevation, plane, rotation, elbow, pronation, wrist flexion, radial
@@ -3000,8 +3093,10 @@ def port_arms(lift=0.0, out=0.0, tilt=0.0):
 
 def aim(yaw=0.0, pitch=0.0, relief=None, kick=0.0, rise=0.0, cant=0.0):
     """The rifle shouldered and aimed along the bearing given: its butt in the right shoulder's pocket (just inside the
-    shoulder's joint, riding the clavicle); the head comes down onto the comb to the sights (the pose's `sight`; see
-    Rig.head_to_sight). (`relief` is kept for old callers: the eye's place on the line is the head's to find.)"""
+    shoulder's joint and under the collarbone, riding the clavicle), the rifle low on its butt plate so it stands up to
+    the face; the head, only a little forward and canted, meets it with the eye on the sights' line (the pose's
+    `sight`; see Rig.head_to_sight, which may ease the butt a little in the pocket). (`relief` is kept for old
+    callers: the eye's place on the line is the head's to find.)"""
     def place(rig, st):
         R = R_axis((0, 0, 1), yaw) @ R_axis((0, 1, 0), -(pitch + rise)) @ R_axis((1, 0, 0), cant)
         o = rig.pocket(st) - R @ np.array(BUTT_AT["rifle"]) + R[:, 0] * kick
@@ -3503,11 +3598,12 @@ HOLD_KNOB = {"grip": "knob", "a": (0.851, -0.259, 0.456), "n": (-0.34, 0.39, 0.8
 
 
 def aim_stand(t=0.0):
-    """Standing to fire: bladed a third of a turn to the right, left foot forward, the rifle shouldered, the cheek
-    down on the stock and the head upright again to look along the sights."""
-    P = {"pelvis_at": (-0.02, 0.0, -0.03), "pelvis": (2.0, 0.0, -30.0), "spine_01": (3.0, 0.0, -2.0), "spine_02": (6.0, 0.0, -4.0),
-         "chest": (9.0, -2.0, -4.0), "neck": (4.0, -3.0, 16.0), "head": (8.0, -11.0, 17.0),
-         "clavicle_l": (0.0, 12.0), "clavicle_r": (16.0, 10.0),
+    """Standing to fire: bladed a third of a turn to the right, left foot forward, leaning a little into the rifle, the
+    right shoulder up, the rifle lifted to the face: the cheek on the comb, the head 10-20 degrees forward and canted a
+    little right, the eye on the sights' line."""
+    P = {"pelvis_at": (-0.02, 0.0, -0.03), "pelvis": (2.0, 0.0, -30.0), "spine_01": (3.0, 0.0, -2.0), "spine_02": (4.0, 0.0, -4.0),
+         "chest": (5.0, -2.0, -4.0), "neck": (4.0, -3.0, 16.0), "head": (8.0, -11.0, 17.0),
+         "clavicle_l": (0.0, 12.0), "clavicle_r": (20.0, 10.0),
          "foot_l": {"at": (0.2, 0.14, ANKLE), "yaw": -12.0}, "foot_r": {"at": (-0.23, -0.14, ANKLE), "yaw": -55.0},
          "weapon": aim(), "sight": 1.0, "hand_l": dict(HOLD_AIM["l"]), "hand_r": dict(HOLD_AIM["r"]),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
@@ -3517,9 +3613,9 @@ def aim_stand(t=0.0):
 def kneel_base(t=0.0, aimed=True):
     """On the right knee, sitting back toward the heel, the left foot forward with its knee up; aimed, the left
     elbow rests on the left knee."""
-    P = {"pelvis_at": (-0.2, 0.0, -0.49), "pelvis": (6.0, 0.0, -24.0), "spine_01": (4.0, 0.0, -2.0), "spine_02": (8.0, 0.0, -4.0),
-         "chest": (10.0, -2.0, -5.0), "neck": (2.0, -3.0, 14.0), "head": (7.0, -11.0, 14.0),
-         "clavicle_l": (0.0, 14.0), "clavicle_r": (16.0, 10.0),
+    P = {"pelvis_at": (-0.2, 0.0, -0.49), "pelvis": (6.0, 0.0, -24.0), "spine_01": (4.0, 0.0, -2.0), "spine_02": (5.0, 0.0, -4.0),
+         "chest": (5.0, -2.0, -5.0), "neck": (2.0, -3.0, 14.0), "head": (7.0, -11.0, 14.0),
+         "clavicle_l": (0.0, 14.0), "clavicle_r": (20.0, 10.0),
          "foot_l": {"at": (0.3, 0.17, ANKLE), "yaw": -10.0, "pole": (1.0, 0.25, 0.3)},
          "foot_r": {"at": (-0.5, -0.2, 0.105), "yaw": -40.0, "pitch": 72.0, "toe": 62.0, "pole": (1.0, -0.2, -0.6)},
          "weapon": aim(), "sight": 1.0, "hand_l": dict(HOLD_AIM["l"], pole_world=(0.3, 0.3, -1.0)), "hand_r": dict(HOLD_AIM["r"]),
@@ -3536,14 +3632,16 @@ PRONE_Z = -0.815
 
 def prone_base(t=0.0, arch=0.5, weapon="rifle"):
     """Lying to fire: the body a little to the right of the line of fire, legs apart, the feet lying toes down with the
-    heels turned out, down on the elbows with the back a little arched, the head up to look along the sights."""
+    heels turned out, down on the elbows with the back a little arched, the head up to look along the sights (the
+    right shoulder shrugged up and drawn back to lift the butt to the face; the head may tip back further on the neck
+    than standing, as a man lying on his elbows must)."""
     P = {"pelvis_at": (0.0, 0.03, PRONE_Z), "pelvis": (86.0, 2.0, -9.0), "spine_01": (-7.0 * arch, 0.0, 3.0),
          "spine_02": (-10.0 * arch, 0.0, 3.0), "chest": (-12.0 * arch, -5.0, 3.0), "neck": (-32.0, -1.0, 4.0), "head": (-22.0, -9.0, 5.0),
-         "clavicle_l": (8.0, 14.0), "clavicle_r": (10.0, 10.0),
+         "clavicle_l": (8.0, 14.0), "clavicle_r": (24.0, -10.0),
          "foot_l": {"at": (-0.8, 0.3, 0.125), "yaw": 22.0, "pitch": 132.0, "roll": -12.0, "toe": 12.0, "pole": (-0.1, 0.3, -1.0)},
          "foot_r": {"at": (-0.82, -0.28, 0.125), "yaw": -28.0, "pitch": 132.0, "roll": 12.0, "toe": 12.0, "pole": (-0.1, -0.3, -1.0)},
          "weapon": aim(), "weapon_kind": weapon, "sight": 1.0,
-         "hand_l": dict(HOLD_AIM["l"], slide=(-0.16, 0.0, 0.0), pole_world=(0.0, 0.3, -1.0)),
+         "hand_l": dict(HOLD_AIM["l"], slide=(-0.21, 0.0, 0.0), pole_world=(0.0, 0.3, -1.0)),
          "hand_r": dict(HOLD_AIM["r"], pole_world=(-0.1, -1.0, -1.3)),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
     return P
@@ -3674,13 +3772,17 @@ def c_go_prone(t):
     return keyed([(0.0, base_stand()), (0.32, knee), (0.58, fall), (0.75, hit), (1.0, prone_base())])(t)
 
 
+def bipod_foot():
+    """The machine gun's bipod feet (their middle, on the ground) in the gun's own space, the legs let down."""
+    return np.array(WEAPONS["lmg"]["hinge"]) + R_axis((0, 1, 0), -104.0) @ np.array((-0.31, 0.0, -0.004)) + np.array((0.0, 0.0, -0.008))
+
+
 def aim_bipod(rig, st):
     """The machine gun on its bipod: shouldered and sighted as a rifle is, then dipped or raised about the butt
     until the bipod's feet stand on the ground."""
-    spec = WEAPONS["lmg"]
     R = np.eye(3)
     o = rig.pocket(st) - np.array(BUTT_AT["lmg"])
-    foot_local = np.array(spec["hinge"]) + R_axis((0, 1, 0), -104.0) @ np.array((-0.31, 0.0, -0.004)) + np.array((0.0, 0.0, -0.008))
+    foot_local = bipod_foot()
     for _ in range(3):
         fz = (o + R @ foot_local)[2]
         butt = o + R @ np.array(BUTT_AT["lmg"])
@@ -3705,7 +3807,7 @@ def lmg_shake(t, t0=0.1, t1=0.8, rate=10.0):
 @clip("lmg_burst", 1.2, loop=True, weapon="lmg",
       events=[ev(0.1, "muzzle_flash", "socket_muzzle", "lmg_burst")] + [ev(round(0.1 + 0.1 * k, 2), "muzzle_flash", "socket_muzzle") for k in range(1, 8)])
 def c_lmg_burst(t):
-    P = prone_base(arch=0.3, weapon="lmg")
+    P = prone_base(arch=0.5, weapon="lmg")      # (arched up onto the elbows: the head can come up to the sights)
     P["bipod"] = 104.0
     P["neck"] = (-28.0, -1.0, 4.0)
     P["hand_r"] = {"grip": "grip_r", "a": (0.96, 0.0, -0.28), "n": (0.0, 1.0, 0.0), "pole_world": (-0.1, -1.0, -1.2)}
@@ -4247,6 +4349,7 @@ def shifted(st, d):
     v = np.array((d[0], d[1], 0.0))
     out = {"D": st["D"], "H": {b: h + v for b, h in st["H"].items()}, "short": st.get("short", {})}
     out["W"] = M4(st["D"]["weapon"], out["H"]["weapon"])
+    out.update({k: st[k] for k in ("sight_miss", "sight_turn", "butt_slide") if k in st})     # (for the aim's check)
     return out
 
 
@@ -5662,6 +5765,14 @@ def write_readme(info):
       "go_prone it is laid down beside him.")
     w("- **Keyed** (the weapon work and the rest: " + ", ".join(f"`{n}`" for n in CLIPS if n not in MOCAP) + "): posed "
       "by the script, feet planted and hands put on the weapon by two-bone IK solved in soldier.py.")
+    w(f"- **A real body's range**: every joint of every clip (and of every man in the hero clip) is measured on every 60th of a "
+      f"second against human ranges of motion by `arms_check.py` (rom.py's limits; joints turning faster than 900 degrees a "
+      f"second are flagged); pictures/arms_check.png is its sheet. Aimed (fire_stand, fire_kneel, fire_prone, lmg_burst and "
+      f"the hero clip's firers) the rifle is lifted to the face rather than the face dropped to the rifle: the butt in the "
+      f"shoulder's pocket under the collarbone, the right shoulder up, the right elbow below the shoulder, the right eye on "
+      f"the sights' line (within half a centimetre), the head {SIGHT_PITCH[0]:g}-{SIGHT_PITCH[1]:g} degrees forward and "
+      f"canted {SIGHT_CANT[0]:g}-{SIGHT_CANT[1]:g} to the right, the cheekbone on the comb; the eye sits 30-40 cm behind "
+      f"the rear sight, which is on the barrel ahead of the receiver.")
     w("- The motion capture credit: *The data used in this project was obtained from mocap.cs.cmu.edu. The database was "
       "created with funding from NSF EIA-0196217.* (mocap_cmu/CREDITS.md lists the takes.)\n")
     w("| clip | seconds | loops | stride | what | events (t: fx @ socket, cue) |")

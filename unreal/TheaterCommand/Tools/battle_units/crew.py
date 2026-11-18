@@ -1434,8 +1434,8 @@ def c_mg_pair_feeder(t):
     # the left on it nearer the box, drawing it up)
     hands = {}
     # (each hand where the belt runs across its fingers with the wrist straight: the right 0.15 m along it from the
-    # feed, the left 0.46 m, nearer the box)
-    for s, along, lift in (("r", 0.15, 0.004 * on * osc(t, 0.1)), ("l", 0.46, 0.012 * on * osc(t, 0.2, 0.3))):
+    # feed, the left 0.54 m, nearer the box: the gun sits higher in the gunner's shoulder since the aim's head fix)
+    for s, along, lift in (("r", 0.15, 0.004 * on * osc(t, 0.1)), ("l", 0.54, 0.012 * on * osc(t, 0.2, 0.3))):
         g, d = belt_at(W, along)
         side = 1.0 if s == "l" else -1.0
         tdir = -d if s == "r" else d                                     # (the thumbs along the belt, outward: palms up)
@@ -2722,7 +2722,7 @@ def c_throw_flat(t):
                foot_r={"at": (-0.05, -0.16, 0.42), "yaw": -10.0, "pitch": 115.0, "toe": 10.0, "pole": (0.0, -0.3, -1.0)})
     hit = S.prone_base(arch=0.0)
     hit.update({"pelvis_at": (0.0, 0.03, S.PRONE_Z + 0.006), "neck": (-26.0, 0, 2.0), "head": (-16.0, -4.0, 2.0),
-                "weapon": S.aim(pitch=4.0)})
+                "weapon": S.aim(pitch=4.0), "sight": 0.6})      # (just down: his head comes onto the sights as he settles)
     hit = _moved(grounded("throw_flat_hit", hit), D - 0.05)
     down = _moved(grounded("throw_flat", S.prone_base()), D)
     # (the rifle brought from the port up into the shoulder through the lunge, the launch and the flight, so the arms

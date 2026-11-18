@@ -12,6 +12,11 @@ crew      every clip of crew.CREW on the crew's rig, at 60 fps
 The report per clip is rom.check's: the worst of every measure with its frame, the faults (over by more than rom.TOL),
 and the joints that turn faster than 900 degrees a second between two 60ths. ARM lists the arm measures; the rest
 (hips, knees, spine, neck: limits marked "mine" in rom.py are common clinical ranges) are reported beside them.
+
+AIM (every frame with the rifle fully at the shoulder, soldier.Rig.sight_measures): the right eye's distance off the
+sights' line and how far behind the rear sight's notch it sits, the head's forward tilt and its cant to the right
+(the coordinator's review: 10-20 degrees forward, canted a little right), the right cheekbone over the comb, the right
+elbow's drop below the shoulder, and how far the butt was eased in the pocket.
 """
 
 import json
@@ -39,11 +44,34 @@ def angles(rig, st):
     return {k: float(v[0]) for k, v in m.items()}
 
 
-def check(rig, states, name, fps=60.0):
+def check(rig, states, name, fps=60.0, kind="rifle"):
     rep = rom.check_states(states, rig, fps=fps, name=name)
     rep["arm_faults"] = [r for r in rep["faults"] if is_arm(r["key"])]
     rep["arm_fast"] = [(j, d) for j, d in rep["fast"] if j.startswith(ARM_JOINTS)]
+    a = aim_report(rig, states, kind)
+    if a:
+        rep["aim"] = a
     return rep
+
+
+def aim_report(rig, states, kind="rifle"):
+    """The aimed frames' sight measures (Rig.sight_measures), each as [least, most]; None if he never aims."""
+    rows = [rig.sight_measures(st, kind) for st in states if st.get("sight_miss") is not None and "W" in st]
+    if not rows:
+        return None
+    out = {"frames": len(rows), "weapon": kind}
+    for k in rows[0]:
+        vals = [r[k] for r in rows]
+        out[k] = [round(min(vals), 1), round(max(vals), 1)]
+    return out
+
+
+def aim_line(a):
+    return (f"aim ({a['frames']} frames, {a['weapon']}): eye off the sights' line up to {a['eye_line_cm'][1]:g} cm "
+            f"({a['eye_behind_rear_cm'][0]:g}-{a['eye_behind_rear_cm'][1]:g} cm behind the rear sight); head "
+            f"{a['head_pitch'][0]:g}-{a['head_pitch'][1]:g} deg forward, canted {a['head_cant'][0]:g}-{a['head_cant'][1]:g} "
+            f"right; cheekbone {a['cheek_over_comb_cm'][0]:g}-{a['cheek_over_comb_cm'][1]:g} cm over the comb; right elbow "
+            f"{a['elbow_r_drop'][0]:g}-{a['elbow_r_drop'][1]:g} deg below the shoulder; butt eased up to {a['butt_slide_cm'][1]:g} cm")
 
 
 def light_rig(nation="GER", seed=None):
@@ -73,6 +101,11 @@ def clip_states(rig, name, fps=60.0):
     return sts
 
 
+def clip_kind(name):
+    import soldier as S
+    return "lmg" if S.CLIPS[name]["weapon"] == "lmg" else "rifle"
+
+
 def soldier_clips(rig, names=None):
     import soldier as S
     S.fill_mocap_events(rig)
@@ -80,7 +113,7 @@ def soldier_clips(rig, names=None):
     for name, c in S.CLIPS.items():
         if names and name not in names:
             continue
-        out[name] = check(rig, clip_states(rig, name), name)
+        out[name] = check(rig, clip_states(rig, name), name, kind=clip_kind(name))
         out[name]["mocap"] = bool(c.get("mocap"))
     return out
 
@@ -102,7 +135,7 @@ def hero(rig, names=None):
         name = "man %d (%s)" % (man["i"], man["role"])
         if names and name not in names and str(man["i"]) not in names:
             continue
-        out[name] = check(rig, hero_states(rig, man), name)
+        out[name] = check(rig, hero_states(rig, man), name, kind=man["weapon"])
     return out
 
 
@@ -115,7 +148,8 @@ def crew_clips(names=None):
         if names and name not in names:
             continue
         n = int(round(c["long"] * 60)) + 1
-        out[name] = check(rig, [rig.solve(c["fn"](k / 60.0)) for k in range(n)], name)
+        kind = c.get("weapon") if c.get("weapon") in ("rifle", "lmg") else "rifle"
+        out[name] = check(rig, [rig.solve(c["fn"](k / 60.0)) for k in range(n)], name, kind=kind)
     return out
 
 
@@ -221,7 +255,7 @@ def sheet(out, names=None, fps=60.0):
         rig.weapon_kind = kind
         n = int(round(c["long"] * fps)) + 1
         sts = [S.clip_state(rig, name, i / fps, kind) for i in range(n)]
-        rep = check(rig, sts, name, fps)
+        rep = check(rig, sts, name, fps, kind=kind)
         frames, near = key_frames(rep, n)
         tiles = []
         for f in frames:
@@ -284,6 +318,18 @@ def sheet(out, names=None, fps=60.0):
         nf = len(rep["arm_faults"]) + len(rep["arm_fast"])
         d.text((8, yy), "arms within every limit" if nf == 0 else f"{nf} arm faults",
                fill=(20, 120, 40) if nf == 0 else (190, 20, 20), font=font)
+        a = rep.get("aim")
+        if a:
+            yy += 19
+            off = a["eye_line_cm"][1] > 1.0 or a["head_pitch"][1] > 20.5 or a["head_pitch"][0] < 9.5
+            d.text((8, yy), fit_text(d, f"eye off sight line <={a['eye_line_cm'][1]:g} cm, behind rear sight "
+                                        f"{a['eye_behind_rear_cm'][0]:.0f}-{a['eye_behind_rear_cm'][1]:.0f} cm", small, L - 12),
+                   fill=(190, 20, 20) if off else (30, 30, 30), font=small)
+            yy += 15
+            d.text((8, yy), fit_text(d, f"head {a['head_pitch'][0]:.0f}-{a['head_pitch'][1]:.0f} deg fwd, cant "
+                                        f"{a['head_cant'][0]:.0f}-{a['head_cant'][1]:.0f} R, elbow r "
+                                        f"{a['elbow_r_drop'][0]:.0f}-{a['elbow_r_drop'][1]:.0f} down", small, L - 12),
+                   fill=(190, 20, 20) if off else (30, 30, 30), font=small)
         for k, (f, view, path) in enumerate(tiles):
             x = L + k * T
             im.paste(Image.open(path).convert("RGB"), (x, y))
@@ -315,6 +361,8 @@ if __name__ == "__main__":
     for part, reps in res.items():
         for name, rep in reps.items():
             print(f"{part:7s} {name:22s} {line(rep)}", flush=True)
+            if rep.get("aim"):
+                print(f"{'':7s} {'':22s} {aim_line(rep['aim'])}", flush=True)
     if md:
         with open(md, "w") as f:
             for part, reps in res.items():
