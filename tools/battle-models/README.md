@@ -192,10 +192,11 @@ What they add to the form:
   1943-09. A file whose `marks` are American carries `mark_months`: a list of `{from, tag}`, the first with no
   `from`. Swap the tag of each of her marks for the last one whose month has come. The red surround of the summer
   of 1943 is left out. `marks.py` draws all three.
-- **Cowl gills** (the file's mesh `gills`, behind a radial engine). The ring of small flaps behind the cowl is its
-  own mesh, in the cowl's paint (`nose`). Where a later coat paints the cowl like the rest of her (`nose` the same
-  as `upper`), the gills take the coat too, light under her as she is. A thin dark line marks the gap between
-  each pair, so that they are seen without a pale collar round her neck.
+- **Cowl gills** (behind a radial engine; a mesh of their own in the sculptor, `gills`). In the file the ring of
+  small flaps behind the cowl is faces of the fuselage in the cowl's paint (`nose`), or, where her cowl is painted
+  like the rest of her (`nose` the same colour as `upper`), in `upper` above and `under` below. So a later coat
+  laid on by paint name colours them with her. A thin dark line (`line`) marks the gap between each pair, so that
+  they are seen without a pale collar round her neck.
 - **The Val's spats** (`SPATS` in `planes.py`): the outer face of each spat is in her upper paint and the inner
   face in her under paint, following the line down her side, so that a green Val has green spats, not white socks.
 - **The yellow tips of a turning airscrew** (`blur_tip`; the file's `clear.blur_tip` is 0.035) are three soft rings
