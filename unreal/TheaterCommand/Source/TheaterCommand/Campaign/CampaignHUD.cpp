@@ -7210,14 +7210,14 @@ namespace
 					]
 
 					// The opening screen: where to begin and as whom.
-					// (The UI director, 18 November 2026, on build 1596, and at 03:48 and 03:53 on 23c9ebe and b604af6.) The
-					// card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12 (48) above and
-					// below, its type at full size, so that under the title band (FIRST COMMAND on its own row above
-					// CONTINUE YOUR CAMPAIGN) the seven great powers, the three settings and BEGIN AS ... all show without
-					// scrolling; the smaller nations take what height is left, down to their MORE plate alone. Where even
-					// that is more than the screen less its 48s (a pick whose sentence runs long, on a short frame), the
-					// card stands taller, as tall as it needs, and the 48s give, down to 16; only past that is it drawn
-					// smaller, never cut. (See LookAtList for what it needs.)
+					// (The UI director, 18 November 2026, on build 1596, and at 03:48, 03:53 and 04:00 on 23c9ebe, b604af6
+					// and e09457e.) The card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12
+					// (48) above and below, its type at full size, so that under the title band (FIRST COMMAND on its own
+					// row, CONTINUE at the end of the pages' row) the seven great powers, the three settings and BEGIN AS ...
+					// all show without scrolling; the smaller nations take what height is left, down to their MORE plate
+					// alone. Where even that is more than the screen less its 48s (a pick whose sentence runs long, on a
+					// short frame), the card stands taller, as tall as it needs, and the 48s give, down to 16; only past
+					// that is it drawn smaller, and never under 0.95 of its size (04:00). (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
@@ -7231,7 +7231,9 @@ namespace
 							{
 								// (876 on the frame of 1,600 by 1,000, which is 972 high; 1,254 on the frame of 1,280 by 720)
 								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
-								return FOptionalSize(static_cast<float>(FMath::Max(High - 96.0, static_cast<double>(OpeningNeed))));
+								// (never drawn under 0.95 of its size: past that the list is cut at its foot instead)
+								const double Room = FMath::Max(High - 32.0, 1.0);
+								return FOptionalSize(static_cast<float>(FMath::Max(High - 96.0, FMath::Min(static_cast<double>(OpeningNeed), Room / 0.95))));
 							})
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
@@ -7285,13 +7287,23 @@ namespace
 										]
 									]
 
-									// The campaign saved on this computer, and the way back to the one under way.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 12.0f, 10.0f, 0.0f)
+									// The pages (the grand campaign, the historical scenarios, the options), and at the row's right end the
+									// way back to a campaign. (The UI director, 18 November 2026, 04:00, for the frame of Brian's Mac, 870
+									// high, and so at every size, one layout.) CONTINUE joins the pages' row as a button of one line:
+									// CONTINUE in typed capitals, then the campaign saved on this computer in the typed face of what is
+									// said ("Germany, July 1940, free play"), on the brass edge as before; with nothing saved there is no
+									// CONTINUE. BACK TO THE WAR, for the menu opened over a campaign under way, stands in the same place.
+									// The pages stand centred in the room left of it.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 10.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
-										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
 										[
-											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											SAssignNew(OpeningTabs, SHorizontalBox)
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(20.0f, 8.0f)).IsFocusable(false)
 											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bCanReturn ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseMenu(); } return FReply::Handled(); })
 											[
@@ -7303,33 +7315,27 @@ namespace
 												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
 											]
 										]
-										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(20.0f, 8.0f)).IsFocusable(false)
 											.Visibility_Lambda([this]()
 											{
 												return Controller.IsValid() && !Controller->GetOpening().bCanReturn && !Controller->GetOpening().SavedLine.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;
 											})
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ContinueCampaign(); } return FReply::Handled(); })
 											[
-												SNew(SVerticalBox)
-												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("CONTINUE YOUR CAMPAIGN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+													SNew(STextBlock).Text(FText::FromString(TEXT("CONTINUE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
 												]
-												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
 												[
 													SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream)
 													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetOpening().SavedLine : FText::GetEmpty(); })
 												]
 											]
 										]
-									]
-
-									// The two pages: the grand campaign, and the historical scenarios.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 10.0f, 0.0f)
-									[
-										SAssignNew(OpeningTabs, SHorizontalBox)
 									]
 									// What the page offers. (The UI director, on build 1596.) The list stands above the settings, never
 									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, it ends
