@@ -540,18 +540,19 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       expect(airQuality(task[0], g)).toBe(0.9);
     }
     // The 19th Bomb Group's bombers are the Fifth Air Force's from the month that forms (March 1942), counted in its 60.
-    // (Rider b534: by the book the record moves them first, to Darwin in January 1942, and they hand over there;
-    // where no book is kept they stand at Del Monte until the Fifth forms.)
+    // (Rider b534: by the book the record moves them first, to east Java in January 1942 (Singosari, in the chart's
+    // Soerabaja: the historian's pass), and they hand over there; where no book is kept they stand at Del Monte until
+    // the Fifth forms.)
     for (const stop of [3, 1]) {
       const g = pacificWar(stop, 28);
       monthlyDiplomacy(g);
       airUpkeep(g, 'USA');
       const group = '19th Bomb Group (Del Monte)';
-      expect(ROWS.find((r) => r.name === group)).toMatchObject({ moves: [[29, 'Darwin']], ally: true, to: ['Fifth Air Force'] });
+      expect(ROWS.find((r) => r.name === group)).toMatchObject({ moves: [[29, 'Soerabaja']], ally: true, to: ['Fifth Air Force'] });
       expect(bases(g, command(g, 'USA', group))).toEqual(['Del Monte']);
       for (let t = 29; t <= 30; t++) { g.turn = t; airUpkeep(g, 'USA'); }
       expect(sum(command(g, 'USA', group)), `stop ${stop}`).toEqual([0, 16]);
-      expect(bases(g, command(g, 'USA', group)), `stop ${stop}`).toEqual([stop === 1 ? 'Darwin' : 'Del Monte']);
+      expect(bases(g, command(g, 'USA', group)), `stop ${stop}`).toEqual([stop === 1 ? 'Soerabaja' : 'Del Monte']);
       g.turn = 31;
       airUpkeep(g, 'USA');
       expect(command(g, 'USA', group).length, `stop ${stop}`).toBe(0);
@@ -586,6 +587,25 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       expect(command(g, 'USA', '49th Fighter Group (Darwin)').length).toBe(0);
       for (const f of fifth) expect(f.ftr).toBe(f.est.ftr);
       expect(g.airPool.USA.ftr).toBeGreaterThanOrEqual(80 - 10 * fifth.length);
+    }
+    // XX Bomber Command (rider b534, the historian's pass): its last mission from Chengtu was in January 1945, so by
+    // the book its 50 stand at Kharagpur from February, and pass into the XXI's row on Saipan in April. Where no book
+    // is kept there is no dated move.
+    for (const stop of [3, 1]) {
+      const g = pacificWar(stop, 58);
+      monthlyDiplomacy(g);
+      take(g, 'Saipan', 'USA');
+      const xx = 'XX Bomber Command';
+      expect(ROWS.find((r) => r.name === xx)).toMatchObject({ moves: [[66, 'Kharagpur']], ally: true, to: ['XXI Bomber Command'] });
+      airUpkeep(g, 'USA');
+      expect(bases(g, command(g, 'USA', xx)), `stop ${stop}`).toEqual(['Chengtu']);
+      for (let t = 59; t <= 67; t++) { g.turn = t; airUpkeep(g, 'USA'); }
+      expect(bases(g, command(g, 'USA', xx)), `stop ${stop}`).toEqual([stop === 1 ? 'Kharagpur' : 'Chengtu']);
+      expect(sum(command(g, 'USA', xx))[1], `stop ${stop}`).toBeGreaterThanOrEqual(50);
+      g.turn = 68;
+      airUpkeep(g, 'USA');
+      expect(command(g, 'USA', xx).length, `stop ${stop}`).toBe(0);
+      expect(sum(command(g, 'USA', 'XXI Bomber Command'))[1], `stop ${stop}`).toBeGreaterThanOrEqual(400);
     }
   });
 

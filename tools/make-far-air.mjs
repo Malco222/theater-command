@@ -117,11 +117,15 @@ const HANDS = {
 const LEAVES = { 'Chinese Air Force': [[20, 50, 50, 'SOV', 'JAP']] };
 /**
  * Rider b534(3): where the record moves an old command before its successor stands, it moves by date at the stops
- * that keep the book and hands over there. The 19th Bomb Group's B-17s left Del Monte for Batchelor Field near Darwin
- * in the second half of December 1941, so the row stands at Darwin from January 1942 until the Fifth Air Force forms.
+ * that keep the book and hands over there. The historian's pass over the list (hand-over-places-b534-historian.md):
+ * - The 19th Bomb Group's B-17s stopped at Batchelor Field for about ten days in December 1941, and from about 30
+ *   December fought from Singosari, by Malang in east Java (inside the chart's Soerabaja), until 1 to 3 March 1942.
+ *   So the row stands at Soerabaja from January 1942 until the Fifth Air Force forms.
+ * - XX Bomber Command flew its last mission from Chengtu on 15 January 1945: from February its 50 stand at Kharagpur,
+ *   until the XXI takes them in April.
  * (Read only where the source gives the row no moves of its own: once the planner's file carries one, his stands.)
  */
-const GOES = { '19th Bomb Group (Del Monte)': [[29, 'Darwin']] };
+const GOES = { '19th Bomb Group (Del Monte)': [[29, 'Soerabaja']], 'XX Bomber Command': [[66, 'Kharagpur']] };
 
 // ---- The source -------------------------------------------------------------------------------------------------
 
