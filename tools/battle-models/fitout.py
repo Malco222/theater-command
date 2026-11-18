@@ -643,7 +643,8 @@ def tail_gunner(m, f, s, G, hull):
     m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
     m.box((x + 0.12, 0.0, hull.z(-x) - 0.5 * hull.h(-x)), (0.6, 1.0 * hull.w(-x), 0.03), "inside")
     if f.panes:
-        # (her skin is closed round him: he is seen through small framed windows in her sides and a glazed panel over his guns)
+        # (her skin is closed round him: he is seen through small framed windows in her sides and a glazed panel over his guns;
+        #  the frames are in her skin's own paint: the art director, 2026-11-18, of the hood's pale frame paint here, "reads as toy trim")
         liner(m, f, hull, xb, hull.back, lambda q, high: any(x1 < q < x0 and a0 < high < a1 for x0, x1, a0, a1 in f.panes), inset=0.02)
         for x0, x1, a0, a1 in f.panes:
             wx = [q for q in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= q <= x0 + 1e-4]
@@ -653,10 +654,10 @@ def tail_gunner(m, f, s, G, hull):
                 for a in (a0, a1):
                     if a >= 90.0 and hand < 0:
                         continue                          # (the bar down the middle of a panel across her back, once)
-                    m.strip([port(hull.at(q, ang(a))) for q in wx], [port(hull.out(q, ang(a))) for q in wx], 0.016, "frame", lift=0.006)
+                    m.strip([port(hull.at(q, ang(a))) for q in wx], [port(hull.out(q, ang(a))) for q in wx], 0.016, "upper", lift=0.006)
                 for q in wx:                              # (a bar at each of her frames: small panes)
                     if q > hull.back + 0.02:
-                        m.strip([port(hull.at(q, ang(a))) for a in arc], [port(hull.out(q, ang(a))) for a in arc], 0.014 if x1 < q < x0 else 0.018, "frame", lift=0.006)
+                        m.strip([port(hull.at(q, ang(a))) for a in arc], [port(hull.out(q, ang(a))) for a in arc], 0.014 if x1 < q < x0 else 0.018, "upper", lift=0.006)
     for nm, base, tip in f.flex:                         # (his guns' breeches, at his hands)
         if base.x < x - 0.3 and abs(base.y) < 0.3 and m.fine:
             m.use(nm)
