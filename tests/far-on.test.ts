@@ -704,10 +704,9 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
   it("counts the Soviet Union's ground beyond the old chart at its share, for all it pays and for lines (ruling b466)", () => {
     const g = grand();
     const F = BUDGET.farHome.SOV;
-    expect(Object.keys(BUDGET.farHome)).toEqual(['SOV']);
-    // (The share is the design director's to set; at 1 nothing changes. The rule is tested whatever it is.)
-    expect(F).toBeGreaterThanOrEqual(0);
-    expect(F).toBeLessThanOrEqual(1);
+    // The share is a tenth, the same tenth a far colony pays: the game has one far-side number (ruling b471).
+    expect(BUDGET.farHome).toEqual({ SOV: 0.1 });
+    expect(F).toBe(BUDGET.farColony.fac);
     const hers = (shore: number): typeof g.regions => g.regions.filter((r) => r.owner === 'SOV' && r.ctrl === 'SOV' && shoreOf(r) === shore);
     const sum = (rs: typeof g.regions): number => rs.reduce((t, r) => t + r.fac, 0);
     const west = hers(0), east = hers(2);
