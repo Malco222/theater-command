@@ -75,6 +75,14 @@ Clips: `sail` (loop), `fire.<turret>` and `fire.sec.*`, `broadside.heel`, `hit`,
 destroyers `torpedoes.port/starboard`, `depth_charges`; carriers `lift.N`; submarines `dive`, `surface`,
 `periscope`, `torpedoes.bow/stern`.
 
+A submarine seen close: her tower's top is an open bridge inside a thin screen with a turned-out lip (the hatch, the
+sight on its post and the periscope standards stand inside it), her deck gun is an open mounting on a pedestal with no
+shield (`style="open"` of `Yard.turret`: its breech lifts with the gun), her light gun a single slender one, her
+casing has free-flooding slots with round ends (Germany's in two rows, America's a row of arched limber holes) and a
+deck laid in slats, with bollards, a capstan, hatches and her anchor in its bed. Germany's boat has the spray
+deflector round the fore end of her tower and a direction-finding loop; America's a door in each side of her
+fairwater. Parts, sockets and clips are as they were; only the plain (`far`) mesh keeps a solid block for the screen.
+
 The convoy's ships are ships like the rest (`ship`, `fore`, `aft`, a screw, a rudder, every ending), with the guns
 such ships were given: `turret.A` in the bows and `turret.Y` on the stern (clips `fire.A`, `fire.Y`), light guns at
 `aa.N`. The tanker has one clip more, `ablaze` (her cargo takes fire: oil fire at her fire sockets, burning oil on

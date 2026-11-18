@@ -298,7 +298,7 @@ class Model:
     def oval(cx, cy, a, b, n=16):
         return [(cx + math.cos(2 * math.pi * k / n) * a, cy + math.sin(2 * math.pi * k / n) * b) for k in range(n)]
 
-    def house(self, x0, x1, half, z, high, paint, r=0.6, y=0.0, top_paint=None, steps=3, taper=0.0, square=(False, False)):
+    def house(self, x0, x1, half, z, high, paint, r=0.6, y=0.0, top_paint=None, steps=3, taper=0.0, square=(False, False), smooth=False):
         """`square`: leave the corners of the fore end, the after end, unrounded (a house built in two lengths end to end)."""
         plan = self.round_rect(x0, x1, y - half, y + half, r, steps)
         if (square[0] or square[1]) and len(plan) > 4:
@@ -313,7 +313,7 @@ class Model:
         top = None
         if taper:
             top = self.round_rect(x0 - math.copysign(taper, x0 - x1), x1 + math.copysign(taper, x0 - x1), y - half + taper, y + half - taper, max(r - taper, 0.05), steps)
-        self.prism(plan, z, z + high, paint, top=top, top_paint=top_paint)
+        self.prism(plan, z, z + high, paint, top=top, top_paint=top_paint, smooth=smooth)
 
     def box(self, mid, size, paint, yaw=0.0, pitch=0.0, roll=0.0):
         hx, hy, hz = size[0] / 2.0, size[1] / 2.0, size[2] / 2.0

@@ -969,6 +969,93 @@ def carrier(tag, fine=True, hull_hex=None):
     return m, yard
 
 
+def _outward(line):
+    """The points of an open line of (x, y), and at each the level way out from the middle of what it goes round."""
+    pts = [Vector((q[0], q[1], 0.0)) for q in line]
+    mid = sum(pts, Vector()) / len(pts)
+    outs = []
+    for i, q in enumerate(pts):
+        along = pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]
+        n = Vector((along.y, -along.x, 0.0)).normalized()
+        outs.append(n if n.dot(q - mid) > 0 else -n)
+    return pts, outs, mid
+
+
+def bulwark(m, line, z0, z1, thick, paint, lip=0.0):
+    """A thin wall standing along an open line of (x, y) points, with an outside, an inside and a top: the screen round
+    an open bridge. `lip` turns the top of its outer face outward (the wind deflector round a submarine's bridge)."""
+    pts, outs, mid = _outward(line)
+    n = len(pts)
+    lo = [q + Z * z0 for q in pts]
+    hi = [q + Z * (z1 - (0.2 if lip else 0.0)) for q in pts]
+    top = [q + o * lip + Z * z1 for q, o in zip(pts, outs)]
+    in_hi = [q - o * thick + Z * z1 for q, o in zip(pts, outs)]
+    in_lo = [q - o * thick + Z * z0 for q, o in zip(pts, outs)]
+
+    def band(a, b, way):
+        m.add(a + b, [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)], paint, True, way)
+    band(lo, hi, lambda q: Vector((q.x - mid.x, q.y - mid.y, 0.0)))
+    if lip:
+        band(hi, top, lambda q: Vector((q.x - mid.x, q.y - mid.y, 0.0)))
+    band(top, in_hi, lambda q: Z)
+    band(in_hi, in_lo, lambda q: Vector((mid.x - q.x, mid.y - q.y, 0.0)))
+    for i in (0, n - 1):                                     # (its two ends)
+        along = (pts[1] - pts[0]) if i == 0 else (pts[-2] - pts[-1])
+        m.add([lo[i], hi[i], top[i], in_hi[i], in_lo[i]], [(0, 1, 2, 3, 4)], paint, False, lambda q, w=-along: w)
+
+
+def ledge(m, line, z, reach, paint, thick=0.05):
+    """A narrow shelf standing out from a wall along an open line of (x, y) points, its upper face sloping down and out,
+    dying away into the wall at each end: the spray deflector half way up a submarine's tower."""
+    pts, outs, mid = _outward(line)
+    n = len(pts)
+    far = [reach * (0.02 if i in (0, n - 1) else 1.0) for i in range(n)]
+    root_hi = [q + Z * (z + thick + r_ * 0.35) for q, r_ in zip(pts, far)]
+    edge = [q + o * r_ + Z * z for q, o, r_ in zip(pts, outs, far)]
+    edge_lo = [q + o * r_ + Z * (z - thick * 0.5) for q, o, r_ in zip(pts, outs, far)]
+    root_lo = [q + Z * (z - thick - r_ * 0.2) for q, r_ in zip(pts, far)]
+    for a, b, way in ((root_hi, edge, Z), (edge, edge_lo, None), (edge_lo, root_lo, -Z)):
+        m.add(a + b, [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)], paint, way is not None,
+              (lambda q, w=way: w) if way is not None else (lambda q: Vector((q.x - mid.x, q.y - mid.y, 0.0))))
+    for i in (0, n - 1):
+        along = (pts[1] - pts[0]) if i == 0 else (pts[-2] - pts[-1])
+        m.add([root_hi[i], edge[i], edge_lo[i], root_lo[i]], [(0, 1, 2, 3)], paint, False, lambda q, w=-along: w)
+
+
+def slot(m, at, facing, long, high, paint="black", lift=0.02, arch=False):
+    """A free-flooding hole in a submarine's casing, lying flat on her side: a slot with round ends along her length,
+    or (`arch`) the upper half of a round hole, its flat side down."""
+    n = Vector(facing).normalized()
+    t = (X - n * X.dot(n)).normalized()
+    u = n.cross(t)
+    if u.z < 0:
+        u = -u
+    c = Vector(at) + n * lift
+    if arch:
+        ring = [t * (math.cos(math.pi * i / 8.0) * long * 0.5) + u * (math.sin(math.pi * i / 8.0) * high) for i in range(9)]
+        hub = c + u * (high * 0.35)
+    else:
+        a, r = (long - high) * 0.5, high * 0.5
+        ring = ([t * (a + r * math.cos(math.radians(d))) + u * (r * math.sin(math.radians(d))) for d in (-90, -54, -18, 18, 54, 90)]
+                + [t * (-a + r * math.cos(math.radians(d))) + u * (r * math.sin(math.radians(d))) for d in (90, 126, 162, 198, 234, 270)])
+        hub = c
+    k = len(ring)
+    m.add([c + q for q in ring] + [hub], [(i, (i + 1) % k, k) for i in range(k if not arch else k - 1)] + ([(k - 1, 0, k)] if arch else []), paint, False, lambda q: n)
+
+
+def hoop(m, mid, axis, r, thick, paint, sides=12):
+    """A ring of thin rod: a direction-finding loop."""
+    axis = Vector(axis).normalized()
+    a = axis.cross(Z)
+    if a.length < 1e-6:
+        a = axis.cross(X)
+    a.normalize()
+    b = a.cross(axis)
+    pts = [Vector(mid) + (a * math.cos(2 * math.pi * i / sides) + b * math.sin(2 * math.pi * i / sides)) * r for i in range(sides)]
+    for i in range(sides):
+        m.rod(pts[i], pts[(i + 1) % sides], thick, paint, sides=4, caps=(False, False))
+
+
 def submarine(tag, fine=True, hull_hex=None):
     """A submarine: a round hull low in the water under a narrow casing, a conning tower, a gun on deck, planes fore and aft."""
     # the plain boat: 80 m by 7
@@ -991,38 +1078,79 @@ def submarine(tag, fine=True, hull_hex=None):
     x0, x1, th = c["tower"]
     Z0 = yard.deck((x0 + x1) * 0.5)
 
-    # ---- the conning tower: a rounded house, a bulwark round her bridge, the periscope standards
+    # ---- the conning tower: a rounded house; round its top the bridge screen, open abaft, and the bridge inside it
     half = min(1.25, h.half_at((x0 + x1) * 0.5) * 0.8)
-    t1 = yard.house(x0, x1, half, Z0, th, r=half * 0.95, rail=False, walls=False)
-    yard.house(x0 - 0.1, x0 - 2.6, half * 0.9, t1, 0.95, r=half * 0.8, top="deck", rail=False, walls=False)       # the bridge screen
+    rnd = half * 0.95
+    t1 = yard.house(x0, x1, half, Z0, th, r=rnd, rail=False, walls=False, steps=6, smooth=True)
+    xb = x1 + 0.9                                            # (the screen ends here: abaft it the tower's top is open)
+    screen = 1.2
     m.use(yard.half(x0))
+    # (the screen follows the tower's own wall: along her port side, round her fore end, back down her starboard side)
+    turn = ([(x0 - rnd + rnd * math.cos(math.radians(d)), (half - rnd) + rnd * math.sin(math.radians(d))) for d in (90, 75, 60, 45, 30, 15, 0)]
+            + [(x0 - rnd + rnd * math.cos(math.radians(d)), -(half - rnd) + rnd * math.sin(math.radians(d))) for d in (0, -15, -30, -45, -60, -75, -90)])
+    if fine:
+        bulwark(m, [(xb, half)] + turn + [(xb, -half)], t1, t1 + screen, 0.06, "upper", lip=0.07)
+        if tag == "GER":      # the spray deflector half way up her tower, round its fore end
+            ledge(m, [(x0 - rnd - 0.7, half)] + turn + [(x0 - rnd - 0.7, -half)], Z0 + th * 0.56, 0.16, "upper")
+    else:
+        yard.house(x0, xb, half, t1, screen, r=rnd, top="deck", rail=False, walls=False)
     stand = x0 - 3.6
-    m.lathe((stand, 0, t1), Z, [(0.0, 0.42), (1.7, 0.32)], "upper", 10 if fine else 6)
+    m.lathe((stand, 0, t1), Z, [(0.0, 0.42), (1.7, 0.32)], "upper", 16 if fine else 6)
     scopes = []
     for i, (px, r_) in enumerate(((stand, 0.09), (stand - 1.0, 0.07))):
         pn = m.part(f"periscope.{i + 1}", yard.half(px), (px, 0, t1 + 0.4), slide=(0, 0, 1), slide_limits=[0.0, 4.2], kind="slide", note="a periscope: slides up out of its standard")
         m.use(pn)
-        m.rod((px, 0, t1 - 2.2), (px, 0, t1 + 1.9 - i * 0.5), r_, "steel", sides=6)
-        m.box((px + 0.05, 0, t1 + 1.8 - i * 0.5), (0.2, 0.16, 0.22), "steel")
+        m.rod((px, 0, t1 - 2.2), (px, 0, t1 + 1.9 - i * 0.5), r_, "steel", sides=10 if fine else 6)
+        if fine:              # its head: a slim neck with a small window looking ahead
+            m.lathe((px, 0, t1 + 1.9 - i * 0.5), Z, [(0.0, r_), (0.1, r_ * 0.7), (0.34, r_ * 0.6), (0.37, r_ * 0.3)], "steel", 10)
+            m.disc((px + r_ * 0.62, 0, t1 + 2.16 - i * 0.5), (1, 0, 0), r_ * 0.4, "glass", 8)
+        else:
+            m.box((px + 0.05, 0, t1 + 1.8 - i * 0.5), (0.2, 0.16, 0.22), "steel")
         m.socket(f"periscope.{i + 1}", (px, 0, t1 + 1.9 - i * 0.5), (0, 0, 1), pn, "the periscope's head: its feather of spray starts here when she runs just under")
         scopes.append(pn)
     m.use(yard.half(x1))
+    if tag != "USA" and fine:   # the second periscope's own low standard
+        m.lathe((stand - 1.0, 0, t1), Z, [(0.0, 0.26), (0.9, 0.2)], "upper", 12)
     if tag == "USA":          # the shears that carry her periscopes and aerials
         for dx in (0.0, -1.0):
-            m.rod((stand + dx, 0.0, t1), (stand + dx, 0.0, t1 + 3.6), 0.2, "upper", sides=6)
+            m.rod((stand + dx, 0.0, t1), (stand + dx, 0.0, t1 + 3.6), 0.2, "upper", sides=12 if fine else 6)
         m.box((stand - 0.5, 0, t1 + 3.3), (1.6, 0.5, 0.3), "upper")
+    if fine:
+        # on her bridge: the hatch down into her, the sight on its post; outside: lamps, the rungs up her side
+        m.use(yard.half(x0))
+        m.lathe((x0 - 2.3, 0, t1), Z, [(0.0, 0.36), (0.07, 0.36), (0.1, 0.3)], "upper", 14)
+        m.lathe((x0 - 2.3, 0, t1 + 0.1), Z, [(0.0, 0.03), (0.07, 0.03), (0.07, 0.13), (0.1, 0.13)], "steel", 10)
+        m.rod((x0 - 1.15, 0, t1), (x0 - 1.15, 0, t1 + 1.12), 0.06, "upper", sides=8)
+        m.box((x0 - 1.15, 0, t1 + 1.15), (0.14, 0.26, 0.06), "upper")
+        for hand in (PORT, STBD):
+            m.rod((x0 - 1.29, hand * 0.07, t1 + 1.23), (x0 - 0.99, hand * 0.07, t1 + 1.23), 0.05, "steel", rb=0.062, sides=8)     # the glasses of her sight
+            m.box((x0 - rnd - 0.5, hand * (half + 0.04), t1 + 0.55), (0.14, 0.08, 0.16), "steel")
+            m.disc((x0 - rnd - 0.5, hand * (half + 0.085), t1 + 0.55), (0, hand, 0), 0.05, "glass", 8)
+        rz = Z0 + 0.4
+        while rz < t1 + screen - 0.1:
+            m.rod((xb + 0.35, half + 0.06, rz), (xb + 0.7, half + 0.06, rz), 0.016, "steel", sides=4)
+            m.rod((xb + 0.35, half + 0.06, rz), (xb + 0.35, half - 0.02, rz), 0.012, "steel", sides=3, caps=(False, False))
+            m.rod((xb + 0.7, half + 0.06, rz), (xb + 0.7, half - 0.02, rz), 0.012, "steel", sides=3, caps=(False, False))
+            rz += 0.3
+        if tag == "GER":      # her direction-finding loop, on the starboard side of the bridge
+            m.rod((x0 - 2.9, -(half - 0.03), t1 + screen - 0.05), (x0 - 2.9, -(half - 0.03), t1 + screen + 0.22), 0.03, "steel", sides=6)
+            hoop(m, (x0 - 2.9, -(half - 0.03), t1 + screen + 0.44), Y, 0.22, 0.016, "steel")
+        if tag == "USA":      # a door in each side of her fairwater
+            for hand in (PORT, STBD):
+                m.box((x1 + 2.2, hand * (half + 0.02), Z0 + 0.92), (0.62, 0.05, 1.6), "door")
+                m.box((x1 + 2.0, hand * (half + 0.05), Z0 + 1.0), (0.08, 0.04, 0.08), "steel")
     # the gun platform abaft the tower (or before it), with its light gun
     ax = c["aa"]
     px0, px1 = (x1 + 0.3, x1 - 3.4) if ax < 0 else (x0 + 3.2, x0 - 0.3)
-    plat = yard.house(px0, px1, half * 0.95, Z0, th * 0.42, r=half * 0.8, top="deck", rail=True, walls=False)
-    yard.light_gun((px0 + px1) * 0.5, 0.0, plat + 0.02, 1, tub=False, facing=180.0 if ax < 0 else 0.0, long=1.5)
+    plat = yard.house(px0, px1, half * 0.95, Z0, th * 0.42, r=half * 0.8, top="deck", rail=True, walls=False, steps=5, smooth=True)
+    yard.light_gun((px0 + px1) * 0.5, 0.0, plat + 0.02, 1, tub=False, facing=180.0 if ax < 0 else 0.0, long=1.5, slim=True)
 
-    # ---- the deck gun
+    # ---- the deck gun: an open mounting on its pedestal, on a round platform let into the casing
     mains = []
     gx = c["gun"] if c["gun"] is not None else c["gun_aft"]
     m.use(yard.half(gx))
-    m.lathe((gx, 0, yard.deck(gx) - 0.05), Z, [(0.0, 1.3), (0.35, 1.3)], "deck", 12 if fine else 6)
-    tn, gs = yard.turret("turret.A", gx, yard.deck(gx) + 0.3, 1.5, 1, 3.6, 0.0 if c["gun"] is not None else 180.0, 0.09, style="shield", rate=12.0, elev=(-5, 35), rest_elev=2.0, floats=False)
+    m.lathe((gx, 0, yard.deck(gx) - 0.05), Z, [(0.0, 1.3), (0.17, 1.3), (0.21, 1.24)], "deck", 20 if fine else 6)
+    tn, gs = yard.turret("turret.A", gx, yard.deck(gx) + 0.16, 1.5, 1, 3.6, 0.0 if c["gun"] is not None else 180.0, 0.09, style="open", rate=12.0, elev=(-5, 35), rest_elev=2.0, floats=False)
     mains.append((tn, gs, gx, False))
 
     # ---- the planes fore and aft: each pair turns together
@@ -1053,16 +1181,68 @@ def submarine(tag, fine=True, hull_hex=None):
         m.disc(p + n * 0.02, n, 0.28, "black", 8, oval=1.4)
         m.socket(f"torpedo.stern.{k + 1}", p - X * 1.0, (-1, 0, 0), "aft", "a torpedo leaves her stern here")
 
-    # ---- the casing: free-flooding holes along it, the jumping wires over all, a few rails by the tower
+    # ---- the casing: free-flooding holes along it, the slats of her deck, what stands on it; the jumping wires over
+    # all, a few rails by the tower
     if fine:
-        x = -L * 0.42
-        k = 0
-        while x < L * 0.44:
+        # (Germany's boats: two rows of slots, the lower one thinner spread; America's: a row of arched limber holes
+        #  along the foot of the casing; the plain boat: one row of slots)
+        rows = {"GER": ((0.28, 0.9, 0.0, False), (0.52, 1.8, 0.45, False)), "USA": ((0.56, 1.15, 0.0, True),)}.get(tag, ((0.36, 1.1, 0.0, False),))
+        for drop, every, start, arch in rows:
+            x = -L * 0.43 + start
+            while x < L * 0.45:
+                zz = yard.deck(x) * (1.0 - drop)
+                for hand in (PORT, STBD):
+                    p, n = h.side(x, zz, hand)
+                    if arch:
+                        slot(yard.on(x), p, n, 0.46, 0.2, arch=True)
+                    else:
+                        slot(yard.on(x), p, n, 0.44, 0.13)
+                x += every
+
+        # her deck is laid in slats along her length: thin seams, a hand's breadth apart in life, here every 0.4 m
+        def on_deck(u, y):
+            e = h.point(u, 1.0, PORT)
+            wide = max(e.y - 0.35, e.y * 0.5)
+            if abs(y) > wide * 0.94:
+                return None
+            j = (1.0 - y / wide) * 3.0                      # (the deck is seven points across, flat between them)
+            j0 = min(int(j), 5)
+
+            def zj(jj):
+                f = 1.0 - 2.0 * jj / 6.0
+                return e.z + 0.02 + 0.22 * (1.0 - f * f) * min(1.0, wide / 4.0)
+            return Vector((e.x, y, zj(j0) * (1.0 - (j - j0)) + zj(j0 + 1) * (j - j0)))
+        ub = h.u_of(yard.break_x)
+        us = sorted(set([-1.0 + 2.0 * i / 72 for i in range(73)] + [ub]))
+        for y in (0.0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6):
+            for part, sel in (("aft", [u for u in us if -0.93 <= u <= ub]), ("fore", [u for u in us if ub <= u <= 0.95])):
+                run = []
+                for u in sel + [None]:
+                    q = on_deck(u, y) if u is not None else None
+                    if q is not None and not (x1 - 0.2 < q.x < x0 + 0.2 and abs(y) < half):
+                        run.append(q)
+                        continue
+                    if len(run) > 1:
+                        m.use(part)
+                        m.strip(run, [Z] * len(run), 0.011, "seam", 0.012)
+                    run = []
+        # what stands on her deck: bollards fore and aft, a capstan, the hatches, her anchor in its bed
+        for bx in (L * 0.36, L * 0.24, -L * 0.27, -L * 0.38):
             for hand in (PORT, STBD):
-                p, n = h.side(x, yard.deck(x) * (0.55 if k % 2 == 0 else 0.3), hand)
-                yard.on(x).disc(p + n * 0.02, n, 0.13, "black", 6, oval=1.8)
-            x += 1.25
-            k += 1
+                yard.bollards(bx, hand * (h.half_at(bx) - 0.75) * 0.8, yard.deck(bx), k=0.5, sides=10)
+        def crown(x_):                                        # (the deck's height on her middle line: it is cambered)
+            return on_deck(h.u_of(x_), 0.0).z - 0.02
+        cx = L * 0.41
+        yard.on(cx).lathe((cx, 0, crown(cx)), Z, [(0.0, 0.26), (0.12, 0.2), (0.34, 0.2), (0.38, 0.27), (0.45, 0.25)], "steel", 12)
+        for hx in ((gx + 5.0) if gx > 0 else (x0 + 7.5), x1 - (9.0 if gx > 0 else 4.5), -L * 0.33):
+            if abs(hx - gx) < 2.2:
+                hx -= 3.0
+            yard.on(hx).lathe((hx, 0, crown(hx)), Z, [(0.0, 0.4), (0.12, 0.4), (0.16, 0.34)], "upper", 14)
+            m.lathe((hx, 0, crown(hx) + 0.16), Z, [(0.0, 0.03), (0.06, 0.03), (0.06, 0.13), (0.09, 0.13)], "steel", 10)
+        p, n = h.side(L * 0.4, yard.deck(L * 0.4) * 0.5, STBD)
+        slot(yard.on(L * 0.4), p, n, 0.9, 0.5, lift=0.015)
+        m.box(p + n * 0.05, (0.7, 0.07, 0.1), "steel", yaw=math.degrees(math.atan2(n.y, n.x)) + 90.0)
+        m.box(p + n * 0.05 - X * 0.3, (0.1, 0.07, 0.42), "steel", yaw=math.degrees(math.atan2(n.y, n.x)) + 90.0)
     bow_top = Vector((h.frame_x(1.0) + h.rake * 0.9, 0, yard.deck(L * 0.49) + 0.5))
     stern_top = Vector((-L * 0.48, 0, yard.deck(-L * 0.48) + 0.5))
     wire_top = Vector((stand, 0, t1 + (3.7 if tag == "USA" else 1.9)))

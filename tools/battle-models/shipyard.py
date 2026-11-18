@@ -335,9 +335,12 @@ class Yard:
             m.prism(lower, top - high, top, "antifoul", top=plan, bottom=True, smooth=False)
 
     # ---- things that stand on her -----------------------------------------------------------------------
-    def house(self, x0, x1, half, z, high, paint="upper", r=0.8, y=0.0, top="deck", taper=0.0, part=None, rail=None, walls=True, square=(False, False)):
+    def house(self, x0, x1, half, z, high, paint="upper", r=0.8, y=0.0, top="deck", taper=0.0, part=None, rail=None, walls=True, square=(False, False),
+              steps=None, smooth=False):
+        """`steps`: how finely its corners are rounded (a house whose ends are half rounds, seen close, wants more than
+        three); `smooth`: its walls are shaded as one round skin."""
         m = self.m.use(part) if part else self.on((x0 + x1) * 0.5)
-        m.house(x0, x1, half, z, high, paint, r, y, top_paint=top, taper=taper, steps=3 if self.m.fine else 1, square=square)
+        m.house(x0, x1, half, z, high, paint, r, y, top_paint=top, taper=taper, steps=(steps or 3) if self.m.fine else 1, square=square, smooth=smooth)
         fore, rear = max(x0, x1), min(x0, x1)
         if rail is None:
             rail = fore - rear >= 4.0 and half >= 2.4 and top == "deck"
@@ -495,30 +498,45 @@ class Yard:
             faces += [(layer * 10 + k, layer * 10 + (k + 1) % 10, (layer + 1) * 10 + (k + 1) % 10, (layer + 1) * 10 + k) for k in range(10)]
         self.m.add(verts, faces, "cork", False, lambda q: (q - mid) - f * (q - mid).dot(f) * 0.0 + f * 0.3)
 
-    def light_gun(self, x, y, z, barrels=2, tub=True, facing=0.0, long=1.9):
-        """Light anti-aircraft guns in a tub."""
+    def light_gun(self, x, y, z, barrels=2, tub=True, facing=0.0, long=1.9, slim=False):
+        """Light anti-aircraft guns in a tub. `slim`: a single gun seen close and in the open (a submarine's): a slender
+        pedestal in the ship's grey, a small body with its drum, shoulder rests."""
         m = self.on(x)
         if tub:
             m.tub((x, y, z), 1.35 if barrels > 1 else 1.0, 0.95, "upper", sides=12 if m.fine else 6, floor="deck")
-        m.lathe((x, y, z), Z, [(0.0, 0.35), (0.9, 0.22)], "steel", 6)
         a = math.radians(facing)
         f = Vector((math.cos(a) * 0.8, math.sin(a) * 0.8, 0.6)).normalized()
         s = Vector((-math.sin(a), math.cos(a), 0))
-        for k in range(barrels):
-            o = s * ((k - (barrels - 1) / 2.0) * 0.32)
-            m.rod(Vector((x, y, z + 1.15)) + o - f * 0.4, Vector((x, y, z + 1.15)) + o + f * long, 0.05, "steel", sides=4)
-        if m.fine:
-            m.box(Vector((x, y, z + 1.15)), (0.7, 0.3 + 0.3 * barrels, 0.45), "steel", yaw=facing, pitch=35)
+        if slim and m.fine:
+            m.lathe((x, y, z), Z, [(0.0, 0.3), (0.06, 0.3), (0.14, 0.11), (1.0, 0.08)], "upper", 12)
+            at = Vector((x, y, z + 1.15))
+            m.rod(at - f * 0.5, at + f * long, 0.028, "steel", sides=6)
+            m.rod(at - f * 0.45, at + f * 0.3, 0.07, "steel", sides=8)                   # the body, and the drum on top of it
+            up = s.cross(f)
+            if up.z < 0:
+                up = -up
+            m.lathe(at - f * 0.05 + up * 0.07, up, [(0.0, 0.13), (0.11, 0.13)], "steel", 10)
+            for hand in (PORT, STBD):                                                    # the shoulder rests
+                m.rod(at - f * 0.45 + s * hand * 0.05, at - f * 0.8 + s * hand * 0.2, 0.018, "steel", sides=4)
+                m.rod(at - f * 0.8 + s * hand * 0.2 - Z * 0.14, at - f * 0.8 + s * hand * 0.2 + Z * 0.06, 0.022, "steel", sides=4)
+            m.rod(Vector((x, y, z + 1.0)), at - f * 0.05, 0.05, "upper", sides=6)
+        else:
+            m.lathe((x, y, z), Z, [(0.0, 0.35), (0.9, 0.22)], "steel", 6)
+            for k in range(barrels):
+                o = s * ((k - (barrels - 1) / 2.0) * 0.32)
+                m.rod(Vector((x, y, z + 1.15)) + o - f * 0.4, Vector((x, y, z + 1.15)) + o + f * long, 0.05, "steel", sides=4)
+            if m.fine:
+                m.box(Vector((x, y, z + 1.15)), (0.7, 0.3 + 0.3 * barrels, 0.45), "steel", yaw=facing, pitch=35)
         n = sum(1 for sk in m.sockets if sk["name"].startswith("aa.")) + 1
         m.socket(f"aa.{n}", Vector((x, y, z + 1.15)) + f * long, f, self.half(x), "a light gun's muzzles: tracer starts here")
 
     def capstan(self, x, y, z):
         self.on(x).lathe((x, y, z), Z, [(0.0, 0.55), (0.25, 0.4), (0.7, 0.4), (0.8, 0.55), (0.95, 0.5)], "steel", 10)
 
-    def bollards(self, x, y, z):
+    def bollards(self, x, y, z, k=1.0, sides=6):
         m = self.on(x)
-        for d in (-0.5, 0.5):
-            m.lathe((x + d, y, z), Z, [(0.0, 0.2), (0.6, 0.2), (0.62, 0.27), (0.72, 0.27)], "steel", 6)
+        for d in (-0.5 * k, 0.5 * k):
+            m.lathe((x + d, y, z), Z, [(0.0, 0.2 * k), (0.6 * k, 0.2 * k), (0.62 * k, 0.27 * k), (0.72 * k, 0.27 * k)], "steel", sides)
 
     def vent(self, x, y, z, r=0.45, high=1.4):
         m = self.on(x)
@@ -585,18 +603,33 @@ class Yard:
             Lf, Lr, hh = 0.62 * S, 0.62 * S, 0.36 * S
             lo = [(Lf, 0.26 * S), (0.36 * S, 0.5 * S), (-Lr, 0.5 * S), (-Lr, -0.5 * S), (0.36 * S, -0.5 * S), (Lf, -0.26 * S)]
             hi = [(Lf - 0.2 * S, 0.24 * S), (0.3 * S, 0.46 * S), (-Lr + 0.03 * S, 0.46 * S), (-Lr + 0.03 * S, -0.46 * S), (0.3 * S, -0.46 * S), (Lf - 0.2 * S, -0.24 * S)]
+        elif style == "open":        # a submarine's deck gun: no shield at all, the gun in its cradle on a pedestal
+            Lf, Lr, hh = 0.3 * S, 0.3 * S, 0.66 * S
+            lo = hi = []
         else:                        # a destroyer's gun in its shield, open at the back
             Lf, Lr, hh = 0.5 * S, 0.42 * S, 0.5 * S
             lo = [(Lf, 0.3 * S), (0.2 * S, 0.5 * S), (-Lr, 0.5 * S), (-Lr, -0.5 * S), (0.2 * S, -0.5 * S), (Lf, -0.3 * S)]
             hi = [(Lf - 0.22 * S, 0.26 * S), (0.1 * S, 0.44 * S), (-Lr, 0.44 * S), (-Lr, -0.44 * S), (0.1 * S, -0.44 * S), (Lf - 0.22 * S, -0.26 * S)]
         nlo = len(lo)
-        vl = [W((p[0], p[1], 0.0)) for p in lo]
-        vh = [W((p[0], p[1], hh)) for p in hi]
-        mid = W((0, 0, hh * 0.5))
-        m.add(vl + vh, [(k, (k + 1) % nlo, nlo + (k + 1) % nlo, nlo + k) for k in range(nlo)], "upper", False, lambda q: q - mid)
-        ctr = W((sum(p[0] for p in hi) / nlo, 0, hh + 0.04 * S if style == "heavy" else hh + 0.02 * S))
-        m.add(vh + [ctr], [(k, (k + 1) % nlo, nlo) for k in range(nlo)], "roof", False, lambda q: Z)
-        m.add(vl + [W((0, 0, 0))], [(k, (k + 1) % nlo, nlo) for k in range(nlo)], "steel", False, lambda q: -Z)
+        if style == "open":
+            # (the pedestal stands on what is 0.45 under the mounting's floor: the deck, or the round platform laid for it)
+            m.lathe(W((0, 0, -0.45)), Z, [(0.0, 0.33 * S), (0.08, 0.33 * S), (0.2, 0.17 * S), (0.45 + hh * 0.5 - 0.14 * S, 0.14 * S)], "upper", 14 if m.fine else 6)
+            if m.fine:
+                m.box(W((0.0, 0, hh * 0.5 - 0.13 * S)), (0.36 * S, 0.3 * S, 0.08 * S), "upper", yaw=bearing)                 # the saddle, and a cheek each side of the cradle
+                for hand in (PORT, STBD):
+                    m.box(W((0.0, hand * 0.14 * S, hh * 0.5 - 0.03 * S)), (0.36 * S, 0.035 * S, 0.26 * S), "upper", yaw=bearing)
+                    wheel = W((-0.15 * S, hand * 0.16 * S, hh * 0.5 - 0.06 * S))                                             # the layer's and the trainer's handwheels
+                    side = rot @ Vector((0, hand, 0))
+                    m.rod(wheel, wheel + side * 0.09 * S, 0.014 * S, "steel", sides=4)
+                    m.lathe(wheel + side * 0.09 * S, side, [(0.0, 0.1 * S), (0.02 * S, 0.1 * S)], "steel", 10)
+        else:
+            vl = [W((p[0], p[1], 0.0)) for p in lo]
+            vh = [W((p[0], p[1], hh)) for p in hi]
+            mid = W((0, 0, hh * 0.5))
+            m.add(vl + vh, [(k, (k + 1) % nlo, nlo + (k + 1) % nlo, nlo + k) for k in range(nlo)], "upper", False, lambda q: q - mid)
+            ctr = W((sum(p[0] for p in hi) / nlo, 0, hh + 0.04 * S if style == "heavy" else hh + 0.02 * S))
+            m.add(vh + [ctr], [(k, (k + 1) % nlo, nlo) for k in range(nlo)], "roof", False, lambda q: Z)
+            m.add(vl + [W((0, 0, 0))], [(k, (k + 1) % nlo, nlo) for k in range(nlo)], "steel", False, lambda q: -Z)
         if style == "heavy" and m.fine:
             for hand in (PORT, STBD):     # the rangefinder's hoods on each side, the sighting hoods on the roof
                 m.box(W((-0.38 * S, hand * 0.49 * S, hh * 0.62)), (0.16 * S, 0.1 * S, 0.1 * S), "upper", yaw=bearing)
@@ -629,7 +662,11 @@ class Yard:
             tip = piv + axis * (reach + long)
             m.disc(tip - axis * 0.02, axis, bore * 0.98, "upper", 10 if m.fine else 6)
             m.disc(tip + axis * 0.005, axis, bore * 0.55, "black", 8 if m.fine else 6)
-            if style != "shield":       # the canvas blast bag where the gun leaves the house
+            if style == "open":         # her breech, behind the trunnions: it lifts and drops with the gun
+                m.rod(piv - axis * 0.42 * S, piv, bore * 2.2, "steel", sides=10 if m.fine else 6)
+                if m.fine:
+                    m.box(piv - axis * 0.38 * S, (0.1 * S, bore * 4.6, bore * 4.6), "steel", yaw=bearing, pitch=rest_elev)
+            if style not in ("shield", "open"):       # the canvas blast bag where the gun leaves the house
                 m.lathe(piv + axis * (reach - 0.25 * bore), axis, [(0.0, bore * 2.7), (bore * 1.6, bore * 2.5), (bore * 5.0, bore * 1.75)], "bag", 10 if m.fine else 6, caps=(False, False))
             m.socket(f"muzzle.{name}.{k + 1}", tip, axis, gname, "flash, smoke and the shell leave here")
             guns.append(gname)
