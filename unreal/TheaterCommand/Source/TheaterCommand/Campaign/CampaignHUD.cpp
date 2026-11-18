@@ -7251,8 +7251,8 @@ namespace
 										SNew(STextBlock).Text(FText::FromString(TEXT("1939 TO 1945"))).Font(Font(TEXT("Bold"), 12, 520)).ColorAndOpacity(Brass)
 									]
 
-									// (Rules 84.3.3; ruling 141.) FIRST COMMAND on the title band, above CONTINUE YOUR CAMPAIGN: lit with the
-									// kit's lamp, never brass, until the ten lessons are done; "New here? Learn as you play.", and then
+									// (Rules 84.3.3; ruling 141.) FIRST COMMAND on the title band, on its own row above the pages' row and
+									// CONTINUE (the UI director, 04:00): lit with the kit's lamp, never brass, until the ten lessons are done; "New here? Learn as you play.", and then
 									// "The ten lessons again." It begins the campaign the rules name for it, after ruling 130's question
 									// where a campaign is saved.
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 10.0f, 0.0f)
@@ -13018,7 +13018,18 @@ namespace
 					}
 				}
 			}
-			OpeningNeed = Need;
+			// (The checker's note E.) Drawn smaller, the card's text is measured at the scale it is drawn at, a line a whole
+			// pixel high, so what it needs moves a little with the scale, and the scale with what it needs: left free, it
+			// could tremble between two scales for good. For its first frames after it is laid out it takes what it
+			// measures; after that it only grows, and so comes to rest, a few units slack at most.
+			if (OpeningSettle > 0 || Need > OpeningNeed)
+			{
+				OpeningNeed = Need;
+			}
+			if (OpeningSettle > 0)
+			{
+				--OpeningSettle;
+			}
 			bListRunsOn = StartsScroll->GetScrollOffset() < StartsScroll->GetScrollOffsetOfEnd() - 1.0f;
 			if (!bListRunsOn)
 			{
@@ -13209,6 +13220,7 @@ namespace
 
 			Starts->ClearChildren();
 			ListRows.Reset();
+			OpeningSettle = 3; // (see LookAtList)
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
 
@@ -14303,6 +14315,7 @@ namespace
 		// (03:53) The opening card, and the height it needs to hold whole all that is ruled to stay (0 until it is known).
 		TSharedPtr<SBox> OpeningCardBox;
 		float OpeningNeed = 0.0f;
+		int32 OpeningSettle = 0; // (frames after a laying out in which what is measured is taken as it is)
 		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
 		bool bListRunsOn = false;
 		int32 ListBelow = 0;
