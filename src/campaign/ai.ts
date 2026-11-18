@@ -23,7 +23,7 @@ import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { GREAT, SIEGE, besieged, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -307,7 +307,7 @@ function sieges(g: Game, nat: string, after = false): void {
     // and when the siege has dragged on, it settles for less and at last for a gamble.
     const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
     // By the book (b509(c)): before Leningrad a computer Germany, and any computer ally round the town with it, keeps
-    // the ring and does not storm. Hunger may still take the place.
+    // the ring and does not storm; and the book feeds the town across the lake, so hunger does not take it either.
     const heldBy = stormHeldBy(g, r.name);
     const noStorm = heldBy !== null && (heldBy === nat || allied(g, nat, heldBy));
     // Allies standing round the same town go in with it: besiegers who each fall short alone storm together. The
@@ -357,7 +357,7 @@ function sieges(g: Game, nat: string, after = false): void {
     // Not stormed: the siege goes on. Round a prize every corps stays; round a small place held by its guard, enough to shut it in.
     // A port that ships can feed is not starved by waiting: after a season round one only the ring stays, and the
     // rest are free to overrun the country behind it (overrun, below) or to go where the staff wants them.
-    const fed = prize && sat >= SIEGE.ai.sea.after && feeders(g, r).length > 0;
+    const fed = prize && sat >= SIEGE.ai.sea.after && (feeders(g, r).length > 0 || fedByBook(g, r));
     const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
     let have = 0;
     for (const c of mine().filter((u) => u.kind !== 'eng').sort((x, y) => fast(x) - fast(y) || atkPower(g, x) - atkPower(g, y))) {
