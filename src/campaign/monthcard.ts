@@ -315,10 +315,14 @@ const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
 /** "Hamburg's", "Calais'". */
 const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${place}'s`);
-/** What a desk did, as the card says it: the desk, then the deed, in about forty letters and never a cut name. */
-export function staffShort(desk: string, text: string): string {
+/**
+ * What a desk did, as the card says it: the desk, then the deed, in about forty letters and never a cut name. `all`
+ * is the letters the line may run to in all; Infinity for a card whose lines wrap (the 3D game's), where the first
+ * way of saying it is always taken and nothing is cut.
+ */
+export function staffShort(desk: string, text: string, all: number = FOOT_ROOM.staff): string {
   const word = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
-  const room = FOOT_ROOM.staff - word.length - 2;
+  const room = all - word.length - 2;
   const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, '');
   // The first way of saying it that fits; the last is always short.
   const fit = (...tries: string[]): string => { const t = tries.find((x) => x.length <= room) ?? tries[tries.length - 1]; return `${word}: ${t.length <= room ? t : wholeWords(t, room, 1).replace(/\.$/, '')}`; };
@@ -465,8 +469,13 @@ export const NOT_YET_FOUGHT = 'Nothing has been fought on your fronts yet.';
 export const cardHead = (card: { month: string; opening?: boolean }): { before: string; month: string; after: string } =>
   (card.opening ? { before: 'As', month: card.month, after: 'opens' } : { before: '', month: card.month, after: '' });
 
-/** The card for everything that has happened since the mark was taken. `opening` marks the card that opens a campaign (see opensCampaign). */
-export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human, opts: { opening?: boolean } = {}): MonthCard {
+/**
+ * The card for everything that has happened since the mark was taken. `opening` marks the card that opens a campaign
+ * (see opensCampaign). `whole` is for a card whose rows and boxes wrap and grow (the 3D game's: its UI director's
+ * review of build 1628, "no sentence is cut with three dots"): a row's sentence, a desk's line and a foot box's lines
+ * are given whole, and a foot box holds as many lines of news as it has lines.
+ */
+export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human, opts: { opening?: boolean; whole?: boolean } = {}): MonthCard {
   const me = viewer ?? '';
   const N = g.nations[me];
   const card: MonthCard = {
@@ -1101,7 +1110,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     card.rows.splice(card.show, 0, gone);
   }
   // (A long word under the figure takes its width from the sentence beside it.)
-  for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
+  if (!opts.whole) for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
   card.quiet = fighting.length ? '' : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
   if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
 
@@ -1157,7 +1166,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
-    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
+    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
     const m = /^Research complete: ([^.]+)\./.exec(h.text);
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.
@@ -1194,7 +1203,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
+  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
     card.also.push(f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }
@@ -1212,7 +1221,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     abroad.push(h);
   }
   // (Each whole while the box's lines last; one that will not fit is cut, or stays in the newsreel: fitFoot.)
-  for (const f of fitFoot(abroad.map((h) => first(h.text)), FOOT_ROOM.elsewhere, slots * 2, slots)) {
+  for (const f of fitFoot(abroad.map((h) => first(h.text)), opts.whole ? Infinity : FOOT_ROOM.elsewhere, slots * 2, slots)) {
     const h = abroad[f.at];
     card.elsewhere.push({ nat: h.nat!, text: f.text, full: h.text, ...(h.region !== undefined ? { region: h.region } : {}) });
     used.add(h);
