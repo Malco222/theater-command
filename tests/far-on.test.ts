@@ -26,6 +26,7 @@ import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
 import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
+import { MANPOWER, classNow, homeShare } from '../src/campaign/manpower';
 import { NAVY } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
@@ -767,5 +768,35 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(industryHeld(g, 'SOV') - (57 - lost) / 57).toBeLessThan(0.05);
     // A country with no home ground out there reads as it always did.
     expect(industryHeld(g, 'GER')).toBe(1);
+  });
+
+  it("counts the month's class of men by the homeland she holds with her far side at the share (ruling b483)", () => {
+    const g = grand();
+    const F = BUDGET.farHome.SOV;
+    expect(homeShare(g, 'SOV')).toBe(1);
+    const full = classNow(g, 'SOV');
+    expect(full).toBe(MANPOWER.class.SOV);
+    // The worth of her home ground, where her young men are: the far side outweighs the old chart, and is never lost.
+    const worth = (r: Game['regions'][number]): number => 1 + r.vp + r.fac;
+    let old = 0, far = 0;
+    for (const r of g.regions) if (r.owner === 'SOV' && !r.overseas) { if (shoreOf(r) === 2) far += worth(r); else old += worth(r); }
+    expect(far).toBeGreaterThan(old);
+    // Germany takes about a third of the old chart's worth.
+    let lost = 0;
+    for (const r of g.regions) if (lost < old / 3 && r.owner === 'SOV' && shoreOf(r) === 0 && !r.cap) { r.ctrl = 'GER'; lost += worth(r); }
+    expect(lost).toBeGreaterThanOrEqual(old / 3);
+    expect(homeShare(g, 'SOV')).toBeCloseTo((old - lost + far * F) / (old + far * F), 9);
+    expect(classNow(g, 'SOV')).toBeCloseTo(full * homeShare(g, 'SOV'), 9);
+    // Counted whole, the far side kept the class near its full size; at the share it reads much as the old chart did.
+    expect(homeShare(g, 'SOV')).toBeLessThan((old + far - lost) / (old + far) - 0.1);
+    expect(homeShare(g, 'SOV') - (old - lost) / old).toBeLessThan(0.05);
+    // A country with no home ground out there reads as it always did.
+    const before = homeShare(g, 'GER');
+    expect(before).toBe(1);
+    const ruhr = g.regions.filter((r) => r.owner === 'GER' && !r.overseas).sort((x, y) => worth(y) - worth(x))[0];
+    let all = 0;
+    for (const r of g.regions) if (r.owner === 'GER' && !r.overseas) all += worth(r);
+    ruhr.ctrl = 'FRA';
+    expect(homeShare(g, 'GER')).toBeCloseTo((all - worth(ruhr)) / all, 12);
   });
 });
