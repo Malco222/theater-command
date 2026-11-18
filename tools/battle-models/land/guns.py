@@ -230,8 +230,11 @@ class GunWorks(Works):
 
     def piece(self, L, bore, back, r0, r1, recoil, brake=None, steps=(), ring=(0.28, 0.3, 0.3), block="right", round_ring=False, lug=0.5, swell=None):
         """The barrel in its cradle: `L` long from the breech face, the breech face `back` behind the trunnions.
-        ring: the breech ring (long, wide, high); block: the way the breech block slides open (right, down), or
-        'screw' for a round breech with a swinging screw."""
+        ring: the breech ring (long, wide, high); block: the way the breech block slides open, or 'screw' for a
+        round breech with a swinging screw. Each kind has its own face, since the battle camera sits behind a gun:
+        'down' is a squarish ring, two upright jaws with the block standing between them, a loading notch in its
+        head; 'right' is a wider oblong ring, a jaw above and one below, the block lying between them and standing
+        out of the ring's right side."""
         xt, zt = self.xt, self.zt
         xb = xt - back
         self.part("barrel", "gun", (xt, 0.0, zt), slide=(-1, 0, 0), slide_limits=[0.0, recoil], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
@@ -244,18 +247,26 @@ class GunWorks(Works):
             n = self.n(24, 10)
             self.lathe((xb - 0.03, 0.0, zt), X, [(bl, r0), (bl, bh / 2 * 0.92), (bl - 0.015, bh / 2), (0.015, bh / 2), (0.0, bh / 2 * 0.9), (0.0, 0.0)], coat, n)
         else:
-            # a forged block with its corners cut away, not a box
-            c = min(bw, bh) * 0.2
+            # a forged ring with its corners cut away: whole round the barrel ahead, and behind that two jaws with
+            # the block's mortise between them (upright jaws for a block that drops, level ones for one that slides)
+            bw, bh = (bw, bh * 1.12) if block == "down" else (bw * 1.24, bh * 0.88)
+            c = min(bw, bh) * (0.1 if block == "down" else 0.16)
+            xr, xm = xb - 0.03, xb - 0.03 + bl * 0.5
             sec = [(-bw / 2 + c, -bh / 2), (bw / 2 - c, -bh / 2), (bw / 2, -bh / 2 + c), (bw / 2, bh / 2 - c), (bw / 2 - c, bh / 2), (-bw / 2 + c, bh / 2), (-bw / 2, bh / 2 - c), (-bw / 2, -bh / 2 + c)]
-            self.put(_bm_section([(y, zt + z) for y, z in sec], xb - 0.03, xb - 0.03 + bl), coat, 0.008)
-            if self.fine:                                   # the loading hole in its rear face, the firing lock in the block, the collar the barrel screws into
-                n = self.n(20, 8)
-                self.lathe((xb - 0.03, 0.0, zt), -X, [(0.003, 0.0), (0.003, bore * 0.86), (0.0, bore * 0.9), (0.0, 0.0)], "shade", n)
-                self.lathe((xb - 0.033, 0.0, zt), -X, [(0.016, 0.0), (0.016, 0.017), (0.0, 0.022), (0.0, 0.0)], "steel", 8)
-                self.lathe((xb - 0.03 + bl, 0.0, zt), X, [(0.05, r0 + 0.004), (0.05, r0 + 0.018), (0.0, r0 + 0.026), (0.0, r0 + 0.004)], coat, self.n(24, 10))
+            self.put(_bm_section([(y, zt + z) for y, z in sec], xm, xr + bl), coat, 0.008)
+            if block == "down":
+                jaw = [(bw * 0.22, -bh / 2), (bw / 2 - c, -bh / 2), (bw / 2, -bh / 2 + c), (bw / 2, bh / 2 - c), (bw / 2 - c, bh / 2), (bw * 0.22, bh / 2)]
+                jaws = [jaw, [(-y, z) for y, z in reversed(jaw)]]
+            else:
+                jaw = [(-bw / 2 + c, bh / 2), (-bw / 2, bh / 2 - c), (-bw / 2, bh * 0.22), (bw / 2, bh * 0.22), (bw / 2, bh / 2 - c), (bw / 2 - c, bh / 2)]
+                jaws = [jaw, [(y, -z) for y, z in reversed(jaw)]]
+            for j in jaws:
+                self.put(_bm_section([(y, zt + z) for y, z in j], xr, xm + 0.004), coat, 0.006)
+            if self.fine:                                   # the collar the barrel screws into, the eyes she is lifted by
+                self.lathe((xr + bl, 0.0, zt), X, [(0.05, r0 + 0.004), (0.05, r0 + 0.018), (0.0, r0 + 0.026), (0.0, r0 + 0.004)], coat, self.n(24, 10))
                 if block != "down":
-                    for sy in (LEFT, RIGHT):                # the eyes she is lifted by
-                        self.lathe((xb - 0.03 + bl * 0.5, sy * bw * 0.2, zt + bh / 2), Z, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.02), (0.0, 0.0)], "shade", 6, False)
+                    for sy in (LEFT, RIGHT):
+                        self.lathe((xr + bl * 0.75, sy * bw * 0.2, zt + bh / 2), Z, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.02), (0.0, 0.0)], "shade", 6, False)
         # the lugs under the barrel that ride the cradle's rails
         for xx in (xb + 0.05, xb + lug):
             self.slab((xx, -self.cradle_w / 2 + 0.04, self.cradle_top + 0.018), (xx + 0.16, self.cradle_w / 2 - 0.04, zt - r0 * 0.5), "shade", 0.004)
@@ -270,8 +281,17 @@ class GunWorks(Works):
             self.tube([(xb - 0.05, 0.02, zt + r0 * 0.3), (xb - 0.09, 0.04, zt + r0 * 0.6), (xb - 0.09, 0.12, zt + r0 * 0.9)], 0.012, "steel", 6)
         else:
             side = Vector((0, 1, 0)) if block == "down" else Vector((0, 0, 1))
-            sz = (bl * 0.46, bw + 0.012, bh * 0.52) if block == "right" else (bl * 0.46, bw * 0.5, bh + 0.012)      # (it stands a little proud of its mortise)
-            self.box(sz, (xb - 0.03 + bl * 0.36, 0.0, zt), "shade", 0.006)
+            rn = bore * 0.62                                # the notch the round is fed through: half a circle cut out of the block
+            arc = [(rn * math.cos(math.radians(a)), -rn * math.sin(math.radians(a))) for a in (0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0)]
+            if block == "down":                             # it stands a little out of the foot of its mortise; the notch is in its head
+                y1, z0, z1 = bw * 0.215, -bh / 2 - 0.02, bh / 2 - 0.025
+                blk = [(-y1, z0), (y1, z0), (y1, z1)] + [(y, z1 + z) for y, z in arc] + [(-y1, z1)]
+            else:                                           # it stands out of the ring's right side; the notch is in its left end
+                z1, y0, y1 = bh * 0.215, -bw / 2 - 0.035, bw / 2 - 0.012
+                blk = [(y0, -z1), (y1, -z1)] + [(y1 + z, y) for y, z in reversed(arc)] + [(y1, z1), (y0, z1)]
+            self.put(_bm_section([(y, zt + z) for y, z in blk], xr + 0.012, xm + 0.002), "shade", 0.004)
+            if self.fine:                                   # the firing lock in the block's face
+                self.lathe((xr + 0.012, 0.0, zt), -X, [(0.016, 0.0), (0.016, 0.017), (0.0, 0.022), (0.0, 0.0)], "steel", 8)
             # the lever that throws it
             a = Vector((xb - 0.03 + bl * 0.4, 0.0, zt)) + side * ((bw if block == "down" else bh) / 2)
             self.tube([a, a + side * 0.04 - X * 0.02, a + side * 0.06 - X * 0.14], 0.011, "steel", 6)

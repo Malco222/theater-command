@@ -229,10 +229,13 @@ def canvas_tilt(v, hoop, xs_h, skirt, lift=0.03, sag=0.035, per_bay=6):
 
 
 # =====================================================================================================================
-def truck(fine=True, tag="_", tilt=True):
+def truck(fine=True, tag="_", tilt=True, fit="troops", name="Truck", title="3-ton lorry"):
     """The 3-ton lorry: 6.0 m long, 2.2 m wide, 2.2 m to the cab's roof, 2.75 m over her tilt. Ten men ride on
-    her benches; a gun's trail goes on her hook."""
-    v = CarrierWorks("Truck", "3-ton lorry", "carrier", tag, fine)
+    her benches; a gun's trail goes on her hook. fit: "troops", or anything else for a bare floor with no benches,
+    tilt or clips, which whoever fits her out gives her (flak.py stands a gun on it)."""
+    v = CarrierWorks(name, title, "carrier", tag, fine)
+    troops = fit == "troops"
+    tilt = tilt and troops
     v.root(hull_pivot=(0.0, 0.0, 0.78), rock=(-5.0, 5.0))
     R, W, RR = 0.46, 0.2, 0.265
     xf, xr, yf, yr = 1.82, -1.72, 0.84, 0.80
@@ -333,9 +336,10 @@ def truck(fine=True, tag="_", tilt=True):
         for x in (bx0 + 0.07, -2.4, -1.6, -0.82, bx1 - 0.09):                                                                # the iron straps
             v.slab((x - 0.03, s * bw, fl - 0.06), (x + 0.03, s * (bw + 0.008), fl + side_h), "shade", 0.002)
             rivets(v, (x, s * (bw + 0.009), fl + 0.06), (x, s * (bw + 0.009), fl + side_h - 0.06), Y * s, 0.17, r=0.008)
-        v.slab((bx0 + 0.12, s * (bw - 0.42), fl + 0.42), (bx1 - 0.12, s * (bw - 0.05), fl + 0.455), "wood", 0.004)            # the bench
-        for x in (bx0 + 0.3, -2.2, -1.6, -1.0, bx1 - 0.3):
-            v.slab((x - 0.02, s * (bw - 0.4), fl), (x + 0.02, s * (bw - 0.36), fl + 0.42), "wood")
+        if troops:
+            v.slab((bx0 + 0.12, s * (bw - 0.42), fl + 0.42), (bx1 - 0.12, s * (bw - 0.05), fl + 0.455), "wood", 0.004)        # the bench
+            for x in (bx0 + 0.3, -2.2, -1.6, -1.0, bx1 - 0.3):
+                v.slab((x - 0.02, s * (bw - 0.4), fl), (x + 0.02, s * (bw - 0.36), fl + 0.42), "wood")
         v.slab((xr - 0.66, s * 0.62, 0.3), (xr - 0.63, s * 1.04, fl - 0.08), "rubber")                                        # the mud flap
         v.lathe((bx0 - 0.002, s * 0.95, fl - 0.17), -X, [(0.03, 0.0), (0.03, 0.04), (0.0, 0.045), (0.0, 0.0)], "red", 10)     # the tail lamp
     for k in range(4):                                                                                                       # the headboard, behind the cab
@@ -387,7 +391,7 @@ def truck(fine=True, tag="_", tilt=True):
     v.socket("driver", (0.55, 0.45, 1.25), X, part="hull", note="the driver, seated at the wheel (left-hand drive)")
     v.socket("rider.cab", (0.55, -0.45, 1.25), X, part="hull", note="the man beside the driver")
     k = 0
-    for s in (LEFT, RIGHT):
+    for s in ((LEFT, RIGHT) if troops else ()):
         for x in (-0.45, -1.05, -1.65, -2.25, -2.85):
             k += 1
             v.socket(f"rider.{k}", (x, s * (bw - 0.24), fl + 0.455), (0, -s, 0), part="hull", note="a man seated on the bench, facing inboard")
@@ -401,6 +405,8 @@ def truck(fine=True, tag="_", tilt=True):
     v.socket("hit.rear", (bx0 - 0.03, 0.0, fl + 0.3), -X, part="hull")
     for s in (LEFT, RIGHT):
         v.mark(tag, (0.62, s * (hw_c + 0.007), 1.14), Y * s, 0.15, part="hull")
+    if not troops:
+        return v                                           # (a bare floor: whoever fits her out gives her her clips)
     v.carrier_clips("lorry_idle_loop", "lorry_drive_loop", dismount=[("tailboard", 176.0, 0.05)], soft=1.25)
     v.m.info.setdefault("file", {})["swaps"] = {
         "how": "tilt: off scales the part `tilt` to nothing (a part scaled to nothing is not drawn), and her benches and riders are seen. The coat is the nation's own paint.",
@@ -422,10 +428,12 @@ def _body_lids(v, at, size, up, along, count=1):
             v.handle(c - u * 0.05 + w * (size[1] / 2 - 0.05) + n * 0.012, c + u * 0.05 + w * (size[1] / 2 - 0.05) + n * 0.012, n, r=0.006, reach=0.025)
 
 
-def hanomag(fine=True, tag="GER", paint=None):
+def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", title="Sd.Kfz. 251 half-track"):
     """The armoured half-track (Sd.Kfz. 251): 5.8 m long, 2.1 m wide, 1.76 m to her top edge. A driver and his
-    mate under the cab roof, ten men on the benches, a machine gun behind a shield."""
-    v = CarrierWorks("Hanomag", "Sd.Kfz. 251 half-track", "carrier", tag, fine, paint=GER_COATS[paint or "grey"][0])
+    mate under the cab roof, ten men on the benches, a machine gun behind a shield. fit: "troops", or anything else
+    for a bare body with no benches, machine gun or clips, which whoever fits her out gives her."""
+    v = CarrierWorks(name, title, "carrier", tag, fine, paint=GER_COATS[paint or "grey"][0])
+    troops = fit == "troops"
     v.root(hull_pivot=(0.0, 0.0, 0.8), rock=(-4.0, 4.0))
     R, W, RR = 0.44, 0.19, 0.25
     xf, yf = 2.14, 0.84
@@ -524,12 +532,13 @@ def hanomag(fine=True, tag="GER", paint=None):
                 for x in (a + 0.08, b - 0.08):
                     v.hinge((x - 0.03, s * (yk + 0.006), zk - 0.05), (x + 0.03, s * (yk + 0.006), zk - 0.05), 0.008)
         # inside: the bench over the track, its back against the wall
-        v.slab((xb - 0.35, s * 0.5, zg), (x_roof1 - 0.25, s * (yg - 0.02), zg + 0.09), "leather", 0.02, 2)
-        v.hull([(xb - 0.35, s * (yg - 0.03), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.03), zg + 0.1), (xb - 0.35, s * (yk - 0.05), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.05), zk + 0.02),
-                (xb - 0.35, s * (yg - 0.09), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.09), zg + 0.1), (xb - 0.35, s * (yk - 0.11), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.11), zk + 0.02)], "leather", 0.01, both=False)
-        if fine:                                                                                                             # rifles clipped upright behind the bench
-            for x in (-0.6, -1.0, -1.4):
-                v.rod((x, s * (yk - 0.09), zk + 0.06), (x, s * (yt - 0.03), zt - 0.1), 0.014, "wood", 6)
+        if troops:
+            v.slab((xb - 0.35, s * 0.5, zg), (x_roof1 - 0.25, s * (yg - 0.02), zg + 0.09), "leather", 0.02, 2)
+            v.hull([(xb - 0.35, s * (yg - 0.03), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.03), zg + 0.1), (xb - 0.35, s * (yk - 0.05), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.05), zk + 0.02),
+                    (xb - 0.35, s * (yg - 0.09), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.09), zg + 0.1), (xb - 0.35, s * (yk - 0.11), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.11), zk + 0.02)], "leather", 0.01, both=False)
+            if fine:                                                                                                             # rifles clipped upright behind the bench
+                for x in (-0.6, -1.0, -1.4):
+                    v.rod((x, s * (yk - 0.09), zk + 0.06), (x, s * (yt - 0.03), zt - 0.1), 0.014, "wood", 6)
     # the driver's and his mate's seats, the wheel, the dash
     v.slab((x0 - 0.02, -yg + 0.02, zg), (x0, yg - 0.02, zk + 0.16), "shade")
     for s in (LEFT, RIGHT):
@@ -561,16 +570,17 @@ def hanomag(fine=True, tag="GER", paint=None):
     v.roll((xr2 + 0.1, -0.5, zt + 0.07), (xr2 + 0.1, 0.5, zt + 0.07), r=0.075, paint="canvas", straps=3)                      # her tarpaulin, rolled across the stern
 
     # ---- the machine gun behind its shield, over the cab roof's after edge ---------------------------------------
-    gx, gz = x_roof1 + 0.06, zt
-    v.part("mg_mount", "hull", (gx, 0.0, gz), axis=(0, 0, -1), limits=[-32.0, 32.0], kind="turn", note="the forward machine gun on its mount: + trains to the right")
-    v.rod((gx, 0.0, gz - 0.02), (gx, 0.0, gz + 0.16), 0.022, "shade", 8)
-    plate_out = [(-0.3, 0.0), (0.3, 0.0), (0.3, 0.2), (0.17, 0.33), (0.05, 0.33), (0.05, 0.2), (-0.05, 0.2), (-0.05, 0.33), (-0.17, 0.33), (-0.3, 0.2)]
-    sheet(v, plate_out, [], (gx + 0.1, 0.0, gz + 0.03), Y, Vector((-0.17, 0.0, 0.985)), 0.01, coat, 0.003)
-    v.mg((gx - 0.22, 0.0, gz + 0.25), X, length=0.86, r=0.017)
-    v.slab((gx - 0.36, -0.02, gz + 0.19), (gx - 0.2, 0.02, gz + 0.27), "wood", 0.01)                                           # the butt
-    v.slab((gx - 0.1, -0.03, gz + 0.14), (gx + 0.02, 0.03, gz + 0.24), "steel", 0.006)                                         # the cradle
-    v.socket("mg", (gx + 0.66, 0.0, gz + 0.25), X, part="mg_mount", note="the machine gun's muzzle")
-    v.socket("gunner", (gx - 0.55, 0.0, 0.74), X, part="hull", note="the gunner stands here, behind the shield")
+    if troops:
+        gx, gz = x_roof1 + 0.06, zt
+        v.part("mg_mount", "hull", (gx, 0.0, gz), axis=(0, 0, -1), limits=[-32.0, 32.0], kind="turn", note="the forward machine gun on its mount: + trains to the right")
+        v.rod((gx, 0.0, gz - 0.02), (gx, 0.0, gz + 0.16), 0.022, "shade", 8)
+        plate_out = [(-0.3, 0.0), (0.3, 0.0), (0.3, 0.2), (0.17, 0.33), (0.05, 0.33), (0.05, 0.2), (-0.05, 0.2), (-0.05, 0.33), (-0.17, 0.33), (-0.3, 0.2)]
+        sheet(v, plate_out, [], (gx + 0.1, 0.0, gz + 0.03), Y, Vector((-0.17, 0.0, 0.985)), 0.01, coat, 0.003)
+        v.mg((gx - 0.22, 0.0, gz + 0.25), X, length=0.86, r=0.017)
+        v.slab((gx - 0.36, -0.02, gz + 0.19), (gx - 0.2, 0.02, gz + 0.27), "wood", 0.01)                                           # the butt
+        v.slab((gx - 0.1, -0.03, gz + 0.14), (gx + 0.02, 0.03, gz + 0.24), "steel", 0.006)                                         # the cradle
+        v.socket("mg", (gx + 0.66, 0.0, gz + 0.25), X, part="mg_mount", note="the machine gun's muzzle")
+        v.socket("gunner", (gx - 0.55, 0.0, 0.74), X, part="hull", note="the gunner stands here, behind the shield")
     v.use("hull")
     v.aerial("aerial", "hull", (x_roof1 + 0.2, -(yt - 0.03), zt), 2.0)
     v.use("hull")
@@ -579,7 +589,7 @@ def hanomag(fine=True, tag="GER", paint=None):
     v.socket("driver", (0.32, 0.38, 1.0), X, part="hull", note="the driver, seated at the wheel")
     v.socket("rider.cab", (0.32, -0.38, 1.0), X, part="hull", note="the man beside the driver")
     k = 0
-    for s in (LEFT, RIGHT):
+    for s in ((LEFT, RIGHT) if troops else ()):
         for x in (-0.4, -0.8, -1.2, -1.6, -2.0):
             k += 1
             v.socket(f"rider.{k}", (x, s * 0.68, zg + 0.09), (0, -s, 0), part="hull", note="a man seated on the bench, facing inboard")
@@ -591,6 +601,8 @@ def hanomag(fine=True, tag="GER", paint=None):
     v.socket("hit.left", (-0.5, yk, zk), Y, part="hull")
     v.socket("hit.right", (-0.5, -yk, zk), -Y, part="hull")
     v.socket("hit.rear", (xk, 0.0, zk), -X, part="hull")
+    if not troops:
+        return v                                           # (a bare body: whoever fits her out gives her her clips and her paint swap)
     v.carrier_clips("halftrack_idle_loop", "halftrack_drive_loop", dismount=[("door_l", 105.0, 0.05), ("door_r", 105.0, 0.12)], mg="mg", soft=0.9)
     v.m.info["bore"], v.m.info["brake"] = 0.008, False
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
@@ -598,10 +610,12 @@ def hanomag(fine=True, tag="GER", paint=None):
 
 
 # =====================================================================================================================
-def m3_halftrack(fine=True, tag="USA"):
+def m3_halftrack(fine=True, tag="USA", fit="troops", name="M3Halftrack", title="Half-track M3"):
     """The half-track M3: 6.2 m long with her roller, 2.2 m wide, 2.0 m to her windscreen's head. A driver and two
-    beside him, ten men on the benches, a heavy machine gun on a pedestal."""
-    v = CarrierWorks("M3Halftrack", "Half-track M3", "carrier", tag, fine)
+    beside him, ten men on the benches, a heavy machine gun on a pedestal. fit: "troops", or anything else for a
+    bare body with no benches, pedestal or clips, which whoever fits her out gives her."""
+    v = CarrierWorks(name, title, "carrier", tag, fine)
+    troops = fit == "troops"
     v.root(hull_pivot=(0.0, 0.0, 0.85), rock=(-4.0, 4.0))
     R, W, RR = 0.48, 0.21, 0.27
     xf, yf = 2.05, 0.82
@@ -693,10 +707,11 @@ def m3_halftrack(fine=True, tag="USA"):
                 v.slab((x - 0.012, s * (hw + 0.012), 1.2), (x + 0.012, s * (hw + 0.13), 1.36), coat)
         # inside: the fuel tank behind the cab, the bench, its back
         v.slab((-0.12, s * 0.5, zs), (0.12, s * (hw - 0.02), zs + 0.62), coat, 0.012, 2)
-        v.slab((bx0 + 0.1, s * 0.56, zs + 0.36), (-0.16, s * (hw - 0.03), zs + 0.44), "canvas", 0.02, 2)
-        v.slab((bx0 + 0.1, s * (hw - 0.09), zs + 0.46), (-0.16, s * (hw - 0.03), zs + 0.76), "canvas", 0.02, 2)
-        for x in (bx0 + 0.3, -1.5, -0.4):
-            v.slab((x - 0.015, s * 0.58, zs), (x + 0.015, s * 0.62, zs + 0.36), "shade")
+        if troops:
+            v.slab((bx0 + 0.1, s * 0.56, zs + 0.36), (-0.16, s * (hw - 0.03), zs + 0.44), "canvas", 0.02, 2)
+            v.slab((bx0 + 0.1, s * (hw - 0.09), zs + 0.46), (-0.16, s * (hw - 0.03), zs + 0.76), "canvas", 0.02, 2)
+            for x in (bx0 + 0.3, -1.5, -0.4):
+                v.slab((x - 0.015, s * 0.58, zs), (x + 0.015, s * 0.62, zs + 0.36), "shade")
         v.slab((0.22, s * 0.2, zs + 0.3), (0.62, s * 0.7, zs + 0.4), "canvas", 0.03, 2)                                        # the cab's seats
         v.slab((0.16, s * 0.2, zs + 0.4), (0.24, s * 0.7, zs + 0.8), "canvas", 0.03, 2)
         v.lathe((bx0 - 0.002, s * 0.86, zs + 0.08), -X, [(0.03, 0.0), (0.03, 0.04), (0.0, 0.045), (0.0, 0.0)], "red", 10)
@@ -725,19 +740,20 @@ def m3_halftrack(fine=True, tag="USA"):
     v.tube([(cab_x - 0.34 + 0.19 * math.sin(a) * 0.58, 0.45 + 0.19 * math.cos(a), 1.5 + 0.19 * math.sin(a) * 0.81) for a in [2 * math.pi * i / 16 for i in range(16)]], 0.012, "black", 6, closed=True)
 
     # ---- the heavy machine gun on its pedestal ---------------------------------------------------------------------
-    px, pz = -0.55, 2.02
-    v.rod((px, 0.0, zs), (px, 0.0, pz - 0.14), 0.045, coat, 12)
-    v.lathe((px, 0.0, zs), Z, [(0.03, 0.0), (0.03, 0.16), (0.0, 0.18), (0.0, 0.0)], coat, 14)
-    v.part("mg_mount", "hull", (px, 0.0, pz - 0.14), axis=(0, 0, -1), kind="turn", note="the machine gun on its pedestal: trains all round, + to the right")
-    v.slab((px - 0.05, -0.05, pz - 0.14), (px + 0.05, 0.05, pz - 0.05), "steel", 0.008)
-    v.slab((px - 0.28, -0.045, pz - 0.06), (px + 0.2, 0.045, pz + 0.07), "steel", 0.012, 2)                                    # the receiver
-    v.mg((px + 0.2, 0.0, pz + 0.01), X, length=1.1, r=0.022)
-    for dy in (-0.035, 0.035):
-        v.rod((px - 0.28, dy, pz + 0.0), (px - 0.4, dy, pz + 0.0), 0.012, "wood", 6)                                           # the spade grips
-    v.slab((px - 0.12, 0.05, pz - 0.14), (px + 0.14, 0.24, pz + 0.04), coat, 0.01)                                             # the ammunition box
-    v.socket("mg", (px + 1.32, 0.0, pz + 0.01), X, part="mg_mount", note="the machine gun's muzzle")
-    v.use("hull")
-    v.socket("gunner", (px - 0.5, 0.0, zs), X, part="hull", note="the gunner stands here")
+    if troops:
+        px, pz = -0.55, 2.02
+        v.rod((px, 0.0, zs), (px, 0.0, pz - 0.14), 0.045, coat, 12)
+        v.lathe((px, 0.0, zs), Z, [(0.03, 0.0), (0.03, 0.16), (0.0, 0.18), (0.0, 0.0)], coat, 14)
+        v.part("mg_mount", "hull", (px, 0.0, pz - 0.14), axis=(0, 0, -1), kind="turn", note="the machine gun on its pedestal: trains all round, + to the right")
+        v.slab((px - 0.05, -0.05, pz - 0.14), (px + 0.05, 0.05, pz - 0.05), "steel", 0.008)
+        v.slab((px - 0.28, -0.045, pz - 0.06), (px + 0.2, 0.045, pz + 0.07), "steel", 0.012, 2)                                    # the receiver
+        v.mg((px + 0.2, 0.0, pz + 0.01), X, length=1.1, r=0.022)
+        for dy in (-0.035, 0.035):
+            v.rod((px - 0.28, dy, pz + 0.0), (px - 0.4, dy, pz + 0.0), 0.012, "wood", 6)                                           # the spade grips
+        v.slab((px - 0.12, 0.05, pz - 0.14), (px + 0.14, 0.24, pz + 0.04), coat, 0.01)                                             # the ammunition box
+        v.socket("mg", (px + 1.32, 0.0, pz + 0.01), X, part="mg_mount", note="the machine gun's muzzle")
+        v.use("hull")
+        v.socket("gunner", (px - 0.5, 0.0, zs), X, part="hull", note="the gunner stands here")
     v.aerial("aerial", "hull", (0.05, -(hw - 0.08), ztop), 2.2)
     v.use("hull")
     v.roll((bx0 + 0.12, -0.7, ztop + 0.07), (bx0 + 0.12, 0.7, ztop + 0.07), r=0.075, paint="canvas", straps=3)
@@ -751,7 +767,7 @@ def m3_halftrack(fine=True, tag="USA"):
     v.socket("driver", (0.42, 0.45, zs + 0.4), X, part="hull", note="the driver, seated at the wheel")
     v.socket("rider.cab", (0.42, -0.45, zs + 0.4), X, part="hull", note="the man beside the driver")
     k = 0
-    for s in (LEFT, RIGHT):
+    for s in ((LEFT, RIGHT) if troops else ()):
         for x in (-0.5, -1.0, -1.5, -2.0, -2.5):
             k += 1
             v.socket(f"rider.{k}", (x, s * 0.72, zs + 0.44), (0, -s, 0), part="hull", note="a man seated on the bench, facing inboard")
@@ -764,6 +780,8 @@ def m3_halftrack(fine=True, tag="USA"):
     v.socket("hit.rear", (bx0, 0.0, 1.3), -X, part="hull")
     for s in (LEFT, RIGHT):
         v.mark("USA", (-1.6, s * (hw + 0.001), 1.52), Y * s, 0.14, part="hull")
+    if not troops:
+        return v                                           # (a bare body: whoever fits her out gives her her clips)
     v.carrier_clips("halftrack_idle_loop", "halftrack_drive_loop", dismount=[("door_rear", 115.0, 0.05)], mg="mg", soft=1.0)
     v.m.info["bore"], v.m.info["brake"] = 0.0127, False
     return v
