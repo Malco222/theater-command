@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
 import { STRENGTH } from '../src/campaign/ashore';
+import { MIDDLE_EAST } from '../src/campaign/middleeast';
 import { liftView } from '../src/campaign/arsenal';
 import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
@@ -507,10 +508,11 @@ describe('staff who prepare the plan', () => {
 describe('the computer under the same rule', () => {
   const D = (openData as unknown as { descent: { after: number; risk: number; chance: number } }).descent;
   // (These are tests of the crossing. The test of strength of Version 83 would keep three corps off Germany's own
-  // shore whatever the sea, so it is set aside here: strength-83.test.ts is its own.)
-  const asked = { ...STRENGTH! };
-  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); });
-  afterAll(() => { Object.assign(STRENGTH!, asked); });
+  // shore whatever the sea, so it is set aside here: strength-83.test.ts is its own. And the floor Britain keeps at
+  // home in 1940 to 1942, ruling 229 part 1b, likewise: egypt-229.test.ts is its own.)
+  const asked = { ...STRENGTH! }, floor = MIDDLE_EAST.floor.UK;
+  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); MIDDLE_EAST.floor.UK = []; });
+  afterAll(() => { Object.assign(STRENGTH!, asked); MIDDLE_EAST.floor.UK = floor; });
   /**
    * Britain's staff a quiet year into its war with a landing force by its quay, every German harbour in reach emptied
    * with the country behind it, no German aircraft, and the German fleet in harbour.
