@@ -614,6 +614,7 @@ void ACampaignMapActor::FindSharedEdges()
 
 void ACampaignMapActor::BuildFrontLine()
 {
+	FrontLineDue = 0; // (a line put off by a press is this one: where a war begins in the same answer it is laid at once, and not again)
 	THEATER_SPEED_SCOPE(BuildFrontLine);
 	// The front, drawn as a staff officer draws it: a crayon line along every frontier between the holdings of two
 	// countries at war. Where the war is the player's (the country beyond is one he is at war with, and the country
@@ -10043,7 +10044,9 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	static const bool bLinesLater = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLinesAtOnce"));
 	if (bLinesLater && bLandLaid)
 	{
-		FrontLineDue = 1;
+		// (By the frame's number, not by a count of the map's own ticks: an order's answer is laid on the table in the
+		// player's tick, and the map's comes later in the same frame, so "the next tick" was this very frame.)
+		FrontLineDue = GFrameCounter + 1;
 	}
 	else
 	{
@@ -10088,7 +10091,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		CampaignTextures::UpdateBoxAll(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
 		if (bLinesLater && bLandLaid)
 		{
-			BordersDue = 2; // (the frame after the front line's)
+			BordersDue = GFrameCounter + 3; // (two frames after the front line's: its second weight lands in the frame between)
 		}
 		else
 		{
@@ -13441,12 +13444,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 {
 	THEATER_SPEED_SCOPE(MapUpdate);
 	// (lines put off by a press that changed whose ground is whose: see SetHolders)
-	if (FrontLineDue > 0 && --FrontLineDue == 0)
+	if (FrontLineDue != 0 && GFrameCounter >= FrontLineDue)
 	{
+		FrontLineDue = 0;
 		BuildFrontLine();
 	}
-	if (BordersDue > 0 && --BordersDue == 0)
+	if (BordersDue != 0 && GFrameCounter >= BordersDue)
 	{
+		BordersDue = 0;
 		BuildBorders();
 	}
 	if (bVictorsMoving)
