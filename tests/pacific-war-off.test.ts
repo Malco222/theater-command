@@ -8,8 +8,10 @@ import { FAR_LAID, lay } from '../src/campaign/far-rows';
 import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY } from '../src/campaign/navy';
-import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds } from '../src/campaign/pacific';
+import { NAVY, airOver } from '../src/campaign/navy';
+import { AIR, airQuality, airUpkeep } from '../src/campaign/air';
+import airData from '../data/campaign/air.json';
+import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, skiesOn, skiesOver } from '../src/campaign/pacific';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
 import open from '../data/campaign/open.json';
@@ -105,6 +107,37 @@ describe('the months after December 1941 with the far side off (ruling 200, find
     expect(shoreOpen(g, 'FRA', false, false)).toBe(shoreOpen(g, 'FRA', false));
     // And no great choice of anybody's frees a corps.
     expect(Object.values(open.ops as Record<string, { frees?: unknown; freesAfter?: unknown }[]>).flat().some((op) => op.frees !== undefined || op.freesAfter !== undefined)).toBe(false);
+  });
+});
+
+describe('the Pacific\'s air forces with the far side off (rulings 184 and 187)', () => {
+  it('lays no row of them, counts the air over every sea from its coasts, and keeps no group\'s record of feeding', () => {
+    // air.json as it is on disk: thirty-six commands, none of Japan's, no nation row for it, no quality by date.
+    expect(AIR.fleets.length).toBe(36);
+    expect(AIR.fleets.some((r) => r.nat === 'JAP' || 'moves' in r || 'ally' in r || 'arrives' in r || 'quality' in r || 'bmrRange' in r)).toBe(false);
+    expect(AIR.nations.JAP).toBeUndefined();
+    expect(AIR.production.JAP).toBeUndefined();
+    expect(AIR.decline).toBeUndefined();
+    expect(JSON.stringify(AIR.fleets)).toBe(JSON.stringify((airData as unknown as { fleets: unknown[] }).fleets));
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'UK');
+    setWar(g, 'GER', 'FRA');
+    expect(skiesOn(g)).toBe(false);
+    for (const z of g.seas) expect(skiesOver(g, z.id), z.key).toBeNull();
+    // The coasts decide: Britain's whole air force stands over the Channel, as it always has.
+    const channel = g.seas.find((z) => z.key === 'channel')!;
+    expect(airOver(g, channel.id, 'GER', true)).toBeGreaterThan(0);
+    // A month in the air marks no field as unfed, raises no command on an ally's ground, stands none down, and moves none by the record.
+    const before = g.airFleets.map((f) => `${f.nat}|${f.name}|${f.base}`);
+    for (let t = 2; t <= 6; t++) { g.turn = t; for (const nat of ['GER', 'UK', 'FRA', 'USA']) airUpkeep(g, nat); }
+    expect(g.airFleets.map((f) => `${f.nat}|${f.name}|${f.base}`)).toEqual(before);
+    expect(g.airFleets.some((f) => f.unfed !== undefined || f.raised !== undefined)).toBe(false);
+    expect(Object.keys(g.flags).some((k) => k.startsWith('air:mv:'))).toBe(false);
+    // A nation's quality is its row's at every stop: no date moves it.
+    const lw = g.airFleets.find((f) => f.nat === 'GER')!;
+    g.turn = 65;
+    expect(airQuality(lw, g)).toBe(AIR.nations.GER.quality);
+    expect(airQuality(lw)).toBe(AIR.nations.GER.quality);
   });
 });
 

@@ -185,15 +185,20 @@ describe('the record\'s line in the south (ruling 234(a))', () => {
     expect(L.theatre).toBe('pacific');
     expect(L.taker).toBe('JAP');
     // (Japan's side takes from five; New Zealand's ground is on the line too, named only as never taken.)
-    expect(L.lands).toEqual(['AUS', 'NED', 'POR', 'UK', 'USA', 'NZL']);
+    expect(L.lands).toEqual(['AUS', 'NED', 'NZL', 'POR', 'UK', 'USA']);
     expect([L.stays, L.field, L.slides, L.ground, L.until]).toEqual([true, true, 'JAP:south', 'pacific', 72]);
     expect(L.floor).toEqual({ until: 72, kinds: ['opening', 'release', 'later'] });
     const g = war(1, 28);
     for (const name of [...Object.keys(L.spans), ...Object.keys(L.back ?? {}), ...(L.shut ?? [])]) {
       const r = g.byName[name];
       expect(r, name).toBeDefined();
-      if (L.spans[name] || L.shut!.includes(name)) expect(L.lands, name).toContain(r.owner);
+      // (New Caledonia is France's: it is named, and bound by its name; France is not one of the line's lands.)
+      if ((L.spans[name] || L.shut!.includes(name)) && name !== 'New Caledonia') expect(L.lands, name).toContain(r.owner);
     }
+    expect(g.byName['New Caledonia'].owner).toBe('FRA');
+    expect(L.shut).toContain('New Caledonia');
+    expect(L.spans['Milne Bay']).toEqual([{ from: 36, to: 36, kind: 'tried' }]);
+    expect([L.spans['Madang'][0].from, L.spans['Wewak'][0].from, L.spans['New Georgia'][0].from]).toEqual([40, 40, 39]);
     // The historian's months (ruling 234, section 9), and the two tries.
     expect(L.spans['Mindoro'][0].from).toBe(30);
     expect(L.spans['Pontianak'][0].from).toBe(29);
@@ -222,6 +227,14 @@ describe('the record\'s line in the south (ruling 234(a))', () => {
     expect(shut('JAP', 'Midway')).toBe(false);
     g.turn = 35;
     expect(shut('JAP', 'Midway')).toBe(true);
+    // A place the line names is bound whoever owns it; the rest of France's ground, Indochina, is not on the line.
+    expect(shut('JAP', 'New Caledonia')).toBe(true);
+    for (const nm of ['Saigon', 'Hanoi', 'Cam Ranh']) expect(shut('JAP', nm), nm).toBe(false);
+    // Milne Bay's one try, in August 1942.
+    g.turn = 36;
+    expect(shut('JAP', 'Milne Bay')).toBe(false);
+    g.turn = 37;
+    expect(shut('JAP', 'Milne Bay')).toBe(true);
     // The line is drawn nowhere off its ground: Britain's home, Germany's road in Africa.
     for (const nm of ['London', 'Alexandria', 'Bombay']) expect(shut('JAP', nm), nm).toBe(false);
     expect(lineShut(g, 'GER', g.byName['Alexandria'])).toBe(false);
@@ -357,9 +370,16 @@ describe('the fleets cover the staff\'s own landings (ruling 200)', () => {
     const path = seaPath(g, 'JAP', palau, jolo, { max: NAVY.landing.range, surprise: true })!;
     expect(path.length).toBeGreaterThan(0);
     const before = new Map(g.fleets.filter((f) => f.nat === 'JAP').map((f) => [f.id, f.zone]));
+    // An American squadron stands in Leyte Gulf, on the way, and closes it to Japan's troopships. (The coasts alone
+    // close no far sea: the air over one is counted from the groups in reach, rulings 184 and 187.)
+    const foe = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Asiatic Fleet')!;
+    expect(path.map((z) => g.seas[z].key)).toContain('leyte');
+    foe.zone = g.seas.findIndex((z) => z.key === 'leyte');
+    foe.stance = 'patrol';
+    foe.ships = { ...foe.ships, ca: foe.ships.ca + 4 };
     // With no shore named, nobody sails for those seas on the landings' account.
     const shutBefore = path.filter((z) => closedTo(g, z, 'JAP'));
-    expect(shutBefore.length).toBeGreaterThan(0);
+    expect(shutBefore).toEqual([foe.zone]);
     g.flags['st:hop:JAP:0'] = jolo.id + 1;
     g.flags['st:hopQ:JAP:0'] = palau.id + 1;
     navalAI(g, 'JAP');

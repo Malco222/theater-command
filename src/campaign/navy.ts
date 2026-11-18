@@ -18,14 +18,14 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
+import { AIR, CARRIERS, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
-import { hopAims } from './pacific';
+import { hopAims, skiesOver } from './pacific';
 import { stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -238,9 +238,15 @@ export function fleetPower(g: Game, f: Fleet): number {
   return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
-/** Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. */
+/**
+ * Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. Over the
+ * far side's seas it is counted from the land air groups in reach instead (rulings 184 and 187: pacific.json 'skies',
+ * air.ts groupsOver); none while the far side's switch is off.
+ */
 export function airOver(g: Game, z: number, nat: string, hostile = false): number {
   const zone = g.seas[z];
+  const S = skiesOver(g, z);
+  if (S) return groupsOver(g, z, nat, hostile, S);
   if (!zone.coast.length) return 0;
   let s = 0;
   for (const id of zone.coast) {
@@ -283,6 +289,7 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
 export class SeaPicture {
   private fleets: { nat: string; power: number }[][] | null = null;
   private coasts: ({ ctrl: string; air: number; sky: string | null; skyAir: number }[] | undefined)[] = [];
+  private groups: ({ nat: string; n: number }[] | undefined)[] = [];
   private most: Float64Array | null = null;
   private harbours: Region[] | null = null;
   constructor(private readonly g: Game) {}
@@ -314,7 +321,12 @@ export class SeaPicture {
       let ships = 0;
       for (const f of this.afloat(z)) ships += Math.max(0, f.power);
       let air = 0;
-      if (zone.coast.length) {
+      const S = skiesOver(g, z);
+      if (S) {
+        let s = 0;
+        for (const x of this.groupsOf(z, S)) s += x.n;
+        air = (s / S.per) * zone.air;
+      } else if (zone.coast.length) {
         let s = 0;
         for (const c of this.coastsOf(z)) s += Math.max(0, c.air * (c.sky ? AIR.sky.seaFoe : 1), c.sky ? c.skyAir * AIR.sky.seaOwn : 0);
         air = (s / zone.coast.length) * zone.air;
@@ -354,6 +366,18 @@ export class SeaPicture {
     return cs;
   }
 
+  /** The land air groups that put aircraft over a sea counted from them (air.ts groupsOver), each with what it puts there, in the order of the game's groups. */
+  private groupsOf(z: number, S: { cover?: Record<string, number> }): { nat: string; n: number }[] {
+    const g = this.g;
+    let gs = this.groups[z];
+    if (!gs) {
+      gs = [];
+      for (const f of g.airFleets) { const n = groupOverSea(g, f, z, S); if (n > 0) gs.push({ nat: f.nat, n }); }
+      this.groups[z] = gs;
+    }
+    return gs;
+  }
+
   /** seaSide's total. */
   private side(z: number, nat: string, hostile: boolean): number {
     const g = this.g;
@@ -365,6 +389,12 @@ export class SeaPicture {
   /** airOver. */
   private air(z: number, nat: string, hostile: boolean): number {
     const g = this.g, zone = g.seas[z];
+    const S = skiesOver(g, z);
+    if (S) {
+      let s = 0;
+      for (const x of this.groupsOf(z, S)) if (hostile ? atWar(g, x.nat, nat) : allied(g, x.nat, nat)) s += x.n;
+      return (s / S.per) * zone.air;
+    }
     if (!zone.coast.length) return 0;
     let s = 0;
     for (const c of this.coastsOf(z)) {

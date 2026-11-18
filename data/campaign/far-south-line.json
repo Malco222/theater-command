@@ -1,7 +1,7 @@
 {
  "_about": "The record's line in the south (ruling 234(a)), written by tools/make-south-line.mjs from the Pacific planner's south-line.json and never by hand; the game lays it over history.json's 'lines' only where the far side's switch is on (src/campaign/far-rows.ts) and reads it in src/campaign/line.ts. At the stops that keep the book, while the Pacific's book stands, computer against computer: Japan's side neither attacks, enters nor lands on a province of the five 'lands' before a span's first month or after its last, nor ever on one no span names (the ceiling); and the Allied computer staffs do not retake a province a span of the floor's kinds covers before its own month under 'back', or before the floor's last month where it has none (the floor). 'ground': the line is drawn only on the Pacific's ground (pacific.json 'shores') and on the provinces named here, in a span or under 'shut'. 'stays': when a span ends Japan's corps keep what they hold. 'field': the floor also covers a province where Japan's army holds the field while the town holds out. 'slides': at a stop with slack the whole calendar moves with the month of Japan's strike south. Kinds: 'opening' (December 1941 to August 1942), 'tried' (Port Moresby and Midway: open to attack, no floor), 'release' (the march on India of March 1944), 'later'.",
  "_source": {
-  "pacific-planner/south-line.json": "2026-11-18T16:52Z"
+  "pacific-planner/south-line.json": "2026-11-18T17:23Z"
  },
  "history": {
   "lines": [
@@ -12,10 +12,10 @@
     "lands": [
      "AUS",
      "NED",
+     "NZL",
      "POR",
      "UK",
-     "USA",
-     "NZL"
+     "USA"
     ],
     "taker": "JAP",
     "until": 72,
@@ -176,12 +176,12 @@
      "Merauke",
      "Merredin",
      "Mildura",
-     "Milne Bay",
      "Moree",
      "Mount Gambier",
      "Napier",
      "Nelson",
      "Nenana",
+     "New Caledonia",
      "Newcastle NSW",
      "Nome",
      "Normanton",
@@ -440,9 +440,9 @@
      ],
      "New Georgia": [
       {
-       "from": 33,
+       "from": 39,
        "to": 48,
-       "kind": "opening"
+       "kind": "later"
       }
      ],
      "Aparri": [
@@ -902,23 +902,23 @@
      ],
      "Madang": [
       {
-       "from": 35,
+       "from": 40,
        "to": 56,
-       "kind": "opening"
+       "kind": "later"
       }
      ],
      "Wewak": [
       {
-       "from": 35,
+       "from": 40,
        "to": 69,
-       "kind": "opening"
+       "kind": "later"
       }
      ],
      "Aitape": [
       {
        "from": 40,
        "to": 56,
-       "kind": "opening"
+       "kind": "later"
       }
      ],
      "Nauru": [
@@ -958,6 +958,13 @@
       {
        "from": 34,
        "to": 34,
+       "kind": "tried"
+      }
+     ],
+     "Milne Bay": [
+      {
+       "from": 36,
+       "to": 36,
        "kind": "tried"
       }
      ],

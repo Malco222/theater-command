@@ -14,6 +14,9 @@
 //   data/campaign/china-setup.json         the dated rows its raids need
 //   data/campaign/china-stop3.json         ruling 221: what Szechwan costs when history is loose
 //   data/campaign/far-pacific-war.json     rulings 197 and 200: the Pacific war's events, Japan's great choice and its marks
+//   data/campaign/far-south-line.json      ruling 234(a): the record's line in the south
+//   data/campaign/far-air.json             rulings 184 and 187: the Pacific's land air groups by date, Japan's air industry
+//                                          (written by tools/make-far-air.mjs from the planner's rows)
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -52,6 +55,7 @@ import navy from '../../data/campaign/navy.json';
 import arsenal from '../../data/campaign/arsenal.json';
 import towns from '../../data/campaign/towns.json';
 import resources from '../../data/campaign/resources.json';
+import air from '../../data/campaign/air.json';
 import globe from '../../data/campaign/far-seats-globe.json';
 import pacific from '../../data/campaign/far-seats-pacific.json';
 import farWorld from '../../data/campaign/far-world.json';
@@ -60,12 +64,13 @@ import chinaLine from '../../data/campaign/china-line.json';
 import chinaSetup from '../../data/campaign/china-setup.json';
 import chinaStop3 from '../../data/campaign/china-stop3.json';
 import southLine from '../../data/campaign/far-south-line.json';
+import farAir from '../../data/campaign/far-air.json';
 
 type Obj = Record<string, any>;
 
 /** The data files a seats file may name, by name without ".json". */
 const TARGETS: Record<string, Obj> = {
-  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources,
+  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources, air,
 };
 
 /** The seats files, in the order they are laid. */
@@ -76,6 +81,8 @@ const FILES: [string, Obj][] = [
   ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
   // (The record's line in the south, ruling 234(a): after China's, whose line stands first in the list.)
   ['far-south-line', southLine],
+  // (The Pacific's air forces, rulings 184 and 187.)
+  ['far-air', farAir],
 ];
 
 /** The first day beyond the old chart, as the seats files give it. */

@@ -936,6 +936,16 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /**
+   * The country that raised it, where it now answers to another: a fallen country's group on far ground that passed
+   * into keeping (ruling 199, pacific.ts keptForces). Its row in air.json is still read under the country that raised it.
+   */
+  raised?: string;
+  /**
+   * The far side (ruling 184): the months running that its field has not been fed, counted as its country's month in
+   * the air opens. A group on an unfed field counts nothing toward the air over a sea. Unset while it is fed.
+   */
+  unfed?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

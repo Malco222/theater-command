@@ -25,7 +25,8 @@
 //            ground while the player is the invader; the rest of the line stands (computer against computer).
 //   ground   Britain's and America's ground reaches round the world, and Germany and Italy fight beside Japan: the
 //            line is drawn only on the Pacific's ground (pacific.ts) and on the provinces it names, in a span or
-//            under `shut` (India's frontier lies beyond the Pacific's ground).
+//            under `shut` (India's frontier lies beyond the Pacific's ground). A province it names is on the line
+//            whoever owns it (New Caledonia is France's; the rest of France's ground, Indochina, is not on it).
 //   back     the floor's month province by province: the road back's own month for each place (rulings 200(i) and
 //            202(e)). A province with none keeps the floor's last month: it was passed, or held to the end.
 //   stays    when a span ends the invader's corps keep what they hold: nobody marches home and nothing is handed
@@ -79,8 +80,10 @@ const shutSets = new WeakMap<Line, Set<string>>();
 const shutOf = (L: Line): Set<string> => { let set = shutSets.get(L); if (!set) shutSets.set(L, (set = new Set(L.shut ?? []))); return set; };
 /** True for ground a line is drawn on: a province of a country invaded, and within the line's own ground where it has one. */
 function onGround(g: Game, L: Line, r: Region): boolean {
+  // (A province a line with its own ground names is on it whoever owns it: New Caledonia, France's, under 'shut'.)
+  if (L.ground && (L.spans[r.name] || shutOf(L).has(r.name))) return true;
   if (L.lands ? !L.lands.includes(r.owner) : L.land !== r.owner) return false;
-  return !L.ground || !!L.spans[r.name] || shutOf(L).has(r.name) || pacificGround(g, r);
+  return !L.ground || pacificGround(g, r);
 }
 /** The line drawn on a province, if the book has one there. (Never on the player's own ground: computer against computer.) */
 const lineOn = (g: Game, r: Region): Line | undefined => (r.owner === g.human ? undefined : lines().find((L) => onGround(g, L, r)));

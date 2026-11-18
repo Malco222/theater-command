@@ -44,13 +44,12 @@ for (const [name, month] of Object.entries(back)) {
   need(Number.isInteger(month), `back "${name}": ${month}`);
 }
 const shut = Object.values(src.shut ?? {}).flat().sort();
-// (The line is drawn on the ground of every country it names a province of: a country Japan's side never took from,
-// New Zealand, is named only under 'shut', and its ground is bound by the ceiling as the others' is.)
+// (A province named under 'shut' is bound whoever owns it: New Caledonia is France's, and France is not one of the
+// line's lands, or the line would be drawn on Indochina, which Japan holds by the demand.)
 const lands = [...L.lands];
 for (const name of shut) {
   need(count.get(name) === 1, `shut "${name}": ${count.get(name) ?? 0} provinces of that name on the chart`);
   need(!L.spans[name], `shut "${name}" has a span too`);
-  if (!lands.includes(owner.get(name))) lands.push(owner.get(name));
 }
 
 const out = {

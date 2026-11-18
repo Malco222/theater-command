@@ -87,6 +87,7 @@ interface Rules {
   demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
   keepers: string[];
   shores?: { slice: number; seas: string[] };
+  skies?: { per: number; cover?: Record<string, number>; seas: string[] };
   says: Record<string, string>;
 }
 
@@ -336,8 +337,39 @@ export function keptForces(g: Game, nat: string, by: string, leave?: (r: Region)
   if (!kept.size) return kept;
   for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.nat = kept.get(c.reg)!; c.hold = true; }
   for (const f of g.fleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
-  for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
+  // (A kept air group still reads its own country's row for what it is kept at and how it flies: air.ts rowOf.)
+  for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) { f.raised ??= nat; f.nat = kept.get(f.base)!; }
   return kept;
+}
+
+// ---- The air over a Pacific sea (rulings 184 and 187) -------------------------------------------------------
+
+const skySeas = new WeakMap<object, Uint8Array>();
+
+/**
+ * True in a campaign where the air over the Pacific's seas is counted from the groups in reach: the grand campaign
+ * on a chart that reaches the far side. (In the last act of a campaign of domination too: how the air over a sea is
+ * counted is no tie between countries.)
+ */
+export const skiesOn = (g: Game): boolean => !!PACIFIC?.skies && g.flags.open === 1 && farOn(g);
+
+/**
+ * The rule for the air over this sea where it is counted from the land air groups in reach (pacific.json 'skies';
+ * air.ts groupsOver), or null where the coasts decide as they always have: every sea of the old chart, the western
+ * Indian Ocean, and every sea while the far side's switch is off, outside the grand campaign, or on a chart that
+ * does not reach the far side.
+ */
+export function skiesOver(g: Game, z: number): { per: number; cover?: Record<string, number> } | null {
+  const S = PACIFIC?.skies;
+  if (!S || !skiesOn(g)) return null;
+  let on = skySeas.get(g.seas);
+  if (!on) {
+    on = new Uint8Array(g.seas.length);
+    const keys = new Set(S.seas);
+    for (const zone of g.seas) if (keys.has(zone.key)) on[zone.id] = 1;
+    skySeas.set(g.seas, on);
+  }
+  return on[z] ? S : null;
 }
 
 // ---- The Pacific's shores ---------------------------------------------------------------------------------
