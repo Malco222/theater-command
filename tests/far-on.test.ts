@@ -19,7 +19,7 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
-import { BUDGET, PRODUCTION, canRaise, colonyPurse, farColony, landFactor, landShare, provinceYield } from '../src/campaign/economy';
+import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
@@ -653,6 +653,27 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     const near = g.regions.find((r) => r.owner === 'NED' && r.overseas && shoreOf(r) === 1 && r.ctrl === 'UK')!;
     expect(near).toBeDefined();
     expect(provinceYield(g, near, 'UK').land).toBeCloseTo(BUDGET.land[near.terrain] * BUDGET.occupied * landFactor(near) * landShare(near), 9);
+  });
+
+  it('forms corps by the factories of the home country alone: a colony\'s never add a line', () => {
+    const g = grand();
+    const count = (colony: boolean): number => g.regions.filter((r) => r.owner === 'UK' && r.ctrl === 'UK' && !!r.overseas === colony).reduce((s, r) => s + r.fac, 0);
+    expect([count(false), count(true)]).toEqual([18, 17]);
+    expect(lineFactories(g, 'UK')).toBe(18);
+    expect(PRODUCTION.aiLine).toBe(6);
+    // Late enough that every scheduled formation is in, an empty programme and a full treasury: three lines, not five.
+    g.turn = 80; g.nations.UK.queue = []; g.nations.UK.pp = 400;
+    aiProduction(g, 'UK');
+    const forming = g.nations.UK.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
+    expect(forming).toBeGreaterThan(0);
+    expect(forming).toBeLessThanOrEqual(3);
+    // Korea's, Formosa's and Karafuto's count with Japan's own (the historian's exception): the home islands'
+    // factories and the two of Hamhung and Formosa. Dairen's adds none.
+    const islands = g.regions.filter((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && !r.overseas).reduce((s, r) => s + r.fac, 0);
+    expect(g.byName['Dairen'].fac).toBe(1);
+    expect(lineFactories(g, 'JAP')).toBe(islands + 2);
+    // Home ground on the far side counts in full: the Soviet Union's works beyond the Volga are her own.
+    expect(lineFactories(g, 'SOV')).toBe(g.regions.filter((r) => r.owner === 'SOV' && r.ctrl === 'SOV').reduce((s, r) => s + r.fac, 0));
   });
 });
 

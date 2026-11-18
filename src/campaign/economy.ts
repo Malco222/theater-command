@@ -146,9 +146,9 @@ export function landShare(r: Region, always = false): number {
 
 const FAR_HOME = new Set(BUDGET.farColony.home);
 /**
- * True for ground that pays its own country as a colony does: ground with the colony mark, but for the few provinces
- * that were part of their country's own economy (budget.json, 'farColony.home'). Where its corps are raised and its
- * works built is another matter (canRaise, arsenal.ts).
+ * True for ground that pays its own country as a colony does, and whose factories form no corps for it: ground with
+ * the colony mark, but for the few provinces that were part of their country's own economy (budget.json,
+ * 'farColony.home'). Where its corps are raised and its works built is another matter (canRaise, arsenal.ts).
  */
 export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
 /** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
@@ -619,6 +619,17 @@ export function gunsWanted(g: Game, nat: string): boolean {
   return false;
 }
 
+/**
+ * The factories a computer staff counts its lines by: those of the home country alone. A colony's never add a line
+ * (rider b462 to ruling 231: with the far side on, India's fourteen and three more gave Britain five lines for three,
+ * and India's army comes by its rows). Korea's, Formosa's and Karafuto's count with Japan's own (budget.json).
+ */
+export function lineFactories(g: Game, nat: string): number {
+  let home = 0;
+  for (const r of g.regions) if (isHome(g, nat, r) && !colonyPurse(r)) home += r.fac;
+  return home;
+}
+
 /** The computer's factory policy: keep a reserve for replacements, spend the rest on new corps. */
 export function aiProduction(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -628,8 +639,7 @@ export function aiProduction(g: Game, nat: string): void {
   if (byHand(g, nat, 'build') || !n.alive || n.capital < 0 || (nat !== g.human && !canBuildYet(g, nat))) return;
   const cap = g.regions[n.capital];
   if (!isHome(g, nat, cap)) return;
-  let home = 0;
-  for (const r of g.regions) if (isHome(g, nat, r)) home += r.fac;
+  const home = lineFactories(g, nat);
   // In the grand campaign a staff orders nothing its treasury could not keep in the field afterwards.
   const keep = (b: Build): number => (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0);
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
