@@ -283,13 +283,11 @@ def capital(name, title, cls, tag, hull, guns, gun_size, gun_long, bore, funnels
     m.socket("ensign", (mainhead.x - 2.0, 0, mainhead.z - tower_high * 0.25), (-1, 0, 0), yard.half(mast_x), "the battle ensign flies from the mainmast's gaff")
 
     # ---- the smaller turrets along each side
-    k = 0
     for i in range(side_turrets):
         sx = lerp(front - 9.0 * k, back + 9.0 * k, i / (side_turrets - 1) if side_turrets > 1 else 0.5)
         ahead = sx > (front + back) * 0.5
         up = (i % 2 == (0 if ahead else 1)) and side_turrets >= 4
         for hand in (PORT, STBD):
-            k += 1
             yard.turret(f"sec.{'P' if hand == PORT else 'S'}{i + 1}", sx, Z1 + (2.6 if up else 0.0) - 0.4, sec_size, 2, sec_long, 0.0 if ahead else 180.0, sec_bore,
                         y=hand * half * (0.6 if up else 0.7), style="medium", rate=15.0, elev=(-5, 80), rest_elev=8.0,
                         limits=(-150, 30) if (hand == PORT) == ahead else (-30, 150))

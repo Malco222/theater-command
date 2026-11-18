@@ -96,15 +96,22 @@ GRADED = [
 
 # A nose of glass with no step (`windows_back`): behind the part that is glass all round, the windows over the pilots
 # are framed as the nose is, down to where her metal belly begins.
+# `nose_bar` is how thick her nose's frames are against the game's (the art director, 2026-11-18, of the two heavies'
+# first noses: "white birdcages"; a third as thick, and in her skin's own finish: `nose_frames_paint`). `nose_cap` is
+# where the ribs begin: ahead of it is one round pane (the B-29's nose was a dome of a few rings of large panes).
 NOSES = [
+    ("        xs = [hull.front - 0.02 - (hull.front - glazed[0] - 0.04) * k / 12.0 for k in range(13)]\n",
+     "        x_tip = s.get('nose_cap', hull.front - 0.02)\n"
+     "        bar = s.get('nose_bar', 1.0)\n"
+     "        xs = [x_tip - (x_tip - glazed[0] - 0.02) * k / 12.0 for k in range(13)]\n"),
     ("            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016, 0.008)\n",
-     "            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016, 0.008)\n"
+     "            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016 * bar, 0.008)\n"
      "            if s.get('windows_back') and hull.out(glazed[1], a).z > -0.5:\n"
      "                more = [glazed[0] - (glazed[0] - glazed[1]) * j / 6.0 for j in range(7)]\n"
-     "                parts.strip(frames, [hull.at(x, a) for x in more], [hull.out(x, a) for x in more], 0.02, 0.008)\n"),
+     "                parts.strip(frames, [hull.at(x, a) for x in more], [hull.out(x, a) for x in more], 0.016 * bar, 0.008)\n"),
     ("            parts.strip(frames, [hull.at(x, a) for a in angles], [hull.out(x, a) for a in angles], 0.018, 0.008)\n",
      "            ring = angles if x >= glazed[0] - 0.01 else [math.radians(-30.0 + 240.0 * k / 30.0) for k in range(31)]\n"
-     "            parts.strip(frames, [hull.at(x, a) for a in ring], [hull.out(x, a) for a in ring], 0.018 if x >= glazed[0] - 0.01 else 0.024, 0.008)\n"),
+     "            parts.strip(frames, [hull.at(x, a) for a in ring], [hull.out(x, a) for a in ring], 0.018 * bar, 0.008)\n"),
 ]
 
 
@@ -383,7 +390,7 @@ EXTRA_PLANES["Amerikabomber"] = {
     # (a long round fuselage with a nose of glass and no step, a long narrow wing on her shoulders, two fins)
     "hull": [(9.5, -0.1, 0.16, 0.16), (9.25, -0.1, 0.52, 0.52), (8.7, -0.06, 0.84, 0.84), (7.9, -0.02, 1.02, 1.03), (6.8, 0.0, 1.09, 1.1), (4.0, 0.0, 1.1, 1.12), (0.0, 0.0, 1.1, 1.12),
              (-4.0, 0.03, 1.02, 1.05), (-7.0, 0.12, 0.8, 0.86), (-9.5, 0.24, 0.5, 0.58), (-10.8, 0.32, 0.26, 0.34), (-11.4, 0.35, 0.06, 0.12)],
-    "square": 2.0, "screw": 1.75, "blades": 3, "glazed": (7.9, 6.9), "nose_frames": ((9.0, 8.45, 7.9, 7.4, 6.92), 12), "windows_back": True,
+    "square": 2.0, "screw": 1.75, "blades": 3, "glazed": (7.9, 6.9), "nose_frames": ((9.0, 8.45, 7.9, 7.4, 6.92), 12), "windows_back": True, "nose_bar": 0.4, "nose_frames_paint": "upper",
     "wing": [(0.0, 2.8, -2.4, 0.5, 0.92), (4.9, 2.35, -2.2, 0.56, 0.78), (9.5, 1.9, -1.75, 0.64, 0.58), (17.5, 1.0, -0.8, 0.8, 0.26), (20.5, 0.6, -0.4, 0.87, 0.13), (21.3, 0.3, -0.2, 0.89, 0.05),
              (21.5, 0.05, -0.05, 0.9, 0.01)],
     "tail": [(0.0, -8.9, -10.9, 0.7, 0.3), (5.3, -9.45, -10.8, 0.7, 0.16), (5.55, -9.75, -10.7, 0.7, 0.04)],
@@ -404,7 +411,7 @@ EXTRA_PLANES["B29"] = {
     # (a round tube of a fuselage, glass at its nose with no step; her skin is left bare metal)
     "hull": [(11.0, -0.15, 0.2, 0.2), (10.78, -0.15, 0.62, 0.62), (10.25, -0.1, 1.0, 1.0), (9.45, -0.04, 1.27, 1.28), (8.3, 0.0, 1.42, 1.44), (6.5, 0.0, 1.45, 1.45), (0.0, 0.0, 1.45, 1.45),
              (-6.0, 0.0, 1.45, 1.45), (-10.0, 0.1, 1.22, 1.26), (-14.0, 0.3, 0.84, 0.92), (-17.0, 0.45, 0.58, 0.64), (-18.5, 0.5, 0.47, 0.52), (-19.2, 0.5, 0.32, 0.36)],
-    "square": 2.0, "screw": 2.5, "blades": 4, "glazed": (9.4, 8.35), "nose_frames": ((10.3, 9.85, 9.4, 8.88, 8.37), 12), "windows_back": True,
+    "square": 2.0, "screw": 2.5, "blades": 4, "glazed": (9.4, 8.35), "nose_frames": ((10.8, 10.1, 9.4, 8.37), 8), "windows_back": True, "nose_cap": 10.8, "nose_bar": 0.45, "nose_frames_paint": "upper",
     "wing": [(0.0, 2.7, -2.5, -0.2, 1.0), (5.9, 2.2, -1.95, 0.1, 0.82), (11.4, 1.72, -1.35, 0.4, 0.58), (19.0, 1.05, -0.5, 0.8, 0.26), (20.8, 0.85, -0.25, 0.9, 0.14), (21.4, 0.6, -0.05, 0.93, 0.06),
              (21.52, 0.35, 0.1, 0.94, 0.01)],
     "tail": [(0.0, -14.6, -17.5, 0.75, 0.42), (5.8, -15.9, -17.4, 0.75, 0.18), (6.4, -16.3, -17.3, 0.75, 0.1), (6.55, -16.6, -17.1, 0.75, 0.03)],
@@ -884,6 +891,7 @@ def convert(name, fine=True):
         return "plane"
 
     # ---- every piece, face by face ---------------------------------------------------------------
+    nose_bars, nose_from = s.get("nose_frames_paint"), (s["glazed"][1] - 0.06 if s.get("glazed") else 1.0e9)
     doped = fitout.nation(s) == "UK" and all(g[2] < 0.12 for g in s.get("guns", []))
     for ob in parts.objects:
         kind = ob.name.split(".")[0]
@@ -927,6 +935,8 @@ def convert(name, fine=True):
                 continue
             of_face = own if own >= 0 else f[layer]
             glassy = kind == "hull" and bool(panes) and pane_at(f.calc_center_median())
+            if kind == "frames" and nose_bars and f.calc_center_median().x > nose_from:
+                of_face = PAINTS[nose_bars]                  # (the frames of her glass nose, in her skin's own finish)
             corners = tuple(reversed([point(l.vert, part) for l in f.loops]))      # (mirrored, so turned round)
             faces, fp, fc = out.setdefault(part, ([], [], []))
             faces.append(corners)

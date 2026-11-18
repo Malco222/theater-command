@@ -161,6 +161,14 @@ What they add to the form:
   and `turret.N.guns` like any other.
 - **A nose of glass with no step** (`windows_back`): the windows over the pilots, behind the part that is glass all
   round, are framed like the nose. Both pilots and the bomb aimer are seen in it (`NOSE_CREW`).
+  The bars of such a nose are her skin's own finish and thin (`nose_frames_paint`, `nose_bar` their thickness beside
+  an ordinary canopy's), never pale: pale, thick bars make a white birdcage of her. The B-29's is a smooth dome of a
+  few large panes (`nose_cap`: where the ribs begin, so no knot of bars at the tip); the German heavy's is a finer
+  lattice. The two differ, as they did.
+- **Each own model has her own shape.** A carrier plane that shares a body with the plain ones reads as the same
+  plane in other paint. The Hellcat is deep and portly with a chin intake (`scoops`), a short hood with metal
+  behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
+  fin; the Val has the rounded, elliptical wing. The plain three stay plain and borrow none of these.
 - **Bare metal** (`bare` in the numbers; the file says `finish: "bare metal"`): draw her painted skin (`upper`,
   `upper2`, `under`, `nose`) as metal. The pictures use metallic 0.85, roughness 0.4.
 - The B-29 has two bomb bays. The model opens the forward one; the rear one's doors are scribed in her belly
