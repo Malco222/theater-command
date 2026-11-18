@@ -61,7 +61,7 @@ GLASS = {"B17": [(0.85, 0.35, 0.16)]}
 # A closed gun position's windows: panes of glass set in her skin, each (from, to along her; from, to round her side
 # in degrees up from level), on both sides alike; a pane that runs up to 90 is one panel across her back. They are
 # framed by fitout.tail_gunner. (The art director, 2026-11-18: one clear band round her tail read as a missing panel.)
-PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.9, -14.36, 45.0, 90.0)]}
+PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)]}
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
 # The game's sculptor at a battle's grain: each line of it that sets a grain, and what stands there instead.
