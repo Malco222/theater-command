@@ -1838,7 +1838,7 @@ namespace TheaterFx
 		}
 		const std::string P = "air_flak." + Name + ".";
 		Dice D(++Seeds * 86028121ull ^ PlaceKey(At));
-		const double Half = 0.5 * Num(P + "long_m", 22.0);
+		const double Half = std::max(0.5, 0.5 * Num(P + "long_m", 22.0)); // (floored: a zero length would divide by nothing below)
 		const double AcrossK = Num(P + "across_m", 16.0) / std::max(2.0 * Half, 1e-3);
 		const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)); // (down the wind, level)
 		const Vec Side = ZUp.Cross(Down).Unit(Vec(0.0, 1.0, 0.0));
@@ -1848,6 +1848,9 @@ namespace TheaterFx
 		const double Alpha = Num(P + "alpha", 0.75);
 		const double HalfBy = Num(P + "half_by_s", 8.0);
 		const double Shade = Num(P + "cloud_shade", 4.0);
+		const double HeartEnd = Num(P + "heart_end", 0.4);
+		const double Spread = Num(P + "spread_mps", 0.8);
+		const double LeastPx = Num(P + "least_px", 9.0);
 		const Rgb Young = Picture(P + "colour", Rgb::FromPicture(46, 43, 42));
 		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
 		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
@@ -1869,8 +1872,10 @@ namespace TheaterFx
 			B.FadeIn = 0.04;
 			B.Hold = 0.88;
 			B.Heart = 0.9;
+			B.HeartEnd = HeartEnd; // (art director 21:47Z: an old burst loses its dark core first, pale and ragged)
 			B.Rim = 0.0;
-			B.Rough = 0.45;
+			B.Rough = 0.5;
+			B.LeastPx = LeastPx; // (and at range it never shrinks into a solid dot)
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			B.TurnRate = D.Bell() * 0.08;
@@ -1886,16 +1891,17 @@ namespace TheaterFx
 		double Ps = D.Bell() * 0.15 * Half, Pz = D.Bell() * 0.1 * Half;
 		for (int I = 0; I < Lobes; ++I)
 		{
-			double Pa = (-0.6 + 1.2 * (I + D.U(-0.3, 0.3)) / std::max(1, Lobes - 1)) * Half;
+			double Pa = (-0.45 + 0.9 * (I + D.U(-0.3, 0.3)) / std::max(1, Lobes - 1)) * Half;
 			Pa *= Pa > 0.0 ? Lopsided : 1.0 / Lopsided;
 			const double R = Half * Pick(D, P + "lobe_r", 0.3, 0.55);
 			const Vec From = At + Down * Pa + Side * (Ps * AcrossK) + ZUp * (Pz * AcrossK);
 			// (each end of the chain draws away along the wind, the downwind end faster: it stretches and leans)
-			const Vec Vel = Down * (Stretch * Pa / Half + Downwind);
+			// (and it spreads across and up and down as it ages, so an old burst is taller as well as longer)
+			const Vec Vel = Down * (Stretch * Pa / Half + Downwind) + (Side * (Ps / Half) + ZUp * (Pz / Half) + Side * (0.4 * D.Bell()) + ZUp * (0.3 * D.Bell())) * Spread;
 			const double Life = Pick(D, P + "life_s", 8.5, 9.5);
 			Bit B = Smoke(From, R, R * Grow * D.U(0.85, 1.15), Vel, Alpha * D.U(0.6, 1.0), Life);
 			B.Along = (Down + Side * (0.25 * D.Bell()) + ZUp * (0.2 * D.Bell())).Unit(Down);
-			B.Stretch = D.U(1.2, 1.7);
+			B.Stretch = D.U(1.0, 1.4);
 			Bits.push_back(B);
 			Ps = std::clamp(Ps + D.Bell() * 0.35 * Half, -0.5 * Half, 0.5 * Half);
 			Pz = std::clamp(Pz + D.Bell() * 0.25 * Half, -0.35 * Half, 0.35 * Half);
@@ -1913,41 +1919,69 @@ namespace TheaterFx
 			B.Rough = 0.6;
 			Bits.push_back(B);
 		}
-		// the flash: soft, no sparks, off-centre in the smoke and laid in front of it from the eye
-		const double FlashS = Num(P + "flash_s", 0.2);
+		// the flash (art director 21:47Z: never an orange disc with a white dot): a torn glow, its edge at least two to
+		// one, with two or three short bright spikes thrown out; the white-hot heart a third to half the glow's radius
+		// off its middle; the heart gone in 0.05 s and the glow in 0.1 s, so the smoke owns the frame. Off-centre in the
+		// smoke and laid in front of it from the eye.
+		const double GlowS = Num(P + "flash_glow_s", 0.1);
+		const double HeartS = Num(P + "flash_heart_s", 0.05);
 		const Vec Off = (Down * D.Bell() + Side * D.Bell() + ZUp * D.Bell()) * (0.25 * Half);
 		const Vec ToEye = bEyeKnown ? (LastEye - At).Unit(ZUp) : Vec();
 		const Vec Hot = At + Off + ToEye * (0.6 * Half);
-		auto Glow = [&](const char* Key, const Rgb& Fallback, double RFallback, double A, double Heart)
+		// (two ways square to the eye's line, so what is off the middle shows as off the middle)
+		const Vec FaceA = (bEyeKnown ? ToEye.Cross(ZUp) : Side).Unit(Side);
+		const Vec FaceB = (bEyeKnown ? FaceA.Cross(ToEye) : ZUp).Unit(ZUp);
+		const Rgb GlowCol = Picture(P + "flash_glow", Rgb::FromPicture(150, 70, 14));
+		const Rgb MidCol = Picture(P + "flash_mid", Rgb::FromPicture(255, 170, 60));
+		const Rgb HeartCol = Picture(P + "flash_heart", Rgb::FromPicture(255, 245, 215));
+		const double GlowR = Num(P + "flash_glow_m", 8.0) * D.U(0.85, 1.15);
+		auto Glow = [&](const Vec& From, const Vec& Vel, const Vec& Along, double R, double Stretch_, double Life, const Rgb& Col, double A, double Heart, double Rough, double Point)
 		{
 			Bit B;
 			B.Born = Now;
-			B.From = Hot;
+			B.From = From;
+			B.Vel = Vel;
 			B.Windage = 1.0;
-			B.Life = FlashS * D.U(0.85, 1.15);
-			B.R0 = Num(P + Key + std::string("_m"), RFallback) * D.U(0.85, 1.15);
-			B.R1 = B.R0 * 1.15;
-			B.Col = Picture(P + Key, Fallback);
-			B.Col2 = B.Col * 0.6;
+			B.Life = Life;
+			B.R0 = R;
+			B.R1 = R * 1.15;
+			B.Along = Along;
+			B.Stretch = Stretch_;
+			B.Point = Point;
+			B.Col = Col;
+			B.Col2 = Col * 0.6;
 			B.Alpha = A;
-			B.FadeIn = 0.01;
-			B.Hold = 0.3;
+			B.FadeIn = 0.005;
+			B.Hold = 0.35;
 			B.Heart = Heart;
 			B.Rim = 0.0;
-			B.Rough = 0.3;
+			B.Rough = Rough;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			B.bLight = true;
 			Bits.push_back(B);
 		};
-		Glow("flash_glow", Rgb::FromPicture(150, 70, 14), 8.0, 0.55, 0.7);
-		Glow("flash_mid", Rgb::FromPicture(255, 170, 60), 3.5, 0.8, 0.85);
-		Glow("flash_heart", Rgb::FromPicture(255, 245, 215), 1.6, 1.0, 0.95);
+		const double Tilt = D.U(0.0, 2.0 * Pi);
+		const Vec GlowWay = FaceA * std::cos(Tilt) + FaceB * std::sin(Tilt);
+		Glow(Hot, Vec(), GlowWay, GlowR, D.U(1.2, 1.45), GlowS * D.U(0.9, 1.1), GlowCol, 0.55, 0.7, 0.6, 0.0);
+		// the spikes: short bright fragments thrown out past the glow's edge
+		const int Spikes = static_cast<int>(std::lround(Pick(D, P + "flash_spikes", 2.0, 3.0)));
+		for (int I = 0; I < Spikes; ++I)
+		{
+			const double A_ = Tilt + (I * 2.0 * Pi) / std::max(1, Spikes) + D.U(-0.7, 0.7);
+			const Vec Thrown = FaceA * std::cos(A_) + FaceB * std::sin(A_);
+			Glow(Hot + Thrown * (GlowR * D.U(0.75, 0.95)) + ToEye * 0.5, Thrown * D.U(20.0, 35.0), Thrown, GlowR * D.U(0.07, 0.1), D.U(2.0, 2.6), GlowS * D.U(0.5, 0.8), MidCol.Mix(HeartCol, 0.3), 0.9, 0.85, 0.3, 0.6);
+		}
+		// the heart, a third to half the glow's radius off its middle, inside a hotter orange
+		const double Turn_ = D.U(0.0, 2.0 * Pi);
+		const Vec HeartAt = Hot + (FaceA * std::cos(Turn_) + FaceB * std::sin(Turn_)) * (GlowR * D.U(0.33, 0.5));
+		Glow(HeartAt + (Hot - HeartAt) * 0.25 + ToEye * 0.5, Vec(), GlowWay, Num(P + "flash_mid_m", 3.5) * D.U(0.85, 1.15), D.U(1.2, 1.5), (HeartS + GlowS) * 0.5, MidCol, 0.8, 0.85, 0.45, 0.0);
+		Glow(HeartAt + ToEye * 1.0, Vec(), GlowWay, Num(P + "flash_heart_m", 1.6) * D.U(0.85, 1.15), 1.2, HeartS, HeartCol, 1.0, 0.8, 0.25, 0.0);
 		Flash L;
 		L.At = Hot;
 		L.Col = Picture(P + "flash_mid", Rgb::FromPicture(255, 170, 60));
 		L.Born = Now;
-		L.Life = FlashS;
+		L.Life = GlowS;
 		L.Strength = Num(P + "lamp", 0.35);
 		L.Radius = Num(P + "lamp_reach_m", 60.0);
 		Flashes.push_back(L);
@@ -2462,7 +2496,7 @@ namespace TheaterFx
 		// (a light shorter than a frame that no frame has caught yet is laid now, where it is, at its full strength)
 		const double Shown = Unseen(B) && Age > B.Life * std::min(B.Hold, 0.5) ? B.Life * std::min(B.Hold, 0.5) : Age;
 		const double F = Shown / B.Life;
-		const double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
+		double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
 		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 		double A = B.Alpha * Fade;
 		if (B.HazeBy > 0.0)
@@ -2498,6 +2532,17 @@ namespace TheaterFx
 			}
 		}
 		const double MetresAPixel = Dist / std::max(Eye.PixelsPerRadian, 1.0);
+		if (B.Form == Bit::Shape::Puff && B.LeastPx > 0.0)
+		{
+			// (a puff never shrinks on the screen below LeastPx across: far off it is held at that size and made thinner
+			// to match, so a far burst stays see-through smoke and never a solid dot)
+			const double Least = 0.5 * B.LeastPx * MetresAPixel;
+			if (Rad < Least)
+			{
+				A *= std::sqrt(Rad / Least);
+				Rad = Least;
+			}
+		}
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
 		Vec Middle = P;
 		switch (B.Form)
@@ -2600,7 +2645,8 @@ namespace TheaterFx
 		{
 			return false;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
+		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
 		B.bShown = true;
 		return true;
 	}

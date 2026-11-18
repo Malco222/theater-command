@@ -439,8 +439,8 @@ namespace
 			Cam.H = H;
 			if (ShotName == "burst")
 			{
-				Cam.Eye = BurstAt + StartRight * 95.0 - StartLevel * 10.0 + ZUp * 8.0;
-				Cam.Forward = (BurstAt + StartLevel * 8.0 - Cam.Eye).Unit();
+				Cam.Eye = BurstAt + StartRight * (std::getenv("FX_FAR") ? 160.0 : 95.0) - StartLevel * 10.0 + ZUp * 8.0;
+				Cam.Forward = (BurstAt + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
 			}
 			else if (ShotName == "flak")
 			{
