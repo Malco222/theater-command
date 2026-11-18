@@ -110,6 +110,14 @@ describe("a fallen country's far ground (ruling 199)", () => {
     const first = g.regions.find((r) => r.id >= FAR_FIRST)!.id;
     expect([g.regions[first + 478].name, g.regions[first + 678].name]).toEqual(['El Aaiun', 'Sao Tome']);
     for (const name of ['Dakar', 'Djibouti', 'Brazzaville', 'Tananarive', 'Luanda', 'Massawa', 'Windhoek', 'Reunion', 'Sao Tome', 'El Aaiun']) expect(keepersOf(g, g.byName[name]), name).toEqual(['UK', 'USA']);
+    // (Rider b534(5): Africa is the whole continent and its islands. The pair covers all of it on the far chart, the east
+    // coast, Madagascar and the islands of both oceans; the provinces before it in that part of the world are Persia's
+    // and Arabia's, which are Asia.)
+    for (const name of ['Mombasa', 'Dar es Salaam', 'Mogadishu', 'Zanzibar', 'Nairobi', 'Addis Ababa', 'Khartoum', 'Lourenco Marques', 'Cape Town', 'Diego Suarez', 'Mauritius', 'Seychelles', 'Cape Verde', 'Walvis Bay', 'Leopoldville', 'Lagos', 'Monrovia']) {
+      expect(g.byName[name], name).toBeDefined();
+      expect(keepersOf(g, g.byName[name]), name).toEqual(['UK', 'USA']);
+    }
+    for (const name of ['Muscat', 'Mukalla', 'Sanaa', 'Jeddah', 'Basra', 'Tehran']) expect(keepersOf(g, g.byName[name]), name).toEqual(['UK', 'AUS', 'USA']);
     // (A town cut out of an African province reads as its province does.)
     const cut = g.regions.find((r) => { const of = (WORLD_MAP.regions[r.id - WORLD_FIRST] as { of?: number } | undefined)?.of; return of !== undefined && of >= first + 478 && of <= first + 678; })!;
     expect(cut).toBeDefined();

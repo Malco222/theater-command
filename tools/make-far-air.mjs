@@ -23,6 +23,7 @@
 //             taken at the stops that keep the book; at the others the command is kept at the most the record has
 //             given it so far. Every row but the Soviet Union's (the historian checked the list: b525).
 //   to        b525: the record ends the command by a change of name, and these rows took its place (HANDS below).
+//             b534: where the record moves such a command before its successor stands, the move is laid too (GOES).
 //             It is not stood down by the date: it ends when every one of them stands and passes them what it
 //             holds, at every stop. Nothing stands twice, and nothing vanishes because a date came.
 //   leaves    b525: a part of the command that leaves for a reason outside the game (LEAVES below): with the date
@@ -114,6 +115,17 @@ const HANDS = {
  * fighters and 50 bombers until then).
  */
 const LEAVES = { 'Chinese Air Force': [[20, 50, 50, 'SOV', 'JAP']] };
+/**
+ * Rider b534(3): where the record moves an old command before its successor stands, it moves by date at the stops
+ * that keep the book and hands over there. The historian's pass over the list (hand-over-places-b534-historian.md):
+ * - The 19th Bomb Group's B-17s stopped at Batchelor Field for about ten days in December 1941, and from about 30
+ *   December fought from Singosari, by Malang in east Java (inside the chart's Soerabaja), until 1 to 3 March 1942.
+ *   So the row stands at Soerabaja from January 1942 until the Fifth Air Force forms.
+ * - XX Bomber Command flew its last mission from Chengtu on 15 January 1945: from February its 50 stand at Kharagpur,
+ *   until the XXI takes them in April.
+ * (Read only where the source gives the row no moves of its own: once the planner's file carries one, his stands.)
+ */
+const GOES = { '19th Bomb Group (Del Monte)': [[29, 'Soerabaja']], 'XX Bomber Command': [[66, 'Kharagpur']] };
 
 // ---- The source -------------------------------------------------------------------------------------------------
 
@@ -145,7 +157,7 @@ for (const r of src.fleets) {
   sched(r.est, `${what} est`, 3);
   need(r.from === undefined || (Number.isInteger(r.from) && r.from > 1), `${what}: from ${r.from}`);
   need((r.from ?? 1) <= 1 ? r.est[0][0] === 1 : r.est[0][0] === r.from, `${what}: its first est row is not its first month`);
-  const moves = r.moves ?? [];
+  const moves = r.moves ?? GOES[r.name] ?? [];
   let last = r.from ?? 1;
   for (const m of moves) {
     need(Array.isArray(m) && m.length === 2 && Number.isInteger(m[0]) && m[0] > last, `${what} move ${JSON.stringify(m)}`);
@@ -170,7 +182,7 @@ for (const r of src.fleets) {
   if (bmrRange !== undefined) out.bmrRange = bmrRange;
   fleets.push(out);
 }
-for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
+for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES), ...Object.keys(GOES)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
 // A command that hands over ends by the record (its last row reads nothing), and to its own side; what leaves a command is on its row as a fall of at least as much that month.
 for (const [k, to] of Object.entries(HANDS)) {
   const r = fleets.find((x) => x.name === k), last = r.est[r.est.length - 1];
