@@ -42,7 +42,8 @@ public:
 	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
 
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
-	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level = FString(), const FString& Depth = FString(), int32 History = 0);
+	/** bFirstCommand (rules 84.3.3): the campaign FIRST COMMAND opened, marked as its, with the ten notes armed again once all are done. */
+	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level = FString(), const FString& Depth = FString(), int32 History = 0, bool bFirstCommand = false);
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
@@ -256,6 +257,25 @@ public:
 	/** Ends the player's month and plays every other nation's. Returns what happened, nation by nation. */
 	FMonthResult EndMonth();
 
+	// ---- (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes ----
+	// The lessons, their words and the tests of their deeds are the rules'; the deeds of the player's own orders are
+	// read by the rules as each order is carried out. The notebook (what he has learnt) is the player's, kept in its
+	// own small file beside the options and never in a save. None of these calls changes the war, so none forgets
+	// the questions kept (see CallRules).
+
+	/** The note on the desk for this moment: bCard, the month card is open; InHand, the corps of the army in hand. */
+	bool LessonNow(bool bCard, const TArray<int32>& InHand, FLessonDesk& Out);
+	/** A deed only the screen sees: "card" (the month card lesson 1 lay on, put down) or "line" (one of its lines followed). */
+	bool LessonDeed(const FString& Deed, bool bCard, FLessonDesk& Out);
+	/** "later", "back:<id>", "again:<id>", "all", "on", "off", "close" or "tip": see the bridge's lessonAct. */
+	bool LessonAct(const FString& Action, bool bCard, const TArray<int32>& InHand, FLessonDesk& Out);
+	/** The Guide's list of the ten lessons. */
+	FLessonGuide LessonGuide();
+	/** FIRST COMMAND's button on the door, and the campaign it starts (asked before any campaign is under way). */
+	FLessonDoor LessonDoor();
+	/** (Trap 1) Lays out the card that opens a war played from its first month as the month's card, for the reports page. */
+	bool OpenOpeningCard();
+
 	/** Fired whenever the picture of the war has changed. */
 	DECLARE_MULTICAST_DELEGATE(FOnViewChanged);
 	FOnViewChanged OnViewChanged;
@@ -316,6 +336,12 @@ private:
 	/** ParseView without the speed log's timing, which is kept on the game thread only: for the rules' thread. */
 	static FCampaignView ReadView(const TSharedPtr<FJsonObject>& Object);
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
+	/** (Rules 84.3.3) The player's notebook of FIRST COMMAND: its file, read into the rules once they are loaded, and written whenever an answer carries it. */
+	static FString NotebookFile();
+	void ReadNotebook();
+	void KeepNotebook(const TSharedPtr<FJsonObject>& Answer);
+	/** A lesson call's answer read into the desk, the notebook written where it changed. */
+	bool ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLessonDesk& Out);
 
 	TUniquePtr<FRulesHost> Host;
 	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
