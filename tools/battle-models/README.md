@@ -170,6 +170,14 @@ counted from forward; her port pair, `sec.P1` and `sec.P2`, stay on their sponso
 `Carrier_JAP` keeps a small island well forward with her smoke led out over the side; `Carrier` a middling one
 with the funnel in it.
 
+A wall the size of that funnel, left bare, reads as a plain slab (the art director again), so it shows its work:
+soot over its top third, fading down in uneven tongues and further down the after side (laid point by point on the
+wall's own rings, since the general weathering fades over the top half of a three-ring wall and hardly shows);
+three steam pipes up its after face, each to its own height, with a dark lip; a railed gallery round its sides and
+after end two thirds of the way up, on brackets; a railed searchlight platform on each side; and ladders, one up
+each side to the gallery and another from there to the top. `railing` and `ladder` in `ships.py` serve any other
+wall or platform that wants them.
+
 A carrier's own mesh has no aircraft on it. Her part `deckpark` is empty: its pivot is the deck under the foremost
 row of her range, about a quarter of her length abaft her middle. Her file says which range stands there, by the
 battle's month:

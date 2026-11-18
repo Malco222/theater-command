@@ -928,15 +928,44 @@ def carrier(tag, fine=True, hull_hex=None):
         fxn = x_a + 5.6 + fl * 0.5
         yard.funnel(fxn, t1, 17.5 - 3.0, fl, 5.4, 0.0, cap=0.06, y=yc, flat=True)
         yard.fire_points.append((fxn + 7.5, yc, t1))
-        if fine:              # (a wall this size left bare reads as a slab: its plates' seams, and a searchlight platform on each side)
+        if fine:
+            # A wall this size left bare reads as a slab, and a working funnel shows its work (the art director,
+            # 11:00 UTC on 18 November 2026): its plates' seams; a railed gallery round its sides and after end two
+            # thirds of the way up; a railed searchlight platform on each side; a ladder up each side to the gallery
+            # and another from there to the top. (Its soot and its steam pipes are the funnel's own: `Yard.funnel`.)
             m_ = yard.on(fxn)
-            plating(m_, Model.round_rect(fxn + fl * 0.5, fxn - fl * 0.5, yc - 2.7, yc + 2.7, 5.4 * 0.3, 3), t1 + 0.1, t1 + 13.4, [t1 + 2.9, t1 + 5.8, t1 + 8.7, t1 + 11.6], every=2.4, pitch=99.0)
+            fa, ff, fr = fxn - fl * 0.5, fxn + fl * 0.5, 5.4 * 0.3
+            plating(m_, Model.round_rect(ff, fa, yc - 2.7, yc + 2.7, fr, 3), t1 + 0.1, t1 + 13.4, [t1 + 2.9, t1 + 5.8, t1 + 8.7, t1 + 11.6], every=2.4, pitch=99.0)
+            zg, gw = t1 + 9.7, 0.85                               # the gallery: how high, how wide
+            gf = ff - 1.3                                         # (it stops short of her fore face, where the mast's legs stand)
+
+            def round_aft(out):                                   # the gallery's plan so far out from her wall, from its fore end to starboard round her after end
+                pts = [(gf, yc - 2.7 - out)]
+                for cy_, a0 in ((yc - 2.7 + fr, -0.5), (yc + 2.7 - fr, -1.0)):
+                    for i_ in range(5):
+                        a_ = (a0 - 0.5 * i_ / 4.0) * math.pi
+                        pts.append((fa + fr + math.cos(a_) * (fr + out), cy_ + math.sin(a_) * (fr + out)))
+                return pts + [(gf, yc + 2.7 + out)]
+            m_.prism(round_aft(gw), zg - 0.09, zg, "upper", top_paint="deck", bottom=True)
+            edge = [Vector((px_, py_, zg)) for px_, py_ in round_aft(gw - 0.06)]
+            railing(m_, [Vector((gf - 0.06, yc - 2.7, zg))] + [q_ - X * 0.06 if n_ in (0, len(edge) - 1) else q_ for n_, q_ in enumerate(edge)] + [Vector((gf - 0.06, yc + 2.7, zg))])
+            under = list(zip(round_aft(0.0), round_aft(gw - 0.1)))                                  # the brackets under it
             for hand in (PORT, STBD):
-                py_ = yc + hand * (2.7 + 0.75)
-                m_.box((fxn + 2.2, py_, t1 + 6.6), (3.0, 1.5, 0.1), "upper")
-                for dx_ in (-1.2, 1.2):
-                    m_.rod((fxn + 2.2 + dx_, yc + hand * 2.7, t1 + 5.4), (fxn + 2.2 + dx_, py_ + hand * 0.6, t1 + 6.55), 0.06, "upper", sides=4)
-                yard.searchlight(fxn + 2.2, py_, t1 + 6.65, 0.5, (0.3, hand, 0.1))
+                under += [((bx_, yc + hand * 2.7), (bx_, yc + hand * (2.7 + gw - 0.1))) for bx_ in (lerp(gf, fa + fr, 0.33), lerp(gf, fa + fr, 0.67))]
+            for n_, ((px_, py_), (qx_, qy_)) in enumerate(under):
+                if n_ not in (2, 4, 7, 9):
+                    m_.rod((px_, py_, zg - 1.0), (qx_, qy_, zg - 0.07), 0.05, "upper", sides=4)
+            for hand in (PORT, STBD):
+                py_ = yc + hand * (2.7 + 0.85)
+                sx_, sz_ = fxn + 2.4, t1 + 5.6
+                m_.box((sx_, py_, sz_), (3.4, 1.7, 0.1), "upper")
+                for dx_ in (-1.4, 0.0, 1.4):
+                    m_.rod((sx_ + dx_, yc + hand * 2.7, sz_ - 1.2), (sx_ + dx_, py_ + hand * 0.7, sz_ - 0.05), 0.06, "upper", sides=4)
+                yard.searchlight(sx_, py_, sz_ + 0.05, 0.5, (0.3, hand, 0.1))
+                railing(m_, [Vector((sx_ + dx_, yc + hand * (2.7 + out_), sz_ + 0.05)) for dx_, out_ in ((1.64, 0.0), (1.64, 1.64), (-1.64, 1.64), (-1.64, 0.0))], every=1.2)
+                wall = Vector((0.0, yc + hand * 2.7, 0.0))
+                ladder(m_, wall + X * (fa + fr + 1.0) + Z * t1, zg + 1.0, (0, hand, 0))
+                ladder(m_, wall + X * (fxn - 0.6) + Z * zg, t1 + 13.5, (0, hand, 0))
         px_ = x_a + 5.0                                           # the smaller aerial on its pole, at the funnel's after end
         yard.on(px_).rod((px_, yc, t1 + 4.0), (px_, yc, t1 + 15.4), 0.17, "upper", rb=0.1, sides=7 if fine else 5)
         radar(yard, "radar.air.2", px_, t1 + 15.4, 2.8, 1.3, y=yc)
@@ -1164,6 +1193,36 @@ def plating(m, plan, z0, z1, belts, every=1.3, pitch=0.14, stud=0.015, skip=()):
             if all(abs(z - b) > 0.07 for b in belts):
                 rivet(q + side * 0.045, out, z)
             z += pitch
+
+
+def railing(m, pts, high=1.0, every=1.6, paint="upper"):
+    """A guard rail along a row of points at a platform's edge: stanchions, a top rail and one at knee height."""
+    pts = [Vector(p) for p in pts]
+    for a, b in zip(pts, pts[1:]):
+        steps = max(1, round((b - a).length / every))
+        for j in range(steps):
+            p, q = a + (b - a) * (j / steps), a + (b - a) * ((j + 1) / steps)
+            m.rod(p - Z * 0.03, p + Z * high, 0.03, paint, sides=3, caps=(False, True), smooth=False)
+            for hz in (high, high * 0.55):
+                m.rod(p + Z * hz, q + Z * hz, 0.018, "rope", sides=3, caps=(False, False), smooth=False)
+    m.rod(pts[-1] - Z * 0.03, pts[-1] + Z * high, 0.03, paint, sides=3, caps=(False, True), smooth=False)
+
+
+def ladder(m, foot, top, out, wide=0.42, off=0.13, every=0.32, paint="upper"):
+    """A ladder up a wall from `foot` (a point on the wall) to the height `top`; `out` is the way the wall faces. Its
+    two rails stand a hand's breadth off the wall, held to it every few metres."""
+    foot, out = Vector(foot), Vector(out).normalized()
+    side = Z.cross(out)
+    a, b = foot + out * off - side * (wide * 0.5), foot + out * off + side * (wide * 0.5)
+    high = top - foot.z
+    for p in (a, b):
+        m.rod(p - Z * 0.03, p + Z * high, 0.024, paint, sides=3, caps=(False, True), smooth=False)
+    for i in range(1, int(high / every) + 1):
+        m.rod(a + Z * (i * every - 0.12), b + Z * (i * every - 0.12), 0.015, paint, sides=3, caps=(False, False), smooth=False)
+    holds = max(2, int(high / 2.6) + 1)
+    for i in range(holds):
+        z = 0.4 + (high - 0.8) * i / (holds - 1)
+        m.box(foot + Z * z + out * (off * 0.5 - 0.02), (wide + 0.06 if abs(out.y) > 0.5 else off + 0.04, off + 0.04 if abs(out.y) > 0.5 else wide + 0.06, 0.05), paint)
 
 
 def hoop(m, mid, axis, r, thick, paint, sides=12):

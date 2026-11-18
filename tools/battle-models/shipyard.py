@@ -546,13 +546,32 @@ class Yard:
         dx = -high * lean
         if flat:
             plan0 = Model.round_rect(x + long * 0.5, x - long * 0.5, y - wide * 0.5, y + wide * 0.5, wide * 0.3, 3 if m.fine else 1)
+            if m.fine:        # (points every metre or so along its straight walls: its soot runs down them in tongues)
+                dense = []
+                for (ax, ay), (bx, by) in zip(plan0, plan0[1:] + plan0[:1]):
+                    steps = max(1, round(math.hypot(bx - ax, by - ay) / 1.05))
+                    dense += [(lerp(ax, bx, i / steps), lerp(ay, by, i / steps)) for i in range(steps)]
+                plan0 = dense
             plan1 = list(plan0)                                   # (upright walls: plates and platforms can be laid on them)
             n = len(plan0)
         else:
             plan0, plan1 = Model.oval(x, y, long * 0.5, wide * 0.5, n), Model.oval(x, y, long * 0.47, wide * 0.46, n)
         zc = z + high * (1.0 - cap)
-        rings = [[Vector((px + dx * t, py, z + high * (1.0 - cap) * t)) for (px, py), (qx, qy) in zip(plan0, plan1) for px, py in [(lerp(px, qx, t), lerp(py, qy, t))]] for t in (0.0, 0.5, 1.0)]
+        # (a flat-sided funnel is one big wall: more rings up it, so that its soot can be laid by height)
+        ts = ((0.0, 0.34, 0.54, 0.66, 0.76, 0.85, 0.93, 1.0) if m.fine else (0.0, 0.62, 1.0)) if flat else (0.0, 0.5, 1.0)
+        rings = [[Vector((px + dx * t, py, z + high * (1.0 - cap) * t)) for (px, py), (qx, qy) in zip(plan0, plan1) for px, py in [(lerp(px, qx, t), lerp(py, qy, t))]] for t in ts]
+        first = len(m.verts)
         m.skin(rings, "upper", (False, False))
+        if flat:
+            # Her soot: the top third darkened, fading down in uneven tongues, further down the after side. (The art
+            # director, 11:00 UTC on 18 November 2026: left to the weathering alone, which fades over the top half of
+            # a three-ring wall, the funnel was "a plain slab".)
+            for i, t in enumerate(ts):
+                for j, q in enumerate(rings[i]):
+                    aft = 0.5 - (q.x - x) / long
+                    reach = 0.31 + 0.13 * aft + 0.1 * noise.noise(Vector((q.x * 0.3, q.y * 0.3, 4.2))) + 0.07 * noise.noise(Vector((q.x * 1.3, q.y * 1.3, 9.1)))
+                    # (strong: a tint is laid in linear light, and one that halves the light darkens the picture by a quarter)
+                    m.vsoot[first + i * n + j] = 0.9 * min(1.0, max(0.0, (t - (1.0 - reach)) / reach)) ** 0.9
         top = [Vector((p.x + dx * cap * 1.0, p.y, z + high)) for p in rings[-1]]
         m.skin([rings[-1], top], "black", (False, False))
         # the mouth: a dark ring inside, a little way down
@@ -562,7 +581,14 @@ class Yard:
         m.skin([low, inner], "black", (True, False), inside=True, cap_paint="black")
         # a band of soot round the top and down the after side comes from the weathering
         if pipes and m.fine:
-            for hand in (PORT, STBD):
+            if flat:          # steam pipes up her after face, each to its own height, clipped to the wall, a dark lip at its head
+                for off, r, over in ((-0.8, 0.16, 0.55), (0.42, 0.1, 0.25), (0.86, 0.13, -0.5)):
+                    px, py = x - long * 0.5 - r - 0.1, y + off
+                    m.rod((px, py, z), (px, py, z + high + over), r, "upper", sides=6)
+                    m.lathe((px, py, z + high + over - 0.02), Z, [(0.0, r), (0.1, r * 1.45), (0.28, r * 1.45)], "black", 6)
+                    for share in (0.22, 0.48, 0.74, 0.93):
+                        m.box((px + (r + 0.15) * 0.5, py, z + high * share), (r + 0.15, r * 2.6, 0.07), "upper")
+            for hand in (PORT, STBD) if not flat else ():
                 m.rod((x + long * 0.5 - 0.1, y + hand * wide * 0.16, z), (x + long * 0.47 + dx, y + hand * wide * 0.16, z + high * 0.98), 0.12, "upper", sides=5)
                 m.rod((x - long * 0.5 + 0.1, y + hand * wide * 0.16, z), (x - long * 0.47 + dx, y + hand * wide * 0.16, z + high * 0.9), 0.1, "upper", sides=5)
             # a grating over the mouth
