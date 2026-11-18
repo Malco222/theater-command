@@ -152,8 +152,8 @@ def glazed_nose(m, f, s, G, hull):
 def gunners(m, f):
     """In each turret: the gunner, looking along his guns, and their breeches beside his head."""
     for k, c, radii in f.turrets:
-        if k in f.balls:
-            continue                                      # (see ball_turret)
+        if k in f.balls or k in f.remote:
+            continue                                      # (see ball_turret; a chin turret is aimed from the nose above it, and a man in it hung out below)
         guns = f.guns_of.get(k, [])
         way = sum(((b - a) for a, b in guns), Vector())
         way.z = 0.0

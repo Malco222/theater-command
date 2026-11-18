@@ -344,7 +344,7 @@ def convert(name, fine=True):
             for hand in ((1.0, -1.0) if (a_.y != 0.0 or b_.y != 0.0) else (1.0,)):
                 rods.append((Vector((a_.x, a_.y * hand, a_.z)), Vector((b_.x, b_.y * hand, b_.z))))
     turrets, gun_part = [], {}                           # (number, middle, radii) of each turret; the part of each gun
-    balls = set()                                        # (the numbers of the turrets that are steel balls)
+    balls, remote = set(), set()                         # (the numbers of the turrets that are steel balls, and of those with nobody in them)
     for c, radii in domes:
         mine = [i for i, (a_, b_) in enumerate(rods) if (a_ - c).length < max(radii) + 0.5 and i not in gun_part]
         if not mine:
@@ -361,6 +361,8 @@ def convert(name, fine=True):
         belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
         if belly and name in fitout.BALL and min(radii) > 0.9 * max(radii):
             balls.add(k)                                    # (a round one under her belly is a steel ball, not a glass dome: see fitout.ball_turret)
+        elif belly:
+            remote.add(k)                                   # (a low one under her is worked from inside her: nobody sits in it)
         m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-10, 80), note="its guns; plus lifts them")
         for i in mine:
             gun_part[i] = f"turret.{k}.guns"
@@ -657,7 +659,7 @@ def convert(name, fine=True):
     f.engines, f.pods = len(hubs) + len(pods), pods
     f.year = s.get("year")                                   # (a machine that only comes late in the war)
     f.waist, f.around, f.waist_hole = waist, around, waist_hole
-    f.panes, f.pane_at, f.balls = panes, pane_at, balls
+    f.panes, f.pane_at, f.balls, f.remote = panes, pane_at, balls, remote
     f.surf = list(surf)
     f.turrets = [(k, port(c), radii) for k, c, radii in turrets]
     f.flex = [(nm, port(a_), port(b_)) for nm, a_, b_ in flex]
