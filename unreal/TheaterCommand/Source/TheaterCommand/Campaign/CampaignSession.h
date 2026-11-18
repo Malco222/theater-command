@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/Future.h"
 #include "Campaign/CampaignView.h"
 
 class FRulesHost;
@@ -259,14 +260,68 @@ public:
 	DECLARE_MULTICAST_DELEGATE(FOnViewChanged);
 	FOnViewChanged OnViewChanged;
 
+	/**
+	 * (Speed: the design director's mark 1 for build 414, a press's own work under a tenth of a second.) The orders that
+	 * cost most on the Mac (a march about 47 ms in the rules, a landing 85, a sortie 67) are answered on a thread of
+	 * their own, so that the frame of the press waits for nothing. The picture of the war is read from the answer on
+	 * that thread too, and the questions the army in hand asks straight after (how it stands, where it can reach, what
+	 * the trains can do, the province's card) are asked there in the same trip and kept, so that the frames that show
+	 * the answer ask the rules nothing. Each was checked against the rules: asked twice it answers the same, and it
+	 * leaves the saved game as it found it. The game's own picture changes only on the game thread, when the answer is
+	 * taken (Deliver). Every other call into the rules waits for an answer still being worked out, and takes it first.
+	 * With bAside false (the photographer), or "tc.Speed.RulesAside 0", the order is answered at once, as before.
+	 */
+	struct FHandNext
+	{
+		/** The province the army in hand will be in, and its corps there before the tray leaves out those that cannot be ordered. */
+		int32 Region = INDEX_NONE;
+		TArray<int32> Ids;
+		/** The province whose card is shown after the order. */
+		int32 Selected = INDEX_NONE;
+		/** A hand that marches (not one at sea or on the railway): it asks where it can reach, and what the trains can do. */
+		bool bPlain = true;
+		/** The nation's adjective as the tray's head names its army ("the German army"), where no general leads it. */
+		FString Adjective;
+	};
+	/** The marches an order made, and the rules' sentence on it. */
+	struct FMoveAnswer
+	{
+		TArray<FCorpsMove> Moved;
+		FString Note;
+	};
+	/** Each Guess is run on the rules' thread, on the answer as read there: it may use only what it was given. Then is run on the game thread. */
+	void MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
+		TFunction<FHandNext(const FMoveAnswer&)>&& Guess, TFunction<void(const FMoveAnswer&)>&& Then);
+	void LandAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bAside, TFunction<FHandNext(const FLandingResult&)>&& Guess, TFunction<void(const FLandingResult&)>&& Then);
+	/** Function: "attack", "take" (bAssault as Take's), "storm" or "sally" (no corps: the province says who). */
+	void FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
+		TFunction<FHandNext(const FAttackResult&)>&& Guess, TFunction<void(const FAttackResult&)>&& Then);
+	/** True from an order given aside until its Then has been run. */
+	bool IsAnswering() const { return Aside.IsValid() || static_cast<bool>(AsideThen); }
+	/** Once a frame, from the player's controller: where the answer is in, it is taken and its Then is run. bWait: waited for, where it is still being worked out. */
+	void Deliver(bool bWait = false);
+
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
+	struct FAside;
+	/** The order on the rules' thread: Guess (there) says what the hand will ask next; Then (here) is given the answer, or nothing where the rules failed. */
+	void Order(const FString& Function, const FString& ArgumentsJson, bool bAside, TFunction<FHandNext(const TSharedPtr<FJsonObject>&)>&& Guess, TFunction<void(const TSharedPtr<FJsonObject>&)>&& Then);
+	/** Waits for an order still being answered, where there is one, and takes its picture of the war and the answers kept with it. Its Then is left for Deliver. */
+	void Settle();
+	/** A new war, or one read in: the order still being answered is taken, and its Then, which belongs to the old war, is dropped. */
+	void DropAside();
 	/** An order that may end in a battle (attack, take): what the rules answer, read as a battle's result. */
 	FAttackResult Fight(const FString& Function, const FString& ArgumentsJson);
 	static FCampaignView ParseView(const TSharedPtr<FJsonObject>& Object);
+	/** ParseView without the speed log's timing, which is kept on the game thread only: for the rules' thread. */
+	static FCampaignView ReadView(const TSharedPtr<FJsonObject>& Object);
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 
 	TUniquePtr<FRulesHost> Host;
+	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
+	TSharedPtr<FAside, ESPMode::ThreadSafe> Aside;
+	TFuture<void> AsideRun;
+	TFunction<void()> AsideThen;
 	/** The rules' last answers to the questions that change nothing, by question and what was asked: see CallRules. */
 	TMap<FString, FString> RulesMemo;
 	FCampaignView View;

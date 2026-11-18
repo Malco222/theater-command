@@ -931,6 +931,12 @@ public:
 	void PickApproach(int32 Index);
 	/** True while a card, a page or a screen lies over the table and its clicks do not reach the map. */
 	bool IsTableBusy() const;
+	/**
+	 * (Speed, b414 mark 1.) True from an order the rules answer on a thread of their own (a march, a landing, an attack)
+	 * until its answer is on the table, a frame or a few later: the map, the keys and the attack card take no other
+	 * order meanwhile.
+	 */
+	bool IsAnswering() const;
 	/** True while the game plays something through by itself: the other countries' month, a newsreel, an announcement. */
 	bool IsBusyForSteps() const;
 	/** Answers what a month's end puts in the way, as a player in a hurry would: the question, the newsreel, the announcements, the replay. */
@@ -1033,7 +1039,26 @@ private:
 	/** The battle the card asked about is fought and its result shown: an attack, or the assault a march ends in. */
 	void ResolveAttack();
 	bool bTicketAll = false;
-	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
+	/** bPictureFirst (an order's answer): the ground and the armies now, the rest of the table a frame after (tc.Speed.PictureFirst). */
+	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr, bool bPictureFirst = false);
+	void ShowWarRest(const FCampaignView& View);
+	/**
+	 * (Speed, b414 mark 1.) What follows an order's answer, a step a frame (tc.Speed.PictureFirst): the ground and the
+	 * armies, then the rest of the table, then the army in hand's orders and the province's card. At once where pictures
+	 * are being taken, or with the switch off.
+	 */
+	TArray<TFunction<void()>> Afterwards;
+	void Later(TFunction<void()>&& Step);
+	/** Everything still to come of an order's answer, now: before a campaign is put away. */
+	void FinishAnswer();
+	/** The nation's adjective as the army in hand's tray names it, for the rules' thread, which reads no map. */
+	FString HandAdjective() const;
+	/** What follows an order's answer, on the game thread: what OrderTo, ConfirmWar, ConfirmMarch and ResolveAttack did once the rules had answered. */
+	void AfterMarch(int32 RegionId, const TArray<FCorpsMove>& Marches, FString Said, const FString& MarchSays, const FString& MarchMeets, const TOptional<FVector>& Carried);
+	void AfterFarMarch(const TArray<FCorpsMove>& Marches, const FString& Said, bool bWasSpent, const TOptional<FVector>& Carried);
+	void AfterLanding(int32 RegionId, const FLandingResult& Result);
+	void AfterSiege(int32 RegionId, const FAttackResult& Result);
+	void AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result);
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
