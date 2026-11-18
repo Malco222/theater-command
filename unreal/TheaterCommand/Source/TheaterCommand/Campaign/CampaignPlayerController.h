@@ -1324,8 +1324,10 @@ private:
 	bool OpenLessonGuide();
 	void RefreshLessonGuide();
 	// (The brief: the notes "read aloud by the built-in voice when the voice is on", the deed line last.) The note
-	// last read, by its arrival; and whether lesson 1, laid on the card that is open, has been read.
+	// last read, by its arrival (and the arrival the screen has had a tick to place); and whether lesson 1, laid on the
+	// card that is open, has been read.
 	int32 LessonSpokenArrival = -1;
+	int32 LessonPlacedArrival = -1;
 	bool bLessonLaidSpoken = false;
 	void SpeakLesson(const FLessonNote& Note);
 	bool PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const;

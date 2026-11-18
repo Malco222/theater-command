@@ -2542,6 +2542,10 @@ void ACampaignPlayerController::OpenGuide()
 		CloseDocument();
 		return;
 	}
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1, as Enter: opening either page asks the rules, and an order is still being answered)
+	}
 	// (Rules 84.3.3; ruling 147.) In a war he leads, the Guide opens on its list of the ten lessons: the typed page of
 	// rules is its second, behind "How a month works".
 	if (!OpenLessonGuide())
@@ -5047,11 +5051,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			bLessonsDue = true;
 		}
 		// (The brief.) The note is read aloud as it comes, when the voice is on: its heading, its sentences, and its
-		// deed line last; lesson 1 as it is laid on the card.
+		// deed line last; lesson 1 as it is laid on the card. Never while the screen hides it: the screen places a note
+		// after this tick, so a new one is read from the next tick on, once the screen has said whether it shows.
 		if (HasLessonNote() && LessonSpokenArrival != LessonArrival)
 		{
-			LessonSpokenArrival = LessonArrival;
-			SpeakLesson(LessonNote);
+			if (LessonPlacedArrival != LessonArrival)
+			{
+				LessonPlacedArrival = LessonArrival;
+			}
+			else if (!bLessonNoteHidden)
+			{
+				LessonSpokenArrival = LessonArrival;
+				SpeakLesson(LessonNote);
+			}
 		}
 		if (IsLessonLaid() && !IsLessonQuiet())
 		{
@@ -8354,7 +8366,9 @@ void ACampaignPlayerController::AfterFarMarch(const TArray<FCorpsMove>& Marches,
 
 bool ACampaignPlayerController::IsTableBusy() const
 {
-	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
+	// (Rules 84.3.3: the Guide's list of the ten lessons lies over the table as a paper does. The key guard, the hover
+	// and the right button read it here.)
+	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || bLessonGuideOpen || Announcements.Num() > 0;
 }
 
 bool ACampaignPlayerController::IsAnswering() const
@@ -8600,6 +8614,7 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	else if (WarPrompt.bVisible) { OutOpen = WarPrompt.Title.ToString(); }
 	else if (EndAsk.bVisible) { OutOpen = TEXT("The question at the month's end"); }
 	else if (Document.bValid) { OutOpen = Document.Title; }
+	else if (bLessonGuideOpen) { OutOpen = LessonGuidePage.Head.IsEmpty() ? FString(TEXT("THE GUIDE")) : TEXT("THE GUIDE: ") + LessonGuidePage.Head; } // (84.3.3: the ten lessons)
 	else if (bPageOpen) { OutOpen = Page.Title; }
 	else if (bArsenalOpen) { OutOpen = TEXT("THE ARSENAL"); }
 	else if (bResearchOpen) { OutOpen = TEXT("RESEARCH"); }
@@ -8620,6 +8635,11 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 		else { Said.Add(FaceOff.OddsLine.ToString()); }
 	}
 	else if (WarPrompt.bVisible) { Said.Add(WarPrompt.Body.ToString()); }
+	else if (bLessonGuideOpen)
+	{
+		if (!LessonGuidePage.State.IsEmpty()) { Said.Add(LessonGuidePage.State); }
+		if (LessonGuidePage.Waiting > 0) { Said.Add(FString::Printf(TEXT("%d waiting"), LessonGuidePage.Waiting)); }
+	}
 	else if (bPageOpen)
 	{
 		if (!Page.Headline.IsEmpty()) { Said.Add(Page.Headline); }
@@ -9840,8 +9860,9 @@ void ACampaignPlayerController::EndMonth()
 		}
 		return;
 	}
-	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away.)
-	if (Document.bValid && bEnterByKey && !bScripted)
+	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away. The Guide's
+	// list of the ten lessons is such a paper.)
+	if ((Document.bValid || bLessonGuideOpen) && bEnterByKey && !bScripted)
 	{
 		return;
 	}
