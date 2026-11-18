@@ -190,9 +190,8 @@ function campaign(g: Game, nat: string): void {
  * reached is given a garrison from the infantry standing there, as long as a corps is left in the field; a
  * fortress town gets one too. A great city of the nation's own (ruling 139: its capital, or a city with great works)
  * takes the corps the field can spare against the enemy next door, infantry before the rest, and where the field
- * cannot be held it is filled to its room, a lone corps and all (b512(e)); a staff attacking the country next door
- * in a war it began keeps the corps its attack needs out, and its lone corps too until that enemy strikes the
- * province (b519(m)). At the start of the month a garrison with no enemy within two marches comes out.
+ * cannot be held it is filled to its room, a lone corps and all (b512(e)); a staff attacking the countries next door
+ * in wars it began garrisons it as any other city until one of them strikes the province (b519(m)). At the start of the month a garrison with no enemy within two marches comes out.
  */
 export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g)) return;
@@ -215,6 +214,14 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     }
     return false;
   };
+  const attacking = (r: Region): boolean => {
+    const foes = [...new Set(r.nb.map((j) => ctl(g, g.regions[j])).filter((x) => atWar(g, nat, x)))];
+    if (!foes.length || !foes.every((e) => onTheAttack(g, nat, e))) return false;
+    return !foes.some((e) => {
+      const since = Math.max(g.flags[`war:${nat}:${e}`] ?? 0, g.flags[`war:${e}:${nat}`] ?? 0);
+      return g.reports.some((p) => p.region === r.id && p.attNat === e && p.turn >= since);
+    });
+  };
   for (const r of g.regions) {
     if (r.ctrl !== nat || besieged(g, r)) continue;
     const inside = garrisonOf(r).filter((c) => c.nat === nat);
@@ -222,7 +229,10 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       if (inside.length && !near(r, 2)) for (const c of [...inside]) takeField(g, c);
       continue;
     }
-    const great = r.owner === nat && greatCity(g, r);
+    // An attacker does not shut its attackers in (b519(m)): a staff attacking every country next door, in wars it
+    // began itself, while the offensive is on, garrisons its great city as it would any other city, until one of
+    // them has attacked the province.
+    const great = r.owner === nat && greatCity(g, r) && !attacking(r);
     const want = great ? roomIn(g, r) : SIEGE.ai.hold[townSize(g, r)] ?? (r.fort ? 1 : 0);
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
@@ -240,22 +250,11 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       const need = (SIEGE.ai.great?.field ?? 0) * threat;
       let held = friendlyUnits(g, r, nat).reduce((s, u) => s + defPower(g, u, r), 0);
       const holds = held >= need;
-      // An attacker does not shut its attackers in (b519(m)): against the countries next door that this staff is
-      // itself attacking, in a war it began, while the offensive is on, the town takes only corps the attack does
-      // not need (none fit to attack), and the lone-corps rule waits until one of them has attacked the province.
-      const foes = [...new Set(r.nb.map((j) => ctl(g, g.regions[j])).filter((x) => atWar(g, nat, x)))];
-      const attacker = foes.length > 0 && foes.every((e) => onTheAttack(g, nat, e));
-      const struck = attacker && foes.some((e) => {
-        const since = Math.max(g.flags[`war:${nat}:${e}`] ?? 0, g.flags[`war:${e}:${nat}`] ?? 0);
-        return g.reports.some((p) => p.region === r.id && p.attNat === e && p.turn >= since);
-      });
-      const lone = !holds && (!attacker || struck);
-      const needed = (c: Corps): boolean => attacker && !lone && !c.hold && c.org >= 0.35;
       let have = inside.length;
       for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
         if (have >= want) break;
         const worth = defPower(g, c, r);
-        if (needed(c) || (!lone && held - worth < need)) continue;
+        if (holds && held - worth < need) continue;
         if (garrison(g, c)) { have++; held -= worth; }
       }
       continue;

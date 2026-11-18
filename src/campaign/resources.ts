@@ -29,6 +29,12 @@ interface LaneRow {
   shutBy?: string[];
   /** The lane only runs while the recipient fights beside one of these. */
   allies?: string[];
+  /** Places the lane's road crosses: it opens once every one is in the recipient's or an ally's hands, and an enemy who holds one shuts it. */
+  held?: string[];
+  /** What is said of the lane while it waits on 'held'. */
+  idle?: string;
+  /** While the lane named here is open, this one carries these shares in place of its own (the aid to the Soviet Union split between two roads). */
+  split?: { lane: string; oil: number; sup: number };
   /** For drawing it on the map: where it comes onto the chart, the seas it is drawn through, and a place it passes on the way. */
   enter?: [number, number];
   draw?: string[];
@@ -228,10 +234,20 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
     const friend = row.allies.find((a) => g.nations[a]?.alive && allied(g, a, to) && g.nations[a].atWar.length > 0);
     if (!friend || !g.nations[to].atWar.length) return cut(`It runs only while ${the(natOf(g, to))} fights beside the western Allies.`, 'idle');
   }
+  for (const name of row.held ?? []) {
+    const r = g.byName[name];
+    if (!r) continue;
+    if (atWar(g, r.ctrl, to)) return cut(`${the(natOf(g, r.ctrl))} holds ${r.name} and the road through it is shut.`);
+    if (r.ctrl !== to && !allied(g, r.ctrl, to)) return cut(row.idle ?? `It opens once ${r.name} is in friendly hands.`, 'idle');
+  }
   if (row.source && g.nations[row.source] && atWar(g, row.source, to)) return cut(`${the(natOf(g, to))} is at war with ${the(natOf(g, row.source))}, which sold the cargoes.`);
   if (row.field) {
     const f = g.byName[row.field];
-    if (f && !friendly(g, f.ctrl, to)) return cut(`${f.name} is in the hands of ${the(natOf(g, f.ctrl))}.`);
+    // (A field held by its own country is that country's to give or keep: "Iraq is at war with the United Kingdom", the UI director's words for ruling 228.)
+    if (f && !friendly(g, f.ctrl, to)) {
+      if (f.ctrl !== f.owner) return cut(`${f.name} is in the hands of ${the(natOf(g, f.ctrl))}.`);
+      return cut(atWar(g, f.ctrl, to) ? `${the(natOf(g, f.ctrl))} is at war with ${the(natOf(g, to))}.` : `${the(natOf(g, f.ctrl))} has gone over to the other side.`);
+    }
   }
   for (const name of row.past ?? []) {
     const r = g.byName[name];
@@ -251,7 +267,10 @@ export function laneStopped(g: Game, id: string): { state: 'cut' | 'idle'; why: 
 /** One sea lane as it stands this month for the nation it feeds. 'need' is that nation's monthly need of each good. */
 function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
   const zones = row.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
-  const full = { oil: row.oil * need.oil, sup: row.sup * need.sup };
+  // (Ruling 228(3a): once the Persian road is open the aid round the North Cape is half what it was, the rest coming through Iran.)
+  const other = row.split ? RES.lanes.find((l) => l.id === row.split!.lane) : undefined;
+  const part = row.split && other && !laneStop(g, other) ? row.split : row;
+  const full = { oil: part.oil * need.oil, sup: part.sup * need.sup };
   const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
   const to = row.to;
   const stop = laneStop(g, row);
