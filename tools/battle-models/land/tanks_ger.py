@@ -70,20 +70,25 @@ def pz4_skirts(v, x0, zt, lost=()):
             x1, x2 = xa + step * k + 0.008, xa + step * (k + 1) - 0.008
             ztop, zbot = zr + 0.025, 0.52
             v.part(name, "hull", ((x1 + x2) / 2, s * ys, zr), kind="fixed", note="a skirt plate hung on the rail: tanks lose them (the game hides none, one or two a tank)")
-            j = lambda k=1.0: v.rng.uniform(-1.0, 1.0) * k                                                     # noqa: E731  (hung by hand, knocked about)
-            yo = s * (ys + 0.014)
-            bent = 0.0 if k == 2 else 0.028                 # (the plate that carries her cross hangs true)
-            a, b = (x1, yo + bent * j(), zbot + 0.02 * j()), (x2, yo + bent * j(), zbot + 0.02 * j())
-            cs = [a, (x1, yo, ztop), (x2, yo, ztop), b]
+            # hung by hand and knocked about: each plate a degree or two off true, one end lower, its foot swung out or in
+            tilt, swing = math.radians(1.7) * v.rng.uniform(-1.0, 1.0), math.radians(2.0) * v.rng.uniform(-1.0, 1.0)
+            yo, long, high = s * (ys + 0.014), x2 - x1, ztop - zbot
+            drop = long / 2 * math.tan(tilt)
+
+            def pt(u, h):                                  # a point of the plate: u along it from its after end, h up from its foot
+                return Vector((x1 + u * long, yo + high * math.tan(swing) * (1.0 - h / high), zbot + h + drop * (2.0 * u - 1.0)))
+            cs = [pt(0, 0), pt(0, high), pt(1, high), pt(1, 0)]
             if k == n - 1:                                 # the foremost plate's lower corner is cut away
-                cs = [a, (x1, yo, ztop), (x2, yo, ztop), (x2, yo, zbot + 0.42), (x2 - 0.3, b[1], b[2])]
+                cs = [pt(0, 0), pt(0, high), pt(1, high), pt(1, 0.42), pt(1 - 0.3 / long, 0)]
             if k == 0:                                     # and the aftermost's
-                cs = [(x1 + 0.26, a[1], a[2]), (x1, yo, zbot + 0.36), (x1, yo, ztop), (x2, yo, ztop), b]
-            v.plate(cs[::int(s)], 0.006, coat, 0.002)
+                cs = [pt(0.26 / long, 0), pt(0, 0.36), pt(0, high), pt(1, high), pt(1, 0)]
+            v.plate([tuple(c) for c in cs][::int(s)], 0.006, coat, 0.002)
             for x in (x1 + 0.16, x2 - 0.16):               # the two hooks it hangs by
                 v.slab((x - 0.03, s * (ys - 0.012), zr - 0.07), (x + 0.03, s * (ys + 0.022), zr + 0.012), "steel", 0.003)
-            if k == 2:
-                v.mark("GER", ((x1 + x2) / 2, yo + s * 0.001, 1.22), Y * s, 0.2, part=name)
+            if k == 2:                                     # her cross, on the plate's own face
+                face = (pt(0, high) - pt(0, 0)).cross(pt(1, 0) - pt(0, 0)).normalized()
+                face = face if face.y * s > 0 else -face
+                v.mark("GER", tuple(pt(0.5, 1.22 - zbot) + face * 0.0015), face, 0.2, part=name)
     # ---- the turret's shield: a horseshoe of plate round her sides and back, standing off on stays ---------------
     z0, z1 = zt + 0.08, zt + 0.58
     side = [(0.80, 1.02), (0.34, 1.17), (-0.52, 1.15), (-1.20, 0.98), (-1.68, 0.55)]
