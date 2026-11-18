@@ -147,7 +147,7 @@ def _key(p):
     return (round(p.x, 4), round(p.y, 4), round(p.z, 4))
 
 
-BARE = ("edge", "apron", "bank", "glacis", "spoil", "berm", "lip", "flip")
+BARE = ("edge", "apron", "bank", "glacis", "spoil", "berm", "lip", "flip", "slope")
 
 
 def earth_paint(tags, mid):
@@ -170,7 +170,7 @@ def earth_coat(tag, p, turf, seed=0.0):
     if tag in ("bank", "glacis", "spoil", "apron", "edge") and p.z > 0.04 and n < turf:
         return "turf"
     d = fbm((p.x * 0.8 + 17.0, p.y * 0.8 - seed, 1.3), 1.0, 3)
-    if tag in ("lip", "flip", "berm") or d > 0.22:
+    if tag in ("lip", "flip", "berm") or d > (0.0 if tag == "slope" else 0.22):
         return "earth"
     return "earth.dry"
 
@@ -642,7 +642,7 @@ def plank_revet(m, path, s0, s1, seed, top=0.0, posts=True):
     hs = []
     z = STEP + 0.01
     while z < top - 0.08:
-        w = g.uniform(0.17, 0.22)
+        w = g.uniform(0.17, 0.22) if m.fine else (top - STEP - 0.02)
         hs.append((z + w / 2, w))
         z += w + g.uniform(0.006, 0.02)
     for a, b in zip(ps, ps[1:]):
@@ -742,13 +742,13 @@ def riser_revet(m, path, s0, s1, seed):
     s = s0
     while s < s1 - 0.1:
         e = min(s1, s + g.uniform(2.0, 2.8))
-        for k in range(4):
+        for k in range(4 if m.fine else 0):
             zc = FLOOR + 0.12 + k * 0.225
             u = U_R0 + (U_R1 - U_R0) * (zc - FLOOR) / (STEP - FLOOR) - 0.016
             _, r = path.axes((s + e) / 2, 0.3)
             bits.plank(m, path.at(s + 0.01, u, zc + g.uniform(-0.01, 0.01)), path.at(e - 0.01, u, zc), 0.21, 0.026, "planks", -r, seed=g.randrange(999))
         n = max(1, int((e - s) / 1.2))
-        for k in range(n + 1):
+        for k in range(n + 1 if m.fine else 0):
             sp = s + 0.06 + (e - s - 0.12) * k / n
             bits.log(m, path.at(sp, U_R0 - 0.06, FLOOR - 0.01), path.at(sp, U_R1 - 0.065, STEP - 0.05), 0.03, "timber", g.randrange(999), sides=7 if m.fine else 4)
         bits.plank(m, path.at(s + 0.01, U_R1 + 0.09, STEP + 0.014), path.at(e - 0.01, U_R1 + 0.09, STEP + 0.014), 0.2, 0.028, "planks", Z, seed=g.randrange(999))
@@ -776,6 +776,10 @@ def duckboards(m, path, s0, s1, seed, gaps=()):
         du = g.uniform(-0.04, 0.04)
         for side in (-0.22, 0.22):
             bits.plank(m, path.at(s + 0.04, FLOOR_U + side + du, lift + 0.02), path.at(e - 0.04, FLOOR_U + side + du, lift + 0.02 + tilt), 0.05, 0.045, "timber", Z, seed=g.randrange(999))
+        if not m.fine:
+            bits.plank(m, path.at(s + 0.04, FLOOR_U + du, lift + 0.056), path.at(e - 0.04, FLOOR_U + du, lift + 0.056 + tilt), 0.58, 0.022, "planks", Z)
+            s = e + 0.04
+            continue
         n = int((e - s) / 0.105)
         for k in range(n):
             sc = s + 0.04 + (e - s - 0.08) * (k + 0.5) / n
@@ -824,9 +828,13 @@ def phone_wire(m, path, s0, s1, avoid=(), z=-0.55):
         s += 1.4
     pts = []
     for a, b in zip(pegs, pegs[1:]):
-        for k in range(6):
-            f = k / 6
-            pts.append(path.at(a + (b - a) * f, ur(z) + 0.05, z - 0.07 * math.sin(math.pi * f)))
+        over = any(a < x0 and b > x1 for x0, x1 in avoid)       # (carried up over a doorway, along the wall's top)
+        for k in range(8):
+            f = k / 8
+            zz = z - 0.07 * math.sin(math.pi * f)
+            if over:
+                zz = z + (0.0 - 0.04 - z) * smooth(min(f, 1 - f) / 0.3)
+            pts.append(path.at(a + (b - a) * f, ur(zz) + 0.05, zz))
     if pegs:
         pts.append(path.at(pegs[-1], ur(z) + 0.05, z))
     if len(pts) > 1:
@@ -887,6 +895,11 @@ def dugout(m, path, s, seed=0):
     m.add(roof, [(2 * k, 2 * k + 1, 2 * k + 3, 2 * k + 2) for k in range(len(us) - 1)], "timber.dark", False, lambda p: -Z)
     m.add([path.at(s - hw, u_end, floor_(u_end) - 0.1), path.at(s + hw, u_end, floor_(u_end) - 0.1), path.at(s + hw, u_end, ceil(u_end)), path.at(s - hw, u_end, ceil(u_end))],
           [(0, 1, 2, 3)], "void", False, lambda p: r)
+    # a dark shell round the whole passage, so no light comes in where boards meet
+    c0 = path.at(s, (u_end + ur(-1.0)) / 2 - 0.05, (FLOOR - 1.4 - 0.02) / 2)
+    hx_, hy_, hz_ = (ur(-1.0) - u_end) / 2 + 0.1, hw + 0.15, (1.4 + 2.0 - 0.02) / 2 + 0.05
+    shell = [c0 + r * (sx * hx_) + t * (sy * hy_) + Z * (sz * hz_) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+    m.add(shell, [(0, 1, 3, 2), (1, 5, 7, 3), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4)], "void", False, lambda p: c0 - p)
     for k, uu in enumerate(us[2::5]):
         for sd in (-1, 1):
             bits.log(m, path.at(s + sd * (hw - 0.05), uu, floor_(uu) - 0.02), path.at(s + sd * (hw - 0.05), uu, ceil(uu)), 0.05, "timber", seed + k * 2 + sd, sides=8 if m.fine else 4)
@@ -906,32 +919,39 @@ def dugout(m, path, s, seed=0):
             c = path.at(s + f, ur(DOOR_TOP) + 0.15, DOOR_TOP - 0.03)
             m.lathe(c - t * 0.008, t, [(0.0, 0.058), (0.016, 0.058)], "rubber", 12, (False, False))
     # the roof: logs across the chamber, their ends showing at the mound's foot, the mound over them
-    for k in range(14):
-        uu = -1.15 - k * 0.25
-        bits.log(m, path.at(s - 2.05 + g.uniform(-0.1, 0.1), uu, 0.1), path.at(s + 2.05 + g.uniform(-0.1, 0.1), uu + g.uniform(-0.03, 0.03), 0.1), 0.11 * g.uniform(0.85, 1.1), "timber", seed + 20 + k,
+    def mound_h(ss, uu):
+        a = abs((ss - s) / 2.0) ** 4 + abs((uu + 3.25) / 2.3) ** 4
+        return 1.05 * max(0.0, 1.0 - a) ** 0.5
+    for k in range(12):
+        uu = -1.42 - k * 0.25
+        e = 2.0 + g.uniform(-0.08, 0.12)
+        bits.log(m, path.at(s - e, uu, 0.1), path.at(s + e + g.uniform(-0.1, 0.05), uu + g.uniform(-0.03, 0.03), 0.1), 0.11 * g.uniform(0.85, 1.1), "timber", seed + 20 + k,
                  sides=10 if m.fine else 5)
-    ns, nu = (34, 32) if m.fine else (10, 9)
-    verts, faces, ptag = [], [], []
+    ns, nu = (36, 32) if m.fine else (10, 9)
+    verts, faces = [], []
     for i in range(ns + 1):
-        ss = s - 2.6 + 5.2 * i / ns
+        ss = s - 2.3 + 4.6 * i / ns
         for j in range(nu + 1):
-            uu = -0.9 - 5.0 * j / nu
-            a = abs((ss - s) / 1.95) ** 2.6 + abs((uu + 3.3) / 2.45) ** 2.6
-            h = 1.05 * max(0.0, 1.0 - a) ** 0.55
+            uu = -0.92 - 4.7 * j / nu
+            h = mound_h(ss, uu)
             p = path.at(ss, uu, 0.0)
             h += 0.06 * fbm(p * 1.0 + Vector((5.0, 0, 0)), 0.5) * min(1.0, h * 4)
-            verts.append(path.at(ss, uu, max(h, 0.0) + 0.01))
+            verts.append(path.at(ss, uu, max(h, 0.0) + (0.012 if h > 0 else -0.03)))
     for i in range(ns):
         for j in range(nu):
-            faces.append((i * (nu + 1) + j, (i + 1) * (nu + 1) + j, (i + 1) * (nu + 1) + j + 1, i * (nu + 1) + j + 1))
+            f = (i * (nu + 1) + j, (i + 1) * (nu + 1) + j, (i + 1) * (nu + 1) + j + 1, i * (nu + 1) + j + 1)
+            if max(verts[c].z for c in f) > 0.02:
+                faces.append(f)
     bits.turfed(m, verts, faces, amount=0.35, base="earth.dry", low=0.08, seed=3.0)
     # sandbags round the stove pipe's foot, and the pipe: a bend and a hat
     pc = path.at(s + 0.7, -3.0, 0.0)
     for k in range(4):
         a = k * 90 + 20
-        bits.sandbag(m, pc + Vector((math.cos(math.radians(a)) * 0.3, math.sin(math.radians(a)) * 0.3, 0.97)), a + 90, seed=seed + 40 + k, size=(0.44, 0.24, 0.11))
+        q = pc + Vector((math.cos(math.radians(a)) * 0.3, math.sin(math.radians(a)) * 0.3, 0.0))
+        sq, uq = path.local(q)
+        bits.sandbag(m, q + Z * (mound_h(sq, uq) - 0.035), a + 90, seed=seed + 40 + k, size=(0.44, 0.24, 0.11))
     top = pc + Z * 1.75
-    m.lathe(pc + Z * 0.8, Z, [(0.0, 0.065), (0.95, 0.065)], "rust", 14 if m.fine else 6, (False, False))
+    m.lathe(pc + Z * 0.6, Z, [(0.0, 0.065), (1.15, 0.065)], "rust", 14 if m.fine else 6, (False, False))
     m.lathe(pc + Z * 0.8, Z, [(0.0, 0.069), (0.03, 0.069)], "steel", 14 if m.fine else 6, (False, False))
     m.lathe(pc + Z * 1.35, Z, [(0.0, 0.069), (0.03, 0.069)], "steel", 14 if m.fine else 6, (False, False))
     m.lathe(top - Z * 0.02, Z, [(0.0, 0.02), (0.03, 0.15), (0.11, 0.015)], "steel", 14 if m.fine else 6, (True, True))
@@ -1219,7 +1239,7 @@ def FieldworksDugout(fine=True, nation="_default", name="FieldworksDugout"):
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Manned and still.", "tracks": [], "events": []}
     m.clips["hit"] = hit_clip(None, (-1.25, 0.0, FLOOR - BERM - 0.06))
     dug_weather(m, bay_base(path), [(stove, 0.3, 0.8)])
-    mound = [path.at(door + a, b) for a, b in ((-2.7, -3.0), (2.7, -3.0), (2.7, -6.0), (-2.7, -6.0))]
+    mound = [path.at(door + 2.0 * math.cos(a), -3.25 + 2.3 * math.sin(a)) for a in [2 * math.pi * k / 24 for k in range(24)]]
     bay_info(m, path, None, extra_clear=[[(round(p.x, 3), round(p.y, 3)) for p in mound]])
     m.info["aim"] = (-0.6, 0.0, -0.3)
     m.info["span"] = 11.0
@@ -1260,12 +1280,13 @@ def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch"):
     m.use("ditch")
     path = Path([(0.0, -5.0), (0.0, 5.0)])
     L = path.L
-    amp = {"bank": 0.08, "berm": 0.0, "lip": 0.01, "wall": 0.02, "floor": 0.035, "slope": 0.05, "apron": 0.015}
+    amp = {"bank": 0.08, "berm": 0.0, "lip": 0.01, "wall": 0.02, "floor": 0.035, "slope": 0.03, "apron": 0.015}
 
     def gully(s, u, z, tag):
         if tag == "slope":           # rain has cut runnels down the enemy's slope
             f = (-z) / AT_DEPTH
-            return -0.07 * max(0.0, fbm(Vector((s * 1.4, 0.3, 7.0)), 1.0, 2) - 0.1) * math.sin(math.pi * min(1.0, f * 1.1))
+            return (-0.16 * max(0.0, fbm(Vector((s * 1.6, 0.3, 7.0)), 1.0, 2) - 0.05) - 0.05 * max(0.0, fbm(Vector((s * 4.0, f * 2.0, 3.0)), 1.0, 2))) \
+                * math.sin(math.pi * min(1.0, f * 1.1)) + 0.06 * fbm(Vector((s * 0.5, f * 3.0, 1.0)), 1.0, 2) * math.sin(math.pi * f)
         return swell(s, u, z, "bank" if tag == "bank" else "")
     sweep(m, path, ditch_profile(), rows_for(L, 0.1 if fine else 0.5), amp, 0.18, 3.3, groove=gully)
     g = rnd(7)

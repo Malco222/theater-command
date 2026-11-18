@@ -126,14 +126,14 @@ def rubble(m, at, spread, count, seed=0, size=(0.12, 0.45), paint="concrete", fl
         m.skin(rings, paint if g.random() < 0.7 else "concrete.in", (True, True), False)
 
 
-def net_hooks(m, pts, out_of, paint="rust"):
+def net_hooks(m, pts, out_of, paint="wire"):
     """Bent rods cast into a roof's edge to tie camouflage nets to."""
     if not m.fine:
         return
     for p, d in zip(pts, out_of):
         p, d = Vector(p), Vector(d).normalized()
         s = Vector((-d.y, d.x, 0))
-        bits.tube(m, [p - s * 0.05, p - s * 0.05 + d * 0.06 + Z * 0.02, p + d * 0.085 + Z * 0.035, p + s * 0.05 + d * 0.06 + Z * 0.02, p + s * 0.05], 0.007, paint, 5)
+        bits.tube(m, [p - s * 0.04, p - s * 0.04 + d * 0.045 + Z * 0.012, p + d * 0.06 + Z * 0.02, p + s * 0.04 + d * 0.045 + Z * 0.012, p + s * 0.04], 0.005, paint, 5)
 
 
 def steel_door(m, hinge, theta, wide=0.74, high=1.52, paint="upper"):
@@ -202,7 +202,7 @@ def gun_clip(name="mg", rounds=6, rate=10.0, muzzle="muzzle"):
     for k in range(rounds):
         t = k / rate
         turn += [[t + 0.015, 0.3], [t + 0.05, -0.1], [t + 0.085, 0.04]]
-        events.append({"t": round(t, 3), "fx": "muzzle_flash_small", "socket": muzzle, "cue": "lmg_burst" if k == 0 else ""})
+        events.append({"t": round(t, 3), "fx": "muzzle_flash_small", "socket": muzzle, "cue": "lmg_burst_01" if k == 0 else ""})
     turn.append([long, 0.0])
     return {"long": long, "loop": True, "about": f"A burst of {rounds} rounds from the embrasure, looping while it fires.", "tracks": [{"part": name + ".gun", "turn": turn}], "events": events}
 
@@ -247,26 +247,15 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
     m.add([Vector((x, y, 0.031)) for x, y in fl] + [Vector((0, 0, 0.031))], [(k, (k + 1) % 6, 6) for k in range(6)], "concrete.in", False, lambda p: Z)
 
     # ---- the roof's furniture: turf laid over it, a ventilator, a periscope, hooks for nets round the edge
-    g = rnd(5)
-    n = 48
+    n = 56
     ring = []
     for k in range(n):
         a = 2 * math.pi * k / n
-        # (the sods follow the six-sided roof, a ragged hand's breadth short of its edge)
+        # (earth thrown on the six-sided roof, a ragged hand's breadth or two short of its edge, heaped unevenly and grown over)
         rr = (A_top - 0.04) / math.cos(math.radians((math.degrees(a) + 30.0) % 60.0 - 30.0))
-        rr = min(rr, A_top + 0.22) * (0.9 + 0.07 * bits.fbm((math.cos(a) * 2, math.sin(a) * 2, 1.0), 0.45) + 0.03 * bits.fbm((math.cos(a) * 2, math.sin(a) * 2, 5.0), 0.12))
-        ring.append(Vector((math.cos(a) * rr, math.sin(a) * rr, z_roof + 0.012)))
-    mid_ring = [Vector((p.x * 0.72, p.y * 0.72, z_roof + 0.13 + 0.04 * bits.fbm((p.x, p.y, 4.0), 0.8))) for p in ring]
-    m.add(ring + mid_ring, [(k, (k + 1) % n, n + (k + 1) % n, n + k) for k in range(n)], "turf", True, lambda p: Z)
-    m.add(mid_ring + [Vector((0, 0, z_roof + 0.17))], [(k, (k + 1) % n, n) for k in range(n)], "turf", True, lambda p: Z)
-    if fine:
-        for _ in range(900):
-            a, d = g.uniform(0, 6.283), (A_top - 0.3) * g.random() ** 0.5
-            base = Vector((math.cos(a) * d, math.sin(a) * d, z_roof + 0.02 + 0.12 * (1.0 - (d / A_top) ** 2)))
-            ang = g.uniform(0, 6.283)
-            side = Vector((-math.sin(ang), math.cos(ang), 0)) * 0.009
-            tip = base + Vector((math.cos(ang) * g.uniform(0.02, 0.08), math.sin(ang) * g.uniform(0.02, 0.08), g.uniform(0.06, 0.2)))
-            m.add([base - side, base + side, tip], [(0, 1, 2)], "turf" if g.random() < 0.6 else "garnish.2", False, None)
+        rr = min(rr, A_top + 0.22) * (0.86 + 0.09 * bits.fbm((math.cos(a) * 2, math.sin(a) * 2, 1.0), 0.45) + 0.04 * bits.fbm((math.cos(a) * 2, math.sin(a) * 2, 5.0), 0.12))
+        ring.append(Vector((math.cos(a) * rr, math.sin(a) * rr, z_roof - 0.01)))
+    bits.mound(m, ring, 0.34, seed=5, rings=7, amount=0.8, lump=0.06, part="pillbox", grass=34.0)
     m.lathe((-0.75, 0.55, z_roof), Z, [(0.0, 0.07), (0.34, 0.07), (0.36, 0.13), (0.44, 0.13), (0.50, 0.03)], "upper", 14)          # the ventilator's cowl
     m.lathe((0.35, -0.6, z_roof), Z, [(0.0, 0.045), (0.5, 0.045), (0.5, 0.06), (0.62, 0.06)], "upper", 12)                          # the periscope's tube
     m.box((0.35 + 0.045, -0.6, z_roof + 0.57), (0.03, 0.07, 0.05), "glass")
@@ -292,8 +281,8 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
 
     # ---- earth banked against the five fighting faces, falling away outward
     path = [local(th, out_at(0.45) + 0.02, t, 0.0) for th, ts in ((-120, (-1.2, 0.0, 1.2)), (-60, (-1.2, 0.0, 1.2)), (0, (-1.2, 0.0, 1.2)), (60, (-1.2, 0.0, 1.2)), (120, (-1.2, 0.0, 1.2))) for t in ts]
-    bits.bank(m, [(p.x, p.y) for p in path], [(-1.8, 0.0), (-1.5, 0.05), (-1.2, 0.13), (-0.9, 0.24), (-0.6, 0.37), (-0.3, 0.5), (-0.1, 0.58), (0.03, 0.6)], "earth", seed=7, lump=0.07, step=0.3, turf=0.5)
-    bits.patch(m, -0.6, 0.0, 4.6, "earth.dry", seed=3, oval=1.12)
+    bits.bank(m, [(p.x, p.y) for p in path], [(-2.0, 0.0), (-1.75, 0.04), (-1.5, 0.09), (-1.2, 0.17), (-0.9, 0.27), (-0.6, 0.4), (-0.3, 0.53), (-0.1, 0.6), (0.03, 0.62)], "earth", seed=7, lump=0.09, step=0.28, turf=0.58)
+    m.socket("entrance", (-A - 0.95, 1.5, 0.0), (0, 1, 0), part="pillbox", note="the way in, round the end of the blast wall: the trodden path to the rear starts here")
 
     # ---- the gun in the front embrasure, and the others' places
     pivot = local(0, out_at(emb_z) - 0.47, 0.0, emb_z)
@@ -334,11 +323,12 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
     weather(m, [(pivot + X * 0.75, 0.75, 0.6)] + [(local(th, out_at(emb_z) + 0.05, 0, emb_z + 0.25), 0.5, 0.3) for th in (60, -60, 120, -120)], splash=0.9)
     m.info["span"] = 6.4
     m.info["high"] = 0.9
-    m.info["worn"] = [(-0.8, 0.0, 5.0), (-4.2, 1.6, 2.2)]
+    m.info["worn"] = [(-3.2, 0.9, 1.7), (-3.4, -0.4, 1.3)]
     m.info["clear"] = [hexagon(A + 0.1), [(-A - 1.9, -1.7), (-A - 0.4, -1.7), (-A - 0.4, 1.4), (-A - 1.9, 1.4)]]
     return m
 
 
 BUILDERS = {
     "Pillbox": Pillbox,
+    "Pillbox_water": lambda fine=True: Pillbox(fine, name="Pillbox_water", cooling="water"),
 }

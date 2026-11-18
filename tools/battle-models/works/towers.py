@@ -15,6 +15,7 @@ from mathutils import Quaternion, Vector
 
 import bits
 import concrete
+import guns
 from bits import X, Y, Z, rnd
 from concrete import local
 from posts import weather
@@ -74,82 +75,83 @@ def rail(m, pts, high=1.0, paint="steel", closed=False, every=1.6):
 
 
 def FlakTower(fine=True, nation="_default", name="FlakTower"):
+    """A flak tower: one massive block of blank concrete on a splayed plinth, a few small shuttered openings, a gallery
+    for the light guns carried round it on corbels two thirds of the way up (with a rounded bay at each corner and in
+    the middle of each face), and at the four top corners round platforms standing out over the corners, each for a
+    twin heavy gun. A command post and its rangefinder in the middle of the roof."""
     m = bits.model(name, "Flak tower (our own design)", "works", nation, fine)
     m.part("tower", None, (0, 0, 0), kind="root")
-    HB = 16.0                         # the keep's half width
-    BC, BR = 14.5, 6.0                # where each bastion's middle stands, and its radius
-    Z0, ZR, ZP, ZB, ZG = -0.6, 26.0, 27.2, 29.4, 18.0       # foot, roof deck, parapet top, bastion top, gallery deck
-    PIT = 1.3                         # how deep the gun pits are
-    GW = 2.6                          # how far the galleries stand out
-    sides = 28 if fine else 12
-    lifts = [2.9, 6.6, 10.6, 14.6, 20.6, 23.9]              # where one day's pour ended and the next began
+    HB = 16.0                         # the block's half width
+    Z0, ZR = -0.6, 27.0               # foot, roof deck
+    ZP = ZR + 1.2                     # the roof parapet's top
+    BC, BR = 12.6, 5.6                # where each gun platform's middle stands, and its radius
+    ZF = ZR + 1.5                     # the gun platforms' floors
+    ZB = ZF + 1.3                     # ... and their walls' tops
+    ZG, GW = 19.5, 2.7                # the gallery's deck, and how far it stands out
+    RN, RM = 4.4, 3.5                 # the corner bays' radius, the middle bays' radius
+    ZC = ZR + 4.0                     # the command post's top
+    sides = 32 if fine else 14
+    lifts = [(8.4, HB - 0.6), (12.2, HB - 0.6), (23.4, 6.4)]      # where one day's pour ended and the next began, and how far along the face
+                                      # (clear of the openings: the cutters must not run into each other; the pictures add more, fainter)
     square = lambda h: [(h, -h), (h, h), (-h, h), (-h, -h)]          # noqa: E731
     corners = [(1, 1), (1, -1), (-1, -1), (-1, 1)]
     faces4 = (0, 90, 180, 270)
 
-    # ---- the keep, its roof deck sunk within a parapet
+    # ---- the block on its plinth, its roof deck sunk within a parapet
     body = bits.s_prism(square(HB), Z0, ZP)
-    bits.s_cut(body, bits.s_prism(square(HB - 0.7), ZR, ZP + 1.0))
-    # ---- galleries: along each face on a splayed corbel, and round each bastion
-    for th in faces4:
-        g = bits.s_wedge([local(th, HB - 0.3, -BC, ZG - 2.6), local(th, HB - 0.3, BC, ZG - 2.6), local(th, HB + 0.05, BC, ZG - 2.6), local(th, HB + 0.05, -BC, ZG - 2.6)],
-                         [local(th, HB - 0.3, -BC, ZG - 0.45), local(th, HB - 0.3, BC, ZG - 0.45), local(th, HB + GW, BC, ZG - 0.45), local(th, HB + GW, -BC, ZG - 0.45)])
-        bits.s_join(body, g)
-        slab = fbox(th, HB - 0.3, HB + GW, -BC, BC, ZG - 0.5, ZG + 1.1)
-        bits.s_cut(slab, fbox(th, HB - 1.0, HB + GW - 0.32, -BC - 1.0, BC + 1.0, ZG, ZG + 2.0))
-        bits.s_join(body, slab)
+    bits.s_cut(body, bits.s_prism(square(HB - 0.8), ZR, ZP + 1.0))
+    bits.s_join(body, bits.s_prism(square(HB + 0.75), Z0, 5.2, top=square(HB + 0.7)))
+    bits.s_join(body, bits.s_prism(square(HB + 0.7), 5.2, 6.4, top=square(HB - 0.05)))
+
+    # ---- the gallery: a corbel and a deck right round the block, bays at the corners and the middles, one walk cut round it all
+    # (built as whole solids through the block, so nothing merely touches or lies face on face)
+    gal = bits.s_prism(square(HB + 0.05), ZG - 2.9, ZG - 0.45, top=square(HB + GW))
+    bits.s_join(gal, bits.s_prism(square(HB + GW), ZG - 0.5, ZG + 1.1))
+    bays = [(local(th, HB + 1.5, 0.0, 0.0), RM, 3.2, 0.9) for th in faces4] + [(Vector((sx * (HB + 0.2), sy * (HB + 0.2), 0.0)), RN, 3.6, 0.8) for sx, sy in corners]
+    for k, (c, r, deep, r0) in enumerate(bays):
+        bits.s_join(gal, bits.s_lathe((c.x, c.y, 0.0), Z, [(ZG - deep - 0.003 * k, r0), (ZG - 0.43, r), (ZG + 1.16 + 0.004 * k, r)], sides))
+    bits.s_cut(gal, bits.s_prism(square(HB + GW - 0.32), ZG, ZG + 2.5))
+    for k, (c, r, deep, r0) in enumerate(bays):
+        bits.s_cut(gal, bits.s_cyl((c.x, c.y, ZG - 0.012 - 0.002 * k), Z, r - 0.32, 2.5, sides))
+    bits.s_join(body, gal)
+
+    # ---- the gun platforms: each a drum standing on the roof's corner and out over it on a flared corbel
     for sx, sy in corners:
         c = (sx * BC, sy * BC)
-        ring = bits.s_lathe((c[0], c[1], 0.0), Z, [(ZG - 3.0, BR - 0.3), (ZG - 0.45, BR + GW), (ZG + 1.1, BR + GW)], sides)
-        bits.s_cut(ring, bits.s_cyl((c[0], c[1], ZG), Z, BR + GW - 0.32, 2.0, sides))
-        # the bastion itself: a drum from the ground to above the roof, the day-joints turned into it
-        prof = [(Z0 - 0.05, BR)]
-        if fine:
-            for z in lifts:
-                prof += [(z, BR), (z + 0.01, BR - 0.07), (z + 0.09, BR - 0.07), (z + 0.1, BR)]
-        prof += [(ZB - 0.5, BR), (ZB - 0.3, BR + 0.25), (ZB, BR + 0.25)]
-        drum = bits.s_lathe((c[0], c[1], 0.0), Z, prof, sides)
-        bits.s_cut(drum, bits.s_cyl((c[0], c[1], ZB - PIT), Z, BR - 0.75, 3.0, sides))
-        bits.s_join(drum, ring)
+        drum = bits.s_lathe((c[0], c[1], 0.0), Z, [(ZR - 5.4, HB - BC - 0.15), (ZR - 1.1, BR), (ZB - 0.42, BR), (ZB - 0.3, BR + 0.16), (ZB, BR + 0.16)], sides)
+        pit = [bits.s_cyl((c[0], c[1], ZF), Z, BR - 0.7, 3.0, sides)]
+        inward = math.degrees(math.atan2(-sy, -sx))
+        pit.append(bits.s_move(bits.s_box((BR - 1.2, -0.6, ZF), (BR + 0.6, 0.6, ZB + 0.5)), at=(c[0], c[1], 0.0), yaw=inward))        # the way in, from the roof
+        for a in (60, 120, 180, 240, 300):                                                    # lockers for ready rounds in the wall
+            pit.append(bits.s_move(bits.s_box((BR - 0.75, -0.5, ZF + 0.18), (BR - 0.22, 0.5, ZF + 1.02)), at=(c[0], c[1], 0.0), yaw=inward + a))
+        bits.s_cut(drum, *pit)
         bits.s_join(body, drum)
-    # ---- on the roof: the command post under its slab, and a hoist house by each bastion
-    post = bits.s_box((-4.0, -4.0, ZR - 0.2), (4.0, 4.0, ZR + 4.2))
-    bits.s_join(post, bits.s_prism(square(4.6), ZR + 4.2, ZR + 4.9, top=square(4.45)))
+
+    # ---- on the roof: the command post under its slab
+    post = bits.s_box((-3.5, -3.5, ZR - 0.2), (3.5, 3.5, ZC - 0.6))
+    bits.s_join(post, bits.s_prism(square(4.1), ZC - 0.6, ZC, top=square(3.95)))
     bits.s_join(body, post)
-    for sx, sy in corners:
-        bits.s_join(body, bits.s_box((sx * 8.2 - 1.3, sy * 8.2 - 1.3, ZR - 0.2), (sx * 8.2 + 1.3, sy * 8.2 + 1.3, ZR + 2.7)))
     # ---- the porch over the main door at the rear
-    porch = fbox(180, HB - 0.2, HB + 3.0, -3.2, 3.2, Z0, 5.4)
-    bits.s_cut(porch, fbox(180, HB - 0.5, HB + 4.0, -2.2, 2.2, -0.05, 4.4))
+    porch = fbox(180, HB - 0.2, HB + 3.6, -3.4, 3.4, Z0, 5.0)
+    bits.s_cut(porch, fbox(180, HB - 0.5, HB + 4.6, -2.2, 2.2, -0.05, 4.0))
     bits.s_join(body, porch)
 
-    # ---- everything cut into it at one stroke: windows, doors, the command post's slits, the day-joints
+    # ---- everything cut into it at one stroke: the few openings, the doors, the look-out slits, the day-joints
     cuts = []
-    windows = []                      # (theta, t, z, wide, high)
-    for th in faces4:
-        for z in (4.5, 8.5, 12.5, 22.4):
-            for t in (-6.2, -3.1, 0.0, 3.1, 6.2):
-                if th == 180 and z == 4.5 and abs(t) < 3.5:
-                    continue
-                if th in (90, 270) and z == 22.4 and t == 0.0:
-                    continue
-                windows.append((th, t, z, 1.1, 1.6))
+    windows = [(th, t, z, 0.9, 1.3) for th in faces4 for z in (9.9, 14.6) for t in (-6.6, 6.6)]
     for th, t, z, w, h in windows:
-        cuts.append(fbox(th, HB - 0.55, HB + 0.5, t - w / 2, t + w / 2, z - h / 2, z + h / 2))
-    cuts.append(fbox(180, HB - 1.3, HB + 0.3, -1.7, 1.7, -0.05, 4.0))                    # the main door's recess
+        cuts.append(fbox(th, HB - 0.6, HB + 0.5, t - w / 2, t + w / 2, z - h / 2, z + h / 2))
+    cuts.append(fbox(180, HB - 1.3, HB + 1.2, -1.7, 1.7, -0.05, 3.8))                    # the main door's recess
     for th in (90, 270):
-        cuts.append(fbox(th, HB - 0.8, HB + 0.5, -5.0, -3.8, -0.05, 2.2))                # a side door
-        cuts.append(fbox(th, HB - 0.8, HB + 0.5, -1.2, 1.2, 21.1, 23.7))                 # the loading door, high up
+        cuts.append(fbox(th, HB - 0.8, HB + 1.2, -5.0, -3.8, -0.05, 2.2))                # a side door
     for th in faces4:
-        cuts.append(fbox(th, 3.3, 4.6, -3.3, 3.3, ZR + 2.75, ZR + 3.25))                 # the command post's look-out slits
-    for sx, sy in corners:                                                              # the hoist houses' doorways, facing the middle
-        th = math.degrees(math.atan2(-sy, -sx))
-        o = bits.s_box((0.9, -0.5, ZR + 0.02), (1.6, 0.5, ZR + 2.05))
-        cuts.append(bits.s_move(o, at=(sx * 8.2, sy * 8.2, 0.0), yaw=th))
+        cuts.append(fbox(th, HB - 0.8, HB + 0.3, 3.2, 4.2, ZG + 0.02, ZG + 2.1))         # a door out onto the gallery
+        cuts.append(fbox(th, 2.9, 4.3, -2.8, 2.8, ZC - 1.35, ZC - 0.9))                  # the command post's look-out slits
+    cuts.append(fbox(180, 2.8, 3.7, -0.5, 0.5, ZR + 0.02, ZR + 2.0))                     # the command post's door
     if fine:
         for th in faces4:
-            for z in lifts:
-                cuts.append(fbox(th, HB - 0.07, HB + 0.4, -9.4, 9.4, z, z + 0.09))
+            for z, half in lifts:
+                cuts.append(fbox(th, HB - 0.06, HB + 0.4, -half, half, z, z + 0.08))
     bits.s_cut(body, s_many(cuts))
     if fine:
         bits.s_bevel(body, 0.045, 1, 30.0)
@@ -158,7 +160,7 @@ def FlakTower(fine=True, nation="_default", name="FlakTower"):
     brk = concrete.ragged(bits.s_wedge([local(0, HB - 1.6, -3.4, ZR + 0.25), local(0, HB - 1.6, 2.9, ZR + 0.4), local(0, HB - 1.6, 2.5, ZP + 1.0), local(0, HB - 1.6, -3.0, ZP + 1.0)],
                                        [local(0, HB + 1.0, -3.9, ZR - 0.55), local(0, HB + 1.0, 3.3, ZR - 0.35), local(0, HB + 1.0, 2.9, ZP + 1.0), local(0, HB + 1.0, -3.4, ZP + 1.0)]),
                           0.5, 0.16, 3.0) if fine else None
-    dark = lambda mid, n, k: "concrete.in" if k == 1 else "concrete"        # noqa: E731
+    dark = lambda mid, n, k: "concrete.in" if k == 1 else "concrete.mass"        # noqa: E731
     if brk is not None:
         piece, body = concrete.split(body, brk)
         m.use("tower")
@@ -166,92 +168,80 @@ def FlakTower(fine=True, nation="_default", name="FlakTower"):
         m.part("parapet", "tower", local(0, HB - 0.3, 0.0, ZR), kind="free", note="a length of the front parapet: a heavy hit throws it down the face")
         concrete.take_slots(m, piece, dark, "parapet")
     else:
-        bits.take(m, body, "concrete", True, "tower")
+        bits.take(m, body, "concrete.mass", True, "tower")
     m.use("tower")
 
-    # ---- what is hung on the concrete: shutters, doors, ladders, rails
-    g = rnd(11)
-    for th, t, z, w, h in windows:
+    # ---- what is hung on the concrete: armoured shutters, doors, ladders, rails
+    for k, (th, t, z, w, h) in enumerate(windows):
         back = HB - 0.5
-        is_open = fine and g.random() < 0.16
-        if is_open:
-            m.box(local(th, back + 0.02, t, z), (0.02, w, h), "void", yaw=th)
-            for s in (-1, 1):                    # leaves swung right back against the wall
-                m.box(local(th, HB + 0.035, t + s * (w * 0.5 + w * 0.26), z), (0.03, w * 0.5, h - 0.04), "upper", yaw=th)
-        else:
-            ajar = g.uniform(0.0, 0.03)
-            for s in (-1, 1):
-                m.box(local(th, back + 0.2 + ajar * s, t + s * w * 0.25, z), (0.03, w * 0.5 - 0.012, h - 0.03), "upper", yaw=th)
-                if fine:
-                    for zz in (-0.5, 0.5):
-                        m.box(local(th, back + 0.222 + ajar * s, t + s * w * 0.25, z + zz), (0.012, w * 0.5 - 0.05, 0.05), "steel", yaw=th)
+        ajar = 0.03 if k % 5 == 2 else 0.0
+        for s in (-1, 1):
+            m.box(local(th, back + 0.2 + ajar * s, t + s * w * 0.25, z), (0.04, w * 0.5 - 0.012, h - 0.03), "upper", yaw=th)
             if fine:
-                m.box(local(th, back + 0.225, t, z), (0.014, 0.05, 0.3), "steel", yaw=th)
+                for zz in (-0.4, 0.4):
+                    m.box(local(th, back + 0.226 + ajar * s, t + s * w * 0.25, z + zz), (0.012, w * 0.5 - 0.05, 0.05), "steel", yaw=th)
+                for zz in (-0.5, -0.25, 0.0, 0.25, 0.5):
+                    bits.bolt(m, local(th, back + 0.222 + ajar * s, t + s * (w * 0.5 - 0.06), z + zz), local(th, 1, 0, 0), 0.016, 0.012)
+        if fine:
+            m.box(local(th, back + 0.23, t, z), (0.014, 0.05, 0.3), "steel", yaw=th)
     # the main doors: two leaves of plate, framed and bolted
     for s in (-1, 1):
-        mid = local(180, HB - 1.22, s * 0.85, 1.95)
-        m.box(mid, (0.06, 1.66, 3.9), "upper", yaw=180)
+        mid = local(180, HB - 1.22, s * 0.85, 1.85)
+        m.box(mid, (0.06, 1.66, 3.7), "upper", yaw=180)
         if fine:
-            for zz in (0.25, 1.95, 3.65):
+            for zz in (0.25, 1.85, 3.45):
                 m.box(local(180, HB - 1.18, s * 0.85, zz), (0.02, 1.6, 0.09), "steel", yaw=180)
-            for k in range(9):
+            for k in range(8):
                 for tt in (0.1, 1.6):
                     bits.bolt(m, local(180, HB - 1.165, s * tt, 0.2 + k * 0.44), local(180, 1, 0, 0), 0.02, 0.014)
-    m.box(local(180, HB - 1.16, 0.0, 1.9), (0.03, 0.09, 3.8), "steel", yaw=180)
+    m.box(local(180, HB - 1.16, 0.0, 1.8), (0.03, 0.09, 3.6), "steel", yaw=180)
     for th in (90, 270):
-        hinge = local(th, HB - 0.72, -5.0, 0.0)
-        concrete.steel_door(m, hinge, th, 1.2, 2.15)
-        # the loading door and its beam
-        m.box(local(th, HB - 0.7, 0.0, 22.4), (0.05, 2.4, 2.6), "upper", yaw=th)
-        m.box(local(th, HB - 0.67, 0.0, 22.4), (0.02, 0.07, 2.6), "steel", yaw=th)
-        a, b = local(th, HB - 0.3, 0.0, 24.25), local(th, HB + 2.4, 0.0, 24.25)
-        for dz in (-0.14, 0.14):
-            m.box((a + b) / 2 + Z * dz, ((b - a).length, 0.16, 0.02), "steel", yaw=th)
-        m.box((a + b) / 2, ((b - a).length, 0.02, 0.28), "steel", yaw=th)
+        concrete.steel_door(m, local(th, HB - 0.72, -5.0, 0.0), th, 1.2, 2.15)
+    for th in faces4:
+        concrete.steel_door(m, local(th, HB - 0.72, 3.2, ZG + 0.02), th, 1.0, 2.05)
+    concrete.steel_door(m, local(180, 3.42, -0.5, ZR + 0.02), 180, 1.0, 1.95)
+    # steps from the roof up to each gun platform, and rounds standing in the lockers
+    for sx, sy in corners:
+        inward = math.degrees(math.atan2(-sy, -sx))
+        c = Vector((sx * BC, sy * BC, 0.0))
+        d = local(inward, 1, 0, 0)
+        for k in range(5):
+            m.box(c + d * (BR + 0.3 + (4 - k) * 0.3 + 0.15) + Z * (ZR + (k + 0.5) * 0.3 - 0.15), (0.32, 1.3, (k + 1) * 0.3 + 0.3), "concrete.mass", yaw=inward)
         if fine:
-            blk = local(th, HB + 2.0, 0.0, 24.0)
-            m.box(blk - Z * 0.1, (0.22, 0.12, 0.25), "steel", yaw=th)
-            bits.tube(m, [blk - Z * 0.2, blk - Z * 1.6], 0.008, "steel", 5)
-            bits.tube(m, [blk - Z * 1.6, blk - Z * 1.72 + local(th, 0.05, 0, 0), blk - Z * 1.8, blk - Z * 1.74 - local(th, 0.05, 0, 0)], 0.014, "steel", 6)
-    for sx, sy in corners:                       # the hoist houses' doors
-        th = math.degrees(math.atan2(-sy, -sx))
-        d = local(th, 1, 0, 0)
-        c = Vector((sx * 8.2, sy * 8.2, 0.0))
-        m.box(c + d * 0.95 + Z * (ZR + 1.03), (0.04, 0.98, 2.0), "upper", yaw=th)
+            for a in (60, 120, 180, 240, 300):
+                dd = local(inward + a, 1, 0, 0)
+                side = dd.cross(Z)
+                for j in (-0.28, 0.0, 0.28):
+                    guns.shell(m, c + dd * (BR - 0.47) + side * j + Z * (ZF + 0.18), Z, 0.09, 0.8)
     if fine:
-        # ladders: gallery to roof on the two flanks, roof to each bastion, roof to the command post's top
+        # ladders: gallery to roof on the two flanks, roof to the command post's top
         for th in (90, 270):
-            ladder(m, local(th, HB - 0.02, 7.6, ZG + 0.02), local(th, HB - 0.02, 7.6, ZP), local(th, 1, 0, 0))
-        for sx, sy in corners:
-            th = math.degrees(math.atan2(-sy, -sx))
-            d = local(th, 1, 0, 0)
-            c = Vector((sx * BC, sy * BC, 0.0))
-            ladder(m, c + d * (BR + 0.25) + Z * ZR, c + d * (BR + 0.25) + Z * ZB, d)
-        ladder(m, local(180, 4.0, 2.6, ZR), local(180, 4.6, 2.6, ZR + 4.9) - local(180, 0.62, 0, 0), local(180, 1, 0, 0))
-        rail(m, [(4.35, -4.35, ZR + 4.9), (4.35, 4.35, ZR + 4.9), (-4.35, 4.35, ZR + 4.9), (-4.35, -4.35, ZR + 4.9)], 1.0, "steel", closed=True)
-        # down-pipes from the roof at the flanks of each face, and a cable run
+            ladder(m, local(th, HB - 0.02, -4.2, ZG + 0.02), local(th, HB - 0.02, -4.2, ZP), local(th, 1, 0, 0))
+        ladder(m, local(0, 3.5, 2.2, ZR), local(0, 4.1, 2.2, ZC) - local(0, 0.62, 0, 0), local(0, 1, 0, 0))
+        rail(m, [(3.85, -3.85, ZC), (3.85, 3.85, ZC), (-3.85, 3.85, ZC), (-3.85, -3.85, ZC)], 1.0, "steel", closed=True)
+        # down-pipes from the roof at the flanks of each face
         for th in faces4:
-            for t in (-8.4, 8.4):
-                bits.tube(m, [local(th, HB + 0.09, t, ZG - 2.7), local(th, HB + 0.09, t, 0.1)], 0.06, "steel.worn", 8)
-                for z in (2.0, 6.0, 10.0, 14.0):
+            for t in (-9.6, 9.6):
+                bits.tube(m, [local(th, HB + 0.09, t, ZG - 3.1), local(th, HB + 0.09, t, 6.5), local(th, HB + 0.85, t, 5.9), local(th, HB + 0.85, t, 0.1)], 0.06, "steel.worn", 8)
+                for z in (8.0, 11.5, 15.0):
                     m.box(local(th, HB + 0.07, t, z), (0.1, 0.2, 0.05), "steel", yaw=th)
         # the aerial on the command post
-        mast = Vector((-3.6, 3.6, ZR + 4.9))
+        mast = Vector((-3.1, 3.1, ZC))
         m.lathe(mast, Z, [(0.0, 0.07), (4.5, 0.045), (7.5, 0.02)], "steel", 8)
         for a in (20, 140, 260):
             foot = mast + Vector((math.cos(math.radians(a)) * 2.2, math.sin(math.radians(a)) * 2.2, 0.0))
-            foot.x, foot.y = max(min(foot.x, 4.3), -4.3), max(min(foot.y, 4.3), -4.3)
+            foot.x, foot.y = max(min(foot.x, 3.8), -3.8), max(min(foot.y, 3.8), -3.8)
             bits.tube(m, [mast + Z * 4.4, foot], 0.006, "steel", 4)
-        # hooks for nets round the roof's edge
+        # hooks for nets along the roof's edge between the platforms
         hooks, ways = [], []
         for th in faces4:
-            for k in range(-4, 5):
-                hooks.append(local(th, HB + 0.02, k * 1.9, ZP - 0.25))
+            for k in range(-3, 4):
+                hooks.append(local(th, HB + 0.02, k * 1.8, ZP - 0.25))
                 ways.append(local(th, 1, 0, 0))
         concrete.net_hooks(m, hooks, ways)
 
     # ---- the rangefinder on the command post: a long tube on a turning pedestal, an eyepiece housing, two seats
-    top = Vector((0.6, 0.0, ZR + 4.9))
+    top = Vector((0.6, 0.0, ZC))
     m.lathe(top, Z, [(0.0, 0.55), (0.12, 0.55), (0.14, 0.32), (1.05, 0.26), (1.1, 0.36), (1.22, 0.36)], "upper", 20 if fine else 10)
     m.part("director", "tower", top + Z * 1.22, axis=(0, 0, -1), kind="turn", note="the rangefinder: turns all round, plus is clockwise seen from above")
     m.use("director")
@@ -270,32 +260,33 @@ def FlakTower(fine=True, nation="_default", name="FlakTower"):
             m.lathe(seat - Z * 0.03, Z, [(0.0, 0.17), (0.03, 0.19), (0.05, 0.17)], "leather", 12)
             bits.crew(m, f"rangefinder.{1 if s > 0 else 2}", seat - Z * 0.44, (1, 0, 0), "sit", "director", "sitting at the rangefinder's eyepiece", seat_h=0.44)
     m.use("tower")
-    bits.crew(m, "commander", (-2.4, -1.2, ZR + 4.9), (1, 0, 0), "stand", "tower", "standing on the command post, field glasses up")
+    bits.crew(m, "commander", (-2.4, -1.2, ZC), (1, 0, 0), "stand", "tower", "standing on the command post, field glasses up")
 
     # ---- the guns' places, and where the tower shows it has been hit
     takes = {}
     for k, (sx, sy) in enumerate(corners):
-        m.socket(f"gun.{k + 1}", (sx * BC, sy * BC, ZB - PIT), (1, 0, 0), part="tower",
-                 note="a heavy flak gun stands here in its pit (build it from its own model, HeavyFlak): floor 10.5 m across inside the wall, the wall's top 1.3 m above the floor")
-        takes[f"gun.{k + 1}"] = "HeavyFlak"
+        m.socket(f"gun.{k + 1}", (sx * BC, sy * BC, ZF), (1, 0, 0), part="tower",
+                 note="a twin heavy flak gun stands here on its platform (build it from its own model, HeavyFlakTwin): floor 9.8 m across inside the wall, the wall's top 1.3 m above the floor")
+        takes[f"gun.{k + 1}"] = "HeavyFlakTwin"
         out = Vector((sx, sy, 0)).normalized()
-        for j, a in enumerate((-38.0, 38.0)):
-            d = Quaternion(Z, math.radians(a)) @ out
-            n = k * 2 + j + 1
-            m.socket(f"light.{n}", (sx * BC + d.x * (BR + 1.2), sy * BC + d.y * (BR + 1.2), ZG), tuple(d), part="tower",
-                     note="a light flak gun stands here on the gallery (LightFlak), facing outward")
-            takes[f"light.{n}"] = "LightFlak"
+        m.socket(f"light.{k * 2 + 1}", (sx * (HB + 0.2) + out.x * 1.3, sy * (HB + 0.2) + out.y * 1.3, ZG), tuple(out), part="tower",
+                 note="a light flak gun stands here in the gallery's corner bay (LightFlak), facing outward")
+        takes[f"light.{k * 2 + 1}"] = "LightFlak"
+    for k, th in enumerate(faces4):
+        p = local(th, HB + 2.3, 0.0, ZG)
+        m.socket(f"light.{k * 2 + 2}", tuple(p), tuple(local(th, 1, 0, 0)), part="tower", note="a light flak gun stands here in the gallery's middle bay (LightFlak), facing outward")
+        takes[f"light.{k * 2 + 2}"] = "LightFlak"
     m.info["takes"] = takes
     m.socket("hit", (HB + 0.1, 0.0, ZR + 0.4), (1, 0, 0), part="tower", note="where a heavy bomb or shell strikes: the front parapet")
-    for k, (th, t, z) in enumerate(((0, 3.1, 12.5), (90, -3.1, 8.5), (270, 0.0, 12.5), (0, -6.2, 22.4))):
-        m.socket(f"smoke.{k + 1}", local(th, HB - 0.2, t, z), tuple(local(th, 1, 0, 0.4)), part="tower", note="smoke pours from this window when she burns inside")
-    m.socket("fire", local(0, HB - 0.3, 3.1, 12.3), (1, 0, 0.3), part="tower", note="what burns inside shows at this window")
-    m.socket("entrance", local(180, HB + 3.4, 0.0, 0.0), (-1, 0, 0), part="tower", note="men go in and out here")
+    for k, (th, t, z) in enumerate(((0, 6.6, 14.6), (90, -6.6, 9.9), (270, 6.6, 14.6), (0, -6.6, 9.9))):
+        m.socket(f"smoke.{k + 1}", local(th, HB - 0.2, t, z), tuple(local(th, 1, 0, 0.4)), part="tower", note="smoke pours from this opening when she burns inside")
+    m.socket("fire", local(0, HB - 0.3, 6.6, 14.4), (1, 0, 0.3), part="tower", note="what burns inside shows at this opening")
+    m.socket("entrance", local(180, HB + 3.9, 0.0, 0.0), (-1, 0, 0), part="tower", note="men go in and out here")
 
     # ---- rubble thrown on the gallery below the break, hidden until then
     m.part("rubble", "tower", local(0, HB + 1.2, 0, ZG), kind="free", note="hidden (scale 0) until the parapet is thrown down")
     m.use("rubble")
-    concrete.rubble(m, local(0, HB + 1.2, 0.0, ZG + 0.1), 1.1, 26, seed=6, size=(0.15, 0.5))
+    concrete.rubble(m, local(0, HB + 1.4, 0.0, ZG + 0.1), 1.2, 26, seed=6, size=(0.15, 0.5))
     concrete.rubble(m, local(0, HB + 4.6, -0.5, 0.25), 2.6, 30, seed=8, size=(0.2, 0.75))
     m.use("tower")
     q1 = Quaternion(Vector((0.1, -1, 0.05)).normalized(), math.radians(150.0))
@@ -304,10 +295,10 @@ def FlakTower(fine=True, nation="_default", name="FlakTower"):
                          "tracks": [{"part": "director", "turn": [[0.0, -40.0], [8.0, 40.0], [16.0, -40.0]]}], "events": []}
     m.clips["knocked_out"] = {
         "long": 3.4, "loop": False, "after": "hold",
-        "about": "A heavy bomb on the front parapet: a length of it is thrown out and falls the tower's whole height, rubble lies on the gallery and at the foot, smoke pours from the windows. "
+        "about": "A heavy bomb on the front parapet: a length of it is thrown out and falls the tower's whole height, rubble lies on the gallery and at the foot, smoke pours from the openings. "
                  "The tower itself stands (nothing in the field could bring one down); its guns are knocked out one by one as their own models. (At rest play `idle`.)",
         "tracks": [{"part": "parapet", "rot": [[0.0, 1, 0, 0, 0], [0.5, *Quaternion().slerp(q1, 0.2)], [1.4, *Quaternion().slerp(q1, 0.6)], [2.45, *q1]],
-                    "move": [[0.0, 0, 0, 0], [0.5, 1.6, 0.1, -0.6], [1.0, 2.9, 0.2, -4.2], [1.6, 4.2, 0.3, -11.5], [2.1, 5.2, 0.3, -19.5], [2.45, 5.8, 0.3, -25.6]],
+                    "move": [[0.0, 0, 0, 0], [0.5, 2.2, 0.1, -0.6], [1.0, 3.9, 0.2, -4.2], [1.6, 5.0, 0.3, -11.5], [2.1, 5.8, 0.3, -20.0], [2.45, 6.2, 0.3, -26.6]],
                     "scale": [[0.0, 1.0], [2.44, 1.0], [2.45, 0.0]]},
                    {"part": "rubble", "scale": [[0.0, 0.0], [0.3, 0.0], [0.6, 1.0]]}],
         "events": [{"t": 0.0, "fx": "shell_burst_big", "socket": "hit", "cue": "explosion_debris"},
@@ -316,11 +307,19 @@ def FlakTower(fine=True, nation="_default", name="FlakTower"):
                    {"t": 0.9, "fx": "smoke_black", "socket": "smoke.4", "cue": ""},
                    {"t": 1.2, "fx": "fire", "socket": "fire", "cue": "fire_start", "cue_loop": "fire_loop"},
                    {"t": 2.45, "fx": "dust_big", "socket": "entrance", "cue": "building_collapse"}]}
-    weather(m, [(local(0, HB + 0.1, 3.1, 13.6), 2.2, 0.5), (local(0, HB, 0.0, ZR + 0.6), 3.0, 0.35)], splash=0.8)
-    m.info["span"] = 60.0
-    m.info["high"] = 14.0
-    m.info["worn"] = [(0.0, 0.0, 30.0), (-24.0, 0.0, 6.0)]
-    m.info["clear"] = [square(HB + 0.2)] + [[(sx * BC + math.cos(math.radians(a)) * (BR + 0.3), sy * BC + math.sin(math.radians(a)) * (BR + 0.3)) for a in range(0, 360, 20)] for sx, sy in corners]
+    weather(m, [(local(0, HB + 0.1, 6.6, 15.6), 2.2, 0.5), (local(0, HB, 0.0, ZR + 0.6), 3.0, 0.35)], splash=0.8)
+    m.info["span"] = 62.0
+    m.info["high"] = 14.5
+    # (the ground is trodden in a ragged band round the foot and beaten flat before the door, where the lorries turn)
+    rr = bits.rnd(31)
+    ring = []
+    for th in range(4):                              # (a band along each wall, closer and barer in some lengths than others)
+        for i in range(-9, 10):
+            p = local(th, HB + 1.4 + rr.uniform(0.0, 1.8), i * 2.0 + rr.uniform(-0.5, 0.5), 0.0)
+            ring.append((p[0], p[1], rr.uniform(2.3, 3.6), rr.uniform(0.55, 1.0)))
+    m.info["worn"] = ring + [(-HB - 7.0, 0.0, 7.5), (-HB - 14.0, 3.0, 5.0)]
+    m.info["tracks"] = [[(-HB - 5.0, 1.2), (-HB - 16.0, 2.5), (-HB - 34.0, -5.0), (-HB - 70.0, -3.0)], [(-HB - 6.0, -2.0), (-HB - 14.0, -8.0), (-HB - 10.0, -22.0), (-HB - 30.0, -44.0)]]
+    m.info["clear"] = [square(HB + 0.9), [(-HB - 3.8, -3.6), (-HB - 0.5, -3.6), (-HB - 0.5, 3.6), (-HB - 3.8, 3.6)]]
     return m
 
 

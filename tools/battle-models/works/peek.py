@@ -39,7 +39,8 @@ def main():
         rigid.apply_pose(arm, rigid.pose_of(m, m.clips[clip], float(at)), model=m)
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s", flush=True)
     t = time.time()
-    ground.Ground(digs=m.info.get("dig", []), worn=m.info.get("worn", []), clear=m.info.get("clear", []), trees="notrees" not in sys.argv)
+    ground.Ground(digs=m.info.get("dig", []), worn=list(m.info.get("worn", [])) + ground.skirt(m), clear=m.info.get("clear", []), trees="notrees" not in sys.argv,
+                  paths=ground.paths_of(m), tracks=ground.tracks_of(m), fine=max(26.0, m.info.get("span", 4.0) * 1.2))
     print(f"ground: {time.time() - t:.1f}s", flush=True)
     look.render_setup(w, h, spp)
     cam = look.cam()

@@ -171,9 +171,9 @@ class Case:
 def battery(fx, cam, have):
     s = Set()
     if "FlakPit" in have:
-        gun = s.put("FlakPit").mounted["gun"]
+        gun = s.put("FlakPit", nation="GER").mounted["gun"]
     else:
-        gun = s.put("HeavyFlak", (0.0, 0.0, 0.0))
+        gun = s.put("HeavyFlak", (0.0, 0.0, 0.0), nation="GER")
     if "Pillbox" in have:
         s.put("Pillbox", (32.0, -9.0), -6.0)
     if "MGNest" in have:
@@ -188,8 +188,11 @@ def battery(fx, cam, have):
         s.put("Hedgehogs", (48.0, 6.0), 0.0)
     light = None
     if "LightFlak" in have:
-        light = s.put("SandbagRing", (30.0, 22.0), 0.0).mounted["gun"] if "SandbagRing" in have else s.put("LightFlak", (30.0, 22.0), 0.0)
-    s.lay(seed=3, flat=70.0, sun_turn=125.0, sun_elev=34.0, trees=True, grass_area=62.0, grass_count=230000)
+        light = s.put("SandbagRing", (30.0, 22.0), 0.0, nation="GER").mounted["gun"] if "SandbagRing" in have else s.put("LightFlak", (30.0, 22.0), 0.0, nation="GER")
+    # (the worn ground is drawn fine about the middle of the line, not about the gun alone; a lorry track comes up
+    # from the rear to the pit)
+    s.lay(seed=3, flat=80.0, fine=45.0, centre=(22.0, 3.0), sun_turn=125.0, sun_elev=34.0, trees=True, grass_area=66.0, grass_count=260000,
+          tracks=[[(-7.5, -1.0), (-16.0, -3.0), (-30.0, 4.0), (-60.0, 2.0)]])
 
     fires = [1.73, 4.73, 7.73]              # (a fiftieth before a frame, so the frame catches the flash young)
     case = Case()
@@ -261,7 +264,7 @@ def breach(fx, cam, have):
     if "Fieldworks" in have:
         s.put("Fieldworks", (-1.0, 9.0), 0.0)
         s.put("Fieldworks", (-1.0, -17.0), 0.0)
-    s.lay(seed=5, flat=60.0, sun_turn=120.0, sun_elev=36.0, trees=True)
+    s.lay(seed=5, flat=60.0, fine=33.0, sun_turn=120.0, sun_elev=36.0, trees=True, grass_area=44.0, grass_count=160000)
     hit = 2.0
     near = [(0.5, (7.0, 3.5, 0.0)), (1.25, (5.0, -2.5, 0.0))]
     for t0, at in near:

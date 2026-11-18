@@ -37,18 +37,19 @@ def bag(m, at, yaw=0.0, size=bits.BAG, seed=0, paint=None, droop=0.02, pitch=0.0
     lump = [g.uniform(-1, 1) for _ in range(6)]
     rings = []
     for i in range(nu):
-        u = -1.0 + 2.0 * i / (nu - 1)
-        full = (1.0 - abs(u) ** 5.0) ** 0.42 if abs(u) < 1.0 else 0.0
-        full = max(full, 0.16)
-        wide = W / 2 * (0.42 + 0.58 * full) * (1.0 + 0.05 * lump[0] * math.sin(2.2 * u + lump[1] * 3))
-        high = H * (0.30 + 0.70 * full) * (1.0 + 0.07 * lump[2] * math.cos(1.7 * u + lump[3] * 3))
+        u = math.sin((-1.0 + 2.0 * i / (nu - 1)) * math.pi / 2) if nu > 4 else (-0.94 + 1.88 * i / (nu - 1))   # (more rings at the ends, where it turns)
+        # (beaten flat into its course: a slab with rounded shoulders, the ends drawn in only a little)
+        full = (1.0 - abs(u) ** 7.0) ** 0.33 if abs(u) < 1.0 else 0.0
+        full = max(full, 0.42)
+        wide = W / 2 * (0.74 + 0.26 * full) * (1.0 + 0.04 * lump[0] * math.sin(2.2 * u + lump[1] * 3))
+        high = H * (0.52 + 0.48 * full) * (1.0 + 0.05 * lump[2] * math.cos(1.7 * u + lump[3] * 3))
         sag = -droop * (abs(u) ** 2.2) + 0.006 * lump[4] * math.sin(3.0 * u)
         ring = []
         for k in range(nv):
             a = 2 * math.pi * (k + (0.5 if nv < 8 else 0.0)) / nv
             c, s = math.cos(a), math.sin(a)
-            y = wide * math.copysign(abs(c) ** 0.55, c)
-            zz = math.copysign(abs(s) ** 0.55, s)
+            y = wide * math.copysign(abs(c) ** 0.4, c)
+            zz = math.copysign(abs(s) ** 0.4, s)
             z = (H / 2 + sag) + (high / 2) * zz * (1.0 if zz > 0 else 0.92) + (H / 2 - high / 2) * (-0.6)
             ring.append(at + rot @ Vector((u * L / 2, y, z)))
         rings.append(ring)
@@ -138,10 +139,15 @@ def ring_bank(m, r0, profile, seed=0, lump=0.05, step=1.25, cut=None, paint="ear
             q = c0 + d * (r0 + off)
             f = cut(q.x, q.y) if cut else 1.0
             edge = j in (0, len(profile) - 1)
-            w = 0.0 if (edge and h <= 0.02) else lump
+            toe = edge and h <= 0.02
+            if toe and j > 0:
+                # (the outer toe is never a ruled circle: it runs out further here, less there, and ends just under the ground)
+                wide = abs(profile[-1][0] - profile[0][0])
+                q = q + d * min(0.6, 0.3 * wide) * (0.35 + 0.9 * bits.fbm((q.x * 0.45 + seed * 1.7, q.y * 0.45, 2.0), 1.0, 2) + 0.3 * bits.fbm((q.x * 1.9, q.y * 1.9, seed + 4.0), 1.0, 2))
+            w = 0.0 if toe else lump
             dz = bits.fbm((q.x + seed, q.y, h * 2.0), 0.55) * w * 1.6
             dr = bits.fbm((q.x + 31.0 + seed, q.y - 17.0, 0.3), 0.7) * w
-            z = max((h + (dz if h > 0.02 else 0.0)) * f, 0.006)
+            z = -0.03 if toe else max((h + (dz if h > 0.02 else 0.0)) * f, 0.006)
             verts.append(q + d * dr + Vector((0, 0, z)))
     k = len(profile)
     faces = []
@@ -241,7 +247,7 @@ def bucket(m, at, r=0.14, h=0.27, paint="steel.worn", tipped=False, seed=0):
 
 
 def spade(m, foot, lean=(-0.12, 0.05, 1.0), paint="timber"):
-    """An entrenching spade stuck in the earth: the blade half in, the haft leaning."""
+    """A short digging spade stuck in the earth: the blade half in, the haft leaning."""
     foot, d = Vector(foot), Vector(lean).normalized()
     m.rod(foot + d * 0.1, foot + d * 0.85, 0.016, paint, sides=8)
     m.rod(foot + d * 0.85, foot + d * 0.95, 0.02, "timber.dark", sides=8)
@@ -532,6 +538,8 @@ def FlakPit(fine=True, nation="_default", name="FlakPit"):
     # -- what lies about: a telephone on the rear wall and its cable out, a bucket, a spade, the cleaning staff
     tel = V2(180.0, R + 0.02) + Z * 0.95
     m.box(tel + Vector((0.12, 0, 0)), (0.12, 0.26, 0.2), "wood.paint")
+    bits.log(m, tel + Vector((0.02, 0, -1.05)), tel + Vector((0.02, 0, 0.12)), 0.05, "timber", 77, taper=0.9)
+    bits.plank(m, tel + Vector((0.06, 0, -0.12)), tel + Vector((0.2, 0, -0.12)), 0.3, 0.025, "planks", Z, 3)
     m.box(tel + Vector((0.12, 0, 0.11)), (0.13, 0.27, 0.02), "wood.paint")
     m.rod(tel + Vector((0.2, -0.08, 0.06)), tel + Vector((0.2, 0.08, 0.06)), 0.018, "iron", sides=8)
     if fine:
@@ -556,6 +564,7 @@ def FlakPit(fine=True, nation="_default", name="FlakPit"):
     bits.crew(m, "commander", V2(180.0, 3.35), (1, 0, 0), "stand", "pit", "the gun commander at the rear wall, field glasses up, giving the orders; the telephone is at his back")
     m.socket("hit", (4.9, 0.0, 1.05), (1, 0, 0), note="where a shell strikes the bank's front")
     m.socket("dust", (0.0, 0.0, 0.1), (0, 0, 1), note="where the gun's blast lifts dust off the floor")
+    m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing empty.", "tracks": [], "events": []}
     weather(m, splash=0.35, rust=0.4)
     m.info["span"] = 15.0
     m.info["high"] = 0.7
@@ -671,6 +680,7 @@ def SandbagRing(fine=True, nation="_default", name="SandbagRing"):
     bits.crew(m, "1", V2(70, 1.5), -V2(70), "kneel", "ring", "kneeling at the wall, left: the gunner's mate or the light's operator")
     bits.crew(m, "2", V2(-70, 1.5), -V2(-70), "kneel", "ring", "kneeling at the wall, right: ammunition, the boxes at his back")
     bits.crew(m, "3", V2(170, 1.55), (1, 0, 0), "stand", "ring", "standing by the entrance: the commander, looking over the gun")
+    m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing empty.", "tracks": [], "events": []}
     weather(m)
     m.info["span"] = 6.4
     m.info["high"] = 0.45
@@ -753,6 +763,7 @@ def GunPit(fine=True, nation="_default", name="GunPit"):
     m.socket("hit", (3.3, 0.0, 0.4), (1, 0, 0), note="where a shell strikes the parapet")
     m.socket("ground", (4.0, 0.0, 0.05), (1, 0, 0), note="where the muzzle blast lifts dust off the scorched ground")
     bits.crew(m, "ammo", V2(NA, R - 0.4) + Z * -D, V2(NA), "kneel", "pit", "kneeling at the ammunition niche, passing rounds to the loader")
+    m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing empty.", "tracks": [], "events": []}
     weather(m, soot_at=[((4.6, 0.0, 0.0), 2.4, 0.55), ((2.9, 0.0, 0.5), 1.0, 0.35)])
     m.info["span"] = 9.5
     m.info["high"] = 0.2
@@ -1303,13 +1314,13 @@ def ObservationPost(fine=True, nation="_default", name="ObservationPost"):
     RO = P + 0.35
     for x in (-P, 0.0, P):
         for sy in (-1, 1):
-            bits.plank(m, (x, sy * RO, EAVE - 0.08), (x, 0.0, RIDGE), 0.08, 0.12, "timber", Vector((0, -sy * 0.75, RO)), g.randrange(999))
+            bits.plank(m, (x, sy * RO, EAVE - 0.08), (x, 0.0, RIDGE), 0.08, 0.12, "timber", Vector((0, sy * 0.75, RO)), g.randrange(999))
     for sy in (-1, 1):
         bits.plank(m, (-P - 0.05, sy * TOPW, EAVE - 0.02), (P + 0.05, sy * TOPW, EAVE - 0.02), 0.12, 0.12, "timber", Z, g.randrange(999))
         n = 16
         for k in range(n):
             x = -P - 0.25 + (k + 0.5) * (2 * P + 0.5) / n
-            up = Vector((0, -sy * 0.75, RO)).normalized()
+            up = Vector((0, sy * 0.75, RO)).normalized()
             bits.plank(m, Vector((x, sy * (RO + 0.05), EAVE - 0.0)) + up * 0.07, Vector((x, 0.0, RIDGE)) + up * 0.07, (2 * P + 0.5) / n * 0.97, 0.025, g.choice(["planks", "planks", "timber"]), up, g.randrange(999))
     bits.plank(m, (-P - 0.3, 0, RIDGE + 0.1), (P + 0.3, 0, RIDGE + 0.1), 0.16, 0.04, "timber", Z, g.randrange(999))
     # the ladder up through the hatch
@@ -1352,7 +1363,7 @@ def ObservationPost(fine=True, nation="_default", name="ObservationPost"):
     axis = Vector((0.1, 1.0, 0.0)).normalized()
     ti = m.part_at["tower"]
     pts = [m.verts[i] for f, pt in zip(m.faces, m.fpart) if pt == ti for i in f]
-    pts = pts[::7]
+    pts = [p for p in pts[::5] if p.z > 2.0]
     final = 85.0
     for deg in range(20, 120, 1):
         q = Quaternion(axis, math.radians(-deg))

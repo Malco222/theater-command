@@ -192,7 +192,7 @@ def mg_fire_clip(names, rounds=6, rate=10.0):
         t = k / rate
         turn += [[t + 0.015, 0.35], [t + 0.05, -0.12], [t + 0.085, 0.05]]
         slide += [[t + 0.02, 0.085], [t + 0.07, 0.0]]
-        events.append({"t": round(t, 3), "fx": "muzzle_flash_small", "socket": "muzzle", "cue": "lmg_burst" if k == 0 else ""})
+        events.append({"t": round(t, 3), "fx": "muzzle_flash_small", "socket": "muzzle", "cue": "lmg_burst_01" if k == 0 else ""})
         events.append({"t": round(t + 0.03, 3), "fx": "case_small", "socket": "eject", "cue": ""})
     turn.append([long, 0.0])
     slide.append([long, 0.0])
@@ -236,7 +236,7 @@ def MGNest(fine=True, cooling="air", nation="_default", name="MGNest"):
     bits.bag_wall(m, line, 7, 0.0, seed=11, thick=2, top=top, inward=1.0)
     # earth thrown up against the front and sides, falling away outward
     bank_line = horseshoe(R + 0.18, -112, 112, -0.35, 0.0)
-    bits.bank(m, bank_line, [(-1.25, 0.0), (-0.95, 0.07), (-0.55, 0.19), (-0.2, 0.30), (0.0, 0.33), (0.05, 0.0)], "earth", seed=3, lump=0.06)
+    bits.bank(m, bank_line, [(-1.5, 0.0), (-1.25, 0.03), (-0.95, 0.08), (-0.55, 0.19), (-0.2, 0.30), (0.0, 0.33), (0.05, 0.0)], "earth", seed=3, lump=0.06, turf=0.55, step=0.3)
     bits.patch(m, -0.5, 0.0, 3.4, "earth.dry", seed=5, oval=1.05)
     # a strip of sacking and two logs over the notch's sill, where the gun's blast would tear the bags
     bits.log(m, (-0.35 + R + 0.24, -0.50, 0.50), (-0.35 + R + 0.24, 0.50, 0.50), 0.045, seed=4)
@@ -264,7 +264,8 @@ def MGNest(fine=True, cooling="air", nation="_default", name="MGNest"):
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Laid and still.", "tracks": [], "events": []}
     weather(m, [(names["trunnion"] + X * (names["muzzle"] + 0.05), 0.5, 0.75)])
     m.info["span"] = 4.6
-    m.info["worn"] = [(-0.5, 0.0, 3.6)]
+    # (trodden inside the post and behind it, where the men come and go; the bank's front is left to the grass)
+    m.info["worn"] = [(-0.45, 0.0, 1.75), (-2.3, 0.2, 1.5, 0.8)]
     m.info["clear"] = [[(p[0] * 1.25 + 0.1, p[1] * 1.25) for p in horseshoe(R + 0.5, -180, 180, -0.35, 0.0)]]
     return m
 
@@ -282,7 +283,8 @@ def SandbagWall(fine=True, long=3.2, courses=8, nation="_default", name="Sandbag
     bits.crew(m, "2", (-0.75, 0.7, 0.0), (1, 0, 0), "kneel", "wall", "kneeling behind the wall, firing over it")
     weather(m)
     m.info["span"] = long + 0.6
-    m.info["worn"] = [(-0.4, 0.0, long * 0.75)]
+    # (a trodden strip behind the wall, not a disc about it)
+    m.info["worn"] = [(-0.75, -long / 2 + 0.5 + k * (long - 1.0) / 4, 0.95, 0.85) for k in range(5)]
     return m
 
 

@@ -70,16 +70,22 @@ class Set:
 
     def lay(self, **kw):
         """The ground under them all: each work's holes, trodden earth and bare patches where it stands."""
-        digs, worn, clear = [], [], []
+        digs, worn, clear, paths, tracks = [], [], [], [], []
         for it in self.items:
+            if it.at[2] > 0.5:                       # (what stands up on another work wears no ground)
+                continue
             xy = (it.at[0], it.at[1])
             c, s = math.cos(math.radians(it.yaw)), math.sin(math.radians(it.yaw))
             digs += [ground.placed(d, xy, it.yaw) for d in it.m.info.get("dig", [])]
             clear += [ground.placed(d, xy, it.yaw) for d in it.m.info.get("clear", [])]
-            for w in it.m.info.get("worn", []):
+            for w in list(it.m.info.get("worn", [])) + ground.skirt(it.m):
                 worn.append((xy[0] + w[0] * c - w[1] * s, xy[1] + w[0] * s + w[1] * c) + tuple(w[2:]))
+            paths += [ground.placed(p, xy, it.yaw) for p in ground.paths_of(it.m, seed=len(paths))]
+            tracks += [ground.placed(p, xy, it.yaw) for p in ground.tracks_of(it.m)]
         worn += list(kw.pop("worn", []))
-        self.ground = ground.Ground(digs=digs, worn=worn, clear=clear, **kw)
+        paths += list(kw.pop("paths", []))
+        tracks += list(kw.pop("tracks", []))
+        self.ground = ground.Ground(digs=digs, worn=worn, clear=clear, paths=paths, tracks=tracks, **kw)
         return self.ground
 
 

@@ -16,6 +16,11 @@ from rigid import smooth
 PICKETS = (-5.0, -5.0 / 3.0, 5.0 / 3.0, 5.0)
 
 
+def trod(m, x, y, r, s=0.8):
+    """A circle of trodden earth for the stage and the game to wear into the ground (no pad is modelled)."""
+    m.info.setdefault("worn", []).append((round(x, 3), round(y, 3), round(r, 3), s))
+
+
 # ---- wire helpers ---------------------------------------------------------------------------------------
 
 def wire(m, pts, r, paint="wire", sides=None, smooth_=True):
@@ -318,15 +323,15 @@ def Wire(fine=True, nation="_default", name="Wire"):
             pts = [Vector((cx + math.cos(k * 0.55) * 0.16 * (1 + 0.3 * math.sin(k)), cy + k * 0.02, 0.012 + 0.11 * abs(math.sin(k * 0.55)) * (1 - k / n))) for k in range(n)]
             wire(m, pts, 0.004, "wire", 4)
             barbs(m, pts, 0.12, 0.03, "wire", 900 + c, 0.004)
-    bits.patch(m, -1.6, 3.4, 0.55, "earth", seed=2, oval=1.3)
+    trod(m, -1.6, 3.4, 0.55)
     for N, y in enumerate(PICKETS):
-        bits.patch(m, 0.0, y, 0.32, "earth", seed=10 + N)
+        trod(m, 0.0, y, 0.32)
     m.socket("hit", (0.5, 0.0, 0.8), (1, 0, 0), part=root, note="where a shell strikes")
     wire_clips(m)
     weather(m, splash=0.25, rust=0.8)
     m.info["span"] = 8.5
     m.info["high"] = 0.7
-    m.info["worn"] = [(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-1.6, 3.4, 0.9)]
+    m.info.setdefault("worn", []).extend([(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-1.6, 3.4, 0.9)])
     return m
 
 
@@ -396,28 +401,58 @@ def WireFence(fine=True, nation="_default", name="WireFence"):
             bits.log(m, foot, head, 0.035, "timber", seed=100 + N * 3 + side, sides=8 if fine else 5)
             if fine:
                 wrap(m, head - Z * 0.04, (head - foot).normalized(), 0.04, 2.5, 0.012, 0.004)
-            bits.patch(m, head.x, y, 0.16, "earth", seed=40 + N * 2 + side)
-        bits.patch(m, 0.0, y, 0.28, "earth", seed=60 + N)
+            trod(m, head.x, y, 0.16)
+        trod(m, 0.0, y, 0.28)
     m.use(root)
     reel(m, (-3.9, 2.2, 0.0), -15, seed=5)
     bits.angle_iron(m, (-3.6, -1.8, 0.03), (-3.4, -0.3, 0.04), 0.05, 0.006, "steel", (0.0, 0.2, 1.0))
     bits.log(m, (-3.75, -2.7, 0.04), (-3.3, -2.9, 0.035), 0.035, "timber", seed=7)
     bits.log(m, (-3.8, -2.5, 0.04), (-3.32, -2.62, 0.04), 0.035, "timber", seed=8)
-    bits.patch(m, -3.85, 2.2, 0.6, "earth", seed=12, oval=1.3)
+    trod(m, -3.85, 2.2, 0.6)
     m.socket("hit", (0.5, 0.0, 0.8), (1, 0, 0), part=root, note="where a shell strikes")
     wire_clips(m, spread=1.0)
     weather(m, splash=0.25, rust=0.8)
     m.info["span"] = 8.0
     m.info["high"] = 0.6
-    m.info["worn"] = [(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-3.8, 2.2, 1.0)]
+    m.info.setdefault("worn", []).extend([(0.0, -5.0 + 0.8 * k, 1.6, 0.8) for k in range(13)] + [(-3.8, 2.2, 1.0)])
     return m
 
 # ---- 3. dragon's teeth ------------------------------------------------------------------------------------
 
-SLAB_TOP = 0.12
-ROWS_X = (1.75, 0.6, -0.6, -1.75)
-COLS_Y = tuple(-4.375 + 1.25 * c for c in range(8))
-LANE = (3, 4)                               # the two middle columns (0-based)
+SLAB_TOP = 0.02                             # the footing: its top just at the soil, its edges buried
+ROWS_X = (1.75, 0.6, -0.6, -1.75)          # front (the enemy's side) to rear
+ROW_H = (0.72, 0.98, 1.22, 1.46)           # how high each row stands
+PITCH = 1.25
+
+
+def row_ys(r):
+    """Where the teeth of a row stand: each row half a pitch along from the one in front (the odd rows' last tooth
+    stands on the length's end, so lengths join without a doubled tooth)."""
+    if r % 2 == 0:
+        return [-5.0 + PITCH / 2 + PITCH * c for c in range(8)]
+    return [-5.0 + PITCH + PITCH * c for c in range(8)]
+
+
+def in_lane(y):
+    return abs(y) < 1.5
+
+
+def tuft(m, at, h, paint, g, blades=None):
+    """A tuft of grass or a weed: thin blades fanning out of one root."""
+    at = Vector(at)
+    n = blades or (7 if m.fine else 3)
+    verts, faces = [], []
+    for k in range(n):
+        a = g.uniform(0, 2 * math.pi)
+        lean = g.uniform(0.15, 0.6)
+        d = Vector((math.cos(a) * lean, math.sin(a) * lean, 1.0)).normalized()
+        side = Vector((-math.sin(a), math.cos(a), 0.0)) * g.uniform(0.006, 0.012)
+        root = at + Vector((g.uniform(-0.02, 0.02), g.uniform(-0.02, 0.02), 0.0))
+        tip = root + d * h * g.uniform(0.55, 1.1) + Vector((math.cos(a), math.sin(a), 0)) * h * 0.15
+        b = len(verts)
+        verts += [root - side, root + side, tip]
+        faces.append((b, b + 1, b + 2))
+    m.add(verts, faces, paint, True, None)
 
 
 def finish(m, ob, paint, part=None, chamfer=0.03, rough=0.008, seed=0.0, cut=0.26):
@@ -450,70 +485,103 @@ def chunk(g, at, size, tilt=25.0):
 
 
 def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
-    """Four rows of cast teeth on a common footing slab, rising from the enemy's side to the rear."""
+    """Four staggered rows of cast teeth rising from the enemy's side to the rear, on a common footing sunk under the
+    soil: only a little concrete shows between them where the earth and turf have not grown over it."""
     m = bits.model(name, "Dragon's teeth, a length (our own model)", "works", nation, fine)
     root = m.part("teeth", None, (0, 0, 0), kind="root")
     g = rnd(31)
-    # the footing slab: cast in four bays with joints between, standing a little proud of the ground
     m.use(root)
-    xa, xb = -2.72, 2.55
+    xa, xb = -2.5, 2.35
+    # the footing: cast in four bays, its top at the soil
     for k in range(4):
-        y0, y1 = -5.0 + 2.5 * k + (0.012 if k else 0.0), -5.0 + 2.5 * (k + 1) - (0.012 if k < 3 else 0.0)
-        ob = bits.s_box((xa, y0, -0.3), (xb, y1, SLAB_TOP + g.uniform(-0.008, 0.008)))
-        finish(m, ob, "concrete.old", root, 0.035, 0.012, 3.0 + k, 0.7)
-    # earth drifted against the slab's long edges
-    bits.bank(m, [(xb, -5.0), (xb, 5.0)], [(-0.55, 0.0), (-0.3, 0.05), (-0.1, 0.1), (0.04, 0.125)], "earth", seed=4, lump=0.045, ends=False, turf=0.4)
-    bits.bank(m, [(xa, -5.0), (xa, 5.0)], [(-0.04, 0.125), (0.1, 0.1), (0.3, 0.05), (0.55, 0.0)], "earth", seed=5, lump=0.045, ends=False, turf=0.4)
+        y0, y1 = -5.0 + 2.5 * k + (0.01 if k else 0.0), -5.0 + 2.5 * (k + 1) - (0.01 if k < 3 else 0.0)
+        ob = bits.s_box((xa, y0, -0.3), (xb, y1, SLAB_TOP + g.uniform(-0.004, 0.004)))
+        finish(m, ob, "concrete.old", root, 0.02, 0.006, 3.0 + k, 0.7)
+    # earth and turf over it: thick and banked at both long edges (no edge of the footing shows), thinning inward
+    # and broken, so the concrete shows through in ragged places between the teeth
+    step = 0.2 if fine else 0.5
+    xs = [xa - 0.5 + step * i for i in range(int((xb - xa + 1.0) / step) + 1)]
+    ys = [-5.0 + 10.0 * j / int(10.0 / step) for j in range(int(10.0 / step) + 1)]
+    verts, faces = [], []
+    for i, x in enumerate(xs):
+        for y in ys:
+            inside = min(x - xa, xb - x)
+            lump = 0.012 * bits.fbm((x * 2.3, y * 2.3, 9.0), 0.5)
+            if inside < 0.0:
+                z = max(0.003, (SLAB_TOP + 0.055) * smooth(1.0 + inside / 0.5) + lump * smooth(1.0 + inside / 0.5))
+            else:
+                cover = 0.06 * smooth(1.0 - inside / 1.0) + 0.07 * (bits.fbm((x * 0.7, y * 0.7, 4.0), 1.0) + 0.12 * bits.fbm((x * 3.0, y * 3.0, 6.0), 0.5) + 0.015)
+                cover = max(cover, 0.045 * smooth(1.0 - inside / 0.35))
+                z = SLAB_TOP + (cover + lump if cover > 0.006 else -0.015)
+            # (the outermost points wander in and out, so the cover has no straight edge)
+            edge = smooth((-inside - 0.2) / 0.3) if inside < 0 else 0.0
+            verts.append(Vector((x + 0.03 * bits.fbm((x, y * 1.7, 2.0), 0.4) + math.copysign(0.28, -inside) * edge * bits.fbm((x * 0.5, y * 1.3, 8.0), 0.5), y, z)))
+    ny = len(ys)
+    for i in range(len(xs) - 1):
+        for j in range(ny - 1):
+            faces.append((i * ny + j, (i + 1) * ny + j, (i + 1) * ny + j + 1, i * ny + j + 1))
+    bits.turfed(m, verts, faces, 0.5, "earth", "turf", seed=2.0, part=root, low=SLAB_TOP + 0.025, scale=1.1)
     chips = {(0, 1), (2, 6), (1, 0), (3, 2)}
-    lane = {}
+    lane, bases = {}, []
     for r, x0 in enumerate(ROWS_X):
-        f = r / 3.0
-        for c, y0 in enumerate(COLS_Y):
-            h = (0.8 + 0.7 * f) * g.uniform(0.96, 1.03)
-            b = (0.74 + 0.26 * f) * g.uniform(0.95, 1.04)
+        for c, y0 in enumerate(row_ys(r)):
+            h = ROW_H[r] * g.uniform(0.96, 1.03)
+            b = (0.66 + 0.34 * r / 3.0) * g.uniform(0.95, 1.04)
             t = b * g.uniform(0.27, 0.35)
             off = (g.uniform(-0.035, 0.035), g.uniform(-0.035, 0.035))
             plan = [(-b / 2, -b / 2), (b / 2, -b / 2), (b / 2, b / 2), (-b / 2, b / 2)]
             top = [(p[0] * t / b + off[0], p[1] * t / b + off[1]) for p in plan]
             ob = bits.s_prism(plan, SLAB_TOP - 0.05, h, top)
-            if (r, c) in chips and fine:
+            if (r, c) in chips and fine and not in_lane(y0):
                 cut = bits.s_box((-0.16, -0.16, -0.16), (0.16, 0.16, 0.16))
                 corner = g.choice([(1, 1), (1, -1), (-1, 1)])
                 bits.s_move(cut, (corner[0] * (t / 2 + 0.07) + off[0], corner[1] * (t / 2 + 0.07) + off[1], h - 0.02), g.uniform(20, 70), g.uniform(15, 40), g.uniform(-20, 20))
                 bits.s_cut(ob, cut)
-                # (and a bite out of a foot corner on some)
                 if r % 2:
                     cut2 = bits.s_box((-0.1, -0.1, -0.1), (0.1, 0.1, 0.1))
-                    bits.s_move(cut2, (-corner[0] * b / 2, corner[1] * b / 2, SLAB_TOP + 0.12), 45, 20, 10)
+                    bits.s_move(cut2, (-corner[0] * b / 2, corner[1] * b / 2, SLAB_TOP + 0.14), 45, 20, 10)
                     bits.s_cut(ob, cut2)
             pos = (x0 + g.uniform(-0.04, 0.04), y0 + g.uniform(-0.04, 0.04), 0.0)
             bits.s_move(ob, pos, g.uniform(-4, 4))
+            bases.append((pos, b))
             paint = "concrete" if g.random() < 0.6 else "concrete.old"
-            if c in LANE:
+            if in_lane(y0):
                 nm = f"tooth.{r + 1}.{c + 1}"
                 m.part(nm, root, (pos[0], pos[1], SLAB_TOP), kind="free", note="a tooth of the lane the engineers blow: thrown over and broken by `breach`")
-                lane[nm] = (r, c, finish(m, ob, paint, nm, 0.035, 0.003, r * 8 + c + 0.5, 0.42), Vector((pos[0], pos[1], SLAB_TOP)), b, h)
+                lane[nm] = (r, y0, finish(m, ob, paint, nm, 0.035, 0.003, r * 8 + c + 0.5, 0.5), Vector((pos[0], pos[1], SLAB_TOP)), b, h)
             else:
-                finish(m, ob, paint, root, 0.035, 0.003, r * 8 + c + 0.5, 0.42)
-    # a few old chips lying at the teeth's feet, and earth caught between them
+                finish(m, ob, paint, root, 0.035, 0.003, r * 8 + c + 0.5, 0.5)
     m.use(root)
-    for k in range(9):
-        x = g.uniform(-2.4, 2.4)
-        y = g.choice([-4.0, -3.0, -1.8, 1.8, 3.0, 4.0]) + g.uniform(-0.3, 0.3)
-        finish(m, chunk(g, (x, y, SLAB_TOP), g.uniform(0.04, 0.09)), "concrete.old", root, 0.008, 0.006, 40 + k, 0.0)
-    for k in range(10):
-        bits.patch(m, g.uniform(-2.5, 2.4), g.uniform(-4.8, 4.8), g.uniform(0.18, 0.4), "earth", seed=70 + k, lift=SLAB_TOP + 0.006, oval=1.5, yaw=g.uniform(0, 180))
+    # old chips lying at the teeth's feet
+    for k in range(9 if fine else 3):
+        x = g.uniform(-2.2, 2.2)
+        y = g.choice([-4.0, -3.0, -1.9, 1.9, 3.0, 4.0]) + g.uniform(-0.3, 0.3)
+        finish(m, chunk(g, (x, y, SLAB_TOP + 0.02), g.uniform(0.04, 0.09)), "concrete.old", root, 0.008, 0.006, 40 + k, 0.0)
+    # grass and weeds grown up between the teeth: thick along both edges, round the teeth's feet, sparse in between
+    for k in range(170 if fine else 24):
+        u = g.random()
+        if u < 0.45:
+            x = g.choice([xa, xb]) + g.uniform(-0.55, 0.45)
+            y = g.uniform(-5.0, 5.0)
+        elif u < 0.85:
+            (px, py, _), b = g.choice(bases)
+            a = g.uniform(0, 2 * math.pi)
+            x, y = px + math.cos(a) * b * 0.55, py + math.sin(a) * b * 0.55
+        else:
+            x, y = g.uniform(xa, xb), g.uniform(-5.0, 5.0)
+        weed = g.random() < 0.18
+        tuft(m, (x, y, SLAB_TOP + 0.01), g.uniform(0.28, 0.48) if weed else g.uniform(0.1, 0.24), "garnish.2" if weed or g.random() < 0.25 else "turf", g)
     # -- the rubble of the blown lane: hidden until the breach
     m.part("rubble.1", root, (0.0, 0.0, SLAB_TOP), kind="free", note="the broken stumps of the lane's teeth: hidden (scale 0) until `breach`")
     m.part("rubble.2", root, (0.0, 0.0, 0.5), kind="free", note="broken concrete thrown about the lane: hidden (scale 0) until `breach`")
     m.part("rubble.3", root, (0.0, 0.0, 0.5), kind="free", note="more of it, further out: hidden (scale 0) until `breach`")
     m.use("rubble.1")
-    for nm, (r, c, rng, piv, b, h) in lane.items():
+    for nm, (r, y0, rng, piv, b, h) in lane.items():
         lo = [piv + Vector((sx * b * 0.47, sy * b * 0.47, -0.04)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-        hi = [piv + Vector((sx * b * g.uniform(0.3, 0.4), sy * b * g.uniform(0.3, 0.4), g.uniform(0.12, 0.38))) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-        finish(m, bits.s_wedge(lo, hi), "concrete", "rubble.1", 0.02, 0.03, 90 + r * 3 + c, 0.1)
+        hi = [piv + Vector((sx * b * g.uniform(0.3, 0.4), sy * b * g.uniform(0.3, 0.4), g.uniform(0.12, 0.34))) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        finish(m, bits.s_wedge(lo, hi), "concrete", "rubble.1", 0.02, 0.03, 90 + r * 3 + y0, 0.1)
         for k in range(3 if fine else 1):
-            a = piv + Vector((g.uniform(-0.15, 0.15), g.uniform(-0.15, 0.15), 0.25))
+            a = piv + Vector((g.uniform(-0.15, 0.15), g.uniform(-0.15, 0.15), 0.22))
             d = Vector((g.uniform(-0.6, 0.6), g.uniform(-0.6, 0.6), 1.0)).normalized()
             bits.tube(m, [a - d * 0.1, a + d * 0.15, a + d * 0.25 + Vector((g.uniform(-0.1, 0.1), g.uniform(-0.1, 0.1), -0.05))], 0.009, "rust", 6 if fine else 3)
     for part, n, rad in (("rubble.2", 12, (0.3, 1.8)), ("rubble.3", 10, (1.6, 3.6))):
@@ -522,19 +590,20 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
             a = g.uniform(0, 2 * math.pi)
             d = g.uniform(*rad)
             x, y = math.cos(a) * d * 1.3, math.sin(a) * d * 0.6
-            z = SLAB_TOP if xa < x < xb else 0.0
-            finish(m, chunk(g, (x, y, z), g.uniform(0.09, 0.28)), g.choice(["concrete", "concrete.old"]), part, 0.012, 0.012, 120 + k, 0.0)
-    # -- how the lane's teeth fall
+            finish(m, chunk(g, (x, y, SLAB_TOP + 0.02), g.uniform(0.09, 0.28)), g.choice(["concrete", "concrete.old"]), part, 0.012, 0.012, 120 + k, 0.0)
+    # -- how the lane's teeth fall: the front row thrown toward the enemy, the rear row back, the middle two tipped over
     tracks = []
-    for nm, (r, c, (v0, v1), piv, b, h) in lane.items():
-        out = -1.0 if c == LANE[0] else 1.0
-        if r in (0, 1):
-            ax = Y.copy()
+    for nm, (r, y0, (v0, v1), piv, b, h) in lane.items():
+        if abs(y0) < 0.1:
+            out = g.choice([-1.0, 1.0]) * 0.5
+        elif abs(y0) > 1.0:
+            out = -math.copysign(0.6, y0)                 # (the outer ones fall a little inward, clear of their neighbours)
         else:
-            ax = -Y
+            out = math.copysign(1.0, y0)
+        ax = Y.copy() if r in (0, 1) else -Y
         alpha = math.degrees(math.atan2((b - b * 0.31) / 2, h - SLAB_TOP))
         ang = 90.0 + alpha + g.uniform(-3, 9)
-        q = Quaternion(Z, math.radians(g.uniform(-35, 35))) @ Quaternion(ax, math.radians(ang))
+        q = Quaternion(Z, math.radians(g.uniform(-20, 20))) @ Quaternion(ax, math.radians(ang))
         sc = Vector((0.9, 0.9, 0.76))
         if r == 0:
             dxy = Vector((g.uniform(2.0, 2.6), out * g.uniform(0.2, 0.5), 0))
@@ -543,9 +612,7 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
         else:
             dxy = Vector(((0.3 if r == 1 else -0.3), out * g.uniform(0.05, 0.2), 0))
         low = min((q @ Vector(((m.verts[i] - piv).x * sc.x, (m.verts[i] - piv).y * sc.y, (m.verts[i] - piv).z * sc.z))).z for i in range(v0, v1))
-        land_x = piv.x + dxy.x + (0.45 * h if r < 2 else -0.45 * h)
-        ground = SLAB_TOP if xa < land_x < xb else 0.0
-        mz = ground - 0.015 - (piv.z + low)
+        mz = SLAB_TOP + 0.01 - (piv.z + low)
         apex = g.uniform(1.4, 2.0) if r in (0, 3) else g.uniform(0.35, 0.6)
         q2 = Quaternion().slerp(q, 0.55)
         qb = Quaternion(ax, math.radians(-4.0)) @ q
@@ -564,17 +631,20 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing; the rubble hidden.",
                        "tracks": [{"part": p, "scale": [[0.0, 0.0]]} for p in ("rubble.1", "rubble.2", "rubble.3")], "events": []}
     m.socket("gap", (0.0, 0.0, 0.5), (1, 0, 0), part=root, note="the middle of the lane the engineers blow")
-    m.socket("hit", (2.2, 0.0, 0.6), (1, 0, 0), part=root, note="where a shell strikes")
-    weather(m, splash=0.35)
+    m.socket("hit", (2.0, 0.0, 0.5), (1, 0, 0), part=root, note="where a shell strikes")
+    weather(m, splash=0.55)
     m.info["span"] = 9.0
     m.info["high"] = 0.6
-    m.info["clear"] = [[(xb + 0.3, -5.0), (xb + 0.3, 5.0), (xa - 0.3, 5.0), (xa - 0.3, -5.0)]]
+    # (no grass under the earth cover; its outline wanders so the stage's grass has no straight edge)
+    m.info.setdefault("worn", []).extend([(x, -5.0 + 0.7 * k, 0.9, 0.75) for x in (xa - 0.25, xb + 0.25) for k in range(15)])
+    m.info["clear"] = [[(xb + 0.35 + 0.15 * bits.fbm((0, y, 1.0), 0.7), y) for y in [-5.0 + 0.5 * k for k in range(21)]] +
+                       [(xa - 0.35 + 0.15 * bits.fbm((0, y, 2.0), 0.7), y) for y in [5.0 - 0.5 * k for k in range(21)]]]
     return m
 
 
 # ---- 4. steel hedgehogs ---------------------------------------------------------------------------------
 
-def angle_bar(m, a, b, leg, thick, paint, open_to, seed=0, bend=0.0):
+def angle_bar(m, a, b, leg, thick, paint, open_to, seed=0, bend=0.0, edge=None):
     """Rolled angle: an L with a filleted root and eased toes, a little bent and dented along its length."""
     a, b = Vector(a), Vector(b)
     L = (b - a).length
@@ -585,19 +655,21 @@ def angle_bar(m, a, b, leg, thick, paint, open_to, seed=0, bend=0.0):
     l1, l2 = (o + p).normalized(), (o - p).normalized()
     t = thick
     if m.fine:
-        fr = 0.012
+        fr = 0.006
         sec = [(0.0, 0.0), (leg - 0.003, 0.0), (leg, 0.003), (leg, t - 0.002), (leg - 0.002, t)]
         for k in range(5):
             ang = math.pi * 1.5 - math.pi / 2 * k / 4
             sec.append((t + fr + math.cos(ang) * fr, t + fr + math.sin(ang) * fr))
         sec += [(t, leg - 0.002), (t - 0.002, leg), (0.003, leg), (0.0, leg - 0.003)]
         root_i = 7
+        toes = {1, 2, 3, 10, 11, 12}
     else:
+        toes = {1, 4}
         sec = [(0.0, 0.0), (leg, 0.0), (leg, t), (t, t), (t, leg), (0.0, leg)]
         root_i = 3
     n = len(sec)
     g = rnd(seed)
-    nodes = 6 if m.fine else 2
+    nodes = 10 if m.fine else 2
     bend_dir = (l1 + l2).normalized()
     ph = g.uniform(0, 6)
     rings = []
@@ -610,15 +682,33 @@ def angle_bar(m, a, b, leg, thick, paint, open_to, seed=0, bend=0.0):
         k1 = (k + 1) % n
         e = (sec[k1][0] - sec[k][0], sec[k1][1] - sec[k][1])
         nn = (l1 * e[1] - l2 * e[0]).normalized()
-        m.add(verts, [(i * n + k, i * n + k1, (i + 1) * n + k1, (i + 1) * n + k) for i in range(nodes - 1)], paint, True, lambda q, w=nn: w)
+        m.add(verts, [(i * n + k, i * n + k1, (i + 1) * n + k1, (i + 1) * n + k) for i in range(nodes - 1)], edge if (edge and k in toes) else paint, True, lambda q, w=nn: w)
     for ring, way in ((rings[0], -d), (rings[-1], d)):
-        m.add(ring, [(root_i, k, (k + 1) % n) for k in range(n) if root_i not in (k, (k + 1) % n)], paint, False, lambda q, w=way: w)
+        m.add(ring, [(root_i, k, (k + 1) % n) for k in range(n) if root_i not in (k, (k + 1) % n)], edge or paint, False, lambda q, w=way: w)
     return l1, l2
 
 
-def rusty(mid, n):
-    """Rust all over, the old black paint hanging on in patches."""
-    return "iron" if bits.fbm(mid * 3.1, 0.5) > 0.3 else "rust"
+def rubbed(mid, n):
+    """The edges of the legs and the cut ends: bright where they have been rubbed, rusted dark where not."""
+    return "steel.worn" if bits.fbm(mid * 3.7, 0.5) > -0.15 else "rust"
+
+
+def rust_patches(m, much=0.85, scale=0.32):
+    """Over the weather: rust breaking through the dark steel in soft-edged patches (point by point)."""
+    base = m.weather
+
+    def f(p, n, paint, part):
+        w, s_ = base(p, n, paint, part)
+        if paint == "iron":
+            v = bits.fbm(Vector(p) + Vector((3.3, 1.7, 0.0)), scale) + 0.35 * bits.fbm(Vector(p) * 3.0, scale)
+            w = max(w, much * smooth((v + 0.05) / 0.3))
+        return w, s_
+    m.weather = f
+
+
+def rivet(m, at, facing, r=0.011):
+    if m.fine:
+        m.lathe(at, facing, [(0.0, r), (0.004, r * 0.85), (0.007, r * 0.45)], "iron", 6, (False, True))
 
 
 HH_ARM = 0.95
@@ -637,18 +727,18 @@ def hedgehog(m, at, yaw=0.0, seed=0, wired=False):
     for i in range(3):
         di, dj, dk = dirs[i], dirs[(i + 1) % 3], dirs[(i + 2) % 3]
         L = HH_ARM * g.uniform(0.98, 1.02)
-        angle_bar(m, C - di * L, C + di * L, leg, thick, rusty, -(dj + dk), seed * 7 + i, g.uniform(0.0, 0.012))
-    # gussets where each pair crosses, bolted through to both, nuts behind
+        angle_bar(m, C - di * L, C + di * L, leg, thick, "iron", -(dj + dk), seed * 7 + i, g.uniform(0.0, 0.006), rubbed)
+    # gussets where each pair crosses, riveted to both in rows
     for i in range(3):
         di, dj, dk = dirs[i], dirs[(i + 1) % 3], dirs[(i + 2) % 3]
         out = [(0.0, 0.0), (-0.36, 0.0), (-0.36, -leg), (-leg, -0.36), (0.0, -0.36)]
         bits.plate(m, [(a_ + 0.004, b_ + 0.004) for a_, b_ in out], 0.01, "iron", C + dk * 0.006, di, dj)
-        if m.fine:
-            for a_, b_ in ((-0.06, -0.06), (-0.2, -0.06), (-0.31, -0.06), (-0.06, -0.2), (-0.06, -0.31)):
-                pt = C + di * a_ + dj * b_
-                bits.bolt(m, pt + dk * 0.011, dk, 0.014, 0.01, "iron")
-                bits.bolt(m, pt - dk * (thick + 0.0), -dk, 0.015, 0.012, "iron")
-                m.rod(pt - dk * (thick + 0.012), pt - dk * (thick + 0.026), 0.007, "rust", sides=5, caps=(False, True))
+        pts = [(-0.035, -0.035), (-0.085, -0.035), (-0.035, -0.085), (-0.085, -0.085)]
+        for row in (-0.035, -0.085):
+            for along in (-0.16, -0.23, -0.3):
+                pts += [(row, along), (along, row)]
+        for a_, b_ in pts:
+            rivet(m, C + di * a_ + dj * b_ + dk * 0.011, dk)
     # the feet: a small plate welded under each low end
     ends = []
     for i in range(3):
@@ -663,9 +753,9 @@ def hedgehog(m, at, yaw=0.0, seed=0, wired=False):
                 if m.fine:
                     # the weld: a bead round where the angle meets the plate
                     bead = [c + Z * (foot + 0.006) + (u * math.cos(2 * math.pi * k / 9) + v * math.sin(2 * math.pi * k / 9)) * 0.075 for k in range(10)]
-                    wire(m, bead, 0.007, "rust", 4)
+                    wire(m, bead, 0.007, "iron", 4)
                     for sx in (-1, 1):
-                        bits.bolt(m, c + u * 0.065 + v * 0.06 * sx + Z * foot, Z, 0.012, 0.008, "iron")
+                        rivet(m, c + u * 0.065 + v * 0.06 * sx + Z * foot, Z)
     if wired and m.fine:
         # a few turns of barbed wire wound round an upper arm, its end trailing to the ground
         top = max(range(3), key=lambda i: dirs[i].z)
@@ -691,9 +781,10 @@ def Hedgehog(fine=True, nation="_default", name="Hedgehog"):
     root = m.part("hedgehog", None, (0, 0, 0), kind="root")
     m.use(root)
     hedgehog(m, (0, 0, 0), 12.0, seed=1, wired=True)
-    bits.patch(m, 0.0, 0.0, 0.85, "earth", seed=3)
+    trod(m, 0.0, 0.0, 0.85)
     m.socket("hit", (0.0, 0.0, 0.6), (1, 0, 0), part=root, note="where a shell strikes")
-    weather(m, splash=0.35, rust=0.9)
+    weather(m, splash=0.3, rust=0.75)
+    rust_patches(m)
     m.info["span"] = 2.4
     m.info["high"] = 0.55
     return m
@@ -716,7 +807,7 @@ def Hedgehogs(fine=True, nation="_default", name="Hedgehogs"):
         hedgehog(m, (x, y, 0.0), g.uniform(0, 120), seed=10 + k, wired=(k == 2))
         v1 = len(m.verts)
         m.use(root)
-        bits.patch(m, x, y, 0.8, "earth", seed=20 + k)
+        trod(m, x, y, 0.8)
         m.socket(nm, piv, (1, 0, 0), part=nm, note="the hedgehog's middle")
         # the shove: rolled a quarter turn toward -x about its middle, kept on the ground, and slid back about a metre
         ax = Vector((g.uniform(-0.2, 0.2), -1.0, 0.0)).normalized()
@@ -734,7 +825,8 @@ def Hedgehogs(fine=True, nation="_default", name="Hedgehogs"):
                                      "events": [{"t": 0.3, "fx": "dust", "socket": nm, "cue": ""}]}
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing.", "tracks": [], "events": []}
     m.socket("hit", (0.3, 0.0, 0.6), (1, 0, 0), part=root, note="where a shell strikes")
-    weather(m, splash=0.35, rust=0.9)
+    weather(m, splash=0.3, rust=0.75)
+    rust_patches(m)
     m.info["span"] = 8.5
     m.info["high"] = 0.55
     return m
@@ -748,6 +840,7 @@ def mound(m, cx, cy, R, H, paint="earth", seed=0, hole=0.0, base=0.004):
     n = 18 if m.fine else 8
     nr = 4 if m.fine else 2
     v0 = len(m.verts)
+    el, tw = (0.0 if hole else g.uniform(0.08, 0.25)), g.uniform(0, math.pi)
     rings = []
     for j in range(nr + 1):
         f = j / nr
@@ -756,7 +849,9 @@ def mound(m, cx, cy, R, H, paint="earth", seed=0, hole=0.0, base=0.004):
         ring = []
         for k in range(n):
             a = 2 * math.pi * k / n
-            rr = r * (1.0 + 0.32 * bits.fbm((math.cos(a) * 1.4 + seed * 0.37, math.sin(a) * 1.4, f * 0.5), 0.5) * (0.4 + 0.6 * f))
+            rr = r * (1.0 + (0.3 * bits.fbm((math.cos(a) * 1.4 + seed * 0.37, math.sin(a) * 1.4, f * 0.5), 0.5)
+                             + 0.14 * bits.fbm((math.cos(a) * 3.5, math.sin(a) * 3.5 + seed * 0.37, 2.0), 0.4)) * (0.4 + 0.6 * f))
+            rr *= 1.0 + el * math.cos(2 * (a - tw))
             ring.append(Vector((cx + math.cos(a) * rr, cy + math.sin(a) * rr, base + max(0.0, h + 0.012 * bits.fbm((cx + math.cos(a) * rr * 3, cy + math.sin(a) * rr * 3, seed), 0.3) * (1 - f)))))
         rings.append(ring)
     if hole:
@@ -845,7 +940,7 @@ def Minefield(fine=True, nation="_default", name="Minefield"):
         top = Vector((x, y, 0.6)) + lean
         bits.log(m, (x, y, -0.15), top, 0.022, "timber", seed=200 + k, sides=7 if fine else 4, taper=0.85)
         tops[(round(x, 2), round(y, 2))] = top
-        bits.patch(m, x, y, 0.1, "earth", seed=300 + k, n=10 if fine else 5)
+        trod(m, x, y, 0.1)
 
     def strand(seq):
         pts = []
@@ -923,7 +1018,7 @@ def Minefield(fine=True, nation="_default", name="Minefield"):
         m.box(cr + qq @ Vector((0, e, 0.11)), (0.44, 0.03, 0.05), "timber", yaw=q)
     m.rod((-3.5, 1.4, 0.02), (-3.6, 2.4, 0.03), 0.009, "timber", sides=6)
     m.rod((-3.5, 1.4, 0.02), (-3.47, 1.1, 0.02), 0.004, "steel", sides=5)
-    bits.patch(m, -3.7, 2.2, 0.7, "earth", seed=9, oval=1.3)
+    trod(m, -3.7, 2.2, 0.7)
     # -- clips
     for N in range(1, 5):
         m.clips[f"detonate.{N}"] = {"long": 1.2, "loop": False, "after": "hold",
@@ -937,7 +1032,7 @@ def Minefield(fine=True, nation="_default", name="Minefield"):
     weather(m, splash=0.2, rust=0.5)
     m.info["span"] = 9.0
     m.info["high"] = 0.2
-    m.info["worn"] = [(-3.7, 2.3, 0.8)]
+    m.info.setdefault("worn", []).extend([(-3.7, 2.3, 0.8)])
     return m
 
 
@@ -1016,8 +1111,8 @@ def RoadBar(fine=True, nation="_default", name="RoadBar"):
         if fine:
             bits.bolt(m, rp + Vector((sx * 0.081, 0, 0.8)), X * sx, 0.014, 0.01, "steel")
     bits.plate(m, [(-0.08, -0.05), (0.08, -0.05), (0.08, 0.05), (-0.08, 0.05)], 0.01, "upper", rp + Vector((0, 0, 0.915)), X, Y)
-    bits.patch(m, 0.0, RY, 0.35, "earth", seed=4)
-    bits.patch(m, 0.0, PY, 0.6, "earth", seed=5)
+    trod(m, 0.0, RY, 0.35)
+    trod(m, 0.0, PY, 0.6)
     chain(m, rp + Vector((0.08, 0.0, 0.84)), rp + Vector((0.12, -0.05, 0.5)), 0.04, 0.05)
     if fine:
         m.box(rp + Vector((0.13, -0.05, 0.46)), (0.04, 0.025, 0.05), "brass")
@@ -1075,7 +1170,7 @@ def RoadBar(fine=True, nation="_default", name="RoadBar"):
     weather(m, splash=0.3, rust=0.4)
     m.info["span"] = 7.5
     m.info["high"] = 0.8
-    m.info["worn"] = [(-0.9, PY - 0.2, 1.1, 1.0)] + [(-5.0 + 1.0 * k, 0.0, 2.0, 1.0) for k in range(11)]
+    m.info.setdefault("worn", []).extend([(-0.9, PY - 0.2, 1.1, 1.0)] + [(-5.0 + 1.0 * k, 0.0, 2.0, 1.0) for k in range(11)])
     m.info["clear"] = [[(-0.9, PY - 0.9), (0.6, PY - 0.9), (0.6, PY + 0.5), (-0.9, PY + 0.5)]]
     return m
 

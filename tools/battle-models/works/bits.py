@@ -24,9 +24,10 @@ from rigid import X, Y, Z, Model  # noqa: E402
 
 # The paints of the works (the game gives `upper` and `upper2` each nation's own field paint; the rest are what they are).
 PAINTS = {
-    "concrete": "8F8D83", "concrete.in": "55554F", "concrete.old": "7E7B6E",
-    "earth": "6A5843", "earth.dry": "86724F", "turf": "5F6C3A",
-    "sandbag": "B39A6D", "sandbag.2": "A39068", "sandbag.3": "948766",
+    "concrete": "8F8D83", "concrete.in": "55554F", "concrete.old": "7E7B6E", "concrete.mass": "88877E",
+    "earth": "7E6C51", "earth.dry": "86724F", "turf": "7A7B4A",
+    "grass": "6F7B42", "grass.2": "8D8650", "grass.3": "B0A066",
+    "sandbag": "7C6A46", "sandbag.2": "6C5C3E", "sandbag.3": "5F553A",
     "timber": "77604A", "timber.end": "A68C66", "timber.dark": "4B3E33", "planks": "8A7254",
     "steel": "3B3D3F", "steel.worn": "7C7E7E", "rust": "6B4631", "wire": "4B4037", "iron": "2B2B2C",
     "upper": "4E5459", "upper2": "6C6A4E", "rubber": "1D1D1D", "brass": "B38F4B", "canvas": "777050",
@@ -35,22 +36,67 @@ PAINTS = {
     "leather": "5A3E2A", "wood.paint": "5E6A48",
 }
 
-# Each nation's field paint (as the land kit has it) and the second colour of its camouflage where it used one.
+# Each army's field paint. The first colour comes from the art director's unit table (ruling 78(f): every gun takes its
+# owner's paint from that one table); this list is what stands in when the table cannot be read, and holds the second
+# colour of an army's camouflage where it used one (the table gives the first only).
 NATIONS = {
-    "GER": ("4E5459", "6E6A4C"), "UK": ("65704E", "4A4436"), "USA": ("565C3A", "3F4430"), "SOV": ("4F5E3E", "6B6146"),
+    "GER": ("4E5459", "3E4347"), "UK": ("65704E", "4A4436"), "USA": ("565C3A", "3F4430"), "SOV": ("4F5E3E", "6B6146"),
     "FRA": ("5E6A48", "7A6844"), "ITA": ("8A7F5E", "5E6442"), "JAP": ("988256", "566240"), "POL": ("66684A", "7B6A48"),
     "_default": ("60664A", "7A6E4E"),
 }
+# Paint that changed during the war: (from month, first colour, second colour, what it is). Germany's guns are dark grey
+# until early 1943 and dark yellow from then on, the same two coats and the same month as its tanks (land kit, PanzerIV).
+DATED = {"GER": [(None, "4E5459", "3E4347", "dark grey"), ("1943-02", "A3925E", "82744B", "dark yellow")]}
+TABLE = os.environ.get("UNIT_TABLE", "/mnt/project-files/art-director/generic-units/unit-table.json")
+_armies = None
+
+
+def _darker(hexa, k=0.8):
+    return "".join(f"{int(int(hexa[i:i + 2], 16) * k):02X}" for i in (0, 2, 4))
+
+
+def armies():
+    """{tag: [(from month or None, first colour, second colour, what it is), ...]} for every country in the unit table
+    (and `_default`): its field paint through the war, earliest first."""
+    global _armies
+    if _armies is None:
+        firsts = {k: v[0] for k, v in NATIONS.items()}
+        try:
+            import json
+            table = json.load(open(TABLE))
+            firsts.update({k: c["paint"].upper() for k, c in table["countries"].items() if c.get("paint")})
+            if table.get("_default", {}).get("paint"):
+                firsts["_default"] = table["_default"]["paint"].upper()
+        except (OSError, ValueError, KeyError) as e:
+            print(f"bits: unit table not read ({e}); using the paints kept here", file=sys.stderr)
+        _armies = {}
+        for k, first in firsts.items():
+            second = NATIONS[k][1] if k in NATIONS and NATIONS[k][0] == first else _darker(first)
+            _armies[k] = [(None, first, second, "field paint")]
+            if k in DATED:
+                _armies[k] = [(when, a if when else first, b, what) for when, a, b, what in DATED[k]]
+    return _armies
+
+
+def paint_of(nation="_default"):
+    """An army's two colours. `nation` is its tag, or tag:YYYY-MM for its paint at that month ("GER:1943-06")."""
+    tag, _, when = nation.partition(":")
+    rows = armies().get(tag) or armies()["_default"]
+    row = rows[0]
+    for r in rows[1:]:
+        if when and when >= r[0]:
+            row = r
+    return row[1], row[2]
 
 
 def model(name, title, kind="works", nation="_default", fine=True, more=None):
     paints = dict(PAINTS)
-    up, up2 = NATIONS.get(nation, NATIONS["_default"])
-    paints["upper"], paints["upper2"] = up, up2
+    paints["upper"], paints["upper2"] = paint_of(nation)
     if more:
         paints.update(more)
     m = Model(name, title, kind, paints, fine)
-    m.info["nation"] = nation
+    m.info["nation"] = nation.partition(":")[0]
+    m.info["wears"] = nation                      # (tag, or tag:month: whose paint this build wears in a picture)
     m.info["rust"] = "6B4631"
     m.info["soot"] = "1C1A19"
     return m
@@ -251,10 +297,10 @@ def cast(m, ob, paint="concrete", chamfer=0.035, part=None, inside=None, rough=0
 
 # ---- sandbags ---------------------------------------------------------------------------------------------
 
-BAG = (0.54, 0.27, 0.125)          # a filled bag as it lies: long, wide, high
+BAG = (0.56, 0.28, 0.115)          # a filled bag as it lies: long, wide, high
 
 
-def sandbag(m, at, yaw=0.0, size=BAG, seed=0, paint=None, droop=0.02, pitch=0.0, roll=0.0, tie=True):
+def sandbag(m, at, yaw=0.0, size=BAG, seed=0, paint=None, droop=0.032, pitch=0.0, roll=0.0, tie=True):
     """One filled sandbag lying flat: square-shouldered, sagging at its ends, the neck tied off at one end."""
     g = rnd(seed)
     L, W, H = size[0] * g.uniform(0.94, 1.05), size[1] * g.uniform(0.95, 1.05), size[2] * g.uniform(0.92, 1.08)
@@ -265,22 +311,24 @@ def sandbag(m, at, yaw=0.0, size=BAG, seed=0, paint=None, droop=0.02, pitch=0.0,
     lump = [g.uniform(-1, 1) for _ in range(6)]
     rings = []
     for i in range(nu):
-        u = -1.0 + 2.0 * i / (nu - 1)
+        u = math.sin((-1.0 + 2.0 * i / (nu - 1)) * math.pi / 2) if nu > 4 else (-0.94 + 1.88 * i / (nu - 1))   # (more rings at the ends, where it turns)
         # how full the bag is along its length: square shoulders, ends drawn in to a seam
-        full = (1.0 - abs(u) ** 5.0) ** 0.42 if abs(u) < 1.0 else 0.0
-        full = max(full, 0.16)
-        wide = W / 2 * (0.42 + 0.58 * full) * (1.0 + 0.05 * lump[0] * math.sin(2.2 * u + lump[1] * 3))
-        high = H * (0.30 + 0.70 * full) * (1.0 + 0.07 * lump[2] * math.cos(1.7 * u + lump[3] * 3))
+        # (beaten flat into its course: a slab with rounded shoulders, the ends drawn in only a little)
+        full = (1.0 - abs(u) ** 7.0) ** 0.33 if abs(u) < 1.0 else 0.0
+        full = max(full, 0.42)
+        wide = W / 2 * (0.74 + 0.26 * full) * (1.0 + 0.04 * lump[0] * math.sin(2.2 * u + lump[1] * 3))
+        high = H * (0.52 + 0.48 * full) * (1.0 + 0.05 * lump[2] * math.cos(1.7 * u + lump[3] * 3))
         sag = -droop * (abs(u) ** 2.2) + 0.006 * lump[4] * math.sin(3.0 * u)
         ring = []
         for k in range(nv):
             a = 2 * math.pi * k / nv
             c, s = math.cos(a), math.sin(a)
             # a squarish section, flat underneath, bulging on top
-            e = 0.55
+            e = 0.4
             y = wide * math.copysign(abs(c) ** e, c)
             zz = math.copysign(abs(s) ** e, s)
-            z = (H / 2 + sag) + (high / 2) * zz * (1.0 if zz > 0 else 0.92) + (H / 2 - high / 2) * (-0.6)
+            # (pressed flat on top by the bag above, bedded flat beneath, the fill slumped to one side)
+            z = (H / 2 + sag) + (high / 2) * zz * (0.86 if zz > 0 else 0.92) + (H / 2 - high / 2) * (-0.6) + 0.012 * lump[5] * c * full
             ring.append(at + rot @ Vector((u * L / 2, y, z)))
         rings.append(ring)
     m.skin(rings, paint, (True, True), True)
@@ -335,12 +383,12 @@ def bag_wall(m, pts, courses, z0=0.0, seed=0, batter=0.012, thick=1, size=BAG, t
     `inward` is +1 if the wall's own side (where the second row and the lean go) is to the left of the line."""
     g = rnd(seed)
     for c in range(courses):
-        z = z0 + c * size[2] * 0.93
+        z = z0 + c * size[2] * 0.88
         skip = (lambda f, zz, c=c: c >= top(f)) if top else None
         for t in range(thick):
             lean = inward * (c * batter + t * size[1] * 0.92)
             bag_row(m, pts, z, g.randrange(1 << 30), size, half_step=(c + t) % 2 == 1, lean=lean, skip=skip)
-    return z0 + courses * size[2] * 0.93
+    return z0 + courses * size[2] * 0.88
 
 
 # ---- earth ------------------------------------------------------------------------------------------------
@@ -372,13 +420,21 @@ def bank(m, pts, profile, paint="earth", seed=0, lump=0.05, closed=False, step=0
             e = min(i, n - 1 - i) * step
             fall = rigid.smooth(e / 0.8)
         row = []
+        mid_off = 0.5 * (profile[0][0] + profile[-1][0])
+        wide = abs(profile[-1][0] - profile[0][0])
         for j, (off, h) in enumerate(profile):
-            q = p + side * off
             edge = j in (0, len(profile) - 1)
-            w = 0.0 if edge and h <= 0.02 else lump
+            toe = edge and h <= 0.02
+            if toe:
+                # (a toe is never a ruled line: it runs out further here, less there, and ends just under the ground)
+                q0 = p + side * off
+                out = 1.0 if off > mid_off else -1.0
+                off = off + out * min(0.6, 0.3 * wide) * (0.35 + 0.9 * fbm((q0.x * 0.45 + seed * 1.7, q0.y * 0.45, 2.0), 1.0, 2) + 0.3 * fbm((q0.x * 1.9, q0.y * 1.9, seed + 4.0), 1.0, 2))
+            q = p + side * off
+            w = 0.0 if toe else lump
             dz = fbm((q.x * 1.0 + seed, q.y * 1.0, h * 2.0), 0.55) * w * 1.6
             dxy = fbm((q.x + 31.0 + seed, q.y - 17.0, 0.3), 0.7) * w
-            row.append(Vector((q.x + side.x * dxy, q.y + side.y * dxy, max(h * fall + (dz if h > 0.02 else 0.0), -9.0 if h < 0 else 0.004))))
+            row.append(Vector((q.x + side.x * dxy, q.y + side.y * dxy, -0.03 if toe else max(h * fall + (dz if h > 0.02 else 0.0), -9.0 if h < 0 else 0.004))))
         rows.append(row)
     if closed:
         rows.append(rows[0])
@@ -390,7 +446,7 @@ def bank(m, pts, profile, paint="earth", seed=0, lump=0.05, closed=False, step=0
     m.sheet(rows, paint_fn or paint, Z, True)
 
 
-def turfed(m, verts, faces, amount=0.5, base="earth", over="turf", seed=0.0, part=None, low=0.05, scale=1.5, smooth=True):
+def turfed(m, verts, faces, amount=0.5, base="earth", over="turf", seed=0.0, part=None, low=0.05, scale=1.5, smooth=True, grass=5.0):
     """Earth grown over with turf in soft-edged patches, as thrown earth is after a season: every POINT is earth or turf by
     a broad noise (more turf with `amount`; none below `low` metres, where boots keep it bare), and the paint runs
     smoothly from point to point, so there is never a hard-edged square of green. Faces are turned to look upward.
@@ -400,24 +456,110 @@ def turfed(m, verts, faces, amount=0.5, base="earth", over="turf", seed=0.0, par
     for q in vs:
         n = 0.5 + 0.5 * fbm((q.x / scale + seed * 3.1, q.y / scale - seed, 0.37), 1.0, 3)
         fine = 0.12 * fbm((q.x * 2.3, q.y * 2.3, 5.0 + seed), 1.0, 2)
-        coat.append(over if (q.z > low and n + fine < amount) else None)
+        # (turf where the noise says, and along the toe, where the field's grass has grown up onto the earth)
+        coat.append(over if ((q.z > low and n + fine < amount) or (q.z < 0.11 and n + 3 * fine < 0.8)) else None)
     fs = []
     for f in faces:
         a, b, c = vs[f[0]], vs[f[1]], vs[f[2]]
         fs.append(tuple(f) if (b - a).cross(c - a).z >= 0.0 else tuple(reversed(f)))
     name = part if part is not None else m.parts[m.cur].name
     m.raw(vs, fs, [base] * len(fs), name, coat=coat, by_point=[True] * len(fs), smooth=smooth)
+    if grass > 0.0 and m.fine and over == "turf":
+        # (the field's grass grows on the turf: tufts by the square metre, where every corner of a face is turfed)
+        g = rnd(int(seed * 7) + 11)
+        pts = []
+        for f in fs:
+            if all(coat[i] is not None for i in f):
+                a, b, c = vs[f[0]], vs[f[1]], vs[f[2]]
+                area = (b - a).cross(c - a).length * (0.5 if len(f) == 3 else 1.0)
+                k = int(area * grass + g.random())
+                for _ in range(k):
+                    u, v = g.random(), g.random()
+                    if len(f) == 4:
+                        pts.append((a.lerp(b, u)).lerp(vs[f[3]].lerp(vs[f[2]], u), v))
+                    else:
+                        if u + v > 1.0:
+                            u, v = 1.0 - u, 1.0 - v
+                        pts.append(a + (b - a) * u + (c - a) * v)
+        if pts:
+            tufts(m, pts, seed=int(seed * 3) + 5, part=name, long=0.12)
 
 
 def patch(m, cx, cy, r, paint="earth", seed=0, n=28, lift=0.012, ragged=0.22, oval=1.0, yaw=0.0):
-    """Trodden or dug-over ground: a ragged patch lying just on the ground, so a work does not sit on clean grass."""
-    ring, ca, sa = [], math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
-    for k in range(n):
-        a = 2 * math.pi * k / n
-        rr = r * (1.0 + ragged * fbm((math.cos(a) * 1.7 + seed, math.sin(a) * 1.7, 0.0), 0.6))
-        x, y = math.cos(a) * rr * oval, math.sin(a) * rr
-        ring.append(Vector((cx + x * ca - y * sa, cy + x * sa + y * ca, lift)))
-    m.add(ring + [Vector((cx, cy, lift * 1.5))], [(k, (k + 1) % n, n) for k in range(n)], paint, True, lambda p: Z)
+    """Trodden or dug-over ground round a work. It is no longer a disc of earth laid on the grass (that read as a
+    display pad): it only records a circle of wear in m.info["worn"], which the stage (and the game, from the file's
+    `ground.worn`) wears into the ground itself with a ragged, fading edge."""
+    ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    worn = m.info.setdefault("worn", [])
+    if abs(oval - 1.0) < 0.2:
+        worn.append((cx, cy, r * 1.05, 0.9))
+        return
+    # a long patch: a chain of circles along its length
+    long_, wide = (r * oval, r) if oval > 1.0 else (r, r * oval)
+    along = (ca, sa) if oval > 1.0 else (-sa, ca)
+    k = max(2, int(2 * long_ / max(wide, 0.3)))
+    for i in range(k + 1):
+        t = -1.0 + 2.0 * i / k
+        worn.append((cx + along[0] * t * (long_ - wide), cy + along[1] * t * (long_ - wide), wide * 1.05, 0.9))
+
+
+def tufts(m, pts, seed=0, high=(0.06, 0.2), paints=("grass", "grass", "grass.2", "grass.3"), blades=(5, 8), part=None, long=0.2):
+    """Grass and weeds growing on a work (a turfed roof, between dragon's teeth): the field's own grass, each tuft a
+    handful of bent blades splayed outward, one in five (`long`) a taller stand gone to straw. Paints `grass*` are for
+    blades only (the pictures let light through them)."""
+    g = rnd(seed)
+    if not m.fine:
+        pts = pts[::4]
+    for p in pts:
+        p = Vector(p)
+        tall = g.random() < long
+        paint = "grass.3" if tall and g.random() < 0.7 else paints[int(g.random() * len(paints)) % len(paints)]
+        if paint.split(".")[0] != "grass":
+            paint = "grass"
+        for _ in range(g.randint(*blades) if m.fine else 2):
+            ang = g.uniform(0, 2 * math.pi)
+            h = g.uniform(*high) * (1.9 if tall else 0.6)
+            out = Vector((math.cos(ang), math.sin(ang), 0))
+            side = Vector((-math.sin(ang), math.cos(ang), 0)) * g.uniform(0.006, 0.01)
+            base = p + Vector((g.uniform(-0.07, 0.07), g.uniform(-0.07, 0.07), -0.02))
+            lean = g.uniform(0.2, 0.7) * h if tall else g.uniform(0.7, 1.5) * h
+            mid = base + out * lean * 0.35 + Z * h * 0.75
+            top = base + out * lean + Z * h * (g.uniform(0.75, 1.0) if tall else 1.0)
+            if part is not None:
+                m.add([base - side, base + side, mid + side * 0.65, mid - side * 0.65, top], [(0, 1, 2, 3), (3, 2, 4)], paint, False, None, part)
+            else:
+                m.add([base - side, base + side, mid + side * 0.65, mid - side * 0.65, top], [(0, 1, 2, 3), (3, 2, 4)], paint, False, None)
+
+
+def mound(m, ring, high=0.3, seed=0, rings=6, amount=0.75, base="earth", over="turf", lump=0.05, part=None, grass=0.0):
+    """Earth heaped inside a closed line of points (lying where its edge lies): it rises unevenly toward the middle,
+    higher on one side than the other, lumpy, turfed in soft patches. `grass` tufts a square metre grow on it."""
+    ring = [Vector(p) for p in ring]
+    n = len(ring)
+    c = sum(ring, Vector()) / n
+    verts = []
+    for j in range(rings):
+        t = j / rings
+        for p in ring:
+            q = p.lerp(c, t)
+            rise = 1.0 - (1.0 - t) ** 2.2
+            uneven = 0.7 + 0.55 * fbm((q.x * 0.6 + seed, q.y * 0.6, 1.3), 1.0, 2)
+            verts.append(Vector((q.x, q.y, p.z + (c.z - p.z) * t + high * rise * uneven + lump * fbm((q.x * 2.6, q.y * 2.6, seed + 7.0), 1.0, 2) * min(1.0, t * 4.0))))
+    top = Vector((c.x, c.y, c.z + high * (0.7 + 0.55 * fbm((c.x * 0.6 + seed, c.y * 0.6, 1.3), 1.0, 2))))
+    verts.append(top)
+    faces = [(j * n + k, j * n + (k + 1) % n, (j + 1) * n + (k + 1) % n, (j + 1) * n + k) for j in range(rings - 1) for k in range(n)]
+    faces += [((rings - 1) * n + k, (rings - 1) * n + (k + 1) % n, rings * n) for k in range(n)]
+    turfed(m, verts, faces, amount, base, over, seed=seed, part=part, low=-9.0, grass=0.0)
+    if grass > 0.0 and m.fine:
+        g = rnd(seed + 3)
+        area = abs(sum(ring[k].x * ring[(k + 1) % n].y - ring[(k + 1) % n].x * ring[k].y for k in range(n))) * 0.5
+        pts = []
+        for _ in range(int(area * grass)):
+            j, k, u = g.randrange(rings - 1), g.randrange(n), g.random()
+            a, b = verts[j * n + k].lerp(verts[j * n + (k + 1) % n], u), verts[(j + 1) * n + k].lerp(verts[(j + 1) * n + (k + 1) % n], u)
+            pts.append(a.lerp(b, g.random()) + Z * 0.01)
+        tufts(m, pts, seed=seed + 5, part=part)
+    return verts
 
 
 # ---- timber -----------------------------------------------------------------------------------------------
