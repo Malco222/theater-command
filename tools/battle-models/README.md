@@ -525,7 +525,9 @@ Mending a clip by frames. A clip need not be rendered again for one fault: `show
 where the mend is. For a thing added (the splash's column), give it dice of its own and names of its own (`rng` and
 `name` of `puff`): the other puffs then keep their throws and their names, and a puff's name decides its pattern, so
 the first frame after the mend comes out as it was. Check that by subtracting the two. For a thing moved (a bomber
-stepped clear of another's smoke), find the frames it is in by projecting it into the camera.
+stepped clear of another's smoke), find the frames it is in by projecting it into the camera. Several renders may share
+one folder with frame lists that do not overlap; after the join, look at every frame's sea (one worker once read the
+wake's picture while another was writing it and gave a frame a white sea; the picture is now moved into place whole).
 
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now

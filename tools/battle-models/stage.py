@@ -281,7 +281,12 @@ def paint_wake(path, L, B, half_of=None, bow=None, stern=None, x0=-4.0, x1=0.62,
     img[..., 1] = np.clip(green, 0, 1) * 255
     img[..., 2] = np.clip(crest, 0, 1) * 255
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    Image.fromarray(img[::-1].copy()).save(path)        # (a picture's first row is its top; the sea's y runs up)
+    # (a picture's first row is its top; the sea's y runs up. It is written beside its place and moved in whole:
+    # several renders may share one folder, and one that read this picture while another was half way through
+    # writing it got a sea that was white water from end to end)
+    part = f"{path}.{os.getpid()}.part.png"
+    Image.fromarray(img[::-1].copy()).save(part)
+    os.replace(part, path)
     return (X0, X1, -Y1, Y1)
 
 
