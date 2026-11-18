@@ -71,18 +71,18 @@ def paints(out, w, h, spp):
     look.render_setup(w, h, spp)
     cam = look.cam()
     cam.data.lens = 50
-    kit.orbit(cam, Vector((-1.0, 1.9, 1.2)), 55.0, 25.0, 0.0)
+    kit.orbit(cam, Vector((-0.5, 1.9, 0.9)), 47.0, 24.0, 0.0)
     path = os.path.join(out, "paints.png")
     kit.still(path)
     bpy.context.view_layer.update()
     im = Image.open(path).convert("RGB")
     d = ImageDraw.Draw(im, "RGBA")
-    font = kit._font(max(15, int(h * 0.03)))
+    font = kit._font(max(15, int(w * 0.0165)))
     for p, label, hexa in spots:
         v = world_to_camera_view(bpy.context.scene, cam, p)
         x, y = v.x * w, (1.0 - v.y) * h
         tw = d.textlength(label, font=font)
-        sw = int(h * 0.03)
+        sw = int(w * 0.0165)
         box = (x - tw / 2 - sw - 14, y - 4, x + tw / 2 + 10, y + sw + 8)
         d.rectangle(box, fill=(232, 226, 214, 225))
         d.rectangle((box[0] + 5, y + 2, box[0] + 5 + sw, y + 2 + sw), fill=tuple(int(hexa[i:i + 2], 16) for i in (0, 2, 4)) + (255,), outline=(40, 34, 28, 255))
