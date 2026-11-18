@@ -25,33 +25,36 @@
 /* Under 1440 the bar is 83 high whatever the title, the height the longest sea's name needs once the odds fold, so the
    sea never starts lower in one action than in another (the UI director, 2b1f0e3). */
 @media (max-width: 1439px) { .sea .bbar { min-height: 83px; } }
-/* And at any width where the facts have folded and a long sea's name would still push the buttons off the bar; there
-   the middle may give 8 more, its break bars still 52 wide at 1280 ("The action in the Central Mediterranean"). */
+/* And at any width where the facts have folded and a long sea's name would still push the buttons off the bar. */
 .sea .btitle.is-small .tc-title-3 { font-size: 15px; }
-.sea .btitle.is-small ~ .bbal { min-width: 312px; }
-/* The same: under 1440 the clock's buttons drop their key letters, so the date and the fleets hold one line beside the
-   title. Space, the key the opening dispatch asks for, joins the keys band below the sea; 1, 2 and 3 stay in the
-   buttons' tooltips (the band holds one line at 1280 with one more key, not two). */
-@media (max-width: 1439px) { .sea .bspeed .tc-key { display: none; } }
-@media (min-width: 1440px) { .sea .keys .fact:has(.knarrow) { display: none; } }
-/* The hint line folds once under 1440, before "Arrows" (the fold rule: the dot at the fold goes). */
+/* The same: under 1536 the clock's buttons drop their key letters, so the date and the fleets hold one line beside the
+   title. Space and 1 2 3 join the keys band below the sea instead (the UI director, b467); 1, 2 and 3 stay in the
+   buttons' tooltips too. */
+/* At sea the caps show from 1536: between 1440 and 1535 they cost the break gauges about 120 (the UI director, b467). */
+@media (max-width: 1535px) { .sea .bspeed .tc-key { display: none; } }
+@media (min-width: 1536px) { .sea .keys .fact:has(.knarrow) { display: none; } }
+/* The hint line folds once under 1536, before "Arrows" (the fold rule: the dot at the fold goes). */
 .sea .keys .kbreak { display: none; flex-basis: 100%; height: 0; }
-@media (max-width: 1439px) { .sea .keys .kbreak { display: block; } }
+@media (max-width: 1535px) { .sea .keys .kbreak { display: block; } }
 .sea .bclock { flex: none; }
 .sea .bspeed { flex: none; }
 /* The middle of the bar (the odds, the two break bars, the nations) keeps 16 clear of the buttons, the bar's gap and this
-   margin, and narrows to fit (the UI director, keep-together mend 1), never so far that a break bar is under about 50
-   wide (the floor: the label, its two gaps and two bars of 50); where it is narrow, the two odds fold at their dot. */
-.sea .bbal { flex: 1 1 360px; min-width: 320px; max-width: 420px; margin-right: 4px; grid-template-columns: minmax(0, 1fr); }
+   margin, and narrows to fit (the UI director, keep-together mend 1). Where a break gauge would be under 56 the title's
+   facts fold first (fitTitle); the floor, 294, keeps each gauge at 32 or more whatever the title (b467). */
+.sea .bbal { flex: 1 1 360px; min-width: 294px; max-width: 420px; margin-right: 4px; grid-template-columns: minmax(0, 1fr); }
 .sea .bends { display: grid; grid-template-columns: auto minmax(0, max-content) auto; justify-content: space-between; column-gap: 6px; align-items: start; }
 .sea .bends #ratio { white-space: normal; min-width: 0; }
 /* The odds always on two lines, the card's over now's, at every width from the first second, as the land's are, so the
    bars never jump when a button's word grows (the UI director, b467). Now's line keeps room for its longest figures. */
 .sea .bends #ratio .facts > span { flex-direction: column; }
 .sea .bends #ratio .fact + .fact { min-width: calc(13ch + 1.4em); }
-/* In a chase WITHDRAW reads END THE CHASE: the odds block gives the extra width (down from 320 to about 300 at 1280), so
-   the button keeps 14 clear of the page's edge and the page never scrolls sideways (the UI director, b467). */
-.sea .bbar.is-ending .bbal, .sea .bbar.is-ending .btitle.is-small ~ .bbal { min-width: 260px; }
+/* WITHDRAW holds END THE CHASE's box from the first second, its word centred in it, the word not in use hidden: the
+   button keeps one width all action, so the bar is laid once and its ends never move (the UI director, b467). */
+.sea .wdbtn { display: inline-grid; align-items: center; justify-items: center; }
+.sea .wdbtn > .wd-word { grid-area: 1 / 1; }
+.sea .wdbtn > .wd-word.is-off { visibility: hidden; }
+/* Where a break gauge would be thinner than 56 the subtitle folds from the first second (sea-page.ts fitTitle); what is
+   still short after that stands, never under 32: the middle's floor of 294 above (the UI director, b467). */
 /* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
 .sea .bclock .tc-label { color: var(--paper-300); }
 .sea .bclock .tc-label.is-paused { color: var(--brass-300); }

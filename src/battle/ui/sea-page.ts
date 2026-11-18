@@ -72,6 +72,8 @@ interface State {
   chasing: boolean;
   /** The player has set the clock's speed since a fleet broke off: the chase runs at their speed (b458, 1: orders do not). */
   chaseByHand: boolean;
+  /** The player has taken the approach's clock in hand with a speed key once it was running (the UI director, b467). */
+  approachByHand: boolean;
   /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
   tag: { text: string; until: number } | null;
   /** The warnings at three quarters of the way to breaking off: ours stands while it holds, theirs is said once. */
@@ -89,7 +91,7 @@ const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, chasing: false, chaseByHand: false, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '', follow: true,
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, chasing: false, chaseByHand: false, approachByHand: false, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '', follow: true,
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -177,7 +179,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   sc.layout = undefined; sc.keep = undefined; S.follow = true;
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false; S.handing = false; S.closing = true; S.chasing = false; S.chaseByHand = false; S.tag = null;
+  S.asking = false; S.handing = false; S.closing = true; S.chasing = false; S.chaseByHand = false; S.approachByHand = false; S.tag = null;
   S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   guard();
@@ -200,7 +202,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       </div>
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands.">Hand it to the staff</button>
-        <button class="tc-btn tc-btn--grave" data-act="withdraw">Withdraw</button>
+        <button class="tc-btn tc-btn--grave wdbtn" data-act="withdraw"><span class="wd-word">${WITHDRAW_WORD}</span><span class="wd-word is-off" aria-hidden="true">${END_CHASE_WORD}</span></button>
         <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="${WITHDRAW_ASK.label}"><p id="waskText">${WITHDRAW_ASK.text}</p><div class="wbtns"><button class="tc-btn" data-act="wgo">${WITHDRAW_ASK.yes}</button><button class="tc-btn tc-btn--primary" data-act="wstay">Keep fighting</button></div></div>
         <div class="wask tc-paper" id="sask" hidden role="alertdialog" aria-label="Hand the action to the staff?"><p id="saskText"></p><div class="wbtns"><button class="tc-btn" data-act="sgo">Hand it over</button><button class="tc-btn tc-btn--primary" data-act="sstay">Keep fighting</button></div></div>
       </div>
@@ -452,11 +454,14 @@ function updateTop(force = false): void {
   const wd = document.querySelector<HTMLButtonElement>('[data-act="withdraw"]')!, going = sim.brokenSide === me;
   if (wd.disabled !== going) { wd.disabled = going; if (going) wd.title = ALREADY_GOING; else wd.removeAttribute('title'); }
   // Once the enemy has broken off the button ends the chase, in plain style (the UI director, b467).
-  const ending = sim.brokenSide === them && !sim.over, word = ending ? END_CHASE_WORD : WITHDRAW_WORD;
-  if (wd.textContent !== word) {
-    wd.textContent = word; wd.classList.toggle('tc-btn--grave', !ending);
-    // The longer button takes its width from the odds block, never from the page's edge (sea.css .is-ending).
-    wd.closest('.bbar')!.classList.toggle('is-ending', ending);
+  // The button holds both its words in one box from the first second, the one not in use hidden, so it keeps one width
+  // all action and the bar is laid once (the UI director, b467: sea.css .wdbtn).
+  const ending = sim.brokenSide === them && !sim.over;
+  if (wd.classList.contains('tc-btn--grave') === ending) {
+    wd.classList.toggle('tc-btn--grave', !ending);
+    const [a, b] = wd.querySelectorAll<HTMLElement>('.wd-word');
+    a.classList.toggle('is-off', ending); b.classList.toggle('is-off', !ending);
+    if (ending) { a.setAttribute('aria-hidden', 'true'); b.removeAttribute('aria-hidden'); } else { b.setAttribute('aria-hidden', 'true'); a.removeAttribute('aria-hidden'); }
   }
   (el('sask') as HTMLElement).hidden = !S.handing;
   if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
@@ -469,7 +474,7 @@ function updateTop(force = false): void {
   let tag = '';
   if (!S.asking && !S.handing && !sim.over) {
     if (paused) tag = `Paused ${cap('Space')}`;
-    else if (S.closing) tag = `×${APPROACH} until the fleets meet`;
+    else if (S.closing && !S.approachByHand) tag = `×${APPROACH} until the fleets meet ${cap('1')}`;
     else if (S.chasing) tag = `×${APPROACH} until the chase is over ${cap('1')}`;
     else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
   }
@@ -511,7 +516,13 @@ function fitTitle(): void {
   // scale's next size down, as it does under 1440, so the buttons are never pushed off the bar.
   if (over()) title.classList.add('is-folded');
   if (over()) title.classList.add('is-small');
+  // Where a break gauge would still be thinner than 56, the facts fold at their dot too, from the first second; what is
+  // short after that stands (the UI director, b467). The button already holds its longer word's width (.wdbtn).
+  const gauge = bar.querySelector<HTMLElement>('.bbar2')?.getBoundingClientRect().width ?? Infinity;
+  if (gauge < GAUGE_FLOOR) title.classList.add('is-folded');
 }
+/** The thinnest a break gauge should be before the title's facts fold to give it room (the UI director, b467). */
+const GAUGE_FLOOR = 56;
 
 function fit(first = false): void {
   const r = canvas.getBoundingClientRect();
@@ -811,7 +822,7 @@ function frame(): void {
   // player could not strike or choose, and the chase should read the same every time. The approach does too, as the
   // land's does ("×8 until the fleets meet"); the speed the player chose takes over when the rush ends.
   const chase = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
-  S.clock.rush = chase || sim.quiet ? APPROACH / (S.clock.speed || 1) : 1;
+  S.clock.rush = chase || (sim.quiet && !S.approachByHand) ? APPROACH / (S.clock.speed || 1) : 1;
   S.clock.advance(sim, dt);
   const quiet = !sim.over && sim.quiet;
   if (S.closing && !quiet && !sim.over) S.tag = { text: `The action begins · Running ×${S.clock.speed}`, until: t + 2.5 };
@@ -848,11 +859,15 @@ const APPROACH = 8;
 /** Sets the clock, and as it starts from stopped says so for a moment: "RUNNING ×2" (ruling 226, 8). */
 function setClock(to: Speed | 'toggle'): void {
   if (S.asking || S.handing) return;
-  const was = S.clock.speed;
+  const was = S.clock.speed, hand = S.chaseByHand || S.approachByHand;
   // Choosing a speed takes the chase in hand; a pause does not, however it is given (button or Space).
   if (to !== 'toggle' && to !== 0 && S.sim?.brokenSide) S.chaseByHand = true;
+  // One rule for both rushes (the UI director, b467): once the approach has begun, 1, 2 or 3 ends its rush at once and
+  // lights that button. Before the first second a speed key starts the clock, the approach still rushed.
+  if (to !== 'toggle' && to !== 0 && S.sim && S.sim.t > 0 && S.sim.quiet) S.approachByHand = true;
   if (to === 'toggle') S.clock.toggle(); else S.clock.set(to);
-  if (was === 0 && S.clock.speed > 0) S.tag = { text: `Running ×${S.clock.speed}`, until: now() + 2 };
+  // The chip goes as the rush ends, and the speed taken in its place is said for a moment, as on starting the clock.
+  if (S.clock.speed > 0 && (was === 0 || (!hand && (S.chaseByHand || S.approachByHand)))) S.tag = { text: `Running ×${S.clock.speed}`, until: now() + 2 };
   updateTop();
 }
 
