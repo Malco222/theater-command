@@ -75,7 +75,10 @@ with brown for a desert army, green with black-green for a jungle one. **A natio
 `upper2` with `upper`** (the lorry serves great powers too), or its vehicles show blotches in a darker shade of
 their coat; the file says so under `camouflage.how`. Wheels, tracks, canvas, the barrel, the inside of an open body
 and the hull's wall behind the wheels stay in the first colour. `Gun75` is France's own gun as well: built for
-France her second colour is her first, and she stays one coat.
+France her second colour is her first, and she stays one coat. To see one in a nation's coat and mark:
+`python landshow.py LightTank <out> sheet nation=<unit-table.json>:SWE dust=0.3` reads that country's `paint`,
+`paint2` and `insignia` from the game's own table (Sweden's green and brown, her three crowns); `coat=A08A5E,7A6446
+mark=1A1A1A,F2EEE2,1E7A3C` gives two colours and a mark's rings by hand; `pool` takes the same for a whole line-up.
 
 ## The model file (`<Name>.json`)
 

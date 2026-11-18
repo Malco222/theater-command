@@ -8,6 +8,9 @@
     options: fps=15 size=960x540 spp=20 only=12,40 (frames, to try a clip) tmp=<folder for frames>
              field=battle (the field battle's own ground and trees; or meadow, steppe, desert: this folder's plain field)
              gun=short paint=yellow (what the builder offers: a Panzer IV's short gun, her dark yellow coat)
+             coat=A08A5E,7A6446 mark=1A1A1A,F2EEE2,1E7A3C dust=0.3 (sheet, pool: a small nation's own two coat colours
+             and her mark's rings on a vehicle built for any nation, as the game gives them; less road dust.
+             nation=<unit-table.json>:SWE takes the coat and the mark from the game's own table)
 
 Everything a clip shows is the model's own rig and clips (the same the game plays), with the effects the clips' events
 name drawn by ground.Air. The game moves her, rolls her wheels and runs her tracks; here Show.drive does that.
@@ -26,6 +29,7 @@ from mathutils import Quaternion, Vector  # noqa: E402
 import ground  # noqa: E402
 import kit  # noqa: E402
 import landmarks  # noqa: E402
+import motorpool  # noqa: E402
 import rigid  # noqa: E402
 import stage  # noqa: E402
 import vehicles  # noqa: E402
@@ -40,7 +44,7 @@ def ease(a, b, t):
 
 
 class Show:
-    def __init__(self, name, field="battle", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, build=None, burn=False, **field_kw):
+    def __init__(self, name, field="battle", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, build=None, burn=False, nation=None, **field_kw):
         kit.fresh()
         t = time.time()
         self.v = vehicles.build(name, True, tag, **(build or {}))
@@ -49,6 +53,7 @@ class Show:
         # the dust she carries is the ground she stands on
         dust_hex = "9A8A6A" if field == "battle" else ground.KINDS[field][3]
         look_kw = {"burn": works.burn_sources(self.m, getattr(self.v, "ring_r", 0.85))} if burn else {}
+        look_kw.update(own(nation or {}, self.v))          # (a small nation's own coat and mark, if the picture asks)
         self.ob, self.arm = works.to_scene(self.m, dust_hex=dust_hex, **look_kw)
         self.marks = landmarks.put(self.m, self.ob, self.arm, burn=burn)
         self.burnt(0.0)
@@ -176,6 +181,27 @@ def choice(opt):
     return out
 
 
+def own(opt, v=None):
+    """A small nation's own coat and mark in the picture, as the game gives them to the vehicles built for any nation:
+    coat=A08A5E,7A6446 (her two coat colours: the game fills `upper` and `upper2` with them), mark=1A1A1A,F2EEE2,1E7A3C
+    (her mark's rings, the outside first), dust=0.3 (less of the road on her, to judge the coat). Or both from the
+    game's own table: nation=<unit-table.json>:SWE (her `paint`, `paint2` and `insignia` there)."""
+    coat, mark = opt.get("coat"), opt.get("mark")
+    if opt.get("nation"):                                 # nation=<unit-table.json>:SWE: both as the game's table has them
+        import json
+        path, tag = opt["nation"].rsplit(":", 1)
+        row = json.load(open(path))["countries"][tag]
+        coat = coat or ",".join(c for c in (row.get("paint"), row.get("paint2")) if c)
+        if not mark and row.get("insignia"):
+            landmarks.own_marking(row["insignia"])
+    if mark:
+        landmarks.own_rings(*mark.split(","))
+    if v is not None and coat:
+        a, b = (coat.split(",") + [None])[:2]
+        v.m.paints.update({"upper": a, "upper2": b or a, "shade": motorpool.dark(a, 0.62)})
+    return {"dust": float(opt["dust"])} if opt.get("dust") else {}
+
+
 def options(argv):
     opt = dict(a.split("=", 1) for a in argv if "=" in a)
     w, h = (int(a) for a in opt.get("size", "960x540").split("x"))
@@ -192,7 +218,7 @@ def finish(S, name, out, what, tmp, fps, only):
 # ---- the sheet ---------------------------------------------------------------------------------------
 
 def sheet(name, out, opt, w, h, spp):
-    S = Show(name, field=opt.get("field", "battle"), grass=(-16.0, 22.0, -22.0, 22.0), density=float(opt.get("grass", 26.0)), build=choice(opt))
+    S = Show(name, field=opt.get("field", "battle"), grass=(-16.0, 22.0, -22.0, 22.0), density=float(opt.get("grass", 26.0)), build=choice(opt), nation=opt)
     stage.render_setup(w, h, samples=spp)
     L, H, cx = S.L, S.H, S.cx
     m = S.m
@@ -292,6 +318,7 @@ def pool(names, out, opt, w, h, spp):
     the first): the picture of them all together from above their right front, a second from the other end, and a
     sheet of the two. `gap=` metres between neighbours, `ranks=` how many ranks, `rank=` metres between them, `step=`
     metres each stands behind her neighbour, `x=` `y=` where the front rank's middle stands, `as=` the file's name.
+    `coat=` `mark=` `dust=`: a small nation's own coat and mark on them all (own).
     `names=Sherman:BUCKEYE,T34:Za_Rodinu,PanzerIV:3`: her crew's own mark on each (b477), a word or a count of barrel rings."""
     kit.fresh()
     t = time.time()
@@ -299,7 +326,7 @@ def pool(names, out, opt, w, h, spp):
     crew = dict(a.split(":", 1) for a in opt["names"].split(",")) if opt.get("names") else {}
     for name in names:
         v = vehicles.build(name, True)
-        ob, arm = works.to_scene(v.m, dust_hex="9A8A6A")
+        ob, arm = works.to_scene(v.m, dust_hex="9A8A6A", **own(opt, v))
         mk = crew.get(name, "")
         landmarks.put(v.m, ob, arm, name=None if mk.isdigit() else (mk or None), rings=int(mk) if mk.isdigit() else 0)
         stood.append((v, arm))

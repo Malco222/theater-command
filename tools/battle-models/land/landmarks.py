@@ -40,7 +40,50 @@ def shapes(tag, shown=None):
         return [rect(-0.8, 0.8, -0.55, 0.55, RED), rect(-0.12, 0.12, -0.55, 0.55, WHITE)]
     if tag == "POL":
         return []
+    if tag == "_":              # built for any nation: the picture's stand-in for her owner's own mark, if one is set
+        return list(OWN)
     return []
+
+
+# A vehicle built for any nation (tag `_`) carries no marking of her own: the game draws each small nation's own where
+# her marks say. A picture may stand one in: these are its layers, lowest first (`own_rings`).
+OWN = []
+
+
+def own_rings(*cols):
+    """The picture's stand-in for a small nation's own mark on the vehicles built for any nation: rings of these
+    colours from the outside in (Iraq's: black, white, green). None: bare paint again."""
+    OWN[:] = [ring(0.0, 1.0 - i / len(cols), c) for i, c in enumerate(cols)]
+
+
+def own_marking(layers):
+    """The stand-in as the art director's table gives a country's mark (unit-table.json, `insignia`): layers lowest
+    first in a square from -1 to 1 (v is up), each a `ring` [r0, r1], a `tri` [r, turn in degrees], a `star`
+    [r, inner, points] or a `rect` [u0, u1, v0, v1] with its colour `c`. Neighbours of one colour are laid as one
+    layer (Sweden's three crowns are 24 gold blocks)."""
+    out, last = [], None
+    for lay in layers or []:
+        c = lay["c"]
+        if "ring" in lay:
+            polys = ring(lay["ring"][0], lay["ring"][1], c)
+        elif "rect" in lay:
+            polys = rect(*lay["rect"], c)
+        elif "star" in lay:
+            r, inner, n = (list(lay["star"]) + [0.382, 5])[:3]
+            pts = [((r if k % 2 == 0 else r * inner) * math.cos(math.pi / 2 + math.pi * k / n), (r if k % 2 == 0 else r * inner) * math.sin(math.pi / 2 + math.pi * k / n)) for k in range(2 * int(n))]
+            polys = star(r, c, inner) if int(n) == 5 else [(c, [(0.0, 0.0), pts[k], pts[(k + 1) % len(pts)]]) for k in range(len(pts))]
+        elif "tri" in lay:
+            r, turn = (list(lay["tri"]) + [0.0])[:2]
+            pts = [(r * math.cos(math.radians(90.0 + turn + 120.0 * k)), r * math.sin(math.radians(90.0 + turn + 120.0 * k))) for k in range(3)]
+            polys = [(c, [(0.0, 0.0), pts[k], pts[(k + 1) % 3]]) for k in range(3)]
+        else:
+            continue
+        if out and last == c:
+            out[-1] = out[-1] + polys
+        else:
+            out.append(polys)
+        last = c
+    OWN[:] = out
 
 
 # The crew's own paint (b477): a little thinner and duller than the factory's marking, about 200,196,186 in the sun.
