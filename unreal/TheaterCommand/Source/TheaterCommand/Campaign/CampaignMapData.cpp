@@ -247,7 +247,15 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 	if (bWorld)
 	{
 		// (Rules version 74) The wider chart.
-		const FString WidePath = ResolveDataFile(TEXT("world-map.json"), TEXT("src/generated"));
+		// (Rules Version 85, 18 November 2026: the rules read the Americas with their 339 cities, 540 provinces in all,
+		// from world-americas.json, a file of the same form. The game went on reading world-map.json and its 201, so an
+		// army that marched into a city stood on ground the table did not have and was nowhere to be seen. The table
+		// reads the file the rules read; the old one only where the new is not there.)
+		FString WidePath = ResolveDataFile(TEXT("world-americas.json"), TEXT("src/generated"));
+		if (!FPaths::FileExists(WidePath))
+		{
+			WidePath = ResolveDataFile(TEXT("world-map.json"), TEXT("src/generated"));
+		}
 		TSharedPtr<FJsonObject> Wide;
 		FString WideError;
 		if (ReadJsonFile(WidePath, Wide, WideError))
@@ -301,14 +309,29 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 			}
 			RuledRivers.Reset();
 			RuledBroad.Reset();
+			int32 Streams = 0;
 			{
 				TSharedPtr<FJsonObject> Waters;
 				FString WatersError;
 				const TArray<TSharedPtr<FJsonValue>>* RiverValues = nullptr;
-				if (ReadJsonFile(ResolveDataFile(TEXT("world-rivers.json"), TEXT("src/generated")), Waters, WatersError) && Waters->TryGetArrayField(TEXT("rivers"), RiverValues))
+				// (and the rivers the rules cross: world-americas-rivers.json with the cities, 165 where there were 15. Each has
+				// a class: a great or a middle river is water with banks; a small one is a stream, which the art director
+				// has ruled is paint on the ground and no obstacle. Streams are left out here until that paint is built.)
+				FString WatersPath = ResolveDataFile(TEXT("world-americas-rivers.json"), TEXT("src/generated"));
+				if (!FPaths::FileExists(WatersPath))
+				{
+					WatersPath = ResolveDataFile(TEXT("world-rivers.json"), TEXT("src/generated"));
+				}
+				if (ReadJsonFile(WatersPath, Waters, WatersError) && Waters->TryGetArrayField(TEXT("rivers"), RiverValues))
 				{
 					for (const TSharedPtr<FJsonValue>& RiverValue : *RiverValues)
 					{
+						FString Class;
+						if (RiverValue->AsObject()->TryGetStringField(TEXT("class"), Class) && Class == TEXT("small"))
+						{
+							++Streams;
+							continue;
+						}
 						TArray<FVector2D> Course;
 						if (ReadRing(RiverValue->AsObject()->GetArrayField(TEXT("pts")), Course) || Course.Num() >= 2)
 						{
@@ -318,8 +341,8 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 					}
 				}
 			}
-			UE_LOG(LogTheater, Display, TEXT("The wider chart: %d provinces beyond Europe (from %d), %d lands, %d waters cut out of them, %d lakes named, %d seas"),
-				Regions.Num() - FirstBeyond, FirstBeyond, Land.Num(), LandHoles.Num(), Lakes.Num(), Seas.Num());
+			UE_LOG(LogTheater, Display, TEXT("The wider chart: %d provinces beyond Europe (from %d), %d lands, %d waters cut out of them, %d lakes named, %d seas, %d rivers the rules cross (%d streams left out), from %s"),
+				Regions.Num() - FirstBeyond, FirstBeyond, Land.Num(), LandHoles.Num(), Lakes.Num(), Seas.Num(), RuledRivers.Num(), Streams, *FPaths::GetCleanFilename(WidePath));
 		}
 		else
 		{
