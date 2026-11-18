@@ -19,7 +19,7 @@
 
 import data from '../../data/campaign/aircampaigns.json';
 import { turnToDate } from '../core/ticket';
-import type { AirCampaign, AirFleet, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
+import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, guardsLand, kmTo, whyNotMission,
 } from './air';
@@ -27,6 +27,7 @@ import { allied, atWar, headline } from './game';
 import { hasTech } from './tech';
 import { byHand } from './depth';
 import { stopDef } from './history';
+import { majorsOf } from './diplomacy';
 import { townSize } from './towns';
 import { grounded, weatherOn } from './weather';
 import { wrecked } from './airversion';
@@ -44,7 +45,10 @@ export const AC = data as unknown as {
   bands: { from: number; words: string }[];
   repair: Record<string, RepairRow>;
   book: BookRow[];
+  radar: { tech: string; control: string; ground: number; record: ChainRow[]; night: Record<string, [number, number][]> };
+  gunners: { night: number; ground: number; day: Record<string, [number, number][]>; box: { nats: string[]; alone: number; escorted: number }; b29: { nat: string; vs: string[]; from: number; ratio: number } };
 };
+interface ChainRow { nat: string; from: number; name: string; by: string; ground: number; plural?: boolean; regions?: string[]; where?: string }
 
 /** True where air campaigns are flown: the grand campaign, with the switch on. */
 export const acOn = (g: Game): boolean => g.flags.open === 1 && g.flags.ac === 1;
@@ -284,6 +288,89 @@ export function bombWorn(g: Game, nat: string): number {
     if (size === 'city' || size === 'capital') w += AC.will.per * heldDown(g, r, 'works');
   }
   return Math.min(AC.will.most, w);
+}
+
+// ---- Radar by the tree (rider b553) ---------------------------------------------------------------------------
+
+/**
+ * The warning chain over a province with the air campaigns on (b553(a)): the record's two chains on their months at
+ * every stop; at the stops that follow the book each other great power's on its record month, whatever its research;
+ * at the other stops any nation's, the month it holds Early-warning radar. Only over ground its owner holds.
+ */
+export function chainAt(g: Game, r: Region, record: ChainRow[]): ChainRow | null {
+  if (r.owner !== r.ctrl) return null;
+  const nat = r.ctrl;
+  const old = record.find((c) => c.nat === nat && c.from <= g.turn);
+  if (old) return old;
+  if (stopDef(g).book) {
+    // A row may cover only part of the ground: the Freya stations the North Sea coast, the Redut stations two cities (b558(1)).
+    const row = AC.radar.record.find((c) => c.nat === nat && c.from <= g.turn && (!c.regions || c.regions.includes(r.name)));
+    return row && majorsOf(g).includes(nat) ? row : null;
+  }
+  if (!hasTech(g, nat, AC.radar.tech)) return null;
+  const n = g.nations[nat];
+  return { nat, from: g.turn, name: `the ${n?.adj ?? nat} early-warning chain`, by: n?.name ?? nat, ground: AC.radar.ground };
+}
+
+/**
+ * The defending fighters the bombers' gunners bring down for each bomber the fighters bring down (rulings 237 b557 and
+ * b559, the historian's historian/gunner-kills-b557.md), from the real losses, never the gunners' claims. The game
+ * flies one bomber a nation, so the historian's kinds are read from what the game knows: night or day, a strike on
+ * troops, the nation and month, whether an escort reached the target, and the B-29's targets.
+ */
+export function gunnerRatio(g: Game, nat: string, m: AirMission, target: number, night: boolean, escorted: boolean): number {
+  const G = AC.gunners;
+  if (night) return G.night;
+  if (m === 'ground' || m === 'line') return G.ground;
+  if (G.box.nats.includes(nat)) {
+    const r = m === 'strike' || m === 'fleet' ? undefined : g.regions[target];
+    if (r && nat === G.b29.nat && g.turn >= G.b29.from && G.b29.vs.includes(r.ctrl)) return G.b29.ratio;
+    return escorted ? G.box.escorted : G.box.alone;
+  }
+  return rowAt(G.day[nat] ?? G.day._default, g.turn);
+}
+
+/**
+ * The tree cards' lines for the two radar steps (b553(d); the UI director's words, ui-director/words-radar-cards.md),
+ * worked out from the numbers, for any nation's card: null for any other technology, or with the switch off.
+ */
+export function radarWords(g: Game, nat: string, id: string): string | null {
+  if (!acOn(g)) return null;
+  const record = AIR.radar.chains as ChainRow[], without = AIR.radar.without;
+  if (id === AC.radar.tech) {
+    if (stopDef(g).book) {
+      // One clause a chain row, in order of its month, so the tense never changes as the months pass (b558).
+      const rows = [...record.filter((c) => c.nat === nat), ...(majorsOf(g).includes(nat) ? AC.radar.record.filter((c) => c.nat === nat) : [])]
+        .sort((a, b) => a.from - b.from);
+      if (!rows.length) return null;
+      return `Its warning chain follows history's, with or without this research: ${rows.map((c) => `over ${c.where ?? 'all its ground'} from ${month(c.from)}`).join(', ')}.`;
+    }
+    return `A warning chain over all the ground it holds: every fighter in reach gets up in time to meet a raid, where without one only ${Math.round(without * 10)} in 10 do, and fewer of its aircraft are caught on the ground.`;
+  }
+  if (id === AC.radar.control) {
+    return stopDef(g).book
+      ? 'Its night defence grows with the years as history\'s did, with or without this research.'
+      : "Its fighters are steered onto the bombers in the dark, as well as each year's sets allow. Without this, its night defence stays as it was at the start of the war.";
+  }
+  return null;
+}
+
+/** What a defending fighter counts for by night (b553(b)): the controlled figure for a nation holding Fighter control. */
+const rowAt = (rows: [number, number][], t: number): number => {
+  let v = rows[0][1];
+  for (const [from, x] of rows) if (from <= t) v = x;
+  return v;
+};
+
+/**
+ * What a nation's fighters count for by night, as a share of their worth by day (b558(2)): the historian's row for the
+ * nation, by date. At the stops that follow the book the row runs by date whatever is researched. At stops 3 to 5
+ * Fighter control is the gate: without it the nation keeps its row's first figure; with it, the row's figure for the
+ * month (an early Fighter control does not buy 1944's sets in 1941).
+ */
+export function nightFighters(g: Game, nat: string): number {
+  const rows = AC.radar.night[nat] ?? AC.radar.night._default;
+  return stopDef(g).book || hasTech(g, nat, AC.radar.control) ? rowAt(rows, g.turn) : rows[0][1];
 }
 
 // ---- Campaigns: the doors -------------------------------------------------------------------------------------

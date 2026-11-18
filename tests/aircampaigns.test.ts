@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AIR, CLOSE, airAI, airBattles, airFleetsOf, airIncomeLoss, airOverBattle, fly } from '../src/campaign/air';
 import {
-  AC, acOn, airWarMonth, bombLands, bombWorn, callOff, campaignView, heldDown, lossBand, openCampaign, setAirCampaigns, skyFight, skyFought, stockLoss, whyNotCampaign,
+  AC, acOn, airWarMonth, bombLands, bombWorn, callOff, campaignView, chainAt, gunnerRatio, heldDown, lossBand, nightFighters, openCampaign, setAirCampaigns, skyFight, skyFought, stockLoss, whyNotCampaign,
 } from '../src/campaign/aircampaigns';
 import { createGame } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
@@ -372,5 +372,181 @@ describe("the book: history's campaigns on their months (b549)", () => {
     expect(AC.book).toHaveLength(54);
     for (const r of AC.book) expect(!!r.fly || !!r.book).toBe(true);
     for (const k of ['airfield', 'aircraft', 'synthetic', 'refinery', 'city']) expect(AC.repair[k].perMonth).toBeGreaterThan(0);
+  });
+});
+
+describe("radar by the tree and the record (riders b553 and b558, Brian's \"if you had radar then your fighters are much better at intercepting bombing raids\")", () => {
+  const raid = (g: Game, att: string, def: string, target: string, m: 'bomb' | 'night' = 'bomb'): ReturnType<typeof fly> => {
+    if (!g.nations[att].atWar.includes(def)) { g.nations[att].atWar.push(def); g.nations[def].atWar.push(att); }
+    const fs = g.airFleets.filter((f) => f.nat === att && f.bmr > 0 && f.kind !== 'ftr' && f.ship === undefined);
+    return fly(g, att, m, g.byName[target].id, fs);
+  };
+  const learn = (g: Game, nat: string, ...ids: string[]): void => { const t = (g.nations[nat].tech ??= { done: [], work: [] } as never); for (const id of ids) if (!t.done.includes(id)) t.done.push(id); };
+  const warned = (r: AirReport | null): string | undefined => r?.lines.find((l) => l.label === 'Radar')?.value;
+  const chain = (g: Game, place: string): string | undefined => chainAt(g, g.byName[place], AIR.radar.chains)?.name;
+
+  it('at stops 3 to 5 the warning comes with Early-warning radar, for any nation; without it 7 in 10 meet the raid', () => {
+    const g = grand();
+    g.turn = 12;
+    expect(warned(raid(g, 'GER', 'FRA', 'Paris'))).toBe('No radar warning');
+    const h = grand();
+    h.turn = 12;
+    learn(h, 'FRA', 'earlywarning');
+    expect(warned(raid(h, 'GER', 'FRA', 'Paris'))).toBe('The French early-warning chain gives warning');
+  });
+
+  it("at the stops that follow the book each great power's chain comes on the record's month, over the record's ground, whatever its research", () => {
+    const g = grand();
+    setStop(g, 1, true);
+    learn(g, 'SOV', 'earlywarning');
+    g.turn = 22;
+    expect(chain(g, 'Moscow')).toBeUndefined();
+    g.turn = 23;
+    expect(chain(g, 'Moscow')).toBe('the Redut stations');
+    expect(chain(g, 'Leningrad')).toBe('the Redut stations');
+    expect(chain(g, 'Kiev')).toBeUndefined();
+    g.turn = 41;
+    expect(chain(g, 'Kiev')).toBe('the Redut stations');
+    // Germany's North Sea coast has the Freya stations from the first month; inland waits for the Kammhuber Line.
+    g.turn = 1;
+    expect(chain(g, 'Bremen')).toBe('the Freya stations');
+    expect(chain(g, 'Ruhr')).toBeUndefined();
+    g.turn = 24;
+    expect(chain(g, 'Bremen')).toBe('the Kammhuber Line');
+    expect(chain(g, 'Ruhr')).toBe('the Kammhuber Line');
+    g.turn = 40;
+    expect(chain(g, 'Rome')).toBeUndefined();
+    expect(chain(g, 'Paris')).toBeUndefined();
+    g.turn = 41;
+    expect(chain(g, 'Rome')).toBe('the German radar stations');
+    // France has none at the book, whatever it researches.
+    learn(g, 'FRA', 'earlywarning');
+    expect(chain(g, 'Paris')).toBeUndefined();
+    // At stops 3 to 5 the tree rules: the record's part-ground rows give way to it.
+    setStop(g, 3, true);
+    g.turn = 23;
+    expect(chain(g, 'Moscow')).toBe('the Soviet early-warning chain');
+    expect(chain(g, 'Kiev')).toBe('the Soviet early-warning chain');
+    expect(chain(g, 'Paris')).toBe('the French early-warning chain');
+    g.turn = 1;
+    expect(chain(g, 'Bremen')).toBeUndefined();
+  });
+
+  it('the raid report agrees the verb with the chain', () => {
+    const g = grand();
+    setStop(g, 1, true);
+    g.turn = 3;
+    expect(warned(raid(g, 'UK', 'GER', 'Bremen'))).toBe('The Freya stations give warning');
+    g.turn = 12;
+    expect(warned(raid(g, 'GER', 'UK', 'London'))).toBe('Chain Home gives warning');
+  });
+
+  it("keeps the record's two chains on their months at every stop", () => {
+    for (const stop of [1, 3, 5]) {
+      const g = grand();
+      setStop(g, stop, true);
+      g.turn = 12;
+      expect(warned(raid(g, 'GER', 'UK', 'London'))).toBe('Chain Home gives warning');
+      g.turn = 24;
+      expect(chain(g, 'Ruhr')).toBe('the Kammhuber Line');
+    }
+  });
+
+  it("the night figure is the historian's dated row for the nation; at stops 3 to 5 Fighter control is the gate", () => {
+    const g = grand();
+    setStop(g, 1, true);
+    g.turn = 12;
+    expect(nightFighters(g, 'UK')).toBe(0.001);
+    expect(nightFighters(g, 'GER')).toBe(0.001);
+    g.turn = 14;
+    expect(nightFighters(g, 'GER')).toBe(0.004);
+    g.turn = 19;
+    expect(nightFighters(g, 'UK')).toBe(0.008);
+    g.turn = 47;
+    expect(nightFighters(g, 'GER')).toBe(0.01);
+    g.turn = 50;
+    expect(nightFighters(g, 'GER')).toBe(0.033);
+    expect(nightFighters(g, 'FRA')).toBe(0.001);
+    setStop(g, 3, true);
+    expect(nightFighters(g, 'GER')).toBe(0.001);
+    learn(g, 'GER', 'gci');
+    expect(nightFighters(g, 'GER')).toBe(0.033);
+    g.turn = 20;
+    expect(nightFighters(g, 'GER')).toBe(0.004);
+  });
+
+  it('Fighter control steers the defending fighters by night: more bombers fall to them', () => {
+    const night = (ctl: boolean): number => {
+      let lost = 0;
+      for (let t = 45; t < 51; t++) lost += nightRaid(ctl, t);
+      return lost;
+    };
+    const nightRaid = (ctl: boolean, t: number): number => {
+      const g = grand();
+      g.turn = t;
+      learn(g, 'GER', 'earlywarning', ...(ctl ? ['gci'] : []));
+      // Germany's fighters stand over the Ruhr, so they come up against the raid.
+      for (const f of g.airFleets) if (f.nat === 'GER' && f.ftr > 0 && f.ship === undefined) { f.base = g.byName.Ruhr.id; f.mission = 'support'; }
+      const r = raid(g, 'UK', 'GER', 'Ruhr', 'night')!;
+      expect(r.def.length).toBeGreaterThan(0);
+      return r.att.reduce((s, x) => s + x.lostBmr, 0);
+    };
+    expect(night(true)).toBeGreaterThan(night(false));
+  });
+
+  it("the bombers' gunners bring down a few night fighters with the switch on, none with it off (b557)", () => {
+    const shot = (on: boolean): number => {
+      let down = 0;
+      for (let t = 49; t < 55; t++) {
+        const g = grand(on);
+        setStop(g, 1, true);
+        g.turn = t;
+        for (const f of g.airFleets) if (f.nat === 'GER' && f.ftr > 0 && f.ship === undefined) { f.base = g.byName.Ruhr.id; f.mission = 'support'; }
+        const r = raid(g, 'UK', 'GER', 'Ruhr', 'night')!;
+        down += r.def.reduce((s, x) => s + x.lostFtr, 0);
+      }
+      return down;
+    };
+    expect(shot(false)).toBe(0);
+    expect(shot(true)).toBeGreaterThan(0);
+  });
+
+  it("the gunners' ratio reads the historian's kinds from what the game knows (b559)", () => {
+    const g = grand();
+    const at = (nat: string, place: number, t: number, o: { m?: 'bomb' | 'ground' | 'line'; night?: boolean; escort?: boolean } = {}): number => {
+      g.turn = t;
+      return gunnerRatio(g, nat, o.m ?? 'bomb', place, !!o.night, !!o.escort);
+    };
+    const london = g.byName.London.id, ruhr = g.byName.Ruhr.id, japan = g.byName.Rome.id;
+    // Ground Japan holds (the Europe chart has none, so a stand-in province changes hands).
+    g.regions[japan].ctrl = 'JAP';
+    expect(at('GER', london, 12)).toBe(0.07);
+    expect(at('UK', ruhr, 4)).toBe(0.15);
+    expect(at('UK', ruhr, 20)).toBe(0.07);
+    expect(at('UK', ruhr, 30)).toBe(0.15);
+    expect(at('GER', london, 30)).toBe(0.15);
+    expect(at('USA', ruhr, 47)).toBe(0.4);
+    expect(at('USA', ruhr, 47, { escort: true })).toBe(0.2);
+    expect(at('USA', japan, 57)).toBe(0.4);
+    expect(at('USA', japan, 58)).toBe(0.5);
+    expect(at('UK', ruhr, 50, { night: true })).toBe(0.05);
+    expect(at('SOV', ruhr, 50, { m: 'ground' })).toBe(0.07);
+  });
+
+  it('the tree cards say so, from the rows, only with the switch on', async () => {
+    const { techRule, TECH } = await import('../src/campaign/tech');
+    const ew = TECH.techs.find((t) => t.id === 'earlywarning')!, gci = TECH.techs.find((t) => t.id === 'gci')!;
+    const off = grand(false);
+    expect(techRule(ew, off, 'FRA')).toBe(techRule(ew));
+    const g = grand();
+    expect(techRule(ew, g, 'FRA')).toMatch(/only 7 in 10 do/);
+    expect(techRule(gci, g, 'FRA')).toMatch(/as well as each year's sets allow\. Without this, its night defence stays as it was at the start of the war\.$/);
+    setStop(g, 1, true);
+    expect(techRule(ew, g, 'UK')).toMatch(/Its warning chain follows history's, with or without this research: over all its ground from September 1939\.$/);
+    expect(techRule(ew, g, 'GER')).toMatch(/: over its North Sea coast from September 1939, over all its ground from August 1941\.$/);
+    expect(techRule(ew, g, 'SOV')).toMatch(/: over Moscow and Leningrad from July 1941, over all its ground from January 1943\.$/);
+    expect(techRule(ew, g, 'USA')).toMatch(/: over all its ground from January 1942\.$/);
+    expect(techRule(ew, g, 'FRA')).not.toMatch(/warning chain/);
+    expect(techRule(gci, g, 'FRA')).toMatch(/Its night defence grows with the years as history's did, with or without this research\.$/);
   });
 });

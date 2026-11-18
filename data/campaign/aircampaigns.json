@@ -1305,5 +1305,242 @@
   "Middlebrook and Everitt, The Bomber Command War Diaries (1985); Webster and Frankland, The Strategic Air Offensive against Germany (HMSO, 1961)",
   "Craven and Cate, The Army Air Forces in World War II; Freeman, The Mighty Eighth War Diary (1981)",
   "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
- ]
+ ],
+ "radar": {
+  "_about": "Ruling 236 riders b553 and b558 (Brian, 20:43Z: \"if you had radar then your fighters are much better at intercepting bombing raids\"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled.",
+  "tech": "earlywarning",
+  "control": "gci",
+  "ground": 0.5,
+  "record": [
+   {
+    "nat": "GER",
+    "from": 1,
+    "name": "the Freya stations",
+    "by": "the coast's warning service",
+    "ground": 0.5,
+    "plural": true,
+    "regions": [
+     "Hamburg",
+     "Schleswig-Holstein",
+     "Bremen"
+    ],
+    "where": "its North Sea coast"
+   },
+   {
+    "nat": "SOV",
+    "from": 23,
+    "name": "the Redut stations",
+    "by": "the air defence of Moscow and Leningrad",
+    "ground": 0.5,
+    "plural": true,
+    "regions": [
+     "Moscow",
+     "Leningrad"
+    ],
+    "where": "Moscow and Leningrad"
+   },
+   {
+    "nat": "SOV",
+    "from": 41,
+    "name": "the Redut stations",
+    "by": "the air armies' warning service",
+    "ground": 0.5,
+    "plural": true
+   },
+   {
+    "nat": "USA",
+    "from": 29,
+    "name": "the Aircraft Warning Service",
+    "by": "the Army's fighter commands",
+    "ground": 0.5
+   },
+   {
+    "nat": "JAP",
+    "from": 41,
+    "name": "the coast radars and picket boats",
+    "by": "the home islands' air defence",
+    "ground": 0.5,
+    "plural": true
+   },
+   {
+    "nat": "ITA",
+    "from": 41,
+    "name": "the German radar stations",
+    "by": "the German air force in Italy",
+    "ground": 0.5,
+    "plural": true
+   }
+  ],
+  "night": {
+   "UK": [
+    [
+     1,
+     0.001
+    ],
+    [
+     17,
+     0.003
+    ],
+    [
+     19,
+     0.008
+    ],
+    [
+     41,
+     0.015
+    ],
+    [
+     53,
+     0.023
+    ]
+   ],
+   "GER": [
+    [
+     1,
+     0.001
+    ],
+    [
+     14,
+     0.004
+    ],
+    [
+     30,
+     0.011
+    ],
+    [
+     41,
+     0.022
+    ],
+    [
+     47,
+     0.01
+    ],
+    [
+     49,
+     0.033
+    ],
+    [
+     57,
+     0.02
+    ],
+    [
+     63,
+     0.008
+    ]
+   ],
+   "USA": [
+    [
+     1,
+     0.003
+    ],
+    [
+     58,
+     0.012
+    ]
+   ],
+   "SOV": [
+    [
+     1,
+     0.001
+    ],
+    [
+     41,
+     0.002
+    ],
+    [
+     53,
+     0.004
+    ]
+   ],
+   "JAP": [
+    [
+     1,
+     0.001
+    ],
+    [
+     58,
+     0.003
+    ]
+   ],
+   "ITA": [
+    [
+     1,
+     0.001
+    ],
+    [
+     47,
+     0.003
+    ]
+   ],
+   "_default": [
+    [
+     1,
+     0.001
+    ]
+   ]
+  },
+  "nightWhy": {
+   "UK": "1 to 16: no ground control at night and no working airborne radar (the AI Mk III Blenheims). 17: the first ground-control (GCI) stations and the Beaufighter with AI Mk IV. 19: the two together, March 1941, rising to the best month of the Blitz in May 1941. 41: centimetric radar in Mosquitos (from early 1943). 53: Mosquitos with AI Mk VIII and X against Steinbock, 1944.",
+   "GER": "1 to 13: searchlights and few night fighters. 14: the searchlight belt and Freya line (October 1940), then the Himmelbett boxes in 1941. 30: Lichtenstein airborne radar in service (February 1942), general by late 1942. 41: the full Himmelbett and Lichtenstein system of 1943. 47: Window blinds Wuerzburg and Lichtenstein (Hamburg, 24/25 Jul 1943) for about two months. 49: free hunting in the bomber stream (Tame Boar and Wild Boar) with SN-2 radar, the peak of the night defence. 57: France's warning lost after D-Day, fuel short, British intruders and jamming. 63: the collapse of late 1944 and 1945.",
+   "USA": "No night raids on American soil. Overseas, the P-70 and early navy night fighters to 1944; the P-61 with SCR-720 radar from mid-1944 (58).",
+   "SOV": "Night fighters without radar, under searchlights, most of the war; most German night losses over Soviet cities were to guns.",
+   "JAP": "Night fighters with upward-firing guns and few radar sets against the B-29 fire raids from 1944.",
+   "ITA": "No night-fighter arm of note; German night fighters in Italy in 1943."
+  }
+ },
+ "gunners": {
+  "_about": "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on ground held by 'vs'. 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
+  "night": 0.05,
+  "ground": 0.07,
+  "box": {
+   "nats": [
+    "USA"
+   ],
+   "alone": 0.4,
+   "escorted": 0.2
+  },
+  "b29": {
+   "nat": "USA",
+   "vs": [
+    "JAP"
+   ],
+   "from": 58,
+   "ratio": 0.5
+  },
+  "day": {
+   "_default": [
+    [
+     1,
+     0.07
+    ],
+    [
+     29,
+     0.15
+    ]
+   ],
+   "UK": [
+    [
+     1,
+     0.15
+    ],
+    [
+     17,
+     0.07
+    ],
+    [
+     29,
+     0.15
+    ]
+   ]
+  },
+  "map": {
+   "Light and medium bombers with hand-held guns, 1939-41 (0.07)": "Every nation's day bombers from September 1939 to December 1941 (turns 1 to 28), and Britain's in 1941 (17 to 28: the Blenheims' day raids).",
+   "Bombers with power turrets by day, 1939-40 (0.15)": "Britain's day bombers from September 1939 to December 1940 (1 to 16: the Wellingtons and Hampdens).",
+   "Medium bombers in formation with more guns, 1942-45 (0.15)": "Every nation's day bombers from January 1942 (29), America's excepted.",
+   "Heavy bomber boxes (0.4 beyond escort, 0.2 escorted all the way)": "America's day bombers, every month, keyed by whether an escort reached the target. The game's one American bomber is the heavy; its B-25s and B-26s are not told apart.",
+   "B-29 by day over Japan (0.5)": "America's day raids on ground Japan holds, from June 1944 (58).",
+   "Any bomber by night (0.05)": "Every night raid.",
+   "Ground-attack aircraft with a rear gunner (0.07)": "Every nation's strikes on troops ('ground' and 'line'), whatever the year: the game's bombers flying close support stand for the Il-2s and Ju 87s."
+  }
+ }
 }

@@ -36,12 +36,12 @@ import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
-import { acOn, aimOf, bombLands, campaignOrders, campaignResults, inCampaign, skyFought, stockLoss } from './aircampaigns';
+import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
-interface Chain { nat: string; from: number; name: string; by: string; ground: number }
+interface Chain { nat: string; from: number; name: string; by: string; ground: number; plural?: boolean }
 interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean; home?: boolean }
 export interface AirOrder { fleet: string; base?: string[]; mission: AirMission; region?: string; sea?: string }
 export interface AirPlan { nat: string; from: number; to: number; name: string; against: string; orders: AirOrder[] }
@@ -214,7 +214,12 @@ const outputWorth = (g: Game, r: Region, cut: number): number => (airWar(g) ? cu
  * combat boxes of 1943). Never none where fighters met the raid and bombers fell to them; none by night, and none
  * outside the air war.
  */
-function gunsDown(g: Game, a: AirAssess, night: boolean, bombersLost: number): number {
+function gunsDown(g: Game, a: AirAssess, night: boolean, bombersLost: number, m: AirMission, target: number): number {
+  // With the air campaigns on, the historian's ratio by bomber kind, by night as by day, takes the place of 227's (b557, b559).
+  if (acOn(g)) {
+    if (!airWar(g) || a.D <= 0 || a.bomberLoss <= 0) return 0;
+    return bombersLost * Math.max(0, 1 - a.gunLoss / a.bomberLoss) * gunnerRatio(g, a.att[0]?.f.nat ?? '', m, target, night, a.E > 0);
+  }
   if (!airWar(g) || night || a.D <= 0 || a.bomberLoss <= 0) return 0;
   const toFighters = Math.max(0, 1 - a.gunLoss / a.bomberLoss);
   return bombersLost * toFighters * AIRWAR.day.kill * a.defence;
@@ -551,6 +556,8 @@ export function raid(g: Game, by: string, victim: string, share: number): void {
 /** The radar chain that warns of raids on this ground, if its owner has one and still holds it. */
 function radarAt(g: Game, r: Region): Chain | null {
   if (r.owner !== r.ctrl) return null;
+  // With the air campaigns on, every nation's warning comes by the tree, or by the record's month at the book (b553(a)).
+  if (acOn(g)) return chainAt(g, r, AIR.radar.chains);
   return AIR.radar.chains.find((c) => c.nat === r.ctrl && c.from <= g.turn) ?? null;
 }
 
@@ -1379,7 +1386,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
     const deck = f.ship !== undefined;
     if (sea && !deck) w *= C.seaCover;
-    if (night) w *= C.night.fighters;
+    // (With the air campaigns on, the historian's dated row for the defender's nation, gated by Fighter control: b553(b), b558(2).)
+    if (night) w *= acOn(g) ? nightFighters(g, f.nat) : C.night.fighters;
     if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
     w *= unready;
     // Under cloud fewer of the defenders find the bombers.
@@ -1478,7 +1486,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   }
   if (df > 0 || out.radar) {
     out.lines.push(out.radar
-      ? { label: 'Radar', value: `${cap(out.radar.name)} gives warning`, effect: 'Every defending fighter in reach gets up in time, and fewer aircraft are caught on the ground' }
+      ? { label: 'Radar', value: `${cap(out.radar.name)} ${out.radar.plural ? 'give' : 'gives'} warning`, effect: 'Every defending fighter in reach gets up in time, and fewer aircraft are caught on the ground' }
       : { label: 'Radar', value: 'No radar warning', effect: `Only ${Math.round(AIR.radar.without * 100)}% of the defending fighters meet the raids` });
   }
   const kitA = techNotes(g, out.att.map((a) => a.f.nat), out.B > 0 ? ['fighters', 'bombers'] : ['fighters']), kitD = techNotes(g, out.def.map((x) => x.f.nat), ['fighters', 'radar']);
@@ -1565,7 +1573,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const eLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare * luck();
   const bLoss = a.B * Math.min(mostBomberLoss(g, night), a.bomberLoss * luck());
   // The bombers' guns bring down some of the fighters that close with them, the more the better their defence (ruling 227).
-  const gunKills = gunsDown(g, a, night, bLoss);
+  const gunKills = gunsDown(g, a, night, bLoss, m, target);
   // Pilots who come down over their own ground mostly fly again; over the enemy's, or the sea, few do.
   const saved = (home: boolean): number => (sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away);
   const down = (f: AirFleet, side: AirSide, n: number, home: boolean): void => {
@@ -2416,7 +2424,7 @@ function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortL
     const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop);
     const pr = groundRules(g) ? railBombChance(g, target, through, gunsStop) : 0;
     const pf = groundRules(g) ? ruinChance(g, r, cut) : 0;
-    const worth = outputWorth(g, r, cut) + 10, guns = gunsDown(g, a, true, lost);
+    const worth = outputWorth(g, r, cut) + 10, guns = gunsDown(g, a, true, lost, 'night', target);
     for (const ld of fighters) {
       for (const le of fighters) {
         // Aircraft come down whole: each side's losses are rounded up or down by the flight's own dice.
@@ -2448,7 +2456,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let ftrLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare;
   const bmrLoss = a.B * a.bomberLoss;
   // The defenders' losses: to the escort, and to the bombers' own guns (ruling 227).
-  const foeGuns = gunsDown(g, a, m === 'night', bmrLoss);
+  const foeGuns = gunsDown(g, a, m === 'night', bmrLoss, m, target);
   const foeLoss = C.fighters * I * clash * 2 * share + foeGuns;
   let cut = 0, nation = 0, value = 0;
   let rail: number | undefined, ruin: number | undefined;
