@@ -3,7 +3,10 @@
     python landshow.py <Name> <out folder> sheet            # six stills on the field and a sheet of them
     python landshow.py <Name> <out folder> action           # she drives up, halts, trains her gun and fires
     python landshow.py <Name> <out folder> brewup           # she is struck and her ammunition goes
-    options: fps=15 size=960x540 spp=20 only=12,40 (frames, to try a clip) field=meadow tmp=<folder for frames>
+    python landshow.py <Name> <out folder> faces            # one still of each gun and coat she wore (vehicles.FACES)
+    options: fps=15 size=960x540 spp=20 only=12,40 (frames, to try a clip) tmp=<folder for frames>
+             field=battle (the field battle's own ground and trees; or meadow, steppe, desert: this folder's plain field)
+             gun=short paint=yellow (what the builder offers: a Panzer IV's short gun, her dark yellow coat)
 
 Everything a clip shows is the model's own rig and clips (the same the game plays), with the effects the clips' events
 name drawn by ground.Air. The game moves her, rolls her wheels and runs her tracks; here Show.drive does that.
@@ -21,6 +24,7 @@ from mathutils import Quaternion, Vector  # noqa: E402
 
 import ground  # noqa: E402
 import kit  # noqa: E402
+import landmarks  # noqa: E402
 import rigid  # noqa: E402
 import stage  # noqa: E402
 import vehicles  # noqa: E402
@@ -35,14 +39,21 @@ def ease(a, b, t):
 
 
 class Show:
-    def __init__(self, name, field="meadow", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, **field_kw):
+    def __init__(self, name, field="battle", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, build=None, **field_kw):
         kit.fresh()
         t = time.time()
-        self.v = vehicles.build(name, True, tag) if hasattr(vehicles, "build") else vehicles.BUILDERS[name](True)
+        self.v = vehicles.build(name, True, tag, **(build or {}))
         self.m = self.v.m
-        self.ob, self.arm = works.to_scene(self.m)
-        rut = next(iter(self.v.belts.values()))["y"] if self.v.belts else 0.9
-        self.field = ground.Field(kind=field, rut=abs(rut), grass=grass, density=density, **field_kw)
+        # the dust she carries is the ground she stands on
+        dust_hex = "9A8A6A" if field == "battle" else ground.KINDS[field][3]
+        self.ob, self.arm = works.to_scene(self.m, dust_hex=dust_hex)
+        landmarks.put(self.m, self.ob, self.arm)
+        belt = next(iter(self.v.belts.values())) if self.v.belts else None
+        rut = abs(belt["y"]) if belt else 0.9
+        if field == "battle":
+            self.field = ground.Battle(rut=rut, rut_wide=belt["wide"] if belt else 0.3, pitch=belt["pitch"] if belt else 0.12, **field_kw)
+        else:
+            self.field = ground.Field(kind=field, rut=rut, grass=grass, density=density, **field_kw)
         self.sun_at(*sun)
         self.fx = ground.Air(wind=wind or (-1.4, 1.9, 0.0))
         self.pose, self.at, self.heading, self.run = {}, Vector(), 0.0, {"l": 0.0, "r": 0.0}
@@ -50,7 +61,10 @@ class Show:
         self.cam.data.clip_end = 20000.0
         self.clip = self.m.clips
         xs, zs = [p.x for p in self.m.verts], [p.z for p in self.m.verts]
-        self.L, self.H, self.cx = max(xs) - min(xs), max(zs), (max(xs) + min(xs)) / 2
+        hull = [p.x for p in self.m.verts if abs(p.y) > 0.6] or xs       # (her body without the gun's overhang)
+        # (how far off the cameras stand goes by the hull, so a short gun and a long one are framed alike)
+        # (and how high by her body, so a tall aerial does not send them up into the air)
+        self.L, self.H, self.cx = max(max(xs) - min(xs), (max(hull) - min(hull)) * 1.27), min(max(zs), 1.36 * works.body_top(self.m)), (max(xs) + min(xs)) / 2
         print(f"{name}: {self.m.triangles()} triangles, built and staged in {time.time() - t:.1f}s", flush=True)
 
     def sun_at(self, bearing, elev):
@@ -118,7 +132,8 @@ class Show:
         q, mv, sc = pose["hull"]
         axis, ang = q.to_axis_angle()
         out = dict(pose)
-        out["hull"] = (Quaternion(Quaternion(Z, -math.radians(bearing)) @ axis, ang), mv, sc)
+        turn = Quaternion(Z, -math.radians(bearing))
+        out["hull"] = (Quaternion(turn @ axis, ang), turn @ mv, sc)
         return out
 
     # -- cameras
@@ -131,6 +146,11 @@ class Show:
         while t < t0:
             self.fx.at(t)
             t += 0.1
+
+
+def choice(opt):
+    """What the command line asks of the builder: gun=short paint=yellow."""
+    return {k: opt[k] for k in ("gun", "paint") if k in opt}
 
 
 def options(argv):
@@ -149,7 +169,7 @@ def finish(S, name, out, what, tmp, fps, only):
 # ---- the sheet ---------------------------------------------------------------------------------------
 
 def sheet(name, out, opt, w, h, spp):
-    S = Show(name, field=opt.get("field", "meadow"), grass=(-16.0, 22.0, -22.0, 22.0), density=float(opt.get("grass", 26.0)))
+    S = Show(name, field=opt.get("field", "battle"), grass=(-16.0, 22.0, -22.0, 22.0), density=float(opt.get("grass", 26.0)), build=choice(opt))
     stage.render_setup(w, h, samples=spp)
     L, H, cx = S.L, S.H, S.cx
     m = S.m
@@ -180,27 +200,76 @@ def sheet(name, out, opt, w, h, spp):
         t = time.time()
         kit.still(path)
         print(f"  {key}: {time.time() - t:.1f}s", flush=True)
-    if not only:
+    if all(os.path.exists(f) for f in files):            # (with views=, the stills re-shot join the others on the sheet)
         title = f"{m.title}   {m.triangles():,} triangles near, {len(m.parts)} moving parts, {len(m.clips)} clips"
         kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=3, labels=labels, title=title)
         print("wrote", os.path.join(out, "sheets", f"{name}.png"), flush=True)
 
 
+# ---- the faces she showed through the war ------------------------------------------------------------
+
+def faces(name, out, opt, w, h, spp):
+    """One still of each face of her that vehicles.FACES names (a gun, a coat), from the same place, side by side."""
+    files, labels, eye = [], [], None
+    for k, (words, pick) in enumerate(vehicles.FACES.get(name, [])):
+        S = Show(name, field=opt.get("field", "battle"), build=pick)
+        stage.render_setup(w, h, samples=spp)
+        if eye is None:
+            xs = [p.x for p in S.m.verts if abs(p.y) > 0.6]              # (the hull, not the gun: every face from one place)
+            L, cx, H = max(xs) - min(xs), (max(xs) + min(xs)) / 2, S.H
+            # (far enough off, and looking far enough forward, that the longest gun's muzzle is in the picture)
+            eye, tgt = (cx + L * 1.16, -L * 0.9, H * 0.8), (cx + 0.6, 0, H * 0.4)
+        S.place((0, 0, 0))
+        S.set({})
+        S.look(eye, tgt, 44)
+        S.sun_at(math.degrees(math.atan2(eye[1] - tgt[1], eye[0] - tgt[0])) + 60.0, 36.0)
+        path = os.path.join(out, "sheets", "stills", f"{name}-face{k + 1}.png")
+        t = time.time()
+        kit.still(path)
+        print(f"  {words}: {time.time() - t:.1f}s", flush=True)
+        files.append(path)
+        labels.append(words)
+    if files:
+        kit.sheet(files, os.path.join(out, "sheets", f"{name}-faces.png"), cols=len(files), labels=labels, title=f"{S.m.title}: one model, the faces she showed through the war")
+        print("wrote", os.path.join(out, "sheets", f"{name}-faces.png"), flush=True)
+
+
 # ---- she drives up, halts, trains and fires ----------------------------------------------------------
 
 def action(name, out, opt, w, h, spp, fps, only):
-    S = Show(name, field=opt.get("field", "meadow"), density=float(opt.get("grass", 26.0)))
+    S = Show(name, field=opt.get("field", "battle"), density=float(opt.get("grass", 26.0)), build=choice(opt))
     stage.render_setup(w, h, samples=spp)
     m = S.m
     v0, t1, t2 = 6.5, 2.4, 3.9                       # under way at 6.5 m/s, braking from t1, at rest at t2
     x_end = 0.0
     x_start = x_end - (v0 * t1 + v0 * (t2 - t1) / 2)
-    t_train0, bearing, lift = 3.0, -24.0, 3.0         # (the turret trains at its own rate)
+    # she halts and settles; then the gun is laid (the turret comes round at its own rate, the barrel lifts a touch as
+    # it comes on); a breath; the shot
+    bearing, lift, ramp = float(opt.get("bearing", -18.0)), 2.5, 0.25
     rate = m.info.get("file", {}).get("controls", {}).get("turret", {}).get("degrees_per_second", 14.0)
-    t_train1 = t_train0 + abs(bearing) / rate
-    t_fire = t_train1 + 0.7
-    t_mg = t_fire + 2.1
-    long = float(opt.get("long", t_mg + 2.2))
+    t_train0 = t2 + 0.45
+    t_train1 = t_train0 + abs(bearing) / rate + ramp
+    t_lift0, t_lift1 = t_train1 - 0.5, t_train1 + 0.3
+    t_fire = math.ceil((t_lift1 + 0.4) * fps) / fps - 0.012      # (the shot falls just before a frame, so the flash's one bright instant is seen)
+    t_mg = t_fire + 2.0
+    long = float(opt.get("long", t_mg + 1.9))
+    brake_rate = S.clip["stop"].get("rest", 0.0) / (t2 - t1) if "stop" in S.clip else 0.0
+    print(f"  halts {t2:.2f}s, lays {t_train0:.2f} to {t_lift1:.2f}s, fires {t_fire:.3f}s (frame {int(t_fire * fps) + 2}), {long:.1f}s in all", flush=True)
+
+    def trained(t):
+        """The turret's bearing: it gathers way, turns at its rate, and slows onto the target."""
+        a, T = t - t_train0, t_train1 - t_train0
+        if a <= 0.0:
+            return 0.0
+        if a >= T:
+            return bearing
+        if a < ramp:
+            d = rate * a * a / (2 * ramp)
+        elif a < T - ramp:
+            d = rate * (a - ramp / 2)
+        else:
+            d = abs(bearing) - rate * (T - a) ** 2 / (2 * ramp)
+        return math.copysign(d, bearing)
 
     def speed(t):
         return v0 if t < t1 else (v0 * (t2 - t) / (t2 - t1) if t < t2 else 0.0)
@@ -227,9 +296,10 @@ def action(name, out, opt, w, h, spp, fps, only):
     def step(t):
         d = gone(t)
         S.place((x_start + d, 0, 0))
-        b = bearing * ease(t_train0, t_train1, t) if has_turret else 0.0
-        poses = [S.rolled(d), S.play("drive", t, weight=min(1.0, speed(t) / 3.0)) if t < t2 else {}, S.play("stop", t - (t2 - 0.35)),
-                 S.train(b, lift * ease(t_train0, t_train1, t)), S.play("fire", t - t_fire), S.about_turret(S.play("fire.rock", t - t_fire), b)]
+        b = trained(t) if has_turret else 0.0
+        stop = S.play("stop", (t - t1) * brake_rate) if brake_rate else S.play("stop", t - (t2 - 0.35))
+        poses = [S.rolled(d), S.play("drive", t, weight=min(1.0, speed(t) / 3.0)) if t < t2 else {}, stop,
+                 S.train(b, lift * ease(t_lift0, t_lift1, t)), S.play("fire", t - t_fire), S.about_turret(S.play("fire.rock", t - t_fire), b)]
         S.set(*poses)
         S.fx.at(t)
         # the camera stands by the road and follows her, a little behind her going
@@ -251,7 +321,7 @@ def action(name, out, opt, w, h, spp, fps, only):
 # ---- she is struck and her ammunition goes -----------------------------------------------------------
 
 def brewup(name, out, opt, w, h, spp, fps, only):
-    S = Show(name, field=opt.get("field", "meadow"), density=float(opt.get("grass", 26.0)), grass=(-26.0, 30.0, -30.0, 26.0))
+    S = Show(name, field=opt.get("field", "battle"), density=float(opt.get("grass", 26.0)), grass=(-26.0, 30.0, -30.0, 26.0), build=choice(opt))
     stage.render_setup(w, h, samples=spp)
     m = S.m
     t_hit = 0.8
@@ -287,7 +357,7 @@ def brewup(name, out, opt, w, h, spp, fps, only):
         S.set(S.play("idle", t) if t < t_hit else {}, S.play("hit", t - t_hit) if blast is not None and t < t_hit + blast else {}, S.play(clip, t - t_hit))
         S.fx.at(t)
         up = ease(t_hit + 0.4, t_hit + 3.0, t)
-        S.look(eye + Vector((1.5, 1.5, 0.3)) * up, Vector((0.0, 0.3, S.H * 0.55 + 2.2 * up)), 40.0 - 8.0 * up)
+        S.look(eye + Vector((1.0, 1.0, 0.3)) * up, Vector((0.0, 0.3, S.H * 0.55 + 1.7 * up)), 40.0 - 4.0 * up)
 
     S.preroll(2.0)
     tmp = opt.get("tmp", os.path.join(out, "frames", f"{name}-brewup"))
@@ -304,6 +374,8 @@ def main():
         action(name, out, opt, w, h, spp, fps, only)
     elif what == "brewup":
         brewup(name, out, opt, w, h, spp, fps, only)
+    elif what == "faces":
+        faces(name, out, opt, w if "size" in opt else 1280, h if "size" in opt else 720, int(opt.get("spp", 40)))
 
 
 if __name__ == "__main__":

@@ -113,8 +113,9 @@ class Works(Shop, Gear, Fittings):
         """How a sprung hull answers a knock at t = 0: a rocking that dies away."""
         return kick * math.exp(-damp * t) * math.sin(2 * math.pi * freq * t)
 
-    def hull_keys(self, long, pitch=None, roll=None, bob=None, fps=30):
-        """Keys for the hull from functions of time (degrees, degrees, metres): one `rot` and one `move` track."""
+    def hull_keys(self, long, pitch=None, roll=None, bob=None, fps=30, surge=None):
+        """Keys for the hull from functions of time (degrees, degrees, metres): one `rot` and one `move` track.
+        `surge` is the hull thrown along her length on her springs (metres, + forward)."""
         hp = self.m.parts[self.m.part_at["hull"]]
         rot_keys, mv = [], []
         n = max(2, int(round(long * fps)))
@@ -122,7 +123,7 @@ class Works(Shop, Gear, Fittings):
             t = long * i / n
             q = Quaternion(hp.axis, math.radians(pitch(t) if pitch else 0.0)) @ Quaternion(X, math.radians(roll(t) if roll else 0.0))
             rot_keys.append([t, q.w, q.x, q.y, q.z])
-            mv.append([t, 0.0, 0.0, bob(t) if bob else 0.0])
+            mv.append([t, surge(t) if surge else 0.0, 0.0, bob(t) if bob else 0.0])
         return {"part": "hull", "rot": rot_keys, "move": mv}
 
     def sooted(self, reach=0.6, most=0.85):
@@ -173,22 +174,40 @@ class Works(Shop, Gear, Fittings):
         m.clips["move_off"] = {"long": 1.2, "loop": False, "after": "hold", "about": "she moves off: the nose lifts as the tracks bite, and settles",
                                "tracks": [self.hull_keys(1.2, pitch=lambda t: 1.3 * math.exp(-3.0 * t) * math.sin(two_pi * 1.1 * t) * (1.0 if t > 0 else 0.0), bob=lambda t: 0.004 * math.exp(-3 * t) * math.sin(two_pi * 2.0 * t))],
                                "events": [ev(0.0, "exhaust_rev", e) for e in ex]}
-        m.clips["stop"] = {"long": 1.2, "loop": False, "after": "hold", "about": "she brakes: the nose dips and comes back",
-                           "tracks": [self.hull_keys(1.2, pitch=lambda t: -1.7 * math.exp(-3.2 * t) * math.sin(two_pi * 1.15 * t), bob=lambda t: -0.005 * math.exp(-3 * t) * math.sin(two_pi * 2.0 * t))],
+        # stop: the nose goes down as the brakes bite and stays down while she slows; as she comes to rest (`rest`
+        # seconds in) it comes back up, a little over, and settles
+        rest, dip = 1.3, 1.6
+
+        def braking(t):
+            if t < rest:
+                return -dip * rigid.smooth(t / 0.45) * (1.0 - 0.12 * rigid.smooth((t - 0.45) / (rest - 0.45)))
+            a = t - rest
+            return -dip * 0.88 * math.exp(-3.0 * a) * math.cos(two_pi * 0.85 * a)
+        m.clips["stop"] = {"long": 2.6, "loop": False, "after": "hold", "rest": rest,
+                           "about": "she brakes: start it as the brakes go on. The nose dips and stays down while she slows; she is at rest `rest` seconds in "
+                                    "(play it faster or slower to fit), and the nose comes back up, a little over, and settles",
+                           "tracks": [self.hull_keys(2.6, pitch=braking, bob=lambda t: -0.012 * rigid.smooth(t / 0.45) if t < rest else -0.012 * math.exp(-3.0 * (t - rest)) * math.cos(two_pi * 0.85 * (t - rest)))],
                            "events": [ev(0.0, "brakes", "dust.left"), ev(0.0, "brakes", "dust.right")]}
 
         # fire: the barrel runs back and out again; the hull's answer is a clip of its own
+        # (back in a twentieth of a second, held a moment on the buffer, then run out slowly by the recuperator: a full second)
         def run_back(t):
-            if t < 0.06:
-                return recoil * rigid.smooth(t / 0.06)
-            return recoil * max(0.0, 1.0 - rigid.smooth((t - 0.06) / 0.7))
-        keys = [[t, run_back(t)] for t in (0.0, 0.015, 0.03, 0.045, 0.06, 0.12, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.76, 2.5)]
-        m.clips["fire"] = {"long": 2.5, "loop": False, "after": "hold", "about": "the main gun fires: flash and blast at 0.0, the barrel runs back and out, the empty case a moment after",
+            if t < 0.05:
+                return recoil * rigid.smooth(t / 0.05)
+            if t < 0.13:
+                return recoil
+            return recoil * max(0.0, 1.0 - rigid.smooth((t - 0.13) / 1.0))
+        keys = [[t, round(run_back(t), 4)] for t in (0.0, 0.0125, 0.025, 0.0375, 0.05, 0.13, 0.2, 0.28, 0.36, 0.45, 0.55, 0.63, 0.72, 0.8, 0.9, 1.0, 1.08, 1.13, 2.5)]
+        m.clips["fire"] = {"long": 2.5, "loop": False, "after": "hold", "about": "the main gun fires: flash and blast at 0.0, the barrel runs back at once and out again over a second, the empty case a moment after",
                            "tracks": [{"part": "barrel", "slide": keys}],
-                           "events": [ev(0.0, "muzzle_flash_big", "muzzle", gun_cue), ev(0.0, "muzzle_blast_dust", "muzzle"), ev(1.2, "case_clang", "case", "tank_shell_case")]}
+                           "events": [ev(0.0, "muzzle_flash_big", "muzzle", gun_cue), ev(0.0, "muzzle_blast_dust", "muzzle"), ev(1.5, "case_clang", "case", "tank_shell_case")]}
+        # (the hull rocks back about `kick` degrees a fifth of a second after the shot, and has settled a second after it)
         m.clips["fire.rock"] = {"long": 1.6, "loop": False, "after": "hold",
-                                "about": "the hull's answer to the shot, for a gun trained ahead (nose up, then settling). With the turret trained off, turn this about the turret's bearing or play it weaker",
-                                "tracks": [self.hull_keys(1.6, pitch=lambda t: kick * math.exp(-3.4 * t) * math.sin(two_pi * 1.5 * t) * 1.25, bob=lambda t: -0.006 * math.exp(-4 * t) * math.sin(two_pi * 3 * t))],
+                                "about": "the hull's answer to the shot, for a gun trained ahead: she is thrown back on her springs, the nose lifts about a degree, and she settles in a "
+                                         "second. With the turret trained off, turn this about the turret's bearing or play it weaker",
+                                "tracks": [self.hull_keys(1.6, pitch=lambda t: kick * 2.25 * math.exp(-3.6 * t) * math.sin(two_pi * 1.0 * t),
+                                                          bob=lambda t: -0.008 * math.exp(-4 * t) * math.sin(two_pi * 2.0 * t),
+                                                          surge=lambda t: -0.045 * kick * math.exp(-4.5 * t) * math.sin(two_pi * 1.1 * t))],
                                 "events": []}
         if mg and any(s["name"] == mg for s in m.sockets):
             m.clips["mg_burst"] = {"long": 1.0, "loop": False, "after": "hold", "about": "a burst from the machine gun beside the main gun: ten rounds",
@@ -469,6 +488,12 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45):
             rough = _ramp(nt, shine, 0.0, 1.0, 0.7, 0.42)
             grime = _math(nt, "MULTIPLY", grime, _ramp(nt, edge_at, 0.0, 1.0, 0.4, 0.06))
             mud = _math(nt, "MULTIPLY", mud, _ramp(nt, edge_at, 0.0, 1.0, 0.8, 0.0))
+            # the run lying on the road takes the road's dust: the dustiest steel on her. (By where the link is now,
+            # not where it was built, so the dust stays on the ground run while the track goes round.)
+            wsep = nt.nodes.new("ShaderNodeSeparateXYZ")
+            nt.links.new(geo.outputs["Position"], wsep.inputs[0])
+            on_road = _math(nt, "MULTIPLY", _ramp(nt, wsep.outputs[2], 0.07, 0.22, 1.0, 0.0), _ramp(nt, mid, 0.25, 0.75, 0.6, 1.0))
+            grime = _math(nt, "MAXIMUM", grime, _math(nt, "MULTIPLY", on_road, _ramp(nt, edge_at, 0.0, 1.0, 0.85, 0.55)))
         elif key == "rust":
             # an exhaust that has been red-hot and rained on: dark rust brown, blotched darker, flecked lighter
             base = toward(base, hex_rgb("241A16"), _ramp(nt, _noise(nt, pos, 11.0, 4.0, 0.6), 0.38, 0.62, 0.0, 0.8))
@@ -526,6 +551,12 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45):
             m = _math(nt, "MULTIPLY", metal, _math(nt, "SUBTRACT", 1.0, covered), clamp=True)
             nt.links.new(m, bsdf.inputs["Metallic"])
     return look
+
+
+def body_top(model):
+    """How high she stands without her aerial."""
+    skip = {i for i, p in enumerate(model.parts) if p.name.startswith("aerial")}
+    return max(model.verts[i].z for f, pi in zip(model.faces, model.fpart) if pi not in skip for i in f)
 
 
 def touched(model, flags):

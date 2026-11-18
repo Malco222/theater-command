@@ -32,7 +32,7 @@ SIDES = (("l", LEFT), ("r", RIGHT))
 # second camouflage colour (how far a point is into it is the file's `blend`).
 COMMON = {
     "upper": "60664A", "upper2": "7A6A48", "shade": "3C402E", "track": "37322E", "rubber": "202022", "steel": "3A3C3E",
-    "bright": "8C8E90", "wood": "7C5E3C", "canvas": "8C8468", "glass": "1B2A33", "black": "101112", "rust": "4A3226",
+    "bright": "8C8E90", "wood": "5A4B3C", "canvas": "8C8468", "glass": "1B2A33", "black": "101112", "rust": "4A3226",
     "lamp": "D8D4C0", "white": "E6E2D8", "red": "A82020", "yellow": "C9A227", "blue": "2F4A7A", "leather": "4A3626",
     "torn": "241D1A", "rope": "8A7A5A", "cloth": "807A56", "skin": "C49A7A", "brass": "9A8448",
 }

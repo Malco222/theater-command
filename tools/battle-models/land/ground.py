@@ -486,6 +486,13 @@ class Battle:
         ob.data.materials.append(m)
 
 
+# The 75 mm's flash as lamps (Blender's watts: the sun here gives the ground about 3.4 a square metre, and a lamp of P
+# watts gives P / (39.5 d d) at d metres). The art director: a fifth brighter at most on the faces that see the muzzle,
+# a warm pool on the ground under it, never the whole field.
+FLASH_TOUCH = 230.0     # the lamp at the muzzle
+FLASH_POOL = 500.0      # the lamp that throws the pool straight down
+
+
 class Air(stage.Effects):
     """stage.Effects with a land vehicle's effects. Places and facings are in the world's axes."""
 
@@ -539,26 +546,61 @@ class Air(stage.Effects):
                           r=(0.08, g.uniform(0.55, 0.95)), col=(c, c, c * 1.05), alpha=g.uniform(0.35, 0.5), drag=3.0, rise=0.6, fade_in=0.04, grow=0.55, wind=1.0)
         self.once(t0, where, make)
 
+    def spot(self, t0, at, power, long=0.1, col=(1.0, 0.6, 0.28), cone=110.0, r=0.3):
+        """A flash's light thrown straight down in a cone: a warm pool on the ground under it and nothing beyond."""
+        d = bpy.data.lights.new("flash_pool", "SPOT")
+        d.energy, d.color, d.shadow_soft_size = 0.0, col, r
+        d.spot_size, d.spot_blend = math.radians(cone), 1.0
+        ob = bpy.data.objects.new("flash_pool", d)
+        self.coll.objects.link(ob)
+        ob.location = at                                  # (a lamp looks down its own -z: as made, straight down)
+        self.lights.append(dict(ob=ob, t0=t0, long=long, power=power))
+
     def gun(self, t0, where, bore=0.075, brake=True, light=True, ground=True):
-        """Her main gun fires: a flash at the muzzle (and to both sides through a brake), a grey-brown cloud thrown out
-        along the bore, and the dust the blast lifts from the ground under it."""
+        """Her main gun fires. Through a muzzle brake the flash is thrown out sideways: two short yellow-white jets left
+        and right of the brake and only a small tongue ahead. A plain muzzle gives a short cone ahead. Orange at the
+        edges, bright for an instant and gone in a tenth of a second; then the grey-brown cloud along the bore, and the
+        dust the blast lifts from the ground under it. Its light is small and warm: a pool on the ground under the
+        muzzle, a touch on the faces that see it, never the whole field."""
         g = self.rng
         k = (bore / 0.075) ** 0.8
 
         def make(t, at, facing):
             side = facing.cross(Z).normalized()
             up = side.cross(facing)
-            q = facing.to_track_quat("X", "Z")
-            for i in range(3):       # the flash: long along the bore
-                p = self.puff(t, at + facing * (0.35 + 0.55 * i) * k, vel=facing * 9.0, life=0.07 + 0.02 * i, r=(0.2 * k, (0.62 - 0.1 * i) * k), col=(1.0, 0.74, 0.34), col2=(1.0, 0.4, 0.1),
-                              alpha=1.0, kind="glow", drag=6.0, wind=0.0, squash=(2.3, 1.0, 1.0), fade_in=0.008, grow=0.4)
-                p["ob"].rotation_euler = q.to_euler()
-            if brake:                # and out of each side of the brake
+
+            def tongues(n, way, spread, long0, long1, root, thick=1.0):
+                # (flame in ragged tongues, each its own length and shade: never one solid shape)
+                for i in range(n):
+                    long = g.uniform(long0, long1) * k
+                    d = (way + side * g.uniform(-spread, spread) + up * g.uniform(-spread * 0.8, spread)).normalized()
+                    kk = g.uniform(0.85, 1.2)
+                    wide = (0.1 * long + 0.035 * k) * thick
+                    p = self.puff(t, root + d * (0.5 * long + 0.03), vel=d * g.uniform(3.0, 8.0), life=g.uniform(0.1, 0.15), r=(0.8, 1.0), col=(0.27 * kk, 0.078 * kk, 0.009),
+                                  col2=(0.2, 0.035, 0.005), alpha=0.95, kind="tongue" if i % 4 else "lick", wind=0.0,
+                                  squash=(0.5 * long, wide, wide), fade_in=0.002, grow=0.5, hold=0.3, cool=0.9)
+                    p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+
+            def heart(root, way, long, r):
+                # (the yellow-white heart of a jet: small, and gone before the orange round it)
+                p = self.puff(t, root + way * long * 0.4, vel=way * 2.0, life=0.075, r=(r, r * 1.5), col=(0.75, 0.56, 0.26), col2=(0.7, 0.3, 0.07), alpha=0.8, kind="glow", wind=0.0,
+                              squash=(long / r * 0.5, 1.0, 1.0), fade_in=0.002, grow=0.4, hold=0.3)
+                p["ob"].rotation_euler = way.to_track_quat("X", "Z").to_euler()
+
+            if brake:                # out of each side of the brake, and a small tongue ahead
+                vent = at - facing * 0.14 * k
+                for hand in (1.0, -1.0):
+                    d = (side * hand + facing * 0.22 + up * 0.05).normalized()
+                    tongues(5, d, 0.15, 0.65, 1.3, vent + d * 0.05)
+                    heart(vent + d * 0.06, d, 0.5 * k, 0.085 * k)
+                tongues(2, facing, 0.1, 0.25, 0.5, at, thick=0.8)
+                heart(at, facing, 0.18 * k, 0.05 * k)
+            else:                    # a plain muzzle: a short cone ahead
+                tongues(8, facing, 0.24, 0.4, 1.05, at, thick=1.15)
+                heart(at, facing, 0.42 * k, 0.1 * k)
+            if brake:                # the gas that follows the flash out of the brake, to each side
                 for hand in (1.0, -1.0):
                     d = (side * hand + facing * 0.35 + up * 0.08).normalized()
-                    p = self.puff(t, at - facing * 0.12 + d * 0.3 * k, vel=d * 7.0, life=0.08, r=(0.12 * k, 0.42 * k), col=(1.0, 0.7, 0.3), col2=(1.0, 0.36, 0.1), alpha=1.0, kind="glow",
-                                  drag=6.0, wind=0.0, squash=(2.0, 0.8, 0.8), fade_in=0.008, grow=0.4)
-                    p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
                     for i in range(5):
                         c = g.uniform(0.62, 0.78)
                         self.puff(t + 0.02, at, vel=d * g.uniform(8, 22) * k + up * g.uniform(-1, 3), life=g.uniform(1.8, 3.2), r=(0.16 * k, g.uniform(0.8, 1.4) * k), col=(0.6, 0.5, 0.36),
@@ -579,7 +621,10 @@ class Air(stage.Effects):
                     self._dust_puff(t + 0.03 + 0.012 * out.length, foot + out + Z * 0.12, away * g.uniform(1.5, 6.0) + Z * g.uniform(0.4, 2.2), big=g.uniform(0.7, 1.25) * k, thick=1.25,
                                     life=g.uniform(2.6, 4.8))
             if light:
-                self.light(t, at + facing * 0.9 * k + Z * 0.2, 9.0e3 * k * k, 0.1, r=0.6)
+                # (one frame, warm, short of reach: faces that see the muzzle brighten by a fifth at most, the ground
+                # under it gets a warm pool)
+                self.light(t, at + facing * 0.25 * k + Z * 0.1, FLASH_TOUCH * k * k, 0.09, col=(1.0, 0.6, 0.28), r=0.35)
+                self.spot(t, at + Z * 0.05, FLASH_POOL * k * k, 0.09)
         self.once(t0, where, make)
 
     def shaken(self, t0, spots, thick=1.0):

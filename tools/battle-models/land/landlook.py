@@ -57,7 +57,7 @@ def main():
     cam = kit.camera("cam", 50.0)
     xs = [p.x for p in m.verts]
     zs = [p.z for p in m.verts]
-    L, H = max(xs) - min(xs), max(zs)
+    L, H = max(xs) - min(xs), min(max(zs), 1.36 * works.body_top(m))
     cx = (max(xs) + min(xs)) / 2
     shots = {
         "front": ((cx + L * 1.05, -L * 0.85, H * 1.0), (cx + 0.3, 0, H * 0.36), 50),

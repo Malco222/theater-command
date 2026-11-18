@@ -444,9 +444,10 @@ class Fittings:
                 ring = [c + d * (math.cos(t) * 0.06) + side * (math.sin(t) * 0.04) for t in (2 * math.pi * k / 10 for k in range(10))]
                 self.tube(ring, r * 1.25, paint, 5, closed=True)
 
-    def spare_links(self, a, b, count, pitch, wide, facing, paint="track", thick=0.03, part=None, horn=False, style=None, bar=True):
+    def spare_links(self, a, b, count, pitch, wide, facing, paint="upper", thick=0.03, part=None, horn=False, style=None, bar=True):
         """A run of spare track links lying on a plate from a toward b, their backs to the plate, held by a flat bar
-        across them. The links are the same links the track is made of."""
+        across them. The links are the same links the track is made of, painted over in her coat as the crews did:
+        hung spares do no work, so nothing on them is polished and they are never brighter than the plate they hang on."""
         if not self.fine:
             return
         a, b = Vector(a), Vector(b)
@@ -462,8 +463,12 @@ class Fittings:
             self.m.use(part)
         for k in range(count):
             c = a + along * (pitch * (k + 0.5)) + f * 0.004
-            for vs, fs, pa, _ in shape:
+            for vs, fs, pa, shine in shape:
+                before = len(self.m.faces)
                 self.m.add([c + along * u + across * v + f * w for u, v, w in vs], fs, pa, False, None, part)
+                # (no polish: on the coat a flag is edge wear, and only the cleats' faces, where a boot or a branch
+                # rubs, carry a little)
+                self.flag(before, [x * 0.3 for x in shine] if shine else None)
         if bar:
             m = Matrix((along, across, f)).transposed()
             for off in (-wide * 0.3, wide * 0.3):
