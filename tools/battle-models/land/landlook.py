@@ -48,7 +48,7 @@ def main():
         rigid.apply_pose(arm, pose, model=m)
     landmarks.put(m, ob, arm)
     rut = abs(next(iter(v.belts.values()))["y"]) if v.belts else 0.9
-    towed = "carriage" in m.part_at                       # (a towed gun: no tank has run where she stands)
+    towed = not v.belts                                   # (a gun or a lorry: no tank has run where she stands)
     if opt.get("ground", "meadow") == "battle":
         field = ground.Battle(rut=rut, ruts=not towed)
     else:

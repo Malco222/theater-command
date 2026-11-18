@@ -54,11 +54,12 @@ class Show:
         self.burnt(0.0)
         belt = next(iter(self.v.belts.values())) if self.v.belts else None
         rut = abs(belt["y"]) if belt else 0.9
-        self.towed = "carriage" in self.m.part_at        # (a towed gun: no tank has run where she stands)
-        if self.towed:
+        self.towed = "carriage" in self.m.part_at        # (a towed gun)
+        self.carrier = "steer_l" in self.m.part_at       # (a lorry or a half-track)
+        if not belt:                                     # (no tank has run where she stands)
             rut = 400.0
         if field == "battle":
-            field_kw.setdefault("ruts", not self.towed)
+            field_kw.setdefault("ruts", bool(belt))
             self.field = ground.Battle(rut=rut, rut_wide=belt["wide"] if belt else 0.3, pitch=belt["pitch"] if belt else 0.12, **field_kw)
         else:
             self.field = ground.Field(kind=field, rut=rut, grass=grass, density=density, **field_kw)
@@ -210,6 +211,10 @@ def sheet(name, out, opt, w, h, spp):
             ("breech", "Breech and laying gear, close", (-L * 0.52, L * 0.38, H * 1.25), (-0.25, 0.05, H * 0.5), 50, 50.0, {}),
             ("road", "Closed up for the road, her trail on the hook", (cx - L * 0.9, -L * 1.2, H * 1.15), (cx, 0, H * 0.36), 50, -32.0, S.play("towed", 0.0)),
         ]
+    if S.carrier:        # a carrier: her wheels and tracks from a little further off; her last picture is the way down thrown open for the men
+        shots[4] = ("gear", "Wheels and running gear", (cx + L * 0.66, -L * 0.92, 1.05), (cx + L * 0.02, -0.8, 0.5), 50, 55.0, {})
+        shots[-1] = ("open", "The way down thrown open", (cx - L * 1.02, -L * 0.8, H * 1.25), (cx - L * 0.16, 0, H * 0.4), 50, -30.0,
+                     rigid.merge(S.play("dismount", 1.2), rigid.aim(m, "mg_mount", 24.0) if "mg_mount" in m.part_at else {}))
     only = opt.get("views", "").split(",") if opt.get("views") else None
     files, labels = [], []
     for key, label, eye, tgt, lens, sun, pose in shots:
@@ -386,6 +391,11 @@ def action(name, out, opt, w, h, spp, fps, only):
     t_fire = math.ceil((t_lift1 + 0.4) * fps) / fps - 0.012      # (the shot falls just before a frame, so the flash's one bright instant is seen)
     t_mg = t_fire + 2.0
     long = float(opt.get("long", t_mg + 1.9))
+    t_open = t2 + 0.5
+    mg_at = "coax" if S.has("coax") else ("mg" if S.has("mg") else None)
+    if S.carrier:        # a carrier: she halts, the way down is thrown open, her machine gun fires a burst
+        t_mg = t2 + 2.0
+        long = float(opt.get("long", t_mg + 1.7 if mg_at else t_open + 2.6))
     brake_rate = S.clip["stop"].get("rest", 0.0) / (t2 - t1) if "stop" in S.clip else 0.0
     print(f"  halts {t2:.2f}s, lays {t_train0:.2f} to {t_lift1:.2f}s, fires {t_fire:.3f}s (frame {int(t_fire * fps) + 2}), {long:.1f}s in all", flush=True)
 
@@ -422,8 +432,8 @@ def action(name, out, opt, w, h, spp, fps, only):
     if S.has("muzzle"):
         S.fx.gun(t_fire, S.where("muzzle"), bore=m.info.get("bore", 0.075), brake=m.info.get("brake", True))
         S.fx.shaken(t_fire + 0.02, [S.where(s) for s in S.sockets("dust.")] + [S.where("engine")] if S.has("engine") else [])
-    if S.has("coax"):
-        S.fx.mg(t_mg, S.where("coax"))
+    if mg_at:
+        S.fx.mg(t_mg, S.where(mg_at))
     eye = Vector((13.5, -8.2, 1.55))
 
     def step(t):
@@ -432,7 +442,8 @@ def action(name, out, opt, w, h, spp, fps, only):
         b = trained(t) if has_turret else 0.0
         stop = S.play("stop", (t - t1) * brake_rate) if brake_rate else S.play("stop", t - (t2 - 0.35))
         poses = [S.rolled(d), S.play("drive", t, weight=min(1.0, speed(t) / 3.0)) if t < t2 else {}, stop,
-                 S.train(b, lift * ease(t_lift0, t_lift1, t)), S.play("fire", t - t_fire), S.about_turret(S.play("fire.rock", t - t_fire), b)]
+                 S.train(b, lift * ease(t_lift0, t_lift1, t)), S.play("fire", t - t_fire), S.about_turret(S.play("fire.rock", t - t_fire), b),
+                 S.play("dismount", t - t_open) if S.carrier else {}]
         S.set(*poses)
         S.fx.at(t)
         # the camera stands by the road and follows her, a little behind her going

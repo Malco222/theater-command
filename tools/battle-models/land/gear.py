@@ -62,7 +62,7 @@ class Gear:
             for k in range(holes):
                 a = 2 * math.pi * (k + 0.5) / holes
                 at = c + out * (d_dish + web * 0.5 + 0.002) + (side * math.cos(a) + up * math.sin(a)) * rw
-                m.lathe(at, out, [(0.0, 0.0), (0.0, hr)], "black", 10)
+                m.lathe(at, out, [(0.0, 0.0), (0.0, hr)], "black", m.n(20, 8) if hr > 0.03 else 10)      # (a lorry's big holes are seen close: round)
         if ribs:
             rw0, rw1 = rh * 1.1, rr - lip * 2.6
             for k in range(ribs):

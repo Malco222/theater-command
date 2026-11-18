@@ -3,6 +3,7 @@
 BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name] says whose it is, what it does on the
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
+import carriers
 import guns
 import tanks_any
 import tanks_fra
@@ -33,6 +34,9 @@ BUILDERS = {
     "25pdr": guns.pounder25,
     "Howitzer105": guns.howitzer105,
     "ZiS3": guns.zis3,
+    "Truck": carriers.truck,
+    "Hanomag": carriers.hanomag,
+    "M3Halftrack": carriers.m3_halftrack,
 }
 
 ABOUT = {
@@ -54,6 +58,9 @@ ABOUT = {
     "25pdr": {"nation": "UK", "role": "field gun", "years": "1940-45", "units": "artillery (Britain and the Commonwealth)"},
     "Howitzer105": {"nation": "USA", "role": "field howitzer", "years": "1941-45", "units": "artillery (United States)"},
     "ZiS3": {"nation": "SOV", "role": "field gun", "years": "1942-45", "units": "artillery (Soviet Union)"},
+    "Truck": {"nation": "any", "role": "lorry", "years": "1936-45", "units": "carrier (every nation but Germany and the United States), and what tows the guns"},
+    "Hanomag": {"nation": "GER", "role": "armoured half-track", "years": "1939-45", "units": "carrier (Germany)"},
+    "M3Halftrack": {"nation": "USA", "role": "armoured half-track", "years": "1941-45", "units": "carrier (United States)"},
 }
 
 
@@ -65,6 +72,8 @@ FACES = {
                  ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
                  ("1943 on: the long gun, dark yellow", {"gun": "long", "paint": "yellow"})],
     "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "Hanomag": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "Truck": [("Under her tilt", {}), ("The tilt stowed: her benches", {"tilt": False})],
 }
 
 
