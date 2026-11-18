@@ -12,8 +12,9 @@
 //     is lit: every working track from its own province outward.
 import { describe, expect, it } from 'vitest';
 import { turnToDate } from '../src/core/ticket';
-import { addCorps, createGame, litTracks, nearestBreak, railReach, railReachFor, railSays, rideLines, roomForAll, whyNoTrain, whyNoTrainFor } from '../src/campaign/game';
+import { addCorps, createGame, litTracks, relocate, setWar, nearestBreak, railReach, railReachFor, railSays, rideLines, roomForAll, whyNoTrain, whyNoTrainFor } from '../src/campaign/game';
 import { cutRail, mendRail, onNet, railsAt } from '../src/campaign/rails';
+import { besieged, garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { KIND, type Corps, type Game, type Kind, type Region } from '../src/campaign/types';
 
@@ -106,6 +107,20 @@ describe('a break he can act on is marked, and an aside is not (the art director
     const no = whyNoTrainFor(g, [c, mate], far[0])!;
     expect(no.line.startsWith(`${mate.name} cannot go by rail, so nobody rides. No train for ${mate.name} this month:`)).toBe(true);
     expect(no.strong).toBeUndefined();
+  });
+
+  it('a garrison: shut in where the town is besieged, and told to take the field first where it is not (the 3D builder, 18 November)', () => {
+    const g = grand();
+    setWar(g, 'GER', 'POL');
+    const town = g.byName['Lodz'];
+    for (const u of [...town.units]) relocate(g, u, g.byName['Warsaw']);
+    const c = corps(g, 'POL', 'inf', town);
+    expect(garrison(g, c)).toBe(true);
+    expect(besieged(g, town)).toBe(false);
+    expect(whyNoTrain(g, c)).toEqual({ code: 'town', line: `${c.name} is inside the town at Lodz. Take the field first: the train leaves from the country round it.`, at: town.id });
+    relocate(g, corps(g, 'GER', 'inf', g.byName['Upper Silesia']), town);
+    expect(besieged(g, town)).toBe(true);
+    expect(whyNoTrain(g, c)!.line).toBe(`${c.name} is shut in the town at Lodz. No train leaves a siege.`);
   });
 });
 
