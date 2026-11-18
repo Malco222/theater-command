@@ -919,14 +919,15 @@ function frame(): void {
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** How the day went against the chance the staff gave it, in the UI director's plain words (no dice on the player's page). */
-function reckoned(carried: boolean, chance: number, practice = false, said?: CardSaid): string {
+function reckoned(carried: boolean, chance: number, practice = false, said?: CardSaid, siege = false): string {
   // Where the card printed a band, its own figures (b476(4)): "60 to 100%", or its best guess where it printed one.
   const end = said ? said.end : chance >= 0.995 ? 'sure' : chance <= 0.005 ? 'none' : null;
   if (end === 'sure') return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
   if (end === 'none') return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
   const figure = !said ? `about ${Math.round(chance * 100)}%` : said.guess !== null ? `about ${said.guess}%` : said.lo === said.hi ? `about ${said.lo}%` : `${said.lo} to ${said.hi}%`;
-  // A practice ground is not a place to take (b408): there the staff gave him a chance to win it.
-  const p = `they gave you ${figure} to ${practice ? 'win' : 'take'} it.`;
+  // A practice ground is not a place to take (b408): there the staff gave him a chance to win it. Nor is a town that
+  // holds out after the battle round it: the chance was the battle's.
+  const p = `they gave you ${figure} to ${practice || siege ? 'win' : 'take'} it.`;
   if (carried) return chance < 0.5 ? `You did better than the staff expected: ${p}` : `As the staff expected: ${p}`;
   return chance >= 0.5 ? `You did worse than the staff expected: ${p}` : `As the staff feared: ${p}`;
 }
@@ -976,7 +977,9 @@ function showAfter(): void {
   let told = '', price = '', sides = '';
   if (rep) {
     const place = rep.regionName;
-    told = rep.siege ? `The country round ${esc(t.place.town ?? place)} was won, but the town holds out: ${esc(place)} is under siege.`
+    // A capital or a city is fought in its outer streets (field.ts streetsOf): its old town holds out (the third playtester).
+    told = rep.siege ? (rep.streets ? `The battle in ${esc(t.place.town ?? place)}'s outer streets was won, but the old town holds out: ${esc(place)} is under siege.`
+      : `The country round ${esc(t.place.town ?? place)} was won, but the town holds out: ${esc(place)} is under siege.`)
       : rep.gates ? `The army outside was beaten, and ${esc(t.place.town ?? place)} opened its gates. ${esc(place)} has fallen.`
         : rep.taken ? `${esc(place)} was taken.` : `The attack on ${esc(place)} was thrown back.`;
     const sum = (us: typeof rep.attackers): number => us.reduce((s, u) => s + u.men, 0);
@@ -984,7 +987,7 @@ function showAfter(): void {
     const pct = (l: number, m: number): string => (m > 0 ? `, ${Math.max(1, Math.round((100 * l) / m))}% of those sent in,` : '');
     price = `It cost you ${num(aLost)} men${pct(aLost, sum(rep.attackers))} against ${num(dLost)} of theirs${rep.prisoners ? `, and ${num(rep.prisoners)} were taken prisoner` : ''}.`;
     // As the campaign's own report says it: a corps with no fate of its own fell back if its side lost.
-    const list = (us: typeof rep.attackers, won: boolean): string => us.map((u) => `<li><b>${esc(u.name)}</b> <span>${facts([`${u.divs} division${u.divs === 1 ? '' : 's'}`, `lost ${num(u.lost)}`, u.fate === '' && !won ? 'fell back' : FATE[u.fate] ?? u.fate])}</span></li>`).join('');
+    const list = (us: typeof rep.attackers, won: boolean): string => us.map((u) => `<li><b>${esc(u.name)}</b> <span>${facts([`${u.divs} division${u.divs === 1 ? '' : 's'}`, `lost ${num(u.lost)}`, u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && rep.streets ? 'fell back into the old town' : FATE[u.fate] ?? u.fate])}</span></li>`).join('');
     sides = `<div class="aside2"><div><h3 class="tc-label">${esc(A)} attack</h3><ul>${list(rep.attackers, rep.taken)}</ul></div><div><h3 class="tc-label">${esc(D)} defence</h3><ul>${list(rep.defenders, !rep.taken)}</ul></div></div>`;
   }
   const paid = rep?.paid ? `<p class="paid">${esc(rep.paid.att)}</p>` : '';
@@ -997,7 +1000,7 @@ function showAfter(): void {
     ${rep ? `<p class="told"><b>${told}</b> ${price}</p>${paid}` : ''}
     <h3 class="tc-label">On the field</h3><ul class="flines">${fieldLines}</ul>
     <h3 class="tc-label">Against the staff's reckoning</h3>
-    <p class="dice">${esc(reckoned(won, chance, !rep, S.offer?.band?.said))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
+    <p class="dice">${esc(reckoned(won, chance, !rep, S.offer?.band?.said, !!rep?.siege))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
     ${settled?.drift ? '<p class="warn">The campaign moved while the battle was fought: its odds are not the card\'s any more.</p>' : ''}
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>

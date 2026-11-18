@@ -3,7 +3,7 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut, type BreakCause } from '../src/battle/core';
-import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, streetsOf, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
@@ -1056,6 +1056,8 @@ describe('the hand-off with a real campaign', () => {
     expect(rep).not.toBeNull();
     expect(rep.odds).toBeCloseTo(b.over!.R);
     expect(rep.taken || rep.siege === true).toBe(b.over!.R >= 1.2);
+    // A capital or a city was fought in its streets: the report says so, for the after card's words (the third playtester).
+    expect(rep.streets).toBe(streetsOf(t.place) ?? undefined);
   });
   it('a second attack on the same place this month keeps its ground and draws a fresh day\'s luck (the review, 21:55)', () => {
     // Over a handful of places: an attack thrown back leaves a report, and the next ticket for that place counts it.

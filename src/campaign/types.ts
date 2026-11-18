@@ -460,6 +460,12 @@ export interface BattleReport {
   town?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
+  /**
+   * Fought by hand on the field in a capital's or a city's streets (src/battle/land/field.ts streetsOf): the field drew the
+   * battle in its outer streets, so the after card says so, and that its old town holds out under a siege (the third
+   * playtester's hand check of 4086e97).
+   */
+  streets?: 'capital' | 'city';
   /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
   gates?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */

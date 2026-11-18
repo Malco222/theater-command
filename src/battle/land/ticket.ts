@@ -14,7 +14,7 @@ import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign
 import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
-import type { LandPlace } from './field';
+import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 
 /** The corps that would actually go in, as the attack card and the battle count them. */
@@ -154,7 +154,12 @@ export function cardKnows(g: Game, t: FieldTicket<LandPlace>): Set<number> {
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */
 export function handBack(g: Game, corps: Corps[], target: Region, result: FieldResult): BattleReport | null {
-  return orderAttack(g, corps, target, result.R, fieldBill(result));
+  // The field drew a capital or a city as streets (read before the attack moves anything): the after card tells the
+  // battle as fought in them.
+  const streets = streetsOf({ terrain: target.terrain, townSize: townSize(g, target) } as LandPlace);
+  const rep = orderAttack(g, corps, target, result.R, fieldBill(result));
+  if (rep && streets) rep.streets = streets;
+  return rep;
 }
 
 /** The odds the campaign would give this attack now, for a check that nothing moved between the ticket and the hand-back. */

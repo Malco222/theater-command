@@ -7010,10 +7010,10 @@ function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** A corps after the battle: what it lost and what became of it. */
-function fateCard(u: BattleReport['attackers'][number], won: boolean): string {
+function fateCard(u: BattleReport['attackers'][number], won: boolean, streets = false): string {
   const left = u.men > 0 ? Math.max(0, 1 - u.lost / u.men) : 0;
   const gone = u.fate === 'surrendered' || u.fate === 'destroyed';
-  const fate = u.fate === '' && !won ? 'fell back' : FATE[u.fate];
+  const fate = u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && streets ? 'fell back into the old town' : FATE[u.fate];
   const named = corpsNamed(g, u.nat, u.name);
   return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(named)} · ${num(u.men)} men, lost ${num(u.lost)}">
     <span class="utop"><svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[u.nat].color}"/>${symbol(u.kind, 24, 15)}</svg></span><b>${esc(named)}</b>
@@ -7167,7 +7167,7 @@ function resultLine(r: BattleReport): string {
   const held = mine ? `${r.regionName} is yours.` : me && allied(g, me, place.ctrl) ? `${r.regionName} is freed.` : `${r.regionName} is taken.`;
   const and = town === r.regionName ? (mine ? ' and is yours.' : '.') : `. ${held}`;
   // (An attack thrown back, and a battle he defended, are told by a slip only where the staff settled them: b464(4).)
-  const what = !r.taken && !r.siege ? `The attack on ${r.regionName} was thrown back.` : r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
+  const what = !r.taken && !r.siege ? `The attack on ${r.regionName} was thrown back.` : r.siege ? (r.streets ? `${town}'s outer streets are won. The old town holds out.` : `The country round ${town} is won. The town holds out.`) : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
   if (r.yielded) return `${what} The defenders fell back before the blow.`;
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
   const [ours, theirs] = defending(r) ? [d, a] : [a, d];
@@ -7233,7 +7233,7 @@ function reportCard(r: BattleReport): string {
       // A joint army attacks under the flag of the nation that commands it.
       nats: [...new Set(role === 'attacking' ? [r.attNat, ...us.map((u) => u.nat)] : us.map((u) => u.nat))], role, men: total, corps: us.filter((u) => !u.guard).length, divs: us.reduce((s, u) => s + u.divs, 0),
       under: `<div class="floss"><span class="meter"><i class="low" style="width:${Math.round(share * 100)}%"></i></span><small>${line}</small></div>`,
-      cards: us.map((u) => fateCard(u, won)).join(''),
+      cards: us.map((u) => fateCard(u, won, !!r.streets)).join(''),
     };
   };
   const share = r.aPower / Math.max(1e-9, r.aPower + r.dPower);
@@ -7249,7 +7249,8 @@ function reportCard(r: BattleReport): string {
   const told = r.town ? (r.taken ? (one ? `${town} was stormed and has fallen.` : `${town} was stormed: ${esc(r.regionName)} has fallen.`) : `The assault on ${town} was thrown back. The siege goes on.`)
     : r.sally ? (r.taken ? `The garrison of ${town} drove off the army round it. The siege is raised.` : `The sortie from ${town} was beaten back inside the walls. The siege goes on.`)
     : r.relief ? (r.taken ? `The army round ${town} was driven off. The siege is raised.` : `The attempt to relieve ${town} failed. The siege goes on.`)
-    : r.siege ? `The country round ${town} was won, but the town holds out. ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
+    // A battle fought by hand in a capital's or a city's streets was for its outer streets: its old town holds out.
+    : r.siege ? `${r.streets ? `The battle in ${town}'s outer streets was won, but the old town holds out.` : `The country round ${town} was won, but the town holds out.`} ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
     : r.gates ? `The army outside was beaten, and ${town} opened its gates without a fight. ${one ? 'It' : esc(r.regionName)} has fallen.`
     : r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`;
   const mineNow = !!r.siege && r.turn === g.turn && humanUp(g) && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human));
