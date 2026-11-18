@@ -474,6 +474,51 @@ CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 
 ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
 
+# ---- later coats of paint ----------------------------------------------------------------------------------
+# The same machine in other colours, by the month they come in (the art director's unit table, `carrier_paint`). The
+# file lists them under `schemes`; the game paints her in the last one whose month has come.
+_THREE_BLUES = {"upper": "2A3850", "upper2": "55708C", "under": "D9DAD3", "nose": "2A3850"}
+_SEA_BLUE = {"upper": "1E2A40", "upper2": "1E2A40", "under": "1E2A40", "nose": "1E2A40"}
+_DARK_GREEN = {"upper": "2F4236", "upper2": "2F4236", "under": "A3A69C"}
+SCHEMES = {
+    "Hellcat": [("1944-07", "overall sea blue", _SEA_BLUE)],
+    "Dauntless": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
+    "Avenger": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
+    "Zero": [("1942-07", "dark green over grey", _DARK_GREEN)],
+    "Kate": [("1942-07", "dark green over grey", _DARK_GREEN)],
+    "Val": [("1942-07", "dark green over grey", _DARK_GREEN)],
+}
+# (the Dauntless and the Avenger are one colour on top in 1941, but their skins are laid out for the three blues that
+#  follow: the band down their sides and their fins are `upper2`, the same blue-grey until the later coat)
+EXTRA_PLANES["Dauntless"]["graded"] = navy_blues(EXTRA_PLANES["Dauntless"]["hull"], 2.1, -3.6)
+EXTRA_PLANES["Avenger"]["graded"] = navy_blues(EXTRA_PLANES["Avenger"]["hull"], 2.3, -4.9)
+
+
+def paints_of(G, s, colours=None):
+    """Every paint of a machine, by name, from her numbers (or from them with some colours changed: a later coat)."""
+    c = G["colours_of"](dict(s, colours=dict(s["colours"], **colours)) if colours else s)
+    paints = {k: c.get(k, "808080") for k in G["PAINTS"]}
+    paints["torn"] = "2B2825"
+    paints["blur"] = "3A3A36"
+    paints["blur_tip"] = "D9B224"
+    paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
+    paints.update(fitout.paints_for(s))
+    paints.update(fitout.rivet_paints(paints))
+    return paints, c
+
+
+def schemes_of(G, name, s, paints, ink):
+    """Her later coats as the file gives them: when each comes in, its name, and only the paints it changes."""
+    out = []
+    for start, title, change in SCHEMES.get(name, []):
+        later, c = paints_of(G, s, change)
+        entry = {"from": start, "name": title, "colours": {k: v for k, v in later.items() if paints.get(k) != v}}
+        if c["ink"] != ink:
+            entry["number_ink"] = c["ink"]
+        out.append(entry)
+    return out
+
+
 # ---- her record, painted on her ----------------------------------------------------------------------------
 # Brian, 2026-11-18: an ace's kills by his cockpit, a bomber's missions as rows of small yellow bombs on her nose, a
 # star over a mission she led. The file says where each mark goes (a slot: a place on her port side and the way her
@@ -619,15 +664,8 @@ def convert(name, fine=True):
     fin_high = max(r[3] for r in fins[0][0]) - min(r[3] for r in fins[0][0])
     BATTLE.update(hull=max(0.15, (body.front - body.back) / 80.0), wing=max(0.24, half / 44.0), tail=max(0.22, tailw.tip / 14.0), fin=max(0.2, fin_high / 12.0))
     parts, hull = G["build"](s, fine)
-    colours = G["colours_of"](s)
     paint_names = list(PAINTS)
-    paints = {k: colours.get(k, "808080") for k in paint_names}
-    paints["torn"] = "2B2825"
-    paints["blur"] = "3A3A36"
-    paints["blur_tip"] = "D9B224"
-    paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
-    paints.update(fitout.paints_for(s))
-    paints.update(fitout.rivet_paints(paints))
+    paints, colours = paints_of(G, s)
     role = ROLE.get(name, "fighter")
     m = Model(name, s.get("title", name), "aircraft", paints, fine)
     chords = CHORDS if fine else CHORDS_PLAIN
@@ -1138,6 +1176,9 @@ def convert(name, fine=True):
     f.windows = [(port(c), radii) for c, radii in windows]
     if s.get("bare"):
         m.info["file"]["finish"] = "bare metal"             # (her skin is unpainted: it shines as metal does)
+    later = schemes_of(G, name, s, paints, colours["ink"])
+    if later:
+        m.info["file"]["schemes"] = later                   # (her later coats of paint, by the month each comes in)
     if has_torpedo:
         m.info["file"]["loads"] = (["torpedo", "bombs"] if has_bombs else ["torpedo"])
     f.bay, f.bay_half, f.rings_x = (bay if fine else None), BAY_HALF, rings_x

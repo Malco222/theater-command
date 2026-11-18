@@ -84,9 +84,11 @@ class Air:
 
 
 class Plane:
-    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None):
+    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
+        if scheme:                                           # (seen in a later coat of paint: the month it comes in, as her file gives it)
+            self.m.paints.update(next(c for c in self.m.info["file"]["schemes"] if c["from"] == scheme)["colours"])
         bare = self.m.info["file"].get("finish") == "bare metal"
         self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=True)) if bare else plane_look, crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)

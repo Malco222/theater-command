@@ -169,6 +169,20 @@ What they add to the form:
   plane in other paint. The Hellcat is deep and portly with a chin intake (`scoops`), a short hood with metal
   behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
   fin; the Val has the rounded, elliptical wing. The plain three stay plain and borrow none of these.
+- **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
+  the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
+  in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`
+  by `paint_names`) and, where it changes, `number_ink`. Paint her in the last one whose month has come.
+
+  | file | to begin with | later |
+  | --- | --- | --- |
+  | `Hellcat` | three blues over white | overall sea blue from 1944-07 |
+  | `Dauntless`, `Avenger` | blue-grey over light grey | three blues over white from 1943-02, overall sea blue from 1944-07 |
+  | `Zero`, `Kate`, `Val` | pale grey | dark green over grey from 1942-07 |
+
+  The Dauntless and the Avenger are one colour on top to begin with, but their skins are laid out for the three
+  blues: the band down their sides and their fins are `upper2`. `airlook.py ... scheme=1944-07` shows a machine in
+  a later coat.
 - **Matt paint, and less light from below** (`SKIN` and `BACK_LIGHT` in `airshow.py`, the pictures only). The war's
   paints were matt: roughness 0.6, shine 0.25. And the sunlit cloud and haze under her light her belly with half
   their brightness, or a white belly is as bright as the sky behind it and a pale wing seen from just below is lost

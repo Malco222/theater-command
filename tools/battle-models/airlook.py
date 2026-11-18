@@ -1,6 +1,6 @@
 """A close look at one aircraft, for judging her detail.
 
-    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word]
+    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word] [scheme=YYYY-MM]
 
 views:  front   from ahead and to port, a little above (the sheet's view, closer)
         hood    close on her hood and nose, from ahead and above
@@ -12,7 +12,7 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
         record  close on the record painted on her port side (kills, missions); rudder: on a German fighter's rudder;
                 nose: a bomber's port nose from a little further off; ace: a fighter's pilot and his score together
 record= is what she has done, e.g. record='{"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19]}'
-(see marks.record); tag= is added to the pictures' names.
+(see marks.record); tag= is added to the pictures' names; scheme= shows her in a later coat of paint (the month it comes in).
 A clip named after the views is laid over `fly` at the time given (bank.port@0.9, watch@2.0, flaps.down@1.5).
 """
 import json
@@ -41,7 +41,8 @@ def main():
     os.makedirs(out, exist_ok=True)
     A = Air(clouds=12.0)
     stage.render_setup(w, h, spp)
-    p = Plane(A, name, record=rec)
+    scheme = next((a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("scheme=")), None)
+    p = Plane(A, name, record=rec, scheme=scheme)
     for c in extra:
         if c.startswith("load."):                        # (clip=load.bombs@0: she is seen with that load, not her usual one)
             p.carry(c.split("@")[0][5:])
