@@ -20,7 +20,7 @@ import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
+  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding,
   fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -293,7 +293,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
         forecast: `Meets any raid on the ships in the sea its fleet is in or the harbour it lies in, and any raid on troops on coasts within ${num(R.ftr)} km of it. It also keeps the enemy's coastal bombers off the fleet month by month. About ${num(f.ftr)} fighters can go up.`,
       }
       : {
-        key: 'patrol', label: 'Patrol the sky', on: idle && !with_, why: gone,
+        key: 'patrol', label: 'Patrol the sky', on: idle && !with_ && !f.close, why: gone,
         forecast: `Meets any raid within ${num(R.ftr)} km of ${home}, at full effect to ${far}: on troops and ships anywhere in that reach, and on the towns and works of ${plural(under, 'province')} it guards. About ${num(f.ftr * crowding(g, f))} fighters can go up.`,
       });
     const bombers = airFleetsOf(g, f.nat).filter((b) => b.id !== f.id && kindOf(b) !== 'ftr' && b.bmr > 0 && apart(g, f, b) <= R.ftr);
@@ -309,6 +309,12 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     }
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
+  // Close air support (Brian's ask of 2026-11-18, air.json 'close'): a land fighter group flies over its own side's
+  // battles in reach, in place of meeting raids and escorting.
+  if (closeRules(g) && kind !== 'bmr' && !deck) out.push({
+    key: 'close', label: 'Ground support', on: idle && !!f.close, why: gone,
+    forecast: `Flies over your own battles within ${num(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, never below ${pct(CLOSE.least)} readiness. Each battle costs it ${pct(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. It does not meet raids or escort bombers while it does this.`,
+  });
   const R2 = AIR.ready;
   out.push({ key: 'rest', label: 'Rest and refit', on: f.mission === 'rest', why: null, forecast: deck
     ? `Stands down: it regains ${pct(R2.rest)} readiness a month in place of ${pct(R2.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.`
@@ -316,12 +322,14 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   return out;
 }
 
-/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>' or 'rest'. */
+/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on) or 'rest'. */
 export function setGroupJob(g: Game, id: number, key: string, nat: string | null = g.human): boolean {
   const f = mine(g, id, nat);
   const job = f ? groupJobs(g, id, nat).find((j) => j.key === key) : undefined;
   if (!f || !job || job.why) return false;
-  if (key === 'rest') { delete f.escorts; return setMission(g, f, 'rest'); }
+  if (key === 'rest') { delete f.escorts; delete f.close; return setMission(g, f, 'rest'); }
+  if (key === 'close') { delete f.escorts; f.close = true; return setMission(g, f, 'support'); }
+  delete f.close;
   if (key === 'patrol') delete f.escorts; else f.escorts = Number(key.split(':')[1]);
   return setMission(g, f, 'support');
 }
