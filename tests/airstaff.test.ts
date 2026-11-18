@@ -1,8 +1,8 @@
 // The computer's air staff in the grand campaign, and what a raid costs there. Every computer nation at war plans
 // raids of its own at every level of difficulty and flies them at once: bombers against factories and railway
 // junctions by day or night, against the armies on a live front, and fighters for the sky over it. A raid's losses
-// are counted nearer history's: about a fifth of the bombers that go without escort into a strong patrol, and a
-// few in a hundred of those that are escorted. The historical scenarios keep the air war they always had.
+// are counted by the record (ruling 227): in 1939 a quarter to well over half of the bombers that go without escort
+// into a strong patrol, and far fewer of those that are escorted. The historical scenarios keep the air war they always had.
 import { describe, expect, it } from 'vitest';
 import airwar from '../data/campaign/airwar.json';
 import levels from '../data/campaign/difficulty.json';
@@ -65,7 +65,10 @@ describe('the numbers', () => {
   it('say what a raid costs and how the computer plans one', () => {
     const L = airwar.losses;
     expect(L.bombers).toBeGreaterThan(0.15);
-    expect(L.bombers + AIR.combat.flak).toBeLessThanOrEqual(L.most);
+    // Ruling 227: a day raid met by a full defence may lose what the record's worst lost (the Heligoland Bight, more than
+    // half), and no more; a night raid no more than before.
+    expect(L.day).toBeGreaterThanOrEqual(0.55);
+    expect(L.day).toBeLessThanOrEqual(0.6);
     expect(L.most).toBeLessThan(AIR.combat.maxBomberLoss);
     expect(L.power).toBeGreaterThan(1);
     expect(L.clash).toBeGreaterThan(0);
@@ -88,15 +91,15 @@ describe('the numbers', () => {
 });
 
 describe('what a raid costs in the grand campaign', () => {
-  it('about a fifth of the bombers that go by day without escort into a strong patrol, and a few in a hundred with one', () => {
+  it('a quarter to well over half of the bombers that go by day without escort into a strong patrol in 1939, and far fewer with one', () => {
     const g = grand('GER');
     const { b, escorts, target, patrol } = daylight(g);
     const alone = assessAir(g, [b], 'bomb', target);
     expect(alone.B).toBe(250);
     expect(alone.D).toBeGreaterThan(270);
     expect(alone.D).toBeLessThan(330);
-    expect(alone.bomberLoss).toBeGreaterThanOrEqual(0.15);
-    expect(alone.bomberLoss).toBeLessThanOrEqual(0.25);
+    expect(alone.bomberLoss).toBeGreaterThanOrEqual(0.25);
+    expect(alone.bomberLoss).toBeLessThanOrEqual(0.6);
     const escorted = assessAir(g, [b, ...escorts], 'bomb', target);
     expect(escorted.E).toBeGreaterThan(450);
     expect(escorted.E).toBeLessThan(550);
@@ -113,8 +116,9 @@ describe('what a raid costs in the grand campaign', () => {
     // However strong the patrol, a raid never loses more than the most the rules allow.
     for (const f of patrol) { f.mission = 'support'; f.ftr = 5000; }
     const worst = assessAir(g, [b], 'bomb', target);
-    expect(worst.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.most);
-    expect(worst.bomberLoss).toBeGreaterThan(alone.bomberLoss);
+    expect(worst.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.day);
+    expect(worst.bomberLoss).toBeGreaterThanOrEqual(alone.bomberLoss);
+    expect(worst.bomberLoss).toBeCloseTo(AIRWAR.losses.day, 9);
   });
 
   it('is what the flight then costs, within the luck of the day, and the escort fights less hard than in a fight for the sky', () => {
@@ -125,7 +129,9 @@ describe('what a raid costs in the grand campaign', () => {
     const sky = forecastAir(g, assessAir(g, [b, ...escorts], 'superiority', target), 'superiority', target);
     expect(fc.ftrLoss).toBeGreaterThan(0);
     expect(fc.ftrLoss).toBeCloseTo(sky.ftrLoss * AIRWAR.losses.clash, 6);
-    expect(fc.foeLoss).toBeCloseTo(sky.foeLoss * AIRWAR.losses.clash, 6);
+    // The fighter clash; the bombers' own guns bring down defenders besides (ruling 227).
+    expect(fc.foeGuns).toBeGreaterThan(0);
+    expect(fc.foeLoss - fc.foeGuns).toBeCloseTo((sky.foeLoss - sky.foeGuns) * AIRWAR.losses.clash, 6);
     expect(fc.worth).toBeGreaterThan(0);
     const rep = fly(g, 'GER', 'bomb', target, [b, ...escorts], ':test')!;
     const lostB = rep.att.reduce((s, x) => s + x.lostBmr, 0), lostF = rep.att.reduce((s, x) => s + x.lostFtr, 0);
@@ -224,11 +230,14 @@ describe('the computer\'s air staff', () => {
     const g = grand('FRA');
     // September 1939: Germany is at war with France and Poland, and fighting only Poland.
     airAI(g, 'GER');
-    const tactical = g.airReports.filter((r) => r.mission === 'ground' || r.mission === 'superiority');
+    const tactical = g.airReports.filter((r) => r.mission === 'ground' || r.mission === 'line' || r.mission === 'superiority');
     for (const r of tactical) expect(g.regions[r.region].units.some((u) => u.nat === 'FRA'), r.place).toBe(false);
-    // Over the months that follow the armies in the field are raided and the sky over them fought for.
+    // Over the months that follow the armies in the field are raided and the sky over them fought for. At the record's
+    // price a raid on the troops themselves seldom pays (ruling 227), so the staff goes for their fieldworks before its
+    // offensive goes in, and for the sky above them.
     const later = months(g, 10);
-    expect(later.some((r) => r.mission === 'ground')).toBe(true);
+    expect(later.some((r) => r.mission === 'ground' || r.mission === 'line')).toBe(true);
+    expect(later.some((r) => r.mission === 'superiority')).toBe(true);
     for (const r of later.filter((x) => x.mission === 'ground')) expect(r.result, r.place).toMatch(/organisation|little to hit/);
   });
 

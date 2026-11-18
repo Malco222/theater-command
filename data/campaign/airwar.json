@@ -38,13 +38,13 @@
     "value": 10
   },
   "ground": {
-    "_note": "A raid on troops. intensity is how hard the month's fighting is beside a fight for the sky (1). fighters is what one fighter is worth beside a bomber against troops. The organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max; troops in cover (by terrain) or dug in lose less. str is the share of the cut that is also lost in men and guns. fire is the share of the attacking fighters brought down by ground fire. value is what a point of the cut on one division counts for when the raid is judged.",
+    "_note": "A raid on troops: a month's raiding on the troops in one province. intensity is how hard the month's fighting is beside a fight for the sky (1). fighters is what one fighter is worth beside a bomber against troops. The organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max, the weight being the bombers that get through and the fighters at 'fighters', times the nation's weight row where it has one (airwar.json 'weight'); troops in cover (by terrain) or dug in lose less. str is the share of the cut also lost in men and guns. Priced by the record (ruling 227, b424 and b428; historian/air-on-armies-b422.md): a month of raids on one army in 1942 and 1943 cost it 0.1 to 0.3% of its strength, in 1941 up to about 1%, and an army falling back under a sky the enemy holds 1 to 2%. The organisation cut is twice the share of men lost, about the same fighting power for a month: organisation is the game's stand-in for what air did to movement and supply. Fitted on the raids the computer flew in twelve free wars: a German raid of the usual weight (240) on 12 divisions in the open costs them 0.3%, a Soviet one 0.1 to 0.15%, and 600 bombers with 1,000 fighters on 4 divisions under a clear sky 1.8%; never more than 2%. Close support inside a battle is counted on the battle card, not here. fire is the share of the attacking fighters brought down by ground fire. value is what a point of the cut on one division counts for when the raid is judged.",
     "intensity": 0.6,
     "fighters": 0.5,
-    "scale": 600,
-    "perDiv": 40,
-    "max": 0.35,
-    "str": 0.12,
+    "scale": 24000,
+    "perDiv": 1500,
+    "max": 0.04,
+    "str": 0.5,
     "floor": 0.1,
     "dug": 0.6,
     "cover": { "plains": 1, "desert": 1, "hills": 0.85, "marsh": 0.85, "forest": 0.7, "mountain": 0.7, "urban": 0.6 },
@@ -58,20 +58,44 @@
     "ready": 0.04
   },
   "losses": {
-    "_note": "What a raid costs in bombers, in the air war. The share lost is bombers x (the defending fighters' share of the fighting weight over the target) to the power 'power', plus what the guns bring down, and never more than most. The escort and the bombers' own guns are the rest of that weight, so an escort saves far more than its numbers. Set against history: a day raid that goes without escort into a strong patrol loses 15 to 25% of its bombers and an escorted one 3 to 8%. By night the few fighters that find the bombers take 2 to 5%. clash is how hard the fighters of the two sides fight over a raid, beside a fight for the sky (1): the escort is there to see the bombers through, not to hunt.",
-    "bombers": 0.26,
+    "_note": "What a raid costs in bombers, in the air war. The share lost is bombers x (the defending fighters' share of the fighting weight over the target) to the power 'power', plus what the guns bring down. The rest of that weight is the escort, counted 'escort' times over, and the bombers' own defence (day.defence, by nation and month; by night the old flat bomberDefence of air.json). An escort saves far more than its numbers. A day raid loses no more than 'day', a night raid no more than 'most'. Fitted by ruling 227 to the historian's yardsticks (historian/raid-rows-227.json, 'fit') and the ruling's set raids (tests/raids-record-227.test.ts): 280 RAF bombers on Bremen in 1939 lose 35%, 291 American heavies on Schweinfurt in October 1943 22%, the same on the Ruhr in 1944 escorted all the way by 400 fighters 6%. By night the few fighters that find the bombers take 2 to 5%. clash is how hard the fighters of the two sides fight over a raid, beside a fight for the sky (1): the escort is there to see the bombers through, not to hunt.",
+    "bombers": 1.0,
     "power": 2,
+    "escort": 3.5,
+    "day": 0.6,
     "most": 0.3,
     "night": { "bombers": 0.4, "power": 1 },
     "clash": 0.5
   },
+  "day": {
+    "_note": "Ruling 227: day raids priced by the record. Dated rows from the historian (historian/raid-rows-227.json, with marks and sources): [month, value], month 1 = September 1939; a row holds from its month until the nation's next row, and a nation with none takes _default. defence: what a nation's day bombers can do for themselves, formation, guns and turrets (1.0 is the American combat box of 1943); the bombers' side of the fighting weight is bombers x defence. kill: the defending fighters the bombers' guns bring down, for each bomber the fighters bring down, x defence (about 1 per 5.5 bombers lost at 0.35, 1 per 2 at 1.0; never none where fighters met the raid; none by night). accuracy: day bombing's weight on factories and railways (1 is full weight; the bombardment of a town under siege, and night, stay as they are). range: how far a nation's fighters reach, in km as air.json's ftrRange reads, for escort and for defence alike (a fleet row with a longer ftrRange of its own keeps it; carrier aircraft keep theirs). The historian's twin-engined long-range fighters (Germany's Bf 110 and Me 410) are not used.",
+    "kill": 0.55,
+    "defence": { "_default": [[1, 0.25]], "UK": [[1, 0.35], [30, 0.45]], "FRA": [[1, 0.25]], "GER": [[1, 0.3], [25, 0.35]], "ITA": [[1, 0.3]], "JAP": [[1, 0.25], [27, 0.3]], "SOV": [[1, 0.2], [46, 0.3]], "USA": [[28, 0.7], [44, 1.0], [52, 1.05], [58, 1.1]] },
+    "accuracy": { "_default": [[1, 0.3]], "UK": [[1, 0.3], [29, 0.5], [49, 0.6], [61, 0.9]], "FRA": [[1, 0.3]], "GER": [[1, 0.7], [34, 0.6]], "ITA": [[1, 0.4]], "JAP": [[1, 0.6], [28, 0.8], [49, 0.5]], "SOV": [[1, 0.4], [46, 0.5]], "USA": [[36, 0.6], [41, 0.85], [47, 1.0]] },
+    "range": { "_default": [[1, 180]], "UK": [[1, 180], [30, 240], [46, 320], [60, 500]], "FRA": [[1, 180]], "GER": [[1, 150], [13, 200], [22, 300]], "ITA": [[1, 200], [25, 250]], "JAP": [[1, 350], [13, 750], [28, 850]], "SOV": [[1, 200], [46, 300]], "USA": [[1, 300], [44, 300], [47, 375], [49, 500], [51, 650], [52, 750], [55, 950], [58, 1200]] }
+  },
+  "weight": {
+    "_note": "Ruling 227 (b424): a nation's real weight in the air, month by month, beside the air force named in 'against' (1.0): serviceability, training, radios and tactics, from the historian's row (historian/air-on-armies-b422.md, section 3). Each of its aircraft fights in the air as that share of one of 'against' (its quality becomes the row times that nation's quality in air.json) and weighs that share in a raid on troops. [month, value], month 1 = September 1939; the first row holds before its month too (the purged command and short courses were the same in the Winter War). A nation with no row keeps its own quality and weighs in full against troops. Only in the grand campaign's air war.",
+    "against": "GER",
+    "rows": { "SOV": [[22, 0.3], [28, 0.35], [37, 0.4], [44, 0.5], [47, 0.55], [53, 0.65], [58, 0.7]] }
+  },
+  "sky": {
+    "_note": "Ruling 227 (b433): what command of the air lends a land battle in the grand campaign's air war (game.ts, the battle card; historian/sky-on-land-b431.md). The air edge is the attacker's air less the defender's over their sum (-1 to 1); 'land' is added to it where the attacker's side holds the sky over the battle, and taken off where the defender's side does; the attack is then multiplied by 1 + attack x edge and the defence by 1 - defence x edge. Fitted to the historian's bands: the attacker's sky at even air numbers x1.12 on the odds, with overwhelming air x1.25 (band x1.10 to x1.25); a contested sky at even numbers nothing (band x0.95 to x1.05); the defender's sky x0.89, and x0.79 with overwhelming air (band x0.75 to x0.90). The historical campaigns keep the old figures (land 0.3, attack 0.3, defence 0.2, the attacker's sky only). 'own' (b444, b446; historian/sky-on-land-b431.md): where nobody has won the sky over a battle, a side that can bring 'own' times the other's aircraft over it (fighters within their reach, bombers within theirs, each at its nation's weight row, the Soviet row, and at one elsewhere), and at least the least a won sky needs, holds it: overwhelming air owns the sky, as Germany's did over Poland in 1939 (about 6 to 1) and France in 1940 (1.5 to 3 to 1), and not at Kursk (about 1.07 to 1). It is contested, and nobody holds it so, where the sky there has been fought for since last month and that side did not win it, and over a nation's own home ground once it has the 'radar' technology (Britain held in 1940 at about 3.6 to 1). A sky won on the ground, as on Barbarossa's first day, is the surprise rules' business, not this.",
+    "land": 0.5,
+    "attack": 0.135,
+    "defence": 0.09,
+    "own": 1.5,
+    "radar": "earlywarning"
+  },
   "success": {
     "_note": "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",
-    "k": 12
+    "k": 12,
+    "factory": 200
   },
   "ai": {
     "_note": "The computer's air staff. escortReady is the least readiness at which a fighter group flies escort. raids is how every computer nation at war plans raids of its own, at every level: each month 'share' of its bomber groups fit to fly go out (a group is fit with 'least' bombers and readiness 'ready'), each against the best target among the 'look' most promising it can reach, and only where the forecast gives a chance of success of 'success' or better, a gain of 'worth' aircraft or more, and bomber losses of no more than 'loss'. 'rail' is what a province with a junction and no factory is worth beside one with industry. It flies up to 'sweeps' fights for the sky a month, over front where its fighters go in at 'sky' times the odds that win it; 'skyWorth' is what the sky over an army's front is worth to it, in aircraft. The harder levels replace share, least, loss and rail for a rival (difficulty.json, bombing); the easier ones cut a rival's share. 'sour' is how a staff gives up a poor trade: a raid on factories that loses 'dear' aircraft or more and is worth less than 'trade' for each one lost, 'times' running on the same target, is not flown there again for 'rest' months (a wrecked factory or a cut railway makes it a good month). 'beach' is for a player who has named a crossing as their plan and handed the air war to the staff: it brings fighter groups up to airfields within reach of the beach, up to 'monthly' a month, until 'groups' are in reach, leaves at least 'home' guarding the homeland, and puts none on an airfield that is already full; and it sends every fit fighter group in reach up together to fight for the sky over the beach in any month it expects to win it, at 'sky' times the odds that win a sky (a staff's own offensives keep the wider margin above). A computer nation's own staff does not use it.",
     "escortReady": 0.5,
+    "basing": { "_note": "Ruling 227 (b428): each month a staff bases its fighter groups by the threat (air.ts baseByThreat): every place where the nation has troops, or its own cities and works, asks for a share of its fighters as large as its share of the enemy aircraft that can reach it (fighters and bombers against troops, bombers against cities; each enemy group counted once at its real weight, airwar.json 'weight', shared among the places it reaches). A group moves to the airfield where it meets most of what is still asked for, only when that is more than 'better' times what it meets where it is, plus 'least' of its own fighters.", "better": 1.25, "least": 0.05 },
     "raids": { "share": 0.34, "least": 60, "loss": 0.1, "rail": 0.25, "ready": 0.6, "success": 0.55, "look": 4, "worth": 15, "sweeps": 1, "sky": 1.2, "skyWorth": 150, "sour": { "trade": 8, "dear": 5, "times": 3, "rest": 12 }, "beach": { "groups": 8, "home": 2, "monthly": 2, "sky": 1 } }
   }
 }
