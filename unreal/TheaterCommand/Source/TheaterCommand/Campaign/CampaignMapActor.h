@@ -942,6 +942,11 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> FrontLineMesh;
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
+	/** (Speed: tc.Speed.FrontWeights.) Lays one weight of the front line (0 or 1) or both (INDEX_NONE); false if there is no front. */
+	bool LayFrontLine(int32 Only, bool bOwed);
+	int32 FrontLineOwed = INDEX_NONE; // the weight still to be laid, a frame after the other
+	uint64 FrontLineOwedFrame = 0;
+	float FrontLineSeenFrom = 0.0f; // (the eye's distance at the last look, for which weight is laid first)
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	bool bPiecesShown = true;
@@ -1173,6 +1178,16 @@ private:
 	float RiversDrawnFor = -1.0f;
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
+	/**
+	 * (Speed: tc.Speed.RiverInks.) The rivers' inks as they were laid before the haze, point for point in each of the
+	 * river mesh's two sections, and the province each point asks the haze of (none for sand and islands); with these
+	 * RecolourRivers darkens them where the haze lies now without laying the rivers again. False if it cannot.
+	 */
+	TArray<FColor> RiverPlainInks[2];
+	TArray<int32> RiverInkRegions[2];
+	bool bRiverInksKept[2] = { false, false };
+	bool bRiverInksFor = false;
+	bool RecolourRivers();
 	/** How deep the snow lies at a place on the map (0 to 1) when the winter is this hard. */
 	static float SnowLying(const FVector2D& Place, float Hard);
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands

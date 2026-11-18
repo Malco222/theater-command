@@ -3,6 +3,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "TheaterCommand.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
@@ -93,6 +94,9 @@ bool FCampaignMapData::Load(FString& OutError)
 	bLoaded = false;
 	Land.Reset();
 	Regions.Reset();
+	GridNX = GridNY = 0; // (the squares list provinces by their place in Regions: none until it is read again)
+	GridStart.Reset();
+	GridRegions.Reset();
 	Nations.Reset();
 	Corps.Reset();
 	Seas.Reset();
@@ -114,6 +118,7 @@ bool FCampaignMapData::Load(FString& OutError)
 		LoadNations(ResolveDataFile(TEXT("world.json"), TEXT("data/campaign")), Ignored);
 	}
 
+	RuleRegionGrid();
 	bLoaded = true;
 	UE_LOG(LogTheater, Log, TEXT("Campaign data: %d regions, %d nations, %d corps, %d seas, %d landmasses (from %s)"),
 		Regions.Num(), Nations.Num(), Corps.Num(), Seas.Num(), Land.Num(), *SourceDescription);
@@ -546,13 +551,113 @@ bool FCampaignMapData::PointInRing(const TArray<FVector2D>& Ring, double X, doub
 	return bInside;
 }
 
+void FCampaignMapData::RuleRegionGrid()
+{
+	GridNX = GridNY = 0;
+	GridStart.Reset();
+	GridRegions.Reset();
+	FBox2D All(ForceInit);
+	for (const FCampaignRegion& Region : Regions)
+	{
+		if (Region.Bounds.bIsValid)
+		{
+			All += Region.Bounds;
+		}
+	}
+	if (!All.bIsValid)
+	{
+		return;
+	}
+	GridMin = All.Min;
+	GridMax = All.Max;
+	const FVector2D Size = All.GetSize();
+	// (about 256 squares along the longer side: a province's bounds reach into a handful)
+	GridCell = FMath::Max(FMath::Max(Size.X, Size.Y) / 256.0, 1.0e-3);
+	GridNX = FMath::Clamp(FMath::FloorToInt32(Size.X / GridCell) + 1, 1, 4096);
+	GridNY = FMath::Clamp(FMath::FloorToInt32(Size.Y / GridCell) + 1, 1, 4096);
+	auto Square = [this](double V, double Min, int32 N)
+	{
+		return FMath::Clamp(FMath::FloorToInt32((V - Min) / GridCell), 0, N - 1);
+	};
+	TArray<int32> Count;
+	Count.Init(0, GridNX * GridNY);
+	for (int32 Pass = 0; Pass < 2; ++Pass)
+	{
+		if (Pass == 1)
+		{
+			// (counted first, then laid out one list after another)
+			GridStart.SetNumUninitialized(GridNX * GridNY + 1);
+			GridStart[0] = 0;
+			for (int32 Index = 0; Index < Count.Num(); ++Index)
+			{
+				GridStart[Index + 1] = GridStart[Index] + Count[Index];
+				Count[Index] = 0;
+			}
+			GridRegions.SetNumUninitialized(GridStart.Last());
+		}
+		for (int32 Index = 0; Index < Regions.Num(); ++Index)
+		{
+			const FBox2D& Bounds = Regions[Index].Bounds;
+			if (!Bounds.bIsValid)
+			{
+				continue;
+			}
+			const int32 I0 = Square(Bounds.Min.X, GridMin.X, GridNX), I1 = Square(Bounds.Max.X, GridMin.X, GridNX);
+			const int32 J0 = Square(Bounds.Min.Y, GridMin.Y, GridNY), J1 = Square(Bounds.Max.Y, GridMin.Y, GridNY);
+			for (int32 J = J0; J <= J1; ++J)
+			{
+				for (int32 I = I0; I <= I1; ++I)
+				{
+					const int32 Cell = J * GridNX + I;
+					if (Pass == 1)
+					{
+						GridRegions[GridStart[Cell] + Count[Cell]] = Index; // (in the provinces' own order, as the whole list is read)
+					}
+					++Count[Cell];
+				}
+			}
+		}
+	}
+}
+
 int32 FCampaignMapData::FindRegionAt(double InX, double Y) const
 {
+	// (Speed, 18 November 2026: tc.Speed.RegionGrid. Every province of the world was looked at for each place asked
+	// about; the rivers alone ask it for each point of their course whenever the haze moves. Now only the provinces
+	// whose bounds reach into the place's square are, in the same order, so the same province is found: one whose
+	// bounds hold the place reaches into its square.)
+	const bool bGrid = GridNX > 0 && GridStart.Num() == GridNX * GridNY + 1 && TheaterSpeed::RegionGrid();
 	// (on the whole-world map a place may be counted a turn of the world east or west of where its province is kept)
 	for (int32 Turn = 0; Turn <= (bWorld ? 2 : 0); ++Turn)
 	{
 		const double X = InX + (Turn == 1 ? -WorldWidth : Turn == 2 ? WorldWidth : 0.0);
 		const FVector2D P(X, Y);
+		if (bGrid)
+		{
+			if (X < GridMin.X || X > GridMax.X || Y < GridMin.Y || Y > GridMax.Y)
+			{
+				continue; // (outside every province's bounds)
+			}
+			const int32 I = FMath::Clamp(FMath::FloorToInt32((X - GridMin.X) / GridCell), 0, GridNX - 1);
+			const int32 J = FMath::Clamp(FMath::FloorToInt32((Y - GridMin.Y) / GridCell), 0, GridNY - 1);
+			const int32 Cell = J * GridNX + I;
+			for (int32 At = GridStart[Cell]; At < GridStart[Cell + 1]; ++At)
+			{
+				const FCampaignRegion& Region = Regions[GridRegions[At]];
+				if (!Region.Bounds.IsInside(P))
+				{
+					continue;
+				}
+				for (const TArray<FVector2D>& Ring : Region.Polygons)
+				{
+					if (PointInRing(Ring, X, Y))
+					{
+						return Region.Id;
+					}
+				}
+			}
+			continue;
+		}
 		for (const FCampaignRegion& Region : Regions)
 		{
 			if (!Region.Bounds.bIsValid || !Region.Bounds.IsInside(P))

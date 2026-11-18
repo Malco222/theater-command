@@ -2,6 +2,7 @@
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "ImageUtils.h"
+#include "CoreGlobals.h" // (GFrameCounter)
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
 #include "EngineUtils.h"
@@ -615,15 +616,37 @@ void ACampaignMapActor::FindSharedEdges()
 void ACampaignMapActor::BuildFrontLine()
 {
 	THEATER_SPEED_SCOPE(BuildFrontLine);
+	// (Speed, 18 November 2026: tc.Speed.FrontWeights. The line is laid in two weights, and only one is ever shown:
+	// 47 ms for both on the take of Buffalo, in the frame of the take, most of it the barbs, which all move along the
+	// front when any stretch of it does. The weight the eye is at is laid now and the other a frame after, or at once
+	// if the eye goes to it first; the same line.)
+	FrontLineOwed = INDEX_NONE;
+	if (!TheaterSpeed::FrontWeights())
+	{
+		LayFrontLine(INDEX_NONE, false);
+		return;
+	}
+	const int32 Wanted = FrontLineSeenFrom > 9000.0f ? 1 : 0; // (as UpdateForCamera will choose once it is laid, from the working weight)
+	if (LayFrontLine(Wanted, false))
+	{
+		FrontLineOwed = 1 - Wanted;
+		FrontLineOwedFrame = GFrameCounter;
+	}
+}
+
+bool ACampaignMapActor::LayFrontLine(int32 Only, bool bOwed)
+{
 	// The front, drawn as a staff officer draws it: a crayon line along every frontier between the holdings of two
 	// countries at war. Where the war is the player's (the country beyond is one he is at war with, and the country
 	// on this side is not) the line is vermilion over a dark edge, with small barbs along it that point at the
 	// enemy. Where two others fight, it is a thinner buff line with no barbs. It lies on the ground with the other
 	// inked lines, under every piece and flag, and it is laid in two weights: one for working height, and a
 	// heavier one that can be read from the staff map's height (see UpdateForCamera).
+	// (Only: one weight alone, 0 or 1, or INDEX_NONE for both. bOwed: the weight left for a frame after, laid into its
+	// own section beside the other, which stands.)
 	if (!Data.IsLoaded())
 	{
-		return;
+		return false;
 	}
 	if (!FrontLineMesh)
 	{
@@ -633,11 +656,18 @@ void ACampaignMapActor::BuildFrontLine()
 		FrontLineMesh->RegisterComponent();
 		FrontLineMesh->SetCastShadow(false);
 	}
-	FrontLineMesh->ClearAllMeshSections();
-	FrontLineFar = -1;
+	if (bOwed)
+	{
+		FrontLineMesh->ClearMeshSection(Only);
+	}
+	else
+	{
+		FrontLineMesh->ClearAllMeshSections();
+		FrontLineFar = -1;
+	}
 	if (WarSet.Num() == 0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFrontLine")))
 	{
-		return;
+		return false;
 	}
 	FindSharedEdges();
 	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
@@ -701,6 +731,10 @@ void ACampaignMapActor::BuildFrontLine()
 		}
 		for (int32 Weight = 0; Weight < 2; ++Weight)
 		{
+			if (Only != INDEX_NONE && Weight != Only)
+			{
+				continue;
+			}
 			FCampaignMeshBuffers& Into = Weights[Weight];
 			const double W = Heavier[Weight] * (bMine ? 1.0 : 0.62);
 			auto Ribbon = [&](double HalfWidth, double Lift, const FColor& Ink)
@@ -744,12 +778,23 @@ void ACampaignMapActor::BuildFrontLine()
 	}
 	{
 		THEATER_SPEED_SCOPE(FrontLineCommit);
-		Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
-		Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+		for (int32 Weight = 0; Weight < 2; ++Weight)
+		{
+			if (Only == INDEX_NONE || Weight == Only)
+			{
+				Weights[Weight].Commit(FrontLineMesh, Weight, InkMaterial);
+			}
+		}
+	}
+	if (bOwed)
+	{
+		FrontLineMesh->SetMeshSectionVisible(Only, FrontLineFar == Only); // (shown if the eye is at it)
+		return true;
 	}
 	FrontLineMesh->SetMeshSectionVisible(1, false);
 	FrontLineFar = 0;
 	UE_LOG(LogTheater, Log, TEXT("The front line: %d stretches of the player's own fronts, %d of others' (%d wars)"), Mine, Theirs, WarPairs.Num() / 2);
+	return true;
 }
 
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
@@ -4896,6 +4941,12 @@ void ACampaignMapActor::BuildWaterways()
 		}
 	}
 	FCampaignMeshBuffers Buffers, BuffersBeyond;
+	// (Speed, 18 November 2026: tc.Speed.RiverInks. Each point's ink as it is before the haze, and the province the
+	// haze is asked of for it, none for a point it never darkens: so that where the haze moves the inks are changed
+	// in place, the same inks, and the rivers are not laid again, a tenth of a second on the wider chart.)
+	const bool bKeepInks = TheaterSpeed::RiverInks();
+	TArray<FColor> PlainInks[2];
+	TArray<int32> InkRegions[2];
 	for (const FLandRiver& River : Land.Rivers)
 	{
 		const int32 Count = River.Course.Num();
@@ -4908,6 +4959,7 @@ void ACampaignMapActor::BuildWaterways()
 		// height would show through the coarse ground only in scraps)
 		const bool bRiverBeyond = Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height);
 		FCampaignMeshBuffers& Into = bRiverBeyond ? BuffersBeyond : Buffers;
+		const int32 Kind = bRiverBeyond ? 1 : 0;
 		const int32 RiverIndex = static_cast<int32>(&River - Land.Rivers.GetData());
 		TArray<FVector2D> Path = RiverLaid[RiverIndex];
 		const double Broad = FCampaignMapData::RiverBroad(River.Name);
@@ -4983,17 +5035,24 @@ void ACampaignMapActor::BuildWaterways()
 			const FLinearColor EdgeLeft_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 + 0.5 * ToNorthWest)), EdgeRight_ = FMath::Lerp(JungleLit, JungleShade, static_cast<float>(0.5 - 0.5 * ToNorthWest));
 			const FColor MarginLeft = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeLeft_, BankIce, Frozen), Brown).ToFColor(true);
 			const FColor MarginRight = FMath::Lerp(FLinearColor(Earth), FMath::Lerp(EdgeRight_, BankIce, Frozen), Brown).ToFColor(true);
-			const bool bUnderHaze = HazeSet.Num() > 0 && HazeSet.Contains(Data.FindRegionAt(Path[K].X, Path[K].Y));
+			const int32 RegionHere = HazeSet.Num() > 0 || bKeepInks ? Data.FindRegionAt(Path[K].X, Path[K].Y) : INDEX_NONE;
+			const bool bUnderHaze = HazeSet.Num() > 0 && HazeSet.Contains(RegionHere);
 			auto Hazed = [bUnderHaze, &RiverHaze](const FColor& Paint)
 			{
 				return bUnderHaze ? FColor(static_cast<uint8>(Paint.R * RiverHaze.X), static_cast<uint8>(Paint.G * RiverHaze.Y), static_cast<uint8>(Paint.B * RiverHaze.Z), Paint.A) : Paint;
 			};
+			const FColor Plain[5] = { MarginLeft, Bank, Midstream, Bank, MarginRight };
 			const FColor Inks[5] = { Hazed(MarginLeft), Hazed(Bank), Hazed(Midstream), Hazed(Bank), Hazed(MarginRight) };
 			int32 Here[5];
 			for (int32 P = 0; P < 5; ++P)
 			{
 				// (the banks a hair lower than the water between them, so the water is never hidden by its bank)
 				Here[P] = Into.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, (P == 0 || P == 4 ? Lift - 0.03 : Lift) - Under), FVector::UpVector, Inks[P]);
+				if (bKeepInks)
+				{
+					PlainInks[Kind].Add(Plain[P]);
+					InkRegions[Kind].Add(RegionHere);
+				}
 			}
 			if (Previous[0] != INDEX_NONE)
 			{
@@ -5046,6 +5105,11 @@ void ACampaignMapActor::BuildWaterways()
 					for (int32 P = 0; P < 3; ++P)
 					{
 						Now[P] = Into.AddVertex(SurfacePointOver(Points[P].X, Points[P].Y, Lift + Raised), FVector::UpVector, P == 1 ? Middle : Rim);
+						if (bKeepInks)
+						{
+							PlainInks[Kind].Add(P == 1 ? Middle : Rim);
+							InkRegions[Kind].Add(INDEX_NONE); // (sand and islands are not darkened under the haze)
+						}
 					}
 					if (Last[0] != INDEX_NONE)
 					{
@@ -5097,13 +5161,75 @@ void ACampaignMapActor::BuildWaterways()
 		WaterMaterial->SetScalarParameterValue(TEXT("Grain"), 0.0f);
 		WaterMaterial->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
 	}
-	Buffers.Commit(RiverMesh, 0, WaterMaterial);
+	bRiverInksKept[0] = Buffers.Commit(RiverMesh, 0, WaterMaterial);
+	bRiverInksKept[1] = false;
 	if (BuffersBeyond.Vertices.Num() > 0)
 	{
-		BuffersBeyond.Commit(RiverMesh, 1, WaterMaterial);
+		bRiverInksKept[1] = BuffersBeyond.Commit(RiverMesh, 1, WaterMaterial);
 		RiverMesh->SetMeshSectionVisible(1, bRiversBeyondShown);
 	}
+	const FCampaignMeshBuffers* Laid[2] = { &Buffers, &BuffersBeyond };
+	for (int32 Kind = 0; Kind < 2; ++Kind)
+	{
+		// (kept only where they are this section's points, one for one)
+		bRiverInksKept[Kind] = bRiverInksKept[Kind] && bKeepInks && PlainInks[Kind].Num() == Laid[Kind]->Vertices.Num() && InkRegions[Kind].Num() == Laid[Kind]->Vertices.Num();
+		RiverPlainInks[Kind] = bRiverInksKept[Kind] ? MoveTemp(PlainInks[Kind]) : TArray<FColor>();
+		RiverInkRegions[Kind] = bRiverInksKept[Kind] ? MoveTemp(InkRegions[Kind]) : TArray<int32>();
+	}
+	bRiverInksFor = bKeepInks;
 	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points (and %d beyond Europe)"), Land.Rivers.Num(), Buffers.Vertices.Num(), BuffersBeyond.Vertices.Num());
+}
+
+bool ACampaignMapActor::RecolourRivers()
+{
+	THEATER_SPEED_SCOPE(RecolourRivers);
+	if (!RiverMesh || !bRiverInksFor)
+	{
+		return false;
+	}
+	for (int32 Section = 0; Section < 2; ++Section)
+	{
+		// (the inks kept are for the points the section has: if anything else has laid it since, it is laid again whole)
+		const FProcMeshSection* Laid = Section < RiverMesh->GetNumSections() ? RiverMesh->GetProcMeshSection(Section) : nullptr;
+		const int32 Points = Laid ? Laid->ProcVertexBuffer.Num() : 0;
+		if (bRiverInksKept[Section] ? Points != RiverPlainInks[Section].Num() : Points > 0)
+		{
+			return false;
+		}
+	}
+	// (the same darkening BuildWaterways gives a point under the haze, by day or by night as it is now)
+	bRiversNightFor = NightNow > 0.5f;
+	const FVector RiverHaze = bRiversNightFor ? FVector(0.47, 0.54, 0.63) : FVector(0.7, 0.66, 0.72);
+	TArray<FColor> Inks;
+	TArray<FVector> Positions;
+	for (int32 Section = 0; Section < 2; ++Section)
+	{
+		if (!bRiverInksKept[Section])
+		{
+			continue;
+		}
+		// (5.8 changes a section only when it is given all its points, the same number: they are given again as they
+		// are, and so its box is the same box)
+		const FProcMeshSection* Section_ = RiverMesh->GetProcMeshSection(Section);
+		Positions.SetNumUninitialized(Section_->ProcVertexBuffer.Num());
+		for (int32 Index = 0; Index < Positions.Num(); ++Index)
+		{
+			Positions[Index] = FVector(Section_->ProcVertexBuffer[Index].Position);
+		}
+		const TArray<FColor>& Plain = RiverPlainInks[Section];
+		const TArray<int32>& Where = RiverInkRegions[Section];
+		Inks.SetNumUninitialized(Plain.Num());
+		for (int32 Index = 0; Index < Plain.Num(); ++Index)
+		{
+			const FColor& Laid = Plain[Index];
+			const bool bUnderHaze = Where[Index] != INDEX_NONE && HazeSet.Num() > 0 && HazeSet.Contains(Where[Index]);
+			Inks[Index] = bUnderHaze ? FColor(static_cast<uint8>(Laid.R * RiverHaze.X), static_cast<uint8>(Laid.G * RiverHaze.Y), static_cast<uint8>(Laid.B * RiverHaze.Z), Laid.A) : Laid;
+		}
+		// (the inks changed; the points, and so the bounds, as they were; normals and the rest left as they are)
+		RiverMesh->UpdateMeshSection(Section, Positions, TArray<FVector>(), TArray<FVector2D>(), Inks, TArray<FProcMeshTangent>());
+	}
+	RiversHazedFor = HazeSet;
+	return true;
 }
 
 void ACampaignMapActor::MakeUpTrain(FTrain& Train, int32 FromRegion) const
@@ -7408,7 +7534,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	ShownNight = Night;
 	if (RiverMesh && Land.Rivers.Num() > 0 && HazeSet.Num() > 0 && (NightNow > 0.5f) != bRiversNightFor)
 	{
-		BuildWaterways(); // (a river under the haze is darker still by night)
+		// (a river under the haze is darker still by night; speed, tc.Speed.RiverInks: its inks changed in place)
+		if (!(TheaterSpeed::RiverInks() && RecolourRivers()))
+		{
+			BuildWaterways();
+		}
 	}
 	ApplyPaperLight();
 	PaperShown = -1.0f; // (the margin's paper takes the hour's light too)
@@ -10788,10 +10918,15 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen, const TArray<int
 	bMiniStale = true;
 	if (RiverMesh && Land.Rivers.Num() > 0 && (RiversHazedFor.Num() != HazeSet.Num() || !RiversHazedFor.Includes(HazeSet)))
 	{
-		// (a river is darker under the haze: where the haze has moved, the rivers are drawn again)
+		// (a river is darker under the haze: where the haze has moved, the rivers are drawn again. Speed, 18 November
+		// 2026, tc.Speed.RiverInks: their inks are changed in place, the same inks, 0.12 s on the wider chart before.)
 		const double Began = FPlatformTime::Seconds();
-		BuildWaterways();
-		UE_LOG(LogTheater, Log, TEXT("The rivers drawn again under the haze in %.2f s"), FPlatformTime::Seconds() - Began);
+		const bool bInPlace = TheaterSpeed::RiverInks() && RecolourRivers();
+		if (!bInPlace)
+		{
+			BuildWaterways();
+		}
+		UE_LOG(LogTheater, Log, TEXT("The rivers %s under the haze in %.3f s"), bInPlace ? TEXT("inked again") : TEXT("drawn again"), FPlatformTime::Seconds() - Began);
 	}
 	OrdersMesh->ClearMeshSection(6);
 	// Ground nobody of the player's can see is the staff's own paper map (art fix 11): the land's material draws
@@ -13491,9 +13626,18 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		}
 	}
 	// The front line is drawn heavier from the staff map's height, where the working line would be a hair.
+	FrontLineSeenFrom = CameraDistance;
 	if (FrontLineMesh && FrontLineFar >= 0)
 	{
 		const int32 Far = CameraDistance > (FrontLineFar == 1 ? 8200.0f : 9000.0f) ? 1 : 0;
+		// (speed, tc.Speed.FrontWeights: the weight left over is laid a frame after the other, or now if it is wanted now)
+		if (FrontLineOwed != INDEX_NONE && (Far == FrontLineOwed || GFrameCounter > FrontLineOwedFrame))
+		{
+			THEATER_SPEED_SCOPE(FrontLineOwed);
+			const int32 Owed = FrontLineOwed;
+			FrontLineOwed = INDEX_NONE;
+			LayFrontLine(Owed, true);
+		}
 		if (Far != FrontLineFar)
 		{
 			FrontLineFar = Far;
