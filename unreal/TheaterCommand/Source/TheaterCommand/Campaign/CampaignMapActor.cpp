@@ -13586,6 +13586,40 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
+			{
+				// (For the effects artist, 23:04Z on 18 November 2026: the near half of the test machine gun's tracer did
+				// not show. The kit's test gun stands 36 m south and 10 west of the middle, 0.6 m up, and fires at a
+				// point 20 m north and 20 east of the middle and 0.5 m over the middle's own height, which is not put
+				// on the ground. The log says how far over the ground that line runs along its 63 m.)
+				static double LoweredMetres = 0.0;
+				static bool bLowAsked = false;
+				if (!bLowAsked)
+				{
+					bLowAsked = true;
+					FString Asked;
+					TArray<FString> Parts;
+					if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+					{
+						LoweredMetres = FCString::Atod(*Parts[2]);
+					}
+				}
+				const FVector Middle = SurfacePoint(Under.X, Under.Y, 0.0);
+				auto GroundUnder = [this](const FVector& Flat)
+				{
+					const FVector2D OnMap = WorldToMap(Flat);
+					return SurfacePoint(OnMap.X, OnMap.Y, 0.0) - FVector(0.0, 0.0, LoweredMetres * BlastUnitsAMetre);
+				};
+				const FVector Gun = GroundUnder(Middle + FVector(-36.0, -10.0, 0.0) * BlastUnitsAMetre) + FVector(0.0, 0.0, 0.6 * BlastUnitsAMetre);
+				const FVector Target = Middle + FVector(20.0, 20.0, 0.5) * BlastUnitsAMetre;
+				FString Said;
+				for (const double Along : { 0.0, 10.0, 21.0, 32.0, 42.0, 53.0, 63.0 })
+				{
+					const FVector On = FMath::Lerp(Gun, Target, FMath::Clamp(Along / 63.5, 0.0, 1.0));
+					Said += FString::Printf(TEXT(" at %.0f m %.2f m over the ground;"), Along, (On.Z - GroundUnder(On).Z) / BlastUnitsAMetre);
+				}
+				UE_LOG(LogTheater, Display, TEXT("Effects: the test machine gun's line of fire:%s the middle's ground is %.2f m above the gun's"), *Said,
+					(Middle.Z - (Gun.Z - 0.6 * BlastUnitsAMetre) - LoweredMetres * BlastUnitsAMetre) / BlastUnitsAMetre);
+			}
 		}
 		if (BlastHold >= 0.0)
 		{
