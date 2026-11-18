@@ -9,7 +9,7 @@ import { AIR, AIRWAR, CARRIERS, airAI, airFleetsOf, airRange, cover, hasAirfield
 import { aiArsenal, bareFront } from '../src/campaign/arsenal';
 import { searchOf, seaStaff } from '../src/campaign/carriers';
 import { PRODUCTION } from '../src/campaign/economy';
-import { allied, atWar, createGame, removeCorps } from '../src/campaign/game';
+import { allied, atWar, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { NAVY, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -138,9 +138,18 @@ describe('a computer staff\'s fighters', () => {
     const inReach = (f: AirFleet): boolean => front.some((id) => cover(km(g, f.base, id), airRange(f, g).ftr) > 0);
     const before = landFighters(g, 'GER').filter(inReach).length;
     expect(before).toBeLessThan(landFighters(g, 'GER').length);
+    // The groups that can reach ground the enemy holds from where they stand.
+    const foes = g.regions.filter((r) => atWar(g, 'GER', r.ctrl)).map((r) => r.id);
+    const engaged = (f: AirFleet): boolean => foes.some((id) => km(g, f.base, id) <= airRange(f, g).ftr);
+    // (One group stands on the Silesian border already.)
+    landFighters(g, 'GER').find((f) => g.regions[f.base].name === 'Vienna')!.base = g.byName['Upper Silesia'].id;
+    const was = landFighters(g, 'GER').filter(engaged).map((f) => f.id);
+    expect(was.length).toBeGreaterThan(0);
     airAI(g, 'GER');
     expect(landFighters(g, 'GER').filter(inReach).length).toBe(landFighters(g, 'GER').length);
     expect(landFighters(g, 'GER').length).toBeGreaterThan(before);
+    // No move behind the army has taken one of them out of reach of the enemy.
+    for (const f of landFighters(g, 'GER')) if (was.includes(f.id)) expect(engaged(f), g.regions[f.base].name).toBe(true);
   });
 
   it('stay where they are in a nation at peace', () => {
@@ -169,7 +178,7 @@ describe('a computer staff\'s airfields', () => {
     aiArsenal(g, 'GER');
     const orders = fieldOrders(g, 'GER');
     expect(orders.length).toBe(1);
-    const at = g.regions[orders[0].region!];
+    const at = g.regions[orders[0].region];
     expect(at.ctrl).toBe('GER');
     expect(hasAirfield(g, at.id)).toBe(false);
     const R = Math.min(...landFighters(g, 'GER').map((f) => airRange(f, g).ftr));
@@ -207,6 +216,23 @@ describe('a computer staff\'s airfields', () => {
     h.turn += airwar.ai.basing.fields;
     aiArsenal(h, 'GER');
     expect(fieldOrders(h, 'GER')).toEqual([]);
+  });
+
+  it('are ordered in the first month of a war that begins with the front out of reach of every field', () => {
+    const g = grand();
+    expect(bareFront(g, 'ITA')).toEqual([]);
+    declareWar(g, 'ITA', 'UK');
+    g.nations.ITA.pp = 500;
+    const bare = bareFront(g, 'ITA');
+    // Libya has no airfield on the first day, and Italian divisions on the Egyptian frontier.
+    expect(bare.length).toBeGreaterThan(0);
+    aiArsenal(g, 'ITA');
+    const orders = fieldOrders(g, 'ITA');
+    expect(orders.length).toBe(1);
+    const at = g.regions[orders[0].region];
+    expect(at.ctrl).toBe('ITA');
+    const R = Math.min(...landFighters(g, 'ITA').map((f) => airRange(f, g).ftr));
+    expect(bare.some(([id]) => km(g, at.id, id) <= R)).toBe(true);
   });
 
   it('are nobody\'s at peace', () => {

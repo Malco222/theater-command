@@ -1820,11 +1820,23 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   for (const f of fighters) if (stays(f)) meets(f, f.base, true);
   // The airfields open to this nation's groups (whyNotBase, leaving out each group's own base and how far it can fly in a month).
   const open = g.regions.filter((r) => whyNotBase(g, free[0], r, true) === null || r.id === free[0].base);
+  // Ruling 52(a), its second part: a move behind the army never takes a group out of reach of the enemy. A group
+  // that can reach ground an enemy holds from where it stands goes only to a field from which it still can.
+  const foes = P > 0 ? g.regions.filter((r) => atWar(g, nat, r.ctrl)).map((r) => r.id) : [];
+  const toFoe = new Map<number, number>();
+  const foeAt = (base: number): number => {
+    let d = toFoe.get(base);
+    if (d === undefined) { d = Infinity; for (const id of foes) d = Math.min(d, km(g, base, id)); toFoe.set(base, d); }
+    return d;
+  };
   for (const f of free.sort((a, b) => b.ftr - a.ftr || a.id - b.id)) {
     const here = meets(f, f.base, false);
+    const R = reach(f, g).ftrRange;
+    const engaged = P > 0 && foeAt(f.base) <= R;
     let best: { r: Region; v: number } | null = null;
     for (const r of open) {
       if (r.id === f.base || overOcean(g, f, r) || km(g, f.base, r.id) > AIR.ferry || !fieldRoom(g, r.id, f)) continue;
+      if (engaged && foeAt(r.id) > R) continue;
       const v = meets(f, r.id, false);
       if (!best || v > best.v) best = { r, v };
     }

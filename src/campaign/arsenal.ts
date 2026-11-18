@@ -708,7 +708,8 @@ export function aiArsenal(g: Game, nat: string): void {
  * stretch of its front lies beyond the reach of every airfield its fighters could use, it orders a field from the
  * arsenal in the province of its own that would cover most of the divisions standing there: one behind the line for
  * choice, one in it where it holds nothing else. It waits until its front has stood out of reach so many months
- * running (airwar.json ai.basing 'fields': a field is no answer to a campaign that is over in a month). One on order
+ * running (airwar.json ai.basing 'fields': a field is no answer to a campaign that is over in a month), except
+ * where a war begins with the front already out of reach: that field is ordered in the war's first month. One on order
  * at a time, paid for as its guns are, above the staff's reserve. The fighters come up by the staff's own basing rule
  * once the field is open (air.ts, baseByThreat). A player's own production desk orders none: that is his to decide.
  */
@@ -722,7 +723,13 @@ function aiAirfields(g: Game, nat: string): void {
   if (!bare.length) { delete g.flags[key]; return; }
   // (The month it was first seen so, kept one up so that the campaign's first month is not a nought.)
   const since = g.flags[key] ?? (g.flags[key] = g.turn + 1);
-  if (g.turn + 1 - since < wait) return;
+  // A front that begins a war out of reach of every field is not waited on: the staff knew where the war would open.
+  const fresh = bare.some(([id]) => g.regions[id].nb.some((j) => {
+    const e = g.regions[j].ctrl;
+    const began = atWar(g, nat, e) ? g.flags[`war:${nat}:${e}`] ?? g.flags[`war:${e}:${nat}`] : undefined;
+    return began !== undefined && g.turn - began <= 1;
+  }));
+  if (!fresh && g.turn + 1 - since < wait) return;
   const R = fighterReach(g, nat);
   let best: Region | null = null, bv = 0;
   for (const r of g.regions) {
