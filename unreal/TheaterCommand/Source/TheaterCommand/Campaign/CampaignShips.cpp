@@ -385,7 +385,10 @@ namespace ShipParts
 		const FString Tag = MiniatureParts::NationWanted();
 		const FLivery L = LiveryOf(Tag, 0);
 		FCapital C;
-		if (Tag == TEXT("GER"))
+		// (Whose layout it takes, by the art director's table: its own, another country's by the record, or none.
+		// Its paint and its flags are always its own.)
+		const FString Of = UnitTable::IsLoaded() ? UnitTable::BattleshipOf(Tag) : Tag;
+		if (Of == TEXT("GER"))
 		{
 			// Bismarck: 251 m long, 36 m in the beam; four turrets of two 38 cm guns, one funnel.
 			C.H = { 251.0, 36.0, 7.0, 2.5, 0.0, 9.0, 0.5 };
@@ -394,7 +397,7 @@ namespace ShipParts
 			C.TowerX = 32.0;
 			C.TowerHigh = 24.0;
 		}
-		else if (Tag == TEXT("USA"))
+		else if (Of == TEXT("USA"))
 		{
 			// Iowa: 270 m long, 33 m in the beam; three turrets of three 16-inch guns, two funnels, a long fine bow.
 			C.H = { 270.0, 33.0, 6.5, 4.5, 0.0, 12.0, 0.6 };
@@ -405,7 +408,7 @@ namespace ShipParts
 			C.TowerHigh = 26.0;
 			C.SideTurrets = 4;
 		}
-		else if (Tag == TEXT("JAP") || Tag == TEXT("JPN"))
+		else if (Of == TEXT("JAP") || Of == TEXT("JPN"))
 		{
 			// Yamato: 263 m long, 39 m in the beam; three turrets of three 46 cm guns, one raked funnel, a pagoda of a bridge.
 			C.H = { 263.0, 38.9, 6.0, 4.5, 1.0, 10.0, 0.5 };
@@ -418,7 +421,7 @@ namespace ShipParts
 			C.TowerHigh = 30.0;
 			C.bPagoda = true;
 		}
-		else if (Tag == TEXT("ITA"))
+		else if (Of == TEXT("ITA"))
 		{
 			// Littorio: 238 m long, 33 m in the beam; three turrets of three 15-inch guns, two funnels.
 			C.H = { 238.0, 32.8, 6.5, 3.0, 0.0, 9.0, 0.5 };
@@ -426,7 +429,7 @@ namespace ShipParts
 			C.Funnels = { 8.0, -10.0 };
 			C.TowerX = 26.0;
 		}
-		else if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR"))
+		else if (Of == TEXT("FRA") || Of == TEXT("VIC") || Of == TEXT("FFR"))
 		{
 			// Richelieu: 248 m long, 33 m in the beam; both turrets forward, four 380 mm guns in each.
 			C.H = { 248.0, 33.0, 6.5, 3.0, 0.0, 9.0, 0.5 };
@@ -438,11 +441,14 @@ namespace ShipParts
 			C.TowerHigh = 26.0;
 			C.SideTurrets = 4;
 		}
-		else if (UnitTable::PlainBattleship(Tag))
+		else if (UnitTable::IsLoaded() && Of != TEXT("UK"))
 		{
 			// (Rulings 78 and 79; the art director's numbers.) The plain battleship, no navy's own: 215 m by 30; six guns
 			// in three turrets of two, which tells it at a glance from every great navy's; two funnels close together.
 			// It takes the British layout's place on every navy with none of its own, the Soviet one among them.
+			// (The art director's table of 18 November 2026, after Brian's rule: a small nation has a battleship only
+			// by a great power's captured or stolen plans, the dominions among them. Until the rules say whose plans
+			// a country holds, such a ship is this one.)
 			C.H = { 215.0, 30.0, 6.5, 2.0, 0.0, 6.0, 0.5 };
 			C.Guns = { { 60.0, false, 2 }, { 44.0, true, 2 }, { -58.0, false, 2 } };
 			C.GunSize = 11.0;
@@ -454,7 +460,7 @@ namespace ShipParts
 		}
 		else
 		{
-			// (Britain's own, and the Commonwealth's by the record.)
+			// (Britain's own.)
 			// King George V: 227 m long, 31 m in the beam; four guns forward, two above them, four aft; two funnels.
 			C.H = { 227.0, 31.4, 6.5, 2.0, 0.0, 6.0, 0.5 };
 			C.Guns = { { 64.0, false, 4 }, { 48.0, true, 2 }, { -64.0, false, 4 } };
@@ -488,7 +494,8 @@ namespace ShipParts
 		C.FunnelHigh = 10.0;
 		C.TowerHigh = 15.0;
 		C.SideTurrets = 2;
-		if (Tag == TEXT("GER"))
+		const FString Of = UnitTable::IsLoaded() ? UnitTable::CruiserOf(Tag) : Tag; // (whose layout it takes: see the battleship)
+		if (Of == TEXT("GER"))
 		{
 			// Admiral Hipper: 203 m; four turrets of two 20 cm guns, one funnel.
 			C.H = { 203.0, 21.3, 6.0, 2.5, 0.0, 9.0, 0.45 };
@@ -496,7 +503,7 @@ namespace ShipParts
 			C.Funnels = { 4.0 };
 			C.TowerX = 30.0;
 		}
-		else if (Tag == TEXT("USA"))
+		else if (Of == TEXT("USA"))
 		{
 			// A heavy cruiser of the Baltimore kind: 205 m; three turrets of three 8-inch guns, two funnels.
 			C.H = { 205.0, 21.6, 6.0, 3.5, 0.0, 9.0, 0.6 };
@@ -504,7 +511,7 @@ namespace ShipParts
 			C.Funnels = { 8.0, -8.0 };
 			C.TowerX = 28.0;
 		}
-		else if (Tag == TEXT("JAP") || Tag == TEXT("JPN"))
+		else if (Of == TEXT("JAP") || Of == TEXT("JPN"))
 		{
 			// Takao: 204 m; five turrets of two 20 cm guns, three of them forward; a massive bridge, a raked funnel.
 			C.H = { 204.0, 20.7, 5.5, 3.5, 0.5, 9.0, 0.45 };
@@ -515,7 +522,17 @@ namespace ShipParts
 			C.TowerHigh = 18.0;
 			C.bPagoda = true;
 		}
-		else if (UnitTable::PlainCruiser(Tag))
+		else if (Of == TEXT("ITA"))
+		{
+			// (The table of 18 November 2026: Italy's cruiser is its own.) Zara: 183 m long, 20.6 m in the beam; four
+			// turrets of two 203 mm guns, two forward and two aft; two funnels, the after one the smaller.
+			C.H = { 183.0, 20.6, 6.0, 2.0, 0.0, 8.0, 0.45 };
+			C.Guns = { { 56.0, false, 2 }, { 44.0, true, 2 }, { -46.0, true, 2 }, { -58.0, false, 2 } };
+			C.Funnels = { 10.0, -10.0 };
+			C.TowerX = 28.0;
+			C.TowerHigh = 16.0;
+		}
+		else if (UnitTable::IsLoaded() && Of != TEXT("UK"))
 		{
 			// (Rulings 78 and 79; the art director's numbers.) The plain cruiser, no navy's own: 175 m by 17.5; six guns in
 			// three turrets of two; two funnels. It takes the three-funnelled layout's place on every navy but Britain's.

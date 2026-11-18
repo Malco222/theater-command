@@ -1,5 +1,5 @@
 {
- "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. Colours are hex. Art director, 16 November 2026.",
+ "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. src captured (18 November 2026, Brian's rule for small nations' battleships and carriers): nothing shows until the country holds a great power's plans, by capture or by a spy; then it shows that great power's model named in captured_models, in its own hull grey, flying its own ensign (and jack on a battleship). Colours are hex. Art director, 16 November 2026. with_tech {tech id: model} shows that model once the country has researched it. swaps {swap name: [[from month YYYY-MM or null for the start, the file's choice], ...]} picks a model's swap by date. carrier_fighter, torpedo_bomber, dive_bomber and carrier_paint are for after release 1, as is a model named under after_release_1.",
  "_default": {
   "soldier": {
    "src": "generic",
@@ -29,26 +29,60 @@
   "paint": "60664A",
   "marking": "a plain ring of two or three of the flag's colours",
   "battleship": {
-   "src": "generic",
-   "model": "GenericBattleship"
+   "src": "captured",
+   "model": null,
+   "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
   },
   "cruiser": {
    "src": "generic",
-   "model": "GenericCruiser"
+   "model": "Cruiser"
   },
   "destroyer": {
    "src": "generic",
    "model": "Destroyer"
   },
   "ship_carrier": {
-   "src": "generic",
-   "model": "Carrier"
+   "src": "captured",
+   "model": null,
+   "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
   },
   "submarine": {
    "src": "generic",
    "model": "Submarine"
   },
-  "hull": "74808C"
+  "hull": "74808C",
+  "carrier_fighter": {
+   "src": "generic",
+   "model": "CarrierFighter"
+  },
+  "torpedo_bomber": {
+   "src": "generic",
+   "model": "TorpedoBomber"
+  },
+  "dive_bomber": {
+   "src": "generic",
+   "model": "DiveBomber"
+  }
+ },
+ "captured_models": {
+  "battleship": {
+   "GER": "Battleship_GER",
+   "UK": "Battleship_UK",
+   "USA": "Battleship_USA",
+   "FRA": "Battleship_FRA",
+   "ITA": "Battleship_ITA",
+   "JAP": "Battleship_JAP",
+   "SOV": "Battleship"
+  },
+  "ship_carrier": {
+   "USA": "Carrier_USA",
+   "JAP": "Carrier_JAP",
+   "UK": "Carrier",
+   "GER": "Carrier",
+   "ITA": "Carrier",
+   "FRA": "Carrier",
+   "SOV": "Carrier"
+  }
  },
  "card_names": {
   "LightTank": "Light tank",
@@ -57,11 +91,14 @@
   "Truck": "Lorry",
   "Fighter": "Fighter",
   "Bomber": "Bomber",
-  "GenericBattleship": "Battleship",
-  "GenericCruiser": "Cruiser",
+  "Battleship": "Battleship",
+  "Cruiser": "Cruiser",
   "Destroyer": "Destroyer",
   "Carrier": "Aircraft carrier",
   "Submarine": "Submarine",
+  "CarrierFighter": "Carrier fighter",
+  "TorpedoBomber": "Torpedo bomber",
+  "DiveBomber": "Dive bomber",
   "soldier": "Infantry, Cavalry, Engineers: the corps' own names, as today"
  },
  "countries": {
@@ -75,7 +112,29 @@
    "cloth_name": "as built",
    "tank": {
     "src": "own",
-    "model": "PanzerIV, Panther 1944"
+    "model": "PanzerIV, Panther 1944",
+    "swaps": {
+     "gun": [
+      [
+       null,
+       "short"
+      ],
+      [
+       "1942-03",
+       "long"
+      ]
+     ],
+     "paint": [
+      [
+       null,
+       "grey"
+      ],
+      [
+       "1943-02",
+       "yellow"
+      ]
+     ]
+    }
    },
    "gun": {
     "src": "own",
@@ -87,11 +146,29 @@
    },
    "fighter": {
     "src": "own",
-    "model": "Bf109, Fw190 1942"
+    "model": "Bf109, Fw190 1942, Me262 once jet fighters are researched",
+    "with_tech": {
+     "jets": "Me262"
+    }
    },
    "bomber": {
     "src": "own",
-    "model": "He111"
+    "model": "He111",
+    "with_tech": {
+     "verylongrange": "Amerikabomber"
+    }
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
    },
    "paint": "4E5459",
    "paint_name": "as built",
@@ -105,16 +182,16 @@
     "model": "own layout"
    },
    "destroyer": {
-    "src": "generic",
-    "model": "Destroyer (123 m)"
+    "src": "own",
+    "model": "own layout (123 m)"
    },
    "ship_carrier": {
     "src": "generic",
     "model": "Carrier"
    },
    "submarine": {
-    "src": "generic",
-    "model": "Submarine (67 m)"
+    "src": "own",
+    "model": "own layout (67 m)"
    },
    "hull": "6A7278",
    "hull_name": "as built"
@@ -148,6 +225,19 @@
     "src": "own",
     "model": "Bomber until 1942, then Lancaster"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "carrier_paint": "the Fleet Air Arm's greys over Sky",
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
@@ -200,8 +290,24 @@
    },
    "bomber": {
     "src": "own",
-    "model": "B17"
+    "model": "B17",
+    "with_tech": {
+     "verylongrange": "B29"
+    }
    },
+   "carrier_fighter": {
+    "src": "own",
+    "model": "CarrierFighter, Hellcat 1943"
+   },
+   "torpedo_bomber": {
+    "src": "own",
+    "model": "TorpedoBomber, Avenger 1942"
+   },
+   "dive_bomber": {
+    "src": "own",
+    "model": "DiveBomber, Dauntless 1941"
+   },
+   "carrier_paint": "blue-grey over light grey to early 1943; the three blues over white 1943 to mid-1944; overall sea blue from mid-1944",
    "paint": "565C3A",
    "paint_name": "as built",
    "marking": "as built",
@@ -222,8 +328,8 @@
     "model": "own layout"
    },
    "submarine": {
-    "src": "generic",
-    "model": "Submarine (95 m)"
+    "src": "own",
+    "model": "own layout (95 m)"
    },
    "hull": "5F6E80",
    "hull_name": "as built"
@@ -256,16 +362,28 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4F5E3E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
     "src": "generic",
-    "model": "GenericBattleship"
+    "model": "Battleship"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
@@ -310,6 +428,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A48",
    "paint_name": "as built",
    "marking": "as built",
@@ -319,7 +449,7 @@
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
@@ -367,6 +497,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A48",
    "paint_name": "as built",
    "marking": "as built",
@@ -377,7 +519,7 @@
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
@@ -426,6 +568,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A48",
    "paint_name": "as built",
    "marking": "as built",
@@ -436,7 +590,7 @@
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
@@ -481,6 +635,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "8A7F5E",
    "paint_name": "as built",
    "marking": "as built",
@@ -489,8 +655,8 @@
     "model": "own layout"
    },
    "cruiser": {
-    "src": "generic",
-    "model": "GenericCruiser"
+    "src": "own",
+    "model": "own layout"
    },
    "destroyer": {
     "src": "generic",
@@ -534,8 +700,22 @@
    },
    "bomber": {
     "src": "generic",
-    "model": "Bomber"
+    "model": "Bomber",
+    "after_release_1": "Nell, Betty 1941"
    },
+   "carrier_fighter": {
+    "src": "own",
+    "model": "Zero"
+   },
+   "torpedo_bomber": {
+    "src": "own",
+    "model": "Kate"
+   },
+   "dive_bomber": {
+    "src": "own",
+    "model": "DiveBomber, Val 1940"
+   },
+   "carrier_paint": "pale grey early; dark green over grey from 1942 to 1943",
    "paint": "988256",
    "paint_name": "as built",
    "marking": "as built",
@@ -548,8 +728,8 @@
     "model": "own layout"
    },
    "destroyer": {
-    "src": "generic",
-    "model": "Destroyer"
+    "src": "own",
+    "model": "own layout"
    },
    "ship_carrier": {
     "src": "own",
@@ -590,24 +770,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "66684A",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -650,13 +844,25 @@
     "model": "Bomber until 1942, then Lancaster",
     "of": "UK"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "shared",
-    "model": "own layout",
-    "of": "UK"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "shared",
@@ -668,8 +874,9 @@
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -712,13 +919,25 @@
     "model": "Bomber until 1942, then Lancaster",
     "of": "UK"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "shared",
-    "model": "own layout",
-    "of": "UK"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "shared",
@@ -730,8 +949,9 @@
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -775,13 +995,25 @@
     "model": "Bomber until 1942, then Lancaster",
     "of": "UK"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "shared",
-    "model": "own layout",
-    "of": "UK"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "shared",
@@ -793,8 +1025,9 @@
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -838,13 +1071,25 @@
     "model": "Bomber until 1942, then Lancaster",
     "of": "UK"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "shared",
-    "model": "own layout",
-    "of": "UK"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "shared",
@@ -856,8 +1101,9 @@
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -901,13 +1147,25 @@
     "model": "Bomber until 1942, then Lancaster",
     "of": "UK"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "65704E",
    "paint_name": "as built",
    "marking": "as built",
    "battleship": {
-    "src": "shared",
-    "model": "own layout",
-    "of": "UK"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "shared",
@@ -919,8 +1177,9 @@
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -958,24 +1217,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1012,24 +1285,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1066,6 +1353,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -1075,20 +1374,22 @@
    ],
    "marking_words": "red, white, sky",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1125,24 +1426,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1179,24 +1494,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1233,24 +1562,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5C6268",
    "paint_name": "slate grey",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1288,24 +1631,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1342,6 +1699,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -1351,20 +1720,22 @@
    ],
    "marking_words": "blue, black, white",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1401,6 +1772,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -1410,20 +1793,22 @@
    ],
    "marking_words": "red, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1460,6 +1845,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -1469,20 +1866,22 @@
    ],
    "marking_words": "yellow, green, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1519,24 +1918,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5C6268",
    "paint_name": "slate grey",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1573,24 +1986,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1627,24 +2054,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1681,24 +2122,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1736,24 +2191,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1790,6 +2259,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -1799,20 +2280,22 @@
    ],
    "marking_words": "white, blue, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1849,24 +2332,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1903,24 +2400,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -1957,24 +2468,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2011,24 +2536,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2065,24 +2604,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2119,6 +2672,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "9A8A62",
    "paint_name": "sand",
    "marking": [
@@ -2128,20 +2693,22 @@
    ],
    "marking_words": "black, white, green",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2178,6 +2745,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2187,20 +2766,22 @@
    ],
    "marking_words": "green, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2238,24 +2819,38 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": "as built",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2293,6 +2888,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2302,20 +2909,22 @@
    ],
    "marking_words": "green, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2352,6 +2961,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -2361,20 +2982,22 @@
    ],
    "marking_words": "blue, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2411,6 +3034,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -2420,20 +3055,22 @@
    ],
    "marking_words": "blue, red, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2470,6 +3107,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2479,20 +3128,22 @@
    ],
    "marking_words": "blue, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2529,6 +3180,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -2538,20 +3201,22 @@
    ],
    "marking_words": "sky, white, sky",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2588,6 +3253,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -2597,20 +3274,22 @@
    ],
    "marking_words": "blue, white, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2647,6 +3326,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2656,20 +3347,22 @@
    ],
    "marking_words": "blue, white, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2706,6 +3399,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -2715,20 +3420,22 @@
    ],
    "marking_words": "blue, white, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2765,6 +3472,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2774,20 +3493,22 @@
    ],
    "marking_words": "blue, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2824,6 +3545,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -2833,20 +3566,22 @@
    ],
    "marking_words": "blue, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2883,6 +3618,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": [
@@ -2892,20 +3639,22 @@
    ],
    "marking_words": "yellow, blue, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -2942,6 +3691,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -2951,20 +3712,22 @@
    ],
    "marking_words": "red, blue, yellow",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3001,6 +3764,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -3010,20 +3785,22 @@
    ],
    "marking_words": "blue, yellow, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3061,6 +3838,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "9A8A62",
    "paint_name": "sand",
    "marking": [
@@ -3070,20 +3859,22 @@
    ],
    "marking_words": "red, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3120,6 +3911,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -3129,20 +3932,22 @@
    ],
    "marking_words": "green, yellow, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3179,6 +3984,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -3188,20 +4005,22 @@
    ],
    "marking_words": "red, yellow, green",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3238,6 +4057,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5E6A62",
    "paint_name": "grey-green",
    "marking": [
@@ -3247,20 +4078,22 @@
    ],
    "marking_words": "red, white, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3297,6 +4130,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -3306,20 +4151,22 @@
    ],
    "marking_words": "blue, white, yellow",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3356,6 +4203,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -3365,20 +4224,22 @@
    ],
    "marking_words": "sky, white, sky",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3416,6 +4277,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "5C6268",
    "paint_name": "slate grey",
    "marking": [
@@ -3425,20 +4298,22 @@
    ],
    "marking_words": "blue, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3477,6 +4352,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -3486,20 +4373,22 @@
    ],
    "marking_words": "red, blue, white",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3538,6 +4427,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -3547,20 +4448,22 @@
    ],
    "marking_words": "yellow, red, blue",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3599,6 +4502,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -3608,20 +4523,22 @@
    ],
    "marking_words": "red, yellow, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3659,6 +4576,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -3668,20 +4597,22 @@
    ],
    "marking_words": "black, red, green",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3719,6 +4650,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "4C5840",
    "paint_name": "dark green",
    "marking": [
@@ -3728,20 +4671,22 @@
    ],
    "marking_words": "blue, red, white",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3779,6 +4724,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "6C6444",
    "paint_name": "brown olive",
    "marking": [
@@ -3788,20 +4745,22 @@
    ],
    "marking_words": "green, white, green",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3839,6 +4798,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "9A8A62",
    "paint_name": "sand",
    "marking": [
@@ -3848,20 +4819,22 @@
    ],
    "marking_words": "red, white, red",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",
@@ -3899,6 +4872,18 @@
     "src": "generic",
     "model": "Bomber"
    },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
    "paint": "60664A",
    "paint_name": "olive green",
    "marking": [
@@ -3908,20 +4893,22 @@
    ],
    "marking_words": "red, blue, white",
    "battleship": {
-    "src": "generic",
-    "model": "GenericBattleship"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
    },
    "cruiser": {
     "src": "generic",
-    "model": "GenericCruiser"
+    "model": "Cruiser"
    },
    "destroyer": {
     "src": "generic",
     "model": "Destroyer"
    },
    "ship_carrier": {
-    "src": "generic",
-    "model": "Carrier"
+    "src": "captured",
+    "model": null,
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
    },
    "submarine": {
     "src": "generic",

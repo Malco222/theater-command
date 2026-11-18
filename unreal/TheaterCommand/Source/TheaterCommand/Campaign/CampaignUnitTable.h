@@ -22,7 +22,12 @@ namespace UnitTable
 	bool Hull(const FString& Tag, FLinearColor& Out);
 	/** For a country with no marking drawn: the ring of its flag's colours, outer, middle and centre. Empty where its marking is drawn, or not known. */
 	TArray<FLinearColor> Ring(const FString& Tag);
-	/** True where the country's battleship (its cruiser) is the plain hull: it has no layout of its own and shares none by the record. */
-	bool PlainBattleship(const FString& Tag);
-	bool PlainCruiser(const FString& Tag);
+	/**
+	 * Whose layout the country's battleship (its cruiser) takes: its own tag, another country's by the record (Vichy's
+	 * battleship is France's, a dominion's cruiser Britain's), or nothing for the plain hull, which is no navy's own.
+	 * A small nation's battleship, held only by a great power's captured or stolen plans, is the plain one until the
+	 * rules say whose plans it holds. Where the table is not read, the tag itself.
+	 */
+	FString BattleshipOf(const FString& Tag);
+	FString CruiserOf(const FString& Tag);
 }

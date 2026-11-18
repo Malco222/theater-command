@@ -12,7 +12,8 @@ namespace
 	{
 		FString Head, Cloth, Paint, Hull;
 		TArray<FString> Ring;
-		bool bPlainBattleship = false, bPlainCruiser = false;
+		// Whose layout its battleship and its cruiser take: "*" its own, a tag another's by the record, empty the plain one.
+		FString BattleshipOf, CruiserOf;
 	};
 
 	struct FTable
@@ -35,14 +36,32 @@ namespace
 		Told->TryGetStringField(TEXT("hull"), Look.Hull);
 		// (a marking that is a list is a ring of the flag's colours; one that is words is drawn already, or is the default's note)
 		Told->TryGetStringArrayField(TEXT("marking"), Look.Ring);
-		FString Source;
-		if (Told->TryGetObjectField(TEXT("battleship"), Part) && (*Part)->TryGetStringField(TEXT("src"), Source))
+		// (The art director's table of 18 November 2026, after Brian's rule for small nations: a ship's "src" is "own",
+		// "shared" (another country's layout by the record, named in "of"), "generic", or "captured". A captured
+		// battleship is one a small nation holds by a great power's plans; it is to be that power's model in the
+		// small nation's own grey. The rules do not yet say whose plans a country holds, so until they do such a
+		// ship is drawn as the plain one, which is no navy's own.)
+		auto LayoutOf = [](const TSharedPtr<FJsonObject>& Ship)
 		{
-			Look.bPlainBattleship = Source == TEXT("generic");
+			FString Source, Of;
+			Ship->TryGetStringField(TEXT("src"), Source);
+			if (Source == TEXT("own"))
+			{
+				return FString(TEXT("*"));
+			}
+			if (Source == TEXT("shared") && Ship->TryGetStringField(TEXT("of"), Of))
+			{
+				return Of;
+			}
+			return FString();
+		};
+		if (Told->TryGetObjectField(TEXT("battleship"), Part))
+		{
+			Look.BattleshipOf = LayoutOf(*Part);
 		}
-		if (Told->TryGetObjectField(TEXT("cruiser"), Part) && (*Part)->TryGetStringField(TEXT("src"), Source))
+		if (Told->TryGetObjectField(TEXT("cruiser"), Part))
 		{
-			Look.bPlainCruiser = Source == TEXT("generic");
+			Look.CruiserOf = LayoutOf(*Part);
 		}
 		return Look;
 	}
@@ -152,14 +171,14 @@ TArray<FLinearColor> UnitTable::Ring(const FString& Tag)
 	return Out;
 }
 
-bool UnitTable::PlainBattleship(const FString& Tag)
+FString UnitTable::BattleshipOf(const FString& Tag)
 {
 	const FLook* Look = LookOf(Tag);
-	return Look && Look->bPlainBattleship;
+	return !Look ? Tag : Look->BattleshipOf == TEXT("*") ? Tag : Look->BattleshipOf;
 }
 
-bool UnitTable::PlainCruiser(const FString& Tag)
+FString UnitTable::CruiserOf(const FString& Tag)
 {
 	const FLook* Look = LookOf(Tag);
-	return Look && Look->bPlainCruiser;
+	return !Look ? Tag : Look->CruiserOf == TEXT("*") ? Tag : Look->CruiserOf;
 }
