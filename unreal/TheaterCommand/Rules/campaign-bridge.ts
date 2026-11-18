@@ -367,27 +367,51 @@ function workOutPictureTrade(s: Game): PictureTrade | null {
     return { nat: o, pays: d.state === 'cut' ? 0 : d.worth * (1 - d.lost) * (1 + boost), full: d.worth * (1 + boost), state: d.state, path: tradePathOf(s, d) };
   }).sort((x, y) => y.full - x.full || (x.nat < y.nat ? -1 : 1));
   let ready: boolean | null = null;
+  const houses = tradeHousesOf(s, nat);
   return {
-    used: deals.length, houses: tradeHousesOf(s, nat), pc: n.pc, cost: TRADE_RULES.sign.pc, deals,
+    used: deals.length, houses, pc: n.pc, cost: TRADE_RULES.sign.pc, deals,
     // (An offer's `why` is null when the rules find nothing in the way and the player has the political capital. A
     // country the book leaves out of the offers, the player's own, one fallen or asleep, one already trading, always
     // has something in the way, so asking every country is the same as asking the offers.)
+    // (Speed, b414 mark 2.) whyNoTrade asks after the player's own free trading house for every country it is asked
+    // about, and each time works out what his towns add to his houses. Here that is already known (deals.length and
+    // houses above, the same dealsOf and housesOf it uses), so it is asked once and whyNoTrade is told to skip it: the
+    // same countries come out ready.
     anyReady: () => {
       if (ready === null) {
         const ctx = new Map();
-        ready = n.pc >= TRADE_RULES.sign.pc && Object.values(s.nations).some((b) => whyNoTradeWith(s, nat, b.id, ctx) === null);
+        ready = n.pc >= TRADE_RULES.sign.pc && deals.length < houses && Object.values(s.nations).some((b) => whyNoTradeWith(s, nat, b.id, ctx, false) === null);
       }
       return ready;
     },
   };
 }
 
+// (Speed, b414 mark 2.) The depth and the six desks, likewise worked out once a picture: the frame's brief asked
+// commandOf once, then once more for each desk's bar, and the list of pages asked for the brief again, fourteen
+// times in all. Outside a picture (a desk's own screen, the staff's room) each still asks afresh.
+let pictureCommandKept: { s: Game; v: ReturnType<typeof commandOf>; failed: boolean; why: unknown } | null = null;
+function pictureCommand(s: Game): ReturnType<typeof commandOf> {
+  if (pictureDepth > 0 && pictureCommandKept && pictureCommandKept.s === s) {
+    if (pictureCommandKept.failed) throw pictureCommandKept.why;
+    return pictureCommandKept.v;
+  }
+  let v: ReturnType<typeof commandOf>;
+  try { v = commandOf(s); } catch (why) {
+    if (pictureDepth > 0) pictureCommandKept = { s, v: null, failed: true, why };
+    throw why;
+  }
+  if (pictureDepth > 0) pictureCommandKept = { s, v, failed: false, why: null };
+  return v;
+}
+let pictureBriefKept: { s: Game; brief: ReturnType<typeof workOutCommandBrief> } | null = null;
+
 function view() {
   pictureDepth++;
   try {
     return drawView();
   } finally {
-    if (--pictureDepth === 0) pictureTradeKept = null;
+    if (--pictureDepth === 0) { pictureTradeKept = null; pictureCommandKept = null; pictureBriefKept = null; }
   }
 }
 
@@ -4896,7 +4920,7 @@ function deskOfPage(id: string): DeskId | null {
 /** For a bar on a desk's own screen: who runs it, a line to read, and the button that changes hands. Null outside the grand campaign. */
 function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: string; act: string; tip: string } | null {
   let v: ReturnType<typeof commandOf> = null;
-  try { v = commandOf(s); } catch { v = null; }
+  try { v = pictureCommand(s); } catch { v = null; }
   const d = v?.desks.find((x) => x.id === desk), def = deskDef(desk);
   if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
   return d.staff
@@ -4905,9 +4929,15 @@ function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: 
 }
 
 /** The depth and the desks, for the frame: null outside the grand campaign. */
-function commandBrief(s: Game): { name: string; under: string; depth: string; staffed: number; desks: { id: string; name: string; staff: boolean; line: string; label: string; act: string; tip: string }[] } | null {
+function commandBrief(s: Game): ReturnType<typeof workOutCommandBrief> {
+  if (pictureDepth > 0 && pictureBriefKept && pictureBriefKept.s === s) return pictureBriefKept.brief;
+  const brief = workOutCommandBrief(s);
+  if (pictureDepth > 0) pictureBriefKept = { s, brief };
+  return brief;
+}
+function workOutCommandBrief(s: Game): { name: string; under: string; depth: string; staffed: number; desks: { id: string; name: string; staff: boolean; line: string; label: string; act: string; tip: string }[] } | null {
   try {
-    const v = commandOf(s);
+    const v = pictureCommand(s);
     if (!v || !s.human || !s.nations[s.human]?.alive) return null;
     return {
       name: v.name, under: v.under, depth: v.depth ?? '', staffed: v.desks.filter((d) => d.staff).length,

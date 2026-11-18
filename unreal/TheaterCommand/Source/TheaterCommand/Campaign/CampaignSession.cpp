@@ -4,13 +4,17 @@
 #include "Campaign/TheaterSpeed.h"
 #include "Rules/RulesHost.h"
 #include "TheaterCommand.h"
+#include "Async/Async.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+#include <atomic>
 
 static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out);
 
@@ -20,10 +24,24 @@ namespace
 	{
 		return FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
 	}
+
+	/** (Speed, b414 mark 1: see FCampaignSession::MoveAside.) */
+	TAutoConsoleVariable<int32> CVarRulesAside(
+		TEXT("tc.Speed.RulesAside"), 1,
+		TEXT("1 (default): a march, a landing and an attack are answered by the rules on a thread of their own, with the questions the army in hand asks next, and the press waits for nothing. 0: answered in the frame of the press, as before."),
+		ECVF_Default);
 }
 
 FCampaignSession::FCampaignSession() = default;
-FCampaignSession::~FCampaignSession() = default;
+
+FCampaignSession::~FCampaignSession()
+{
+	// (the rules' thread uses the engine, which goes with the session)
+	if (AsideRun.IsValid())
+	{
+		AsideRun.Wait();
+	}
+}
 
 namespace
 {
@@ -62,10 +80,28 @@ namespace
 	{
 		return Army.IsEmpty() ? FString() : FString::Printf(TEXT(",%s,[%s]"), *JsonQuote(Army), *IdList(ArmyIds));
 	}
+
+	/**
+	 * (Speed, b414 mark 1.) The arguments of the questions the army in hand asks after an order, made one way for the
+	 * question and for the order that asks it ahead: an answer kept ahead is found by them, to the character.
+	 */
+	FString RegionArgs(int32 RegionId)
+	{
+		return FString::Printf(TEXT("[%d]"), RegionId);
+	}
+	FString ReachArgs(const TArray<int32>& CorpsIds)
+	{
+		return FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds));
+	}
+	FString RailShowArgs(const TArray<int32>& CorpsIds, const TArray<int32>& March, const FString& Army, const TArray<int32>& ArmyIds)
+	{
+		return FString::Printf(TEXT("[[%s],[%s]%s]"), *IdList(CorpsIds), *IdList(March), *ArmyArgs(Army, ArmyIds));
+	}
 }
 
 bool FCampaignSession::Prepare(FString& OutError)
 {
+	DropAside(); // (before the engine it was asked of goes)
 	bReady = false;
 	bRunning = false;
 	Host = MakeUnique<FRulesHost>();
@@ -108,6 +144,7 @@ TArray<FStartGroup> FCampaignSession::Starts()
 	TArray<FStartGroup> Out;
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	Settle();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || !Host->Call(TEXT("starts"), TEXT("[]"), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -209,6 +246,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
 	const double Began = FPlatformTime::Seconds();
+	Settle();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false")), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -249,6 +287,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)),
 		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""));
 	FString ViewJson;
+	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	const double Began = FPlatformTime::Seconds();
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
@@ -275,6 +314,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 FString FCampaignSession::Save()
 {
 	FString Json, Error;
+	Settle(); // (an order still being answered is in the war that is saved)
 	if (!bRunning || !Host->Call(TEXT("save"), TEXT("[]"), Json, Error))
 	{
 		return FString();
@@ -292,6 +332,7 @@ FString FCampaignSession::DescribeSave(const FString& SaveText)
 {
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	Settle();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("peek"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -311,6 +352,7 @@ bool FCampaignSession::Load(const FString& SaveText)
 {
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
+	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
 	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("load"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -328,8 +370,24 @@ bool FCampaignSession::Load(const FString& SaveText)
 	return true;
 }
 
+namespace
+{
+	/** The questions that change nothing in the war: see CallRules. */
+	bool IsQuestion(const FString& Function)
+	{
+		// (Speed, b414 mark 1: "stands", "province" and "railShow" too, which the army in hand asks after every order
+		// and the order given aside asks ahead. Each was checked against the rules as the six were. And "garrisonWhy",
+		// whyNotOrderGarrison's sentence, which the tray asks before those three when a town's guard shares it: asked as
+		// an order it threw away the three answers kept ahead.)
+		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
+			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy") };
+		return Questions.Contains(Function);
+	}
+}
+
 bool FCampaignSession::CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject)
 {
+	Settle(); // (an order still being answered on the rules' thread comes first: see MoveAside)
 	if (!bRunning)
 	{
 		return false;
@@ -343,8 +401,7 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	// answers the same, and it leaves the saved game as it found it. "lead", why an army may not go alone, is asked by
 	// the same hover tip just before the odds: were it not here, it would forget the odds on every hover.)
 	// "tc.Speed.RulesMemo 0" always asks.
-	static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead") };
-	const bool bQuestion = Questions.Contains(Function);
+	const bool bQuestion = IsQuestion(Function);
 	if (!bQuestion)
 	{
 		RulesMemo.Reset();
@@ -439,6 +496,11 @@ namespace
 FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 {
 	THEATER_SPEED_SCOPE(ParseView);
+	return ReadView(Object);
+}
+
+FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
+{
 	FCampaignView Out;
 	Object->TryGetStringField(TEXT("rules"), Out.Rules);
 	Out.Turn = Object->GetIntegerField(TEXT("turn"));
@@ -1461,7 +1523,7 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 		OutStanding->Reset();
 	}
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("reach"), FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds)), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("reach"), ReachArgs(CorpsIds), Object))
 	{
 		return Out;
 	}
@@ -1613,7 +1675,7 @@ FString FCampaignSession::Stands(int32 RegionId)
 {
 	FString Now;
 	TSharedPtr<FJsonObject> Object;
-	if (CallRules(TEXT("stands"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	if (CallRules(TEXT("stands"), RegionArgs(RegionId), Object))
 	{
 		Object->TryGetStringField(TEXT("stands"), Now);
 	}
@@ -2082,46 +2144,56 @@ FAttackResult FCampaignSession::Take(const TArray<int32>& CorpsIds, int32 Region
 	return CorpsIds.Num() == 0 ? FAttackResult() : Fight(TEXT("take"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bAssault ? TEXT("true") : TEXT("false")));
 }
 
+namespace
+{
+	/** An order that may end in a battle, as the rules answer it (on either thread: it reads only the answer). */
+	FAttackResult ReadFight(const TSharedPtr<FJsonObject>& Object)
+	{
+		FAttackResult Out;
+		const TSharedPtr<FJsonObject>* Report = nullptr;
+		if (Object->TryGetObjectField(TEXT("report"), Report)) // null when the rules would not let the attack go in
+		{
+			Out.bFought = true;
+			(*Report)->TryGetStringField(TEXT("level"), Out.Level);
+			(*Report)->TryGetBoolField(TEXT("taken"), Out.bTaken);
+			(*Report)->TryGetBoolField(TEXT("yielded"), Out.bYielded);
+			(*Report)->TryGetNumberField(TEXT("attLost"), Out.AttackerLost);
+			(*Report)->TryGetNumberField(TEXT("defLost"), Out.DefenderLost);
+			(*Report)->TryGetNumberField(TEXT("prisoners"), Out.Prisoners);
+			Out.Attackers = ReadUnits(*Report, TEXT("attackers"));
+			Out.Defenders = ReadUnits(*Report, TEXT("defenders"));
+			Out.Lines = ReadTicket(*Report);
+			double Odds = 0.0;
+			(*Report)->TryGetNumberField(TEXT("odds"), Odds);
+			Out.Odds = static_cast<float>(Odds);
+		}
+		Object->TryGetStringField(TEXT("price"), Out.Price);
+		{
+			// (Version 84) who paid, and to what
+			const TSharedPtr<FJsonObject>* Paid = nullptr;
+			if (Object->TryGetObjectField(TEXT("paid"), Paid))
+			{
+				(*Paid)->TryGetStringField(TEXT("text"), Out.Paid);
+				(*Paid)->TryGetStringField(TEXT("sign"), Out.PaidSign);
+			}
+		}
+		Object->TryGetStringField(TEXT("note"), Out.Note);
+		Object->TryGetBoolField(TEXT("siege"), Out.bSiege);
+		Object->TryGetBoolField(TEXT("fell"), Out.bFell); // (rules 84.1: a march to take a place)
+		Object->TryGetStringField(TEXT("stands"), Out.Stands);
+		Out.Moved = ReadMoves(Object);
+		return Out;
+	}
+}
+
 FAttackResult FCampaignSession::Fight(const FString& Function, const FString& ArgumentsJson)
 {
-	FAttackResult Out;
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(Function, ArgumentsJson, Object))
 	{
-		return Out;
+		return FAttackResult();
 	}
-	const TSharedPtr<FJsonObject>* Report = nullptr;
-	if (Object->TryGetObjectField(TEXT("report"), Report)) // null when the rules would not let the attack go in
-	{
-		Out.bFought = true;
-		(*Report)->TryGetStringField(TEXT("level"), Out.Level);
-		(*Report)->TryGetBoolField(TEXT("taken"), Out.bTaken);
-		(*Report)->TryGetBoolField(TEXT("yielded"), Out.bYielded);
-		(*Report)->TryGetNumberField(TEXT("attLost"), Out.AttackerLost);
-		(*Report)->TryGetNumberField(TEXT("defLost"), Out.DefenderLost);
-		(*Report)->TryGetNumberField(TEXT("prisoners"), Out.Prisoners);
-		Out.Attackers = ReadUnits(*Report, TEXT("attackers"));
-		Out.Defenders = ReadUnits(*Report, TEXT("defenders"));
-		Out.Lines = ReadTicket(*Report);
-		double Odds = 0.0;
-		(*Report)->TryGetNumberField(TEXT("odds"), Odds);
-		Out.Odds = static_cast<float>(Odds);
-	}
-	Object->TryGetStringField(TEXT("price"), Out.Price);
-	{
-		// (Version 84) who paid, and to what
-		const TSharedPtr<FJsonObject>* Paid = nullptr;
-		if (Object->TryGetObjectField(TEXT("paid"), Paid))
-		{
-			(*Paid)->TryGetStringField(TEXT("text"), Out.Paid);
-			(*Paid)->TryGetStringField(TEXT("sign"), Out.PaidSign);
-		}
-	}
-	Object->TryGetStringField(TEXT("note"), Out.Note);
-	Object->TryGetBoolField(TEXT("siege"), Out.bSiege);
-	Object->TryGetBoolField(TEXT("fell"), Out.bFell); // (rules 84.1: a march to take a place)
-	Object->TryGetStringField(TEXT("stands"), Out.Stands);
-	Out.Moved = ReadMoves(Object);
+	FAttackResult Out = ReadFight(Object);
 	TakeView(Object);
 	return Out;
 }
@@ -2514,7 +2586,7 @@ FRailShow FCampaignSession::RailShow(const TArray<int32>& CorpsIds, const TArray
 {
 	FRailShow Out;
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("railShow"), FString::Printf(TEXT("[[%s],[%s]%s]"), *IdList(CorpsIds), *IdList(March), *ArmyArgs(Army, ArmyIds)), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("railShow"), RailShowArgs(CorpsIds, March, Army, ArmyIds), Object))
 	{
 		return Out;
 	}
@@ -2645,16 +2717,27 @@ FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 
 	return Plan;
 }
 
+namespace
+{
+	/** A landing as the rules answer it (on either thread). */
+	FLandingResult ReadLanding(const TSharedPtr<FJsonObject>& Object)
+	{
+		FLandingResult Result;
+		Object->TryGetBoolField(TEXT("ok"), Result.bOk);
+		Object->TryGetBoolField(TEXT("taken"), Result.bTaken);
+		Object->TryGetStringField(TEXT("note"), Result.Note);
+		Result.Moved = ReadMoves(Object);
+		return Result;
+	}
+}
+
 FLandingResult FCampaignSession::Land(const TArray<int32>& CorpsIds, int32 RegionId)
 {
 	FLandingResult Result;
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() > 0 && CallRules(TEXT("landOn"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
 	{
-		Object->TryGetBoolField(TEXT("ok"), Result.bOk);
-		Object->TryGetBoolField(TEXT("taken"), Result.bTaken);
-		Object->TryGetStringField(TEXT("note"), Result.Note);
-		Result.Moved = ReadMoves(Object);
+		Result = ReadLanding(Object);
 		TakeView(Object);
 	}
 	return Result;
@@ -2664,7 +2747,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 {
 	FProvinceInfo Info;
 	TSharedPtr<FJsonObject> Object;
-	if (!CallRules(TEXT("province"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	if (!CallRules(TEXT("province"), RegionArgs(RegionId), Object))
 	{
 		return Info; // the stand-in rules have no provinces to manage
 	}
@@ -4425,4 +4508,312 @@ bool FCampaignSession::CancelOrder(int32 OrderId)
 	Object->TryGetBoolField(TEXT("ok"), bOk);
 	TakeView(Object);
 	return bOk;
+}
+
+// (Speed, the design director's mark 1 for build 414: a press's own work under a tenth of a second. See MoveAside.)
+
+struct FCampaignSession::FAside
+{
+	FString Function, Arguments;
+	/** Run on the rules' thread: what the army in hand will ask after the order. */
+	TFunction<FHandNext(const TSharedPtr<FJsonObject>&)> Guess;
+	/** Run on the game thread, with the answer. */
+	TFunction<void(const TSharedPtr<FJsonObject>&)> Then;
+
+	// What came back, written on the rules' thread and read on the game thread once bDone is set.
+	bool bOk = false;
+	FString Error;
+	double Seconds = 0.0;
+	TSharedPtr<FJsonObject> Answer;
+	bool bView = false;
+	FCampaignView View;
+	struct FKept
+	{
+		FString Function, Arguments, Json;
+		double Seconds = 0.0;
+	};
+	TArray<FKept> Kept;
+	std::atomic<bool> bDone{ false };
+};
+
+void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJson, bool bAside, TFunction<FHandNext(const TSharedPtr<FJsonObject>&)>&& InGuess, TFunction<void(const TSharedPtr<FJsonObject>&)>&& InThen)
+{
+	// (one order at a time: the controller takes no order while one is being answered, and an earlier one is taken first)
+	Deliver(true);
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	{
+		// At once, as before: the order, its picture of the war, then its Then.
+		TSharedPtr<FJsonObject> Object;
+		if (!CallRules(Function, ArgumentsJson, Object))
+		{
+			InThen(nullptr);
+			return;
+		}
+		if (InGuess)
+		{
+			InGuess(Object); // (it reads the answer for Then; nothing is asked ahead)
+		}
+		TakeView(Object);
+		InThen(Object);
+		return;
+	}
+	RulesMemo.Reset(); // (an order: nothing asked before it holds)
+	const TSharedRef<FAside, ESPMode::ThreadSafe> Job = MakeShared<FAside, ESPMode::ThreadSafe>();
+	Job->Function = Function;
+	Job->Arguments = ArgumentsJson;
+	Job->Guess = MoveTemp(InGuess);
+	Job->Then = MoveTemp(InThen);
+	Aside = Job;
+	FRulesHost* Rules = Host.Get();
+	// (A thread of its own, not the pool, where the world's fine sheets are modelled: the answer never waits behind them.
+	// Its stack is as deep as a program's first thread, for the rules run inside the game with -TheaterRulesInside.)
+	AsideRun = AsyncThread([Rules, Job]()
+	{
+		const double Began = FPlatformTime::Seconds();
+		FString Json;
+		Job->bOk = Rules->Call(Job->Function, Job->Arguments, Json, Job->Error);
+		Job->Seconds = FPlatformTime::Seconds() - Began;
+		if (Job->bOk && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Job->Answer) && Job->Answer.IsValid()))
+		{
+			Job->bOk = false;
+			Job->Error = Job->Function + TEXT(": the answer could not be read");
+		}
+		if (Job->bOk)
+		{
+			const TSharedPtr<FJsonObject>* NewView = nullptr;
+			if (Job->Answer->TryGetObjectField(TEXT("view"), NewView))
+			{
+				Job->View = ReadView(*NewView);
+				Job->bView = true;
+			}
+			const FHandNext Next = Job->Guess ? Job->Guess(Job->Answer) : FHandNext();
+			auto Ask = [Rules, &Job](const FString& Question, const FString& Asked) -> FString
+			{
+				const double At = FPlatformTime::Seconds();
+				FString Said, Wrong;
+				if (!Rules->Call(Question, Asked, Said, Wrong))
+				{
+					return FString(); // (the hand asks it again itself, and says what went wrong)
+				}
+				FAside::FKept& Kept = Job->Kept.AddDefaulted_GetRef();
+				Kept.Function = Question;
+				Kept.Arguments = Asked;
+				Kept.Json = Said;
+				Kept.Seconds = FPlatformTime::Seconds() - At;
+				return Said;
+			};
+			if (Job->bView && Next.Region != INDEX_NONE)
+			{
+				// The army in hand as the controller's RefreshOrders will make it from this picture: its corps there that
+				// can be ordered, its general, and its corps in the field (the town's garrison where nobody stands outside).
+				const FCampaignView& Seen = Job->View;
+				bool bAny = false;
+				FString General;
+				TArray<int32> Field, InTown;
+				for (const FViewCorps& Unit : Seen.Corps)
+				{
+					if (Unit.Region != Next.Region || Unit.Nation != Seen.Human)
+					{
+						continue;
+					}
+					bAny = true;
+					if (General.IsEmpty() && !Unit.General.IsEmpty())
+					{
+						General = Unit.General;
+					}
+					if (Unit.bCanOrder)
+					{
+						(Unit.bInTown ? InTown : Field).Add(Unit.Id);
+					}
+				}
+				if (bAny)
+				{
+					TArray<int32> Ids;
+					for (const int32 Id : Next.Ids)
+					{
+						if (Field.Contains(Id) || InTown.Contains(Id))
+						{
+							Ids.Add(Id);
+						}
+					}
+					if (Field.Num() == 0)
+					{
+						Field = InTown;
+					}
+					const FString Army = General.IsEmpty() ? FString::Printf(TEXT("the %s army"), *Next.Adjective) : FString::Printf(TEXT("%s's army"), *General);
+					Ask(TEXT("stands"), RegionArgs(Next.Region));
+					if (Next.bPlain && Ids.Num() > 0)
+					{
+						const FString ReachJson = Ask(TEXT("reach"), ReachArgs(Ids));
+						TSharedPtr<FJsonObject> Read;
+						if (!ReachJson.IsEmpty() && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ReachJson), Read) && Read.IsValid())
+						{
+							// (the ground it walks to, as RefreshOrders hands it to the railway's question)
+							TArray<int32> Walked;
+							const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
+							if (Read->TryGetArrayField(TEXT("regions"), Regions))
+							{
+								for (const TSharedPtr<FJsonValue>& Value : *Regions)
+								{
+									const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+									bool bAttack = false;
+									FString War;
+									if (!Entry.IsValid())
+									{
+										continue;
+									}
+									Entry->TryGetBoolField(TEXT("attack"), bAttack);
+									Entry->TryGetStringField(TEXT("war"), War);
+									if (!bAttack && War.IsEmpty())
+									{
+										Walked.Add(static_cast<int32>(Entry->GetIntegerField(TEXT("id"))));
+									}
+								}
+							}
+							Ask(TEXT("railShow"), RailShowArgs(Ids, Walked, Army, Field));
+						}
+					}
+				}
+			}
+			if (Next.Selected != INDEX_NONE)
+			{
+				Ask(TEXT("province"), RegionArgs(Next.Selected));
+			}
+		}
+		Job->bDone.store(true, std::memory_order_release);
+	}, 8 * 1024 * 1024);
+}
+
+void FCampaignSession::Settle()
+{
+	if (!Aside.IsValid())
+	{
+		return;
+	}
+	if (!Aside->bDone.load(std::memory_order_acquire))
+	{
+		THEATER_SPEED_SCOPE(RulesWait); // (something asked the rules while the order was still being answered)
+		AsideRun.Wait();
+	}
+	const TSharedPtr<FAside, ESPMode::ThreadSafe> Job = MoveTemp(Aside);
+	Aside.Reset();
+	AsideRun = TFuture<void>();
+	TheaterSpeed::NoteRulesCall(Job->Function, Job->Seconds, false);
+	if (!Job->bOk)
+	{
+		UE_LOG(LogTheater, Error, TEXT("Rules: %s"), *Job->Error);
+	}
+	if (Job->bView)
+	{
+		View = MoveTemp(Job->View);
+		OnViewChanged.Broadcast();
+	}
+	RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
+	for (FAside::FKept& Kept : Job->Kept)
+	{
+		TheaterSpeed::NoteRulesCall(Kept.Function, Kept.Seconds, false);
+		if (TheaterSpeed::RulesMemo() && IsQuestion(Kept.Function))
+		{
+			RulesMemo.Add(Kept.Function + TEXT("|") + Kept.Arguments, MoveTemp(Kept.Json));
+		}
+	}
+	const TSharedPtr<FJsonObject> Answer = Job->bOk ? Job->Answer : TSharedPtr<FJsonObject>();
+	AsideThen = [Then = MoveTemp(Job->Then), Answer]()
+	{
+		if (Then)
+		{
+			Then(Answer);
+		}
+	};
+}
+
+void FCampaignSession::Deliver(bool bWait)
+{
+	if (Aside.IsValid() && (bWait || Aside->bDone.load(std::memory_order_acquire)))
+	{
+		THEATER_SPEED_SCOPE(RulesAnswer);
+		Settle();
+	}
+	if (AsideThen)
+	{
+		THEATER_SPEED_SCOPE(RulesAnswerThen);
+		const TFunction<void()> Run = MoveTemp(AsideThen);
+		AsideThen = nullptr;
+		Run();
+	}
+}
+
+void FCampaignSession::DropAside()
+{
+	Settle();
+	AsideThen = nullptr;
+}
+
+void FCampaignSession::MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
+	TFunction<FHandNext(const FMoveAnswer&)>&& InGuess, TFunction<void(const FMoveAnswer&)>&& InThen)
+{
+	if (CorpsIds.Num() == 0)
+	{
+		InThen(FMoveAnswer());
+		return;
+	}
+	// (read once, on whichever thread has the answer first; Then is run after, on the game thread)
+	const TSharedRef<FMoveAnswer, ESPMode::ThreadSafe> Read = MakeShared<FMoveAnswer, ESPMode::ThreadSafe>();
+	Order(TEXT("move"), FString::Printf(TEXT("[[%s],%d%s]"), *IdList(CorpsIds), RegionId, *ArmyArgs(Army, ArmyIds)), bAside,
+		[Read, Guess = MoveTemp(InGuess)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Read->Moved = ReadMoves(Answer);
+			Answer->TryGetStringField(TEXT("note"), Read->Note);
+			return Guess ? Guess(*Read) : FHandNext();
+		},
+		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? *Read : FMoveAnswer());
+		});
+}
+
+void FCampaignSession::LandAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bAside, TFunction<FHandNext(const FLandingResult&)>&& InGuess, TFunction<void(const FLandingResult&)>&& InThen)
+{
+	if (CorpsIds.Num() == 0)
+	{
+		InThen(FLandingResult());
+		return;
+	}
+	const TSharedRef<FLandingResult, ESPMode::ThreadSafe> Read = MakeShared<FLandingResult, ESPMode::ThreadSafe>();
+	Order(TEXT("landOn"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), bAside,
+		[Read, Guess = MoveTemp(InGuess)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			*Read = ReadLanding(Answer);
+			return Guess ? Guess(*Read) : FHandNext();
+		},
+		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? *Read : FLandingResult());
+		});
+}
+
+void FCampaignSession::FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
+	TFunction<FHandNext(const FAttackResult&)>&& InGuess, TFunction<void(const FAttackResult&)>&& InThen)
+{
+	// (the same arguments as Attack, Take, Storm and Sally send)
+	const bool bByProvince = Function == TEXT("storm") || Function == TEXT("sally");
+	if (!bByProvince && CorpsIds.Num() == 0)
+	{
+		InThen(FAttackResult());
+		return;
+	}
+	const FString Arguments = bByProvince ? FString::Printf(TEXT("[%d]"), RegionId)
+		: Function == TEXT("take") ? FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bAssault ? TEXT("true") : TEXT("false"))
+		: FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId);
+	const TSharedRef<FAttackResult, ESPMode::ThreadSafe> Read = MakeShared<FAttackResult, ESPMode::ThreadSafe>();
+	Order(Function, Arguments, bAside,
+		[Read, Guess = MoveTemp(InGuess)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			*Read = ReadFight(Answer);
+			return Guess ? Guess(*Read) : FHandNext();
+		},
+		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? *Read : FAttackResult());
+		});
 }

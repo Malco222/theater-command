@@ -1126,6 +1126,7 @@ private:
 	mutable float KeptPointsScale = 0.0f;
 	/** A fine sheet has stood up or been taken away over Box: the points kept on and around it are worked out again. */
 	void ForgetKeptPoints(const FBox2D& Box);
+	int32 FrontLineDue = 0, BordersDue = 0; // (speed) frames until the front line and the frontier lines, put off by a press, are drawn
 	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
 	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
 	double InkBegan = 0.0, PaintStepped = 0.0;

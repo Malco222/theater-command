@@ -27,6 +27,34 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/Parse.h"
 
+namespace
+{
+	/** (Speed, b414 mark 1: see ACampaignPlayerController::Afterwards.) */
+	TAutoConsoleVariable<int32> CVarPictureFirst(
+		TEXT("tc.Speed.PictureFirst"), 1,
+		TEXT("1 (default): an order's answer is laid on the table a step a frame: the ground and the armies, then the rest of the table, then the army in hand's orders and the province's card. 0: all in one frame, as before."),
+		ECVF_Default);
+
+	/**
+	 * (Speed, b414 mark 1.) The army in hand after an order that carries the corps that moved into a province, as the
+	 * rules' thread is to ask its questions ahead: see FCampaignSession::MoveAside. Selected: the province whose card is
+	 * shown after (INDEX_NONE: none).
+	 */
+	FCampaignSession::FHandNext HandOf(const TArray<FCorpsMove>& Moved, int32 Region, int32 Selected, bool bPlain, const FString& Adjective)
+	{
+		FCampaignSession::FHandNext Next;
+		Next.Region = Region;
+		Next.Selected = Selected;
+		Next.bPlain = bPlain;
+		Next.Adjective = Adjective;
+		for (const FCorpsMove& Each : Moved)
+		{
+			Next.Ids.Add(Each.CorpsId);
+		}
+		return Next;
+	}
+}
+
 ACampaignPlayerController::ACampaignPlayerController()
 {
 	bShowMouseCursor = true;
@@ -731,6 +759,7 @@ void ACampaignPlayerController::EnterCampaign()
 	TurnLaid = Session->GetView().Turn;
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
+	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
 	CloseDocument();
@@ -2580,6 +2609,10 @@ void ACampaignPlayerController::ToggleEffects()
 
 void ACampaignPlayerController::EnterKey()
 {
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1: an order is still being answered, and a hurried second press is not another order)
+	}
 	// (Rules 84.3.1; the second playtester's check of 84.3.) The map's own Enter never takes the press that put a card
 	// down, nor one hurried after it: Enter on CALL IT OFF or Esc, and a second Enter at once, opened the question
 	// before the month's end. A card put down by the mouse leaves it free.
@@ -2599,6 +2632,10 @@ void ACampaignPlayerController::EnterKey()
 
 void ACampaignPlayerController::EscapeKey()
 {
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
 	const bool bCardUp = IsCardUp();
 	Escape();
 	if (bCardUp)
@@ -2609,6 +2646,10 @@ void ACampaignPlayerController::EscapeKey()
 
 void ACampaignPlayerController::SpaceKey()
 {
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
 	const bool bCardUp = IsCardUp();
 	SpaceBar();
 	if (bCardUp)
@@ -2619,6 +2660,10 @@ void ACampaignPlayerController::SpaceKey()
 
 void ACampaignPlayerController::TabKey()
 {
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
 	// (Rules 84.3.2; the second playtester's check of 84.3.1.) Tab on the question before the month's end is its SHOW ME
 	// and puts the question down by a key: the map's own Enter then waits the guard's half second, so Tab and a hurried
 	// Enter never end the month the question was asked about.
@@ -4105,6 +4150,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	THEATER_SPEED_SCOPE(PlayerTick);
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
+	// (Speed, b414 mark 1.) An order the rules answered on their own thread: its answer is taken once it is in, and what
+	// follows it is laid on the table a step a frame.
+	if (Afterwards.Num() > 0)
+	{
+		THEATER_SPEED_SCOPE(AnswerStep);
+		const TFunction<void()> Step = MoveTemp(Afterwards[0]);
+		Afterwards.RemoveAt(0);
+		Step();
+	}
+	else if (FCampaignSession* Answering = GetSession())
+	{
+		Answering->Deliver();
+	}
 	// (Ruling 64.) The month's card, once nothing else has the screen.
 	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
 	{
@@ -4359,6 +4417,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		WatchNextStep();
 	}
 	const bool bBusy = IsTableBusy();
+	// (Speed, b414 mark 1.) An order still being answered: the map takes no other order, and the pointer asks the rules
+	// nothing, until it is on the table. (The ground under the pointer stays lit: that asks nothing.) It is asked afresh at
+	// each gate, never kept from the top of the tick: a march given by this very tick's release must already hush this
+	// tick's road and tip, or their questions would wait out the whole order on the frame of the press.
 
 	// (The UI director's 84.3 check, item 3.) An army picked up by a hand: once the view is still and its tray is laid out,
 	// the map is framed so the ground it can reach lies clear of the tray, the chips and every other panel. A press that
@@ -4450,7 +4512,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && !bBusy && !bRightGameOnPanel)
+		if (!bTurning && !bBusy && !IsAnswering() && !bRightGameOnPanel)
 		{
 			// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
 			RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
@@ -4471,13 +4533,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
 		bAgentHeld = false;
-		if (!bBusy && PointedAgent != INDEX_NONE)
+		if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
 		{
 			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
 			bAgentWasInHand = AgentInHand == PointedAgent;
 			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
 		}
-		else if (!bBusy)
+		else if (!bBusy && !IsAnswering())
 		{
 			const bool bAlreadyInHand = PointedPiece && ArmyRegion != INDEX_NONE && RingedPiece.Get() == PointedPiece;
 			bHeldWasInHand = Hold(PointedPiece) && bAlreadyInHand;
@@ -4570,7 +4632,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			// Otherwise a plain click on the flag has already picked the army up.
 		}
-		else if (!bDragging && !bBusy)
+		else if (!bDragging && !bBusy && !IsAnswering())
 		{
 			// A second click on the same ground straight after the first goes there: the view centres on it, a little closer.
 			const double ClickedAt = FPlatformTime::Seconds();
@@ -4659,7 +4721,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
 	{
 		Map->SetHoveredRegion(bBusy || bPointerOverPanel ? INDEX_NONE : AimedRegion); // (nor is the ground behind a panel lit)
-		if (ArmyRegion != INDEX_NONE && !bBusy)
+		if (ArmyRegion != INDEX_NONE && !bBusy && !IsAnswering())
 		{
 			ShowRouteTo(AimedRegion);
 		}
@@ -4733,7 +4795,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bTipHushed = false;
 	}
 	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
-	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
+	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || IsAnswering() || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
 	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : bStagedTip ? (bStagedField ? StagedHover : INDEX_NONE) : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
@@ -7160,41 +7222,30 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		// (release 1) Friendly ground too far for this month: a march that carries on. The army sets off at once, as
 		// far as it can go, and the rules send it on as each month opens.
 		AdviserSaw(1);
-		FString Said;
 		const bool bWasSpent = bHandSpent;
 		// (One voice after a press.) The rules' one sentence answers the press, naming the army as the tray's head does.
-		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said, HandArmy, HandArmyIds);
-		if (Said.IsEmpty() && Marches.Num() == 0)
-		{
-			Notify(TEXT("They cannot march there."), 5.0);
-			return;
-		}
-		bHandOrdered = true; // (the slip is put away, and the foot says only how to change the order)
-		if (bWasSpent && !bMarchSlipDone)
-		{
-			bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
-			SaveOptions();
-		}
-		if (!Said.IsEmpty())
-		{
-			Notify(Said, 10.0);
-		}
-		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
-		if (Marches.Num() > 0)
-		{
-			ShowWar(Session->GetView(), Marches, CarriedFrom);
-			PickedCorps.Reset();
-			for (const FCorpsMove& March : Marches)
+		// (Speed, b414 mark 1.) Answered on the rules' own thread: see AfterFarMarch.
+		const TOptional<FVector> Carried = CarriedFrom ? TOptional<FVector>(*CarriedFrom) : TOptional<FVector>();
+		const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+		Session->MoveAside(PickedCorps, RegionId, HandArmy, HandArmyIds, !bScripted,
+			[Here = ArmyRegion, Hand = PickedCorps, Adjective = HandAdjective()](const FCampaignSession::FMoveAnswer& Answer)
 			{
-				PickedCorps.Add(March.CorpsId);
-			}
-			if (Marches[0].Path.Num() > 0)
+				// (the army goes as far as it can this month, and is in hand where the first march ends)
+				const int32 Ends = Answer.Moved.Num() > 0 && Answer.Moved[0].Path.Num() > 0 ? Answer.Moved[0].Path.Last() : Here;
+				FCampaignSession::FHandNext Next = HandOf(Answer.Moved, Ends, Ends, true, Adjective);
+				if (Answer.Moved.Num() == 0)
+				{
+					Next.Ids = Hand;
+				}
+				return Next;
+			},
+			[Self, bWasSpent, Carried](const FCampaignSession::FMoveAnswer& Answer)
 			{
-				ArmyRegion = Marches[0].Path.Last();
-			}
-		}
-		RefreshOrders();
-		SelectRegion(ArmyRegion);
+				if (ACampaignPlayerController* Me = Self.Get())
+				{
+					Me->AfterFarMarch(Answer.Moved, Answer.Note, bWasSpent, Carried);
+				}
+			});
 		return;
 	}
 	if (!Target)
@@ -7265,8 +7316,32 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 
 	AdviserSaw(1);
-	FString Said;
-	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said, HandArmy, HandArmyIds);
+	// (Speed, the design director's mark 1 for build 414: a press's own work under a tenth of a second.) The march is
+	// answered by the rules on their own thread, with what the army in hand will ask next; the answer is laid on the
+	// table when it comes, a frame or a few later (AfterMarch).
+	const TOptional<FVector> Carried = CarriedFrom ? TOptional<FVector>(*CarriedFrom) : TOptional<FVector>();
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->MoveAside(PickedCorps, RegionId, HandArmy, HandArmyIds, !bScripted,
+		[RegionId, Adjective = HandAdjective()](const FCampaignSession::FMoveAnswer& Answer)
+		{
+			return Answer.Moved.Num() > 0 ? HandOf(Answer.Moved, RegionId, RegionId, true, Adjective) : FCampaignSession::FHandNext();
+		},
+		[Self, RegionId, MarchSays, MarchMeets, Carried](const FCampaignSession::FMoveAnswer& Answer)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterMarch(RegionId, Answer.Moved, Answer.Note, MarchSays, MarchMeets, Carried);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterMarch(int32 RegionId, const TArray<FCorpsMove>& Marches, FString Said, const FString& MarchSays, const FString& MarchMeets, const TOptional<FVector>& Carried)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
 	if (Said.IsEmpty() && Marches.Num() > 0 && Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; }))
 	{
 		Said = MarchSays; // (said once the army is there)
@@ -7282,7 +7357,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	{
 		Notify(Said, 7.0);
 	}
-	ShowWar(Session->GetView(), Marches, CarriedFrom);
+	ShowWar(Session->GetView(), Marches, Carried.IsSet() ? &Carried.GetValue() : nullptr, true);
 	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 
 	// The army in hand is now the corps that marched, where they have arrived.
@@ -7292,19 +7367,67 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		PickedCorps.Add(March.CorpsId);
 	}
 	ArmyRegion = RegionId;
-	RefreshOrders();
-	SelectRegion(RegionId);
-	if (MarchMeets == TEXT("unknown") && Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; }))
+	const bool bArrived = Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; });
+	Later([this, RegionId, bUnseenTown = MarchMeets == TEXT("unknown") && bArrived]()
 	{
-		// (Rulings 207 and 182 as changed, 17 November.) The army has come up to a town its reports could not see into
-		// and stands round it. No card opens by itself in the middle of his orders: where only the town guard holds
-		// it, the paper line says so, and the storm's card opens when he presses for it.
-		const FAttackPreview Found = Session->PreviewStorm(RegionId);
-		if (Found.bValid && Found.bForecast && Found.Meets == TEXT("guard"))
+		FCampaignSession* Now = GetSession();
+		RefreshOrders();
+		SelectRegion(RegionId);
+		if (Now && bUnseenTown)
 		{
-			Notify(FString::Printf(TEXT("Only its town guard holds %s. Right-click the town to plan the storm."), *Found.Town), 10.0);
+			// (Rulings 207 and 182 as changed, 17 November.) The army has come up to a town its reports could not see into
+			// and stands round it. No card opens by itself in the middle of his orders: where only the town guard holds
+			// it, the paper line says so, and the storm's card opens when he presses for it.
+			const FAttackPreview Found = Now->PreviewStorm(RegionId);
+			if (Found.bValid && Found.bForecast && Found.Meets == TEXT("guard"))
+			{
+				Notify(FString::Printf(TEXT("Only its town guard holds %s. Right-click the town to plan the storm."), *Found.Town), 10.0);
+			}
+		}
+	});
+}
+
+void ACampaignPlayerController::AfterFarMarch(const TArray<FCorpsMove>& Marches, const FString& Said, bool bWasSpent, const TOptional<FVector>& Carried)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	if (Said.IsEmpty() && Marches.Num() == 0)
+	{
+		Notify(TEXT("They cannot march there."), 5.0);
+		return;
+	}
+	bHandOrdered = true; // (the slip is put away, and the foot says only how to change the order)
+	if (bWasSpent && !bMarchSlipDone)
+	{
+		bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
+		SaveOptions();
+	}
+	if (!Said.IsEmpty())
+	{
+		Notify(Said, 10.0);
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+	if (Marches.Num() > 0)
+	{
+		ShowWar(Session->GetView(), Marches, Carried.IsSet() ? &Carried.GetValue() : nullptr, true);
+		PickedCorps.Reset();
+		for (const FCorpsMove& March : Marches)
+		{
+			PickedCorps.Add(March.CorpsId);
+		}
+		if (Marches[0].Path.Num() > 0)
+		{
+			ArmyRegion = Marches[0].Path.Last();
 		}
 	}
+	Later([this]()
+	{
+		RefreshOrders();
+		SelectRegion(ArmyRegion);
+	});
 }
 
 bool ACampaignPlayerController::IsTableBusy() const
@@ -7312,9 +7435,57 @@ bool ACampaignPlayerController::IsTableBusy() const
 	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
 }
 
+bool ACampaignPlayerController::IsAnswering() const
+{
+	if (Afterwards.Num() > 0)
+	{
+		return true;
+	}
+	const ACampaignGameMode* Mode = GetMode();
+	const FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr;
+	return Session && Session->IsAnswering();
+}
+
+void ACampaignPlayerController::Later(TFunction<void()>&& Step)
+{
+	if (bScripted || CVarPictureFirst.GetValueOnGameThread() == 0)
+	{
+		Step();
+		return;
+	}
+	Afterwards.Add(MoveTemp(Step));
+}
+
+void ACampaignPlayerController::FinishAnswer()
+{
+	const ACampaignGameMode* Mode = GetMode();
+	if (FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr)
+	{
+		Session->Deliver(true);
+	}
+	while (Afterwards.Num() > 0)
+	{
+		const TFunction<void()> Step = MoveTemp(Afterwards[0]);
+		Afterwards.RemoveAt(0);
+		Step();
+	}
+}
+
+FString ACampaignPlayerController::HandAdjective() const
+{
+	const FCampaignSession* Session = GetSession();
+	const FString Human = Session ? Session->GetView().Human : FString();
+	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Human) : nullptr;
+	return Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : Human;
+}
+
 void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOnTheTable)
 {
 	THEATER_SPEED_SCOPE(RightClickOn);
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1: the last order is still being answered; the playtester's hook comes here too)
+	}
 	if (AgentInHand != INDEX_NONE)
 	{
 		// (Ruling 169.) The agent in hand is sent with a right-click, as an army is. An agent may go anywhere:
@@ -7366,7 +7537,8 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 
 bool ACampaignPlayerController::IsBusyForSteps() const
 {
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible;
+	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering();
 }
 
 void ACampaignPlayerController::StepThroughMonth()
@@ -7396,6 +7568,7 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	{
 		return false;
 	}
+	FinishAnswer(); // (an order still being answered is laid on the table it was given on, before that table is put away)
 	// (whatever is open or in hand belongs to the game being left)
 	if (FaceOff.bVisible)
 	{
@@ -7631,32 +7804,31 @@ void ACampaignPlayerController::ConfirmWar()
 	}
 	if (Asked.bLanding)
 	{
-		// The landing goes in.
+		// The landing goes in. (The card is down and the guns are heard at once; the rules answer on their own thread,
+		// with what the army ashore will ask next: speed, b414 mark 1. See AfterLanding.)
 		CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
 		CampaignSounds::PlayLater(this, TEXT("battle"), 0.8f, 0.7f);
-		const FLandingResult Result = Session->Land(PickedCorps, Asked.Region);
-		if (Map.IsValid() && Result.bOk)
-		{
-			Map->AddBattleSmoke(Asked.Region);
-		}
-		ShowWar(Session->GetView(), Result.Moved);
-		if (Result.bOk)
-		{
-			CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 3.2f, 0.6f);
-		}
-		if (Result.Moved.Num() > 0)
-		{
-			PickedCorps.Reset();
-			for (const FCorpsMove& Ashore : Result.Moved)
+		const int32 Beach = Asked.Region;
+		const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+		Session->LandAside(PickedCorps, Beach, !bScripted,
+			[Beach, Here = ArmyRegion, Hand = PickedCorps, bPlain = !bByRail, Adjective = HandAdjective()](const FLandingResult& Result)
 			{
-				PickedCorps.Add(Ashore.CorpsId);
-			}
-			ArmyRegion = Asked.Region;
-		}
-		bBySea = false;
-		RefreshOrders();
-		SelectRegion(Result.bTaken ? Asked.Region : ArmyRegion);
-		Notify(Result.Note, 9.0);
+				const bool bAshore = Result.Moved.Num() > 0;
+				FCampaignSession::FHandNext Next = HandOf(Result.Moved, bAshore ? Beach : Here, INDEX_NONE, bPlain, Adjective);
+				if (!bAshore)
+				{
+					Next.Ids = Hand;
+				}
+				Next.Selected = Result.bTaken ? Beach : Next.Region;
+				return Next;
+			},
+			[Self, Beach](const FLandingResult& Result)
+			{
+				if (ACampaignPlayerController* Me = Self.Get())
+				{
+					Me->AfterLanding(Beach, Result);
+				}
+			});
 		return;
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
@@ -7690,6 +7862,40 @@ void ACampaignPlayerController::ConfirmWar()
 	}
 }
 
+void ACampaignPlayerController::AfterLanding(int32 RegionId, const FLandingResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
+	if (Map.IsValid() && Result.bOk)
+	{
+		Map->AddBattleSmoke(RegionId);
+	}
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
+	if (Result.bOk)
+	{
+		CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 3.2f, 0.6f);
+	}
+	if (Result.Moved.Num() > 0)
+	{
+		PickedCorps.Reset();
+		for (const FCorpsMove& Ashore : Result.Moved)
+		{
+			PickedCorps.Add(Ashore.CorpsId);
+		}
+		ArmyRegion = RegionId;
+	}
+	bBySea = false;
+	Later([this, RegionId, bTaken = Result.bTaken, Note = Result.Note]()
+	{
+		RefreshOrders();
+		SelectRegion(bTaken ? RegionId : ArmyRegion);
+		Notify(Note, 9.0);
+	});
+}
+
 void ACampaignPlayerController::CloseWarPrompt()
 {
 	const bool bBack = WarPrompt.bFromOffice;
@@ -7706,7 +7912,7 @@ void ACampaignPlayerController::CloseWarPrompt()
 	}
 }
 
-void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
+void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom, bool bPictureFirst)
 {
 	THEATER_SPEED_SCOPE(ShowWar);
 	if (Map.IsValid())
@@ -7741,6 +7947,31 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		{
 			PutDownAgent(); // (caught, or retired, while in hand)
 		}
+	}
+	// (Speed, b414 mark 1; the speed detective's "change the picture first".) After an order, the ground's new holders
+	// and the armies where they now stand are the press's own picture; the works, the scars, the front line, the haze
+	// and the rest follow a frame later.
+	if (bPictureFirst)
+	{
+		Later([this]()
+		{
+			if (const FCampaignSession* Now = GetSession())
+			{
+				ShowWarRest(Now->GetView());
+			}
+		});
+	}
+	else
+	{
+		ShowWarRest(View);
+	}
+}
+
+void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
+{
+	THEATER_SPEED_SCOPE(ShowWarRest);
+	if (Map.IsValid())
+	{
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowCuts(View.Cuts);
 		Map->ShowCivic(View.Civic);
@@ -8266,7 +8497,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || !(FaceOff.bMarch || FaceOff.bStorm))
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !(FaceOff.bMarch || FaceOff.bStorm))
 	{
 		return;
 	}
@@ -8280,17 +8511,39 @@ void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 		CloseFaceOff(); // KEEP UP THE SIEGE: nothing changes (ruling 182)
 		return;
 	}
-	// LAY SIEGE FIRST: the army marches in and closes round the town. Nothing is risked this month.
+	// LAY SIEGE FIRST: the army marches in and closes round the town. Nothing is risked this month. (The card is put
+	// away at once; the march is answered on the rules' own thread: speed, b414 mark 1. See AfterSiege.)
 	const int32 RegionId = FaceOff.Region;
-	const FAttackResult Result = Session->Take(PickedCorps, RegionId, false);
 	PickedBeforeMass.Reset();
 	FaceOff.bVisible = false;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->FightAside(TEXT("take"), PickedCorps, RegionId, false, !bScripted,
+		[RegionId, bPlain = !bByRail && !bBySea, Adjective = HandAdjective()](const FAttackResult& Result)
+		{
+			return Result.Moved.Num() > 0 ? HandOf(Result.Moved, RegionId, RegionId, bPlain, Adjective) : FCampaignSession::FHandNext();
+		},
+		[Self, RegionId](const FAttackResult& Result)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterSiege(RegionId, Result);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterSiege(int32 RegionId, const FAttackResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
 	if (Result.Moved.Num() == 0)
 	{
 		Notify(Result.Note.IsEmpty() ? FString(TEXT("They cannot get there this month.")) : Result.Note, 6.0);
 		return;
 	}
-	ShowWar(Session->GetView(), Result.Moved);
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 	PickedCorps.Reset();
 	for (const FCorpsMove& March : Result.Moved)
@@ -8302,13 +8555,16 @@ void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 	{
 		Notify(Result.Note, 9.0);
 	}
-	RefreshOrders();
-	SelectRegion(RegionId);
+	Later([this, RegionId]()
+	{
+		RefreshOrders();
+		SelectRegion(RegionId);
+	});
 }
 
 void ACampaignPlayerController::SendEveryone()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || FaceOff.MassIds.Num() == 0)
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || FaceOff.MassIds.Num() == 0)
 	{
 		return;
 	}
@@ -8325,7 +8581,7 @@ void ACampaignPlayerController::SendEveryone()
 void ACampaignPlayerController::ProbeLine()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bProbeOk || FaceOff.ProbeCorps == INDEX_NONE)
+	if (!Session || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !FaceOff.bProbeOk || FaceOff.ProbeCorps == INDEX_NONE)
 	{
 		return;
 	}
@@ -8372,7 +8628,7 @@ void ACampaignPlayerController::ProbeLine()
 
 void ACampaignPlayerController::BombLine()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bBombOk || FaceOff.BombOpen.IsEmpty())
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !FaceOff.bBombOk || FaceOff.BombOpen.IsEmpty())
 	{
 		return;
 	}
@@ -8393,7 +8649,7 @@ void ACampaignPlayerController::OpenFold()
 
 void ACampaignPlayerController::SendOnlyPicked()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || PickedBeforeMass.Num() == 0)
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || PickedBeforeMass.Num() == 0)
 	{
 		return;
 	}
@@ -8430,7 +8686,7 @@ void ACampaignPlayerController::ConfirmAttack()
 void ACampaignPlayerController::ResolveAttack()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved)
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering())
 	{
 		return;
 	}
@@ -8442,7 +8698,48 @@ void ACampaignPlayerController::ResolveAttack()
 	const bool bMarch = FaceOff.bMarch; // (rules 84.1: the army marches in and goes at the town as it arrives)
 	const bool bStorm = FaceOff.bStorm; // (ruling 182: the army already round the town storms it)
 	const bool bSally = FaceOff.bSally; // (the garrison's sortie against the army round its town)
-	const FAttackResult Result = bSally ? Session->Sally(RegionId) : bStorm ? Session->Storm(RegionId) : bMarch ? Session->Take(PickedCorps, RegionId, true) : Session->Attack(PickedCorps, RegionId);
+	// (Speed, the design director's mark 1 for build 414.) The battle is fought by the rules on their own thread, with what
+	// the army in hand will ask after it; the card turns to the result when the answer comes, a frame or a few later.
+	const TCHAR* const Function = bSally ? TEXT("sally") : bStorm ? TEXT("storm") : bMarch ? TEXT("take") : TEXT("attack");
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->FightAside(Function, PickedCorps, RegionId, true, !bScripted,
+		[RegionId, bMarch, Here = ArmyRegion, Hand = PickedCorps, HandBefore = PickedBeforeMass, bPlain = !bByRail && !bBySea, Adjective = HandAdjective()](const FAttackResult& Result)
+		{
+			// (as AfterFight leaves the army in hand, and the card it shows)
+			FCampaignSession::FHandNext Next = HandOf(Result.Moved, RegionId, RegionId, bPlain, Adjective);
+			if (!Result.bFought)
+			{
+				if (bMarch && Result.Moved.Num() > 0)
+				{
+					return Next;
+				}
+				Next = HandOf(TArray<FCorpsMove>(), HandBefore.Num() > 0 && Result.Moved.Num() == 0 ? Here : INDEX_NONE, INDEX_NONE, bPlain, Adjective);
+				Next.Ids = HandBefore;
+				return Next;
+			}
+			if (Result.Moved.Num() == 0)
+			{
+				Next.Region = Here;
+				Next.Ids = Hand;
+			}
+			return Next;
+		},
+		[Self, RegionId, bMarch, bStorm, bSally](const FAttackResult& Result)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterFight(RegionId, bMarch, bStorm, bSally, Result);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
 	const TArray<int32> HandBefore = PickedBeforeMass;
 	PickedBeforeMass.Reset();
 	if (!Result.bFought)
@@ -8463,7 +8760,7 @@ void ACampaignPlayerController::ResolveAttack()
 		if (bMarch && Result.Moved.Num() > 0)
 		{
 			// (the march met no fight after all: the place fell as the army came, or the army stands round the town)
-			ShowWar(Session->GetView(), Result.Moved);
+			ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 			CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 			PickedCorps.Reset();
 			for (const FCorpsMove& March : Result.Moved)
@@ -8475,8 +8772,11 @@ void ACampaignPlayerController::ResolveAttack()
 			{
 				Notify(Result.Note, 9.0);
 			}
-			RefreshOrders();
-			SelectRegion(RegionId);
+			Later([this, RegionId]()
+			{
+				RefreshOrders();
+				SelectRegion(RegionId);
+			});
 			return;
 		}
 		Notify(bMarch ? TEXT("They cannot get there this month.") : TEXT("The attack could not go in."));
@@ -8545,7 +8845,7 @@ void ACampaignPlayerController::ResolveAttack()
 	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 
 	// Show the result on the table: ground repainted if it changed hands, and the corps that followed up carried in.
-	ShowWar(Session->GetView(), Result.Moved);
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 	if (Result.Moved.Num() > 0)
 	{
 		PickedCorps.Reset();
@@ -8555,12 +8855,19 @@ void ACampaignPlayerController::ResolveAttack()
 		}
 		ArmyRegion = RegionId;
 	}
-	RefreshOrders();
-	SelectRegion(RegionId);
+	Later([this, RegionId]()
+	{
+		RefreshOrders();
+		SelectRegion(RegionId);
+	});
 }
 
 void ACampaignPlayerController::CloseFaceOff()
 {
+	if (FaceOff.bVisible && !FaceOff.bResolved && IsAnswering())
+	{
+		return; // (the attack has been sent in and its answer is on its way: the card is not called off under it)
+	}
 	if (FaceOff.bVisible && FaceOff.bResolved && Map.IsValid())
 	{
 		BattleMusicUntil = FPlatformTime::Seconds() + 6.0; // the march plays on a little after the result
@@ -8583,6 +8890,9 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
+	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
+	FinishAnswer();
 	FCampaignSession* Session = GetSession();
 	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with a card up
 	// the key never ends the month behind it: it presses the card's lit button, below.)

@@ -333,7 +333,7 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 {
 	FCampaignSession* Session = Player.GetSession();
 	const ACampaignMapActor* Map = Player.GetMap();
-	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = false;
+	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = bLook = false;
 	OnScreen = -1;
 	Note.Reset();
 	TargetRegion = INDEX_NONE;
@@ -626,9 +626,10 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			}
 		}
 	}
-	else if (Verb == TEXT("pan-zoom"))
+	else if (Verb == TEXT("pan-zoom") || Verb == TEXT("look-at"))
 	{
 		// "Paris near", "Norfolk middle", "Ruhr far": ten seconds of pan and zoom there, for the frame rate
+		// ("look-at" goes there and stays: its picture is of that place, taken once its fine ground stands)
 		FString Name = Step.Target, Height;
 		int32 Cut = INDEX_NONE;
 		if (Step.Target.FindLastChar(TEXT(' '), Cut))
@@ -650,7 +651,8 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			TargetRegion = Region;
 			const FVector2D Spot = Map->GetData().Regions[Region].Center;
 			Eye->GoTo(Map->MapToWorld(Spot.X, Spot.Y), Height == TEXT("near") ? 0.2f : Height == TEXT("far") ? 0.8f : 0.45f, true);
-			bPan = true;
+			bPan = Verb == TEXT("pan-zoom");
+			bLook = !bPan;
 		}
 	}
 	else if (Verb == TEXT("open-page"))
@@ -927,6 +929,20 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 				}
 			}
 			if (Clock < 10.0f)
+			{
+				return true;
+			}
+		}
+		if (bLook && Clock < 15.0f)
+		{
+			// (the place's fine ground is waited for, and a moment more for its towns and trees)
+			const ACampaignMapActor* Table = Player.GetMap();
+			if (Clock < 2.0f || (Table && Table->AreFineSheetsComing()))
+			{
+				LookSettled = Clock;
+				return true;
+			}
+			if (Clock < LookSettled + 1.5f)
 			{
 				return true;
 			}

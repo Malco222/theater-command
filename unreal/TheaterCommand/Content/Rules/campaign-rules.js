@@ -32337,30 +32337,56 @@
       return { nat: o, pays: d.state === "cut" ? 0 : d.worth * (1 - d.lost) * (1 + boost), full: d.worth * (1 + boost), state: d.state, path: tradePath(s, d) };
     }).sort((x, y) => y.full - x.full || (x.nat < y.nat ? -1 : 1));
     let ready = null;
+    const houses = housesOf(s, nat);
     return {
       used: deals.length,
-      houses: housesOf(s, nat),
+      houses,
       pc: n.pc,
       cost: TRADE.sign.pc,
       deals,
       // (An offer's `why` is null when the rules find nothing in the way and the player has the political capital. A
       // country the book leaves out of the offers, the player's own, one fallen or asleep, one already trading, always
       // has something in the way, so asking every country is the same as asking the offers.)
+      // (Speed, b414 mark 2.) whyNoTrade asks after the player's own free trading house for every country it is asked
+      // about, and each time works out what his towns add to his houses. Here that is already known (deals.length and
+      // houses above, the same dealsOf and housesOf it uses), so it is asked once and whyNoTrade is told to skip it: the
+      // same countries come out ready.
       anyReady: () => {
         if (ready === null) {
           const ctx = /* @__PURE__ */ new Map();
-          ready = n.pc >= TRADE.sign.pc && Object.values(s.nations).some((b) => whyNoTrade(s, nat, b.id, ctx) === null);
+          ready = n.pc >= TRADE.sign.pc && deals.length < houses && Object.values(s.nations).some((b) => whyNoTrade(s, nat, b.id, ctx, false) === null);
         }
         return ready;
       }
     };
   }
+  var pictureCommandKept = null;
+  function pictureCommand(s) {
+    if (pictureDepth > 0 && pictureCommandKept && pictureCommandKept.s === s) {
+      if (pictureCommandKept.failed) throw pictureCommandKept.why;
+      return pictureCommandKept.v;
+    }
+    let v;
+    try {
+      v = commandOf(s);
+    } catch (why) {
+      if (pictureDepth > 0) pictureCommandKept = { s, v: null, failed: true, why };
+      throw why;
+    }
+    if (pictureDepth > 0) pictureCommandKept = { s, v, failed: false, why: null };
+    return v;
+  }
+  var pictureBriefKept = null;
   function view2() {
     pictureDepth++;
     try {
       return drawView();
     } finally {
-      if (--pictureDepth === 0) pictureTradeKept = null;
+      if (--pictureDepth === 0) {
+        pictureTradeKept = null;
+        pictureCommandKept = null;
+        pictureBriefKept = null;
+      }
     }
   }
   function drawView() {
@@ -36943,7 +36969,7 @@ ${standing5}`,
   function deskBar(s, desk) {
     let v = null;
     try {
-      v = commandOf(s);
+      v = pictureCommand(s);
     } catch {
       v = null;
     }
@@ -36952,8 +36978,14 @@ ${standing5}`,
     return d.staff ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? "Nothing to report this month."} What you order here by hand still goes out.`, label: "TAKE IT BACK", act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` } : { staff: false, line: "", label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${def.runs} You can take it back in any month.` };
   }
   function commandBrief(s) {
+    if (pictureDepth > 0 && pictureBriefKept && pictureBriefKept.s === s) return pictureBriefKept.brief;
+    const brief2 = workOutCommandBrief(s);
+    if (pictureDepth > 0) pictureBriefKept = { s, brief: brief2 };
+    return brief2;
+  }
+  function workOutCommandBrief(s) {
     try {
-      const v = commandOf(s);
+      const v = pictureCommand(s);
       if (!v || !s.human || !s.nations[s.human]?.alive) return null;
       return {
         name: v.name,
