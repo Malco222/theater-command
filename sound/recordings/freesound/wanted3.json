@@ -1,0 +1,15 @@
+{
+  "why": "Round six (18 Nov): new takes for what Brian cut (ship's horn, horses, hammer), a better rifle line, and the beds the battle mix needs (wind on open ground, woods, rain, a shell whistling in).",
+  "sounds": [
+    { "id": 72805,  "for": "ship_whistle" }, { "id": 164006, "for": "ship_whistle" }, { "id": 407394, "for": "ship_whistle" },
+    { "id": 30628,  "for": "ship_whistle" }, { "id": 157284, "for": "ship_whistle" }, { "id": 208714, "for": "ship_whistle" },
+    { "id": 504567, "for": "ship_whistle" },
+    { "id": 480018, "for": "horses" }, { "id": 479778, "for": "horses" }, { "id": 583261, "for": "horses" },
+    { "id": 103630, "for": "hammer" }, { "id": 831634, "for": "hammer" }, { "id": 455899, "for": "hammer" }, { "id": 337815, "for": "hammer" },
+    { "id": 450854, "for": "rifles" }, { "id": 450853, "for": "rifles" }, { "id": 450851, "for": "rifles" }, { "id": 385785, "for": "rifles" },
+    { "id": 486026, "for": "shell_whistle" }, { "id": 170991, "for": "shell_whistle" },
+    { "id": 139337, "for": "bed_wind" }, { "id": 684183, "for": "bed_wind" }, { "id": 620099, "for": "bed_wind" }, { "id": 620100, "for": "bed_wind" }, { "id": 365873, "for": "bed_wind" },
+    { "id": 531016, "for": "bed_woods" }, { "id": 523389, "for": "bed_woods" }, { "id": 360568, "for": "bed_woods" }, { "id": 352841, "for": "bed_woods" },
+    { "id": 119784, "for": "bed_rain" }, { "id": 320520, "for": "bed_rain" }, { "id": 270349, "for": "bed_rain" }, { "id": 234317, "for": "bed_rain" }
+  ]
+}
