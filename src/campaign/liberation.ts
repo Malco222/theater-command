@@ -18,7 +18,7 @@ import { turnToDate } from '../core/ticket';
 import { STACK, type Game, type Nation, type Passing, type Region } from './types';
 import { addCorps, allied, armySize, atWar, bloc, headline, newsWeek, setWar, theName, type Bloc } from './game';
 import { corpsName } from './economy';
-import { homeOpinion } from './diplomacy';
+import { DIPLOMACY, homeOpinion } from './diplomacy';
 import { enrol, small } from './league';
 
 export const LIB = data as unknown as {
@@ -26,8 +26,11 @@ export const LIB = data as unknown as {
   never: string[];
   army: { perVp: number; most: number; divs: number; str: number; org: number; xp: number };
   lines: { freed: string; freedAfter: string; freedSelf: string; sides: Record<Bloc, string> };
-  /** Finishing the war together (ruling 115, finish.ts): months of notice before an ally's war is joined, and how long the staff presses it. */
-  finish: { notice: number; push: number };
+  /**
+   * Finishing the war together (ruling 115, finish.ts): months of notice before an ally's war is joined, how long the
+   * staff presses it, and whether Vichy's end and a freed country's old wars may come before the chief enemy has fallen.
+   */
+  finish: { notice: number; push: number; before?: boolean };
 };
 
 const fill = (line: string, vars: Record<string, string | number>): string => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
@@ -69,6 +72,34 @@ export function rememberWars(g: Game, nat: string): void {
 
 /** The nations a fallen country was at war with when it fell (the grand campaign), in the order of their ids. */
 export const warsAtFall = (g: Game, nat: string): string[] => Object.keys(g.flags).filter((k) => k.startsWith(`fw:${nat}:`)).map((k) => k.slice(4 + nat.length)).sort();
+
+/**
+ * True once the chief enemy of a nation's alliance has fallen (the leader of the other alliance, diplomacy.json
+ * 'leaders': Germany for the Allies). From then on its alliance is finishing the war together (ruling 115).
+ */
+export function chiefFallen(g: Game, nat: string): boolean {
+  const b = g.nations[nat] ? bloc(g.nations[nat]) : null;
+  if (b !== 'allies' && b !== 'axis') return false;
+  const chief = g.nations[DIPLOMACY.leaders[b === 'allies' ? 'axis' : 'allies']];
+  return !!chief && !chief.alive;
+}
+
+/**
+ * A freed country takes up its old wars beside those who freed it (ruling 115(c)): it is at war again with every
+ * country that was at war with it when it fell and still fights one of its liberator's alliance, whether or not the
+ * liberator itself does. Returns the enemies it took up.
+ */
+export function rejoinWars(g: Game, nat: string, by: string): string[] {
+  const out: string[] = [];
+  for (const e of warsAtFall(g, nat)) {
+    if (e === nat || !g.nations[e]?.alive || allied(g, nat, e) || atWar(g, nat, e)) continue;
+    if (!Object.values(g.nations).some((A) => A.alive && A.id !== nat && allied(g, A.id, by) && A.atWar.includes(e))) continue;
+    setWar(g, nat, e);
+    g.flags[`war:${nat}:${e}`] = g.turn;
+    out.push(e);
+  }
+  return out;
+}
 
 /** The roll for a campaign saved before it was kept: one entry for each nation that remembers its own fall. */
 export function rollFromMemory(g: Game): Passing[] {
@@ -186,14 +217,9 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   }
   X.atWar = [];
   for (const e of [...H.atWar]) if (e !== nat && g.nations[e]?.alive && !allied(g, nat, e)) setWar(g, nat, e);
-  // It rejoins the war of those who freed it (ruling 115(c)): at war again with every country that was at war with
-  // it when it fell and still fights one of its liberator's alliance, whether or not the liberator itself does.
-  for (const e of warsAtFall(g, nat)) {
-    if (e === nat || !g.nations[e]?.alive || allied(g, nat, e) || atWar(g, nat, e)) continue;
-    if (!Object.values(g.nations).some((A) => A.alive && A.id !== nat && allied(g, A.id, by) && A.atWar.includes(e))) continue;
-    setWar(g, nat, e);
-    g.flags[`war:${nat}:${e}`] = g.turn;
-  }
+  // It rejoins the war of those who freed it (ruling 115(c)), once their chief enemy has fallen: until then it fights
+  // its liberator's wars and no others, as it always has.
+  if (LIB.finish?.before || chiefFallen(g, by)) rejoinWars(g, nat, by);
   // Its ground: whatever its new allies hold of it is its own again.
   cap.cap = true;
   const provinces = handBack(g, X);
