@@ -4155,7 +4155,10 @@ namespace
 			{
 				// (eased: most of the change near the foot, so the last whole row still reads)
 				const float Share = static_cast<float>(Step + 1) / Bands;
-				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X, Band + 0.5), FSlateLayoutTransform(FVector2D(0.0, Step * Band))), &Plain,
+				// (each band from its own top to the next band's, edge to edge: none laid over another, which would
+				// tint the strip between them twice and show as a faint line)
+				const double Top = Step * Band, Bottom = Step + 1 == Bands ? Size.Y : (Step + 1) * Band;
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X, Bottom - Top), FSlateLayoutTransform(FVector2D(0.0, Top))), &Plain,
 					ESlateDrawEffect::None, Fill.CopyWithNewOpacity(0.94f * Share * Share));
 			}
 			return LayerId + 1;
@@ -8452,6 +8455,10 @@ namespace
 		 */
 		FMargin PlaceHoverTip() const
 		{
+			if (!Controller.IsValid() || Controller->GetHoverTip().IsEmpty())
+			{
+				return FMargin(0.0f); // (no slip, nothing to place)
+			}
 			FVector2D Size(1920.0, 1080.0);
 			if (GEngine && GEngine->GameViewport)
 			{
@@ -8502,7 +8509,10 @@ namespace
 			}
 			auto Whole = [&Keep, &Screen, &Tip, Clear](const FVector2D& Corner)
 			{
-				const FBox2D Box(Corner, Corner + Tip);
+				// (Measured a hair inside its own edges: a box that only touches another counts as crossing it, and a
+				// slip set flush against a kept piece, the window's edge or a gate's mark, as every try is, is whole.)
+				const FVector2D Hair(0.05, 0.05);
+				const FBox2D Box(Corner + Hair, Corner + Tip - Hair);
 				if (Box.Min.X < Clear || Box.Min.Y < Clear || Box.Max.X > Screen.X - Clear || Box.Max.Y > Screen.Y - Clear)
 				{
 					return false;
@@ -12980,6 +12990,13 @@ namespace
 			}
 			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
 			const FGeometry& Along = Starts->GetTickSpaceGeometry();
+			// (The checker's note C: the first frame the card shows, the list and its scroll have not been laid out yet,
+			// and a scroll with no size takes its whole list for what runs on below. Until they have a width, nothing is
+			// measured and no plate is shown. A list squeezed to no height still has its width, and is measured.)
+			if (View.GetLocalSize().X <= 0.0f || Along.GetLocalSize().X <= 0.0f || (OpeningCardBox.IsValid() && OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f))
+			{
+				return;
+			}
 			FArrangedChildren Arranged(EVisibility::Visible);
 			Starts->ArrangeChildren(Along, Arranged);
 			// (The UI director, 03:53.) What the card needs: all it holds outside the list, and the list down to the foot
