@@ -500,6 +500,9 @@ describe('a harbour the player takes from the sea', () => {
   it('is a second front his allies\' staffs know of', () => {
     const g = playing('UK', 5);
     // An empty German harbour within a landing's range of a British quay, and a corps on that quay.
+    // (Since ruling 52 Germany's fighters stand over its own coast from the first month, and no invasion fleet
+    // crosses under them: the sky over its harbours is taken as won here. That rule is crossing-72's business.)
+    for (const r of g.regions) if (r.port && r.ctrl === 'GER') g.sky[r.id] = { nat: 'UK', turn: g.turn };
     let done = false;
     for (const from of g.regions.filter((r) => r.port && r.ctrl === 'UK' && r.owner === 'UK' && !r.overseas)) {
       const c = addCorps(g, 'UK', 'Landing Corps', 'inf', 2, from.id, {});

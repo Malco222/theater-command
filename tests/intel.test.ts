@@ -594,7 +594,8 @@ describe('the month\'s secret war', () => {
     expect(JSON.stringify([g.intel, g.flags])).toBe(before);
     const watch = grand(null, 6);
     for (let k = 0; k < 14; k++) runTurnAI(watch);
-    expect(watch.intel).toEqual({ agents: [], next: 1, notes: [], heat: {} });
+    // (The sea searches a computer's air staff keeps beside it, ruling 52, are no part of the secret war.)
+    expect({ ...watch.intel, seaBy: undefined }).toEqual({ agents: [], next: 1, notes: [], heat: {} });
     expect(watch.flags.spyfrom).toBeUndefined();
     expect(Object.keys(watch.flags).some((k) => k.startsWith('oilout:'))).toBe(false);
   });
