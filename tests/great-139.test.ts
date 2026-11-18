@@ -208,17 +208,18 @@ describe('an attacker does not shut its attackers in (b519(m))', () => {
     expect(garrisonOf(town)).toContain(one);
   });
 
-  it('while the field holds, only a corps the attack cannot use goes inside', () => {
+  it('the city is garrisoned as any other city, not filled to its room', () => {
     const g = playing();
     const town = warsaw(g, () => false);
-    const [fit, worn] = g.corps.filter((c) => c.nat === 'POL' && !c.dead && !c.town && c.kind === 'inf').slice(0, 2);
-    for (const c of [fit, worn]) { relocate(g, c, town); c.joint = undefined; }
-    worn.org = 0.2;
-    door(g, town, 'weak');
+    const five = g.corps.filter((c) => c.nat === 'POL' && !c.dead && !c.town && c.kind === 'inf').slice(0, 5);
+    for (const c of five) { relocate(g, c, town); c.joint = undefined; }
+    door(g, town, 'strong');
     attacking(g);
     garrisons(g, 'POL', true);
-    expect(garrisonOf(town)).toEqual([worn]);
-    expect(field(town, 'POL')).toEqual([fit]);
+    // (Without the attack the five would fill the city's room: b512(e), the field cannot be held.)
+    expect(garrisonOf(town).length).toBe(SIEGE.ai.hold[townSize(g, town)]);
+    expect(garrisonOf(town).length).toBeLessThan(roomIn(g, town));
+    expect(field(town, 'POL').length).toBeGreaterThan(0);
   });
 
   it('a war the enemy began is not the attacker\'s: the lone corps goes in as before', () => {
