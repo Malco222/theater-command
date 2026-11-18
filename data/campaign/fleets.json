@@ -1,6 +1,7 @@
 {
   "_about": {
     "what": "The grand campaign's navy, handled as pieces on the map like the armies. A fleet is picked up, its ships are laid out as cards by class, and it is given one of five orders: patrol a sea, raid shipping, escort a shipping lane, hunt submarines, or lie in harbour. It can also stand in to a coast and shell it. None of this touches the history campaigns.",
+    "harbour": "A computer's navy that keeps its harbours from the month an event has come (ruling 233(k)): the country, and the event's flag. The Italian fleet did not come out after Mussolini fell on 25 July 1943: its surface fleets lie in port and come out against no landing, and its submarines keep the sea. The computer's Italy in the grand campaign only; a player's fleets sail as he likes.",
     "escort": "Cargoes on a lane are guarded by the fleets ordered to escort that lane, wherever on it they are, and each ship counts its full escort worth (navy.json: destroyers 1, carriers 3, cruisers 0.5, battleships nothing). A fleet that merely patrols or hunts in one of the lane's seas gives distant cover only: 'loose' of that worth.",
     "hunt": "Submarines are sunk by destroyers and aircraft and by nothing else. Each month a nation's hunters in a sea sink this share of the enemy submarines at sea there: base + rate x H / (H + submarines x perSub + sea), never more than 'most'. H counts its destroyers (and 'carrier' for each carrier, whose aircraft search far): in full for a fleet ordered to hunt there ('hunter'), 'escort' for a fleet escorting a lane through that sea, 'loose' for one on patrol there, plus 'air' for each point of friendly air strength over the sea, the whole multiplied by what radar is worth. With no hunter at all nothing is sunk. A hunting fleet loses 'cost' destroyers for each submarine it sinks.",
     "screen": "A fleet of heavy ships needs destroyers round it. With fewer than 'per' destroyers for each battleship, carrier and cruiser, a fleet at sea where enemy submarines are at work may be torpedoed: each month the chance of losing one heavy ship is submarines x risk x the share of the screen that is missing, never more than 'most'.",
@@ -8,6 +9,7 @@
     "ai": "A computer admiral shells troops on a coast its own army (or an ally's) stands beside, when its fleet is on patrol there with readiness of 'ready' or better and its side is the stronger in that sea. A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast in any sea within its reach, but only where its side would be 'sortie' times the enemy's strength with it there; raiders keep to their own work. bombard false stops it, and sortie 0 keeps the harbour fleets in."
   },
   "escort": { "loose": 0.25 },
+  "harbour": { "ITA": "event:mussolini-falls" },
   "hunt": { "base": 0.004, "rate": 0.12, "sea": 20, "perSub": 1, "hunter": 1, "escort": 0.5, "loose": 0.25, "carrier": 3, "air": 0.15, "most": 0.25, "cost": 0.12 },
   "screen": { "per": 1.5, "risk": 0.01, "most": 0.4 },
   "bombard": {

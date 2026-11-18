@@ -54,6 +54,8 @@ export const NAVY = data as unknown as {
 /** The grand campaign's navy: escorts bound to lanes, destroyers that hunt, guns that shell a coast. See fleets.json. */
 export const FLEETS = fleetData as unknown as {
   escort: { loose: number };
+  /** A computer's navy that keeps its harbours once an event has come: the country, and the event's flag (ruling 233(k)). */
+  harbour?: Record<string, string>;
   hunt: { base: number; rate: number; sea: number; perSub: number; hunter: number; escort: number; loose: number; carrier: number; air: number; most: number; cost: number };
   screen: { per: number; risk: number; most: number };
   bombard: {
@@ -678,6 +680,7 @@ export function sortieAgainst(g: Game, nat: string, path: number[]): number {
   for (const f of g.fleets) {
     if (!atWar(g, f.nat, nat) || !surfaceShips(f)) continue;
     if (atSea(f)) { if (!path.includes(f.zone) && near.has(f.zone)) s += fleetPower(g, f); continue; }
+    if (keepsHarbour(g, f.nat)) continue;
     if ((f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z))) s += fleetPower(g, f);
   }
   return s * NAVY.landing.sortie;
@@ -1794,6 +1797,17 @@ function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> }
   return { off, way };
 }
 
+/**
+ * Ruling 233(k), the grand campaign: a computer's navy whose government has changed and is treating for peace keeps
+ * its harbours (fleets.json 'harbour': the country and the event). The Italian fleet did not come out after 25 July
+ * 1943. Its surface fleets lie in port and come out against no landing; its submarines keep the sea. A player's
+ * fleets sail as he likes.
+ */
+export function keepsHarbour(g: Game, nat: string): boolean {
+  const ev = FLEETS.harbour?.[nat];
+  return !!ev && g.flags.open === 1 && nat !== g.human && !!g.flags[ev];
+}
+
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
   // The player's fleets are his own to order, unless he has handed the navy to his admirals (depth.ts).
@@ -1802,7 +1816,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   let cross: { off: Set<number>; way: Set<number> } | null = null;
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
-    if (!n.atWar.length || !shipCount(f.ships)) { home(); continue; }
+    if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
     // A worn fleet stays in harbour until it is fit for sea again.
