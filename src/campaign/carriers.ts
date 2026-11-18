@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips } from './navy';
+import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips } from './navy';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 
@@ -671,8 +671,11 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
  * can fly at the harbour, and the wing goes for what lies there that month, with the fleet's fighters where fighters
  * will come up. None of the admirals' sums is asked: the plan orders it. A harbour with no ship of an enemy's in it
  * is not struck and nothing sails; afterwards the admirals' own rule decides. A player's fleets are his own.
+ * `home`: the base the fleet makes for once the strike is flown, that same month (the force was back in the Inland Sea
+ * before December 1941 was out; its country moves last in a month, and left at its northern anchorage it would lie in
+ * reach of the fleet it had just struck through all of that fleet's January).
  */
-export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string): boolean {
+export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string, home?: { base: string; port: string; home: string; words: string }): boolean {
   if (!carrierRules(g) || nat === g.human) return false;
   const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
   if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
@@ -696,8 +699,10 @@ export function plannedStrike(g: Game, nat: string, fleet: string, harbour: stri
   if (a.why) return false;
   if (a.D >= 1 && cap && cap.ftr > 0 && cap.flew !== g.turn && cap.mission === 'support' && whyNotMission(g, cap, 'harbour', r.id) === null) fleets = [lead, cap];
   const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
-  if (rep) for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
-  return !!rep;
+  if (!rep) return false;
+  for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
+  if (home) orderedTo(g, c, home);
+  return true;
 }
 
 /**

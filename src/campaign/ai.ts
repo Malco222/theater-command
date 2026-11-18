@@ -21,7 +21,7 @@ import { plannedStrike } from './carriers';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
-import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
+import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
@@ -480,7 +480,7 @@ function mainCampaign(g: Game, nat: string): void {
     if (open) afterDeclaring(g, nat);
   }
   // (The strikes the plan orders of its carriers fall with the declaration, before the admirals read the month.)
-  for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour);
+  for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour, s.home);
   navalAI(g, nat, ph?.fleets);
   shoreAI(g, nat);
   airAI(g, nat, ph);
@@ -2297,6 +2297,13 @@ export function wantsOut(g: Game, c: Corps): boolean {
   // host rule below.
   const here = g.regions[c.reg];
   if (beyondEurope(here) && (here.ctrl === c.nat || fieldCtrl(g, here) === c.nat) && atWar(g, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
+  // On the far side of the world nobody is the Continent's guest. The host rule below asks for the biggest ally on a
+  // continent and a road to his capital: Japan's army in Manchukuo found Germany there the month Japan fought beside
+  // the Axis, no road from Mukden to Berlin, and sailed home in December 1941; the Dutch garrison of Java, kept at
+  // its post under Britain's colours (ruling 199(b)), sailed for England in June 1940; the Australians in Malaya would
+  // have followed. A corps on ground beyond the old chart's far shore stays where its staff put it, and comes off
+  // only when cut off or broken. (None stands there while the far side's switch is off.)
+  if (shoreOf(here) === 2) return !c.supplied || c.org < 0.3;
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;

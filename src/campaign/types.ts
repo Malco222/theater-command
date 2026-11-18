@@ -832,8 +832,13 @@ export interface PlanPhase {
   landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
   /** Harbours the nation holds without owning them from which the main plan's named landings may also sail (the far side: Japan's quays on Hainan and in Indochina, ruling 200 and the planner's paper 18). */
   quays?: string[];
-  /** Strikes the plan orders of a carrier fleet in the month the blow falls: the fleet by name and the enemy harbour its wing goes for (the far side: the carrier striking force on Pearl Harbor, ruling 200(c)). */
-  strikes?: { fleet: string; harbour: string }[];
+  /**
+   * Strikes the plan orders of a carrier fleet in the month the blow falls: the fleet by name and the enemy harbour its
+   * wing goes for (the far side: the carrier striking force on Pearl Harbor, ruling 200(c)). `home`, where the row
+   * has it, is the base the fleet makes for once the strike is flown, in the same month (a base, the harbour's name,
+   * its sea's key and the news line, as a row of navy.json 'moves').
+   */
+  strikes?: { fleet: string; harbour: string; home?: { base: string; port: string; home: string; words: string } }[];
   /**
    * An expedition on someone else's ground that leaves rather than be lost with it: once the enemy holds any of the
    * places in 'when', its corps make for a port and are taken off, to one of the theatre's havens or else home.

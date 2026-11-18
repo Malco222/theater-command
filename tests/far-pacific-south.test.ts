@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
+import { wantsOut } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { bookMonth } from '../src/campaign/claims';
 import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
@@ -55,7 +56,7 @@ describe("Japan's opening (ruling 200): the rows", () => {
     expect(op.landings!.length).toBe(10);
     expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo']);
     expect(op.quays).toEqual(['Hainan', 'Cam Ranh']);
-    expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor' }]);
+    expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor', home: { base: 'Hiroshima', port: 'Kure', home: 'inland', words: 'The carrier striking force comes home to Kure' } }]);
     expect(HISTORY.dates.JAP?.south).toBe(28);
     expect(HISTORY.theatre['JAP:south']).toBe('pacific');
     expect(HISTORY.theatres.pacific.after).toEqual(['west']);
@@ -103,6 +104,24 @@ describe("a fallen country's far ground (ruling 199)", () => {
     expect(g.regions[fleet.base].name).toBe('Soerabaja');
     // No German soldier or flag reaches the Indies.
     expect(g.regions.some((r) => r.owner === 'NED' && r.overseas && r.ctrl === 'GER')).toBe(false);
+  });
+
+  it('nobody on the far side is the Continent\'s guest: the kept garrison stays on Java, and Japan\'s army in Manchukuo when Japan fights beside the Axis', () => {
+    const g = war(1, 9);
+    declareWar(g, 'GER', 'NED');
+    capitulate(g, 'NED', 'GER');
+    const knil = corps(g, 'KNIL 1st Division (West Java)')!;
+    expect(knil.nat).toBe('UK');
+    expect(wantsOut(g, knil)).toBe(false);
+    // (Cut off, or broken, it would come off as anyone does.)
+    knil.supplied = false;
+    expect(wantsOut(g, knil)).toBe(true);
+    const h = war(1, 28);
+    const guests = h.corps.filter((c) => c.nat === 'JAP' && !c.dead && h.regions[c.reg].owner === 'MAN');
+    expect(guests.length).toBeGreaterThan(3);
+    declareWar(h, 'JAP', 'UK');
+    expect(bloc(h.nations.JAP)).toBe('axis');
+    expect(guests.filter((c) => wantsOut(h, c)).map((c) => c.name)).toEqual([]);
   });
 
   it('Australia keeps it where Britain is beaten', () => {
@@ -299,6 +318,13 @@ describe("Japan's month of December 1941", () => {
     expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
     const after = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
     expect(after.ships.bb + after.ships.cv + after.ships.ca + after.ships.dd).toBeLessThan(afloat);
+    // The strike flown, the force is based at Kure again before the month is out (Japan moves last in a month); where
+    // it goes from there is the admirals' own.
+    const force = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
+    expect(g.regions[force.base].name).toBe('Hiroshima');
+    expect(force.port).toBe('Kure');
+    expect(g.seas[force.home].key).toBe('inland');
+    expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
     expect(at(g, '25th Army (5th Division)')).toBe('Singora');
     expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');

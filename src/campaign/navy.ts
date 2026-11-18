@@ -1332,6 +1332,22 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
   return false;
 }
 
+/**
+ * A fleet's base moved by order of its staff's book (navy.json 'moves', and the base a planned strike comes home to,
+ * carriers.ts): to a harbour its country holds, the sea it lies on named. It lies in harbour there, and the news
+ * says so. False where the place is not its country's, or it is there already.
+ */
+export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }): boolean {
+  const r = g.byName[m.base], sea = zoneOf(g, m.home);
+  if (!r || r.ctrl !== f.nat || r.id === f.base || sea < 0) return false;
+  f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+  delete f.lane;
+  g.supplyDirty = true;
+  syncWings(g);
+  headline(g, 'info', `${m.words}.`, f.nat);
+  return true;
+}
+
 /** Friendly ports a fleet could move its base to. */
 export function baseTargets(g: Game, f: Fleet): Region[] {
   return g.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g, f.nat, r.ctrl) && canSailTo(g, f, r));
@@ -1388,13 +1404,8 @@ export function navalUpkeep(g: Game, nat: string): void {
   }
   for (const m of NAVY.moves ?? []) {
     if (m.nat !== nat || m.turn !== g.turn || nat === g.human || (m.stops && !m.stops.includes(stopOf(g)))) continue;
-    const f = named(m.fleet), r = g.byName[m.base], sea = zoneOf(g, m.home);
-    if (!f || !r || r.ctrl !== nat || r.id === f.base || sea < 0) continue;
-    f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
-    delete f.lane;
-    g.supplyDirty = true;
-    syncWings(g);
-    headline(g, 'info', `${m.words}.`, nat);
+    const f = named(m.fleet);
+    if (f) orderedTo(g, f, m);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;
