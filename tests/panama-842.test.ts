@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { RELATIONS, sideHeld, soreList, wouldResent } from '../src/campaign/diplomacy';
 import { addCorps, createGame, relocate } from '../src/campaign/game';
+import { endTrade, signTrade } from '../src/campaign/trade';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { guardMen } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -25,6 +26,16 @@ function nextMonth(g: Game): void {
   beginHuman(g);
 }
 const gateOf = (g: Game, name: RegExp): number => g.gates.findIndex((x) => name.test(x.name));
+/**
+ * On the cities chart no agreement of the first day sails through the canal: the Dominican Republic's trade with
+ * Guatemala keeps to the Caribbean. So Peru and the Dominican Republic each give up one agreement (Chile's with Peru,
+ * Haiti's with the Dominican Republic) and sign one with each other, whose goods go through it.
+ */
+function canalTrade(g: Game): void {
+  expect(endTrade(g, 'CHL', 'PER')).toBe(true);
+  expect(endTrade(g, 'HAI', 'DOM')).toBe(true);
+  expect(signTrade(g, 'PER', 'DOM', new Map(), true)).not.toBeNull();
+}
 const panama = (g: Game) => g.corps.find((c) => c.name === 'Panama Canal Department')!;
 
 describe("Panama's garrison is a division he can move", () => {
@@ -88,12 +99,13 @@ describe('the last corps ordered out of a gate\'s province: the gate is left to 
 describe('who resents a shut gate', () => {
   it('his own row stands first, the rows add up, and the two neutrals whose trade it turns back are named', () => {
     const g = seat('USA');
+    canalTrade(g);
     const p = gateOf(g, /Panama/);
     const q = gateQuestion(g, p)!;
     expect(q.rows[0].own).toBe(true);
     expect(q.rows[0].what).toBe('None of your own trade runs through it.');
     expect(q.rows[0].loss).toBe(0);
-    expect(q.rows.slice(1).map((r) => r.nat).sort()).toEqual(['DOM', 'GUA']);
+    expect(q.rows.slice(1).map((r) => r.nat).sort()).toEqual(['DOM', 'PER']);
     // Each figure is in the money the page shows, and the totals are the rows added up.
     const sumOf = (rs: { loss: number }[]): number => Math.round(rs.reduce((s, r) => s + r.loss, 0) * 100);
     for (const r of q.rows) expect(Math.abs(r.loss * 100 - Math.round(r.loss * 100))).toBeLessThan(1e-9);
@@ -106,7 +118,7 @@ describe('who resents a shut gate', () => {
     expect(q.resentNote).toBe('Each moves away from the Allies in public opinion for as long as it stays shut.');
     expect(q.resent.map((r) => [r.nat, r.so, r.most, r.line])).toEqual([
       ['DOM', 0, 8, '1 point of opinion a month, 8 at most'],
-      ['GUA', 0, 8, '1 point of opinion a month, 8 at most'],
+      ['PER', 0, 8, '1 point of opinion a month, 8 at most'],
     ]);
     // Asking changes nothing.
     const before = saveGame(g);
@@ -116,10 +128,11 @@ describe('who resents a shut gate', () => {
 
   it('a point a month away from his side while it stays shut, eight at most, and no further once it is open', () => {
     const g = seat('USA');
+    canalTrade(g);
     const still = loadGame(saveGame(g))!;
     const p = gateOf(g, /Panama/);
     expect(orderGate(g, p, true)).toBe(true);
-    expect(soreList(g, p).map((x) => [x.nat, x.so]).sort()).toEqual([['DOM', 0], ['GUA', 0]]);
+    expect(soreList(g, p).map((x) => [x.nat, x.so]).sort()).toEqual([['DOM', 0], ['PER', 0]]);
     // Month by month against the same game with the gate left open: the gap is the points moved, less what drifts home.
     const pull = 0.08;
     let want = 0;
@@ -127,7 +140,7 @@ describe('who resents a shut gate', () => {
       nextMonth(g);
       nextMonth(still);
       want = want * (1 - pull) + (m <= RELATIONS.gate.most ? RELATIONS.gate.month : 0);
-      for (const id of ['DOM', 'GUA']) expect(g.nations[id].opinion - still.nations[id].opinion, `${id} after ${m} months`).toBeCloseTo(want, 6);
+      for (const id of ['DOM', 'PER']) expect(g.nations[id].opinion - still.nations[id].opinion, `${id} after ${m} months`).toBeCloseTo(want, 6);
       // Nobody else is moved by it.
       expect(g.nations.MEX.opinion).toBeCloseTo(still.nations.MEX.opinion, 9);
       expect(soreList(g, p).map((x) => x.so)).toEqual([Math.min(m, 8), Math.min(m, 8)]);

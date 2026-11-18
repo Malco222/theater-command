@@ -143,12 +143,15 @@ const DEC_41 = 28, AUG_42 = 36;
 describe('Latin America is on the chart', () => {
   it('is drawn after North America, whose provinces and seas keep their numbers', () => {
     const g = wide();
-    expect(WORLD_STAGES).toEqual([104]);
-    expect(WORLD_REGIONS).toBe(201);
-    expect(g.regions.length).toBe(WORLD_FIRST + 201);
+    // (The cities version lays the Americas' cities after them: the chart's stages are 104 and 201, then its end.)
+    expect(WORLD_STAGES).toEqual([104, 201]);
+    expect(WORLD_REGIONS).toBe(540);
+    expect(g.regions.length).toBe(WORLD_FIRST + 540);
     expect(g.regions[WORLD_FIRST + 103].name).toBe('Southern Baja');
     expect(g.regions[WORLD_FIRST + 104].name).toBe('Guatemala City');
-    expect(g.regions[g.regions.length - 1].name).toBe('Rio Grande do Sul');
+    expect(g.regions[WORLD_FIRST + 200].name).toBe('Rio Grande do Sul');
+    // Then the cities, each cut from a province of the 201 (the cities version).
+    expect((WORLD_MAP.regions as { of?: number }[]).slice(201).every((r) => r.of !== undefined && r.of >= WORLD_FIRST && r.of < WORLD_FIRST + 201)).toBe(true);
     expect(new Set(g.regions.map((r) => r.name)).size).toBe(g.regions.length);
     // The chart runs down to 56 degrees south at the scale of the rest: the whole height the 3D game was promised.
     expect(WORLD_MAP.frame.y1 - WORLD_MAP.frame.y0).toBe(5096);
@@ -160,7 +163,9 @@ describe('Latin America is on the chart', () => {
     expect(g.seas.slice(44).map((s) => s.key)).toEqual(['panama', 'guayaquil', 'callao', 'atacama', 'valparaiso', 'fjords', 'eqpacific', 'sepacific', 'guiana', 'amazon', 'narrows',
       'bahia', 'santos', 'plate', 'argentine', 'falklands', 'southatlantic', 'sierra', 'guinea', 'angola', 'cape', 'mozambique', 'aden']);
     // The two Americas are one land mass, joined through the isthmus; the frontiers are the true ones.
-    const nb = (a: string, b: string): boolean => g.byName[a].nb.includes(g.byName[b].id);
+    // (Ground to ground: a province with the cities cut from it, since the cities version.)
+    const ground = (n: string): number[] => [g.byName[n].id, ...(WORLD_MAP.regions as { of?: number }[]).map((r, i) => (r.of === g.byName[n].id ? WORLD_FIRST + i : -1)).filter((i) => i >= 0)];
+    const nb = (a: string, b: string): boolean => ground(a).some((x) => g.regions[x].nb.some((y) => ground(b).includes(y)));
     for (const [a, b] of [['Chiapas', 'Guatemala City'], ['Yucatan', 'British Honduras'], ['Chiriqui', 'Canal Zone'], ['Canal Zone', 'Panama City'], ['Panama City', 'Medellin'],
       ['Caqueta', 'Loreto'], ['Arequipa', 'Tarapaca'], ['Mendoza', 'Santiago'], ['Tacuarembo', 'Rio Grande do Sul'], ['Guayana', 'British Guiana']]) expect(nb(a, b), `${a} and ${b}`).toBe(true);
     // Chile and Brazil do not touch; Ecuador and Brazil do not; Chiriqui reaches Panama City only through the Zone.
@@ -183,19 +188,23 @@ describe('Latin America is on the chart', () => {
   it('has the great rivers, and railways only where history had laid them', () => {
     const g = wide();
     const id = (name: string): number => g.byName[name].id;
-    const river = (a: string, b: string): string | null => { const c = crossingOf(id(a), id(b)); return c ? riverName(c) : null; };
+    // A province with the cities cut from it: since the cities version a river or a line may run from a city.
+    const ground = (n: string): number[] => [id(n), ...(WORLD_MAP.regions as { of?: number }[]).map((r, i) => (r.of === id(n) ? WORLD_FIRST + i : -1)).filter((i) => i >= 0)];
+    const river = (a: string, b: string): string | null => { for (const x of ground(a)) for (const y of ground(b)) { const c = crossingOf(x, y); if (c) return riverName(c); } return null; };
     expect(river('Amazonas', 'Rio Negro')).toBe('Amazon');
     expect(river('Para', 'Amapa')).toBe('Amazon');
-    expect(river('Asuncion', 'Chaco Boreal')).toBe('Paraguay');
-    expect(river('Rosario', 'Corrientes')).toBe('Parana');
+    expect(river('Asuncion', 'Gran Chaco')).toBe('Paraguay');
+    expect(river('Asuncion', 'Corrientes')).toBe('Parana');
     expect(river('Tacuarembo', 'Corrientes')).toBe('Uruguay');
     expect(river('Ciudad Bolivar', 'Guayana')).toBe('Orinoco');
     expect(river('Bogota', 'Medellin')).toBe('Magdalena');
-    expect(river('Bahia', 'Pernambuco')).toBe('Sao Francisco');
+    expect(river('Bahia', 'Goias')).toBe('Sao Francisco');
     expect(river('Buenos Aires', 'Pampas')).toBeNull();
-    const rail = (a: string, b: string): boolean => railsAt(id(a)).includes(id(b));
-    // The Transandine, the lines up to La Paz, Rio to Sao Paulo, Buenos Aires to Rosario.
-    for (const [a, b] of [['Mendoza', 'Santiago'], ['Tarapaca', 'La Paz'], ['Tucuman', 'Potosi'], ['Rio de Janeiro', 'Sao Paulo'], ['Buenos Aires', 'Rosario'], ['Canal Zone', 'Panama City']]) expect(rail(a, b), `${a} to ${b}`).toBe(true);
+    const rail = (a: string, b: string): boolean => ground(a).some((x) => railsAt(x).some((y) => ground(b).includes(y)));
+    // The lines up to La Paz, Rio to Sao Paulo, Buenos Aires to Rosario. (The Transandine was cut by the flood of 1934
+    // until 1944: the map builder's net of the cities leaves it out.)
+    expect(rail('Mendoza', 'Santiago')).toBe(false);
+    for (const [a, b] of [['Tarapaca', 'La Paz'], ['Tucuman', 'Potosi'], ['Rio de Janeiro', 'Sao Paulo'], ['Buenos Aires', 'Rosario'], ['Canal Zone', 'Panama City']]) expect(rail(a, b), `${a} to ${b}`).toBe(true);
     // None through the Darien, none down the isthmus, none over the Uruguay, none into the forest.
     for (const [a, b] of [['Panama City', 'Medellin'], ['Managua', 'San Jose'], ['Tacuarembo', 'Corrientes'], ['Santa Cruz', 'Campo Grande']]) expect(rail(a, b), `${a} to ${b}`).toBe(false);
     for (const name of ['Amazonas', 'Acre', 'Loreto', 'Mato Grosso', 'Peten', 'Chaco Boreal', 'Magallanes', 'Tierra del Fuego', 'Falkland Islands']) expect(onNet(id(name)), name).toBe(false);
@@ -290,7 +299,7 @@ describe('Latin America is on the chart', () => {
     expect(['Curacao', 'Dutch Guiana'].map((n) => g.byName[n].ctrl)).toEqual(['UK', 'UK']);
     capitulate(g, 'FRA', 'GER');
     expect(['Martinique', 'French Guiana'].map((n) => g.byName[n].ctrl)).toEqual(['UK', 'UK']);
-    expect(g.headlines.some((h) => /Martinique and French Guiana into their keeping/.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /Martinique, French Guiana and Cayenne into their keeping/.test(h.text))).toBe(true);
   });
 
   it('brings in the republics of the isthmus when America goes to war, and Brazil in August 1942', () => {

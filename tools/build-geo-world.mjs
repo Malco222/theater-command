@@ -471,3 +471,8 @@ const landPts = out.land.reduce((s, p) => s + p.reduce((t, r) => t + r.length, 0
 console.log(`world map: ${regions.length} new provinces (${first} to ${first + regions.length - 1}), ${pts} points, ${landPts} of coast, ${zones.length - nCore} new seas, ${out.frame.x0} to ${out.frame.x1} by ${out.frame.y1}, ${(JSON.stringify(out).length / 1024).toFixed(0)} KB`);
 if (joined.length) console.log(`islands joined to: ${[...new Set(joined)].join(', ')}`);
 if (alone.length) console.log(`no neighbours: ${alone.join(', ')}`);
+
+// For tools/build-geo-far.mjs, which lays the far side of the world round this chart without moving anything on it:
+// the chart as written, and the grid it was counted on (which sea each cell of water went to, and how far by sea it
+// lies from that sea's anchor).
+export const CHART = { out, gx0, cols, rows, zoneAt, dist, isLand, regionAt, nCore, landFull: land };

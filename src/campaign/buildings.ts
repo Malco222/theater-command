@@ -264,6 +264,26 @@ export function civicSum(g: Game, nat: string, keeps = false): CivicSum {
   return s;
 }
 
+/**
+ * civicSum's houses alone (the trading houses a nation's buildings open), without adding up the rest: asked of every
+ * country in turn whenever trade is weighed. Counted as civicSum counts them.
+ */
+export function civicHouses(g: Game, nat: string): number {
+  if (!g.flags['cv:any'] || !civicRules(g)) return 0;
+  let houses = 0;
+  const cap = g.nations[nat]?.capital;
+  for (const r of g.regions) {
+    // Only a harbour town or the capital opens one.
+    if (!(r.port || cap === r.id) || r.ctrl !== nat || r.owner !== nat) continue;
+    for (const l of CIVIC.lines) {
+      if (!l.house) continue;
+      const lv = g.flags[key(l.id, r.id)] ?? 0;
+      if (lv > 0 && lv >= l.house) houses++;
+    }
+  }
+  return Math.min(CIVIC.caps.houses, houses);
+}
+
 /** How fast a nation's research teams work: 1 with no schools. */
 export const researchSpeed = (g: Game, nat: string): number => 1 + civicSum(g, nat).research;
 

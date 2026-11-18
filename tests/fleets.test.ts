@@ -83,7 +83,7 @@ describe('the numbers', () => {
 describe('escorts on a shipping lane', () => {
   it('guard it in full once bound to it, where a patrol in its seas gives distant cover only', () => {
     const g = britain();
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     const lane = seaRoutes(g).find((r) => r.id === 'atlantic')!;
     expect(sail(g, wac, sea(g, 'wapp'), 'patrol')).toBe(true);
     const loose = laneLoss(g, 'UK', lane.zones, 'atlantic');
@@ -99,7 +99,7 @@ describe('escorts on a shipping lane', () => {
 
   it('guard the whole lane, whichever of its seas the fleet is in', () => {
     const g = britain();
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     const lane = seaRoutes(g).find((r) => r.id === 'atlantic')!;
     escort(g, wac, 'atlantic');
     const a = laneLoss(g, 'UK', lane.zones, 'atlantic').guard;
@@ -112,7 +112,7 @@ describe('escorts on a shipping lane', () => {
 
   it('are forecast before the order is given, and the forecast comes true', () => {
     const g = britain();
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     orderFleet(g, wac.id, wac.home, 'port');
     const before = { zone: wac.zone, stance: wac.stance, lane: wac.lane };
     const plan = previewEscort(g, wac.id, 'atlantic')!;
@@ -129,7 +129,7 @@ describe('escorts on a shipping lane', () => {
 
   it('are refused where they make no sense', () => {
     const g = britain();
-    const home = named(g, 'Home Fleet'), med = named(g, 'Mediterranean Fleet'), wac = named(g, 'Western Approaches Command');
+    const home = named(g, 'Home Fleet'), med = named(g, 'Mediterranean Fleet'), wac = named(g, 'Western Approaches Fleet');
     // A lane out of reach of the fleet's base.
     expect(whyNotEscort(g, med, 'atlantic')).toMatch(/out of reach/);
     // An enemy's lane.
@@ -145,7 +145,7 @@ describe('escorts on a shipping lane', () => {
 
   it('end when the fleet is given other work', () => {
     const g = britain();
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     escort(g, wac, 'atlantic');
     orderFleet(g, wac.id, sea(g, 'wapp'), 'patrol');
     expect(wac.lane).toBeUndefined();
@@ -161,7 +161,7 @@ describe('escorts on a shipping lane', () => {
     const g = startOpen(createGame(5, null));
     for (let m = 0; m < 6; m++) runTurnAI(g);
     expect(g.nations.UK.atWar.length).toBeGreaterThan(0);
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     expect(wac.stance).toBe('escort');
     expect(wac.lane).toBe('atlantic');
     expect(g.convoys.atlantic.guard).toBeGreaterThan(0);
@@ -178,7 +178,7 @@ describe('destroyers hunt submarines', () => {
     const quarry = named(g, 'Mediterranean Fleet');
     quarry.ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 60 };
     quarry.zone = z; quarry.stance = 'raid';
-    const hunters = named(g, 'Baltic Station');
+    const hunters = named(g, 'Swinemunde Fleet');
     hunters.ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...ships };
     hunters.zone = z; hunters.stance = stance; hunters.ready = 1;
     return { g, hunters, quarry, z };
@@ -219,7 +219,7 @@ describe('destroyers hunt submarines', () => {
     expect(pw).toBeCloseTo(hw * FLEETS.hunt.loose, 6);
     // An escort hunts in every sea of its lane, at the escort's share.
     const g = britain();
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     escort(g, wac, 'atlantic');
     const lane = seaRoutes(g).find((r) => r.id === 'atlantic')!;
     for (const z of lane.zones) expect(huntersIn(g, 'UK', z).fleets).toContain(wac);
@@ -235,7 +235,7 @@ describe('destroyers hunt submarines', () => {
     const run = (dd: number): { g: Game; home: Fleet } => {
       const g = britain();
       const z = sea(g, 'nsea');
-      const subs = named(g, 'U-boat Arm');
+      const subs = named(g, 'U-boat Fleet');
       subs.ships.ss = 80; subs.zone = z; subs.stance = 'raid';
       const home = named(g, 'Home Fleet');
       home.ships.dd = dd; home.zone = z; home.stance = 'patrol';
@@ -272,7 +272,7 @@ describe('shelling a coast', () => {
     const r = coast(g, z, () => true);
     garrison(g, r);
     expect(whyNotBombard(g, home, r, 'troops')).toBeNull();
-    const dover = named(g, 'Dover Command');
+    const dover = named(g, 'Dover Fleet');
     sail(g, dover, z, 'patrol');
     expect(whyNotBombard(g, dover, r, 'troops')).toMatch(/too few heavy guns/);
     const med = named(g, 'Mediterranean Fleet');
@@ -351,7 +351,7 @@ describe('shelling a coast', () => {
     g.turn = keep;
     // A coast with no industry and no troops in sight is not worth the shells.
     const empty = g.seas[z].coast.map((id) => g.regions[id]).find((x) => x.ctrl === 'GER' && x.fac <= 0 && !x.units.length && x.id !== r.id);
-    if (empty) expect(whyNotBombard(g, named(g, 'Dover Command'), empty) ?? whyNotBombard(g, detach(g, home, { bb: 2 })!, empty)).not.toBeNull();
+    if (empty) expect(whyNotBombard(g, named(g, 'Dover Fleet'), empty) ?? whyNotBombard(g, detach(g, home, { bb: 2 })!, empty)).not.toBeNull();
   });
 
   it('is answered by the batteries of a fortified coast, which sink only the light ships that stand in', () => {
@@ -511,7 +511,7 @@ describe('the cards both interfaces draw', () => {
     orderFleet(g, home.id, sea(g, 'nsea'), 'hunt');
     expect(fleetView(g, home.id)!.doing).toBe('Hunting submarines in the North Sea');
     expect(fleetView(g, home.id)!.order).toBe('Hunt submarines');
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     orderEscort(g, wac.id, 'atlantic');
     const w = fleetView(g, wac.id)!;
     expect(w.doing).toBe('Escorting the Atlantic lane');
@@ -534,7 +534,7 @@ describe('the cards both interfaces draw', () => {
     expect(o.ports.length).toBeGreaterThan(0);
     expect(fleetOptions(g, named(g, 'Battle Fleet').id)).toBeNull();
     // Where enemy submarines are out, the options say what hunting them there would sink.
-    const subs = named(g, 'U-boat Arm');
+    const subs = named(g, 'U-boat Fleet');
     subs.zone = sea(g, 'nsea'); subs.stance = 'raid';
     const s = seaOptions(g, home).find((x) => x.zone === subs.zone)!;
     expect(s.subs).toBe(subs.ships.ss);
@@ -554,7 +554,7 @@ describe('the cards both interfaces draw', () => {
 
   it('come back from a save as they went in', () => {
     const g = britain();
-    const home = named(g, 'Home Fleet'), wac = named(g, 'Western Approaches Command');
+    const home = named(g, 'Home Fleet'), wac = named(g, 'Western Approaches Fleet');
     const z = sea(g, 'nsea');
     orderFleet(g, home.id, z, 'patrol');
     orderEscort(g, wac.id, 'atlantic');
@@ -562,8 +562,8 @@ describe('the cards both interfaces draw', () => {
     garrison(g, r);
     orderBombard(g, home.id, r.id, 'troops');
     const back = loadGame(saveGame(g))!;
-    expect(named(back, 'Western Approaches Command').lane).toBe('atlantic');
-    expect(named(back, 'Western Approaches Command').stance).toBe('escort');
+    expect(named(back, 'Western Approaches Fleet').lane).toBe('atlantic');
+    expect(named(back, 'Western Approaches Fleet').stance).toBe('escort');
     expect(named(back, 'Home Fleet').shelled).toBe(g.turn);
     expect(back.shoreReports).toEqual(g.shoreReports);
     expect(whyNotBombard(back, named(back, 'Home Fleet'), back.regions[r.id], 'troops')).toMatch(/already/);
@@ -595,7 +595,7 @@ describe('the history campaigns', () => {
   it('count a patrol in a route\'s seas as its escort, as they always did', () => {
     const g = createGame(1939, null);
     for (let m = 0; m < 3; m++) runTurnAI(g);
-    const wac = named(g, 'Western Approaches Command');
+    const wac = named(g, 'Western Approaches Fleet');
     expect(wac.stance).toBe('patrol');
     const lane = NAVY.convoys.find((c) => c.id === 'atlantic')!;
     const zones = lane.zones.map((k) => zoneOf(g, k));

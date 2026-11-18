@@ -38,7 +38,7 @@ describe('a fleet action weighed up before it is fought', () => {
   it('changes nothing: no dice, no ship, no flag, no news, and the save is the same', () => {
     const { g, home, battle, z } = meet(5);
     const before = saveGame(g), dice = g.rng.state;
-    for (const id of [home.id, battle.id, fleet(g, 'U-boat Arm').id]) for (const viewer of [null, 'UK', 'GER', 'FRA']) planSeaBattle(g, id, z, viewer);
+    for (const id of [home.id, battle.id, fleet(g, 'U-boat Fleet').id]) for (const viewer of [null, 'UK', 'GER', 'FRA']) planSeaBattle(g, id, z, viewer);
     expect(saveGame(g)).toBe(before);
     expect(g.rng.state).toBe(dice);
     // And the fight it forecasts is the same fight whether it was forecast or not.
@@ -134,7 +134,7 @@ describe('a fleet action weighed up before it is fought', () => {
 
   it('has nothing to forecast for submarines, for a stranger, or for a sea with no enemy known', () => {
     const { g, home, battle, z } = meet(5);
-    const subs = planSeaBattle(g, fleet(g, 'U-boat Arm').id, z, null)!;
+    const subs = planSeaBattle(g, fleet(g, 'U-boat Fleet').id, z, null)!;
     expect(subs.why).toMatch(/Submarines fight no fleet action/);
     expect(subs.odds).toBeNull();
     // The enemy is not shown our plan; an ally is.

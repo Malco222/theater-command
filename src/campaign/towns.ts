@@ -11,10 +11,10 @@
  */
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-americas.json';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, provinceYield } from './economy';
+import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldYield, resRules } from './resources';
@@ -108,7 +108,11 @@ export function worthOf(g: Game, r: Region): number {
   const k = r.overseas ? BUDGET.overseas : 1;
   const seat = g.nations[r.owner];
   const capital = r.cap && seat && seat.capital === r.id ? BUDGET.capital : 0;
-  return Math.round((BUDGET.land[r.terrain] * k + (r.port ? BUDGET.port * k : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital) * BUDGET.scale);
+  // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
+  // nothing where it pays something.
+  const f = landFactor(r);
+  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
+  return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 
 const rankOf = (worth: number): number => TOWNS.ranks.filter((x) => worth >= x).length;
@@ -196,9 +200,11 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const kind: Prize['kind'] = mine ? 'yours' : friendly ? 'ally' : restored ? 'restored' : 'taken';
   const to = kind === 'restored' ? (frees ?? r.owner) : kind === 'ally' ? r.ctrl : nat;
   const scale = BUDGET.scale;
-  const income = Math.round(provinceYield(g, r, to === nat ? nat : to).total * scale);
+  // (Ground that pays something is never said to pay nothing: under one rounds up to one, as a town's worth does.)
+  const pay = (v: number): number => (v > 0 ? Math.max(1, Math.round(v * scale)) : 0);
+  const income = pay(provinceYield(g, r, to === nat ? nat : to).total);
   // What its holder stands to lose for good: a siege that stops its pay for now is left out of account.
-  const incomeNow = Math.round(provinceYield(g, r, r.ctrl, true).total * scale);
+  const incomeNow = pay(provinceYield(g, r, r.ctrl, true).total);
   const oil = resRules(g) ? fieldYield(g, r, to) : 0, oilNow = resRules(g) ? fieldYield(g, r, r.ctrl) : 0;
   const factories = workingFactories(g, r);
   const yard = yardLevel(g, r), airfield = workLevel(g, 'field', r.id), fort = r.fort?.lv ?? 0;
@@ -212,8 +218,13 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const whose = to === nat ? 'your treasury' : `${theName(g.nations[to])}'s treasury`;
   if (budgeted(g) || factories) {
     const y = provinceYield(g, r, to);
-    const parts = [y.land ? `land ${Math.round(y.land * scale)}` : '', y.port ? `harbour ${Math.round(y.port * scale)}` : '', y.oil ? `oilfield ${Math.round(y.oil * scale)}` : '',
-      y.fac ? `${plural(factories, 'factory', 'factories')} ${Math.round(y.fac * scale)}` : '', y.capital ? `seat of government ${Math.round(y.capital * scale)}` : ''].filter(Boolean);
+    // (Its parts add up to the total beside them: each is rounded down and the units left go to the largest remainders,
+    // never to a part under a half; a part left under one says so, as the province card does.)
+    const named = ([['land', y.land], ['harbour', y.port], ['oilfield', y.oil], [plural(factories, 'factory', 'factories'), y.fac], ['seat of government', y.capital]] as [string, number][]).filter(([, v]) => v > 0);
+    const exact = named.map(([, v]) => v * scale), whole = exact.map(Math.floor);
+    let left = income - whole.reduce((a, b) => a + b, 0);
+    for (const i of exact.map((_, i) => i).filter((i) => exact[i] >= 0.5).sort((a, b) => exact[b] - whole[b] - (exact[a] - whole[a]) || a - b)) { if (left <= 0) break; whole[i]++; left--; }
+    const parts = named.map(([word], i) => `${word} ${whole[i] < 1 ? 'under 1' : whole[i]}`);
     items.push({ key: 'income', label: 'Money', text: `${income} a month to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });

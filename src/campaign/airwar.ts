@@ -15,6 +15,7 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
@@ -115,10 +116,10 @@ function fieldRow(g: Game, id: number, viewer: string | null, sight: Uint8Array)
   };
 }
 
-/** Every airfield on the map, for a map to draw. Empty outside the grand campaign's air war, where airfields are not places. */
-export function airfields(g: Game, viewer: string | null = g.human): AirfieldRow[] {
+/** Every airfield on the map, for a map to draw. Empty outside the grand campaign's air war, where airfields are not places. 'seen' is the viewer's sightOf where the caller has it already. */
+export function airfields(g: Game, viewer: string | null = g.human, seen?: Uint8Array): AirfieldRow[] {
   if (!airWar(g)) return [];
-  const sight = sightOf(g, viewer);
+  const sight = seen ?? sightOf(g, viewer);
   const out: AirfieldRow[] = [];
   for (const r of g.regions) { const row = fieldRow(g, r.id, viewer, sight); if (row) out.push(row); }
   return out;
@@ -662,7 +663,7 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
   const place = placeOf(g, kind, target);
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
-    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
+    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
     if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
   } else if (kind === 'superiority') {

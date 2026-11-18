@@ -50,8 +50,9 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; warned: boolean; island: boolean; wave: boolean }[] = [];
 const guard: number[] = [];
 {
-  // Seed 3 since Version 76: on the chart with Latin America seed 2's staffs make no landing before June 1943.
-  const g = wide(3);
+  // Seed 4 since Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no
+  // landing before June 1943. (Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
@@ -66,8 +67,10 @@ describe('war work by steps', () => {
   it('going to war does not turn the factories over in a day', () => {
     const g = wide();
     expect(warFooting(g, 'USA')).toBe(0.1);
-    // Every other country works at full stretch from the first day of its war, as it always did.
-    for (const id of ['GER', 'UK', 'SOV', 'CAN']) expect(warFooting(g, id)).toBeNull();
+    // Every other country works at full stretch from the first day of its war, as it always did, but Canada since the
+    // cities version (world.json climbFrom): 45 in 100 until the fall of France, then a step a month (tested below).
+    for (const id of ['GER', 'UK', 'SOV']) expect(warFooting(g, id)).toBeNull();
+    expect(warFooting(g, 'CAN')).toBe(0.45);
     const peace = income(g, 'USA');
     setWar(g, 'USA', 'GER');
     warWorkMonth(g);
@@ -86,6 +89,26 @@ describe('war work by steps', () => {
     expect(months).toBe(25);
     expect(warWorkLeft(g, 'USA')).toBe(0);
     expect(income(g, 'USA')).toBeGreaterThan(peace * 5);
+  });
+
+  it("Canada's factories wait for the fall of France, then climb to full war work by July 1942 (the cities version)", () => {
+    // world.json: 45 in 100 on war work from the first day, war or no war, until June 1940 (turn 10); then 0.022 a
+    // month, all of it by July 1942 (turn 35).
+    const g = wide();
+    expect(atWar(g, 'CAN', 'GER')).toBe(true);
+    const seen: Record<number, number> = {};
+    for (g.turn = 1; g.turn <= 40; g.turn++) { warWorkMonth(g); seen[g.turn] = warFooting(g, 'CAN')!; }
+    for (let t = 1; t <= 10; t++) expect(seen[t], `turn ${t}`).toBeCloseTo(0.45, 9);
+    expect(seen[11]).toBeCloseTo(0.472, 9);
+    expect(seen[34]).toBeCloseTo(0.978, 9);
+    expect(seen[35]).toBe(1);
+    expect(seen[40]).toBe(1);
+    // A campaign that opens later finds the share where the calendar has it, and the months left agree.
+    const late = wide();
+    late.turn = 23;
+    warWorkMonth(late);
+    expect(warFooting(late, 'CAN')).toBeCloseTo(0.45 + 0.022 * 13, 9);
+    expect(warWorkLeft(late, 'CAN')).toBe(12);
   });
 
   it('a country at war in December 1941 is on full war work in June 1943', () => {

@@ -11,7 +11,7 @@
 // 4. a besieged capital's lead adds "It is your capital: the country will not long outlast it."
 // Display only: the rule is not changed, nothing is written and no dice are thrown.
 import { describe, expect, it } from 'vitest';
-import { CAPITAL_BESIEGED, IN_DANGER, REACH_AT, armyWords, fallWarning, reading, standing, withinReach } from '../src/campaign/danger';
+import { armyWords, CAPITAL_BESIEGED, fallWarning, homeAlarms, IN_DANGER, REACH_AT, reading, standing, withinReach } from '../src/campaign/danger';
 import { addCorps, armySize, atWar, collapseScore, createGame, homeLost, setWar } from '../src/campaign/game';
 import { markFor, monthCard } from '../src/campaign/monthcard';
 import { saveGame } from '../src/campaign/save';
@@ -155,11 +155,15 @@ describe('2. the enemy within reach, said once', () => {
     expect(r).toMatchObject({ canFall: false, within: true, seat: 'reach', reachBy: 'SOV', reachFrom: at.id });
     const w = fallWarning(g)!;
     expect(w).toMatchObject({ title: IN_DANGER, level: 'reach', head: 'The enemy is within reach of Berlin', note: 'Hold Berlin, and win back home ground.', nat: ME, region: seatOf(g).id });
-    expect(w.text).toBe(`The enemy is within reach of Berlin. Soviet troops stand in ${at.name}, beside the capital. Soviet troops are a march from Berlin, ${r.lost} of ${r.of} home provinces are lost and the army is at two thirds of its strength. Germany gives in when the capital, the home provinces and the army lost together pass what the country will bear, and your campaign ends with it: it is ${Math.round(r.near * 100)}% of the way there. Hold Berlin, and win back home ground.`);
+    // (Version 84.2.6, the UI director's words for ruling 211, section 2: the capital's words no longer say again that
+    // the enemy is a march from it, and the warning ends with the alarm's help.)
+    const help = homeAlarms(g, ME)[0].lines[2];
+    expect(w.text).toBe(`The enemy is within reach of Berlin. Soviet troops stand in ${at.name}, beside the capital. ${r.lost} of ${r.of} home provinces are lost and the army is at two thirds of its strength. Germany gives in when the capital, the home provinces and the army lost together pass what the country will bear, and your campaign ends with it: it is ${Math.round(r.near * 100)}% of the way there. Hold Berlin, and win back home ground. ${help}`);
     // On the card: a red band, with what to do where the date stands and the capital to show. Under its headline
-    // the band says in full what is lost and that the campaign ends with it: the whole warning is the three together.
-    expect(w.text).toBe(`${w.head}. ${w.sub} ${w.note}`);
-    expect(w.sub).toMatch(/^Soviet troops stand in .+, beside the capital\. .+ your campaign ends with it: it is \d+% of the way there\.$/);
+    // the band says in full what is lost and that the campaign ends with it: the whole warning is the three together,
+    // and from Version 84.2.6 the alarm's help ends both the band's line and the whole warning.
+    expect(w.text).toBe(`${w.head}. ${w.sub.replace(` ${help}`, '')} ${w.note} ${help}`);
+    expect(w.sub).toMatch(/^Soviet troops stand in .+, beside the capital\. .+ your campaign ends with it: it is \d+% of the way there\. Nearest help: .+\.$/);
     expect(bandOf(g, mark)).toMatchObject({ word: 'WARNING', nats: [ME], head: 'The enemy is within reach of Berlin', text: w.text, sub: w.sub, note: 'Hold Berlin, and win back home ground.', region: seatOf(g).id });
     // The next card, told from the mark taken now, does not say it again.
     const next = markFor(g, ME);
@@ -194,10 +198,12 @@ describe('1. a red band every month it can give in next month', () => {
     expect(r).toMatchObject({ canFall: true, how: 'taken', sure: true, lastMonth: false });
     const w = fallWarning(g)!;
     expect(w).toMatchObject({ level: 'fall', head: 'Germany can fall next month', note: 'Hold Berlin, or win back home ground.' });
-    expect(w.text).toBe(`Germany can fall next month. Soviet troops are a march from Berlin, ${r.lost} of ${r.of} home provinces are lost and the army is at a fifth of its strength. If Berlin is taken, Germany gives in and your campaign ends. Hold Berlin, or win back home ground.`);
+    // (Version 84.2.6: the warning ends with the alarm's help, on the band's second line too.)
+    const help = homeAlarms(g, ME)[0].lines[2];
+    expect(w.text).toBe(`Germany can fall next month. Soviet troops are a march from Berlin, ${r.lost} of ${r.of} home provinces are lost and the army is at a fifth of its strength. If Berlin is taken, Germany gives in and your campaign ends. Hold Berlin, or win back home ground. ${help}`);
     // The band's second line, printed in full: what is lost, and that the campaign ends with it.
-    expect(w.sub).toBe(`Soviet troops are a march from Berlin, ${r.lost} of ${r.of} home provinces are lost and the army is at a fifth of its strength. If Berlin is taken, Germany gives in and your campaign ends.`);
-    expect(w.text).toBe(`${w.head}. ${w.sub} ${w.note}`);
+    expect(w.sub).toBe(`Soviet troops are a march from Berlin, ${r.lost} of ${r.of} home provinces are lost and the army is at a fifth of its strength. If Berlin is taken, Germany gives in and your campaign ends. ${help}`);
+    expect(w.text).toBe(`${w.head}. ${w.sub.replace(` ${help}`, '')} ${w.note} ${help}`);
     // Every month: it does not matter what the last card said.
     expect(fallWarning(g, ME, true)).toMatchObject({ level: 'fall' });
     // It is the first band of the card, above the news of the month.
@@ -305,7 +311,7 @@ describe('4. a besieged capital\'s lead', () => {
     };
     rep(seat);
     const card = monthCard(g, mark, ME);
-    expect(card.lead).toMatchObject({ tag: 'HELD', head: 'Berlin is besieged' });
+    expect(card.lead).toMatchObject({ tag: 'BESIEGED', head: 'Berlin is besieged' });
     expect(card.lead!.follows.endsWith(` ${CAPITAL_BESIEGED}`)).toBe(true);
     expect(CAPITAL_BESIEGED).toBe('It is your capital: the country will not long outlast it.');
     // Another town of his under siege.

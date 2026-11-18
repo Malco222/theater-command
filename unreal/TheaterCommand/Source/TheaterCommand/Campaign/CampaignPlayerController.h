@@ -80,6 +80,10 @@ struct FTrayCard
 	bool bDigging = false; // (Version 84) digging, with no works to show yet
 	int32 Experience = 0; // 0 to 100
 	TArray<FHonourRibbon> Honours;
+	// (The code checker, 17 November.) A corps of the town's garrison while the army in the field is in hand: it cannot
+	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
+	bool bInTown = false;
+	FString Apart;
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -325,10 +329,39 @@ struct FWarPrompt
 	bool bSortie = false;
 	/** True where the card is an order he asked for himself: Enter gives it, Esc calls it off, and the buttons wear their key caps. */
 	bool IsOrder() const { return bApproach || bSortie; }
+	/**
+	 * (The UI director's 84.3 check, item 6: one rule for every card.) The question of war itself: its safe answer
+	 * (NOT NOW) is lit and takes Enter and Esc, and the declaration takes a click. The landing and the gate keep their
+	 * order lit, as before.
+	 */
+	bool IsWarQuestion() const { return !IsOrder() && !bLanding && !bGate; }
 	int32 ApproachTo = INDEX_NONE;
 	TArray<FApproachRow> Ways;
 	int32 Way = 0;
 	FText WaysHead;
+	// (Rules 84.5; the UI director's sheet 34, "The road before the order".) The march-up card in the landing card's
+	// parts: the kicker and date, the two sides with THE ROAD between them, the headline (bright where he can attack
+	// this month, amber where the attack waits), the sentence under it, and the note over the rows.
+	FString Kicker; // "MARCH UP AND ATTACK  ·  JANUARY 1941"
+	FString OursTag, OursName, OursLine; // the hand: its flag, the name the tray gives it, and its numbers
+	FString FoeName, FoeLine; // the enemy as far as the fog shows ("Round Pittsburgh"; its flag is Tag)
+	FString From; // where the road starts
+	FString Road; // "from New York to Susquehanna, beside the enemy"
+	FText Headline; // the row's own sentence: "3 moves left on arrival: you can attack this month"
+	bool bHeadAmber = false; // the attack waits for next month
+	FText Under; // the staff's pick and what Enter does, in one or two sentences
+	FText WaysNote; // "press a row to go another way", or "the only one in reach this month"
+};
+
+/**
+ * (The UI director, check 19.) One corps on a side of the battle card: its name, and its figures ("infantry, 2
+ * divisions · 14,599 men", after the battle "infantry, 2 divisions · lost 1,240, fell back"). The card sets the two on
+ * one line where every corps of the side fits its column, and on two lines each where any does not.
+ */
+struct FRosterLine
+{
+	FString Name;
+	FString Figures; // empty for a corps not identified
 };
 
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
@@ -348,8 +381,9 @@ struct FFaceOff
 	FText TheirGeneral;
 	FText OurStrength;
 	FText TheirStrength;
-	FText OurUnits;
+	FText OurUnits; // the corps a line each, as plain text; where a roster is empty (a town's guard) the card shows this sentence instead
 	FText TheirUnits;
+	TArray<FRosterLine> OurRoster, TheirRoster; // (check 19) the corps as the card sets them
 	float Balance = 0.5f; // the attackers' share of the strength on the field
 	FText OddsLine;
 	FText Prize; // what taking the place is worth
@@ -384,6 +418,12 @@ struct FFaceOff
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
+	// (The UI director, 17 November.) The card shows exactly what was picked. Where that pick cannot go (guns or
+	// engineers alone, ruling 211(a)) this is the rules' sentence: it stands at the foot, there is no forecast, SEND
+	// THEM IN is not lit and takes no key, and CALL IT OFF is lit with Enter and Esc.
+	FText Alone;
+	/** The light and Enter are on CALL IT OFF: the verdict is a long shot or worse, or the pick cannot go at all. */
+	bool CallOffLit() const { return bLongShot || !Alone.IsEmpty(); }
 	bool bFavourSiege = false; // which order the forecast favours: that button is the lit one
 	FText NowLabel, NowSays, LaterLabel, LaterOdds, LaterSays;
 	float LaterBalance = 0.5f;
@@ -470,6 +510,8 @@ public:
 	void AskToBegin(int32 Kind, int32 GroupIndex = 0, int32 SideIndex = 0);
 	/** The answer to that question: begin the new war and let the saved one go, or keep it. */
 	void AnswerBegin(bool bBegin);
+	/** (The UI director's 84.3 check, item 6.) The door's BEGIN AS ... is up: Enter presses it, and it shows ENTER. */
+	bool CanBeginByKey() const { return Opening.bVisible && Opening.AskKind == 0 && Opening.Tab == 0 && Opening.Years.Num() > 0 && Opening.Nations.IsValidIndex(Opening.NationIndex); }
 
 	/** Saves the campaign and shows the opening screen over it. */
 	void OpenMenu();
@@ -598,6 +640,16 @@ public:
 	FString GetToDoText(int32 Index) const;
 	FString GetToDoTip(int32 Index) const;
 	void PressToDo(int32 Index);
+	/** (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the row shown first in the tray, or none; how many
+	 * there are and which of them is shown (from 1), for its "1 of 3"; and a press on it, which puts the nearest help in
+	 * hand, centres the town and goes on to the next. */
+	const FHomeAlarm* GetAlarm() const;
+	int32 GetAlarmCount() const;
+	int32 GetAlarmPlace() const;
+	void PressAlarm();
+	/** (Rules 84.2.6.) His own guns left alone round an enemy town: the row at this place, or none; and a press, which centres the town. */
+	const FGunsAlone* GetGunsAlone(int32 Index) const;
+	void PressGunsAlone(int32 Index);
 	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
 	FText GetHoverTip() const { return HoverTip; }
 	/**
@@ -607,6 +659,8 @@ public:
 	FText GetHoverTipMarked() const { return HoverTipMarked; }
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
 	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
+	/** The same at the head of a sentence: "The United States has fallen." (84.2.6) */
+	static FString HeadThe(const FString& Name) { const FString Said = WithThe(Name); return Said.Left(1).ToUpper() + Said.Mid(1); }
 	/** A line made safe to stand inside marked text. */
 	static FString PlainInMarked(const FString& Text) { return Text.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")); }
 	/**
@@ -877,6 +931,12 @@ public:
 	void PickApproach(int32 Index);
 	/** True while a card, a page or a screen lies over the table and its clicks do not reach the map. */
 	bool IsTableBusy() const;
+	/**
+	 * (Speed, b414 mark 1.) True from an order the rules answer on a thread of their own (a march, a landing, an attack)
+	 * until its answer is on the table, a frame or a few later: the map, the keys and the attack card take no other
+	 * order meanwhile.
+	 */
+	bool IsAnswering() const;
 	/** True while the game plays something through by itself: the other countries' month, a newsreel, an announcement. */
 	bool IsBusyForSteps() const;
 	/** Answers what a month's end puts in the way, as a player in a hurry would: the question, the newsreel, the announcements, the replay. */
@@ -889,8 +949,11 @@ public:
 	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
 	int32 StepNotices() const { return NoticesSaid; }
 	int32 NoticesSaid = 0;
-	void PressEscape() { Escape(); }
-	void PressSpace() { SpaceBar(); }
+	void PressEscape() { EscapeKey(); }
+	void PressTab() { TabKey(); } // (the code checker's pre-check: a replay's Tab goes through the key guard, as a player's does)
+	void PressSpace() { SpaceKey(); }
+	/** Enter as the key gives it: the lit button of the card that is up, or the map's own END THE MONTH under the key guard. */
+	void PressEnter() { EnterKey(); }
 	/** What the game is showing by itself just now, for the screens a month's end brings: the question, the replay, a newsreel, an announcement, or the page on top. */
 	FString StepState() const;
 	/** A click on a province's airfield, as the mouse gives it. */
@@ -943,6 +1006,8 @@ public:
 
 	/** While a script is driving (the development photographer), the pointer does not light or route anything. */
 	void SetScripted(bool bInScripted) { bScripted = bInScripted; }
+	/** (The UI director's 84.3 check, item 3.) Where the screen's panels stand, in the viewport's own pixels, as the HUD last laid them out. */
+	void SetFrameOnScreen(TArray<FBox2D>&& Boxes) { FrameOnScreen = MoveTemp(Boxes); }
 
 private:
 	void WheelUp();
@@ -974,7 +1039,36 @@ private:
 	/** The battle the card asked about is fought and its result shown: an attack, or the assault a march ends in. */
 	void ResolveAttack();
 	bool bTicketAll = false;
-	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
+	/** bPictureFirst (an order's answer): the ground and the armies now, the rest of the table a frame after (tc.Speed.PictureFirst). */
+	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr, bool bPictureFirst = false);
+	void ShowWarRest(const FCampaignView& View);
+	/**
+	 * (Speed, b414 mark 1.) What follows an order's answer, a step a frame (tc.Speed.PictureFirst): the ground and the
+	 * armies, then the rest of the table, then the army in hand's orders and the province's card. At once where pictures
+	 * are being taken, or with the switch off.
+	 */
+	TArray<TFunction<void()>> Afterwards;
+	void Later(TFunction<void()>&& Step);
+	/**
+	 * (Speed, b414 mark 2.) The last of an order's answer, a frame each: the army in hand's orders (RefreshOrders), then
+	 * Then (the province's card and the paper line), then the enemy's reach. Build 1590 had all three in one frame of 35 to
+	 * 79 ms.
+	 */
+	void LaterOrders(TFunction<void()>&& Then);
+	/** Set while LaterOrders' RefreshOrders runs: the enemy's reach is then shown a step later. */
+	bool bOrdersInSteps = false;
+	/** The enemy's reach so put off, until shown: any RefreshOrders before then shows it first, as it would have been. */
+	TOptional<TArray<int32>> PendingEnemyReach;
+	/** Everything still to come of an order's answer, now: before a campaign is put away. */
+	void FinishAnswer();
+	/** The nation's adjective as the army in hand's tray names it, for the rules' thread, which reads no map. */
+	FString HandAdjective() const;
+	/** What follows an order's answer, on the game thread: what OrderTo, ConfirmWar, ConfirmMarch and ResolveAttack did once the rules had answered. */
+	void AfterMarch(int32 RegionId, const TArray<FCorpsMove>& Marches, FString Said, const FString& MarchSays, const FString& MarchMeets, const TOptional<FVector>& Carried);
+	void AfterFarMarch(const TArray<FCorpsMove>& Marches, const FString& Said, bool bWasSpent, const TOptional<FVector>& Carried);
+	void AfterLanding(int32 RegionId, const FLandingResult& Result);
+	void AfterSiege(int32 RegionId, const FAttackResult& Result);
+	void AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result);
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
@@ -1021,6 +1115,11 @@ private:
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
+	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
+	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
+	bool bHandOrdered = false;
+	FString HandArmy; // the army in hand as its tray's head names it, for the rules' sentences: "the American army", "Heinz Guderian's army"
+	TArray<int32> HandArmyIds; // and the corps it has in the field there
 	bool bNightTold = false; // (ruling 205(c)) this campaign's first night has said that it is night, and which key holds the hour
 	FMarchPlan KeptPlan; // the rules' plan for a march to the place last asked about
 	int32 KeptPlanRegion = -2;
@@ -1116,6 +1215,20 @@ private:
 	double LastClickAt = 0.0;
 	bool bPointerOverPanel = false; // the pointer is on one of the screen's panels, not on the map
 	bool bButtonDown = false; // the mouse was down at the last look
+	// (The UI director's 84.3 check, item 3.) Nothing silent under a panel.
+	TArray<FBox2D> FrameOnScreen; // the panels, in the viewport's pixels
+	int32 FrameReachFor = INDEX_NONE; // an army just picked up, whose reach is to be framed clear of the panels once the view is still
+	double FrameReachFrom = 0.0, FrameReachUntil = 0.0;
+	FVector LastCameraSpot = FVector::ZeroVector;
+	bool bSlateRightDown = false; // the right button, as the screen itself saw it at the last look
+	bool bRightPressOnPanel = false; // and it went down on a panel
+	bool bRightGameOnPanel = false; // the map saw the press, but it was on a panel: no order goes through the panel
+	bool bPanelRightClick = false; // a right-click on a panel, to be answered with a line
+	FVector2D RightPanelPress = FVector2D::ZeroVector;
+	/** An army has been picked up by a hand (a press on its flag, or Tab): its reach is framed clear of the panels soon. */
+	void FrameReachSoon();
+	/** Frames the army in hand and the ground it can reach in the largest stretch of the screen no panel covers. */
+	void FrameReach();
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
 	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
@@ -1210,11 +1323,17 @@ private:
 	TArray<TPair<int32, FBox2D>> GateMarks;
 	int32 StagedGate = INDEX_NONE;
 	int32 HoverGate = INDEX_NONE;
+	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked
+	// while the button is held, so the click is judged on this, and on the padlock still being under the pointer as it is let go.
+	int32 PressGate = INDEX_NONE;
+	int32 AlarmShown = 0; // (rules 84.2.6) which of the alarm's rows the tray shows: each press goes on to the next
 	FText GateTip, GateTipMarked;
 	int32 GateUnder(const FVector2D& Pointer) const;
 	FVector2D StagedPointer = FVector2D::ZeroVector;
 	int32 HoverTipHand = INDEX_NONE; // what was in hand, and how it was to travel, when the tip was written
 	int32 HoverTipRegion = INDEX_NONE;
+	bool bTipHushed = false; // (84.3 check, item 4) Tab moved the view: no hover box until the pointer moves
+	FVector2D TipHushedAt = FVector2D::ZeroVector; // where the pointer stood when it was hushed
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
 	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched
 	void OpenScreen1();
@@ -1223,6 +1342,18 @@ private:
 	void OpenScreen4();
 	void OpenScreen5();
 	bool bScripted = false;
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The keys as they are bound: each notes when it put a card
+	// down, and the map's own Enter waits the key guard's half second after that. A card put down by the mouse leaves
+	// the map's Enter free.
+	void EnterKey();
+	void EscapeKey();
+	void SpaceKey();
+	/** (Rules 84.3.2.) Tab, NEXT ARMY's key: on the question before the month's end it is SHOW ME, and it tells the guard. */
+	void TabKey();
+	bool IsCardUp() const { return IsTableBusy() || EndAsk.bVisible; }
+	double KeyShutAt = -1000.0;
+	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second
+	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
 	bool bBySea = false;

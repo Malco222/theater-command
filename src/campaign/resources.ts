@@ -190,7 +190,7 @@ const friendly = (g: Game, holder: string, nat: string): boolean => {
 };
 
 const natOf = (g: Game, id: string): string => g.nations[id]?.name ?? id;
-const the = (name: string): string => (/^(United|Soviet|Netherlands)/.test(name) ? `the ${name}` : name);
+const the = (name: string): string => (/^(United|Soviet|Netherlands|Dominican Republic)/.test(name) ? `the ${name}` : name);
 
 /** Where a sea lane runs on the map: in from the edge of the chart, through its seas, to the recipient's best port on the last of them. */
 function lanePath(g: Game, row: LaneRow): [number, number][] {
@@ -213,7 +213,8 @@ function lanePath(g: Game, row: LaneRow): [number, number][] {
 
 /** Why nothing sails on a sea lane this month, if nothing does: it is cut by an enemy, or idle because the trade has not begun. */
 function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string } | null {
-  const cut = (why: string, state: 'cut' | 'idle' = 'cut'): { state: 'cut' | 'idle'; why: string } => ({ state, why });
+  // (Every reason is a sentence of its own: "the United Kingdom holds Gibraltar" starts with a capital.)
+  const cut = (why: string, state: 'cut' | 'idle' = 'cut'): { state: 'cut' | 'idle'; why: string } => ({ state, why: why[0].toUpperCase() + why.slice(1) });
   const to = row.to;
   if (row.allies) {
     const friend = row.allies.find((a) => g.nations[a]?.alive && allied(g, a, to) && g.nations[a].atWar.length > 0);

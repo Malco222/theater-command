@@ -312,7 +312,7 @@ function alliesIn(cs: Corps[], nat: string): string[] {
  * known in full. Anyone else's is a flag and a count until its corps are identified: in battle, by an agent, or
  * from the air. On ground the viewer cannot see there is nothing (null).
  */
-export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human, town = false): ArmyCard | null {
+export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human, town = false, seen?: Uint8Array): ArmyCard | null {
   const r = g.regions[region];
   if (!r) return null;
   // An army is every corps that marches under its flag: the nation's own, and an ally's that have joined it.
@@ -321,7 +321,8 @@ export function armyCard(g: Game, region: number, nat: string, viewer: string | 
   if (!cs.length) return null;
   const allies = alliesIn(cs, nat);
   const mine = viewer === null || allied(g, nat, viewer);
-  const sight = mine ? SIGHT.full : sightOf(g, viewer)[region];
+  // (`seen`: the viewer's sightOf, worked out already by a caller that asks of many armies while nothing moves.)
+  const sight = mine ? SIGHT.full : (seen ?? sightOf(g, viewer))[region];
   if (sight === SIGHT.none) return null;
   const name = town ? `${g.nations[nat].adj} garrison of ${townName(r)}` : `${g.nations[nat].adj} army at ${r.name}`;
   const last = (c: Corps): number => (c.kind === 'fort' ? 1 : 0);

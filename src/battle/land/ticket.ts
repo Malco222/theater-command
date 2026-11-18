@@ -10,7 +10,7 @@ import { armyOf } from '../../campaign/joint';
 import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
 import { townName, townSize } from '../../campaign/towns';
-import { jointForce, orderAttack, previewAttack } from '../../campaign/turn';
+import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import type { LandPlace } from './field';
@@ -48,7 +48,10 @@ const CROSSINGS: Record<string, { river: string; at: number[] }> = {
 };
 
 /** The ticket for an attack the player could order now, or null where there is no attack to fight. */
-export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket<LandPlace> | null {
+export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicket<LandPlace> | null {
+  // The army the attack order will send, and no other: a corps spent on a probe since it was chosen, or no longer next
+  // to the target, stays out of the field as the hand-back leaves it out of the report (the review, b453).
+  const corps = chosen.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id));
   const a = previewAttack(g, corps, target);
   if (!a || !a.defenders.length) return null;
   const going = goingIn(g, corps, target);

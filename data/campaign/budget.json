@@ -12,6 +12,8 @@
     "desert": 0.03
   },
   "port": 0.12,
+  "_landFactor": "Ruling 214 (the design director, 17 Nov 2026; map-tables/land-factor-214.json, from the table of ruling 213): a smaller power's land and harbours pay by its worth, not by the count of its provinces. landFactor[code] multiplies the land and harbour pay of every province whose owner on the first day was that country, home and colonies alike. It goes with the ground, not the flag: the province keeps the factor whoever holds it, so no great power's first day moves. A country not listed is 1. Oil, factories, the capital's pay, victory points, supply, men and trade are untouched (trade reads a country's land before the factor). The grand campaign only.",
+  "landFactor": { "MGL": 0.02, "SAU": 0.04, "AUS": 0.1, "IRN": 0.15, "BRA": 0.16, "SAF": 0.17, "MEX": 0.17, "PER": 0.17, "VEN": 0.18, "CHL": 0.18, "CAN": 0.2, "NZL": 0.21, "POR": 0.21, "MAN": 0.4, "ARG": 0.47, "NED": 0.6 },
   "oil": 1.5,
   "occupied": 0.5,
   "overseas": 0.5,

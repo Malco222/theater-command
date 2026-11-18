@@ -3,6 +3,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/TheaterSpeed.h"
 #include "TheaterCommand.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -109,6 +110,7 @@ namespace
 
 	TArray<FFoundButton> ButtonsOnScreen()
 	{
+		THEATER_SPEED_SCOPE(HarnessFindButton); // (the step player's own work, which a player does not pay for)
 		TArray<FFoundButton> Out;
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (Window.IsValid())
@@ -118,8 +120,12 @@ namespace
 		return Out;
 	}
 
-	/** True where a press in the middle of the button would reach it: nothing lies over it. */
-	bool Reachable(const FFoundButton& Button)
+	/**
+	 * True where a press in the middle of the button would reach it: nothing lies over it. Where something does, Over
+	 * says what a press there would reach instead: the widget's kind, where in the code it was made, and its words, so
+	 * that a replay names the layer and nobody has to guess it (v8425 part C, steps 25 and 31).
+	 */
+	bool Reachable(const FFoundButton& Button, FString* Over = nullptr)
 	{
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (!Window.IsValid() || !Button.Widget.IsValid())
@@ -130,7 +136,32 @@ namespace
 		const FVector2D Middle = Place.LocalToAbsolute(Place.GetLocalSize() * 0.5);
 		const TArray<TSharedRef<SWindow>> Windows = { Window.ToSharedRef() };
 		const FWidgetPath Under = FSlateApplication::Get().LocateWindowUnderMouse(Middle, Windows, false, 0);
-		return Under.IsValid() && Under.ContainsWidget(Button.Widget.Get());
+		if (Under.IsValid() && Under.ContainsWidget(Button.Widget.Get()))
+		{
+			return true;
+		}
+		if (Over)
+		{
+			if (!Under.IsValid() || Under.Widgets.Num() == 0)
+			{
+				*Over = TEXT("nothing in the window takes a press there");
+			}
+			else
+			{
+				// The topmost widget at that point, and the two it sits in: enough to find the layer in the code.
+				TArray<FString> Said;
+				for (int32 Index = Under.Widgets.Num() - 1; Index >= FMath::Max(0, Under.Widgets.Num() - 3); --Index)
+				{
+					const TSharedRef<SWidget> Each = Under.Widgets[Index].Widget;
+					FString Words;
+					Lettering(Each, Words);
+					Said.Add(FString::Printf(TEXT("%s at %s%s"), *Each->GetTypeAsString(), *Each->GetReadableLocation(),
+						Words.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (\"%s\")"), *Words.Left(60))));
+				}
+				*Over = FString::Join(Said, TEXT(", in "));
+			}
+		}
+		return false;
 	}
 }
 
@@ -170,6 +201,7 @@ bool FStepPlayer::Load(const FString& File, const FString& InFolder)
 
 FStepPlayer::FSeen FStepPlayer::Look(ACampaignPlayerController& Player, int32 RegionId) const
 {
+	THEATER_SPEED_SCOPE(HarnessLook); // (the step player's own work, which a player does not pay for)
 	FSeen Seen;
 	Player.DescribeScreen(Seen.Open, Seen.Words, Seen.Hand);
 	Seen.Notices = Player.StepNotices();
@@ -251,10 +283,11 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 		}
 		return false;
 	}
-	if (!Reachable(Button))
+	FString Over;
+	if (!Reachable(Button, &Over))
 	{
 		bError = true;
-		Note = TEXT("the button is on the screen but something lies over it: a press would not reach it");
+		Note = TEXT("the button is on the screen but something lies over it: a press would not reach it") + (Over.IsEmpty() ? FString() : TEXT(". At its middle: ") + Over);
 		return false;
 	}
 	StaticCastSharedPtr<SButton>(Button.Widget)->SimulateClick();
@@ -300,7 +333,7 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 {
 	FCampaignSession* Session = Player.GetSession();
 	const ACampaignMapActor* Map = Player.GetMap();
-	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = false;
+	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = bLook = false;
 	OnScreen = -1;
 	Note.Reset();
 	TargetRegion = INDEX_NONE;
@@ -314,6 +347,17 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 	auto Find = [&](const FString& Name)
 	{
+		// (the name was looked up before the press was timed: asking the rules again here would count against the game)
+		if (bFound && Name == FoundName)
+		{
+			Region = FoundRegion;
+			Sea = FoundSea;
+			Corps = FoundCorps;
+			CorpsRegion = FoundCorpsRegion;
+			Fleet = FoundFleet;
+			Group = FoundGroup;
+			return true;
+		}
 		return Session && Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group);
 	};
 	const FString& Verb = Step.Verb;
@@ -485,6 +529,32 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 				Player.IsTableBusy() && Aimed == INDEX_NONE ? TEXT(" (a card lay over the table)") : TEXT(""));
 		}
 	}
+	else if (Verb == TEXT("ask-war"))
+	{
+		// The WAR button on that country's row in the Foreign Office (a row may lie below the fold of its list): the
+		// question's card opens, as the button opens it. DECLARE WAR on the card is pressed by its words.
+		const FCampaignNation* Asked = nullptr;
+		if (Map)
+		{
+			for (const auto& Pair : Map->GetData().Nations)
+			{
+				const FCampaignNation& Each = Pair.Value;
+				if (Each.Name.Equals(Step.Target, ESearchCase::IgnoreCase) || Each.Tag.Equals(Step.Target, ESearchCase::IgnoreCase))
+				{
+					Asked = &Each;
+				}
+			}
+		}
+		if (!Asked)
+		{
+			bMissing = true;
+			Note = TEXT("no country of that name");
+		}
+		else
+		{
+			Player.AskWarOn(Asked->Tag);
+		}
+	}
 	else if (Verb == TEXT("order-sea") || Verb == TEXT("select-sea"))
 	{
 		if (!Find(Step.Target) || Sea == INDEX_NONE)
@@ -556,9 +626,10 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			}
 		}
 	}
-	else if (Verb == TEXT("pan-zoom"))
+	else if (Verb == TEXT("pan-zoom") || Verb == TEXT("look-at"))
 	{
 		// "Paris near", "Norfolk middle", "Ruhr far": ten seconds of pan and zoom there, for the frame rate
+		// ("look-at" goes there and stays: its picture is of that place, taken once its fine ground stands)
 		FString Name = Step.Target, Height;
 		int32 Cut = INDEX_NONE;
 		if (Step.Target.FindLastChar(TEXT(' '), Cut))
@@ -580,7 +651,8 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			TargetRegion = Region;
 			const FVector2D Spot = Map->GetData().Regions[Region].Center;
 			Eye->GoTo(Map->MapToWorld(Spot.X, Spot.Y), Height == TEXT("near") ? 0.2f : Height == TEXT("far") ? 0.8f : 0.45f, true);
-			bPan = true;
+			bPan = Verb == TEXT("pan-zoom");
+			bLook = !bPan;
 		}
 	}
 	else if (Verb == TEXT("open-page"))
@@ -615,8 +687,8 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		// A key of the keyboard, by the hand that key is bound to.
 		const FString Key = Step.Target.ToLower();
-		if (Key == TEXT("tab")) { Player.NextArmy(); }
-		else if (Key == TEXT("enter") || Key == TEXT("return")) { bMonth = !Player.IsTableBusy(); Player.EndMonth(); }
+		if (Key == TEXT("tab")) { Player.PressTab(); }
+		else if (Key == TEXT("enter") || Key == TEXT("return")) { bMonth = !Player.IsTableBusy() && !Player.GetEndAsk().bVisible; Player.PressEnter(); }
 		else if (Key == TEXT("esc") || Key == TEXT("escape")) { Player.PressEscape(); }
 		else if (Key == TEXT("space")) { Player.PressSpace(); }
 		else if (Key == TEXT("t")) { Player.ToggleDayNight(); }
@@ -765,17 +837,43 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			}
 			int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 			const bool bOfUnit = Step.Verb == TEXT("select-unit") || Step.Verb == TEXT("order-unit");
-			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start")
+			bFound = false;
+			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
 				&& Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group))
 			{
 				Named = bOfUnit ? CorpsRegion : Region;
+				bFound = true;
+				FoundName = Name;
+				FoundRegion = Region;
+				FoundSea = Sea;
+				FoundCorps = Corps;
+				FoundCorpsRegion = CorpsRegion;
+				FoundFleet = Fleet;
+				FoundGroup = Group;
 			}
 		}
 		Before = Look(Player, Named);
 		ShownBefore = ShownLast = Before.Open + TEXT("|") + Before.Words + TEXT("|") + Before.Hand;
+		// (That reading asked the rules several questions, and its frame is a long one. It is let go by before the
+		// press, so that what is timed after the press is the game's own work and not the hook's.)
+		Phase = 3;
+		Clock = 0.0f;
+		LookFrames = 0;
+		return true;
+	}
+	if (Phase == 3)
+	{
+		if (++LookFrames < 3 || Clock < 0.12f)
+		{
+			return true;
+		}
 		const double Began = FPlatformTime::Seconds();
 		Act(Player, Step);
 		ActMs = (FPlatformTime::Seconds() - Began) * 1000.0;
+		// (Time is read off the clock from here: the engine caps the length it reports for a frame at 0.4 s. The first
+		// frame counted runs from the press itself, so the press's own work is in it.)
+		ActBegan = Began;
+		LastTickAt = Began;
 		FirstMs = LastMs = -1.0;
 		SinceAct = 0.0;
 		Frames.Reset();
@@ -788,8 +886,12 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 	if (Phase == 1)
 	{
 		// How smooth it is while it happens: every frame's length, and when what he is shown first changed and last changed.
-		SinceAct += DeltaSeconds;
-		Frames.Add(DeltaSeconds);
+		{
+			const double NowAt = FPlatformTime::Seconds();
+			Frames.Add(static_cast<float>(NowAt - LastTickAt));
+			LastTickAt = NowAt;
+			SinceAct = NowAt - ActBegan;
+		}
 		GameMs += FPlatformTime::ToMilliseconds(GGameThreadTime);
 		DrawMs += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 		ChipMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
@@ -799,7 +901,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			const FString Shown = Open + TEXT("|") + Words + TEXT("|") + Hand;
 			if (Shown != ShownLast)
 			{
-				LastMs = ActMs + SinceAct * 1000.0;
+				LastMs = SinceAct * 1000.0; // (from the press, by the clock)
 				if (FirstMs < 0.0 && Shown != ShownBefore)
 				{
 					FirstMs = LastMs;
@@ -827,6 +929,20 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 				}
 			}
 			if (Clock < 10.0f)
+			{
+				return true;
+			}
+		}
+		if (bLook && Clock < 15.0f)
+		{
+			// (the place's fine ground is waited for, and a moment more for its towns and trees)
+			const ACampaignMapActor* Table = Player.GetMap();
+			if (Clock < 2.0f || (Table && Table->AreFineSheetsComing()))
+			{
+				LookSettled = Clock;
+				return true;
+			}
+			if (Clock < LookSettled + 1.5f)
 			{
 				return true;
 			}

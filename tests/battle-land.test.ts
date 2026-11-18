@@ -330,6 +330,41 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(said + quiet).toBeGreaterThan(10);
   });
 
+  it('a river crossing is a bridgehead, not a heap: no box drawn on another, none left standing in the river (the art director, b439)', () => {
+    // The practice river, as the art director looks at it: at a minute, a minute and a half and two minutes.
+    const p = PRACTICE_GROUNDS.find((x) => x.river)!;
+    const box = (u: LandUnit): [number, number][] => {
+      const [fx, fy, rx, ry] = [Math.sin(u.face), Math.cos(u.face), Math.cos(u.face), -Math.sin(u.face)];
+      return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, c]) => [u.x + rx * a * u.w / 2 + fx * c * u.d / 2, u.y + ry * a * u.w / 2 + fy * c * u.d / 2]);
+    };
+    // Drawn on one another: no line between the two boxes keeps them apart (2 m given for the ink).
+    const onEach = (A: [number, number][], B: [number, number][]): boolean => [A, B].every((P) => P.every(([x1, y1], i) => {
+      const [x2, y2] = P[(i + 1) % 4], L = Math.hypot(x2 - x1, y2 - y1), nx = (y2 - y1) / L, ny = (x1 - x2) / L;
+      const a = A.map(([x, y]) => x * nx + y * ny), b = B.map(([x, y]) => x * nx + y * ny);
+      return Math.max(...a) - 2 >= Math.min(...b) && Math.max(...b) - 2 >= Math.min(...a);
+    }));
+    let pictures = 0, heaped = 0, wet = 0;
+    for (let s = 1; s <= 12; s++) {
+      const b = new LandBattle(practiceTicket(p, { humanAtt: true, seed: s * 7919 + 13 }));
+      b.ai.att = false; b.ai.def = true;
+      plainAttack(b);
+      for (let i = 1; i <= 1200 && !b.over; i++) {
+        b.step();
+        if (i % 300 || i < 600) continue;
+        pictures++;
+        const up = b.units.filter((u) => u.kind !== 'fort' && u.state !== 'gone' && u.state !== 'withdrawn' && u.state !== 'routing');
+        for (let a = 0; a < up.length; a++) for (let c = a + 1; c < up.length; c++) if (up[a].side === up[c].side && onEach(box(up[a]), box(up[c]))) heaped++;
+        for (const u of up) if (u.speed < 0.5 && GROUNDS[b.field.ground[Math.floor(u.y / b.field.cell) * b.field.cols + Math.floor(u.x / b.field.cell)]] === 'water') wet++;
+      }
+    }
+    expect(pictures).toBeGreaterThan(30);
+    // Before b439 these 36 pictures held 15 pairs of boxes on one another, mostly at the bridge, and two blocks stood in
+    // the river; now 3, each passing: the reserve going up behind the line (b453: a block finding no room within its
+    // reach presses in beside a friend, where before it stood off out of reach and never fired).
+    expect(heaped / pictures).toBeLessThan(0.15);
+    expect(wet).toBe(0);
+  });
+
   it('a close battle lasts minutes from the first contact, and never breaks an army most of which has not fought (mark 2)', () => {
     const fights: number[] = [];
     for (const ground of GROUNDS7) {

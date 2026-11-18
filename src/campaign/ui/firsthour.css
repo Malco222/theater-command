@@ -1,0 +1,159 @@
+/* ---- FIRST COMMAND, the first hour: the staff's note, its slip, a tip, the pointer, the DONE stamp, the Guide's rows,
+   the door's button. The parts are the UI kit's "first hour" (ui-director/kit/kit.css), in its own tokens, which are
+   set on these parts alone so that the rest of the page keeps its own. The look is the art director's
+   (art-director/first-hour/first-hour-look-brief.md). No red on a note: red is for dated warnings only. ---- */
+.fh-note, .fh-laid, #fhpointer, .fh-guidebody, .fh-door, .fh-guide {
+  --desk-900: #17120d; --desk-800: #211a13; --desk-700: #2d241a; --desk-600: #3d3125; --line: #4b3d2d;
+  --brass-700: #8a6b3b; --brass-500: #b08d57; --brass-300: #e0b872; --brass-100: #f4dea8; --on-brass: #1e1608;
+  --paper-100: #ede6d6; --paper-200: #e2d7bc; --paper-300: #cdbf9c; --ink-900: #2a2118; --ink-600: #5c5040;
+  --text-muted: #a89f8d; --text-faint: #8f8573; --gain-deep: #3f6b36; --steel-deep: #2f5068;
+  --shadow-panel: 0 14px 36px rgba(0, 0, 0, .58), 0 2px 6px rgba(0, 0, 0, .5); --shadow-lit: 0 0 0 1px #e0b872, 0 0 18px rgba(224, 184, 114, .38);
+  --radius-paper: 2px; --radius-plate: 4px; --radius-pill: 999px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --font-serif: "PT Serif", Georgia, "Times New Roman", serif; --font-typed: "Courier Prime", "Courier New", ui-monospace, monospace;
+}
+
+/* the kit's paper, labels and the quiet word */
+.tc-paper { background: linear-gradient(180deg, #e9dfc6, var(--paper-200)); color: var(--ink-900); border: 1px solid var(--paper-300); border-radius: var(--radius-paper); box-shadow: var(--shadow-panel); }
+.tc-label { font: 700 11px/14px var(--font-typed); letter-spacing: .14em; text-transform: uppercase; color: var(--brass-500); }
+.tc-micro { font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+.tc-paper .tc-label { color: var(--ink-900); }
+.tc-paper .tc-micro { color: var(--ink-600); }
+.tc-btn--quiet { height: auto; padding: 2px 0; background: none; border: 0; border-bottom: 1px solid var(--brass-700); border-radius: 0; box-shadow: none; color: var(--brass-300); font: 700 12px/16px var(--font-typed); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.tc-btn--quiet:hover { background: none; color: var(--brass-100); border-bottom-color: var(--brass-100); }
+.tc-paper .tc-btn--quiet { font-size: 11px; line-height: 14px; padding: 0 0 1px; letter-spacing: .1em; color: var(--ink-600); border-bottom-color: rgba(92, 80, 64, .55); }
+.tc-paper .tc-btn--quiet:hover { color: var(--ink-900); border-bottom-color: var(--ink-900); }
+.tc-stamp { display: inline-block; padding: 4px 12px 2px; font: 700 26px/30px var(--font-serif); letter-spacing: .08em; text-transform: uppercase; border: 3px solid currentColor; border-radius: 3px; transform: rotate(-6deg); background: rgba(226, 215, 188, .9); }
+.tc-stamp--won { color: var(--gain-deep); border-color: var(--gain-deep); }
+.tc-stamp--sm { padding: 3px 10px 1px; font-size: 22px; line-height: 26px; }
+.tc-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill); display: inline-grid; place-items: center; font: 700 11px/1 var(--font-typed); letter-spacing: 0; color: var(--on-brass); background: var(--brass-300); }
+
+/* the note: a staff officer's note clipped to the edge of the table. Its height is its words. */
+.tc-note { position: relative; padding: 18px 16px 12px; text-align: left; }
+.tc-note::before { content: ""; position: absolute; left: 26px; top: -8px; width: 44px; height: 15px; border-radius: 4px; background: linear-gradient(180deg, #ecc884, #c79d55 60%, #a27f45); box-shadow: 0 2px 3px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 244, 214, .75); }
+.tc-note__head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: 6px; }
+.tc-note__head .tc-micro { flex: 1; letter-spacing: .08em; }
+.tc-note h4 { font: 700 18px/24px var(--font-serif); margin: 0 0 4px; color: var(--ink-900); letter-spacing: 0; text-transform: none; }
+.tc-note p { font: 400 15px/22px var(--font-serif); margin: 0; color: var(--ink-900); }
+.tc-deed { display: flex; align-items: center; gap: 9px; margin-top: 11px; padding-top: 10px; border-top: 1px dashed rgba(92, 80, 64, .45); font: 400 13px/18px var(--font-typed); color: var(--ink-900); }
+.tc-deed > i { flex: none; width: 18px; height: 18px; border: 1.5px solid var(--ink-600); border-radius: 2px; display: grid; place-items: center; color: var(--gain-deep); }
+.tc-deed > i svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-note.is-done .tc-deed > i { border-color: var(--gain-deep); }
+.tc-note.is-done { cursor: pointer; }
+.tc-note .tc-stamp { position: absolute; right: 14px; bottom: 8px; animation: fh-thump 260ms ease-out both; }
+/* (The stamp lands beside the deed line, never on its words.) */
+.tc-note.is-done .tc-deed { padding-right: 112px; }
+/* the note in the right-hand panel: the first thing in it, the page moved down to make room */
+#pane > .fh-note { margin: 10px 0 16px; }
+/* a tip: one line under a TIP tag, with no count, no LATER and no deed */
+.tc-note--tip { padding: 16px 16px 13px; }
+.fh-tiptag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: 700 11px/1 var(--font-typed); letter-spacing: .1em; text-transform: uppercase; border-radius: 3px; color: var(--paper-100); background: var(--steel-deep); }
+/* the slip: the same note in the margin beside a card that veils the map */
+.fh-slip { position: fixed; left: 14px; top: 14px; z-index: 2; width: 148px; box-sizing: border-box; }
+.tc-note--slip { padding: 16px 11px 10px; }
+.tc-note--slip::before { left: 14px; width: 34px; }
+.tc-note--slip .tc-note__head { flex-wrap: wrap; row-gap: 1px; margin-bottom: 7px; }
+.tc-note--slip .tc-note__head .tc-label { flex-basis: 100%; }
+.tc-note--slip h4 { font-size: 16px; line-height: 20px; }
+.tc-note--slip p { font-size: 14px; line-height: 20px; }
+.tc-note--slip .tc-deed { font-size: 12px; line-height: 16px; align-items: flex-start; }
+.tc-note--slip .tc-stamp { right: 8px; bottom: 6px; padding: 2px 8px 0; font-size: 17px; line-height: 21px; }
+.tc-note--slip.is-done { padding-bottom: 40px; }
+.tc-note--slip.is-done .tc-deed { padding-right: 0; }
+/* lesson 1 laid on the first month's card, as a strip under its heading: the card's own button is its deed */
+.tc-note--laid { display: grid; grid-template-columns: 176px minmax(0, 1fr); column-gap: 28px; align-content: center; min-height: 68px; margin: 12px 0 4px; padding: 11px 17px; box-shadow: none; }
+.tc-note--laid::before { display: none; }
+.tc-note--laid .tc-note__head { grid-column: 1; grid-row: 1; align-self: end; margin: 0 0 2px; }
+.tc-note--laid h4 { grid-column: 1; grid-row: 2; align-self: start; margin: 0; }
+.tc-note--laid p { grid-column: 2; grid-row: 1 / span 2; box-sizing: content-box; display: flex; align-items: center; max-width: 820px; min-height: 44px; padding-left: 28px; border-left: 1px dashed rgba(92, 80, 64, .45); text-wrap: balance; }
+@media (max-width: 760px) { .tc-note--laid { grid-template-columns: 1fr; } .tc-note--laid p { grid-column: 1; grid-row: 3; padding: 8px 0 0; border-left: 0; border-top: 1px dashed rgba(92, 80, 64, .45); min-height: 0; } }
+/* a note slides in the first time it is drawn, 12 px over 220 ms */
+.fh-in { animation: fh-in 220ms ease-out both; }
+@keyframes fh-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+.fh-slip.fh-in { animation-name: fh-in-side; }
+@keyframes fh-in-side { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@keyframes fh-thump { 0% { opacity: 0; transform: rotate(-6deg) scale(1.7); } 70% { opacity: 1; transform: rotate(-6deg) scale(.96); } 100% { transform: rotate(-6deg) scale(1); } }
+
+/* the pointer: four brass corner clamps round the one thing a note points at, 6 clear of it, breathing 4 px over 2 s
+   (by a scale the page works out for its size, which the browser does without redrawing what lies under it) */
+#fhpointer { position: fixed; z-index: 40; pointer-events: none; }
+.tc-pointer { --arm: 12px; --pb: var(--brass-300); --pc: rgba(14, 11, 8, .9); position: absolute; inset: -9px; pointer-events: none; background-repeat: no-repeat; filter: drop-shadow(0 0 5px rgba(224, 184, 114, .75)); animation: fh-breathe 2s ease-in-out infinite; will-change: transform;
+  background-image: linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)),
+    linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc));
+  background-position: left 1.5px top 1.5px, left 1.5px top 1.5px, right 1.5px top 1.5px, right 1.5px top 1.5px, left 1.5px bottom 1.5px, left 1.5px bottom 1.5px, right 1.5px bottom 1.5px, right 1.5px bottom 1.5px,
+    left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+  background-size: calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px),
+    calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px); }
+.tc-pointer--lg { --arm: 16px; }
+@keyframes fh-breathe { 0%, 100% { transform: none; } 50% { transform: scale(var(--fh-s, 1.08)); } }
+/* on the map: drawn on the ground, under every piece, flag and plate. It stands still there: nothing that moves by
+   itself is drawn on the map's own drawing (the standing rule of 84.2.1: one moving mark redraws the whole map) */
+#fhground { pointer-events: none; }
+#fhground .fh-case { fill: none; stroke: rgba(14, 11, 8, .9); stroke-linecap: square; }
+#fhground .fh-arm { fill: none; stroke: #e0b872; stroke-linecap: square; }
+/* while the pointer stands, every other lit thing holds still: one thing moves at a time */
+body.has-pointer .btn.go.lit, body.has-pointer .freeme, body.has-pointer .sgi, body.has-pointer .dirmark circle { animation-play-state: paused; }
+
+/* GUIDE on the top bar, with the count of notes put away on its corner */
+.fh-guide { position: relative; }
+.fh-guide .fh-count { position: absolute; top: -8px; right: -8px; box-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+
+/* the Guide's first page: the ten lessons in their months */
+.fh-guidebody { font-family: var(--font-serif); }
+.fh-guidebody .fh-state { margin: 0 0 12px; font: italic 400 15px/22px var(--font-serif); color: var(--paper-100); }
+.fh-group { margin: 0 0 14px; }
+.fh-glabel { margin: 0 0 6px; font: 700 11px/14px var(--font-typed); letter-spacing: .14em; text-transform: uppercase; color: var(--brass-500); }
+.tc-step { display: flex; align-items: center; gap: var(--space-3); width: 100%; box-sizing: border-box; height: 38px; margin: 0 0 5px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: var(--radius-plate); background: var(--desk-800); text-align: left; color: var(--paper-100); }
+.tc-step > i { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--text-faint); color: var(--text-faint); font: 700 11px/1 var(--font-typed); font-style: normal; box-sizing: border-box; }
+.tc-step > i svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-step > b { flex: 1; min-width: 0; font: 700 14px/18px var(--font-serif); color: var(--paper-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-step > u { flex: none; text-decoration: none; font: 700 11px/1 var(--font-typed); letter-spacing: .1em; text-transform: uppercase; color: var(--brass-100); }
+.tc-step.is-done { border-color: var(--brass-700); }
+.tc-step.is-done > i { background: var(--brass-500); border-color: var(--brass-500); color: var(--on-brass); }
+.tc-step.is-done > b { color: var(--paper-200); }
+.tc-step.is-now { border-color: var(--brass-300); background: var(--desk-700); cursor: pointer; }
+.tc-step.is-now:hover { background: var(--desk-600); }
+.tc-step.is-now > i { border-color: var(--brass-300); color: var(--brass-300); }
+.tc-step.is-now > b { color: var(--brass-100); }
+.tc-step.is-now.is-lit { box-shadow: var(--shadow-lit); }
+.tc-step.is-later { border-style: dashed; background: none; }
+.tc-step.is-later > b { font-weight: 400; color: var(--text-muted); }
+.tc-step.is-later > u { font: 400 12px/1 var(--font-typed); letter-spacing: 0; text-transform: none; color: var(--text-faint); }
+.fh-setting { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); font: 700 14px/18px var(--font-serif); color: var(--paper-100); }
+.fh-seg { display: inline-flex; border: 1px solid var(--brass-700); border-radius: var(--radius-plate); overflow: hidden; background: var(--desk-800); }
+.fh-seg > button { height: 32px; padding: 0 var(--space-4); font: 700 13px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); background: none; border: 0; border-left: 1px solid var(--line); cursor: pointer; }
+.fh-seg > button:first-child { border-left: 0; }
+.fh-seg > button:hover { color: var(--paper-100); background: var(--desk-700); }
+.fh-seg > button.on { color: var(--on-brass); background: linear-gradient(180deg, #ecc884, var(--brass-300)); }
+.fh-rules { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); }
+.fh-rules .link { background: none; border: 0; padding: 0; color: var(--brass-300); font: 700 14px/18px var(--font-serif); cursor: pointer; }
+.fh-rules .link:hover { color: var(--brass-100); text-decoration: underline; }
+.fh-rules small { display: block; margin-top: 2px; }
+.fh-quietdark { margin-left: auto; }
+
+/* the door: FIRST COMMAND on the title band, lit until the ten lessons are done (ruling 141) */
+.card header.fh-band { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 18px; align-items: center; }
+.card header.fh-band > .kick { grid-column: 1; }
+.card header.fh-band > h2 { grid-column: 1; }
+.fh-door { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 210px; padding: 9px 16px 8px; border: 1px solid var(--brass-700); border-radius: var(--radius-plate); background: linear-gradient(180deg, var(--desk-700), var(--desk-800)); color: var(--paper-100); text-align: left; cursor: pointer; }
+.fh-door b { font: 700 19px/22px var(--font-serif); letter-spacing: .06em; text-transform: uppercase; }
+.fh-door span { font: 400 12px/16px var(--font-typed); color: var(--text-muted); }
+.fh-door:hover { border-color: var(--brass-300); background: var(--desk-600); }
+/* (Lit, not brass: the lamp on a dark button, the kit's tc-btn is-lit. BEGIN stays the one brass button of the door.) */
+.fh-door.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); animation: fh-lit-edge 2s ease-in-out infinite; }
+.fh-door.is-lit span { color: var(--paper-100); }
+@keyframes fh-lit-edge { 0%, 100% { box-shadow: 0 0 0 1px #e0b872, 0 0 0 rgba(224, 184, 114, 0); } 50% { box-shadow: 0 0 0 1px #e0b872, 0 0 22px rgba(224, 184, 114, .55); } }
+@media (max-width: 620px) { .card header.fh-band { grid-template-columns: 1fr; } .fh-door { grid-column: 1; grid-row: auto; margin-top: 10px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fh-in, .fh-slip.fh-in, .tc-note .tc-stamp, .tc-pointer, .fh-door.is-lit { animation: none; }
+}
+
+/* the note laid in a card whose margin has no room for the slip (the month card on a laptop): never hidden */
+.tc-note.fh-inlaid::before { display: none; }
+.tc-note--inlaid { margin: 0 0 14px; box-shadow: none; border: 1px solid rgba(92, 80, 64, .35); }
+.tc-note--laid.fh-inlaid { min-height: 0; }
+.tc-note--laid.fh-inlaid .tc-note__head { flex-wrap: wrap; row-gap: 2px; }
+.tc-note--laid.fh-inlaid .tc-deed { grid-column: 2; grid-row: 3; margin: 8px 0 0 28px; padding-top: 8px; }
+.tc-note--laid.fh-inlaid.is-done { padding-bottom: 11px; }
+@media (max-width: 760px) { .tc-note--laid.fh-inlaid .tc-deed { grid-column: 1; grid-row: 4; margin-left: 0; } }
+.tc-note--laid.fh-inlaid .tc-note__head .tc-micro { white-space: nowrap; }

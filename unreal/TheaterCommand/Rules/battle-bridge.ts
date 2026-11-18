@@ -19,7 +19,9 @@
 // With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
 //
 // The calls, on the same global object TC:
-//   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, or null where there is no field battle to fight
+//   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
+//                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
+//                                   FIGHT IT YOURSELF on the card, off, with why beside it
 //   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
 //                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
@@ -65,8 +67,9 @@ import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { LOOPS } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
-import { fieldBill, goingIn, landTicket } from '../../../src/battle/land/ticket';
+import { fieldBill, landTicket } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
+import { staffOnly } from '../../../src/battle/land/offered';
 import { MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
 import { SKY } from '../../../src/battle/air/book';
@@ -164,17 +167,22 @@ export function battleCalls(h: BattleHooks) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const t = landTicket(g, corps, g.regions[to]);
-      return t ? { ticket: t } : null;
+      if (!t) return null;
+      // The safety net (src/battle/land/offered.ts): a kind of place the field still lands more than a tenth off its card
+      // is settled by the staff; the card keeps FIGHT IT YOURSELF, off, with this one sentence beside it.
+      const why = staffOnly(t);
+      return why ? { ticket: null, why } : { ticket: t };
     },
     battleStart(ids: number[], to: number) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
       const t = landTicket(g, corps, target);
-      if (!t) return null;
+      if (!t || staffOnly(t)) return null;
       const sim = new LandBattle(t);
-      // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the card.
-      const going = goingIn(g, corps, target).map((c) => c.id);
+      // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
+      // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
+      const going = t.att.forces.map((f) => f.corps);
       const ses = begin(sim, (r) => h.attack(ids, to, r.R, fieldBill(r)));
       const f = sim.field;
       return {

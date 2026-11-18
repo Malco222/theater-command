@@ -30,6 +30,7 @@ export function monthSign(key: string, h: number, fill: string): string {
 
 const glyph = (d: string, h: number, fill: string): string => `<svg width="${h}" height="${h}" viewBox="0 0 16 16" aria-hidden="true"><path fill="${fill}" fill-rule="evenodd" d="${d}"/></svg>`;
 const toneClass = (t: CardTone): string => `t-${t}`;
+const brass = (word: string): boolean => word === 'WAR' || word === 'FALLEN' || word === 'FREED';
 const REPORT_ACT: Record<string, string> = { land: 'report', sea: 'seareport', air: 'airreport', shore: 'shorereport' };
 
 export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
@@ -48,7 +49,9 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
 
   // (A band with a second line, the country in danger, is read whole: the line stands under the headline in full.)
-  const bands = card.bands.map((b) => `<div class="mc-banner${b.good ? ' good' : ''}${b.spent ? ' spent' : ''}${b.sub ? ' tall' : ''}"><span class="k">${esc(b.word)}</span>${b.sub ? `<span class="mc-bflags">${b.nats.map((n) => fl(n, 38)).join('')}</span>` : b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small${b.note ? ` title="${esc(b.text)}"` : ''}>${esc(b.note ?? b.when)}</small>${b.sub ? `<span class="mc-bsub">${esc(b.sub)}</span>` : ''}${b.region !== undefined ? `<button class="mc-alt" data-act="showmap" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
+  // Red is the dated warning's alone (ruling 160): a band of war, a fall or a freeing is brass on the dark ground, as the
+  // news is, and a freeing his own side did keeps its green.
+  const bands = card.bands.map((b) => `<div class="mc-banner${b.good ? ' good' : ''}${b.word === 'NEWS' ? ' news' : ''}${brass(b.word) && !b.good ? ' brass' : ''}${b.spent ? ' spent' : ''}${b.sub ? ' tall' : ''}"><span class="k">${esc(b.word)}</span>${b.sub ? `<span class="mc-bflags">${b.nats.map((n) => fl(n, 38)).join('')}</span>` : b.nats.map((n) => fl(n, 38)).join('')}<b title="${esc(b.text)}">${esc(b.head)}</b><small${b.note ? ` title="${esc(b.text)}"` : ''}>${esc(b.note ?? b.when)}</small>${b.sub ? `<span class="mc-bsub">${esc(b.sub)}</span>` : ''}${b.region !== undefined ? `<button class="mc-alt" data-act="${b.alarm ? 'homealarm' : 'showmap'}" data-id="${b.region}">SHOW ON MAP</button>` : ''}</div>`).join('');
 
   const tileSign: Record<string, string> = { provinces: glyph(PENNANT, 13, DIM), men: monthSign('inf', 11, DIM), sea: monthSign('hull', 11, DIM), air: monthSign('ftr', 11, DIM) };
   const tally = card.boxes.length ? `<div class="mc-tally" style="--n:${Math.max(4, card.boxes.length)}">${card.boxes.map((b) => `<div class="mc-tile ${toneClass(b.tone)}"><u>${tileSign[b.key] ?? ''}${esc(b.label)}</u><b>${esc(b.figure)}</b><small>${esc(b.sub)}</small></div>`).join('')}</div>` : '';
@@ -56,8 +59,10 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const row = (r: CardRow): string => {
     const pic = r.picture ? `<i class="tpic k-${r.picture}"></i>` : `<span class="mc-nopic">${r.cls === 2 ? fl(r.ours, 34) : ''}</span>`;
     const disc = r.cls === 2 ? '' : `<span class="mc-disc">${monthSign(r.sign || 'star', r.sign === 'star' || !r.sign ? 16 : 15, PALE)}</span>`;
-    const flags = r.cls === 2 ? fl(r.theirs, 30) : versus(r, 30);
-    return `<div class="mc-row ${toneClass(r.tone)}${r.cls === 2 ? ' red' : ''}${r.report ? ' opens' : ''}"${act(r)}>${pic}${disc || '<span></span>'}
+    // (The word that goes with the tag, the other side's flag and its name: "WON from [flag] Mexico".)
+    const flags = r.cls === 2 ? fl(r.theirs, 30) : r.join && r.theirs ? `<i class="mc-ag">${esc(r.join.word)}</i>${fl(r.theirs, 30)}<span class="mc-cn">${esc(r.join.name)}</span>` : versus(r, 30);
+    // (An item that found no band keeps its band's colour: red for a warning, brass for the rest, ruling 160.)
+    return `<div class="mc-row ${toneClass(r.tone)}${r.cls === 2 ? (r.tag === 'WARNING' ? ' red' : ' brass') : ''}${r.report ? ' opens' : ''}"${act(r)}>${pic}${disc || '<span></span>'}
       <div class="mc-rtx"><div class="r1"><b class="pl${r.place.length > 16 ? ' long' : ''}">${esc(r.place)}</b>${r.tag ? `<span class="mc-chip">${esc(r.tag)}</span>` : ''}<span class="vs">${flags}</span></div><div class="r2" title="${esc(r.line)}">${esc(r.line)}</div></div>
       <div class="mc-nums">${nums(r.figures)}</div>${pin(r)}</div>`;
   };
@@ -84,7 +89,9 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const room = o.all ? 0 : L ? (shown.length <= 3 ? 1 : 0) : shown.length <= 3 ? 2 : shown.length <= 5 ? 1 : 0;
   const read = card.letters.slice(0, room);
   const letters = read.length ? `<div class="mc-letters"><div class="mc-lab">${read.length > 1 ? 'Letters from the front' : 'A letter from the front'}</div>${read.map((l) => `<blockquote><p>${esc(l.text)}</p><cite>${esc(l.by)}</cite></blockquote>`).join('')}</div>` : '';
-  const fronts = `<div class="mc-rt"><div class="mc-lab">${card.lead || shown.some((r) => r.cls === 3 || r.cls === 4) ? 'Your fronts · the land first, then sea and air' : 'Your fronts'}</div>
+  // (Where the lead story was the month's only fighting, no head stands over an empty column: the second Playtester's
+  // 84.2.6 find. A letter keeps its own.)
+  const fronts = `<div class="mc-rt">${!shown.length && !card.quiet ? '' : `<div class="mc-lab">${card.lead || shown.some((r) => r.cls === 3 || r.cls === 4) ? 'Your fronts · the land first, then sea and air' : 'Your fronts'}</div>`}
     ${card.quiet ? `<p class="mc-quiet">${esc(card.quiet)}</p>` : ''}${shown.length ? `<div class="mc-rows">${shown.map(row).join('')}</div>` : ''}${more}${letters}</div>`;
 
   const it = (sign: string, body: string, cls = ''): string => `<div class="mc-it${cls}">${sign}${body}</div>`;

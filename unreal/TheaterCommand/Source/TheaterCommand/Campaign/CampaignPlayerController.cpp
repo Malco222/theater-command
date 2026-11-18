@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Campaign/CampaignText.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignSounds.h"
@@ -25,6 +26,34 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/Parse.h"
+
+namespace
+{
+	/** (Speed, b414 mark 1: see ACampaignPlayerController::Afterwards.) */
+	TAutoConsoleVariable<int32> CVarPictureFirst(
+		TEXT("tc.Speed.PictureFirst"), 1,
+		TEXT("1 (default): an order's answer is laid on the table a step a frame: the ground and the armies, then the rest of the table, then the army in hand's orders and the province's card. 0: all in one frame, as before."),
+		ECVF_Default);
+
+	/**
+	 * (Speed, b414 mark 1.) The army in hand after an order that carries the corps that moved into a province, as the
+	 * rules' thread is to ask its questions ahead: see FCampaignSession::MoveAside. Selected: the province whose card is
+	 * shown after (INDEX_NONE: none).
+	 */
+	FCampaignSession::FHandNext HandOf(const TArray<FCorpsMove>& Moved, int32 Region, int32 Selected, bool bPlain, const FString& Adjective)
+	{
+		FCampaignSession::FHandNext Next;
+		Next.Region = Region;
+		Next.Selected = Selected;
+		Next.bPlain = bPlain;
+		Next.Adjective = Adjective;
+		for (const FCorpsMove& Each : Moved)
+		{
+			Next.Ids.Add(Each.CorpsId);
+		}
+		return Next;
+	}
+}
 
 ACampaignPlayerController::ACampaignPlayerController()
 {
@@ -128,6 +157,10 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
 	Opening.bCanReturn = Rules->IsRunning();
+	if (bShow && !Opening.bVisible)
+	{
+		DoorSince = FPlatformTime::Seconds();
+	}
 	Opening.bVisible = bShow;
 	++Opening.Revision;
 }
@@ -627,7 +660,6 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth, History))
 	{
 		bFreshCampaign = true;
-		bNightTold = false;
 		EnterCampaign();
 		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
@@ -727,6 +759,8 @@ void ACampaignPlayerController::EnterCampaign()
 	TurnLaid = Session->GetView().Turn;
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
+	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
+	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
 	CloseDocument();
@@ -741,6 +775,12 @@ void ACampaignPlayerController::EnterCampaign()
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
+	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
+	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
+	LastReel.Reset();
+	LastReelDate.Reset();
+	bNightTold = false;
+	AlarmShown = 0;
 	RefreshOrders();
 	SelectRegion(INDEX_NONE);
 	DispatchText.Reset();
@@ -794,6 +834,35 @@ void ACampaignPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// (Brian, 17 November 2026: "how do we make the game run more smooth". The art director's speed brief, group A,
+	// all at once: a map seen from above needs one sun, one soft fill, the relief shade already painted into the
+	// ground and the table lamp. Bounced light worked out each frame, mirror reflections, fine contact shade and the
+	// lens's blurs are given up; shadows are softer; the map is drawn at two thirds of the window each way and
+	// sharpened up, with the frame, the cards and the plates drawn after at full size. Timed inside one running game
+	// on his Mac, over New York and Louisiana at playing height: the graphics chip's share of a frame falls from
+	// 22.8 ms to 15.9, and the picture's light stays within one part in a hundred. "-TheaterOldLight" keeps the
+	// old settings, for a picture to set beside the new.)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")))
+	{
+		static const TPair<const TCHAR*, const TCHAR*> Trims[] = {
+			{ TEXT("r.DynamicGlobalIlluminationMethod"), TEXT("0") },
+			{ TEXT("r.ReflectionMethod"), TEXT("0") },
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("0") },
+			{ TEXT("r.ContactShadows"), TEXT("0") },
+			{ TEXT("sg.ShadowQuality"), TEXT("2") },
+			{ TEXT("r.DepthOfFieldQuality"), TEXT("0") },
+			{ TEXT("r.LensFlareQuality"), TEXT("0") },
+			{ TEXT("r.LightShaftQuality"), TEXT("0") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& Trim : Trims)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(Trim.Key))
+			{
+				Variable->Set(Trim.Value, ECVF_SetByCode);
+			}
+		}
+	}
+
 	FInputModeGameAndUI Mode;
 	Mode.SetHideCursorDuringCapture(false);
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -837,13 +906,13 @@ void ACampaignPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACampaignPlayerController::WheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACampaignPlayerController::WheelDown);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
-	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
-	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::EscapeKey);
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EnterKey);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceKey);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
-	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
+	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::TabKey); // (rules 84.3.2: through the key guard)
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
@@ -1130,6 +1199,19 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		Action.ParseIntoArray(Parts, TEXT(":"));
 		const int32 Number = Parts.Num() >= 3 ? FCString::Atoi(*Parts[2]) : INDEX_NONE;
 		ClosePage();
+		if (Parts.Num() >= 3 && Parts[1] == TEXT("alarm"))
+		{
+			// (Rules 84.2.6; the words of ruling 211, section 2.) SHOW ON MAP on the month card's warning does what a press
+			// on the alarm's row does, from its first alarm (the one the warning's help names): the nearest help in hand and
+			// the town centred. Without an alarm it shows the place.
+			AlarmShown = 0;
+			if (GetAlarm())
+			{
+				PressAlarm();
+				return;
+			}
+			Parts[1] = TEXT("region");
+		}
 		ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 		if (Parts.Num() >= 3 && Parts[1] == TEXT("fleet") && Map.IsValid())
 		{
@@ -1565,6 +1647,7 @@ float ACampaignPlayerController::GetMoonlight() const
 
 void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetMapLetters);
 	Out.Reset();
 	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 	if (!Map.IsValid() || !GetSession() || !Eye || Opening.bVisible || Newsreel.bOn)
@@ -1579,9 +1662,10 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2100.0f, 4400.0f), FVector2f(0.0f, 0.6f), Distance);
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
-	auto OnScreen = [this](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every letter: see TheaterSpeed)
+	auto OnScreen = [this, &OneView](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
 	{
-		return ProjectWorldLocationToScreen(Map->SurfacePoint(MapPoint.X, MapPoint.Y, Lift), OutScreen, false);
+		return OneView.Project(Map->SurfacePoint(MapPoint.X, MapPoint.Y, Lift), OutScreen);
 	};
 	const float Provinces = FMath::GetMappedRangeValueClamped(FVector2f(6500.0f, 8500.0f), FVector2f(0.8f, 0.0f), Distance);
 	for (const ACampaignMapActor::FMapWord& Word : Map->GetMapWords())
@@ -1672,11 +1756,13 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 
 void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetColoursOnScreen);
 	Out.Reset();
 	if (!Map.IsValid() || !PlayerCameraManager || Opening.bVisible || Newsreel.bOn)
 	{
 		return;
 	}
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every point: see TheaterSpeed)
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
 	const FVector Up = PlayerCameraManager->GetCameraRotation().Quaternion().GetUpVector();
@@ -1685,7 +1771,7 @@ void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 		FVector Middle;
 		double Radius = 0.0;
 		FVector2D At, Top;
-		if (Piece && Piece->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle, At, false) && ProjectWorldLocationToScreen(Middle + Up * Radius, Top, false)
+		if (Piece && Piece->GetColours(Middle, Radius) && OneView.Project(Middle, At) && OneView.Project(Middle + Up * Radius, Top)
 			&& At.X > -60.0 && At.X < Width + 60.0 && At.Y > -60.0 && At.Y < Height + 60.0)
 		{
 			// (the cloth, and the strength plate that hangs under it)
@@ -1697,6 +1783,7 @@ void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
 
 void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 {
+	THEATER_SPEED_SCOPE(GetTownPlates);
 	Out.Reset();
 	const FCampaignSession* Session = GetSession();
 	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
@@ -1704,6 +1791,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 	{
 		return;
 	}
+	const TheaterSpeed::FEye OneView(this); // (the view worked out once for every point: see TheaterSpeed)
 	// Capitals from any distance, towns from the middle distance, every place worth having closer in, and what
 	// each place is worth only close up: the table is never papered over with plates.
 	const float Distance = Eye->GetDistance();
@@ -1723,7 +1811,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			continue;
 		}
 		FVector2D Screen;
-		if (!ProjectWorldLocationToScreen(Spot.World + Toward * Spot.Reach, Screen, false)
+		if (!OneView.Project(Spot.World + Toward * Spot.Reach, Screen)
 			|| Screen.X < -120.0 || Screen.X > Width + 120.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 		{
 			continue;
@@ -1754,7 +1842,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		}
 		const FVector2D Place = Data.Regions[SealAt].Center;
 		FVector2D Screen;
-		if (ProjectWorldLocationToScreen(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen, false)
+		if (OneView.Project(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen)
 			&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
 		{
 			FTownPlate& Seal = Out.AddDefaulted_GetRef();
@@ -1804,7 +1892,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		{
 			FVector World;
 			FVector2D Screen;
-			if (Field.Groups <= 0 || !Map->GetAirfieldWorld(Field.Region, World) || !ProjectWorldLocationToScreen(World, Screen, false)
+			if (Field.Groups <= 0 || !Map->GetAirfieldWorld(Field.Region, World) || !OneView.Project(World, Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1827,7 +1915,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		{
 			const AArmyPiece* Fleet = Pair.Value;
 			FVector2D Screen;
-			if (!Fleet || !Fleet->IsAtAnchor() || Fleet->IsHidden() || !ProjectWorldLocationToScreen(Fleet->GetRestLocation(), Screen, false)
+			if (!Fleet || !Fleet->IsAtAnchor() || Fleet->IsHidden() || !OneView.Project(Fleet->GetRestLocation(), Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1864,7 +1952,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		for (const FViewGate& Gate : View.Gates)
 		{
 			FVector2D Screen;
-			if (!ProjectWorldLocationToScreen(Map->MapToWorld(Gate.At.X, Gate.At.Y, 0.0), Screen, false)
+			if (!OneView.Project(Map->MapToWorld(Gate.At.X, Gate.At.Y, 0.0), Screen)
 				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
 			{
 				continue;
@@ -1891,7 +1979,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			FVector Middle;
 			double Radius = 0.0;
 			FVector2D Screen;
-			if (Crowd.Key->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle + Right * Radius * 0.95, Screen, false)
+			if (Crowd.Key->GetColours(Middle, Radius) && OneView.Project(Middle + Right * Radius * 0.95, Screen)
 				&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
 			{
 				FTownPlate& Count = Out.AddDefaulted_GetRef();
@@ -1999,6 +2087,121 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 	else if (Screen == TEXT("arsenal"))
 	{
 		OpenArsenal();
+	}
+}
+
+const FHomeAlarm* ACampaignPlayerController::GetAlarm() const
+{
+	const FCampaignSession* Session = GetSession();
+	const bool bShown = Session && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible && Session->GetView().Alarms.Num() > 0;
+	return bShown ? &Session->GetView().Alarms[AlarmShown % Session->GetView().Alarms.Num()] : nullptr;
+}
+
+int32 ACampaignPlayerController::GetAlarmCount() const
+{
+	return GetAlarm() ? GetSession()->GetView().Alarms.Num() : 0;
+}
+
+int32 ACampaignPlayerController::GetAlarmPlace() const
+{
+	const int32 Count = GetAlarmCount();
+	return Count > 0 ? AlarmShown % Count + 1 : 0;
+}
+
+void ACampaignPlayerController::PressAlarm()
+{
+	FCampaignSession* Session = GetSession();
+	const FHomeAlarm* Shown = GetAlarm();
+	if (!Session || !Map.IsValid() || !Shown || FaceOff.bVisible || WarPrompt.bVisible)
+	{
+		return;
+	}
+	// (a copy: putting an army in hand reads the view again)
+	const FHomeAlarm Alarm = *Shown;
+	const int32 Count = Session->GetView().Alarms.Num();
+	AlarmShown = Count > 0 ? (AlarmShown % Count + 1) % Count : 0; // (several at once: each press goes on to the next)
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	// (The words of ruling 211, section 1.) A press picks up that army, and the paper says the cure in one line, in the
+	// rules' words. Where no army can come a press centres the town, and nothing more. No new mark is drawn on the map.
+	if (Alarm.HelpRegion != INDEX_NONE && PickUpArmyIn(Alarm.HelpRegion))
+	{
+		// (the rules name the corps a press picks up: the hand is those of them that can take orders now)
+		if (Alarm.HelpCorps.Num() > 0 && PickedCorps.ContainsByPredicate([&Alarm](int32 Id) { return Alarm.HelpCorps.Contains(Id); }))
+		{
+			PickedCorps.RemoveAll([&Alarm](int32 Id) { return !Alarm.HelpCorps.Contains(Id); });
+			RefreshOrders();
+		}
+		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+		if (!Alarm.Hand.IsEmpty())
+		{
+			Notify(Alarm.Hand, 9.0);
+		}
+	}
+	if (Map->GetData().Regions.IsValidIndex(Alarm.Region))
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			// (Rules 84.3; the second Playtester's 84.2.6 find.) The place and where the paper says to right-click are
+			// both in view: the camera stands between them.
+			const FVector2D Place = Map->GetData().Regions[Alarm.Region].Center;
+			const FVector2D Click = Alarm.HelpRegion != INDEX_NONE && Map->GetData().Regions.IsValidIndex(Alarm.SendTo) ? Map->GetData().Regions[Alarm.SendTo].Center : Place;
+			const FVector2D At = (Place + Click) * 0.5;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+		}
+	}
+}
+
+const FGunsAlone* ACampaignPlayerController::GetGunsAlone(int32 Index) const
+{
+	const FCampaignSession* Session = GetSession();
+	const bool bShown = Session && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible && Session->GetView().Alone.IsValidIndex(Index);
+	return bShown ? &Session->GetView().Alone[Index] : nullptr;
+}
+
+void ACampaignPlayerController::PressGunsAlone(int32 Index)
+{
+	const FGunsAlone* Shown = GetGunsAlone(Index);
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Shown || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Shown->Region) || FaceOff.bVisible || WarPrompt.bVisible)
+	{
+		return;
+	}
+	const FGunsAlone Row = *Shown; // (a copy: putting an army in hand reads the view again)
+	const FCampaignMapData& Data = Map->GetData();
+	// (Ruling 211(a) as passed at 16:54 UTC: a press centres the town.)
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	// (Rules 84.3; the Playtester's 84.2.6 find.) On a red row a press picks up the infantry or tanks of his that can
+	// reach the guns this month, not the guns, and the paper says the cure in one line, as the red home alarm does.
+	int32 Other = Row.Region;
+	if (Row.bRed && Data.Regions.IsValidIndex(Row.From) && PickUpArmyIn(Row.From))
+	{
+		Other = Row.From;
+		if (Row.HelpCorps.Num() > 0 && PickedCorps.ContainsByPredicate([&Row](int32 Id) { return Row.HelpCorps.Contains(Id); }))
+		{
+			PickedCorps.RemoveAll([&Row](int32 Id) { return !Row.HelpCorps.Contains(Id); });
+			RefreshOrders();
+		}
+		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+		// (the browser's words: a lone corps by its name, more than one as the army where they stand)
+		FString Who = FString::Printf(TEXT("The army at %s"), *Data.Regions[Row.From].Name);
+		if (PickedCorps.Num() == 1)
+		{
+			for (const FViewCorps& Unit : Session->GetView().Corps)
+			{
+				if (Unit.Id == PickedCorps[0])
+				{
+					Who = Unit.Name;
+					break;
+				}
+			}
+		}
+		Notify(FString::Printf(TEXT("%s is in hand. Right-click %s to send it."), *Who, *Data.Regions[Row.Region].Name), 9.0);
+	}
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		// (Both the town and the army in hand are in view: the second Playtester's 84.2.6 find.)
+		const FVector2D At = (Data.Regions[Row.Region].Center + Data.Regions[Other].Center) * 0.5;
+		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
 	}
 }
 
@@ -2405,6 +2608,74 @@ void ACampaignPlayerController::ToggleEffects()
 	SaveOptions();
 }
 
+void ACampaignPlayerController::EnterKey()
+{
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1: an order is still being answered, and a hurried second press is not another order)
+	}
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The map's own Enter never takes the press that put a card
+	// down, nor one hurried after it: Enter on CALL IT OFF or Esc, and a second Enter at once, opened the question
+	// before the month's end. A card put down by the mouse leaves it free.
+	const bool bCardUp = IsCardUp();
+	if (!bCardUp && !bScripted && FPlatformTime::Seconds() - KeyShutAt < 0.5)
+	{
+		return;
+	}
+	bEnterByKey = true;
+	EndMonth();
+	bEnterByKey = false;
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds();
+	}
+}
+
+void ACampaignPlayerController::EscapeKey()
+{
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
+	const bool bCardUp = IsCardUp();
+	Escape();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::SpaceKey()
+{
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
+	const bool bCardUp = IsCardUp();
+	SpaceBar();
+	if (bCardUp)
+	{
+		KeyShutAt = FPlatformTime::Seconds(); // (the map's Enter waits the key guard after it)
+	}
+}
+
+void ACampaignPlayerController::TabKey()
+{
+	if (IsAnswering())
+	{
+		return; // (as Enter)
+	}
+	// (Rules 84.3.2; the second playtester's check of 84.3.1.) Tab on the question before the month's end is its SHOW ME
+	// and puts the question down by a key: the map's own Enter then waits the guard's half second, so Tab and a hurried
+	// Enter never end the month the question was asked about.
+	const bool bCardUp = IsCardUp();
+	NextArmy();
+	if (bCardUp && !IsCardUp())
+	{
+		KeyShutAt = FPlatformTime::Seconds();
+	}
+}
+
 void ACampaignPlayerController::SpaceBar()
 {
 	if (FaceOff.bVisible && FaceOff.bResolved && !bScripted)
@@ -2772,7 +3043,9 @@ void ACampaignPlayerController::ShowEndAsk()
 
 bool ACampaignPlayerController::IsMarchSlipShown() const
 {
-	return bHandSpent && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
+	// (One voice after a press.) The first lesson for an army picked up with no moves left: never the result of an
+	// order, and any order to that army puts it away.
+	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
 }
 
 void ACampaignPlayerController::DismissMarchSlip()
@@ -2791,7 +3064,7 @@ const FMarchPlan& ACampaignPlayerController::PlanFor(int32 RegionId)
 	{
 		KeptPlanRegion = RegionId;
 		FCampaignSession* Session = GetSession();
-		KeptPlan = (Session && RegionId != INDEX_NONE && ArmyRegion != INDEX_NONE && RegionId != ArmyRegion) ? Session->PlanMarch(PickedCorps, RegionId) : FMarchPlan();
+		KeptPlan = (Session && RegionId != INDEX_NONE && ArmyRegion != INDEX_NONE && RegionId != ArmyRegion) ? Session->PlanMarch(PickedCorps, RegionId, HandArmy, HandArmyIds) : FMarchPlan();
 	}
 	return KeptPlan;
 }
@@ -3470,7 +3743,9 @@ void ACampaignPlayerController::ShowCorpsModel(int32 CorpsId)
 	{
 		Title = Card->Kind.ToString();
 	}
-	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Card->Name.ToString(), *Title));
+	// (The UI director, check 19.) The arm stands on its own line under the name, with no dot: a dot at a fold
+	// began the line ("· Infantry").
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s\n%s"), *Card->Name.ToString(), *Title));
 }
 
 void ACampaignPlayerController::DismissAnnouncement()
@@ -3493,6 +3768,178 @@ void ACampaignPlayerController::DismissAnnouncement()
 			CampaignSounds::Play(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.55f);
 		}
 	}
+}
+
+void ACampaignPlayerController::FrameReachSoon()
+{
+	if (bScripted || bWatching || ArmyRegion == INDEX_NONE)
+	{
+		FrameReachFor = INDEX_NONE;
+		return;
+	}
+	FrameReachFor = ArmyRegion;
+	FrameReachFrom = FPlatformTime::Seconds() + 0.15; // (the tray is laid out a frame after the army is in hand)
+	FrameReachUntil = FPlatformTime::Seconds() + 3.0;
+}
+
+void ACampaignPlayerController::FrameReach()
+{
+	THEATER_SPEED_SCOPE(FrameReach); // (the code checker's pre-check: the search below grows with the panels, four loops deep)
+	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	if (!Eye || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(ArmyRegion) || Width <= 0 || Height <= 0 || FrameOnScreen.Num() == 0)
+	{
+		return;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	const FVector2D Screen(Width, Height);
+	TArray<FBox2D> Panels;
+	for (const FBox2D& Each : FrameOnScreen)
+	{
+		Panels.Add(FBox2D(Each.Min - FVector2D(8.0, 8.0), Each.Max + FVector2D(8.0, 8.0)));
+	}
+
+	// The ground in question, on the screen: the army's own province and every one it can reach, each with room round it.
+	TArray<int32> Places;
+	Places.Add(ArmyRegion);
+	for (const FReachRegion& Each : Reach)
+	{
+		Places.AddUnique(Each.Region);
+	}
+	const double Room = 56.0, Touch = 20.0;
+	FBox2D Ground(ForceInit);
+	bool bHidden = false;
+	for (const int32 Place : Places)
+	{
+		if (!Data.Regions.IsValidIndex(Place))
+		{
+			continue;
+		}
+		const FVector2D At = Data.Regions[Place].Center;
+		FVector2D Spot;
+		if (!ProjectWorldLocationToScreen(Map->MapToWorld(At.X, At.Y), Spot) || Spot.X < -Screen.X || Spot.X > 2.0 * Screen.X || Spot.Y < -Screen.Y || Spot.Y > 2.0 * Screen.Y)
+		{
+			continue; // (behind the eye, or round the world's seam: not framed)
+		}
+		Ground += FBox2D(Spot - FVector2D(Room, Room), Spot + FVector2D(Room, Room));
+		const FBox2D Near(Spot - FVector2D(Touch, Touch), Spot + FVector2D(Touch, Touch));
+		for (const FBox2D& Panel : Panels)
+		{
+			if (Panel.Intersect(Near))
+			{
+				bHidden = true; // (under a panel)
+			}
+		}
+	}
+	if (!Ground.bIsValid || !bHidden)
+	{
+		return; // (none of it is under a panel: the map stays where the player put it)
+	}
+
+	// The open map: of the stretches of the screen no panel covers, the one the ground fits best, and of those that
+	// fit, the one it need travel least to reach.
+	TArray<double> Xs = { 0.0, Screen.X }, Ys = { 0.0, Screen.Y };
+	for (const FBox2D& Panel : Panels)
+	{
+		Xs.AddUnique(FMath::Clamp(Panel.Min.X, 0.0, Screen.X));
+		Xs.AddUnique(FMath::Clamp(Panel.Max.X, 0.0, Screen.X));
+		Ys.AddUnique(FMath::Clamp(Panel.Min.Y, 0.0, Screen.Y));
+		Ys.AddUnique(FMath::Clamp(Panel.Max.Y, 0.0, Screen.Y));
+	}
+	Xs.Sort();
+	Ys.Sort();
+	const FVector2D Need = Ground.GetSize(), Middle = Ground.GetCenter();
+	// (how far the ground's middle must move to lie in an open stretch: nowhere, if it is inside already)
+	auto ShiftInto = [&Need, &Middle](const FBox2D& Open, bool bFits) -> FVector2D
+	{
+		if (!bFits)
+		{
+			return Open.GetCenter() - Middle;
+		}
+		const FVector2D Low = Open.Min + Need * 0.5, High = Open.Max - Need * 0.5;
+		return FVector2D(FMath::Clamp(Middle.X, Low.X, High.X), FMath::Clamp(Middle.Y, Low.Y, High.Y)) - Middle;
+	};
+	FBox2D Best(ForceInit);
+	double BestFit = 0.0, BestTravel = 0.0;
+	for (int32 Left = 0; Left < Xs.Num(); ++Left)
+	{
+		for (int32 Right = Left + 1; Right < Xs.Num(); ++Right)
+		{
+			for (int32 Top = 0; Top < Ys.Num(); ++Top)
+			{
+				for (int32 Bottom = Top + 1; Bottom < Ys.Num(); ++Bottom)
+				{
+					const FBox2D Open(FVector2D(Xs[Left], Ys[Top]), FVector2D(Xs[Right], Ys[Bottom]));
+					const FVector2D Size = Open.GetSize();
+					if (Size.X < 160.0 || Size.Y < 160.0)
+					{
+						continue;
+					}
+					bool bClear = true;
+					for (const FBox2D& Panel : Panels)
+					{
+						if (Panel.Min.X < Open.Max.X - 0.5 && Panel.Max.X > Open.Min.X + 0.5 && Panel.Min.Y < Open.Max.Y - 0.5 && Panel.Max.Y > Open.Min.Y + 0.5)
+						{
+							bClear = false;
+							break;
+						}
+					}
+					if (!bClear)
+					{
+						continue;
+					}
+					const double Fit = FMath::Min(1.0, FMath::Min(Size.X / FMath::Max(Need.X, 1.0), Size.Y / FMath::Max(Need.Y, 1.0)));
+					const double Travel = ShiftInto(Open, Fit >= 0.999).Size();
+					if (Fit > BestFit + 0.01 || (Fit > BestFit - 0.01 && Travel < BestTravel))
+					{
+						Best = Open;
+						BestFit = Fit;
+						BestTravel = Travel;
+					}
+				}
+			}
+		}
+	}
+	if (!Best.bIsValid || BestFit <= 0.0)
+	{
+		return;
+	}
+
+	// Where the ground would rest: inside the open stretch, moved no further than it must be. Where it does not fit,
+	// the eye goes back a little (never past the height a campaign opens at), and the ground is centred there.
+	const double Ratio = Eye->MaxDistance / FMath::Max(Eye->MinDistance, 1.0f);
+	const float Zoom = Eye->GetZoom();
+	float NewZoom = Zoom;
+	if (BestFit < 0.999)
+	{
+		NewZoom = FMath::Min(Zoom + static_cast<float>(FMath::Loge(FMath::Min(1.0 / BestFit, 1.6)) / FMath::Loge(Ratio)), FMath::Max(Zoom, 0.62f));
+	}
+	const double Scale = FMath::Pow(Ratio, static_cast<double>(NewZoom - Zoom)); // (how much further every pixel reaches on the table)
+	const FVector2D Shift = ShiftInto(Best, BestFit >= 0.999); // (where the ground's middle should come to, from where it is, on the screen)
+	auto OnTable = [this](const FVector2D& At, FVector& Out) -> bool
+	{
+		FVector Origin, Direction;
+		return DeprojectScreenPositionToWorld(static_cast<float>(At.X), static_cast<float>(At.Y), Origin, Direction) && RayOnTable(Origin, Direction, Out);
+	};
+	FVector GroundAt, GoalAt;
+	if (!OnTable(Middle, GroundAt) || !OnTable(Middle + Shift, GoalAt))
+	{
+		return;
+	}
+	// (The table under the screen's middle is the eye's focus. A point the ground should come to lies, after the move,
+	// at the focus plus its old offset from the focus, stretched by however far the eye went back.)
+	const FVector Focus = Eye->GetFocus();
+	const FVector Goal = GroundAt - (GoalAt - Focus) * Scale;
+	if (FVector::Dist2D(Goal, Focus) < 1.0 && NewZoom == Zoom)
+	{
+		return;
+	}
+	Eye->GoTo(FVector(Goal.X, Goal.Y, 0.0), NewZoom, false);
+	// (item 4: the view moved under a pointer that did not)
+	float PointerX = 0.0f, PointerY = 0.0f;
+	TipHushedAt = GetMousePosition(PointerX, PointerY) ? FVector2D(PointerX, PointerY) : LastMouse;
+	bTipHushed = true;
 }
 
 void ACampaignPlayerController::NextArmy()
@@ -3542,7 +3989,13 @@ void ACampaignPlayerController::NextArmy()
 	{
 		const FVector2D At = Map->GetData().Regions[Next].Center;
 		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+		// (The UI director's 84.3 check, item 4.) The view moves under a pointer that has not: the hover box goes until
+		// the pointer moves again, so it never names a place the pointer was not put on.
+		float PointerX = 0.0f, PointerY = 0.0f;
+		TipHushedAt = GetMousePosition(PointerX, PointerY) ? FVector2D(PointerX, PointerY) : LastMouse;
+		bTipHushed = true;
 	}
+	FrameReachSoon(); // (item 3: once the view has come to rest)
 }
 
 void ACampaignPlayerController::Escape()
@@ -3694,8 +4147,23 @@ bool ACampaignPlayerController::RayOnTable(const FVector& Origin, const FVector&
 
 void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
+	TheaterSpeed::NoteFrame(DeltaTime, GetWorld()); // ("-TheaterSpeedLog": what the frame costs)
+	THEATER_SPEED_SCOPE(PlayerTick);
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
+	// (Speed, b414 mark 1.) An order the rules answered on their own thread: its answer is taken once it is in, and what
+	// follows it is laid on the table a step a frame.
+	if (Afterwards.Num() > 0)
+	{
+		THEATER_SPEED_SCOPE(AnswerStep);
+		const TFunction<void()> Step = MoveTemp(Afterwards[0]);
+		Afterwards.RemoveAt(0);
+		Step();
+	}
+	else if (FCampaignSession* Answering = GetSession())
+	{
+		Answering->Deliver();
+	}
 	// (Ruling 64.) The month's card, once nothing else has the screen.
 	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
 	{
@@ -3786,6 +4254,20 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			CampaignSounds::Play(this, TEXT("tick"), 1.0f, 0.7f);
 		}
 		bButtonDown = bDown;
+		// (The UI director's 84.3 check, item 3.) A right-click that lands on a panel never reaches the map, so it is
+		// noted here, as the screen saw it, and answered with a line below.
+		const bool bRightDown = Slate.GetPressedMouseButtons().Contains(EKeys::RightMouseButton);
+		if (bRightDown && !bSlateRightDown)
+		{
+			bRightPressOnPanel = bPointerOverPanel;
+			RightPanelPress = Slate.GetCursorPos();
+		}
+		else if (!bRightDown && bSlateRightDown && bRightPressOnPanel)
+		{
+			bRightPressOnPanel = false;
+			bPanelRightClick = bPointerOverPanel && FVector2D::Distance(Slate.GetCursorPos(), RightPanelPress) <= 6.0;
+		}
+		bSlateRightDown = bRightDown;
 	}
 
 	// The standing choices are read once, when everything in the room is there to be told of them.
@@ -3878,11 +4360,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		if (ViewWidth > 0 && ViewHeight > 0)
 		{
 			// ("-TheaterMapSize=67": the map drawn at that many hundredths of a 1600 by 1000 window each way, for timing a trim before it is decided.)
+			// (The art director's group A, item 5: the map at two thirds of a 1600 by 1000 window each way. It was at
+			// about four fifths. "-TheaterOldLight" keeps the old size with the old light.)
 			static const double Budget = []
 			{
 				int32 Hundredths = 0;
 				return FParse::Value(FCommandLine::Get(), TEXT("TheaterMapSize="), Hundredths) && Hundredths >= 40 && Hundredths <= 100
-					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0) : 1250.0 * 780.0;
+					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0)
+					: FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")) ? 1250.0 * 780.0 : 1072.0 * 670.0;
 			}();
 			const int32 Percent = FMath::Clamp(FMath::RoundToInt32(100.0 * FMath::Sqrt(Budget / (static_cast<double>(ViewWidth) * ViewHeight))), 50, 100);
 			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
@@ -3933,6 +4418,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		WatchNextStep();
 	}
 	const bool bBusy = IsTableBusy();
+	// (Speed, b414 mark 1.) An order still being answered: the map takes no other order, and the pointer asks the rules
+	// nothing, until it is on the table. (The ground under the pointer stays lit: that asks nothing.) It is asked afresh at
+	// each gate, never kept from the top of the tick: a march given by this very tick's release must already hush this
+	// tick's road and tip, or their questions would wait out the whole order on the frame of the press.
+
+	// (The UI director's 84.3 check, item 3.) An army picked up by a hand: once the view is still and its tray is laid out,
+	// the map is framed so the ground it can reach lies clear of the tray, the chips and every other panel. A press that
+	// becomes a carry, a turn of the view or an order given first leaves the map where it is.
+	{
+		const FVector CameraSpot = PlayerCameraManager ? PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+		const bool bViewStill = FVector::DistSquared(CameraSpot, LastCameraSpot) < 1.0;
+		LastCameraSpot = CameraSpot;
+		if (FrameReachFor != INDEX_NONE)
+		{
+			const double Now = FPlatformTime::Seconds();
+			if (FrameReachFor != ArmyRegion || bHandOrdered || bScripted || bWatching || bDragging || bTurning || Now > FrameReachUntil)
+			{
+				FrameReachFor = INDEX_NONE;
+			}
+			else if (!bBusy && !bLeftHeld && !bRightHeld && Now >= FrameReachFrom && bViewStill)
+			{
+				FrameReachFor = INDEX_NONE;
+				FrameReach();
+			}
+		}
+	}
 
 	// (Ruling 205(c).) The first night of a campaign says once, on the paper line, that it is night and which key holds
 	// the hour: Brian took the night for the fog of war (17 November 2026).
@@ -3970,6 +4481,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bRightHeld = true;
 		bTurning = false;
 		RightPressPosition = Mouse;
+		bRightGameOnPanel = bPointerOverPanel; // (item 3: an order never goes through a panel to ground the player cannot see)
 	}
 	if (bRightHeld && IsInputKeyDown(EKeys::RightMouseButton) && bHaveMouse)
 	{
@@ -3983,9 +4495,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			Eye->TiltBy(static_cast<float>(-MouseDelta.Y) * 0.2f);
 		}
 	}
+	// (The UI director's 84.3 check, item 3.) A right-click on a panel, with something in hand to send: the line names the
+	// place beneath, and how to reach it.
+	if (bPanelRightClick)
+	{
+		bPanelRightClick = false;
+		if (!bBusy && !bScripted && (ArmyRegion != INDEX_NONE || FleetInHand != INDEX_NONE || AgentInHand != INDEX_NONE))
+		{
+			const FCampaignMapData& Data = Map->GetData();
+			const int32 Sea = (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE;
+			const FString Place = Data.Seas.IsValidIndex(Sea) ? Data.Seas[Sea].Name : Data.Regions.IsValidIndex(AimedRegion) ? Data.Regions[AimedRegion].Name : FString();
+			if (!Place.IsEmpty())
+			{
+				Notify(FString::Printf(TEXT("%s lies under this panel: move the map, then right-click it."), *Place), 6.0);
+			}
+		}
+	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && !bBusy)
+		if (!bTurning && !bBusy && !IsAnswering() && !bRightGameOnPanel)
 		{
 			// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
 			RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
@@ -4002,16 +4530,17 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bLeftHeld = true;
 		bDragging = false;
 		PressPosition = Mouse;
+		PressGate = HoverGate; // (latched now: while the button is held the hover says no padlock)
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
 		bAgentHeld = false;
-		if (!bBusy && PointedAgent != INDEX_NONE)
+		if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
 		{
 			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
 			bAgentWasInHand = AgentInHand == PointedAgent;
 			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
 		}
-		else if (!bBusy)
+		else if (!bBusy && !IsAnswering())
 		{
 			const bool bAlreadyInHand = PointedPiece && ArmyRegion != INDEX_NONE && RingedPiece.Get() == PointedPiece;
 			bHeldWasInHand = Hold(PointedPiece) && bAlreadyInHand;
@@ -4104,7 +4633,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			// Otherwise a plain click on the flag has already picked the army up.
 		}
-		else if (!bDragging && !bBusy)
+		else if (!bDragging && !bBusy && !IsAnswering())
 		{
 			// A second click on the same ground straight after the first goes there: the view centres on it, a little closer.
 			const double ClickedAt = FPlatformTime::Seconds();
@@ -4116,10 +4645,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.34f), false);
 				LastClickRegion = INDEX_NONE;
 			}
-			else if (HoverGate != INDEX_NONE && ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE)
+			else if (PressGate != INDEX_NONE && (GateUnder(Mouse) == PressGate || StagedGate == PressGate) && ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE)
 			{
-				// (Ruling 178(d).) The padlock is a door, for the holder alone.
-				OpenGateBox(HoverGate);
+				// (Ruling 178(d).) The padlock is a door, for the holder alone. (The code checker, 17 November: judged on the
+				// padlock pressed, still under the pointer as the button is let go, since the hover is blank while it is held.)
+				OpenGateBox(PressGate);
 			}
 			else
 			{
@@ -4130,6 +4660,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		bLeftHeld = false;
 		bDragging = false;
+		PressGate = INDEX_NONE;
 		HeldPiece.Reset();
 	}
 
@@ -4191,7 +4722,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
 	{
 		Map->SetHoveredRegion(bBusy || bPointerOverPanel ? INDEX_NONE : AimedRegion); // (nor is the ground behind a panel lit)
-		if (ArmyRegion != INDEX_NONE && !bBusy)
+		if (ArmyRegion != INDEX_NONE && !bBusy && !IsAnswering())
 		{
 			ShowRouteTo(AimedRegion);
 		}
@@ -4259,12 +4790,18 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		const FCampaignRegion& Staged = Map->GetData().Regions[StagedHover];
 		ProjectWorldLocationToScreen(Map->MapToWorld(Staged.Centroid.X, Staged.Centroid.Y), StagedPointer);
 	}
+	// (The UI director's 84.3 check, item 4: after Tab has moved the view, no box until the pointer itself moves.)
+	if (bTipHushed && bHaveMouse && FVector2D::DistSquared(Mouse, TipHushedAt) > 9.0)
+	{
+		bTipHushed = false;
+	}
 	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
-	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : AimedRegion;
+	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || IsAnswering() || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
 	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : bStagedTip ? (bStagedField ? StagedHover : INDEX_NONE) : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
 	{
+		THEATER_SPEED_SCOPE(HoverTip);
 		HoverTipRegion = TipRegion;
 		HoverTipField = TipField;
 		HoverTipHand = TipHand;
@@ -4383,12 +4920,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
+				// (Rules 84.2.5; ruling 211(a); the code checker, 17 November.) Guns and engineers sent forward alone: the
+				// refusal is asked as OrderTo asks it, after the question of war and before anything else is promised.
+				const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString();
 				if (const FReachRegion* There = FindReach(TipRegion))
 				{
 					if (There->IsWar())
 					{
 						const FCampaignNation* Theirs = Map->GetData().FindNation(There->War);
-						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *Theirs->Name : *There->War);
+						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *WithThe(Theirs->Name) : *There->War);
+					}
+					else if (!Alone.IsEmpty())
+					{
+						Line += TEXT("\n") + Alone;
 					}
 					else if (There->bAttack)
 					{
@@ -4399,7 +4943,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						else
 						{
 							// The odds at a glance, before anything is ordered: as the staff reckon them from what is known.
-							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion);
+							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion, false, /*bGlance*/ true); // (the odds alone: see PreviewAttack)
 							auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
 							if (!Glance.Refused.IsEmpty())
 							{
@@ -4475,6 +5019,20 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				else if (!Alone.IsEmpty())
+				{
+					// (Rules 84.2.5; ruling 211(a).) Guns sent forward alone: the refusal on the pointer's paper slip, in ink.
+					Line += TEXT("\n") + Alone;
+				}
+				else if (const FApproachPlan Road = (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
+				{
+					// (The code checker, 17 November.) One test for the tip and the order: the march-up card is promised only
+					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order). (Rules 84.5;
+					// sheet 34: the slip says the order, and under it the staff's pick and the moves left on arrival.)
+					const FApproachRow& Pick = Road.Rows[0];
+					const FString Left = Pick.Left <= 0 ? FString(TEXT("no move left")) : FString::Printf(TEXT("%d %s left"), Pick.Left, Pick.Left == 1 ? TEXT("move") : TEXT("moves"));
+					Line += FString::Printf(TEXT("\nRight-click \u00B7 march up and attack\nBy %s, %s on arrival"), *Pick.Name, *Left);
+				}
 				else if (!bByRail && !bBySea && RailBeyond.Contains(TipRegion))
 				{
 					// (The railway brief, section 8.) A province it can ride to: the rules' one line, in the lit railway's
@@ -4526,9 +5084,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 				else
 				{
-					// (an enemy army seen there: a right-click plans the march up and the attack, and shows it first)
-					const FString Why = (!bByRail && !bBySea) ? WhyNoAttackOn(TipRegion) : FString();
-					Line += TEXT("\n") + (Why.IsEmpty() ? FString(TEXT("Out of this army's reach this month.")) : FString(TEXT("An army attacks from the province next door. Right-click: plan the march up and the attack. You are shown the road first.")));
+					// (The code checker, 17 November.) What a right-click here would say, as OrderTo says it: the rules'
+					// sentence naming the nearest ground beside the enemy, or why no attack goes in, or that it is out of reach.
+					const FString Why = (!bByRail && !bBySea) ? (Road.None.IsEmpty() ? WhyNoAttackOn(TipRegion) : Road.None) : FString();
+					Line += TEXT("\n") + (Why.IsEmpty() ? FString(TEXT("Out of this army's reach this month.")) : Why);
 				}
 			}
 			if (FleetInHand != INDEX_NONE)
@@ -4576,7 +5135,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			ProjectWorldLocationToScreen(Map->MapToWorld(Middle.X, Middle.Y), StagedPointer);
 		}
 		const int32 Sea = bStagedSea ? StagedSea
-			: (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel) ? SeaNear(PointerMap) : INDEX_NONE;
+			: (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel && !bTipHushed) ? SeaNear(PointerMap) : INDEX_NONE;
 		if (Sea != FleetHoverSea)
 		{
 			FleetHoverSea = Sea;
@@ -4646,7 +5205,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (Ruling 86.) The pointer on a gate's mark: who holds it, and whether the player's ships may pass, in the
 	// words of that gate's own rule. Its box takes the place of whatever lies under the mark.
 	{
-		const int32 OnGate = StagedGate != INDEX_NONE ? StagedGate : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : GateUnder(Mouse);
+		const int32 OnGate = StagedGate != INDEX_NONE ? StagedGate : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : GateUnder(Mouse);
 		const FCampaignSession* Told = GetSession();
 		const FViewGate* Shown = (Told && OnGate != INDEX_NONE) ? Told->GetView().Gates.FindByPredicate([OnGate](const FViewGate& Each) { return Each.Id == OnGate; }) : nullptr;
 		if (Shown)
@@ -4710,6 +5269,7 @@ bool ACampaignPlayerController::CanPickUp(const AArmyPiece* Piece) const
 
 bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 {
+	THEATER_SPEED_SCOPE(HoldArmy);
 	if (!CanPickUp(Piece))
 	{
 		return false;
@@ -4723,6 +5283,7 @@ bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 		{
 			return false;
 		}
+		FrameReachSoon(); // (the UI director's 84.3 check, item 3: a press that becomes a carry never moves the map; see PlayerTick)
 		// The army answers: boots, hooves, lorries or tracks.
 		TArray<FString> Kinds;
 		for (const FViewCorps& Unit : Piece->GetCorps())
@@ -5113,7 +5674,7 @@ void ACampaignPlayerController::ShowShipModel(const FString& Model, const FText&
 		return;
 	}
 	Map->SetShowpiece(Model);
-	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Tray.Title.ToString(), *Name.ToString()));
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s\n%s"), *Tray.Title.ToString(), *Name.ToString())); // (check 19: the ship's own line, no dot)
 }
 
 void ACampaignPlayerController::OrderFleetTo(int32 Zone)
@@ -5225,6 +5786,7 @@ void ACampaignPlayerController::FleetToHarbour()
 
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(ClickOnTable);
 	StopLooking();
 	PutDownAgent(); // (a click anywhere else lets the agent in hand go, and looks at what was clicked)
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
@@ -5509,9 +6071,10 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		}
 	}
 	Tray.HintLead = FText::GetEmpty();
-	if (bHandSpent && !bBySea && !bByRail)
+	if (bHandSpent && !bHandOrdered && !bBySea && !bByRail)
 	{
-		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens.
+		// (Ruling 87.) An army with no moves left: its order is kept, and it sets off as the next month opens. (One voice
+		// after a press: only before any order is given to it, the one time the foot speaks of next month.)
 		Tray.HintLead = FText::FromString(TEXT("No moves left this month."));
 		Tray.Hint = FText::FromString(TEXT("Right-click a friendly place and they march there from next month."));
 		// (The playtester's run of 17 November: a garrison always reads "no moves", and was promised a march here.)
@@ -5524,9 +6087,10 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 	}
 	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
 	{
-		// (the order is given: the card says so, and how to change it)
-		Tray.HintLead = FText::FromString(bHandSpent ? TEXT("They march from next month.") : TEXT("On the march."));
-		Tray.Hint = FText::FromString(TEXT("They go on by themselves as each month opens. Right-click another place to change the order."));
+		// (One voice after a press.) The order is given and the paper line has said so: the foot says only what a press
+		// would do now, with no brass lead.
+		Tray.HintLead = FText::GetEmpty();
+		Tray.Hint = FText::FromString(TEXT("Right-click another place to change the order."));
 	}
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
@@ -5594,20 +6158,13 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 		Piece->ReturnToRest();
 		OrderTo(RegionId);
 	}
-	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE && bOnTable && !bByRail && !bBySea && FarMonths.Contains(RegionId))
-	{
-		// (Ruling 87.) Set down on friendly ground out of this month's reach: the march is kept, as a right-click keeps it.
-		Piece->ReturnToRest();
-		OrderTo(RegionId);
-	}
 	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE)
 	{
-		// Set down on a country at peace with the player: does he mean war?
+		// (The code checker, 17 November.) Set down anywhere out of this month's reach, the flag goes back and the drop
+		// is answered as a right-click there is: a kept march (ruling 87), the train, the march up to a far enemy and
+		// its attack, the question of war on a country at peace, or the rules' reason why not. One test for both.
 		Piece->ReturnToRest();
-		if (!OfferWar(RegionId))
-		{
-			Notify(bHandSpent ? TEXT("No moves left this month. Friendly ground is where a march can be kept for next month.") : TEXT("They cannot get there this month. Lightened ground is where they can go."));
-		}
+		OrderTo(RegionId);
 	}
 	// Whatever is left of the army where it started goes back to its place.
 	if (HeldPiece.IsValid())
@@ -5618,6 +6175,7 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 
 void ACampaignPlayerController::SelectRegion(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(SelectRegion);
 	if (!Map.IsValid())
 	{
 		return;
@@ -5661,6 +6219,10 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	}
 	const bool bNewInHand = ArmyRegion != RegionId;
 	PutDownAgent(); // (an army in hand: the agent is let go)
+	if (bNewInHand)
+	{
+		bHandOrdered = false; // (one voice after a press: a new hand, and no order given it yet)
+	}
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
@@ -5736,6 +6298,7 @@ void ACampaignPlayerController::PutDownArmy()
 	}
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
+	bHandOrdered = false;
 	RefreshOrders();
 }
 
@@ -5744,6 +6307,14 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 	if (ArmyRegion == INDEX_NONE)
 	{
 		return;
+	}
+	if (const FTrayCard* Card = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& C) { return C.CorpsId == CorpsId; }))
+	{
+		if (!Card->Apart.IsEmpty())
+		{
+			Notify(Card->Apart, 7.0); // (the garrison is not slipped into the field army's hand: the code checker, 17 November)
+			return;
+		}
 	}
 	if (PickedCorps.Contains(CorpsId))
 	{
@@ -5763,7 +6334,17 @@ const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
 
 void ACampaignPlayerController::RefreshOrders()
 {
+	THEATER_SPEED_SCOPE(RefreshOrders);
 	FCampaignSession* Session = GetSession();
+	if (PendingEnemyReach.IsSet())
+	{
+		// (an enemy's reach put off by LaterOrders and not yet shown: it is shown first, as it was before the steps)
+		if (Map.IsValid())
+		{
+			Map->ShowEnemyReach(PendingEnemyReach.GetValue());
+		}
+		PendingEnemyReach.Reset();
+	}
 	++Tray.Revision;
 	Tray.bVisible = false;
 	if (Map.IsValid() && ArmyRegion == INDEX_NONE)
@@ -5866,11 +6447,14 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.MovesMax = Unit.MovesMax;
 		if (Unit.MarchTo != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Unit.MarchTo))
 		{
-			Card.Marching = FString::Printf(TEXT("Marching to %s, about %s"), *Map->GetData().Regions[Unit.MarchTo].Name,
+			// (One voice after a press.) The lasting fact is each corps' own line: on its way, or set off from next month.
+			Card.Marching = Unit.bMarchNext ? FString::Printf(TEXT("Marches to %s from next month"), *Map->GetData().Regions[Unit.MarchTo].Name)
+				: FString::Printf(TEXT("Marching to %s, about %s"), *Map->GetData().Regions[Unit.MarchTo].Name,
 				Unit.MarchMonths <= 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), Unit.MarchMonths));
 		}
 		Card.bCanOrder = Unit.bCanOrder;
 		Card.NoOrders = Unit.NoOrders;
+		Card.bInTown = Unit.bInTown;
 		Card.bPicked = PickedCorps.Contains(Unit.Id);
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
@@ -5902,6 +6486,20 @@ void ACampaignPlayerController::RefreshOrders()
 		Map->SetReach(Reach);
 		return;
 	}
+	// (The code checker, 17 November.) With the army in the field in hand, the town's garrison cannot be clicked in among
+	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why, in
+	// the rules' refusal of 84.2.4 that names the town (the UI director, 17 November: no sentence of the 3D game's own).
+	if (Tray.Cards.ContainsByPredicate([](const FTrayCard& C) { return C.bPicked && !C.bInTown; }))
+	{
+		for (FTrayCard& Card : Tray.Cards)
+		{
+			if (Card.bInTown && !Card.bPicked && Card.bCanOrder)
+			{
+				const FViewCorps* Inside = View.Corps.FindByPredicate([&Card](const FViewCorps& Each) { return Each.Id == Card.CorpsId; });
+				Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
+			}
+		}
+	}
 
 	const FString Adjective = Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : View.Human;
 	const FString Where = Map->GetData().Regions.IsValidIndex(ArmyRegion) ? Map->GetData().Regions[ArmyRegion].Name : FString();
@@ -5909,6 +6507,24 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
+	// (One voice after a press.) The army as the tray's head names it, for the rules' sentences, and the corps it has in
+	// the field (the town's garrison where nobody stands outside), as an army is picked up.
+	HandArmy = General.IsEmpty() ? FString::Printf(TEXT("the %s army"), *Adjective) : FString::Printf(TEXT("%s's army"), *General);
+	HandArmyIds.Reset();
+	{
+		TArray<int32> InTown;
+		for (const FViewCorps& Unit : View.Corps)
+		{
+			if (Unit.Region == ArmyRegion && Unit.Nation == View.Human && Unit.bCanOrder)
+			{
+				(Unit.bInTown ? InTown : HandArmyIds).Add(Unit.Id);
+			}
+		}
+		if (HandArmyIds.Num() == 0)
+		{
+			HandArmyIds = MoveTemp(InTown);
+		}
+	}
 	Mix.ValueSort([](int32 A, int32 B) { return A > B; });
 	TArray<FString> Made;
 	for (const TPair<FString, int32>& Kind : Mix)
@@ -6003,7 +6619,7 @@ void ACampaignPlayerController::RefreshOrders()
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
 	StandingRoad = MoveTemp(Road);
-	Map->SetReach(Reach, bByRail || bBySea);
+	Map->SetReach(Reach, bByRail || bBySea, bOrdersInSteps); // (in steps, the enemy's old reach stands until its own step below)
 	// (Rulings 110, 112, 118; the art director's railway brief.) The second reach, with no switch to press: where a
 	// train would take the army this month beyond its march, shown as light on the railway itself.
 	RailBeyond.Reset();
@@ -6020,7 +6636,7 @@ void ACampaignPlayerController::RefreshOrders()
 				Walked.Add(Step.Region);
 			}
 		}
-		FRailShow Trains = Session->RailShow(PickedCorps, Walked);
+		FRailShow Trains = Session->RailShow(PickedCorps, Walked, HandArmy, HandArmyIds);
 		Trains.Light.From = ArmyRegion;
 		RailBeyond = TSet<int32>(Trains.Light.Tint);
 		Tray.bRailCan = Trains.bCan;
@@ -6028,7 +6644,24 @@ void ACampaignPlayerController::RefreshOrders()
 		Tray.RailLine = Trains.Line;
 		Map->SetRailLight(Trains.Light);
 	}
-	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
+	// (how far the enemy could strike next month: only for an army that marches)
+	if (bOrdersInSteps)
+	{
+		// (Speed, b414 mark 2: after an order's answer, a frame of its own. See LaterOrders.)
+		PendingEnemyReach = Danger;
+		Later([this]()
+		{
+			if (PendingEnemyReach.IsSet() && Map.IsValid())
+			{
+				Map->ShowEnemyReach(PendingEnemyReach.GetValue());
+			}
+			PendingEnemyReach.Reset();
+		});
+	}
+	else
+	{
+		Map->ShowEnemyReach(Danger);
+	}
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
 	{
@@ -6044,6 +6677,7 @@ void ACampaignPlayerController::RefreshOrders()
 
 void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(ShowRouteTo);
 	if (RegionId == RouteTarget || !Map.IsValid())
 	{
 		return;
@@ -6124,8 +6758,47 @@ bool ACampaignPlayerController::OpenApproach(int32 RegionId, bool bSayNone)
 		WarPrompt.Tag = Foe->Nation;
 	}
 	WarPrompt.Name = Plan.Name;
-	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("March on the enemy at %s"), *Plan.Name));
-	WarPrompt.Confirm = FText::FromString(TEXT("MARCH"));
+	if (!Plan.Foe.IsEmpty())
+	{
+		WarPrompt.Tag = Plan.Foe;
+	}
+	// (Rules 84.5; the UI director's sheet 34.) The card in the landing card's parts: the kicker and the date, the title,
+	// the two sides with THE ROAD between them, and the fixed foot, CALL IT OFF and MARCH UP. Its words are the sheet's.
+	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Marching on %s"), *Plan.Name));
+	WarPrompt.Kicker = FString::Printf(TEXT("MARCH UP AND ATTACK  \u00B7  %s"), *View.Date.ToUpper());
+	WarPrompt.OursTag = View.Human;
+	// (One voice after a press: who is named.) The whole army in hand as the tray's head names it, part of it as "2 corps
+	// of the American army", and one corps alone by its name without the bracket.
+	if (PickedCorps.Num() == 1)
+	{
+		const FViewCorps* Alone = View.Corps.FindByPredicate([this](const FViewCorps& Each) { return Each.Id == PickedCorps[0]; });
+		FString Called = Alone ? Alone->Name : HandArmy;
+		int32 Open = INDEX_NONE;
+		if (Called.EndsWith(TEXT(")")) && Called.FindLastChar(TEXT('('), Open) && Called.Mid(Open).Contains(TEXT("Division")))
+		{
+			Called = Called.Left(Open).TrimEnd();
+		}
+		WarPrompt.OursName = Called;
+	}
+	else if (PickedCorps.Num() == HandArmyIds.Num() && !PickedCorps.ContainsByPredicate([this](int32 Id) { return !HandArmyIds.Contains(Id); }))
+	{
+		WarPrompt.OursName = HandArmy;
+	}
+	else
+	{
+		WarPrompt.OursName = FString::Printf(TEXT("%d corps of %s"), PickedCorps.Num(), *HandArmy);
+	}
+	if (!WarPrompt.OursName.IsEmpty())
+	{
+		WarPrompt.OursName[0] = FChar::ToUpper(WarPrompt.OursName[0]);
+	}
+	WarPrompt.OursLine = Plan.Ours;
+	WarPrompt.FoeName = Plan.FoeName;
+	WarPrompt.FoeLine = Plan.FoeLine;
+	WarPrompt.From = Plan.From;
+	WarPrompt.WaysHead = FText::FromString(TEXT("THE APPROACH"));
+	WarPrompt.WaysNote = FText::FromString(Plan.Rows.Num() > 1 ? TEXT("press a row to go another way") : TEXT("the only one in reach this month"));
+	WarPrompt.Confirm = FText::FromString(TEXT("MARCH UP"));
 	WarPrompt.Cancel = FText::FromString(TEXT("CALL IT OFF"));
 	WarPromptSince = FPlatformTime::Seconds();
 	DressApproach();
@@ -6141,17 +6814,26 @@ void ACampaignPlayerController::DressApproach()
 		return;
 	}
 	const FApproachRow& Way = WarPrompt.Ways[WarPrompt.Way];
-	FString Body = FString::Printf(TEXT("An army attacks from the province next door. This one marches to %s and comes up beside the enemy at %s.\n%s."), *Way.Name, *WarPrompt.Name, *Way.Arrive);
-	Body += FString::Printf(TEXT("\nThe way in from %s: %s."), *Way.Name, *Way.How);
-	if (!Way.Says.IsEmpty())
+	// (Rules 84.5; sheet 34, the words passed at 16:23 UTC.) The headline is what he gets on arrival, bright where he can
+	// attack this month and amber where the attack waits; under it the staff's pick and what Enter does.
+	const FString Army = WarPrompt.OursName.IsEmpty() ? FString(TEXT("The army")) : WarPrompt.OursName;
+	const FString ArmyMid = Army.StartsWith(TEXT("The "), ESearchCase::CaseSensitive) ? TEXT("the") + Army.Mid(3) : Army; // (inside a sentence)
+	WarPrompt.Road = FString::Printf(TEXT("from %s to %s, beside the enemy"), *WarPrompt.From, *Way.Name);
+	WarPrompt.Headline = FText::FromString(Way.Arrive);
+	WarPrompt.bHeadAmber = !Way.bAttack;
+	FString Under;
+	if (Way.bAttack)
 	{
-		Body += TEXT("\n") + Way.Says;
+		Under = WarPrompt.Way == 0 ? FString::Printf(TEXT("The staff takes you by %s, the ground beside the enemy that is reached soonest. "), *Way.Name) : FString();
+		Under += FString::Printf(TEXT("When %s arrives the attack card opens, with the odds in front of you."), *ArmyMid);
 	}
-	WarPrompt.Body = FText::FromString(Body);
-	WarPrompt.Last = FText::FromString(Way.bAttack
-		? TEXT("When the army arrives the attack card opens, and nothing is fought until you send them in.")
-		: TEXT("Only the march is carried out this month."));
-	WarPrompt.WaysHead = WarPrompt.Ways.Num() > 1 ? FText::FromString(TEXT("THE WAYS UP")) : FText::GetEmpty();
+	else
+	{
+		Under = FString::Printf(TEXT("The march alone is carried out. %s ends the month at %s, beside the enemy."), *Army, *Way.Name);
+	}
+	WarPrompt.Under = FText::FromString(Under);
+	WarPrompt.Body = FText::GetEmpty();
+	WarPrompt.Last = FText::GetEmpty();
 	// The road is drawn: to the approach, and on to the enemy.
 	TArray<int32> Road = Way.Road;
 	Road.Add(WarPrompt.ApproachTo);
@@ -6182,12 +6864,91 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 	const FApproachRow Way = Asked.Ways[Asked.Way];
 	const int32 Enemy = Asked.ApproachTo;
 	RouteTarget = -3;
+	// (The code checker, 17 November.) Only the corps that can reach that province this month are sent by its row: the
+	// rest of the hand stays where it is, and is given no march to a later month.
+	if (Way.Going.Num() > 0)
+	{
+		PickedCorps.RemoveAll([&Way](int32 Id) { return !Way.Going.Contains(Id); });
+		if (PickedCorps.Num() == 0)
+		{
+			PickedCorps = Way.Going;
+		}
+	}
+	TMap<int32, int32> StoodAt;
+	for (const FViewCorps& Unit : Session->GetView().Corps)
+	{
+		if (PickedCorps.Contains(Unit.Id))
+		{
+			StoodAt.Add(Unit.Id, Unit.Region);
+		}
+	}
+	// (the army as the tray named it when the order was given: the paper names it the same way if it stops short)
+	const FString ArmyWas = HandArmy;
+	const TArray<int32> ArmyIdsWas = HandArmyIds;
 	// The march, as a right-click on the approach would give it (the same order, the same words where it says any).
 	RefreshOrders();
 	OrderTo(Way.Region);
-	if (ArmyRegion != Way.Region || FaceOff.bVisible || WarPrompt.bVisible)
+	if (FaceOff.bVisible || WarPrompt.bVisible)
 	{
-		return; // (the march did not get there, or it has a question of its own to ask first)
+		return; // (it has a question of its own to ask first)
+	}
+	{
+		// Where the corps set off and none of them got there, the paper says where the army stops, naming it as the rest
+		// of "One voice after a press" does (the UI director, 17 November). Where none set off the order has already said
+		// why, and where the march goes on by itself next month the kept march's own sentence has said so.
+		FString StoppedAt;
+		bool bArrived = false, bKept = false;
+		TArray<const FViewCorps*> Went;
+		for (const FViewCorps& Unit : Session->GetView().Corps)
+		{
+			const int32* From = StoodAt.Find(Unit.Id);
+			if (!From || Unit.Region == *From)
+			{
+				continue;
+			}
+			Went.Add(&Unit);
+			bArrived = bArrived || Unit.Region == Way.Region;
+			bKept = bKept || Unit.MarchTo != INDEX_NONE;
+			if (StoppedAt.IsEmpty() && Map->GetData().Regions.IsValidIndex(Unit.Region))
+			{
+				StoppedAt = Map->GetData().Regions[Unit.Region].Name;
+			}
+		}
+		if (!bArrived)
+		{
+			if (Went.Num() > 0 && !bKept && !StoppedAt.IsEmpty())
+			{
+				// Whole army "The American army"; part "2 corps of the American army"; one corps by its name, without the bracket.
+				FString Who;
+				if (Went.Num() == 1)
+				{
+					Who = Went[0]->Name;
+					int32 Open = INDEX_NONE;
+					if (Who.EndsWith(TEXT(")")) && Who.FindLastChar(TEXT('('), Open) && Who.Mid(Open).Contains(TEXT("Division")))
+					{
+						Who = Who.Left(Open).TrimEnd();
+					}
+				}
+				else if (Went.Num() == ArmyIdsWas.Num() && !Went.ContainsByPredicate([&ArmyIdsWas](const FViewCorps* Each) { return !ArmyIdsWas.Contains(Each->Id); }))
+				{
+					Who = ArmyWas;
+				}
+				else
+				{
+					Who = FString::Printf(TEXT("%d corps of %s"), Went.Num(), *ArmyWas);
+				}
+				if (!Who.IsEmpty())
+				{
+					Who[0] = FChar::ToUpper(Who[0]);
+					Notify(FString::Printf(TEXT("%s stops at %s this month, short of %s."), *Who, *StoppedAt, *Way.Name), 9.0);
+				}
+			}
+			return;
+		}
+	}
+	if (ArmyRegion != Way.Region)
+	{
+		return;
 	}
 	const FReachRegion* There = FindReach(Enemy);
 	if (There && There->bAttack)
@@ -6198,7 +6959,9 @@ void ACampaignPlayerController::CarryOutApproach(const FWarPrompt& Asked)
 			return;
 		}
 	}
-	Notify(FString::Printf(TEXT("The army stands at %s, beside the enemy at %s. It has no move left this month: the attack waits for next month."), *Way.Name, *Asked.Name), 9.0);
+	// (Rules 84.5; sheet 34.) The march alone was carried out: what the paper says after Enter on the amber card.
+	Notify(FString::Printf(TEXT("%s has marched to %s. No move is left this month: right-click the army round %s next month to plan the attack."),
+		Asked.OursName.IsEmpty() ? TEXT("The army") : *Asked.OursName, *Way.Name, *Asked.Name), 9.0);
 }
 
 FString ACampaignPlayerController::GarrisonWhere() const
@@ -6436,6 +7199,17 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		Notify(TEXT("War cannot be declared on them this month."));
 		return;
 	}
+	if (!bByRail && !bBySea)
+	{
+		// (Rules 84.2.5; ruling 211(a).) Guns and engineers never go forward alone: no attack, no storm, no march onto
+		// enemy-held ground without a fighting corps. The rules' sentence answers the press, and nothing is ordered.
+		const FString Alone = Session->WhyNotLead(PickedCorps, RegionId);
+		if (!Alone.IsEmpty())
+		{
+			Notify(Alone, 7.0);
+			return;
+		}
+	}
 	if (!Target && !bByRail && !bBySea && !bHandSpent && OpenApproach(RegionId, false))
 	{
 		// (The design director, 17 November.) An enemy army that is not next door, with ground beside it in this
@@ -6452,6 +7226,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
 			return;
 		}
+		bHandOrdered = true;
 		ShowWar(Session->GetView(), Trains, CarriedFrom);
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
@@ -6474,39 +7249,30 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		// (release 1) Friendly ground too far for this month: a march that carries on. The army sets off at once, as
 		// far as it can go, and the rules send it on as each month opens.
 		AdviserSaw(1);
-		FString Said;
 		const bool bWasSpent = bHandSpent;
-		const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
-		if (Said.IsEmpty() && Marches.Num() == 0)
-		{
-			Notify(TEXT("They cannot march there."), 5.0);
-			return;
-		}
-		if (bWasSpent && !bMarchSlipDone)
-		{
-			bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
-			SaveOptions();
-		}
-		if (!Said.IsEmpty())
-		{
-			Notify(Said, 10.0);
-		}
-		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
-		if (Marches.Num() > 0)
-		{
-			ShowWar(Session->GetView(), Marches, CarriedFrom);
-			PickedCorps.Reset();
-			for (const FCorpsMove& March : Marches)
+		// (One voice after a press.) The rules' one sentence answers the press, naming the army as the tray's head does.
+		// (Speed, b414 mark 1.) Answered on the rules' own thread: see AfterFarMarch.
+		const TOptional<FVector> Carried = CarriedFrom ? TOptional<FVector>(*CarriedFrom) : TOptional<FVector>();
+		const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+		Session->MoveAside(PickedCorps, RegionId, HandArmy, HandArmyIds, !bScripted,
+			[Here = ArmyRegion, Hand = PickedCorps, Adjective = HandAdjective()](const FCampaignSession::FMoveAnswer& Answer)
 			{
-				PickedCorps.Add(March.CorpsId);
-			}
-			if (Marches[0].Path.Num() > 0)
+				// (the army goes as far as it can this month, and is in hand where the first march ends)
+				const int32 Ends = Answer.Moved.Num() > 0 && Answer.Moved[0].Path.Num() > 0 ? Answer.Moved[0].Path.Last() : Here;
+				FCampaignSession::FHandNext Next = HandOf(Answer.Moved, Ends, Ends, true, Adjective);
+				if (Answer.Moved.Num() == 0)
+				{
+					Next.Ids = Hand;
+				}
+				return Next;
+			},
+			[Self, bWasSpent, Carried](const FCampaignSession::FMoveAnswer& Answer)
 			{
-				ArmyRegion = Marches[0].Path.Last();
-			}
-		}
-		RefreshOrders();
-		SelectRegion(ArmyRegion);
+				if (ACampaignPlayerController* Me = Self.Get())
+				{
+					Me->AfterFarMarch(Answer.Moved, Answer.Note, bWasSpent, Carried);
+				}
+			});
 		return;
 	}
 	if (!Target)
@@ -6544,6 +7310,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
 			return;
 		}
+		bHandOrdered = true;
 		ShowWar(Session->GetView(), Trains, CarriedFrom);
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
@@ -6576,8 +7343,32 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 
 	AdviserSaw(1);
-	FString Said;
-	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
+	// (Speed, the design director's mark 1 for build 414: a press's own work under a tenth of a second.) The march is
+	// answered by the rules on their own thread, with what the army in hand will ask next; the answer is laid on the
+	// table when it comes, a frame or a few later (AfterMarch).
+	const TOptional<FVector> Carried = CarriedFrom ? TOptional<FVector>(*CarriedFrom) : TOptional<FVector>();
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->MoveAside(PickedCorps, RegionId, HandArmy, HandArmyIds, !bScripted,
+		[RegionId, Adjective = HandAdjective()](const FCampaignSession::FMoveAnswer& Answer)
+		{
+			return Answer.Moved.Num() > 0 ? HandOf(Answer.Moved, RegionId, RegionId, true, Adjective) : FCampaignSession::FHandNext();
+		},
+		[Self, RegionId, MarchSays, MarchMeets, Carried](const FCampaignSession::FMoveAnswer& Answer)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterMarch(RegionId, Answer.Moved, Answer.Note, MarchSays, MarchMeets, Carried);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterMarch(int32 RegionId, const TArray<FCorpsMove>& Marches, FString Said, const FString& MarchSays, const FString& MarchMeets, const TOptional<FVector>& Carried)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
 	if (Said.IsEmpty() && Marches.Num() > 0 && Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; }))
 	{
 		Said = MarchSays; // (said once the army is there)
@@ -6588,11 +7379,12 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		Notify(Said.IsEmpty() ? FString(TEXT("They cannot get there this month.")) : Said, Said.IsEmpty() ? 5.0 : 9.0);
 		return;
 	}
+	bHandOrdered = true;
 	if (!Said.IsEmpty())
 	{
 		Notify(Said, 7.0);
 	}
-	ShowWar(Session->GetView(), Marches, CarriedFrom);
+	ShowWar(Session->GetView(), Marches, Carried.IsSet() ? &Carried.GetValue() : nullptr, true);
 	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 
 	// The army in hand is now the corps that marched, where they have arrived.
@@ -6602,19 +7394,65 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		PickedCorps.Add(March.CorpsId);
 	}
 	ArmyRegion = RegionId;
-	RefreshOrders();
-	SelectRegion(RegionId);
-	if (MarchMeets == TEXT("unknown") && Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; }))
+	const bool bArrived = Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; });
+	LaterOrders([this, RegionId, bUnseenTown = MarchMeets == TEXT("unknown") && bArrived]()
 	{
-		// (Rulings 207 and 182 as changed, 17 November.) The army has come up to a town its reports could not see into
-		// and stands round it. No card opens by itself in the middle of his orders: where only the town guard holds
-		// it, the paper line says so, and the storm's card opens when he presses for it.
-		const FAttackPreview Found = Session->PreviewStorm(RegionId);
-		if (Found.bValid && Found.bForecast && Found.Meets == TEXT("guard"))
+		FCampaignSession* Now = GetSession();
+		SelectRegion(RegionId);
+		if (Now && bUnseenTown)
 		{
-			Notify(FString::Printf(TEXT("Only its town guard holds %s. Right-click the town to plan the storm."), *Found.Town), 10.0);
+			// (Rulings 207 and 182 as changed, 17 November.) The army has come up to a town its reports could not see into
+			// and stands round it. No card opens by itself in the middle of his orders: where only the town guard holds
+			// it, the paper line says so, and the storm's card opens when he presses for it.
+			const FAttackPreview Found = Now->PreviewStorm(RegionId);
+			if (Found.bValid && Found.bForecast && Found.Meets == TEXT("guard"))
+			{
+				Notify(FString::Printf(TEXT("Only its town guard holds %s. Right-click the town to plan the storm."), *Found.Town), 10.0);
+			}
+		}
+	});
+}
+
+void ACampaignPlayerController::AfterFarMarch(const TArray<FCorpsMove>& Marches, const FString& Said, bool bWasSpent, const TOptional<FVector>& Carried)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	if (Said.IsEmpty() && Marches.Num() == 0)
+	{
+		Notify(TEXT("They cannot march there."), 5.0);
+		return;
+	}
+	bHandOrdered = true; // (the slip is put away, and the foot says only how to change the order)
+	if (bWasSpent && !bMarchSlipDone)
+	{
+		bMarchSlipDone = true; // (ruling 87: one march kept for a spent army, and the slip has done its work)
+		SaveOptions();
+	}
+	if (!Said.IsEmpty())
+	{
+		Notify(Said, 10.0);
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+	if (Marches.Num() > 0)
+	{
+		ShowWar(Session->GetView(), Marches, Carried.IsSet() ? &Carried.GetValue() : nullptr, true);
+		PickedCorps.Reset();
+		for (const FCorpsMove& March : Marches)
+		{
+			PickedCorps.Add(March.CorpsId);
+		}
+		if (Marches[0].Path.Num() > 0)
+		{
+			ArmyRegion = Marches[0].Path.Last();
 		}
 	}
+	LaterOrders([this]()
+	{
+		SelectRegion(ArmyRegion);
+	});
 }
 
 bool ACampaignPlayerController::IsTableBusy() const
@@ -6622,8 +7460,68 @@ bool ACampaignPlayerController::IsTableBusy() const
 	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
 }
 
+bool ACampaignPlayerController::IsAnswering() const
+{
+	if (Afterwards.Num() > 0)
+	{
+		return true;
+	}
+	const ACampaignGameMode* Mode = GetMode();
+	const FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr;
+	return Session && Session->IsAnswering();
+}
+
+void ACampaignPlayerController::Later(TFunction<void()>&& Step)
+{
+	if (bScripted || CVarPictureFirst.GetValueOnGameThread() == 0)
+	{
+		Step();
+		return;
+	}
+	Afterwards.Add(MoveTemp(Step));
+}
+
+void ACampaignPlayerController::LaterOrders(TFunction<void()>&& Then)
+{
+	Later([this]()
+	{
+		bOrdersInSteps = true;
+		RefreshOrders();
+		bOrdersInSteps = false;
+	});
+	Later(MoveTemp(Then));
+}
+
+void ACampaignPlayerController::FinishAnswer()
+{
+	const ACampaignGameMode* Mode = GetMode();
+	if (FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr)
+	{
+		Session->Deliver(true);
+	}
+	while (Afterwards.Num() > 0)
+	{
+		const TFunction<void()> Step = MoveTemp(Afterwards[0]);
+		Afterwards.RemoveAt(0);
+		Step();
+	}
+}
+
+FString ACampaignPlayerController::HandAdjective() const
+{
+	const FCampaignSession* Session = GetSession();
+	const FString Human = Session ? Session->GetView().Human : FString();
+	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Human) : nullptr;
+	return Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : Human;
+}
+
 void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOnTheTable)
 {
+	THEATER_SPEED_SCOPE(RightClickOn);
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1: the last order is still being answered; the playtester's hook comes here too)
+	}
 	if (AgentInHand != INDEX_NONE)
 	{
 		// (Ruling 169.) The agent in hand is sent with a right-click, as an army is. An agent may go anywhere:
@@ -6675,7 +7573,8 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 
 bool ACampaignPlayerController::IsBusyForSteps() const
 {
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible;
+	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering();
 }
 
 void ACampaignPlayerController::StepThroughMonth()
@@ -6705,6 +7604,7 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	{
 		return false;
 	}
+	FinishAnswer(); // (an order still being answered is laid on the table it was given on, before that table is put away)
 	// (whatever is open or in hand belongs to the game being left)
 	if (FaceOff.bVisible)
 	{
@@ -6797,6 +7697,7 @@ bool ACampaignPlayerController::ClickGate(const FString& NameBegins)
 
 void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const
 {
+	THEATER_SPEED_SCOPE(HarnessDescribeScreen);
 	// The card or page on top, by its title.
 	if (FaceOff.bVisible) { OutOpen = FaceOff.Title.ToString() + (FaceOff.bResolved ? TEXT(" (the result)") : TEXT("")); }
 	else if (WarPrompt.bVisible) { OutOpen = WarPrompt.Title.ToString(); }
@@ -6875,7 +7776,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 		return false;
 	}
 	const FCampaignNation* Nation = Map->GetData().FindNation(Tag);
-	const FString Name = Nation ? Nation->Name : Tag;
+	const FString Name = Nation ? WithThe(Nation->Name) : Tag; // (84.2.6: "Declare war on the United States?")
 	WarPrompt = FWarPrompt();
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
@@ -6899,7 +7800,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 	{
 		WarPrompt.Body = FText::FromString(FString::Printf(
 			TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
-			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *Name));
+			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *HeadThe(Name)));
 	}
 	if (WarPrompt.Region != INDEX_NONE)
 	{
@@ -6939,37 +7840,37 @@ void ACampaignPlayerController::ConfirmWar()
 	}
 	if (Asked.bLanding)
 	{
-		// The landing goes in.
+		// The landing goes in. (The card is down and the guns are heard at once; the rules answer on their own thread,
+		// with what the army ashore will ask next: speed, b414 mark 1. See AfterLanding.)
 		CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
 		CampaignSounds::PlayLater(this, TEXT("battle"), 0.8f, 0.7f);
-		const FLandingResult Result = Session->Land(PickedCorps, Asked.Region);
-		if (Map.IsValid() && Result.bOk)
-		{
-			Map->AddBattleSmoke(Asked.Region);
-		}
-		ShowWar(Session->GetView(), Result.Moved);
-		if (Result.bOk)
-		{
-			CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 3.2f, 0.6f);
-		}
-		if (Result.Moved.Num() > 0)
-		{
-			PickedCorps.Reset();
-			for (const FCorpsMove& Ashore : Result.Moved)
+		const int32 Beach = Asked.Region;
+		const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+		Session->LandAside(PickedCorps, Beach, !bScripted,
+			[Beach, Here = ArmyRegion, Hand = PickedCorps, bPlain = !bByRail, Adjective = HandAdjective()](const FLandingResult& Result)
 			{
-				PickedCorps.Add(Ashore.CorpsId);
-			}
-			ArmyRegion = Asked.Region;
-		}
-		bBySea = false;
-		RefreshOrders();
-		SelectRegion(Result.bTaken ? Asked.Region : ArmyRegion);
-		Notify(Result.Note, 9.0);
+				const bool bAshore = Result.Moved.Num() > 0;
+				FCampaignSession::FHandNext Next = HandOf(Result.Moved, bAshore ? Beach : Here, INDEX_NONE, bPlain, Adjective);
+				if (!bAshore)
+				{
+					Next.Ids = Hand;
+				}
+				Next.Selected = Result.bTaken ? Beach : Next.Region;
+				return Next;
+			},
+			[Self, Beach](const FLandingResult& Result)
+			{
+				if (ACampaignPlayerController* Me = Self.Get())
+				{
+					Me->AfterLanding(Beach, Result);
+				}
+			});
 		return;
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
-	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? Nation->Name : Asked.Tag;
-	if (!Session->Declare(Asked.Tag))
+	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? WithThe(Nation->Name) : Asked.Tag;
+	FString Answered;
+	if (!Session->Declare(Asked.Tag, &Answered))
 	{
 		Notify(FString::Printf(TEXT("War could not be declared on %s this month."), *Name));
 		return;
@@ -6977,7 +7878,9 @@ void ACampaignPlayerController::ConfirmWar()
 	// The table as it stands now: their ground is enemy ground, and the army in hand may be able to reach it.
 	ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	RefreshOrders();
-	Notify(FString::Printf(TEXT("War is declared on %s."), *Name), 6.0);
+	// (Rules 84.2.5; the UI director, 17 November: one voice after a press.) A war that brings another at once says so on
+	// the same paper, in the rules' words: "Britain stands by Canada. Britain declares war on the United States: ..."
+	Notify(Answered.IsEmpty() ? FString::Printf(TEXT("War is declared on %s."), *Name) : FString::Printf(TEXT("War is declared on %s. %s"), *Name, *Answered), Answered.IsEmpty() ? 6.0 : 11.0);
 	CampaignSounds::Play(this, TEXT("siren"), 0.5f);
 	const FReachRegion* Onward = Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE ? FindReach(Asked.Region) : nullptr;
 	if (Onward && !Onward->IsWar())
@@ -6993,6 +7896,39 @@ void ACampaignPlayerController::ConfirmWar()
 	{
 		OpenDiplomacy();
 	}
+}
+
+void ACampaignPlayerController::AfterLanding(int32 RegionId, const FLandingResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
+	if (Map.IsValid() && Result.bOk)
+	{
+		Map->AddBattleSmoke(RegionId);
+	}
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
+	if (Result.bOk)
+	{
+		CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 3.2f, 0.6f);
+	}
+	if (Result.Moved.Num() > 0)
+	{
+		PickedCorps.Reset();
+		for (const FCorpsMove& Ashore : Result.Moved)
+		{
+			PickedCorps.Add(Ashore.CorpsId);
+		}
+		ArmyRegion = RegionId;
+	}
+	bBySea = false;
+	LaterOrders([this, RegionId, bTaken = Result.bTaken, Note = Result.Note]()
+	{
+		SelectRegion(bTaken ? RegionId : ArmyRegion);
+		Notify(Note, 9.0);
+	});
 }
 
 void ACampaignPlayerController::CloseWarPrompt()
@@ -7011,8 +7947,9 @@ void ACampaignPlayerController::CloseWarPrompt()
 	}
 }
 
-void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
+void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom, bool bPictureFirst)
 {
+	THEATER_SPEED_SCOPE(ShowWar);
 	if (Map.IsValid())
 	{
 		if (!Map->HasLand())
@@ -7045,6 +7982,31 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		{
 			PutDownAgent(); // (caught, or retired, while in hand)
 		}
+	}
+	// (Speed, b414 mark 1; the speed detective's "change the picture first".) After an order, the ground's new holders
+	// and the armies where they now stand are the press's own picture; the works, the scars, the front line, the haze
+	// and the rest follow a frame later.
+	if (bPictureFirst)
+	{
+		Later([this]()
+		{
+			if (const FCampaignSession* Now = GetSession())
+			{
+				ShowWarRest(Now->GetView());
+			}
+		});
+	}
+	else
+	{
+		ShowWarRest(View);
+	}
+}
+
+void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
+{
+	THEATER_SPEED_SCOPE(ShowWarRest);
+	if (Map.IsValid())
+	{
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowCuts(View.Cuts);
 		Map->ShowCivic(View.Civic);
@@ -7079,28 +8041,44 @@ namespace
 		return FText::AsNumber(Number).ToString();
 	}
 
-	/** The corps of one side of a battle, a line each. After the battle the line says what it cost and what became of them. */
-	FString ListUnits(const TArray<FBattleUnit>& Units, bool bAfter)
+	/**
+	 * The corps of one side of a battle: each one's name, and its figures, which never fold. After the battle the
+	 * figures say what it cost and what became of them. (The UI director, check 19: the card sets the two on one line
+	 * where they fit, and the name over its figures where they do not; the dot stands only between facts on one line.)
+	 */
+	TArray<FRosterLine> RosterOf(const TArray<FBattleUnit>& Units, bool bAfter)
 	{
-		TArray<FString> Lines;
+		TArray<FRosterLine> Roster;
 		for (const FBattleUnit& Unit : Units)
 		{
+			FRosterLine& Row = Roster.AddDefaulted_GetRef();
+			Row.Name = Unit.Name;
 			// A corps not identified has no arm and no numbers to give.
-			FString Line = Unit.Kind.IsEmpty() ? Unit.Name : FString::Printf(TEXT("%s \u00B7 %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
-				Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s"));
+			TArray<FString> Facts;
+			if (!Unit.Kind.IsEmpty())
+			{
+				Facts.Add(FString::Printf(TEXT("%s, %d division%s"), *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s")));
+			}
 			if (bAfter)
 			{
-				Line += FString::Printf(TEXT(" \u00B7 lost %s"), *Thousands(Unit.Lost));
-				if (!Unit.Fate.IsEmpty())
-				{
-					Line += FString::Printf(TEXT(", %s"), *Unit.Fate);
-				}
+				Facts.Add(Unit.Fate.IsEmpty() ? FString::Printf(TEXT("lost %s"), *Thousands(Unit.Lost)) : FString::Printf(TEXT("lost %s, %s"), *Thousands(Unit.Lost), *Unit.Fate));
 			}
 			else if (Unit.Men > 0)
 			{
-				Line += FString::Printf(TEXT(" \u00B7 %s men"), *Thousands(Unit.Men));
+				Facts.Add(FString::Printf(TEXT("%s men"), *Thousands(Unit.Men)));
 			}
-			Lines.Add(CampaignText::Phrases(Line)); // (it folds only after a separator dot, never inside a phrase)
+			Row.Figures = FString::Join(Facts, TEXT(" \u00B7 "));
+		}
+		return Roster;
+	}
+
+	/** The same corps as plain text, a line each, for anything that reads the card as words. */
+	FString ListUnits(const TArray<FRosterLine>& Roster)
+	{
+		TArray<FString> Lines;
+		for (const FRosterLine& Row : Roster)
+		{
+			Lines.Add(Row.Figures.IsEmpty() ? Row.Name : Row.Name + TEXT(" \u00B7 ") + Row.Figures);
 		}
 		return FString::Join(Lines, TEXT("\n"));
 	}
@@ -7115,6 +8093,25 @@ namespace
 			}
 		}
 		return FString();
+	}
+
+	/**
+	 * (The UI director, 17 November, on Version 84.3.) The chance of taking a place, on the card's odds line: at the
+	 * ends of the scale in words, never "about 100%" or "about 0%". The bridge says the row of everyone in reach the
+	 * same way (chanceTo), and both follow the browser's endSaid (Rules 84.3.1): bNamed where the line has already
+	 * named the staff ("The staff's estimate: ...").
+	 */
+	FString ChanceTo(const FString& Words, const FString& Place, bool bNamed = false)
+	{
+		if (Words == TEXT("about 100%"))
+		{
+			return bNamed ? TEXT("they are sure of it") : TEXT("your staff is sure of it");
+		}
+		if (Words == TEXT("about 0%"))
+		{
+			return bNamed ? TEXT("they give it no chance") : TEXT("your staff gives it no chance");
+		}
+		return FString::Printf(TEXT("%s to take %s"), *Words, *Place);
 	}
 
 	FString StrengthLine(const TArray<FBattleUnit>& Units)
@@ -7175,7 +8172,8 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	const FAttackPreview Preview = Given ? *Given : Session->PreviewAttack(PickedCorps, RegionId, bOpening);
 	if (Preview.bValid && Preview.Attackers.Num() > 0)
 	{
-		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
+		// the two sides are drawn up (and where the pick cannot go, the card only turns over)
+		CampaignSounds::Play(this, Preview.Alone.IsEmpty() ? TEXT("drums") : TEXT("click"), 0.6f);
 	}
 	if (!Preview.Refused.IsEmpty())
 	{
@@ -7240,27 +8238,53 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.OurTag = View.Human;
 	FaceOff.TheirTag = TheirTag;
 	const FString OurGeneral = SeniorGeneral(Preview.Attackers), TheirGeneral = SeniorGeneral(Preview.Defenders);
-	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? FString(TEXT("No general named")) : OurGeneral);
-	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? FString(TEXT("No general named")) : TheirGeneral);
+	// (Ruled by the design director at 16:52 UTC on 17 November.) Where no general is named, the large line carries the
+	// force's own name, as the map's flag and the province panel give it ("American army", "Mexican army"). A named
+	// general takes the line back.
+	auto ForceName = [](const FCampaignNation* Nation, const FString& Tag)
+	{
+		return FString::Printf(TEXT("%s army"), Nation && !Nation->Adjective.IsEmpty() ? *Nation->Adjective : *Tag);
+	};
+	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? ForceName(Ours, View.Human) : OurGeneral);
+	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? ForceName(Theirs, TheirTag) : TheirGeneral);
 	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
 	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
-	FaceOff.OurUnits = FText::FromString(ListUnits(Preview.Attackers, false));
-	FaceOff.TheirUnits = FText::FromString(ListUnits(Preview.Defenders, false));
+	FaceOff.Alone = FText::FromString(Preview.Alone);
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (The UI director, 17 November.) The corps picked, as they were picked, and the men among them who could take
+		// the ground: none.
+		int32 Divisions = 0;
+		for (const FBattleUnit& Unit : Preview.Attackers)
+		{
+			Divisions += Unit.Divisions;
+		}
+		FaceOff.OurStrength = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  0 men taking ground"),
+			Preview.Attackers.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"))));
+	}
+	FaceOff.OurRoster = RosterOf(Preview.Attackers, false);
+	FaceOff.TheirRoster = RosterOf(Preview.Defenders, false);
+	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
 	FaceOff.Prize = FText::FromString(Preview.Prize);
-	if (Preview.bExact)
+	if (!Preview.Alone.IsEmpty())
+	{
+		// (the pick cannot go: there is no forecast, and the foot says why)
+	}
+	else if (Preview.bExact)
 	{
 		FString Odds = Preview.Odds >= 1.0f
 			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
 			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f));
-		// (the chance is printed as 100 per cent only when the attack cannot fail)
+		// (the chance is "sure" only when the attack cannot fail, and said in words at the ends of the scale)
 		if (!Preview.ChanceWords.IsEmpty())
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place);
 		}
 		else if (Preview.ChancePct >= 0)
 		{
-			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePct), Place);
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 	}
@@ -7272,13 +8296,13 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 		if (!Preview.ChanceWords.IsEmpty())
 		{
 			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
-			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+			Odds += TEXT("  \u00B7  ") + ChanceTo(Preview.ChanceWords, Place, /*bNamed*/ true);
 		}
 		else if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
 		{
-			Odds += Preview.ChancePctLow == Preview.ChancePctHigh
-				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
-				: FString::Printf(TEXT("  \u00B7  %d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place);
+			Odds += TEXT("  \u00B7  ") + (Preview.ChancePctLow == Preview.ChancePctHigh
+				? ChanceTo(FString::Printf(TEXT("about %d%%"), Preview.ChancePctLow), Place, /*bNamed*/ true)
+				: FString::Printf(TEXT("%d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place));
 		}
 		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 		// (Version 84: where WHAT YOU FACE says what is not scouted, it says it once. The staff's longer note stands
@@ -7480,7 +8504,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 			: FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Low), *Say(High));
 		if (!ChanceWords.IsEmpty())
 		{
-			Line += FString::Printf(TEXT("  \u00B7  %s to take %s"), *ChanceWords, *Town);
+			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town, /*bNamed*/ !bExact); // (the estimate's line names the staff)
 		}
 		return FText::FromString(CampaignText::Phrases(Line));
 	};
@@ -7492,6 +8516,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 	FaceOff.TheirGeneral = FText::FromString(Preview.GuardName.IsEmpty() ? FString::Printf(TEXT("Town guard of %s"), *Town) : Preview.GuardName);
 	FaceOff.TheirStrength = FText::FromString(Preview.GuardLine);
 	FaceOff.TheirUnits = FText::FromString(Preview.GuardWho);
+	FaceOff.TheirRoster.Reset(); // (the guard is said in a sentence, not listed corps by corps)
 	// Block 1 is SEND THEM IN's forecast (the card's own bar and odds), with its heading and its sentence.
 	FaceOff.NowLabel = FText::FromString(Preview.NowLabel.IsEmpty() ? FString(TEXT("SEND THEM IN")) : Preview.NowLabel);
 	FaceOff.NowSays = FText::FromString(Preview.NowSays);
@@ -7507,7 +8532,7 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || !(FaceOff.bMarch || FaceOff.bStorm))
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !(FaceOff.bMarch || FaceOff.bStorm))
 	{
 		return;
 	}
@@ -7521,17 +8546,39 @@ void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 		CloseFaceOff(); // KEEP UP THE SIEGE: nothing changes (ruling 182)
 		return;
 	}
-	// LAY SIEGE FIRST: the army marches in and closes round the town. Nothing is risked this month.
+	// LAY SIEGE FIRST: the army marches in and closes round the town. Nothing is risked this month. (The card is put
+	// away at once; the march is answered on the rules' own thread: speed, b414 mark 1. See AfterSiege.)
 	const int32 RegionId = FaceOff.Region;
-	const FAttackResult Result = Session->Take(PickedCorps, RegionId, false);
 	PickedBeforeMass.Reset();
 	FaceOff.bVisible = false;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->FightAside(TEXT("take"), PickedCorps, RegionId, false, !bScripted,
+		[RegionId, bPlain = !bByRail && !bBySea, Adjective = HandAdjective()](const FAttackResult& Result)
+		{
+			return Result.Moved.Num() > 0 ? HandOf(Result.Moved, RegionId, RegionId, bPlain, Adjective) : FCampaignSession::FHandNext();
+		},
+		[Self, RegionId](const FAttackResult& Result)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterSiege(RegionId, Result);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterSiege(int32 RegionId, const FAttackResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
 	if (Result.Moved.Num() == 0)
 	{
 		Notify(Result.Note.IsEmpty() ? FString(TEXT("They cannot get there this month.")) : Result.Note, 6.0);
 		return;
 	}
-	ShowWar(Session->GetView(), Result.Moved);
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 	PickedCorps.Reset();
 	for (const FCorpsMove& March : Result.Moved)
@@ -7543,13 +8590,15 @@ void ACampaignPlayerController::ConfirmMarch(bool bAssault)
 	{
 		Notify(Result.Note, 9.0);
 	}
-	RefreshOrders();
-	SelectRegion(RegionId);
+	LaterOrders([this, RegionId]()
+	{
+		SelectRegion(RegionId);
+	});
 }
 
 void ACampaignPlayerController::SendEveryone()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || FaceOff.MassIds.Num() == 0)
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || FaceOff.MassIds.Num() == 0)
 	{
 		return;
 	}
@@ -7566,7 +8615,7 @@ void ACampaignPlayerController::SendEveryone()
 void ACampaignPlayerController::ProbeLine()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bProbeOk || FaceOff.ProbeCorps == INDEX_NONE)
+	if (!Session || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !FaceOff.bProbeOk || FaceOff.ProbeCorps == INDEX_NONE)
 	{
 		return;
 	}
@@ -7613,7 +8662,7 @@ void ACampaignPlayerController::ProbeLine()
 
 void ACampaignPlayerController::BombLine()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bBombOk || FaceOff.BombOpen.IsEmpty())
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || !FaceOff.bBombOk || FaceOff.BombOpen.IsEmpty())
 	{
 		return;
 	}
@@ -7634,14 +8683,26 @@ void ACampaignPlayerController::OpenFold()
 
 void ACampaignPlayerController::SendOnlyPicked()
 {
-	if (!FaceOff.bVisible || FaceOff.bResolved || PickedBeforeMass.Num() == 0)
+	if (!FaceOff.bVisible || FaceOff.bResolved || IsAnswering() || PickedBeforeMass.Num() == 0)
 	{
 		return;
 	}
 	const int32 RegionId = FaceOff.Region;
+	const TArray<int32> Everyone = PickedCorps, PickedFirst = PickedBeforeMass;
+	const double CardSince = FaceOffSince;
 	PickedCorps = PickedBeforeMass;
 	PickedBeforeMass.Reset();
+	// (The UI director, 17 November.) The card turns to exactly the corps picked. Where they cannot go by themselves
+	// (guns alone, ruling 211(a)) it still does: it shows them with no men to take the ground, says why at its foot,
+	// and offers everyone in reach again.
 	OpenFaceOff(RegionId);
+	if (FaceOffSince == CardSince)
+	{
+		// (The rules refused the attack outright and said why on the paper: the card still shows everyone going in, and
+		// the hand goes back to match it.)
+		PickedCorps = Everyone;
+		PickedBeforeMass = PickedFirst;
+	}
 }
 
 void ACampaignPlayerController::ConfirmAttack()
@@ -7659,15 +8720,60 @@ void ACampaignPlayerController::ConfirmAttack()
 void ACampaignPlayerController::ResolveAttack()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved)
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering())
 	{
 		return;
+	}
+	if (!FaceOff.Alone.IsEmpty())
+	{
+		return; // (the UI director, 17 November: SEND THEM IN takes no press and no key while the pick cannot go)
 	}
 	const int32 RegionId = FaceOff.Region;
 	const bool bMarch = FaceOff.bMarch; // (rules 84.1: the army marches in and goes at the town as it arrives)
 	const bool bStorm = FaceOff.bStorm; // (ruling 182: the army already round the town storms it)
 	const bool bSally = FaceOff.bSally; // (the garrison's sortie against the army round its town)
-	const FAttackResult Result = bSally ? Session->Sally(RegionId) : bStorm ? Session->Storm(RegionId) : bMarch ? Session->Take(PickedCorps, RegionId, true) : Session->Attack(PickedCorps, RegionId);
+	// (Speed, the design director's mark 1 for build 414.) The battle is fought by the rules on their own thread, with what
+	// the army in hand will ask after it; the card turns to the result when the answer comes, a frame or a few later.
+	const TCHAR* const Function = bSally ? TEXT("sally") : bStorm ? TEXT("storm") : bMarch ? TEXT("take") : TEXT("attack");
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->FightAside(Function, PickedCorps, RegionId, true, !bScripted,
+		[RegionId, bMarch, Here = ArmyRegion, Hand = PickedCorps, HandBefore = PickedBeforeMass, bPlain = !bByRail && !bBySea, Adjective = HandAdjective()](const FAttackResult& Result)
+		{
+			// (as AfterFight leaves the army in hand, and the card it shows)
+			FCampaignSession::FHandNext Next = HandOf(Result.Moved, RegionId, RegionId, bPlain, Adjective);
+			if (!Result.bFought)
+			{
+				if (bMarch && Result.Moved.Num() > 0)
+				{
+					return Next;
+				}
+				Next = HandOf(TArray<FCorpsMove>(), HandBefore.Num() > 0 && Result.Moved.Num() == 0 ? Here : INDEX_NONE, INDEX_NONE, bPlain, Adjective);
+				Next.Ids = HandBefore;
+				return Next;
+			}
+			if (Result.Moved.Num() == 0)
+			{
+				Next.Region = Here;
+				Next.Ids = Hand;
+			}
+			return Next;
+		},
+		[Self, RegionId, bMarch, bStorm, bSally](const FAttackResult& Result)
+		{
+			if (ACampaignPlayerController* Me = Self.Get())
+			{
+				Me->AfterFight(RegionId, bMarch, bStorm, bSally, Result);
+			}
+		});
+}
+
+void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
 	const TArray<int32> HandBefore = PickedBeforeMass;
 	PickedBeforeMass.Reset();
 	if (!Result.bFought)
@@ -7688,7 +8794,7 @@ void ACampaignPlayerController::ResolveAttack()
 		if (bMarch && Result.Moved.Num() > 0)
 		{
 			// (the march met no fight after all: the place fell as the army came, or the army stands round the town)
-			ShowWar(Session->GetView(), Result.Moved);
+			ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 			CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 			PickedCorps.Reset();
 			for (const FCorpsMove& March : Result.Moved)
@@ -7700,8 +8806,10 @@ void ACampaignPlayerController::ResolveAttack()
 			{
 				Notify(Result.Note, 9.0);
 			}
-			RefreshOrders();
-			SelectRegion(RegionId);
+			LaterOrders([this, RegionId]()
+			{
+				SelectRegion(RegionId);
+			});
 			return;
 		}
 		Notify(bMarch ? TEXT("They cannot get there this month.") : TEXT("The attack could not go in."));
@@ -7764,11 +8872,13 @@ void ACampaignPlayerController::ResolveAttack()
 			? FString::Printf(TEXT("The odds on the day were %.1f to 1 in your favour"), Result.Odds)
 			: FString::Printf(TEXT("The odds on the day were %.1f to 1 against you"), 1.0f / FMath::Max(Result.Odds, 0.01f)));
 	}
-	FaceOff.OurUnits = FText::FromString(ListUnits(Result.Attackers, true));
-	FaceOff.TheirUnits = FText::FromString(ListUnits(Result.Defenders, true));
+	FaceOff.OurRoster = RosterOf(Result.Attackers, true);
+	FaceOff.TheirRoster = RosterOf(Result.Defenders, true);
+	FaceOff.OurUnits = FText::FromString(ListUnits(FaceOff.OurRoster));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(FaceOff.TheirRoster));
 
 	// Show the result on the table: ground repainted if it changed hands, and the corps that followed up carried in.
-	ShowWar(Session->GetView(), Result.Moved);
+	ShowWar(Session->GetView(), Result.Moved, nullptr, true);
 	if (Result.Moved.Num() > 0)
 	{
 		PickedCorps.Reset();
@@ -7778,12 +8888,18 @@ void ACampaignPlayerController::ResolveAttack()
 		}
 		ArmyRegion = RegionId;
 	}
-	RefreshOrders();
-	SelectRegion(RegionId);
+	LaterOrders([this, RegionId]()
+	{
+		SelectRegion(RegionId);
+	});
 }
 
 void ACampaignPlayerController::CloseFaceOff()
 {
+	if (FaceOff.bVisible && !FaceOff.bResolved && IsAnswering())
+	{
+		return; // (the attack has been sent in and its answer is on its way: the card is not called off under it)
+	}
 	if (FaceOff.bVisible && FaceOff.bResolved && Map.IsValid())
 	{
 		BattleMusicUntil = FPlatformTime::Seconds() + 6.0; // the march plays on a little after the result
@@ -7806,19 +8922,40 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
+	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
+	FinishAnswer();
 	FCampaignSession* Session = GetSession();
-	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with the
-	// question before a war or a landing up, the key never ends the month behind the card: it puts the card away.)
+	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with a card up
+	// the key never ends the month behind it: it presses the card's lit button, below.)
 	if (Opening.bVisible && Opening.AskKind != 0)
 	{
 		AnswerBegin(false);
 		return;
 	}
+	// (The UI director's 84.3 check, item 6.) On the door Enter is BEGIN AS ..., its lit button, once the door has been
+	// up for half a second. Where a campaign is saved, that asks first, and the question's lit answer keeps it.
+	if (Opening.bVisible && bEnterByKey && !bScripted)
+	{
+		if (CanBeginByKey() && FPlatformTime::Seconds() - DoorSince > 0.5)
+		{
+			AskToBegin(1);
+		}
+		return;
+	}
+	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away.)
+	if (Document.bValid && bEnterByKey && !bScripted)
+	{
+		return;
+	}
 	if (WarPrompt.bVisible && !bScripted)
 	{
-		if (WarPrompt.IsOrder())
+		if (!WarPrompt.IsWarQuestion())
 		{
 			// (The design director, 17 November: Enter marches. He asked for the card himself; not in its first half second.)
+			// (The UI director, 17 November, in place of ruling 138(1)'s words: as in the browser, Enter gives the lit
+			// order on the landing and the gate cards too, and Esc puts them away. Those orders can be changed again before
+			// the month ends. Before a declaration of war, which cannot be taken back, Enter is NOT NOW, below.)
 			if (FPlatformTime::Seconds() - WarPromptSince > 0.5)
 			{
 				ConfirmWar();
@@ -7838,9 +8975,9 @@ void ACampaignPlayerController::EndMonth()
 			{
 				CloseFaceOff(); // (the UI director, 17 November: CONTINUE takes Enter and Space)
 			}
-			else if (FaceOff.bLongShot && !FaceOff.bMarch && !FaceOff.bStorm)
+			else if (FaceOff.CallOffLit() && !FaceOff.bMarch && !FaceOff.bStorm)
 			{
-				// (the verdict is a long shot or worse: Enter is CALL IT OFF, and the paper line says so)
+				// (the verdict is a long shot or worse, or the pick cannot go: Enter is CALL IT OFF, and the paper line says so)
 				const FString Title = FaceOff.Title.ToString();
 				CloseFaceOff();
 				Notify(FString::Printf(TEXT("%s is called off. Nothing was spent."), *Title), 5.0);
@@ -7890,6 +9027,14 @@ void ACampaignPlayerController::EndMonth()
 	{
 		if (FPlatformTime::Seconds() - EndAsk.Since < 0.5)
 		{
+			return;
+		}
+		if (bEnterByKey)
+		{
+			// (Rules 84.3.1; the UI director's ruling of 17 November, one rule for every card: Enter presses the lit
+			// button, and the lit button is the safe one.) On the question Enter is SHOW ME, as Tab is: a double Enter
+			// shows the armies and never ends the month. END THE MONTH takes a click.
+			AnswerEndAsk(true);
 			return;
 		}
 		EndAsk.bVisible = false;
@@ -8253,7 +9398,7 @@ void ACampaignPlayerController::FinishMonth()
 	if (!Month.Fallen.IsEmpty())
 	{
 		const FCampaignNation* Nation = Map->GetData().FindNation(Month.Fallen);
-		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *Nation->Name : *Month.Fallen), 12.0);
+		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *HeadThe(Nation->Name) : *Month.Fallen), 12.0);
 	}
 	else
 	{
@@ -8378,6 +9523,7 @@ void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
 
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
+	THEATER_SPEED_SCOPE(RefreshRegionPanel);
 	RegionPanel = FRegionPanelInfo();
 	RegionPanel.Revision = ++PanelRevision;
 	{

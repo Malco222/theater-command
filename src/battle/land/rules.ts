@@ -50,7 +50,7 @@ export const LAND = {
    */
   cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25 } as Record<Ground, number>,
   pace: {
-    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.15, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15 },
+    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15 },
     wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0 },
     tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0 },
     guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0 },
@@ -71,6 +71,10 @@ export const LAND = {
    * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
    */
   queue: { hard: 0.2, near: 75 },
+  /** Metres between two friends' boxes where an attack's block takes its own stretch beside a friend standing there (b439). */
+  room: 10,
+  /** Metres off either end of a bridge kept clear: no attack has a block stand there, so those coming over can (b439). */
+  mouth: 50,
   /** Mountain troops on rough ground and rock keep this much more of their pace. */
   mountainFoot: 1.6,
   /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
@@ -91,7 +95,7 @@ export const LAND = {
    * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
    * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven).
    */
-  hold: { take: { plains: 0.94, forest: 1.005, hills: 0.96, mountain: 1.12, marsh: 1.245, urban: 0.995, desert: 0.97 } as Record<string, number>, within: 300, river: 1.5, works: [1, 1.02, 1.06, 1.07] },
+  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.4, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {
