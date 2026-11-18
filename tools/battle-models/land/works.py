@@ -35,6 +35,26 @@ MARK_MONTHS = {
 }
 
 
+# Where a crew paints its tank's name once she has come through three battles (Brian's pick b477, 2026-11-18; the
+# historian's table historian/tank-names-b477.md; the art director's look art-director/battles/b477-battle-details-look.md).
+# Each army as its crews really did it: a name on the hull or the turret, the Soviet slogan on the turret in its own
+# letters, and for Germany no name but thin rings round the barrel. Armies that painted neither have no place.
+NAME_INK = {"white": "E6E2D8", "black": "141414"}
+NAME_HOW = ("Once her unit has come through three battles the game paints her crew's mark here. kind `name`: one invented word (the Soviet "
+            "slogan may be two lines) in brush-painted capitals, never a printed face: the middle of it at `at` on the plate that looks along `facing`, "
+            "the writing running along `along` with its top toward `up`, the letters `high` tall and the whole no longer than `long`; it rides `part`, "
+            "and a place is given for each side that carries one. `writing` down: the characters stand one under another, `long` the room downward. "
+            "kind `rings`: no name, but `most` thin bands round the barrel, the first at `at` and each next one `step` on along `toward` (to the breech), "
+            "`wide` across, lying on the barrel whose radius there is `radius`; one ring, then more as she lasts. `ink`: off-white on grey, olive and "
+            "green coats, near-black on dark yellow, matt, never brighter than her national marking; it wears and scorches with her paint.")
+
+
+def name_ink(hexs):
+    """Off-white on a dark coat, near-black on a pale or yellow one (the art director's rule)."""
+    r, g, b = (int(hexs[i:i + 2], 16) for i in (0, 2, 4))
+    return "black" if (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0 > 0.46 else "white"
+
+
 class Works(Shop, Gear, Fittings):
     def root(self, hull_pivot=(0.0, 0.0, 0.9), rock=(-4.0, 4.0)):
         self.part("vehicle", None, (0, 0, 0), kind="root", note="on the ground under her middle; the game moves and turns this")
@@ -122,6 +142,126 @@ class Works(Shop, Gear, Fittings):
         if tag in MARK_MONTHS:
             self.m.info.setdefault("file", {})["mark_months"] = {"how": "paint the mark whose months hold the campaign's month (from and to are both counted in); `none` is bare paint.",
                                                                  tag: MARK_MONTHS[tag]}
+
+    # ---- the crew's name, or their rings (b477) -----------------------------------------------------------------
+    def _skin(self, part=None):
+        """The mesh as she stands, to cast rays at (one part's faces only, if a part is named)."""
+        from mathutils.bvhtree import BVHTree
+        m = self.m
+        key = (len(m.faces), part)
+        if getattr(self, "_skin_key", None) != key:
+            if part is None:
+                ids = list(range(len(m.faces)))
+            else:
+                want = m.part_at[part]
+                ids = [i for i, p in enumerate(m.fpart) if p == want]
+            self._skin_key, self._skin_ids = key, ids
+            self._skin_tree = BVHTree.FromPolygons([tuple(p) for p in m.verts], [tuple(m.faces[i]) for i in ids])
+        return self._skin_tree, self._skin_ids
+
+    def _name_file(self, kind, **kw):
+        d = self.m.info.setdefault("file", {}).setdefault("name_place", {"how": NAME_HOW, "when": "her unit has come through three battles", "kind": kind})
+        coat = self.m.paints.get("upper", "565C3A")
+        ink = {"use": name_ink(coat), **NAME_INK}
+        swaps = self.m.info.get("file", {}).get("swaps", {}).get("paint", {}).get("choices", {})
+        if swaps:
+            ink["by_coat"] = {k: name_ink(c["paints"]["upper"]) for k, c in swaps.items()}
+        d["ink"] = ink
+        d.update(kw)
+        return d
+
+    def name_place(self, near, long=0.9, high=0.12, part="hull", sides=(LEFT, RIGHT), lines=1, writing="across", reach=(1.3, 0.4), parts=None, bend=0.014, note=""):
+        """Where her crew paints her name: a flat run of her own painted plate on the side of `part`, as near to
+        `near` (x, z) as one is found, `long` by `high` (times `lines`; writing "down": `high` across and `long` down).
+        Found on the mesh as she stands, so call it when she is built. The game paints the word; the file carries the place.
+        reach: how far from `near` to look, along and up. parts: other parts whose plate will do as well.
+        bend: how far the plate may leave the flat under the word (a cast turret's side is never flat: the game lays
+        the letters on the skin, as it does her marking)."""
+        m = self.m
+        tree, ids = self._skin()
+        ok_parts = {m.part_at[p] for p in ([part] + list(parts or ()))}
+        ok_paints = {m.paint_at[p] for p in m.paints if p.split(".")[0] in COATS}
+        step = 0.03
+        nx, nz = int(reach[0] / step), int(reach[1] / step)
+        along_len, up_len = (high * 1.25, long) if writing == "down" else (long, high * (1.25 * lines + 0.1 * (lines - 1)))
+        places = []
+        for s in sides:
+            grid = {}
+            for i in range(-nx, nx + 1):
+                for j in range(-nz, nz + 1):
+                    x, z = near[0] + i * step, near[1] + j * step
+                    hit = tree.ray_cast(Vector((x, s * 6.0, z)), Vector((0.0, -s, 0.0)), 6.0)
+                    if hit[0] is None:
+                        continue
+                    f = ids[hit[2]]
+                    if m.fpart[f] in ok_parts and m.fpaint[f] in ok_paints and hit[1].y * s > 0.45:
+                        grid[(i, j)] = (hit[0], hit[1])
+            taken = []
+            for mk in m.marks:                              # her national marking keeps its own room
+                on = mk.get("part", "hull")
+                if (on == part or on in (parts or ())) and (mk.get("both") or -mk["at"][1] * s > 0):
+                    taken.append((mk["at"][0], mk["at"][2], mk["radius"] + 0.06))
+            best = None
+            for shrink in (1.0, 0.88, 0.76, 0.64, 0.52):
+                hx, hz = int(along_len * shrink / 2 / step) + 1, int(up_len / 2 / step) + 1
+                for (i, j), (pc, nc) in grid.items():
+                    x, z = near[0] + i * step, near[1] + j * step
+                    if any(abs(x - tx) < hx * step + r and abs(z - tz) < hz * step + r for tx, tz, r in taken):
+                        continue
+                    flat, n, nsum = 0, 0, Vector((0, 0, 0))
+                    for a in range(-hx, hx + 1):
+                        for b in range(-hz, hz + 1):
+                            n += 1
+                            g = grid.get((i + a, j + b))
+                            if g is not None and abs((g[0] - pc).dot(nc)) < bend and g[1].dot(nc) > (0.93 if bend < 0.02 else 0.86):
+                                flat += 1
+                                nsum += g[1]
+                    if flat >= 0.97 * n:
+                        d = math.hypot(i * step, 1.6 * j * step)
+                        if best is None or d < best[0]:
+                            best = (d, pc, nsum.normalized(), shrink)
+                if best is not None:
+                    break
+            if best is None:
+                continue
+            _, at, n, shrink = best
+            up = (Z - n * Z.dot(n)).normalized()
+            run = up.cross(n)
+            f3 = lambda p: [round(p[0], 3), round(-p[1], 3), round(p[2], 3)]            # (the file's y is to the right)
+            places.append({"side": "left" if s > 0 else "right", "at": f3(at), "facing": f3(n), "along": f3(run), "up": f3(up), "part": part,
+                           "long": round(long * shrink, 3)})
+        if places:
+            self._name_file("name", high=high, lines=lines, writing=writing, places=places, **({"note": note} if note else {}))
+        return places
+
+    def kill_rings(self, part, muzzle="muzzle", most=5, wide=0.025, step=0.075, note=""):
+        """Where a German crew paints its rings: round the barrel, behind the muzzle (and its brake), where the tube
+        runs even. part: the barrel's part (it runs back with the gun, and the rings with it)."""
+        m = self.m
+        tree, ids = self._skin(part)
+        sk = next(s for s in m.sockets if s["name"] == muzzle)
+        at, d = Vector(sk["at"]), Vector(sk["facing"]).normalized()
+        side = d.cross(Z).normalized()
+
+        def radius(t):
+            hit = tree.ray_cast(at - d * t + side * 0.6, -side, 0.6)
+            return None if hit[0] is None else 0.6 - hit[3]
+        need = (most - 1) * step + wide + 0.06
+        t, found = 0.04, None
+        while t < 2.2 and found is None:
+            rs = [radius(t + k * 0.02) for k in range(int(need / 0.02) + 1)]
+            if all(r is not None and 0.025 < r < 0.2 for r in rs) and max(rs) - min(rs) < 0.012 and all(abs(q - r) < 0.0012 for q, r in zip(rs, rs[1:])):
+                found = t
+            t += 0.02
+        if found is None:
+            return None
+        first = found + 0.03 + wide / 2
+        f3 = lambda p: [round(p[0], 3), round(-p[1], 3), round(p[2], 3)]
+        ring = {"part": part, "muzzle": muzzle, "at": f3(at - d * first), "toward": f3(-d), "radius": [round(radius(first + k * step), 4) for k in range(most)],
+                "wide": wide, "step": step, "most": most}
+        d_ = self._name_file("rings", **({"note": note} if note else {}))
+        d_.setdefault("rings", []).append(ring)
+        return ring
 
     def spring(self, t, kick, freq=2.4, damp=3.2):
         """How a sprung hull answers a knock at t = 0: a rocking that dies away."""

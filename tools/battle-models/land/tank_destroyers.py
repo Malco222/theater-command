@@ -227,6 +227,7 @@ def stug3(fine=True, tag="GER", paint=None, mantlet="box", skirts=None):
                    "lose": {"parts": skirt_plates, "how": "each vehicle hides none, one or two of these plates at random, so a battery is not one "
                                                            "vehicle copied; the rails always stay"}}}}
     m.info.setdefault("file", {})["swaps"] = swaps
+    v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v
 
 
@@ -287,6 +288,7 @@ def su85(fine=True, tag="SOV"):
     v.socket("case", (-0.12, 0.22, zc + 0.1), Y, part="hull", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.36, kick=0.9, gun_low=-5.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"], traverse=6.0,
                  idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", has_turret=False, mg=None)
+    v.name_place((-0.5, 1.8), long=1.0, high=0.12, lines=2)           # the slogan (b477): on the casemate's side
     return v
 
 
@@ -431,4 +433,5 @@ def m10(fine=True, tag="USA"):
     v.socket("case", (x0 - 0.9, -0.3, zt + 0.1), -X, part="turret", note="where the empty case falls, on her floor")
     v.tank_clips(recoil=0.30, kick=0.9, gun_low=-10.0, hatches=["hatch_driver", "hatch_radio"], traverse=12.0,
                  idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop", gun_cue="tank_gun_02", blow=(-0.9, 2.8, 0.45, 170.0), mg="mg")
+    v.name_place((1.5, 1.39), long=0.9, high=0.12)                    # her crew's name (b477): on the hull's side, ahead of the star
     return v

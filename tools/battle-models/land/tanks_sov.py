@@ -169,6 +169,7 @@ def t34(fine=True, tag="SOV"):
     v.socket("case", (x0 - 0.9, 0.0, zt + 0.5), -X, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.34, kick=0.9, gun_low=-5.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"],
                  traverse=24.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 3.0, 0.42, 170.0))
+    v.name_place((-0.2, 1.95), long=0.75, high=0.11, part="turret", lines=2)        # the slogan (b477): on the turret's side, in two lines
     return v
 
 
@@ -226,4 +227,5 @@ def t34_85(fine=True, tag="SOV"):
     v.socket("case", (x0 - 1.1, 0.0, zt + 0.5), -X, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.30, kick=1.0, gun_low=-5.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"],
                  traverse=24.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.9, 3.1, 0.42, 170.0))
+    v.name_place((0.55, 2.05), long=0.8, high=0.11, part="turret", lines=2, bend=0.03)         # the slogan (b477): on the turret's side, in two lines
     return v

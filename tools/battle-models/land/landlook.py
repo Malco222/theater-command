@@ -49,7 +49,7 @@ def main():
         pose = rigid.merge(pose, rigid.pose_of(m, m.clips[clip], float(at)))
     if pose:
         rigid.apply_pose(arm, pose, model=m)
-    landmarks.put(m, ob, arm)
+    landmarks.put(m, ob, arm, name=opt.get("name"), rings=int(opt.get("rings", 0)))
     rut = abs(next(iter(v.belts.values()))["y"]) if v.belts else 0.9
     towed = not v.belts                                   # (a gun or a lorry: no tank has run where she stands)
     if opt.get("ground", "meadow") == "battle":

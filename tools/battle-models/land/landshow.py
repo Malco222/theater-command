@@ -291,14 +291,17 @@ def pool(names, out, opt, w, h, spp):
     """Every vehicle named, drawn up on the battle's ground in one rank or two (the second standing in the gaps of
     the first): the picture of them all together from above their right front, a second from the other end, and a
     sheet of the two. `gap=` metres between neighbours, `ranks=` how many ranks, `rank=` metres between them, `step=`
-    metres each stands behind her neighbour, `x=` `y=` where the front rank's middle stands, `as=` the file's name."""
+    metres each stands behind her neighbour, `x=` `y=` where the front rank's middle stands, `as=` the file's name.
+    `names=Sherman:BUCKEYE,T34:Za_Rodinu,PanzerIV:3`: her crew's own mark on each (b477), a word or a count of barrel rings."""
     kit.fresh()
     t = time.time()
     stood = []
+    crew = dict(a.split(":", 1) for a in opt["names"].split(",")) if opt.get("names") else {}
     for name in names:
         v = vehicles.build(name, True)
         ob, arm = works.to_scene(v.m, dust_hex="9A8A6A")
-        landmarks.put(v.m, ob, arm)
+        mk = crew.get(name, "")
+        landmarks.put(v.m, ob, arm, name=None if mk.isdigit() else (mk or None), rings=int(mk) if mk.isdigit() else 0)
         stood.append((v, arm))
     field = ground.Battle(rut=1.2, rut_wide=0.4, ruts=False)
     stage.render_setup(w, h, samples=spp)

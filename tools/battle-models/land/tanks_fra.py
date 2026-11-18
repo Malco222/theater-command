@@ -186,4 +186,5 @@ def char_b1(fine=True, tag="FRA"):
     v.socket("case", (x0 - 0.2, -0.6, zt + 0.3), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.18, kick=0.4, gun_low=-12.0, hatches=["hatch_commander", "hatch_side", "hatch_driver"],
                  traverse=12.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.3, 0.36, 164.0))
+    v.name_place((1.7, 1.3), long=0.9, high=0.13)                     # her name (b477): every B1 carried one, on the hull's side near the front
     return v

@@ -178,4 +178,5 @@ def tp7(fine=True, tag="POL"):
     v.socket("case", (x0 - 0.3, y0 - 0.6, zt + 0.35), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.16, kick=0.5, gun_low=-10.0, hatches=["hatch_commander", "hatch_driver"],
                  traverse=16.0, idle_cue="tank_idle_loop", drive_cue="light_tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.1, 0.32, 165.0))
+    v.name_place((0.4, 1.2), long=0.55, high=0.09, sides=(LEFT,))      # a name was seldom seen (b477): small, on the hull's side, one side only
     return v

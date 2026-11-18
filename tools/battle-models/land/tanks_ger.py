@@ -442,6 +442,10 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
                    "lose": {"parts": skirt_plates, "how": "each tank hides none, one or two of these hull plates at random, so a company is not one tank copied; "
                                                            "the rails and the turret's shield always stay"}}}}
     m.info.setdefault("file", {})["swaps"] = swaps
+    # no name: a German crew painted rings round the barrel (b477), on whichever of her two guns she carries
+    for bp, mz, st in (("barrel_long", "muzzle", 0.075), ("barrel_short", "muzzle.short" if gun == "all" else "muzzle", 0.05)):
+        if bp in v.m.part_at:
+            v.kill_rings(bp, muzzle=mz, step=st)
     return v
 
 
@@ -588,6 +592,7 @@ def panther(fine=True, tag="GER", paint=None):
                  traverse=15.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-1.2, 3.2, 0.45, 168.0))
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: the coat's colours stand in place of the paints of the same names. She wore dark yellow all her life.",
                                                 "paint": coats(v, "yellow", only=("yellow",))}
+    v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v
 
 
@@ -725,4 +730,5 @@ def tiger(fine=True, tag="GER", paint=None):
                  traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.",
                                                 "paint": coats(v, paint or "grey")}
+    v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v

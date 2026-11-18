@@ -431,6 +431,7 @@ def m7(fine=True, tag="USA"):
                          "crew.loader": "a loader stands here, behind the breech: it is 0.73 over the floor, at his waist, and he bends to it"})
     v.tank_clips(recoil=1.0, kick=0.7, gun_low=-5.0, hatches=["hatch_driver"], traverse=6.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg="mg")
+    v.name_place((1.0, 1.55), long=0.9, high=0.12)                    # her crew's name (b477): on the box's side
     return v
 
 
@@ -497,6 +498,7 @@ def sexton(fine=True, tag="UK"):
                   notes={"crew.gunner": "the layer kneels here on her floor, left of the breech (the point is the floor under his hips): the handwheels' handles are 0.58 and 0.70 over the floor, 0.20 and 0.42 ahead of him, the sight at his eye (his hands: grip.gunner.l, grip.gunner.r)"})
     v.tank_clips(recoil=0.5, kick=0.6, gun_low=-9.0, hatches=["hatch_driver"], traverse=4.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
+    v.name_place((1.0, 1.7), long=0.9, high=0.12)                     # her gunners' name (b477): on the box's side
     return v
 
 
@@ -894,6 +896,7 @@ def su76(fine=True, tag="SOV"):
     v.socket("hit.turret", (0.25, -0.6, 1.7), sf, part="hull", note="the box's face")
     v.tank_clips(recoil=0.8, kick=0.9, gun_low=-5.0, hatches=["hatch_driver"], traverse=5.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
+    v.name_place((-0.3, 1.6), long=1.0, high=0.12, lines=2)           # the slogan (b477): on the box's side
     return v
 
 

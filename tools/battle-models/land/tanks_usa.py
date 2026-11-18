@@ -249,6 +249,7 @@ def sherman(fine=True, tag="USA"):
     v.socket("case", (x0 - 0.5, 0.95, zt + 0.42), Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.30, kick=0.9, gun_low=-10.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=24.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.8, 0.45, 170.0))
+    v.name_place((1.0, 1.42), long=0.9, high=0.12)                    # her crew's name (b477): on the sponson, ahead of the star
     return v
 
 
