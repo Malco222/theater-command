@@ -335,11 +335,20 @@ void FStepPlayer::Sweep(ACampaignPlayerController& Player, const FStep& Step)
 	// alone, and at most six of each kind are pressed.
 	TMap<FString, int32> Seen;
 	TArray<FStep> Presses;
+	int32 Under = 0;
 	for (const FFoundButton& Each : ButtonsOnScreen())
 	{
 		const FString Words = Plain(Each.Words);
 		if (FrameButtons.Contains(Words))
 		{
+			continue;
+		}
+		// (A button of the table that the open card lies over is left alone too, and counted: the card is meant to
+		// cover it. Each was pressed and written down as a fault, a dozen to a card, and the true faults were lost
+		// among them. A button named by a step of its own is still tried, and still said to be covered if it is.)
+		if (Each.bEnabled && !Reachable(Each))
+		{
+			++Under;
 			continue;
 		}
 		int32& Count = Seen.FindOrAdd(Words);
@@ -361,7 +370,7 @@ void FStepPlayer::Sweep(ACampaignPlayerController& Player, const FStep& Step)
 	SweepContext = Context;
 	bSweepDirty = false;
 	Steps.Insert(Presses, At + 1);
-	Note = FString::Printf(TEXT("%d buttons to press"), Presses.Num());
+	Note = FString::Printf(TEXT("%d buttons to press"), Presses.Num()) + (Under > 0 ? FString::Printf(TEXT(" (%d more lie under the open card and are left alone)"), Under) : FString());
 }
 
 void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)

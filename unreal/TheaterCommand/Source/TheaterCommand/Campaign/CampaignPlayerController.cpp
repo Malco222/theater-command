@@ -5278,11 +5278,34 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					? 1600.0 * 1000.0 * (Hundredths / 100.0) * (Hundredths / 100.0)
 					: FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLight")) ? 1250.0 * 780.0 : 1072.0 * 670.0;
 			}();
-			const int32 Percent = FMath::Clamp(FMath::RoundToInt32(100.0 * FMath::Sqrt(Budget / (static_cast<double>(ViewWidth) * ViewHeight))), 50, 100);
+			// (Sharp lettering, 18 November 2026; the UI director's ruling (c). The game is drawn at the panel's own fine
+			// pixels, two to a point on Brian's Mac (bAllowHighDPIInGameMode), so that every card and line of type is
+			// crisp where it was one soft pixel to a point. The map keeps the size it was drawn at: it is made at half
+			// the window's pixels each way, as it was when macOS did the doubling, and only the lettering and the
+			// cards are laid over it at all of them. Measured dragged over New York with the frame limit lifted: 94
+			// frames a second so, 96 before; with the map upscaled to every fine pixel it was 57. A window that is not
+			// that large (a picture run's 1600 by 1000) is drawn as it always was. "-nohighdpi" is Unreal's own switch
+			// for one pixel to a point.)
+			float Fine = 1.0f;
+			if (GEngine && GEngine->GameViewport)
+			{
+				const TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow();
+				Fine = Window.IsValid() ? Window->GetDPIScaleFactor() : 1.0f;
+			}
+			const bool bFine = Fine >= 1.5f && static_cast<double>(ViewWidth) * ViewHeight > 2400000.0;
+			const double Each = bFine ? Fine : 1.0;
+			if (IConsoleVariable* Second = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SecondaryScreenPercentage.GameViewport")))
+			{
+				Second->Set(bFine ? FMath::RoundToInt32(100.0f / Fine) : 100, ECVF_SetByCode);
+			}
+			const int32 Percent = FMath::Clamp(FMath::RoundToInt32(100.0 * FMath::Sqrt(Budget / ((ViewWidth / Each) * (ViewHeight / Each)))), 50, 100);
 			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
 			{
 				Variable->Set(Percent, ECVF_SetByCode);
 			}
+			UE_LOG(LogTheater, Display, TEXT("Window: %d by %d pixels, %.1f to a point; the map is drawn at %d by %d and %s"), ViewWidth, ViewHeight, Fine,
+				FMath::RoundToInt32(ViewWidth / Each * Percent / 100.0), FMath::RoundToInt32(ViewHeight / Each * Percent / 100.0),
+				bFine ? TEXT("the lettering at every pixel") : TEXT("filled out to the window by Unreal's upscaler"));
 		}
 	}
 

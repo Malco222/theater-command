@@ -86,8 +86,10 @@ namespace
 			// takes nearly all of the screen now, leaving room for the window's own title bar: 1440 by 878 there, and
 			// the type an eighth larger. "-TheaterWindow=1264x776" opens it as it was.)
 			const FIntPoint Desktop = Settings->GetDesktopResolution();
-			Size.X = FMath::Clamp(FMath::RoundToInt32(Desktop.X * 0.98f), 1100, 2240);
-			Size.Y = FMath::Clamp(FMath::RoundToInt32(Desktop.Y * 0.95f), 700, 1260);
+			// (no upper limit of its own: where the game is drawn at the panel's fine pixels the screen is counted in
+			// those, 2940 by 1880 on his Mac, and a limit of 2240 by 1260 made the window a small one)
+			Size.X = FMath::Max(FMath::RoundToInt32(Desktop.X * 0.98f), 1100);
+			Size.Y = FMath::Max(FMath::RoundToInt32(Desktop.Y * 0.95f), 700);
 			bSuited = true;
 		}
 		Settings->SetScreenResolution(Size);

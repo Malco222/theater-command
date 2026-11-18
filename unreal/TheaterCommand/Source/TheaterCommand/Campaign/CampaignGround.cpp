@@ -463,9 +463,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// Europe's do. It comes in over a degree, and the land's paint brings the squares' gold in from that edge.)
 			// (The art director's review of build 1608, 18 November 2026: the plan passes, but south of the Ohio the
 			// crooked fields came out as soft strips six to ten dots wide and many times as long, "brushed cloth, not
-			// farmland". Until they are whole plots with an edge and a colour of their own, the fields lie as before
-			// and the new lie is asked for with "-TheaterNewFields".)
-			static const bool bOldFields = !FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
+			// farmland". They were made whole plots with an edge and a colour of their own, and she passed them at two
+			// to one on 18 November at 08:13: the new lie is the game's. "-TheaterOldFields" lays the fields as before.)
+			static const bool bOldFields = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
 			// (the chart may count the New World's longitudes on past 180 east: they are brought back to west of Greenwich)
 			const float WestLongitude = Longitude > 180.0f ? Longitude - 360.0f : Longitude;
 			const float WestOfThePlains = 1.0f - FMath::SmoothStep(-101.0f, -99.0f, WestLongitude);
@@ -1641,8 +1641,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (The art director's review of build 1608: where the fields beyond Europe are not squares they were read
 			// half on the small fields' grid and half on the great ones', two patterns laid over each other, and came
 			// out as soft streaks. They are whole plots on one grid: the great one, about thirty-seven dots by twelve
-			// from playing height; rice country keeps the small one, its paddies. With "-TheaterNewFields" only.)
-			static const bool bWholePlots = FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
+			// from playing height; rice country keeps the small one, its paddies. ("-TheaterOldFields": as before.))
+			static const bool bWholePlots = !FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
 			if (bWholePlots && Beyond > 0.5f && !(LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0))
 			{
 				Big = LookRice[Idx] > 0.5f ? 0.0f : 1.0f;
@@ -1680,7 +1680,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (Item 2 again: where the fields are not squares, a province beyond Europe turns its fields by an angle of
 			// its own and makes them a little larger or smaller than its neighbour's, as every province of Europe does.
 			// They all lay at one slant of twenty degrees, and the land read as one ruled board from Maine to Chile.)
-			static const bool bOldLie = !FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
+			static const bool bOldLie = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
 			if (!bSquare && Id >= 0 && bBeyond && !bOldLie)
 			{
 				const uint32 Own = static_cast<uint32>(Id) * 2654435761u;

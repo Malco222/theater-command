@@ -1447,11 +1447,11 @@ void ACampaignMapActor::DressBeyond(UMaterialInstanceDynamic* Sheet) const
 	// wood there as a slow thinning-out, and here each tree-top is let stand or fall by itself across it. (Europe's
 	// woods keep their firm edge.)
 	Sheet->SetScalarParameterValue(TEXT("WoodsFringe"), 1.2f);
-	// (and with the new lie of the fields, "-TheaterNewFields", each whole plot beyond Europe has a thin light edge)
+	// (each whole plot beyond Europe has a thin light edge; "-TheaterOldFields" lays the fields as they were)
 	// (and a plot there is under three times as long as it is wide: Europe's strips, at 2.2 rows to the field's
 	// length, came out six to one once two or three of a tone lay end to end. "-TheaterPlots=strip,edge" tries others.)
-	static const bool bPlotEdges = FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
-	static float PlotStrip = 1.3f, PlotEdge = 0.5f; // (a plot about thirty-seven dots by twenty from playing height, its edge half as light again)
+	static const bool bPlotEdges = !FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
+	static float PlotStrip = 1.4f, PlotEdge = 0.45f; // (the art director's choice of 18 November: two to one, about thirty-seven dots by eighteen from playing height)
 	static bool bPlotsRead = false;
 	if (!bPlotsRead)
 	{
