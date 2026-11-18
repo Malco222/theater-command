@@ -8387,7 +8387,8 @@ namespace
 			{
 				GEngine->GameViewport->GetViewportSize(Size);
 			}
-			const float Scale = FrameScale(Size.Y);
+			// (window pixels to this screen's units: the frame's own scale and, on top of it, Unreal's for the window's size. The pre-checker's find of 18 November 2026: by the first alone these came out two thirds too large in Brian's window.)
+			const float Scale = FrameScale(Size.Y) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
 			auto Wide = [Scale](const TWeakPtr<SWidget>& Kept) -> float
 			{
 				const TSharedPtr<SWidget> Widget = Kept.Pin();
@@ -8684,7 +8685,8 @@ namespace
 				{
 					GEngine->GameViewport->GetViewportSize(Pixels);
 				}
-				const double Scale = FrameScale(Pixels.Y);
+				// (window pixels to this screen's units: the frame's own scale and, on top of it, Unreal's for the window's size. The pre-checker's find of 18 November 2026: by the first alone these came out two thirds too large in Brian's window.)
+				const double Scale = FrameScale(Pixels.Y) * FMath::Max(static_cast<double>(GetTickSpaceGeometry().Scale), 0.01);
 				TArray<FBox2D> Keep;
 				Controller->GetLessonKeepClear(Keep);
 				auto Covers = [&Keep, Scale, Size](const FVector2D& At)
@@ -14549,7 +14551,8 @@ namespace
 			{
 				GEngine->GameViewport->GetViewportSize(Size);
 			}
-			const float Scale = FrameScale(Size.Y);
+			// (window pixels to this screen's units: the frame's own scale and, on top of it, Unreal's for the window's size. The pre-checker's find of 18 November 2026: by the first alone these came out two thirds too large in Brian's window.)
+			const float Scale = FrameScale(Size.Y) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
 			const FVector2D At = (FVector2D(Tray->GetTickSpaceGeometry().GetAbsolutePosition()) - FVector2D(GetTickSpaceGeometry().GetAbsolutePosition())) / Scale;
 			const float High = static_cast<float>(BigCardShow->GetDesiredSize().Y);
 			return FMargin(static_cast<float>(At.X), FMath::Max(static_cast<float>(At.Y) - High - 8.0f, 8.0f), 0.0f, 0.0f);
