@@ -27,6 +27,14 @@ from motorpool import frame as frame_of
 from rigid import hex_rgb
 
 
+# A nation whose marking changed with the months (the historian's ruling of 2026-11-18). Britain and the Commonwealth:
+# no national mark at first, then the recognition flash (three equal upright stripes, white, red, white), then the
+# white five-pointed Allied star.
+MARK_MONTHS = {
+    "UK": [{"to": "1941-10", "mark": "none"}, {"from": "1941-11", "to": "1943-06", "mark": "flash"}, {"from": "1943-07", "mark": "star"}],
+}
+
+
 class Works(Shop, Gear, Fittings):
     def root(self, hull_pivot=(0.0, 0.0, 0.9), rock=(-4.0, 4.0)):
         self.part("vehicle", None, (0, 0, 0), kind="root", note="on the ground under her middle; the game moves and turns this")
@@ -104,11 +112,16 @@ class Works(Shop, Gear, Fittings):
                     self.rod(c + up * 0.012 + w * (t * (r - 0.04)) - u * half, c + up * 0.012 + w * (t * (r - 0.04)) + u * half, 0.006, "upper", 4, caps=False, part=part)
             self.ball(c + up * 0.012, r * 0.16, "upper", 8, 5, part=part, dome=True, squash=0.6)
 
-    def mark(self, tag, at, facing, size=0.22, part="hull", both=False):
-        """A national marking for the game to paint here (and the pictures show): each nation's plain period marking."""
+    def mark(self, tag, at, facing, size=0.22, part="hull", both=False, shown=None):
+        """A national marking for the game to paint here (and the pictures show): each nation's plain period marking.
+        Where a nation's marking changed with the months (MARK_MONTHS) the file carries the table as `mark_months`,
+        for the game to paint the one that fits the campaign's month; `shown` is the one the pictures draw."""
         f = Vector(facing).normalized()
         self.m.marks.append({"tag": tag, "at": [round(at[0], 3), round(-at[1], 3), round(at[2], 3)], "facing": [round(f.x, 3), round(-f.y, 3), round(f.z, 3)],
-                             "radius": size, "part": part, "both": both})
+                             "radius": size, "part": part, "both": both, **({"shown": shown} if shown else {})})
+        if tag in MARK_MONTHS:
+            self.m.info.setdefault("file", {})["mark_months"] = {"how": "paint the mark whose months hold the campaign's month (from and to are both counted in); `none` is bare paint.",
+                                                                 tag: MARK_MONTHS[tag]}
 
     def spring(self, t, kick, freq=2.4, damp=3.2):
         """How a sprung hull answers a knock at t = 0: a rocking that dies away."""

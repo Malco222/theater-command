@@ -69,6 +69,89 @@ class SpWorks(GunWorks):
                 if self.fine:
                     self.lathe((x, y, z0 + high), Z, [(0.002, 0.0), (0.002, r * 0.3)], "steel", 6)       # the primer
 
+    # ---- plate work: what makes a thin open box read as built, not folded from card ---------------------------
+    def edge_bolts(self, a, b, facing, gap=0.17, r=0.011, high=0.007):
+        """A row of bolt heads from a to b, on a plate that faces `facing`."""
+        if not self.fine:
+            return
+        a, b = Vector(a), Vector(b)
+        n = max(1, round((b - a).length / gap))
+        for k in range(n + 1):
+            self.bolt(a.lerp(b, k / n), facing, r, high)
+
+    def rib(self, a, b, inward, deep=0.034, wide=0.03, paint=coat):
+        """A strip of plate standing `deep` out of a wall's inside from a to b: a stiffener up it, or (thin and
+        deep) the angle iron along the inside of its top edge."""
+        a, b = Vector(a), Vector(b)
+        along = (b - a).normalized()
+        n = Vector(inward)
+        n = (n - along * n.dot(along)).normalized()
+        self.box(((b - a).length, wide, deep), (a + b) / 2 + n * (deep / 2 - 0.002), paint, 0.003, turn=_turn(along, n))
+
+    # ---- what a detachment piles into her ----------------------------------------------------------------------
+    def pack(self, at, facing, size=(0.32, 0.13, 0.34), paint="canvas.tarp"):
+        """A haversack hung flat on a plate: `at` the middle of its back, `facing` the way out of the plate."""
+        f = Vector(facing)
+        m = rot(math.degrees(math.atan2(-f.x, f.y)))
+        w, d, h = size
+        c = Vector(at) + m @ Vector((0, d / 2, 0))
+        self.put(bm_box((w, d, h), c, m), paint, 0.035, segs=2)
+        self.put(bm_box((w + 0.012, d + 0.014, h * 0.42), c + Z * (h * 0.30), m), paint, 0.022, segs=2)       # its flap
+        if self.fine:
+            for e in (-0.26, 0.26):                          # two straps down the flap, and the sling it hangs by
+                self.put(bm_box((0.026, d + 0.024, h * 0.5), c + m @ Vector((e * w, 0, h * 0.24)), m), "leather")
+            self.tube([c + m @ Vector((-w * 0.3, -d * 0.4, h * 0.45)), Vector(at) + Z * (h * 0.5 + 0.09), c + m @ Vector((w * 0.3, -d * 0.4, h * 0.45))], 0.008, "leather", 5)
+
+    def tarp(self, at, size=(0.6, 0.42, 0.1), yaw=0.0, paint="canvas", folds=3):
+        """A tarpaulin folded flat: a few layers, none lying quite square on the one below, a strap round it."""
+        m, g, at = rot(yaw), self.rng, Vector(at)
+        h = size[2] / folds
+        for k in range(folds):
+            layer = (size[0] * (1 - 0.04 * k), size[1] * (1 - 0.05 * k), h * 1.1)
+            self.put(bm_box(layer, at + Z * (h * (k + 0.5)) + m @ Vector((g.uniform(-0.012, 0.012), g.uniform(-0.012, 0.012), 0)), rot(yaw + g.uniform(-3, 3))), paint, h * 0.42, segs=2)
+        if self.fine:
+            self.put(bm_box((0.03, size[1] + 0.012, size[2] + 0.01), at + Z * (size[2] / 2), m), "leather")
+
+    def helmet(self, at, up=Z, kind="pot", paint="upper", r=0.125):
+        """A steel helmet lying or hung by its strap: `up` the way its crown points."""
+        if kind == "brodie":       # the British dish: a shallow crown, a wide brim
+            prof = [(0.11, 0.0), (0.10, r * 0.45), (0.065, r * 0.78), (0.022, r * 0.9), (0.012, r * 1.28), (0.0, r * 1.3), (0.0, 0.0)]
+        elif kind == "stahl":      # the German: a deep crown, the skirt flared out round it
+            prof = [(0.16, 0.0), (0.15, r * 0.5), (0.11, r * 0.86), (0.05, r * 0.98), (0.022, r * 1.02), (0.0, r * 1.17), (0.0, 0.0)]
+        else:                      # a plain deep pot (the American and the Soviet)
+            prof = [(0.155, 0.0), (0.145, r * 0.5), (0.105, r * 0.86), (0.04, r), (0.0, r * 1.03), (0.0, 0.0)]
+        self.lathe(at, up, prof, paint, self.n(16, 8))
+
+    def rammer(self, a, b, head=0.05):
+        """The rammer: a wooden staff from a, its head at b, in two clips."""
+        a, b = Vector(a), Vector(b)
+        d = (b - a).normalized()
+        self.rod(a, b - d * 0.12, 0.017, "wood", 8)
+        self.rod(b - d * 0.13, b, head, "wood", 12)
+        if self.fine:
+            for t in (0.22, 0.72):
+                p = a.lerp(b, t)
+                self.rod(p - d * 0.015, p + d * 0.015, 0.03, "steel", 8)
+
+    def sack(self, at, r=0.15, high=0.36, paint="cloth"):
+        """A plain kit sack standing, tied at the neck."""
+        self.lathe(at, Z, [(high, 0.0), (high, r * 0.24), (high * 0.9, r * 0.2), (high * 0.84, r * 0.34), (high * 0.62, r * 0.88), (high * 0.34, r), (high * 0.1, r * 0.9),
+                           (0.0, r * 0.55), (0.0, 0.0)], paint, self.n(14, 7))
+
+    def shells(self, x0, x1, y0, y1, z0, r, high, gap, paint="shade.shell"):
+        """Shells standing on their bases in a rack: a frame of plate round their feet, the noses above it."""
+        self.use("hull")
+        self.slab((x0, min(y0, y1), z0), (x1, max(y0, y1), z0 + high * 0.34), coat, 0.006)
+        nx, ny = max(1, int((x1 - x0 - 0.03) / gap)), max(1, int((abs(y1 - y0) - 0.03) / gap))
+        n = self.n(14, 7)
+        for i in range(nx):
+            for j in range(ny):
+                x = x0 + (x1 - x0) * (i + 0.5) / nx
+                y = y0 + (y1 - y0) * (j + 0.5) / ny
+                self.lathe((x, y, z0 + high * 0.3), Z, [(high * 0.7, 0.0), (high * 0.69, r * 0.2), (high * 0.6, r * 0.52), (high * 0.46, r * 0.82), (high * 0.3, r), (0.0, r), (0.0, 0.0)], paint, n)
+                if self.fine:
+                    self.lathe((x, y, z0 + high * 0.97), Z, [(0.03, 0.0), (0.03, r * 0.16), (0.0, r * 0.26), (0.0, 0.0)], "brass", 8)       # the fuze
+
 
 def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag="USA"):
     """The M4's hull with an open box for a gun where her roof and turret were. zw: the top of the walls; zb: the top
@@ -78,7 +161,7 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
     down to z behind x. Returns the handy numbers."""
     fine = v.fine
     hw, sw, zs, zr, xe = 0.80, 1.33, 1.06, 1.74, -1.02     # between the tracks, over them; the sponson's floor; the engine deck; its bulkhead
-    th = 0.022
+    th, fl = 0.036, 1.076                                  # the box's plate (a little over life, so its top edge reads from the battle camera); her floor
     m4_tub(v, hw)
     v.use("hull")
     # the engine's box behind the bulkhead, and the sponsons' floors over the tracks
@@ -147,11 +230,44 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
                     v.handle(Vector((x - 0.035, s * sw, z)), Vector((x + 0.035, s * sw, z)), Y * s, 0.006, 0.022, "steel")
             for k in range(9):
                 v.bolt((xe + 0.2 + 0.36 * k, s * (sw - 0.06), zs - 0.031), -Z, 0.012, 0.008)
+            # the plate's own work: the angle along the inside of her top edge, a row of bolts through it, stiffeners up the inside
+            inn, yi = -Y * s, s * (sw - th)
+            spans = [(xe + th, step[0] - 0.02), (step[0] + 0.16, xf - 0.06)] if step else [(xe + th, xf - 0.06)]
+            if s < 0 and pulpit:                            # (nothing where the pulpit stands in the wall)
+                spans = [(a, min(b, xa - 0.05)) for a, b in spans if a < xa - 0.25]
+            for a, b in spans:
+                z = zback if a < (step[0] if step else 9.0) else zw
+                v.rib((a, yi, z - 0.05), (b, yi, z - 0.05), inn, deep=0.045, wide=0.012)
+                v.edge_bolts((a + 0.06, s * (sw + 0.0005), z - 0.05), (b - 0.04, s * (sw + 0.0005), z - 0.05), Y * s)
+                for x in (-0.66, 0.62, 1.26):
+                    if a + 0.1 < x < b - 0.1:
+                        v.rib((x, yi, zs + 0.004), (x, yi, z - 0.056), inn)
+            v.weld((2.47, s * (sw + 0.001), zs + 0.01), (xf + 0.01, s * (sw + 0.001), zw - 0.01), (gn + Y * s).normalized())      # where the front plate meets her side
+            if zback > zr + 0.05:
+                v.weld((xe - 0.001, s * (sw - 0.004), zr + 0.01), (xe - 0.001, s * (sw - 0.004), zback - 0.01), (Y * s - X).normalized())
     if zback > zr + 0.01:
         wall(v, [(xe, -sw, zr - 0.02), (xe, sw, zr - 0.02), (xe, sw, zback), (xe, -sw, zback)], X, th, coat, 0.004)
+        if fine:
+            v.rib((xe + th, -sw + th, zback - 0.05), (xe + th, sw - th, zback - 0.05), X, deep=0.045, wide=0.012)
+            v.edge_bolts((xe - 0.0005, -sw + 0.12, zback - 0.05), (xe - 0.0005, sw - 0.12, zback - 0.05), -X)
+            if zback > zr + 0.3:
+                for y in (-0.3, 0.3):
+                    v.rib((xe + th, y, zr), (xe + th, y, zback - 0.056), X)
     if fine:
-        v.tube([(xf - 0.004, sw - th / 2, zw + 0.002)] + [(x, sw - th / 2, z + 0.002) for x, z in top[1:]] + [(xe, -sw + th / 2, zback + 0.002)]
-               + ([] if pulpit else [(x, -sw + th / 2, z + 0.002) for x, z in reversed(top[1:-1])] + [(xf - 0.004, -sw + th / 2, zw + 0.002)]), 0.013, coat, 6)       # the bead along the walls' top edge
+        for y0, y1 in ((-sw + 0.1, n0 - 0.09), (n1 + 0.09, sw - 0.1)):        # the bolts along the front plate's head
+            v.edge_bolts(g_at(Hc - 0.05, y0), g_at(Hc - 0.05, y1), gn)
+
+    # ---- the driver's place behind his flap: a seat with a back, the two steering levers, his dials ----------------
+    v.use("hull")
+    sx = 2.47 - (fl + 0.6 - zs) * (2.47 - xf) / (zw - zs) - 0.56
+    v.slab((sx - 0.14, dy - 0.15, fl), (sx + 0.14, dy + 0.15, fl + 0.1), coat, 0.006)
+    v.box((0.38, 0.38, 0.07), (sx, dy, fl + 0.13), "canvas.seat", 0.025)
+    v.box((0.07, 0.38, 0.44), (sx - 0.2, dy, fl + 0.36), "canvas.seat", 0.025)
+    if fine:
+        for e in (-0.13, 0.13):
+            v.rod((sx + 0.42, dy + e, fl), (sx + 0.36, dy + e, fl + 0.52), 0.012, "steel", 6)
+            v.ball((sx + 0.36, dy + e, fl + 0.53), 0.022, "black", 8, 6)
+        v.box((0.16, 0.36, 0.05), g_at(Hc * 0.26, dy) - gn * (th + 0.03), "black", 0.006, turn=_turn(gl, gn))
 
     # ---- the pulpit: a drum of plate in her right front corner, taller than the walls, a ring round its top -----
     mg = None
@@ -190,10 +306,10 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
     m4_deck(v, zr, caps=False)
     m4_tail(v)
     for s in (LEFT, RIGHT):
-        v.mark(tag, (-0.1, s * (sw + 0.002), (zs + zback) / 2 + 0.04), Y * s, 0.2, part="hull")
+        v.mark(tag, (-0.1, s * (sw + 0.002), (zs + zback) / 2 + 0.04), Y * s, 0.2, part="hull", shown="star" if tag == "UK" else None)
     m4_gear(v, hw)
     v.use("hull")
-    return {"hw": hw, "sw": sw, "zs": zs, "zr": zr, "xe": xe, "floor": 1.076, "g_at": g_at, "gn": gn, "gl": gl, "Hc": Hc, "th": th, "zback": zback, "mg": mg, "driver_y": dy}
+    return {"hw": hw, "sw": sw, "zs": zs, "zr": zr, "xe": xe, "floor": fl, "g_at": g_at, "gn": gn, "gl": gl, "Hc": Hc, "th": th, "zback": zback, "mg": mg, "driver_y": dy}
 
 
 def _open_sockets(v, h, zw, gunner, loaders, commander, case):
@@ -220,34 +336,53 @@ def _open_sockets(v, h, zw, gunner, loaders, commander, case):
 def m7(fine=True, tag="USA"):
     """M7 howitzer motor carriage of 1942: the 105 mm howitzer on the M4's hull, in an open box with a round pulpit
     for a heavy machine gun at its right front corner. 6.02 m long, 2.87 m wide, 2.54 m to the pulpit's rim."""
-    v = SpWorks("M7", "M7 105 mm howitzer motor carriage", "tank", tag, fine, paints={"canvas.seat": "5A5B40"})
+    v = SpWorks("M7", "M7 105 mm howitzer motor carriage", "tank", tag, fine, paints={"canvas.seat": "5A5B40", "canvas.net": "34361F", "canvas.tarp": "6E6A4C"})
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     zw = 2.04
-    h = m4_open_hull(v, zw, 1.90, 1.72, (-0.66, 0.46, 1.36), pulpit=(1.18, -0.90, 0.50, 2.48), driver=LEFT, step=(0.0, 1.90), tag=tag)
-    sw, zs, zr, xe, fl = h["sw"], h["zs"], h["zr"], h["xe"], h["floor"]
-    px, pz, zt = 1.37, 1.30, 1.81
-    v.pedestal((px, 0.0, pz), fl, r=0.36)
-    v.saddle(px, zt, 0.22, (15.0, 30.0), rate=6.0, foot=0.34)
+    h = m4_open_hull(v, zw, 1.90, 1.72, (-0.81, 0.31, 1.36), pulpit=(1.18, -0.98, 0.47, 2.48), driver=LEFT, step=(0.0, 1.90), tag=tag)
+    sw, zs, zr, xe, fl, th = h["sw"], h["zs"], h["zr"], h["xe"], h["floor"], h["th"]
+    px, pz, zt, gy = 1.37, 1.30, 1.81, -0.15            # (the howitzer stands right of her middle line, just inboard of the pulpit)
+    here = v.here()
+    v.pedestal((px, 0.0, pz), fl, r=0.32)
+    v.saddle(px, zt, 0.22, (15.0, 30.0), rate=6.0, foot=0.32)
     v.cradle(-5.0, 35.0, 0.32, 0.2, 1.2, 0.55, 0.16, over=(-0.45, 1.25, 0.07, 0.235))
     xb = v.piece(2.36, 0.105, 0.78, 0.14, 0.1, 1.07, steps=((0.45, 0.118),), ring=(0.3, 0.36, 0.36), block="right", lug=0.5)
     v.handwheels((px - 0.3, 0.42, zt - 0.14), (px - 0.42, 0.34, zt - 0.30), r=0.12)
     v.sight((px - 0.2, 0.32, zt + 0.04), high=0.26)
-    v.seat((px - 0.62, 0.50, zt - 0.62), 1.0, part="turret")
+    v.seat((px - 0.62, 0.50, zt - 0.34), 1.0, part="turret")
+    v.tube([(px - 0.62, 0.30, zt - 0.54), (px - 0.36, 0.26, zt - 0.56), (px - 0.12, 0.2, pz + 0.04)], 0.018, coat, 6)      # the arm that carries it from the saddle
+    v.shift(here, (0.0, gy, 0.0))
     # ---- inside her: the rounds standing along each sponson, seats, the things a detachment lives with -----------
     v.rounds(-0.92, 0.36, 0.88, sw - 0.05, zs, 0.50)
     v.rounds(-0.92, 0.22, -(sw - 0.05), -0.88, zs, 0.50)
     v.use("hull")
-    for at in ((-0.55, 0.52), (-0.55, -0.52)):            # two seats on posts
+    for at in ((-0.6, 0.68), (-0.6, -0.68)):              # two seats on posts, against the racks
         v.rod((at[0], at[1], fl), (at[0], at[1], fl + 0.34), 0.022, "steel", 8)
         v.box((0.32, 0.32, 0.06), (at[0], at[1], fl + 0.37), "canvas.seat", 0.02)
+    v.rammer((xe + th + 0.035, -0.95, 1.775), (xe + th + 0.035, 0.95, 1.775))                           # across the back wall
+    for y in (-0.42, 0.42):                                # the detachment's packs on the bulkhead under it
+        v.pack((xe, y, 1.46), X)
+    v.jerrycan((0.42, -1.14, zs), 0.0)                    # water and oil, in the corner behind the pulpit
+    v.jerrycan((0.42, -0.95, zs), 0.0)
+    v.crate((0.74, 1.08, zs), (0.5, 0.3, 0.24), 0.0)     # a box of fuzes under the wireless, a tarpaulin folded on it
+    v.tarp((0.74, 1.08, zs + 0.245), (0.46, 0.3, 0.08), 0.0, "canvas.tarp")
     if fine:
         v.rod((0.62, sw - 0.09, 1.72), (0.62, sw - 0.09, 1.98), 0.05, "red", 12)                       # the fire extinguisher on the wall
         v.box((0.34, 0.14, 0.24), (0.95, sw - 0.11, 1.80), "shade", 0.008)                             # the wireless
-        v.bucket((-0.86, 0.0, fl), 0.12, 0.24)
-    # ---- outside her: bins on the engine deck, a rolled tarpaulin, the tools across her tail ---------------------
+        v.helmet((-0.45, sw - th - 0.004, 1.70), (0.0, -1.0, 0.2))                                     # helmets hung on the walls over the racks
+        v.helmet((-0.15, -(sw - th - 0.004), 1.70), (0.0, 1.0, 0.2))
+        v.helmet((-0.5, -(sw - th - 0.004), 1.70), (0.0, 1.0, 0.2))
+    # ---- outside her: bins on the engine deck, the net rolled between them, a rolled tarpaulin and the packs on her
+    #      side, the tools across her tail ---------------------------------------------------------------------------
     for s in (LEFT, RIGHT):
         v.bin((-1.58, s * 0.74, zr), (-1.06, s * 1.29, zr + 0.25), bevel=0.02, lid_side=(0, s, 0), latches=2)
-    v.roll((1.5, sw + 0.12, 1.42), (0.3, sw + 0.12, 1.42), 0.11, straps=3)
+    v.roll((-1.112, -0.72, zr + 0.09), (-1.112, 0.72, zr + 0.09), 0.088, paint="canvas.net", straps=3)      # (clear of the engine's air intake)
+    v.tarp((-1.32, 1.02, zr + 0.254), (0.44, 0.42, 0.09), 0.0, "canvas.tarp")
+    v.helmet((-1.30, 1.0, zr + 0.344))
+    v.bucket((-1.32, -1.02, zr + 0.254), 0.12, 0.24)
+    v.roll((1.5, sw + 0.12, 1.42), (0.3, sw + 0.12, 1.42), 0.11, paint="canvas.tarp", straps=3)
+    for x in (0.52, 0.94):
+        v.pack((x, sw, 1.76), Y)
     if fine:
         v.cable([(1.9, -sw - 0.025, 1.22), (0.4, -sw - 0.025, 1.16), (-0.9, -sw - 0.025, 1.24)], 0.014)
         rb = Vector((-2.58 + 2.76, 0, 1.66 - 1.18)).normalized()
@@ -255,10 +390,8 @@ def m7(fine=True, tag="USA"):
         r_at = lambda u, y: Vector((-2.76, y, 1.18)) + rb * u + rn * 0.002      # noqa: E731
         v.shovel(r_at(0.30, -0.5) + rn * 0.02, 90.0, 0.95)
         v.axe(r_at(0.50, -0.38) + rn * 0.02, 90.0, 0.78)
-        for s in (LEFT, RIGHT):
-            v.jerrycan((-0.5 + 0.0, s * (sw + 0.09), 1.12), 90.0 if s > 0 else -90.0)
-    v.aerial("aerial", "hull", (0.95, sw - 0.04, zw), 2.4)
-    _open_sockets(v, h, zw, gunner=(px - 0.55, 0.50, fl), loaders=[(xb - 0.9, -0.25, fl), (xb - 0.7, 0.45, fl)], commander=(-0.75, -0.3, fl), case=(xb - 0.5, -0.2, fl))
+    v.aerial("aerial", "hull", (0.95, sw - th / 2, zw), 2.4)
+    _open_sockets(v, h, zw, gunner=(px - 0.55, 0.50 + gy, fl), loaders=[(xb - 0.8, -0.3 + gy, fl), (xb - 0.55, 0.42 + gy, fl)], commander=(-0.72, 0.30, fl), case=(xb - 0.5, -0.2 + gy, fl))
     v.tank_clips(recoil=1.0, kick=0.7, gun_low=-5.0, hatches=["hatch_driver"], traverse=6.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg="mg")
     return v
@@ -267,34 +400,55 @@ def m7(fine=True, tag="USA"):
 def sexton(fine=True, tag="UK"):
     """Sexton of 1943: the 25-pounder on the same hull (built in Canada on the Ram's), in a plain tall open box with
     no pulpit, the driver on the right. 6.12 m long, 2.72 m wide, 2.44 m high."""
-    v = SpWorks("Sexton", "Sexton, 25-pounder self-propelled", "tank", tag, fine, paints={"canvas.seat": "5A5B40"})
+    v = SpWorks("Sexton", "Sexton, 25-pounder self-propelled", "tank", tag, fine, paints={"canvas.seat": "5A5B40", "canvas.net": "34361F", "canvas.tarp": "6E6A4C"})
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     zw = 2.16
-    h = m4_open_hull(v, zw, zw, 1.88, (-0.46, 0.62, 1.40), pulpit=None, driver=RIGHT, step=None, tag=tag)
-    sw, zs, zr, xe, fl = h["sw"], h["zs"], h["zr"], h["xe"], h["floor"]
-    px, pz, zt = 1.25, 1.40, 1.90
+    h = m4_open_hull(v, zw, zw, 1.88, (-0.34, 0.74, 1.40), pulpit=None, driver=RIGHT, step=None, tag=tag)
+    sw, zs, zr, xe, fl, th = h["sw"], h["zs"], h["zr"], h["xe"], h["floor"], h["th"]
+    px, pz, zt, gy = 1.25, 1.40, 1.90, 0.12             # (the 25-pounder stands left of her middle line, the driver on its right)
+    here = v.here()
     v.pedestal((px, 0.0, pz), fl, r=0.34)
     v.saddle(px - 0.05, zt, 0.2, (25.0, 15.0), rate=4.0, foot=0.3)
     v.cradle(-9.0, 40.0, 0.27, 0.19, 1.45, 0.45, 0.13)
     xb = v.piece(2.47, 0.0876, 0.8, 0.118, 0.07, 0.5, brake="double", steps=((0.5, 0.095),), ring=(0.27, 0.3, 0.31), block="down", lug=0.5)
     v.handwheels((px - 0.37, 0.38, zt - 0.12), (px - 0.49, 0.31, zt - 0.26), r=0.11)
     v.sight((px - 0.29, 0.3, zt + 0.02), high=0.22)
-    v.seat((px - 0.67, 0.44, zt - 0.56), 1.0, part="turret")
-    # ---- inside her: the rounds along each sponson, seats, the wireless ------------------------------------------
+    v.seat((px - 0.67, 0.44, zt - 0.42), 1.0, part="turret")
+    v.tube([(px - 0.67, 0.24, zt - 0.62), (px - 0.4, 0.22, zt - 0.62), (px - 0.14, 0.18, pz + 0.04)], 0.018, coat, 6)       # the arm that carries it from the saddle
+    v.shift(here, (0.0, gy, 0.0))
+    # ---- inside her: the rounds along each sponson, seats, the wireless, the detachment's kit ----------------------
     v.rounds(-0.92, 0.50, 0.90, sw - 0.05, zs, 0.44, r=0.046, gap=0.115)
     v.rounds(-0.92, 0.30, -(sw - 0.05), -0.90, zs, 0.44, r=0.046, gap=0.115)
     v.use("hull")
-    for at in ((-0.55, 0.52), (-0.55, -0.52)):
+    for at in ((-0.6, 0.70), (-0.6, -0.70)):
         v.rod((at[0], at[1], fl), (at[0], at[1], fl + 0.34), 0.022, "steel", 8)
         v.box((0.32, 0.32, 0.06), (at[0], at[1], fl + 0.37), "canvas.seat", 0.02)
+    v.rammer((-0.95, sw - th - 0.036, 2.02), (0.72, sw - th - 0.036, 2.02))                           # along the left wall, under its top
+    for y in (-0.62, 0.0, 0.62):                           # the detachment's packs along the back wall
+        v.pack((xe + th, y, 1.84), X)
+    v.crate((0.72, -1.08, zs), (0.5, 0.3, 0.2), 0.0, "upper")                                          # charge boxes ahead of the right rack
+    v.crate((0.74, -1.08, zs + 0.2), (0.5, 0.3, 0.2), 4.0, "upper")
+    v.jerrycan((0.92, 1.12, zs), 0.0)                     # water, ahead of the left rack
+    v.tarp((1.36, 1.02, zs), (0.46, 0.4, 0.12), 90.0, "canvas.tarp")
     if fine:
         v.rod((0.9, sw - 0.09, 1.80), (0.9, sw - 0.09, 2.06), 0.05, "red", 12)
         v.box((0.40, 0.16, 0.26), (-0.75, -(sw - 0.12), 1.86), "shade", 0.008)                          # the wireless, at the back on the right
-        v.bucket((-0.86, 0.1, fl), 0.12, 0.24)
-    # ---- outside her: a bin each side of the engine deck, bedding rolled along her side, the tools on her tail ----
+        for x in (-0.28, 0.04):                            # helmets hung on the right wall
+            v.helmet((x, -(sw - th - 0.004), 1.86), (0.0, 1.0, 0.2), kind="brodie")
+        v.helmet((0.74, -1.08, zs + 0.405), kind="brodie")
+    # ---- outside her: a bin each side of the engine deck, her deck piled, bedding rolled along her side, packs on
+    #      the other, the tools on her tail ------------------------------------------------------------------------------
     for s in (LEFT, RIGHT):
         v.bin((-2.30, s * 0.80, 1.71), (-1.66, s * 1.29, 1.93), bevel=0.02, lid_side=(0, s, 0), latches=2)
-    v.roll((0.9, -(sw + 0.12), 1.50), (-0.5, -(sw + 0.12), 1.50), 0.11, straps=3)
+    v.roll((1.5, -(sw + 0.12), 1.50), (0.35, -(sw + 0.12), 1.50), 0.11, paint="canvas.tarp", straps=3)
+    for x in (0.36, 0.74):
+        v.pack((x, sw, 1.76), Y)
+    v.roll((-1.10, 1.08, zr + 0.13), (-1.62, 1.08, zr + 0.13), 0.13, paint="canvas.net", straps=2)
+    v.tarp((-1.98, 1.045, 1.934), (0.5, 0.42, 0.1), 0.0, "canvas.tarp")                               # on the bins: a tarpaulin and a bucket, a box of rations
+    v.bucket((-1.98, 1.045, 2.034), 0.12, 0.24)
+    v.crate((-1.98, -1.045, 1.934), (0.55, 0.3, 0.25), 0.0)
+    v.jerrycan((-1.3, -0.92, zr), 0.0)                    # (all clear of the engine's air intake)
+    v.jerrycan((-1.3, -1.11, zr), 0.0)
     if fine:
         v.cable([(1.9, sw + 0.025, 1.22), (0.4, sw + 0.025, 1.16), (-0.9, sw + 0.025, 1.24)], 0.014)
         rb = Vector((-2.58 + 2.76, 0, 1.66 - 1.18)).normalized()
@@ -302,8 +456,8 @@ def sexton(fine=True, tag="UK"):
         r_at = lambda u, y: Vector((-2.76, y, 1.18)) + rb * u + rn * 0.002      # noqa: E731
         v.shovel(r_at(0.30, -0.5) + rn * 0.02, 90.0, 0.95)
         v.axe(r_at(0.50, -0.38) + rn * 0.02, 90.0, 0.78)
-    v.aerial("aerial", "hull", (-0.9, -(sw - 0.04), zw), 2.4)
-    _open_sockets(v, h, zw, gunner=(px - 0.6, 0.48, fl), loaders=[(xb - 0.9, -0.25, fl), (xb - 0.7, 0.45, fl)], commander=(-0.75, 0.3, fl), case=(xb - 0.5, -0.2, fl))
+    v.aerial("aerial", "hull", (-0.9, -(sw - th / 2), zw), 2.4)
+    _open_sockets(v, h, zw, gunner=(px - 0.6, 0.48 + gy, fl), loaders=[(xb - 0.6, -0.35 + gy, fl), (xb - 0.45, 0.45 + gy, fl)], commander=(-0.74, 0.10, fl), case=(xb - 0.5, -0.2 + gy, fl))
     v.tank_clips(recoil=0.5, kick=0.6, gun_low=-9.0, hatches=["hatch_driver"], traverse=4.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
     return v
@@ -313,10 +467,11 @@ def hummel(fine=True, tag="GER"):
     """Hummel of 1943: the 15 cm heavy field howitzer on a lengthened Panzer IV hull, her engine moved to the middle
     under the gun, a tall open box of thin plate over her back half, the drivers' cab across her front. 7.17 m over
     the gun, 2.97 m wide, 2.81 m high. She came after the grey: dark yellow from her first day."""
-    v = SpWorks("Hummel", "Hummel, 15 cm self-propelled howitzer", "tank", tag, fine, paint=GER_COATS["yellow"][0], paints={"canvas.seat": "4A4638"})
+    v = SpWorks("Hummel", "Hummel, 15 cm self-propelled howitzer", "tank", tag, fine, paint=GER_COATS["yellow"][0],
+                paints={"canvas.seat": "4A4638", "canvas.tarp": "5E5A44", "shade.shell": "3E4436"})
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
-    hw, zg, xr, th = 0.925, 1.10, -3.04, 0.02            # half-width between the tracks; the guards; her tail; the box's plate
+    hw, zg, xr, th = 0.925, 1.10, -3.04, 0.03            # half-width between the tracks; the guards; her tail; the box's plate
     # ---- the hull: the Panzer IV's tub, a hand longer behind -------------------------------------------------
     tub = [(xr + 0.12, 0.44), (xr, 0.66), (xr, zg), (1.72, zg), (2.52, 1.00), (2.62, 0.64), (2.25, 0.40), (xr + 0.34, 0.40)]
     v.hull([(x, hw, z) for x, z in tub], coat, bevel=0.014)
@@ -373,12 +528,24 @@ def hummel(fine=True, tag="GER"):
     y_at = lambda z: 1.40 - (z - zg) * 0.18 / (zt0 - zg)      # noqa: E731  (how far out the side plate stands at a height)
     sn = [Vector((0, s * (zt0 - zg), 0.18)).normalized() for s in (1.0, -1.0)]
     side = [(xr + 0.02, zg), (xs0, zg), (xs0, ze), (xs1, zt0), (xk, zt0), (xr + 0.02, zt1)]
+    top_at = lambda x: zt0 if x >= xk else zt1 + (x - xr - 0.02) * (zt0 - zt1) / (xk - xr - 0.02)      # noqa: E731  (her top edge over a place along her)
+    sf_ = Vector((zt0 - ze, 0, xs0 - xs1)).normalized()                                                   # (out of the shield)
     for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
         wall(v, [(x, s * y_at(z), z) for x, z in side][::int(s)], -n, th, coat, 0.004)
         if fine:
             v.weld((-1.30, s * (y_at(zg + 0.03) + 0.001), zg + 0.03), (-1.30, s * (y_at(zt0 - 0.03) + 0.001), zt0 - 0.03), n)
             for k in range(12):                              # the bolts along her foot, into the guard
                 v.bolt((xr + 0.3 + 0.28 * k, s * (y_at(zg + 0.05) + 0.001), zg + 0.05), n, 0.012, 0.008)
+            # the plate's own work: bolts along her top edge, the angle inside it, stiffeners up the inside, the seam at the shield
+            edge = [(xs1 - 0.06, zt0), (xk, zt0), (xr + 0.1, top_at(xr + 0.1))]
+            for (xa, za), (xb_, zb_) in zip(edge, edge[1:]):
+                v.edge_bolts((xa, s * (y_at(za - 0.05) + 0.0005), za - 0.05), (xb_, s * (y_at(zb_ - 0.05) + 0.0005), zb_ - 0.05), n)
+                v.rib((xa, s * (y_at(za - 0.05) - th), za - 0.05), (xb_, s * (y_at(zb_ - 0.05) - th), zb_ - 0.05), -n, deep=0.045, wide=0.012)
+            for x in (-2.45, -1.72, -0.9):
+                z = top_at(x) - 0.056
+                v.rib((x, s * (y_at(zg + 0.01) - th), zg + 0.01), (x, s * (y_at(z) - th), z), -n)
+            v.weld((xs0, s * (y_at(ze) + 0.001), ze), (xs1, s * (y_at(zt0) + 0.001), zt0 - 0.01), (n + sf_).normalized())
+            v.weld((xr + 0.02, s * (y_at(zg) - 0.004), zg + 0.02), (xr + 0.02, s * (y_at(zt1) - 0.004), zt1 - 0.02), (n - X).normalized())
             for x in (-2.5, -0.9, -0.3):                    # loops to lash her stowage to
                 v.handle(Vector((x - 0.04, s * y_at(2.4), 2.4)), Vector((x + 0.04, s * y_at(2.4), 2.4)), n, 0.006, 0.024, "steel")
         v.mark("GER", (-2.1, s * (y_at(1.86) + 0.002), 1.86), n, 0.2, part="hull")
@@ -388,6 +555,12 @@ def hummel(fine=True, tag="GER"):
     sf = Vector((sl.z, 0, -sl.x))
     slot, bn = 0.52, (1.80 - ze) / sl.z
     sheet(v, [(-y_at(ze), 0.0), (y_at(ze), 0.0), (y_at(zt0), Hs), (slot, Hs), (slot, bn), (-slot, bn), (-slot, Hs), (-y_at(zt0), Hs)], [], (xs0, 0.0, ze), Y, sl, th, coat, 0.004)
+    if fine:
+        s_at = lambda u, y: Vector((xs0, y, ze)) + sl * u + sf * 0.0005      # noqa: E731  (a place on the shield, u metres up it)
+        for e in (LEFT, RIGHT):
+            v.edge_bolts(s_at(Hs - 0.05, e * (slot + 0.08)), s_at(Hs - 0.05, e * (y_at(zt0) - 0.1)), sf)
+            v.box((Hs - bn, 0.05, 0.012), s_at((Hs + bn) / 2, e * (slot + 0.03)) + sf * 0.006, coat, 0.003, turn=_turn(sl, sf))      # a strip up each side of the slot
+        v.weld(s_at(0.01, -y_at(ze) + 0.05), s_at(0.01, y_at(ze) - 0.05), sf)
     # the tail plate: two doors, their hinges and a handle
     yb0, yb1 = y_at(zg), y_at(zt1)
     wall(v, [(xr + 0.02, -yb0, zg), (xr + 0.02, yb0, zg), (xr + 0.02, yb1, zt1), (xr + 0.02, -yb1, zt1)], X, th, coat, 0.004)
@@ -397,9 +570,11 @@ def hummel(fine=True, tag="GER"):
             for z in (zg + 0.3, zt1 - 0.32):
                 v.hinge((xr + 0.004, s * 0.63, z - 0.05), (xr + 0.004, s * 0.63, z + 0.05), 0.014)
             v.handle((xr + 0.008, s * 0.12, 1.72), (xr + 0.008, s * 0.12, 1.86), -X, 0.008, 0.04, "steel")
-    if fine:                                               # the bead along the box's top edge
-        top = [(xs1, y_at(zt0) - th / 2, zt0), (xk, y_at(zt0) - th / 2, zt0), (xr + 0.03, y_at(zt1) - th / 2, zt1)]
-        v.tube([Vector(p) + Z * 0.002 for p in top] + [Vector((p[0], -p[1], p[2] + 0.002)) for p in reversed(top)], 0.012, coat, 6)
+            v.edge_bolts((xr + 0.0195, s * 0.7, zt1 - 0.05), (xr + 0.0195, s * (yb1 - 0.1), zt1 - 0.05), -X)
+            v.rib((xr + 0.02 + th, s * 0.66, zg + 0.01), (xr + 0.02 + th, s * 0.66, zt1 - 0.02), X)                  # the doors' posts, inside
+            v.jerrycan((xr - 0.065, s * 0.98, zg + 0.16), 90.0)                                                  # a can each side of the doors, in a strap frame
+            v.slab((xr - 0.15, s * 0.79, zg + 0.14), (xr + 0.02, s * 1.17, zg + 0.16), "upper", 0.004)
+            v.slab((xr - 0.153, s * 0.79, zg + 0.36), (xr + 0.02, s * 1.17, zg + 0.39), "steel")
     # her floor, and the engine's cover inside the box's front that the gun stands on
     v.slab((xr + 0.04, -1.36, zg), (xs0 - 0.02, 1.36, zg + 0.008), "shade")
     v.slab((-0.80, -0.64, zg), (xs0 - 0.03, 0.64, 1.52), coat, 0.012)
@@ -416,7 +591,7 @@ def hummel(fine=True, tag="GER"):
     if True:
         v.use("gun")                                       # (it lifts with the cradle)
         gs = [(-0.42, -0.50), (0.42, -0.50), (0.42, 0.36), (0.32, 0.46), (0.215, 0.46), (0.215, -0.20), (-0.215, -0.20), (-0.215, 0.46), (-0.32, 0.46), (-0.42, 0.36)]
-        sheet(v, gs, [], (px + 0.56, 0.0, zt), Y, Z, 0.012, coat, 0.003)
+        sheet(v, gs, [], (px + 0.56, 0.0, zt), Y, Z, 0.022, coat, 0.003)
         if fine:
             for s in (LEFT, RIGHT):
                 v.rod((px + 0.55, s * 0.30, zt - 0.3), (px + 0.2, s * 0.2, zt - 0.3), 0.012, coat, 6)
@@ -428,17 +603,29 @@ def hummel(fine=True, tag="GER"):
         for s in (LEFT, RIGHT):
             v.rod((px + 0.26, s * 0.36, pz + 0.12), (px + 0.18, s * 0.36, zt - 0.16), 0.06, coat, 14)
             v.rod((px + 0.18, s * 0.36, zt - 0.16), (px + 0.15, s * 0.32, zt - 0.05), 0.022, "steel", 8)
-    # ---- inside her: the cartridge cases standing along each side at the back, seats, the wireless -------------
+    # ---- inside her: the cartridge cases standing at the back on the left, the shells on the right, a locker along
+    #      the left wall that the detachment sits on, the box's canvas cover rolled along the right, their kit ------
     v.rounds(-2.9, -1.75, 0.82, 1.24, zg, 0.5, r=0.075, gap=0.19)
-    v.rounds(-2.9, -1.75, -1.24, -0.82, zg, 0.5, r=0.075, gap=0.19)
+    v.shells(-2.9, -1.75, -1.24, -0.82, zg, 0.074, 0.62, 0.19)
     v.use("hull")
-    for at in ((-1.2, 0.9), (-1.2, -0.9)):
-        v.rod((at[0], at[1], zg), (at[0], at[1], zg + 0.36), 0.022, "steel", 8)
-        v.box((0.32, 0.32, 0.06), (at[0], at[1], zg + 0.39), "canvas.seat", 0.02)
+    v.bin((-1.62, 0.92, zg), (-0.30, 1.26, zg + 0.42), bevel=0.012, lid_side=(0, -1, 0), latches=3)
+    for x in (-1.3, -0.62):
+        v.box((0.5, 0.3, 0.05), (x, 1.09, zg + 0.45), "canvas.seat", 0.02)
+    v.roll((-1.62, -1.14, zg + 0.14), (-0.12, -1.14, zg + 0.14), 0.135, paint="canvas.tarp", straps=4)
+    v.crate((0.0, 1.0, zg), (0.55, 0.32, 0.25), 0.0)                                                   # the charges' boxes, by the shield on the left
+    v.crate((0.0, 1.0, zg + 0.25), (0.52, 0.32, 0.25), -3.0)
+    v.jerrycan((0.12, -0.84, zg), 0.0, coat)                                                             # water and oil, by the shield on the right
+    v.jerrycan((0.12, -1.03, zg), 0.0, coat)
+    v.rammer((-2.5, y_at(2.3) - th - 0.036, 2.3), (-0.5, y_at(2.3) - th - 0.036, 2.3), head=0.07)       # the rammer along the left wall
+    for x in (-2.25, -1.91):                               # packs on the left wall over the cases
+        v.pack((x, y_at(2.0) - th, 2.0), -Y)
     if fine:
         v.box((0.42, 0.16, 0.28), (-0.5, -(y_at(2.0) - 0.12), 2.0), "shade", 0.008)                    # the wireless on the right wall
         v.rod((-0.3, y_at(2.2) - 0.08, 2.1), (-0.3, y_at(2.2) - 0.08, 2.36), 0.05, "red", 12)
-        v.bucket((-2.6, 0.0, zg), 0.12, 0.24)
+        for x in (-1.45, -1.13):                           # helmets hung on the right wall
+            v.helmet((x, -(y_at(2.2) - th - 0.004), 2.2), (0.0, 1.0, 0.25), kind="stahl", paint="shade")
+        v.helmet((0.0, 1.0, zg + 0.505), kind="stahl", paint="shade")
+        v.bucket((-2.75, 0.3, zg), 0.12, 0.24)
     # ---- outside her: the lamp, the tools on the guards ahead of the box, the barrel's travelling lock folded on
     #      the glacis, the silencer across her tail --------------------------------------------------------------
     v.headlamp((2.38, 1.14, 1.10), X, 0.075, stalk=0.09)
@@ -457,14 +644,14 @@ def hummel(fine=True, tag="GER"):
         v.cable([(0.0, -(y_at(1.9) + 0.02), 1.9), (-0.7, -(y_at(1.72) + 0.02), 1.72), (-1.4, -(y_at(1.9) + 0.02), 1.9)], 0.013)
     v.silencer((xr - 0.18, -0.62, 0.93), (xr - 0.18, 0.46, 0.93), 0.15, pipe=[(xr, 0.2, 1.02), (xr - 0.12, 0.2, 1.0), (xr - 0.18, 0.2, 0.96)], tail=((xr - 0.18, -0.62, 0.93), (-0.3, -1, -0.2)))
     v.socket("exhaust.1", (xr - 0.24, -0.78, 0.9), (-0.3, -1, -0.2))
-    v.aerial("aerial", "hull", (-0.5, y_at(zt0) - 0.01, zt0), 2.0)
+    v.aerial("aerial", "hull", (-0.5, y_at(zt0) - th / 2, zt0), 2.0)
     pz4_gear(v, xs=[c + d for c in (-1.7605, -0.6705, 0.4195, 1.5095) for d in (-0.2515, 0.2515)], idler=(-2.82, 0.64),
              rollers=[(-1.62, 0.905), (-0.56, 0.905), (0.50, 0.905), (1.56, 0.905)], dust_x=-3.05)
     # ---- the detachment's places, and what happens to her ---------------------------------------------------
-    v.socket("commander", (-1.9, -0.45, zg), X, part="hull", note="the gun's commander stands here in the open box")
+    v.socket("commander", (-2.55, 0.0, zg), X, part="hull", note="the gun's commander stands here at the back of the open box")
     v.socket("crew.gunner", (px - 0.6, 0.55, zg), X, part="hull", note="the layer, at the sight and the handwheels on the left of the breech")
-    v.socket("crew.loader", (xb - 1.0, -0.3, zg), X, part="hull", note="a loader stands here, behind the breech")
-    v.socket("crew.loader2", (xb - 0.8, 0.5, zg), X, part="hull", note="the second loader, with the cartridge")
+    v.socket("crew.loader", (xb - 0.95, -0.38, zg), X, part="hull", note="a loader stands here, behind the breech")
+    v.socket("crew.loader2", (xb - 0.75, 0.42, zg), X, part="hull", note="the second loader, with the cartridge")
     v.socket("case", (xb - 0.6, -0.2, zg), -X, part="hull", note="where the empty case falls, on her floor")
     v.socket("engine", (0.69, 0.0, ze + 0.05), Z, part="hull", note="the engine's covers under the gun: smoke and the first fire")
     v.socket("fire.1", (0.69, 0.6, ze + 0.05), Z, part="hull")
@@ -486,9 +673,9 @@ def su76(fine=True, tag="SOV"):
     """SU-76M of 1943: the 76 mm divisional gun on a lengthened light tank's hull, six small wheels a side, in an
     open box over her back half, the gun a little left of her middle with a plate box over its recoil gear, the
     driver under a hood in the middle of her glacis. 4.97 m long, 2.72 m wide, 2.10 m high."""
-    v = SpWorks("SU76", "SU-76", "tank", tag, fine, paints={"canvas.seat": "4A4638"})
+    v = SpWorks("SU76", "SU-76", "tank", tag, fine, paints={"canvas.seat": "4A4638", "canvas.tarp": "5A5A40", "cloth.sack": "6A6448"})
     v.root(hull_pivot=(0.0, 0.0, 0.70))
-    hw, zg, zr, xr, th = 0.98, 1.00, 1.26, -2.45, 0.018     # half-width between the tracks; the guards; the roof ahead of the box; her tail
+    hw, zg, zr, xr, th = 0.98, 1.00, 1.26, -2.45, 0.028     # half-width between the tracks; the guards; the roof ahead of the box; her tail
     gz = lambda x: 0.74 + (2.44 - x) * (zr - 0.74) / (2.44 - 0.95)       # noqa: E731  (the glacis: one plate from her nose to the roof)
     xg = 2.44 - (zg - 0.74) * (2.44 - 0.95) / (zr - 0.74)                 # (where it crosses the guards' height)
     # ---- the hull: a tub between the tracks, the engines and the driver under a roof ahead of the box ---------
@@ -537,10 +724,22 @@ def su76(fine=True, tag="SOV"):
     y_at = lambda z: 1.34 - (z - zg) * 0.14 / (zt0 - zg)   # noqa: E731
     sn = [Vector((0, s * (zt0 - zg), 0.14)).normalized() for s in (1.0, -1.0)]
     side = [(xr + 0.02, zg), (xs0, zg), (xs0, zr), (xs1, zt0), (xk, zt0), (xr + 0.02, zt1)]
+    top_at = lambda x: zt0 if x >= xk else zt1 + (x - xr - 0.02) * (zt0 - zt1) / (xk - xr - 0.02)      # noqa: E731  (her top edge over a place along her)
+    sf_ = Vector((zt0 - zr, 0, xs0 - xs1)).normalized()                                                   # (out of the box's face)
     for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
         wall(v, [(x, s * y_at(z), z) for x, z in side][::int(s)], -n, th, coat, 0.004)
         if fine:
             v.weld((-0.9, s * (y_at(zg + 0.03) + 0.001), zg + 0.03), (-0.9, s * (y_at(zt0 - 0.03) + 0.001), zt0 - 0.03), n)
+            # the plate's own work: bolts along her top edge, the angle inside it, stiffeners up the inside, the seam at her face
+            edge = [(xs1 - 0.06, zt0), (xk, zt0), (xr + 0.1, top_at(xr + 0.1))]
+            for (xa, za), (xb_, zb_) in zip(edge, edge[1:]):
+                v.edge_bolts((xa, s * (y_at(za - 0.045) + 0.0005), za - 0.045), (xb_, s * (y_at(zb_ - 0.045) + 0.0005), zb_ - 0.045), n, gap=0.15, r=0.01)
+                v.rib((xa, s * (y_at(za - 0.045) - th), za - 0.045), (xb_, s * (y_at(zb_ - 0.045) - th), zb_ - 0.045), -n, deep=0.04, wide=0.011)
+            for x in (-1.85, -1.0, -0.15):
+                z = top_at(x) - 0.05
+                v.rib((x, s * (y_at(zg + 0.01) - th), zg + 0.01), (x, s * (y_at(z) - th), z), -n, deep=0.03, wide=0.026)
+            v.weld((xs0, s * (y_at(zr) + 0.001), zr), (xs1, s * (y_at(zt0) + 0.001), zt0 - 0.01), (n + sf_).normalized())
+            v.weld((xr + 0.02, s * (y_at(zg) - 0.004), zg + 0.02), (xr + 0.02, s * (y_at(zb) - 0.004), zb - 0.02), (n - X).normalized())
             for k in range(10):
                 v.bolt((xr + 0.25 + 0.28 * k, s * (y_at(zg + 0.05) + 0.001), zg + 0.05), n, 0.011, 0.007)
             v.handle(Vector((-1.9, s * y_at(1.7), 1.7)), Vector((-1.5, s * y_at(1.7), 1.7)), n, 0.009, 0.04)
@@ -552,6 +751,13 @@ def su76(fine=True, tag="SOV"):
     sf = Vector((sl.z, 0, -sl.x))
     slot, bn = 0.36, (1.44 - zr) / sl.z
     sheet(v, [(-y_at(zr), 0.0), (y_at(zr), 0.0), (y_at(zt0), Hs), (gy + slot, Hs), (gy + slot, bn), (gy - slot, bn), (gy - slot, Hs), (-y_at(zt0), Hs)], [], (xs0, 0.0, zr), Y, sl, th, coat, 0.004)
+    if fine:
+        s_at = lambda u, y: Vector((xs0, y, zr)) + sl * u + sf * 0.0005      # noqa: E731  (a place on her face, u metres up it)
+        v.edge_bolts(s_at(Hs - 0.045, gy + slot + 0.07), s_at(Hs - 0.045, y_at(zt0) - 0.09), sf, gap=0.15, r=0.01)
+        v.edge_bolts(s_at(Hs - 0.045, gy - slot - 0.07), s_at(Hs - 0.045, -y_at(zt0) + 0.09), sf, gap=0.15, r=0.01)
+        for e in (-1, 1):
+            v.box((Hs - bn, 0.045, 0.01), s_at((Hs + bn) / 2, gy + e * (slot + 0.028)) + sf * 0.005, coat, 0.003, turn=_turn(sl, sf))      # a strip up each side of the opening
+        v.weld(s_at(0.01, -y_at(zr) + 0.05), s_at(0.01, y_at(zr) - 0.05), sf)
     wall(v, [(xs0, -1.28, zg), (xs0, 1.28, zg), (xs0, 1.28, zr), (xs0, -1.28, zr)], -X, th, coat, 0.004)       # the bulkhead before the engines
     # the tail plate: lower than the sides, a door in its middle
     wall(v, [(xr + 0.02, -y_at(zg), zg), (xr + 0.02, y_at(zg), zg), (xr + 0.02, y_at(zb), zb), (xr + 0.02, -y_at(zb), zb)], X, th, coat, 0.004)
@@ -560,9 +766,11 @@ def su76(fine=True, tag="SOV"):
         for z in (zg + 0.18, zb - 0.16):
             v.hinge((xr + 0.004, 0.31, z - 0.04), (xr + 0.004, 0.31, z + 0.04), 0.012)
         v.handle((xr + 0.008, -0.2, 1.3), (xr + 0.008, -0.2, 1.42), -X, 0.008, 0.035, "steel")
-        top = [(xs1, y_at(zt0) - th / 2, zt0), (xk, y_at(zt0) - th / 2, zt0), (xr + 0.03, y_at(zt1) - th / 2, zt1)]
-        for s in (LEFT, RIGHT):                            # the bead along each side's top edge
-            v.tube([Vector((p[0], s * p[1], p[2] + 0.002)) for p in top], 0.011, coat, 6)
+        for s in (LEFT, RIGHT):
+            v.edge_bolts((xr + 0.0195, s * 0.4, zb - 0.045), (xr + 0.0195, s * (y_at(zb) - 0.1), zb - 0.045), -X, gap=0.15, r=0.01)
+            v.rib((xr + 0.02 + th, s * 0.34, zg + 0.01), (xr + 0.02 + th, s * 0.34, zb - 0.02), X, deep=0.03, wide=0.026)      # the door's posts, inside
+    for s in (LEFT, RIGHT):                                # a bedroll strapped each side of the door
+        v.roll((xr - 0.085, s * 0.42, zg + 0.36), (xr - 0.085, s * 1.12, zg + 0.36), 0.095, paint="canvas.tarp", straps=2)
     v.slab((xr + 0.04, -1.3, zg), (xs0 - 0.02, 1.3, zg + 0.008), "shade")                              # her floor, trodden dark
 
     # ---- the piece: the divisional gun's own saddle and cradle, a plate box over its recoil gear --------------
@@ -581,17 +789,27 @@ def su76(fine=True, tag="SOV"):
     v.handwheels((px - 0.34, 0.33, zt - 0.095), (px - 0.44, 0.27, zt - 0.255), r=0.1)
     v.sight((px - 0.22, 0.25, zt + 0.025), high=0.2)
     v.shift(here, (0.0, gy, 0.0))
-    # ---- inside her: rounds along the right wall and across the back, seats, the wireless ----------------------
+    # ---- inside her: rounds along the right wall and at the back on the left, the layer's seat, the wireless, boxes
+    #      of rounds and the detachment's sacks along the left wall -------------------------------------------------
     v.rounds(-2.3, -0.6, -1.22, -0.96, zg, 0.44, r=0.045, gap=0.105)
     v.rounds(-2.3, -1.3, 0.96, 1.22, zg, 0.44, r=0.045, gap=0.105)
     v.use("hull")
-    for at in ((-0.5, 0.75), (-1.2, -0.45)):
-        v.rod((at[0], at[1], zg), (at[0], at[1], zg + 0.34), 0.02, "steel", 8)
-        v.box((0.3, 0.3, 0.055), (at[0], at[1], zg + 0.37), "canvas.seat", 0.02)
+    v.rod((-0.40, 0.88, zg), (-0.40, 0.88, zg + 0.34), 0.02, "steel", 8)                              # the layer's seat
+    v.box((0.3, 0.3, 0.055), (-0.40, 0.88, zg + 0.37), "canvas.seat", 0.02)
+    v.box((0.34, 0.3, 0.05), (-1.25, -0.80, zg + 0.34), "canvas.seat", 0.02)                           # a seat folded down from the right rack
+    v.slab((-1.4, -0.96, zg + 0.3), (-1.1, -0.66, zg + 0.318), coat, 0.004)
+    v.crate((-0.92, 1.04, zg), (0.62, 0.3, 0.2), 0.0)                                                  # boxes of rounds, a helmet left on them
+    v.crate((-0.90, 1.04, zg + 0.2), (0.62, 0.3, 0.2), 3.0)
+    v.sack((-2.2, 0.68, zg), 0.15, 0.36, "cloth.sack")
+    v.sack((-1.9, 0.76, zg), 0.13, 0.32, "cloth.sack")
+    v.rammer((-1.5, y_at(1.9) - th - 0.034, 1.9), (0.02, y_at(1.9) - th - 0.034, 1.9), head=0.04)      # the cleaning staff along the left wall
     if fine:
         v.box((0.36, 0.14, 0.24), (-0.2, y_at(1.7) - 0.11, 1.7), "shade", 0.008)
-        v.bucket((-2.2, 0.3, zg), 0.11, 0.22)
-    v.aerial("aerial", "hull", (-0.2, y_at(zt0) - 0.01, zt0), 2.0)
+        v.bucket((-2.28, 0.3, zg), 0.11, 0.22)
+        v.helmet((-0.90, 1.04, zg + 0.405))
+        v.helmet((-0.66, -(y_at(1.8) - th - 0.004), 1.8), (0.0, 1.0, 0.25))
+        v.helmet((-0.36, -(y_at(1.8) - th - 0.004), 1.8), (0.0, 1.0, 0.25))
+    v.aerial("aerial", "hull", (-0.2, y_at(zt0) - th / 2, zt0), 2.0)
     # ---- the running gear: six small wheels a side on torsion bars, three rollers, the drive at the front ------
     ty, r_w = 1.18, 0.275
     xs = [-1.70 + 0.66 * i for i in range(6)]
@@ -611,9 +829,9 @@ def su76(fine=True, tag="SOV"):
     for s in (LEFT, RIGHT):
         v.lathe((2.15, s * (hw - 0.02), 0.68), Y * s, [(0.16, 0.0), (0.16, 0.14), (0.1, 0.2), (0.0, 0.22), (0.0, 0.0)], "upper", v.n(22, 8))
     # ---- the detachment's places, and what happens to her ---------------------------------------------------
-    v.socket("commander", (-1.5, -0.5, zg), X, part="hull", note="the gun's commander stands here in the open box, on the right")
+    v.socket("commander", (-2.05, -0.5, zg), X, part="hull", note="the gun's commander stands here at the back of the open box, on the right")
     v.socket("crew.gunner", (px - 0.55, gy + 0.5, zg), X, part="hull", note="the layer, at the sight and the handwheels on the left of the breech")
-    v.socket("crew.loader", (xb - 0.9, gy - 0.3, zg), X, part="hull", note="the loader stands here, behind the breech")
+    v.socket("crew.loader", (xb - 0.58, gy - 0.5, zg), X, part="hull", note="the loader stands here, right of the breech and clear of its run back")
     v.socket("case", (xb - 0.5, gy - 0.2, zg), -X, part="hull", note="where the empty case falls, on her floor")
     v.socket("engine", (0.70, -0.81, zr + 0.05), Z, part="hull", note="the engines' grille on the right: smoke and the first fire")
     v.socket("fire.1", (0.70, -0.4, zr + 0.05), Z, part="hull")

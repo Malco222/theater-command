@@ -16,16 +16,21 @@ from marks import BLACK, DISC, RED, WHITE, YELLOW, rect, ring, star
 FR_BLUE = "24407A"
 
 
-def shapes(tag):
-    """The layers of a marking, lowest first, in a square from -1 to 1 (v is up)."""
+def shapes(tag, shown=None):
+    """The layers of a marking, lowest first, in a square from -1 to 1 (v is up). shown: for a nation whose marking
+    changed with the months (works.MARK_MONTHS), which of them to draw."""
     if tag == "GER":            # the beam cross: black, edged white
         return [rect(-1, 1, -0.3, 0.3, WHITE) + rect(-0.3, 0.3, -1, 1, WHITE), rect(-1, 1, -0.17, 0.17, BLACK) + rect(-0.17, 0.17, -1, 1, BLACK)]
     if tag == "USA":            # the plain white star
         return [star(1.0, WHITE)]
     if tag == "SOV":            # the red star
         return [star(1.0, DISC)]
-    if tag == "UK":             # the armoured corps' flash: red, white, red
-        return [rect(-1, -0.34, -0.6, 0.6, RED) + rect(-0.34, 0.34, -0.6, 0.6, WHITE) + rect(0.34, 1, -0.6, 0.6, RED)]
+    if tag == "UK":             # by the month: bare paint, then the recognition flash (white, red, white), then the white Allied star
+        if shown == "none":
+            return []
+        if shown == "star":
+            return [star(1.0, WHITE)]
+        return [rect(-1, -0.34, -0.6, 0.6, WHITE) + rect(-0.34, 0.34, -0.6, 0.6, RED) + rect(0.34, 1, -0.6, 0.6, WHITE)]
     if tag == "FRA":            # the roundel: blue middle, white, red outside
         return [ring(0.0, 1.0, RED), ring(0.0, 0.66, WHITE), ring(0.0, 0.33, FR_BLUE)]
     if tag == "JAP":            # the plain red disc on white
@@ -52,7 +57,7 @@ def put(model, ob, arm, burn=False):
             v = (up - n * up.dot(n)).normalized()
             u = v.cross(n)
             r = mk["radius"]
-            for layer, polys in enumerate(shapes(mk["tag"])):
+            for layer, polys in enumerate(shapes(mk["tag"], mk.get("shown"))):
                 for col, poly in polys:
                     flat = [Vector((a, b, 0.0)) for (a, b) in poly]
                     tris = [[flat[i] for i in t] for t in tessellate_polygon([flat])]

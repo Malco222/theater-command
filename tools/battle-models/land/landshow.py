@@ -57,6 +57,7 @@ class Show:
         self.towed = "carriage" in self.m.part_at        # (a towed gun)
         self.carrier = "dismount" in self.m.clips        # (a lorry or a half-track: she has a way down for her men)
         self.wheeled = "steer_l" in self.m.part_at       # (she steers on front wheels)
+        self.spg = "breech" in self.m.part_at and "turret" in self.m.part_at and not self.towed      # (a field gun standing in an open hull)
         if not belt:                                     # (no tank has run where she stands)
             rut = 400.0
         if field == "battle":
@@ -225,6 +226,9 @@ def sheet(name, out, opt, w, h, spp):
         pv = m.parts[m.part_at["turret"]].pivot
         shots[3] = shots[3][:6] + (S.train(bearing, 35.0),)
         shots[-1] = ("trained", "Her guns laid on the sky", (pv.x - 3.3, -2.5, pv.z + 1.7), (pv.x + 0.1, 0.0, pv.z + 0.55), 50, 60.0, S.train(-38.0, 52.0))
+    if S.spg:            # a gun in an open hull: her last picture looks down into the box from behind, at the breech the battle camera sees
+        pv = m.parts[m.part_at["turret"]].pivot
+        shots[-1] = ("breech", "Down into her open box from behind, as the battle camera does, the gun laid", (pv.x - 3.7, 1.9, pv.z + 2.6), (pv.x - 0.9, 0.0, pv.z + 0.1), 36, 25.0, S.train(10.0, 14.0))
     only = opt.get("views", "").split(",") if opt.get("views") else None
     files, labels = [], []
     for key, label, eye, tgt, lens, sun, pose in shots:
