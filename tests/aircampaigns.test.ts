@@ -388,7 +388,7 @@ describe("the book: history's campaigns on their months (b549)", () => {
     expect(hasAirfield(g, rhodes.id)).toBe(false);
     expect(whyNotBase(g, ita, rhodes, true)).not.toBeNull();
     setAirCampaigns(g, true);
-    for (const nm of ['Rhodes', 'Sardinia', 'Tripoli', 'Benghazi', 'Derna', 'Tobruk']) expect(hasAirfield(g, g.byName[nm].id)).toBe(true);
+    for (const nm of ['Rhodes', 'Sardinia', 'Tripoli', 'Benghazi', 'Derna', 'Tobruk', 'Crete', 'Tunis', 'El Alamein']) expect(hasAirfield(g, g.byName[nm].id)).toBe(true);
     expect(whyNotBase(g, ita, rhodes, true)).toBeNull();
     // Whoever holds the field uses it.
     tobruk.ctrl = 'UK';

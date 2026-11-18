@@ -2085,14 +2085,24 @@
   "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
  ],
  "fields": {
-  "_about": "Rider b574 (the design director, 22:11Z): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) from this turn; whoever holds the province uses it, as everywhere. With the switch off they are not read. Which Libyan provinces and from when: the historian (b574); the classes are the feature builder's reading.",
+  "_about": "Rider b574 (the design director, 22:11Z) and the historian's list (historian/med-airfields-b574.md): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) all war; every one existed all war and served whoever held the province, so whoever holds it in the game uses it, as everywhere. With the switch off they are not read. Pantelleria is not on the chart: it folds into Sicily, which has its air base. Gambut is counted with Tobruk's El Adem.",
   "rows": [
-   { "region": "Rhodes", "from": 1, "class": 1, "why": "Maritza and Gadurra, the Aegean command's base: about 100 or more aircraft in 1940-41 (the historian, b569, high)." },
-   { "region": "Sardinia", "from": 1, "class": 2, "why": "Elmas, Decimomannu and Alghero, home to the torpedo and bomber groups (the historian, b569, high)." },
-   { "region": "Tripoli", "from": 1, "class": 2, "why": "Castel Benito." },
-   { "region": "Benghazi", "from": 1, "class": 2, "why": "Benina." },
-   { "region": "Derna", "from": 1, "class": 1, "why": "Derna's field." },
-   { "region": "Tobruk", "from": 1, "class": 2, "why": "El Adem and the fields by Tobruk." }
+   { "region": "Tripoli", "from": 1, "class": 3, "why": "Castel Benito (high)." },
+   { "region": "Benghazi", "from": 1, "class": 3, "why": "Benina and Berka; the 1943 Ploesti raid flew from here (high)." },
+   { "region": "Derna", "from": 1, "class": 2, "why": "Derna and Martuba (high)." },
+   { "region": "Tobruk", "from": 1, "class": 3, "why": "El Adem and Gambut (high)." },
+   { "region": "Agedabia", "from": 1, "class": 1, "why": "Landing grounds that followed the front (medium)." },
+   { "region": "El Agheila", "from": 1, "class": 1, "why": "Marble Arch (medium)." },
+   { "region": "Bardia", "from": 1, "class": 1, "why": "Landing grounds that followed the front (medium)." },
+   { "region": "Mersa Matruh", "from": 1, "class": 2, "why": "Matruh's fields (high)." },
+   { "region": "El Alamein", "from": 1, "class": 2, "why": "The Alamein fields (high)." },
+   { "region": "Sidi Barrani", "from": 1, "class": 1, "why": "Sidi Barrani's landing ground (high)." },
+   { "region": "Rhodes", "from": 1, "class": 2, "why": "Maritza, Gadurra and Calato, the Aegean command's base (high)." },
+   { "region": "Sardinia", "from": 1, "class": 3, "why": "Elmas, Decimomannu and four more, home to the torpedo and bomber groups (high)." },
+   { "region": "Crete", "from": 1, "class": 2, "why": "Maleme and Heraklion (high)." },
+   { "region": "Corsica", "from": 1, "class": 2, "why": "The Allied fields of 1943-44 (high)." },
+   { "region": "Tunis", "from": 1, "class": 3, "why": "El Aouina and Bizerte (medium-high)." },
+   { "region": "Sfax", "from": 1, "class": 2, "why": "Kairouan and Gabes (medium-high)." }
   ]
  },
  "radar": {
