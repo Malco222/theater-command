@@ -2,6 +2,20 @@
  "note": "Round one: recordings for the six test sounds, all from Wikimedia Commons. Licences were read from Commons when found; fetch_recording.mjs reads them again and refuses anything a game may not use.",
  "recordings": [
   {
+   "id": "radio_cw_psalm118",
+   "for": "radio",
+   "title": "File:Psalm118CW.wav",
+   "licence": "CC0",
+   "note": "Morse code (CW) by the same radio amateur: a second choice for the wireless. Round five (18 November 2026), for the 3D game's last stand-in sounds."
+  },
+  {
+   "id": "radio_cw_psalm23",
+   "for": "radio",
+   "title": "File:Psalm 23 1 Morse Code.wav",
+   "licence": "CC0",
+   "note": "Morse code sent by a radio amateur; if it was taken off the air, its static is real: the wireless message. Round five (18 November 2026), for the 3D game's last stand-in sounds."
+  },
+  {
    "id": "desk_typewriter_wws",
    "for": "click",
    "title": "File:WWS Typewriter.ogg",

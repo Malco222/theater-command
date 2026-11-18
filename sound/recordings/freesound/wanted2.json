@@ -358,6 +358,46 @@
   {
    "id": 438332,
    "for": "crash"
+  },
+  {
+   "id": 438701,
+   "for": "submarine"
+  },
+  {
+   "id": 438702,
+   "for": "submarine"
+  },
+  {
+   "id": 438527,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438529,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438531,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438533,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438534,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438535,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438536,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438537,
+   "for": "bombs_war"
   }
  ]
 }

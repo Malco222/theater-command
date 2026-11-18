@@ -5,7 +5,7 @@
 //   node sound/make_from_recordings.mjs <folder of raw recordings> <out-folder> [--set test|battle] [name ...]
 //
 // --set test makes the eight of the test batch (recordings/recipes.mjs), --set battle the battle pack
-// (recordings/battle.mjs, battle2.mjs, battle3.mjs and battle4.mjs); with neither, both.
+// (recordings/battle.mjs and battle2.mjs to battle5.mjs); with neither, both.
 //
 // One WAV a sound, under the same names the game already uses, so nothing a builder holds has to change. A list of
 // what was made goes to <out-folder>/sound-list.json in the same form as the old one, with each sound's sources.
@@ -21,6 +21,7 @@ import battle from './recordings/battle.mjs';
 import battle2 from './recordings/battle2.mjs';
 import battle3 from './recordings/battle3.mjs';
 import battle4 from './recordings/battle4.mjs';
+import battle5 from './recordings/battle5.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2), setAt = args.indexOf('--set'), only = setAt >= 0 ? args.splice(setAt, 2)[1] : null;
@@ -45,6 +46,7 @@ battle(defIn('battle'));
 battle2(defIn('battle'));
 battle3(defIn('battle'));
 battle4(defIn('battle'));
+battle5(defIn('battle'));
 
 fs.mkdirSync(out, { recursive: true });
 const list = [];
