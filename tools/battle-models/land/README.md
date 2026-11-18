@@ -32,8 +32,9 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `flak.py` | the light flak mounts, and the three wagons that carry them |
 | `vehicles.py` | every vehicle by name, whose it is, and the faces it showed through the war |
 | `ground.py` | the stage (`Battle`: the field battle's own ground and trees; `Field`: a plain meadow) and the effects (`Air`) |
-| `landmarks.py` | each nation's plain period marking, laid on the skin; a crew's name or rings too, for a proof picture (`landlook.py <Name> <out> side 14 960x540 name=WORD` or `rings=3`) |
-| `brushhand.py` | the crew's brush hand: Latin capitals (with their accents) and Russian ones as strokes, laid out unevenly as a hand does, and the Soviet slogans in Russian letters; written out for the games as `brush-alphabet.json` |
+| `landmarks.py` | each nation's plain period marking, laid on the skin; a crew's name or rings too, for a proof picture (`landlook.py <Name> <out> side 14 960x540 name=WORD` or `rings=3`); and the few soft marks where rain has run down her sides (`rain_marks`: pictures only) |
+| `brushhand.py` | the crew's brush hand: Latin capitals (with their accents) and Russian ones as strokes, laid out unevenly as a hand does, the Soviet slogans in Russian letters, and Japanese characters one under another (`column`); written out for the games as `brush-alphabet.json` |
+| `kanji_strokes.py`, `brush-kanji.json` | the Japanese characters' strokes, read from KanjiVG's open stroke-order record (CC BY-SA 3.0, Ulrich Apel, https://kanjivg.tagaini.net; the table is under the same licence and says so) |
 | `names_fit.py` | which of the historian's names each tank can wear, on how many lines and how tall: writes `names-fit.json` for the games |
 | `landshow.py`, `landlook.py` | sheets, clips, quick stills |
 | `export_land.py` | `<Name>.json`, `.glb`, `.fbx` and `index-land.json` |
@@ -97,9 +98,10 @@ Polish tanks (the Matilda's on her skirting plates, the Char B1's near the front
 the left side only), a slogan in Russian letters on the turret's side for Soviet tanks (on the casemate of the SU-85
 and SU-76), and for Germany no name but thin rings round the barrel (Panzer IV on either gun, Tiger, Panther, StuG
 III; not the Hummel). The M10, M7, Sexton and M8 have a place too. The Type 97 has a place on her turret's side for
-characters written downward, marked `script: japanese`, `ready: false`: no such characters are drawn yet, so the game
-paints nothing there (never Latin letters on her) and the index gives her no `crew_mark`. Every other vehicle has
-none and the file has no `name_place`.
+Japanese characters written downward, marked `script: japanese`: never Latin letters on her. Only the ten of the
+historian's names whose characters are drawn (`japanese.names` in `brush-alphabet.json`: one or two characters each,
+the old forms) are painted; for any other name the game paints nothing. Every other vehicle has none and the file
+has no `name_place`.
 
 kind `name`: a place for each side that carries one (`at`, the plate's `facing`, the writing's `along` and `up`, the
 `part` it rides, the room `long`, the `lines` it has room for), the letters `high` tall (`high_two` on two lines),
@@ -120,6 +122,22 @@ letter, a letter or two run wide, no two strokes weigh the same, and a blob stay
 has every letter the historian's names use (French, Polish, Italian and German marks are one more dab of the brush)
 and his twenty Soviet lines in Russian letters (`slogans_russian`: his Latin spelling drops the soft sign, so read
 them from there).
+
+The Japanese hand (`japanese` in `brush-alphabet.json`, `brushhand.column`): each character's strokes in the order
+they are written, with how the brush leaves each (`stop`: pressed down at both ends; `sweep`: drawn off to a point;
+`dab`: a dot), painted with a finer brush the more strokes the fullest character has, each character a little off the
+line, leaning and unlike in size. To add a name: fetch its characters' files from KanjiVG, run `kanji_strokes.py` on
+the folder, add the name to `brushhand.JAPANESE`, and check `japanese-hand-check.png`-style against a printed face.
+
+Where two strokes cross, or a blob sits on a stroke, the pieces must never lie in one plane: the overlap renders as
+a dark spot. The pictures lay each piece a hair above the last (`landmarks.crew_mark`); a game paints the strokes
+into one decal or does the same. Paint over paint is the same off-white, never darker.
+
+**Rain marks** (pictures only: the games do their own dirt). `landmarks.rain_marks` looks at her sides as she stands
+and lays a few soft dark strips where rain would run: from under a top edge open to the sky, or under a small thing
+that stands off the plate (a handle, a hatch's rim), never under an overhang; unlike in length and spacing, up to
+ten on a hull's side and four on a turret's, clear of her marking and her name. The art director's rule: six to ten
+on a side, not a hundred (fine even streaks all over a plate read as planks; none at all reads as plastic).
 
 **Clips.** `idle`, `start`, `drive`, `move_off`, `stop`, `fire` (the barrel's recoil), `fire.rock` (the hull's answer,
 made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `hull_mg_burst`, `hit`, `open_up`,

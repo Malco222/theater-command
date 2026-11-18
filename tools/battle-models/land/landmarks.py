@@ -55,20 +55,28 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
         return
     col = NAME_PAINT[place["ink"]["use"]]
     back = lambda p: Vector((p[0], -p[1], p[2]))            # (the file's y is to the right)
-    if place["kind"] == "name" and name and not place.get("script"):          # (a script with no characters drawn yet: nothing is painted)
-        text = name.replace("_", " ")
+    text = name.replace("_", " ") if name else None
+    if text and place.get("script") == "japanese":          # her characters, or nothing: never Latin letters on her
+        text = brushhand.japanese(text)
+        if text is None:
+            print("crew_mark: no characters are drawn for %r: %s wears no name" % (name, model.name))
+    if place["kind"] == "name" and text:
         if model.info.get("tag") == "SOV" and text.isascii():
             text = brushhand.russian(text)
         down = place.get("writing") == "down"
         for pl in place["places"]:
             at, n, run, up = back(pl["at"]), back(pl["facing"]).normalized(), back(pl["along"]).normalized(), back(pl["up"]).normalized()
-            got = brushhand.fit(text, pl["long"], place["high"], pl.get("lines", place.get("lines", 1)), place.get("least", brushhand.LEAST), place.get("high_two"))
+            if place.get("script") == "japanese":
+                got = brushhand.fit_down(text, pl["long"], place["high"], place.get("least", brushhand.LEAST))
+            else:
+                got = brushhand.fit(text, pl["long"], place["high"], pl.get("lines", place.get("lines", 1)), place.get("least", brushhand.LEAST), place.get("high_two"))
             if got is None:
                 print("crew_mark: %r does not fit %s's %s side (%.2f m): she wants a shorter name" % (text, model.name, pl["side"], pl["long"]))
                 continue
             h, rows = got
             laid = [brushhand.word(r, seed=model.name + pl["side"], down=down) for r in rows]
             h = min([h] + [pl["long"] / max(0.5, long) for _, long in laid])
+            coat = 0                                        # (paint laid over paint lies ON it: no two pieces of a letter in one plane, or the overlap renders as a dark spot)
             for k, (quads, long) in enumerate(laid):
                 if down:
                     ox, oy = 0.0, long * h / 2
@@ -77,13 +85,14 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
                     oy = -h / 2 + (len(rows) - 1) * 0.675 * h - k * 1.35 * h
                 for q in quads:
                     idx = []
+                    coat += 1
                     for (a, b) in q:
                         p = at + run * (ox + a * h) + up * (oy + b * h)
                         hit = tree.ray_cast(p + n * 0.25, -n, 0.5)
                         if hit[0] is not None and hit[1].dot(n) > 0.4:
                             p = hit[0]
                         idx.append(len(verts))
-                        verts.append(p + n * 0.0045)
+                        verts.append(p + n * (0.0045 + 0.00012 * (coat % 16)))
                         groups.append(pl.get("part", "hull"))
                     a_, b_, c_ = verts[idx[0]], verts[idx[1]], verts[idx[2]]
                     if (b_ - a_).cross(c_ - a_).dot(n) < 0:
@@ -113,14 +122,167 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
                     cols.append(col)
 
 
-def put(model, ob, arm, burn=False, name=None, rings=0):
+# Where rain has run down her (the art director, 2026-11-18): a few soft dark marks on a side, each from under a top
+# edge or something that stands off the plate (a hatch, a port, a box), unlike in length and spacing; six to ten on a
+# hull's side, never a hundred, or a big plate reads as planks. For the pictures only: the games do their own dirt.
+RAIN_PARTS = ("hull", "turret")
+RAIN_DARK = 0.55                                            # how much of the coat's light the darkest mark takes, down its middle
+
+
+def rain_marks(model, tree, verts, faces, cols, groups, runs):
+    """Finds where rain would run on her sides as she stands, and lays each mark as a soft strip on the skin: `runs`
+    gets how dark each new point is (0 at a strip's edges and foot)."""
+    import random
+    from works import COATS
+    m = model
+    coat = {m.paint_at[p] for p in m.paints if p.split(".")[0] in COATS}
+    part_name = {i: k for k, i in m.part_at.items()}
+    ok_part = {m.part_at[p] for p in RAIN_PARTS if p in m.part_at}
+    if not ok_part or not coat:
+        return
+    xs = [p[0] for p in m.verts]
+    zs = [p[2] for p in m.verts]
+    x_lo, z_lo = min(xs), min(zs)
+    sx, sz = 0.03, 0.02
+    nx, nz = int((max(xs) - x_lo) / sx) + 1, int((max(zs) - z_lo) / sz) + 1
+    rng = random.Random("rain:" + model.name)
+    keep_off = []                                           # her marking and her crew's name keep their own room
+    for mk in m.marks:
+        keep_off.append((mk["at"][0], mk["at"][2], mk["radius"] + 0.05, mk["radius"] + 0.05, None if mk.get("both") else (1.0 if -mk["at"][1] > 0 else -1.0)))
+    for pl in model.info.get("file", {}).get("name_place", {}).get("places", []):
+        keep_off.append((pl["at"][0], pl["at"][2], pl["long"] / 2 + 0.05, 0.2, 1.0 if pl["side"] == "left" else -1.0))
+    for s in (1.0, -1.0):
+        def look(x, z):
+            hit = tree.ray_cast(Vector((x, s * 6.0, z)), Vector((0.0, -s, 0.0)), 6.0)
+            if hit[0] is None:
+                return None
+            return hit[0], hit[1], m.fpart[hit[2]], m.fpaint[hit[2]], hit[3]
+        plate = lambda g: g is not None and g[2] in ok_part and g[3] in coat and g[1].y * s > 0.5 and abs(g[1].z) < 0.75
+        same = lambda a, b: a[2] == b[2] and a[1].dot(b[1]) > 0.97 and abs((a[0] - b[0]).dot(b[1])) < 0.004      # two looks at one flat plate
+        starts = []
+        for i in range(nx + 1):
+            col = [look(x_lo + i * sx, z_lo + j * sz) for j in range(nz + 1)]
+            j = nz
+            while j > 0:
+                if not plate(col[j]):
+                    j -= 1
+                    continue
+                top = j                                     # a run of one plate, from its top down
+                while j > 0 and plate(col[j - 1]) and same(col[j - 1], col[j]):
+                    j -= 1
+                room = (top - j) * sz
+                j -= 1
+                if room < 0.12:
+                    continue
+                g = col[top]
+                k = top + 1                                 # what is over it, past the rounding of its own edge
+                while k <= nz and k <= top + 2 and plate(col[k]) and not same(col[k], g) and abs(col[k][4] - g[4]) < 0.012:
+                    k += 1
+                over = col[k] if k <= nz else None
+                if over is None or over[4] > g[4] + 0.03:
+                    weight = 1.0                            # a top edge: sky over it, or the next plate set well back
+                elif over[4] < g[4] - 0.008 or over[3] not in coat:
+                    # something stands off the plate: a hatch's rim, a port, a rail, a lamp's foot. A small thing only:
+                    # under a big overhang (a sponson's floor, a stowage bin) the plate is out of the rain
+                    if not any(b is not None and plate(b) and abs((b[0] - g[0]).dot(g[1])) < 0.012 for b in col[k + 1:k + 8]):
+                        continue
+                    weight = 4.0
+                else:
+                    continue                                # only a bend between two plates
+                # rain has to reach it: nothing over her side there (a track guard, a sponson, a bin) for a man's height up
+                if tree.ray_cast(g[0] + g[1] * 0.06 + Vector((0.0, 0.0, 0.02)), Vector((0.0, s * 0.2, 1.0)).normalized(), 2.0)[0] is not None:
+                    continue
+                starts.append((weight, i, top, room, g[2]))
+        for on in sorted(ok_part):
+            pool = [c for c in starts if c[4] == on]
+            if not pool:
+                continue
+            span = (max(c[1] for c in pool) - min(c[1] for c in pool)) * sx
+            most = 10 if part_name[on] == "hull" else 4
+            want = max(2, min(most, int(round(span * 1.5)) + rng.randint(-1, 1)))
+            taken = []
+            while pool and len(taken) < want:
+                pick = rng.uniform(0.0, sum(c[0] for c in pool))
+                for k, c in enumerate(pool):
+                    pick -= c[0]
+                    if pick <= 0.0:
+                        break
+                _, i, j, room, _ = pool.pop(k)
+                x0, z0 = x_lo + i * sx + rng.uniform(-0.012, 0.012), z_lo + j * sz + 0.006
+                if any(abs(x0 - tx) < rng.uniform(0.16, 0.5) for tx in taken):
+                    continue
+                long = min(room * rng.uniform(0.55, 1.0), rng.uniform(0.12, 0.55))
+                if any((hand is None or hand == s) and abs(x0 - kx) < rx and kz - rz < z0 and z0 - long < kz + rz for kx, kz, rx, rz, hand in keep_off):
+                    continue
+                wide, dark = rng.uniform(0.03, 0.065), rng.uniform(0.5, 1.0)
+                rows, x = [], x0
+                n = max(3, int(long / 0.025))
+                for k in range(n + 1):
+                    t = k / n
+                    hw = wide / 2 * (1.0 - 0.45 * t)
+                    three = [look(x + d, z0 - t * long) for d in (-hw, 0.0, hw)]
+                    if any(not plate(g) for g in three) or abs(three[0][4] - three[2][4]) > 0.01:
+                        if rows:
+                            break
+                        continue                            # (the rounding of the edge it starts under)
+                    rise = 0.45 if not rows else 1.0
+                    rows.append([(g[0] + g[1] * 0.002, a) for g, a in zip(three, (0.0, dark * rise * (1.0 - t) ** 1.15, 0.0))])
+                    x += rng.uniform(-0.0015, 0.0015)
+                if len(rows) < 5:
+                    continue
+                taken.append(x0)
+                base = len(verts)
+                for row in rows:
+                    for p, a in row:
+                        verts.append(p)
+                        groups.append(part_name[on])
+                        runs[len(verts) - 1] = a
+                for k in range(len(rows) - 1):
+                    for c in (0, 1):
+                        q = [base + 3 * k + c, base + 3 * k + c + 1, base + 3 * (k + 1) + c + 1, base + 3 * (k + 1) + c]
+                        if (verts[q[1]] - verts[q[0]]).cross(verts[q[2]] - verts[q[0]]).y * s < 0:
+                            q.reverse()
+                        faces.append(q)
+                        cols.append("rain")
+
+
+def _rain_material():
+    mat = bpy.data.materials.get("rain mark")
+    if mat is None:
+        mat = bpy.data.materials.new("rain mark")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        for nd in list(nt.nodes):
+            if nd.type != "OUTPUT_MATERIAL":
+                nt.nodes.remove(nd)
+        out = next(nd for nd in nt.nodes if nd.type == "OUTPUT_MATERIAL")
+        how = nt.nodes.new("ShaderNodeAttribute")
+        how.attribute_name = "run"
+        fac = nt.nodes.new("ShaderNodeMath")
+        fac.operation = "MULTIPLY"
+        fac.inputs[1].default_value = RAIN_DARK
+        nt.links.new(how.outputs["Fac"], fac.inputs[0])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        film = nt.nodes.new("ShaderNodeBsdfDiffuse")
+        film.inputs["Color"].default_value = (0.03, 0.026, 0.022, 1.0)
+        mix = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(fac.outputs[0], mix.inputs[0])
+        nt.links.new(clear.outputs[0], mix.inputs[1])
+        nt.links.new(film.outputs[0], mix.inputs[2])
+        nt.links.new(mix.outputs[0], out.inputs["Surface"])
+    return mat
+
+
+
+def put(model, ob, arm, burn=False, name=None, rings=0, rain=True):
     """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on. Returns the objects made.
     burn: the marking darkens as its object's colour (red, 0 to 1) says she has burnt, as works.land_look(burn=...) does.
-    name, rings: her crew's own mark too (b477), where her file has a place for it: a word, or a count of barrel rings."""
-    if not model.marks and not (name or rings):
-        return []
+    name, rings: her crew's own mark too (b477), where her file has a place for it: a word, or a count of barrel rings.
+    rain: the few soft marks where rain has run down her sides (`rain_marks`)."""
     tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in model.faces])
-    verts, faces, cols, groups = [], [], [], []
+    verts, faces, cols, groups, runs = [], [], [], [], {}
+    if rain:
+        rain_marks(model, tree, verts, faces, cols, groups, runs)
     if name or rings:
         crew_mark(model, tree, name, rings, verts, faces, cols, groups)
     for mk in model.marks:
@@ -156,6 +318,9 @@ def put(model, ob, arm, burn=False, name=None, rings=0):
     me.from_pydata([tuple(p) for p in verts], [], faces)
     used = sorted(set(cols))
     for c in used:
+        if c == "rain":
+            me.materials.append(_rain_material())
+            continue
         name = ("burnt mark:" if burn else "mark:") + c
         mat = bpy.data.materials.get(name)
         if mat is None:
@@ -182,6 +347,10 @@ def put(model, ob, arm, burn=False, name=None, rings=0):
                 nt.links.new(mx.outputs[2], b.inputs["Base Color"])
         me.materials.append(mat)
     me.polygons.foreach_set("material_index", [used.index(c) for c in cols])
+    if runs:
+        how = me.color_attributes.new("run", "FLOAT_COLOR", "POINT")
+        for i, a in runs.items():
+            how.data[i].color = (a, a, a, 1.0)
     me.update()
     o = bpy.data.objects.new(model.name + "_marks", me)
     bpy.context.scene.collection.objects.link(o)

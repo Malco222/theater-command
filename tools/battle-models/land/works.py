@@ -46,7 +46,8 @@ NAME_HOW = ("Once her unit has come through three battles the game paints her cr
             "rides `part`, and a place is given for each side that carries one. A name too long for one line at `high`: on two lines where the place "
             "has `lines` 2 and the name two words (letters `high_two` tall, or `high` where that is not given), else painted smaller, but never "
             "under `least`; a name that fits neither way is not for this tank. `writing` down: the characters stand one under another, `long` the "
-            "room downward. `script` japanese with `ready` false: no such characters are drawn yet, so paint nothing (never Latin letters on her). "
+            "room downward. `script` japanese: her name is in Japanese characters, and only the names in brush-alphabet.json `japanese.names` have "
+            "theirs drawn; for any other name paint nothing (never Latin letters on her). "
             "kind `rings`: no name, but `most` thin bands round the barrel, the first at `at` and each next one `step` on along `toward` (to the breech), "
             "`wide` across, lying on the barrel whose radius there is `radius`; one ring, then more as she lasts. `ink`: for a name off-white on grey, "
             "olive and green coats and near-black on dark yellow; rings off-white on every coat. Matt, never brighter than her national marking; it "
@@ -186,7 +187,8 @@ class Works(Shop, Gear, Fittings):
         where a place nearly as long has it, and for one line's where none has: a name over ten letters goes on two lines.
         bend: how far the plate may leave the flat under the word (a cast turret's side is never flat: the game lays
         the letters on the skin, as it does her marking).
-        script: "japanese" says the word is in characters the brush alphabet does not have yet: the game paints nothing."""
+        script: "japanese" says the word is in Japanese characters: only the names whose characters brushhand has
+        (`brushhand.JAPANESE`) are painted, any other not at all."""
         m = self.m
         tree, ids = self._skin()
         ok_parts = {m.part_at[p] for p in ([part] + list(parts or ()))}
@@ -287,8 +289,8 @@ class Works(Shop, Gear, Fittings):
             if any(p["lines"] > 1 for p in places) and high_two != high:
                 more["high_two"] = high_two
             if script:
-                more.update(script=script, ready=False)
-                note = (note + " " if note else "") + "No characters for this script are drawn yet: paint nothing here until they are."
+                more.update(script=script)
+                note = (note + " " if note else "") + "Only the names in brush-alphabet.json `japanese.names` have their characters drawn: for any other, paint nothing here."
             if note:
                 more["note"] = note
             self._name_file("name", high=high, least=NAME_LEAST, lines=max(p["lines"] for p in places), writing=writing, places=places, **more)
