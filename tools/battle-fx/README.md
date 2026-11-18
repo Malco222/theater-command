@@ -48,7 +48,7 @@ warm white, and small guns light no ground. A flash shorter than a frame is stil
 shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
-colour in the hour's light, and looking toward the sun the thin edges of smoke and the fringe of a cloud glow warm
+colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm
 (`game.sun_through`). The sun's own light is full by day and none at night, read from the hour's light; the preview
 takes it as FX_SUNLIGHT=r,g,b.
 

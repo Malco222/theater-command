@@ -2563,14 +2563,17 @@ namespace TheaterFx
 				Col = Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B));
 			}
 		}
-		if (!B.bLight && SunThrough > 0.0 && Dist > 1e-6)
+		if (!B.bLight && (B.CloudShade > 0.0 || B.Smear > 0.0) && SunThrough > 0.0 && Dist > 1e-6)
 		{
+			// (smoke clouds and trails only: a low sheet of dust along the ground would glow as a fog over the field)
 			// (art director 22:24Z: with the sun behind it, smoke's thin edges glow warm where the sun shows through,
-			// most when the eye looks almost into the sun; thin smoke and a cloud's fringe, never its thick body)
+			// most when the eye looks almost into the sun; a cloud's fringe, never its thick body. Most at middle
+			// thickness (art director 22:36Z): near see-through dust stays near unseen, never a glowing fog sheet)
 			const double Back = (P - Eye.Eye).Dot(Eye.Sun) / Dist;
 			if (Back > 0.0)
 			{
-				const double K = SunThrough * std::pow(Back, SunThroughPow) * (1.0 - Clamp01(A)) * Outer * Outer;
+				const double Thick = Clamp01(A);
+				const double K = SunThrough * std::pow(Back, SunThroughPow) * 4.0 * Thick * (1.0 - Thick) * Outer * Outer;
 				Through = Rgb(SunThroughCol.R * Eye.SunLight.R, SunThroughCol.G * Eye.SunLight.G, SunThroughCol.B * Eye.SunLight.B) * K;
 			}
 		}
