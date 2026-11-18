@@ -28,7 +28,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, lentStays, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -77,12 +77,6 @@ let single = false;
 let waves = 2;
 /** Set while the army being run fights a war for a strip of frontier: only corps this many marches from the front close up to it. */
 let near: number | null = null;
-/**
- * A corps lent to a war for a strip of frontier ('stay' on its row: the Winter War's 13th Army, b502(c)) stays on that
- * war's front while it lasts: the staff's reserves and its massing leave it where it stands, it is put in no
- * garrison, and it fights there.
- */
-const stays = (g: Game, c: Corps): boolean => lentStays(g, c);
 /** True while an army overseas is fighting its staff's main effort: the force massed opposite the target is there to attack it. */
 let striking = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
@@ -221,7 +215,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
     if (great) {
-      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && !stays(g, c));
+      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined);
       const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
       let have = inside.length;
       for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
@@ -230,7 +224,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       }
       continue;
     }
-    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined && !stays(g, c)).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
+    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
       if (have >= want || field <= 1) break;
@@ -631,7 +625,7 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
     const d = hops(g, r.id, (x) => allied(g, nat, ctl(g, x)));
     const first = door?.name === name;
     const pool = g.corps
-      .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && !stays(g, c) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
+      .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
       .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a));
     for (const c of pool) {
       if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
@@ -2100,7 +2094,7 @@ function defend(g: Game, nat: string, line = true): void {
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
   // A slow command needs a month to organise any answer to ground it has just lost.
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
-  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0 && !stays(g, c));
+  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
     if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
     const here = g.regions[c.reg];
