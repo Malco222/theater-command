@@ -851,6 +851,12 @@ public:
 	bool IsLessonStamped() const { return LessonStampUntil > 0.0 && LessonStampAt >= 0.0; }
 	/** The note just gone, fading over 110 ms: its words, and how far it has faded (0 to 1). False once it has gone. */
 	bool GetLessonLeaving(FLessonNote& Out, float& Faded) const;
+	/** The note leaving was stamped DONE, and leaves with its stamp. */
+	bool IsLessonGoneStamped() const { return bLessonGoneStamped; }
+	/** (The art director's brief, section 10.) Lesson 10 is laid across the open arsenal, and its strip keeps its room until the room closes. */
+	bool IsArsenalStrip() const { return bArsenalStrip && bArsenalOpen; }
+	/** The screen found no room for the note this frame (a room with no margin): it waits unseen, and a stamp owed waits with it. */
+	void SetLessonNoteHidden(bool bHidden) { bLessonNoteHidden = bHidden; }
 	/** Lesson 1, laid across the month card that is open now. */
 	bool IsLessonLaid() const { return bLessonLaid && bPageOpen && Page.Month.bValid; }
 	const FLessonNote& GetLaidLesson() const { return LessonLaid; }
@@ -1273,6 +1279,10 @@ private:
 	double LessonCameAt = 0.0, LessonGoneAt = -1.0, LessonStampAt = -1.0, LessonStampUntil = 0.0;
 	bool bLessonsDue = false;
 	bool bLessonStampOwed = false; // the note's deed is done, and its stamp waits for the screen to be his again
+	bool bLessonGoneStamped = false;
+	bool bLessonNoteHidden = false;
+	bool bArsenalStrip = false; // lesson 10's strip is laid across the arsenal, and keeps its room
+	bool bArsenalStripPutAway = false; // he put the note in the strip away himself: the room closes up until it is next opened
 	uint32 LessonMomentKey = 0;
 	TArray<TPair<FString, bool>> LessonDeedsOwed; // a deed only the screen sees, and whether the month card was open
 	TArray<FString> LessonActsOwed;
@@ -1281,7 +1291,7 @@ private:
 	bool IsLessonQuiet() const;
 	void AskLessons();
 	void TakeLessons(const FLessonDesk& Desk);
-	void ShowDeskNote(double Now);
+	void ShowDeskNote(double Now, bool bWasStamped = false);
 	void LessonPageChanged();
 	void ResetLessons();
 	// (The pointer.) What it frames this frame; where the note stands; the ground pointer as last laid (its frame and

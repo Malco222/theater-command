@@ -3584,7 +3584,7 @@ void ACampaignPlayerController::ResetLessons()
 {
 	Lessons = FLessonDesk();
 	LessonNote = LessonGone = LessonLaid = FLessonNote();
-	bLessonNote = bLessonLaid = bLessonsDue = bOpeningCardOwed = bLessonStampOwed = false;
+	bLessonNote = bLessonLaid = bLessonsDue = bOpeningCardOwed = bLessonStampOwed = bLessonGoneStamped = bLessonNoteHidden = bArsenalStrip = bArsenalStripPutAway = false;
 	++LessonArrival;
 	LessonCameAt = 0.0;
 	LessonGoneAt = LessonStampAt = -1.0;
@@ -3662,6 +3662,7 @@ void ACampaignPlayerController::AskLessons()
 		if (bLessonNote)
 		{
 			LessonGone = LessonNote;
+			bLessonGoneStamped = false;
 			LessonGoneAt = FPlatformTime::Seconds();
 			bLessonNote = false;
 		}
@@ -3714,7 +3715,7 @@ void ACampaignPlayerController::TakeLessons(const FLessonDesk& Desk)
 	}
 	if (bLessonStampOwed)
 	{
-		if (IsLessonQuiet())
+		if (IsLessonQuiet() || bLessonNoteHidden)
 		{
 			return;
 		}
@@ -3731,7 +3732,7 @@ void ACampaignPlayerController::TakeLessons(const FLessonDesk& Desk)
 	ShowDeskNote(Now);
 }
 
-void ACampaignPlayerController::ShowDeskNote(double Now)
+void ACampaignPlayerController::ShowDeskNote(double Now, bool bWasStamped)
 {
 	const bool bSame = bLessonNote && Lessons.bNote && Lessons.Note.Kind == LessonNote.Kind && Lessons.Note.Id == LessonNote.Id;
 	if (bSame)
@@ -3741,8 +3742,9 @@ void ACampaignPlayerController::ShowDeskNote(double Now)
 	}
 	if (bLessonNote)
 	{
-		// The note on the desk fades out over 110 ms, and the next slides in after it.
+		// The note on the desk fades out over 110 ms, and the next slides in after it: a stamped one with its stamp.
 		LessonGone = LessonNote;
+		bLessonGoneStamped = bWasStamped && LessonNote.Kind == TEXT("lesson");
 		LessonGoneAt = Now;
 		bLessonNote = false;
 	}
@@ -3769,6 +3771,12 @@ void ACampaignPlayerController::PressLesson(const FString& Action)
 	}
 	LessonActsOwed.Add(Action);
 	bLessonsDue = true;
+	if (IsArsenalStrip() && (Action == TEXT("later") || Action == TEXT("close") || Action == TEXT("tip")))
+	{
+		// (he asked: the arsenal closes up)
+		bArsenalStrip = false;
+		bArsenalStripPutAway = true;
+	}
 	if (Afterwards.Num() == 0 && !IsAnswering())
 	{
 		AskLessons();
@@ -4023,9 +4031,11 @@ void ACampaignPlayerController::AimLesson()
 						OnScreen(FName(*(TEXT("act:") + Desk->Act)));
 					}
 				}
-				else if (Id == TEXT("build") && bArsenalOpen && Build && Build->bStaff)
+				else if (Id == TEXT("build") && bArsenalOpen)
 				{
-					OnScreen(TEXT("deskbar:build"));
+					// (Through the arsenal's door the clamps leave its button (the art director's brief, section 10): on
+					// LET MY STAFF's row while the staff has the desk, else on the first thing he can order, as the browser.)
+					OnScreen(Build && Build->bStaff ? TEXT("deskbar:build") : TEXT("order"));
 				}
 			}
 			else if (Id == TEXT("pickup") || Id == TEXT("city"))
@@ -4814,8 +4824,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			LessonStampUntil = 0.0;
 			LessonStampAt = -1.0;
-			ShowDeskNote(Now);
+			ShowDeskNote(Now, true);
 			bLessonsDue = true;
+		}
+		// (A stamp earned while the screen was not his lands once it is again, whatever ended last: an announcement,
+		// a question of war, a moment at the front, the briefing or the newsreel; or a room with no margin for the note.)
+		if (bLessonStampOwed && !IsLessonQuiet() && !bLessonNoteHidden)
+		{
+			bLessonsDue = true;
+		}
+		// (The art director's brief, section 10.) Lesson 10's deed is done in the arsenal: while the arsenal is open its
+		// note is laid across it, and the strip keeps its room until the room closes, for what comes next (the closing
+		// note) to take; unless he puts the note away himself.
+		if (!bArsenalOpen)
+		{
+			bArsenalStrip = bArsenalStripPutAway = false;
+		}
+		else if (!bArsenalStrip && !bArsenalStripPutAway && HasLessonNote() && LessonNote.Kind == TEXT("lesson") && LessonNote.Id == TEXT("build"))
+		{
+			bArsenalStrip = true;
 		}
 		if (const FCampaignSession* Seen = GetSession())
 		{

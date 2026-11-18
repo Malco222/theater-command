@@ -3564,8 +3564,10 @@ namespace
 			float Faded = 0.0f;
 			if (C->GetLessonLeaving(Out, Faded))
 			{
-				// (it leaves by fading in 110 ms, with no travel)
+				// (it leaves by fading in 110 ms, with no travel; a stamped note keeps its stamp, landed, as it goes)
 				Alpha = 1.0f - Faded;
+				bStamped = C->IsLessonGoneStamped();
+				StampAge = bStamped ? 1.0 : -1.0;
 				return true;
 			}
 			return false;
@@ -3638,7 +3640,20 @@ namespace
 			Wrap(Words, Face, High, Out);
 		}
 
+		/** The note set out, kept while the note, its stamp and the width are the same (the strip's even lines are sought
+		 * a dozen times over, and the note is asked for its size and drawn every frame). */
 		FLaid Lay(const FLessonNote& Note, bool bStamped, double Width) const
+		{
+			const FString Key = FString::Printf(TEXT("%d|%d|%.2f|%s|%s|%d|%d|%s|%s|%s"), Form.Get(), bStamped ? 1 : 0, Width, *Note.Kind, *Note.Id, Note.N, Note.Of, *Note.Head, *Note.Text, *Note.Deed);
+			if (Key != LaidKey)
+			{
+				LaidKey = Key;
+				LaidKept = LayAfresh(Note, bStamped, Width);
+			}
+			return LaidKept;
+		}
+
+		FLaid LayAfresh(const FLessonNote& Note, bool bStamped, double Width) const
 		{
 			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 			auto P = [this](double Pixels) { return Pixels * K; };
@@ -3976,6 +3991,8 @@ namespace
 		float K = 0.9f;
 		mutable double LastWidth = 0.0;
 		mutable FLaid Shown;
+		mutable FString LaidKey;
+		mutable FLaid LaidKept;
 	};
 
 	/**
@@ -5676,6 +5693,32 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 									[
 										DeskBar(TEXT("build"))
+									]
+									// (Rules 84.3.3; the art director's look brief, section 10.) Lesson 10's deed is done here, so its
+									// note is laid across the room on every screen, under the head and the desk's row and above the
+									// columns, which move down by the strip and 12. The strip's room is made as the room opens and
+									// kept until it closes (the closing note, due next, takes it), unless he puts the note away.
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SBox).Padding(FMargin(0.0f, 12.0f, 0.0f, 0.0f))
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsArsenalStrip() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.MinDesiredHeight_Lambda([this]()
+										{
+											if (!Controller.IsValid() || !Controller->IsArsenalStrip())
+											{
+												ArsenalStripHigh = 0.0f;
+												return FOptionalSize();
+											}
+											if (ArsenalStrip.IsValid())
+											{
+												ArsenalStripHigh = FMath::Max(ArsenalStripHigh, static_cast<float>(ArsenalStrip->GetDesiredSize().Y) + 12.0f);
+											}
+											return FOptionalSize(ArsenalStripHigh);
+										})
+										[
+											SAssignNew(ArsenalStrip, SStaffNote).Controller(Controller).Form(2).Scale(1.0f)
+											.Visibility_Lambda([this]() { return bLessonInLaid && Controller.IsValid() && Controller->IsArsenalStrip() && Controller->HasLessonNote() ? EVisibility::Visible : EVisibility::Collapsed; })
+										]
 									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
@@ -7751,6 +7794,7 @@ namespace
 			{
 				return;
 			}
+			Controller->SetLessonNoteHidden(false);
 			FLessonNote Gone;
 			float Faded = 0.0f;
 			const bool bNote = Controller->HasLessonNote();
@@ -7760,6 +7804,11 @@ namespace
 			}
 			const double K = 0.9;
 			const FVector2D Screen = ScreenRoot->GetTickSpaceGeometry().GetLocalSize();
+			if (Controller->IsArsenalStrip() && !Controller->IsPageOpen() && !Controller->GetDocument().bValid)
+			{
+				bLessonInLaid = true; // (laid across the arsenal: the brief, section 10)
+				return;
+			}
 			if (Controller->IsLessonBesideCard())
 			{
 				// The card's left edge and top: a room's card as it is drawn (it may be scaled down to fit), the others
@@ -7792,6 +7841,12 @@ namespace
 				else if (Controller->IsPageOpen())
 				{
 					bLessonInLaid = true; // (laid in the card under its head instead: never hidden)
+				}
+				else
+				{
+					// (the art director's brief, section 10: in a room with no margin, any other note waits unseen, and is
+					// back at its home the moment the room closes; a stamp owed lands then)
+					Controller->SetLessonNoteHidden(true);
 				}
 				return;
 			}
@@ -7890,9 +7945,25 @@ namespace
 				{
 					continue;
 				}
-				// (Scrolled out of its card, it is not pointed at: the clamps would hang over the card's head round nothing.)
+				// (Scrolled out of its card, it is not pointed at: the clamps would hang over the card's head round nothing.
+				// So it is tried against the card, and against every scroll box it lies in.)
 				const double Middle = Box.GetCenter().Y;
 				if (Card.bIsValid && (Middle < Card.Min.Y || Middle > Card.Max.Y))
+				{
+					continue;
+				}
+				bool bScrolledOut = false;
+				static const FName ScrollType(TEXT("SScrollBox"));
+				const TSharedPtr<SWidget> Widget = Each.Value.Pin();
+				for (TSharedPtr<SWidget> Up = Widget.IsValid() ? Widget->GetParentWidget() : nullptr; Up.IsValid() && !bScrolledOut; Up = Up->GetParentWidget())
+				{
+					if (Up->GetType() == ScrollType)
+					{
+						const FBox2D Held = InFrame(Up);
+						bScrolledOut = Held.bIsValid && (Middle < Held.Min.Y || Middle > Held.Max.Y);
+					}
+				}
+				if (bScrolledOut)
 				{
 					continue;
 				}
@@ -8117,6 +8188,7 @@ namespace
 		void LayOutArsenal(const FArsenal& Stock)
 		{
 			ArsenalColumns->ClearChildren();
+			bool bOrderAimed = false;
 			const TCHAR* Groups[][2] = { { TEXT("army"), TEXT("THE ARMY") }, { TEXT("air"), TEXT("THE AIR FORCE") }, { TEXT("navy"), TEXT("THE NAVY") }, { TEXT("works"), TEXT("WORKS") } };
 			for (int32 Column = 0; Column < 4; ++Column)
 			{
@@ -8135,7 +8207,10 @@ namespace
 				{
 					if (Offer.Group == Groups[Column][0])
 					{
-						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeOffer(Offer)];
+						// (Rules 84.3.3) Lesson 10's pointer, in the arsenal with the build desk his own: the first thing he can order.
+						const bool bFirstLit = !bOrderAimed && Offer.Why.IsEmpty();
+						bOrderAimed |= bFirstLit;
+						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[bFirstLit ? Aimed(TEXT("order"), MakeOffer(Offer)) : MakeOffer(Offer)];
 						++Count;
 					}
 				}
@@ -13344,6 +13419,8 @@ namespace
 		TWeakPtr<SWidget> SmallMapPiece; // the small map's panel: the second home is under it
 		TSharedPtr<SBox> PageCardBox; // a room's card, which the slip stands beside
 		TSharedPtr<SStaffNote> LessonNoteWidget;
+		TSharedPtr<SStaffNote> ArsenalStrip; // (lesson 10 laid across the arsenal, and the room it keeps)
+		float ArsenalStripHigh = 0.0f;
 		FVector2D LessonAt = FVector2D::ZeroVector;
 		bool bLessonShown = false, bLessonSlip = false, bLessonInLaid = false;
 		float LessonSlipWide = 148.0f;
