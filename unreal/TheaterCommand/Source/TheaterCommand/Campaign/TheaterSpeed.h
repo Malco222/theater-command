@@ -110,6 +110,10 @@ class APlayerController;
  *                         3: each sheet on a thread of its own at the engine's lowest priority, its loops on that
  *                         thread. 4: as 3, and on a Mac the thread is marked as background work, which Apple's chips
  *                         keep to their efficiency cores, leaving the fast ones to the frame. STILL FOR MEASURING.
+ *   tc.Speed.FontRoom     1 (default): Unreal is allowed eight pages for the letters it has cut (Slate's font cache;
+ *                         Slate.MaxFontAtlasPagesBeforeFlush), where it had one and threw every letter away each time a
+ *                         second was wanted: a 25 to 45 ms frame about ten times in a two-minute journey (the same
+ *                         capture). Read once, as the table is laid. 0: one page, as before. The same letters either way.
  *   tc.Speed.StandOne     1 (default): one ready fine sheet is stood a frame, and the next the frame after. Standing a
  *                         sheet stands the coarse sheet's tiles round it afresh and hands them and its own to the draw
  *                         thread: 25 to 30 ms, and two stood in one frame made a 45 ms one (the same capture). 0: every

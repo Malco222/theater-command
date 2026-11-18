@@ -96,6 +96,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarQuietModel(
 		TEXT("tc.Speed.QuietModel"), 0,
 		TEXT("(for measuring first) How a fine sheet is modelled. 0: on the engine's pool with its loops spread over every spare core, as before. 1: its loops on its one pool thread. 2: its loops spread at the background's priority. 3: on a thread of its own at the lowest priority, its loops on that thread. 4: as 3, and on a Mac that thread is marked as background work, which the system keeps to the efficiency cores. The same ground whichever; it comes later the quieter it is made."));
+	TAutoConsoleVariable<int32> CVarFontRoom(
+		TEXT("tc.Speed.FontRoom"), 1,
+		TEXT("1 gives Unreal eight pages for the letters it has cut, where it had one and threw every letter away when a second was wanted; 0 leaves it at one, as before. Read as the table is laid. The same letters either way."));
 	TAutoConsoleVariable<int32> CVarStandOne(
 		TEXT("tc.Speed.StandOne"), 1,
 		TEXT("1 stands one ready fine sheet a frame, the next the frame after; 0 stands every ready one in the same frame, as before. The same picture either way."));
@@ -643,6 +646,30 @@ namespace TheaterSpeed
 					{
 						UE_LOG(LogTheater, Warning, TEXT("Speed: -TheaterSet names no console variable called %s"), *Name);
 					}
+				}
+			}
+			// (Speed: tc.Speed.FontRoom, after the command line's sets so that one of them can turn it off.) Unreal keeps
+			// the letters it has cut on pages 1024 points square and, with one page allowed, throws every letter away
+			// when a second page is wanted ("FontCache flush requested. Reason: Large atlases out of space; 2/1
+			// Textures"), then cuts them all again and lays every panel out afresh: a 25 to 45 ms frame about ten times
+			// in a two-minute journey over the world, in the builder's capture of 18 November (build 1680). The names
+			// lettered on the map at their two largest sizes do not fit one page with everything else. Eight pages are
+			// allowed here (8 MB at most). The pre-checker read the engine: the number is read each time a page is
+			// added (FontCache.cpp 30 to 55, TextureAtlas.cpp 446 to 475), so setting it here is in time.
+			if (CVarFontRoom.GetValueOnGameThread() != 0)
+			{
+				static const TCHAR* const PagesName = TEXT("Slate.MaxFontAtlasPagesBeforeFlush");
+				if (IConsoleVariable* Pages = IConsoleManager::Get().FindConsoleVariable(PagesName))
+				{
+					if (Pages->GetInt() < 8)
+					{
+						Pages->Set(8, ECVF_SetByCode);
+						UE_LOG(LogTheater, Display, TEXT("Speed: %s set to %d (tc.Speed.FontRoom)"), PagesName, Pages->GetInt());
+					}
+				}
+				else
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FontRoom found no console variable called %s"), PagesName);
 				}
 			}
 		}
