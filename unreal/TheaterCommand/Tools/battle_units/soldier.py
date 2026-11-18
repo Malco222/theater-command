@@ -57,10 +57,11 @@ NATION_KIT = {
 
 # Studio colours for the pictures only (the game paints by number from its unit table).
 LOOK = {
-    "GER": {"tunic": "5F665C", "trousers": "585E57", "boots": "1E1B19", "lower": "1E1B19", "straps": "24201C", "helmet": "4F5650",
-            "pack": "6E6852", "skin": "C49A7E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420"},
+    "GER": {"tunic": "5F665C", "trousers": "585E57", "boots": "2A2420", "lower": "2C2824", "straps": "2E2620", "helmet": "4F5650",
+            "pack": "6E6852", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25", "blanket": "564A3E"},
     "POL": {"tunic": "7C7450", "trousers": "746C4A", "boots": "3A2A1E", "lower": "5E4A34", "straps": "4A3624", "helmet": "5E6044",
-            "pack": "7A7254", "skin": "C49A7E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420"},
+            "pack": "7A7254", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25",
+            "blanket": "5C5040"},
 }
 
 
@@ -303,9 +304,12 @@ def body_layers(J, kitspec):
     return layers
 
 
-def mesh_from_layers(name, layers, h, target_tris, smooth_steps=1, sym=False):
+def mesh_from_layers(name, layers, h, target_tris, smooth_steps=1, sym=False, cut_paints=False, detail=0.0):
     """Sample the layers on a grid, mesh the surface, thin it to about `target_tris`, and paint each face with
-    the layer it lies on. Returns the Blender object."""
+    the layer it lies on (with `cut_paints`, the faces are first cut along where one paint meets another, so a hem
+    or a boot's top is a clean line, not the thinned faces' teeth). With `detail`, the thinning spares the sharply
+    curved places (hems, flaps, folds, seams) by that much and takes its faces from the broad ones. Returns the Blender
+    object."""
     lo = np.min([L.bounds()[0] for L in layers], axis=0)
     hi = np.max([L.bounds()[1] for L in layers], axis=0)
     g = Grid(lo, hi, h)
@@ -354,9 +358,29 @@ def mesh_from_layers(name, layers, h, target_tris, smooth_steps=1, sym=False):
         mod.ratio = target_tris / tris
         mod.use_symmetry = sym
         mod.symmetry_axis = "Y"
+        if detail > 0.0:
+            # how sharply the surface turns at each point (its normal against its neighbours'), spread a ring
+            e = 1e-4
+            gr = np.stack([(field(V + np.eye(3)[i] * e) - field(V - np.eye(3)[i] * e)) / (2 * e) for i in range(3)], axis=1)
+            Nv = gr / np.maximum(np.linalg.norm(gr, axis=1), 1e-9)[:, None]
+            turn = 1.0 - (Nv[E[:, 0]] * Nv[E[:, 1]]).sum(axis=1)
+            k = np.zeros(len(V))
+            np.maximum.at(k, E[:, 0], turn)
+            np.maximum.at(k, E[:, 1], turn)
+            k2 = k.copy()
+            np.maximum.at(k2, E[:, 0], k[E[:, 1]])
+            np.maximum.at(k2, E[:, 1], k[E[:, 0]])
+            sharp = np.clip((k2 - 0.003) / 0.03, 0.0, 1.0)
+            vg = ob.vertex_groups.new(name="spare")        # (a point out of the group would never be thinned at all)
+            for i in range(len(V)):
+                vg.add([i], float(1.0 - 0.95 * sharp[i]), "REPLACE")
+            mod.vertex_group = "spare"
+            mod.vertex_group_factor = detail
         bpy.context.view_layer.objects.active = ob
         with bpy.context.temp_override(object=ob, active_object=ob):
             bpy.ops.object.modifier_apply(modifier=mod.name)
+        for vg_ in list(ob.vertex_groups):
+            ob.vertex_groups.remove(vg_)
         # the thinning can fold a triangle over at a sharp place: relax the thinned net and lay it back on the surface
         me = ob.data
         V = np.zeros(len(me.vertices) * 3)
@@ -378,6 +402,8 @@ def mesh_from_layers(name, layers, h, target_tris, smooth_steps=1, sym=False):
                 V = V - (d / np.maximum((gr ** 2).sum(axis=1), 1e-6))[:, None] * gr
         me.vertices.foreach_set("co", V.astype(np.float32).ravel())
         me.update()
+    if cut_paints:
+        cut_along_paints(ob, layers)
     # paint each face from the layer nearest its middle
     me = ob.data
     cs = np.zeros(len(me.polygons) * 3, np.float32)
@@ -398,6 +424,56 @@ def mesh_from_layers(name, layers, h, target_tris, smooth_steps=1, sym=False):
     return ob
 
 
+def cut_along_paints(ob, layers):
+    """Cut a mesh's faces along the lines where its layers' paints meet (where one paint's nearest layer is as near as
+    the nearest of the others), so each face afterwards lies all in one paint."""
+    paints = []
+    for L in layers:
+        if L.paint not in paints:
+            paints.append(L.paint)
+    if len(paints) < 2:
+        return
+    of = [[i for i, L in enumerate(layers) if L.paint == p] for p in paints]
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    added = 0
+    for k in range(len(paints) - 1):
+        bm.verts.ensure_lookup_table()
+        bm.verts.index_update()
+        V = np.array([v.co for v in bm.verts])
+        D = np.stack([L.at_points(V) for L in layers], axis=1)
+        Dp = np.stack([D[:, ix].min(axis=1) for ix in of], axis=1)
+        f = Dp[:, k] - np.delete(Dp, k, axis=1).min(axis=1)
+        on = set()
+        for e in list(bm.edges):
+            a, b = e.verts
+            fa, fb = f[a.index], f[b.index]
+            if fa * fb >= 0.0:
+                continue
+            t = fa / (fa - fb)
+            if t < 0.2:
+                on.add(a)
+            elif t > 0.8:
+                on.add(b)
+            else:
+                ne, nv = bmesh.utils.edge_split(e, a, t)
+                on.add(nv)
+                added += 1
+        for face in list(bm.faces):
+            vs = [v for v in face.verts if v in on]
+            if len(vs) == 2 and not any(set(ed.verts) == set(vs) for ed in face.edges):
+                try:
+                    bmesh.utils.face_split(face, vs[0], vs[1])
+                except ValueError:
+                    pass
+        bmesh.ops.triangulate(bm, faces=[fc for fc in bm.faces if len(fc.verts) > 3])
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.data.update()
+    print(f"    {ob.name}: cut along its paints ({added} points added)")
+
+
 LOOK_NOW = dict(LOOK["GER"])
 
 
@@ -405,10 +481,11 @@ def paint_material(paint):
     """The material for a paint, named by the paint (the game colours it); the studio colour is for the pictures."""
     if paint == "eye":
         return eye_paint()
-    rough = {"steel": 0.45, "boots": 0.42, "straps": 0.55, "helmet": 0.6, "skin": 0.55, "wood": 0.5, "eye": 0.3}.get(paint, 0.85)
+    rough = {"steel": 0.45, "boots": 0.42, "straps": 0.55, "helmet": 0.6, "skin": 0.5, "wood": 0.5, "eye": 0.3, "leather": 0.5}.get(paint, 0.85)
     metal = 0.6 if paint == "steel" else 0.0
-    noise = {"tunic": 0.18, "trousers": 0.18, "pack": 0.2, "lower": 0.15, "helmet": 0.12, "wood": 0.25, "skin": 0.06}.get(paint, 0.05)
-    sheen = 0.4 if paint in ("tunic", "trousers", "pack", "lower") else 0.0
+    noise = {"tunic": 0.18, "trousers": 0.18, "pack": 0.2, "lower": 0.15, "helmet": 0.12, "wood": 0.25, "skin": 0.06,
+             "blanket": 0.22}.get(paint, 0.05)
+    sheen = 0.4 if paint in ("tunic", "trousers", "pack", "lower", "blanket") else 0.0
     m = kit.material(paint, kit.hex_rgb(LOOK_NOW[paint]), rough=rough, metal=metal, sheen=sheen, noise=noise,
                      noise_scale=90.0, bump=0.15 if paint in ("tunic", "trousers", "pack") else 0.0)
     m = studio_wear(m, paint)
@@ -443,24 +520,106 @@ def eye_paint():
 
 
 def skin_studio(m):
-    """The skin in the pictures: a little light under it (subsurface), and the short hair (the `scalp` amount) dark."""
+    """The skin in the pictures: light under it (subsurface, a short way), the roughness varying, a flush on the nose,
+    cheeks and ears, the eyebrows, a shaved shadow on the jaw and upper lip, and the short hair (`scalp`). The face's
+    marks are drawn from each point's place about the eyes (the `face` attribute), so they sit right on every face."""
     nt = m.node_tree
-    bsdf = nt.nodes["Principled BSDF"]
-    bsdf.inputs["Subsurface Weight"].default_value = 0.18
-    bsdf.inputs["Subsurface Radius"].default_value = (0.012, 0.005, 0.003)
-    bsdf.inputs["Subsurface Scale"].default_value = 0.6
-    base_in = bsdf.inputs["Base Color"]
-    if not base_in.links:
+    if nt.nodes.get("skin_done"):
         return
-    src = base_in.links[0].from_socket
-    att = nt.nodes.new("ShaderNodeAttribute")
-    att.attribute_name = "scalp"
-    mix = nt.nodes.new("ShaderNodeMix")
-    mix.data_type = "RGBA"
-    nt.links.new(att.outputs["Fac"], mix.inputs["Factor"])
-    nt.links.new(src, mix.inputs["A"])
-    mix.inputs["B"].default_value = (*kit.hex_rgb("2E241D"), 1.0)
-    nt.links.new(mix.outputs["Result"], base_in)
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Subsurface Weight"].default_value = 0.2
+    bsdf.inputs["Subsurface Radius"].default_value = (1.0, 0.45, 0.3)
+    bsdf.inputs["Subsurface Scale"].default_value = 0.006
+    L = nt.links.new
+
+    def math_(op, a, b=None, clamp=False):
+        n_ = nt.nodes.new("ShaderNodeMath")
+        n_.operation = op
+        n_.use_clamp = clamp
+        for i, v in enumerate((a, b)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n_.inputs[i].default_value = v
+            else:
+                L(v, n_.inputs[i])
+        return n_.outputs[0]
+
+    def gauss(v, c, w):                                   # exp(-((v - c) / w)^2)
+        d = math_("DIVIDE", math_("SUBTRACT", v, c), w)
+        return math_("EXPONENT", math_("MULTIPLY", math_("MULTIPLY", d, d), -1.0))
+
+    def step(v, a, b):                                    # 0 below a, 1 above b, smooth between
+        n_ = nt.nodes.new("ShaderNodeMapRange")
+        n_.interpolation_type = "SMOOTHSTEP"
+        L(v, n_.inputs["Value"])
+        n_.inputs["From Min"].default_value, n_.inputs["From Max"].default_value = a, b
+        return n_.outputs["Result"]
+
+    face = nt.nodes.new("ShaderNodeAttribute")
+    face.attribute_name = "face"
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    L(face.outputs["Vector"], sep.inputs[0])
+    x, z = sep.outputs["X"], sep.outputs["Z"]
+    ay = math_("ABSOLUTE", sep.outputs["Y"])
+    # the brows: an arch above each eye
+    u = math_("SUBTRACT", ay, 0.03)
+    zb = math_("SUBTRACT", 0.019, math_("MULTIPLY", math_("MULTIPLY", u, u), 3.0))
+    brow = math_("MULTIPLY", gauss(z, zb, 0.0048), step(ay, 0.008, 0.016))
+    brow = math_("MULTIPLY", brow, math_("SUBTRACT", 1.0, step(ay, 0.05, 0.06)))
+    brow = math_("MULTIPLY", brow, step(x, -0.035, -0.018), clamp=True)
+    # the shaved shadow: chin, jaw and upper lip, not the lips
+    # (its top edge runs under the nose, then down the cheek to the angle of the jaw)
+    top = math_("SUBTRACT", -0.05, math_("MULTIPLY", math_("MAXIMUM", math_("SUBTRACT", ay, 0.016), 0.0), 1.15))
+    beard = math_("MULTIPLY", step(z, -0.15, -0.128), math_("SUBTRACT", 1.0, step(math_("SUBTRACT", z, top), -0.01, 0.002)))
+    beard = math_("MULTIPLY", beard, step(x, -0.085, -0.055))
+    lips = math_("MULTIPLY", math_("SUBTRACT", 1.0, step(ay, 0.02, 0.026)), gauss(z, -0.069, 0.007))
+    beard = math_("MULTIPLY", beard, math_("SUBTRACT", 1.0, lips), clamp=True)
+    # the flush: nose, cheeks, ears
+    nose = math_("MULTIPLY", gauss(z, -0.036, 0.012), math_("SUBTRACT", 1.0, step(ay, 0.01, 0.02)))
+    cheek = math_("MULTIPLY", math_("MULTIPLY", gauss(z, -0.03, 0.013), gauss(ay, 0.045, 0.012)), step(x, -0.04, -0.02))
+    ear = math_("MULTIPLY", math_("MULTIPLY", gauss(z, -0.012, 0.025), step(ay, 0.06, 0.07)), math_("SUBTRACT", 1.0, step(x, -0.06, -0.04)))
+    flush = math_("ADD", math_("ADD", nose, math_("MULTIPLY", cheek, 0.7)), math_("MULTIPLY", ear, 0.8), clamp=True)
+    base_in = bsdf.inputs["Base Color"]
+    src = base_in.links[0].from_socket if base_in.links else None
+    if src is None:
+        rgb = nt.nodes.new("ShaderNodeRGB")
+        rgb.outputs[0].default_value = base_in.default_value[:]
+        src = rgb.outputs[0]
+    scalp = nt.nodes.new("ShaderNodeAttribute")
+    scalp.attribute_name = "scalp"
+    nail = nt.nodes.new("ShaderNodeAttribute")
+    nail.attribute_name = "nail"
+    knuckle = nt.nodes.new("ShaderNodeAttribute")
+    knuckle.attribute_name = "knuckle"
+    for fac, colour, k in ((flush, "A8604E", 0.38), (beard, "6A625C", 0.24), (brow, "3A2C22", 0.85), (scalp.outputs["Fac"], "2E241D", 1.0),
+                           (knuckle.outputs["Fac"], "9A5E50", 0.32), (nail.outputs["Fac"], "D6BCB0", 0.62)):
+        mix = nt.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        L(math_("MULTIPLY", fac, k) if k != 1.0 else fac, mix.inputs["Factor"])
+        L(src, mix.inputs["A"])
+        mix.inputs["B"].default_value = (*kit.hex_rgb(colour), 1.0)
+        src = mix.outputs["Result"]
+    L(src, base_in)
+    # the roughness: oilier on the nose and brow, drier elsewhere, and a fine variation
+    rest = nt.nodes.new("ShaderNodeAttribute")
+    rest.attribute_name = "rest"
+    nz = nt.nodes.new("ShaderNodeTexNoise")
+    nz.inputs["Scale"].default_value = 160.0
+    L(rest.outputs["Vector"], nz.inputs["Vector"])
+    rough = math_("ADD", math_("MULTIPLY", nz.outputs["Fac"], 0.18), 0.42)
+    rough = math_("SUBTRACT", rough, math_("MULTIPLY", nose, 0.1))
+    rough = math_("SUBTRACT", rough, math_("MULTIPLY", nail.outputs["Fac"], 0.2))     # (the nails a little glossy)
+    L(rough, bsdf.inputs["Roughness"])
+    # the knuckles' and the nails' edges drawn in a little (a bump from the same amounts)
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.25
+    bump.inputs["Distance"].default_value = 0.0008
+    L(math_("ADD", nail.outputs["Fac"], math_("MULTIPLY", knuckle.outputs["Fac"], -0.5)), bump.inputs["Height"])
+    if not bsdf.inputs["Normal"].links:
+        L(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    tag = nt.nodes.new("NodeFrame")
+    tag.name = "skin_done"
 
 
 DUST = "B8AA8C"
@@ -488,12 +647,12 @@ def studio_wear(m, paint):
     dust = nt.nodes.new("ShaderNodeAttribute")
     dust.attribute_name = "dust"
     blot = nt.nodes.new("ShaderNodeTexNoise")
-    blot.inputs["Scale"].default_value = 14.0
+    blot.inputs["Scale"].default_value = 7.0
     blot.inputs["Detail"].default_value = 4.0
     nt.links.new(rest.outputs["Vector"], blot.inputs["Vector"])
     shape = nt.nodes.new("ShaderNodeMapRange")
-    shape.inputs["From Min"].default_value = 0.35
-    shape.inputs["From Max"].default_value = 0.65
+    shape.inputs["From Min"].default_value = 0.2
+    shape.inputs["From Max"].default_value = 0.8
     nt.links.new(blot.outputs["Fac"], shape.inputs["Value"])
     amt = nt.nodes.new("ShaderNodeMath")
     amt.operation = "MULTIPLY"
@@ -502,7 +661,7 @@ def studio_wear(m, paint):
     amt2 = nt.nodes.new("ShaderNodeMath")
     amt2.operation = "MULTIPLY"
     amt2.use_clamp = True
-    amt2.inputs[1].default_value = 0.8
+    amt2.inputs[1].default_value = 0.65
     nt.links.new(amt.outputs["Value"], amt2.inputs[0])
     mixd = nt.nodes.new("ShaderNodeMix")
     mixd.data_type = "RGBA"
@@ -545,9 +704,11 @@ def mark_rest(ob, dusty=False):
     if dusty:
         P = co.reshape(-1, 3)
         z, x = P[:, 2], P[:, 0]
-        d = np.clip((0.62 - z) / 0.5, 0.0, 1.0) ** 1.4                                        # rising from the ground
-        d += 0.75 * np.exp(-((z - 0.5) / 0.055) ** 2) * (x > 0.0)                             # the knees' fronts
-        d += 0.35 * np.exp(-((z - 0.87) / 0.08) ** 2) * (x > 0.04)                            # the thighs (kneeling, lying)
+        d = 0.6 * np.clip((0.2 - z) / 0.17, 0.0, 1.0) ** 1.2                                  # the feet and the boots' feet
+        d += 0.25 * np.clip((0.06 - z) / 0.04, 0.0, 1.0) * (x > 0.08)                         # (the toes most)
+        d += 0.18 * np.exp(-((z - 0.42) / 0.06) ** 2)                                          # the boot tops
+        d += 0.6 * np.exp(-((z - 0.53) / 0.055) ** 2) * (x > 0.0)                             # the knees' fronts
+        d += 0.3 * np.exp(-((z - 0.74) / 0.08) ** 2) * (x > 0.04)                             # the thighs (kneeling, lying)
         d = np.clip(d, 0.0, 1.0).astype(np.float32)
         if "dust" not in me.attributes:
             me.attributes.new("dust", "FLOAT", "POINT")
@@ -618,6 +779,26 @@ class Geo:
         if not closed:
             faces.append((3, 2, 1, 0))
             faces.append((4 * (N - 1), 4 * (N - 1) + 1, 4 * (N - 1) + 2, 4 * (N - 1) + 3))
+        self._add(verts, faces, paint)
+
+    def cord(self, pts, nrm, width, thick, paint, sides=6):
+        """A strap as a flattened round tube along pts, its flat side against a surface whose outward normals are nrm."""
+        pts, nrm = np.asarray(pts, float), np.asarray(nrm, float)
+        N = len(pts)
+        verts = []
+        for i in range(N):
+            T = pts[min(i + 1, N - 1)] - pts[max(i - 1, 0)]
+            T /= np.linalg.norm(T)
+            n = nrm[i] - T * (nrm[i] @ T)
+            n /= np.linalg.norm(n)
+            B = np.cross(T, n)
+            for k in range(sides):
+                t = 2 * math.pi * (k + 0.5) / sides
+                verts.append(pts[i] + n * thick * 0.5 + B * math.cos(t) * width * 0.5 + n * math.sin(t) * thick * 0.5)
+        faces = [(i * sides + k, i * sides + (k + 1) % sides, (i + 1) * sides + (k + 1) % sides, (i + 1) * sides + k)
+                 for i in range(N - 1) for k in range(sides)]
+        faces.append(tuple(range(sides - 1, -1, -1)))
+        faces.append(tuple((N - 1) * sides + k for k in range(sides)))
         self._add(verts, faces, paint)
 
     def shell(self, rings, paint, close_top=True):
@@ -705,7 +886,9 @@ def project(L, P, iters=6):
     for _ in range(iters):
         d = L.at_points(P)
         g = np.stack([(L.at_points(P + np.eye(3)[i] * e) - L.at_points(P - np.eye(3)[i] * e)) / (2 * e) for i in range(3)], axis=1)
-        P = P - (d / np.maximum((g ** 2).sum(axis=1), 1e-9))[:, None] * g
+        step = (d / np.maximum((g ** 2).sum(axis=1), 1e-9))[:, None] * g
+        sl = np.linalg.norm(step, axis=1)
+        P = P - step * np.minimum(1.0, 0.04 / np.maximum(sl, 1e-12))[:, None]
     g = np.stack([(L.at_points(P + np.eye(3)[i] * e) - L.at_points(P - np.eye(3)[i] * e)) / (2 * e) for i in range(3)], axis=1)
     return P, g / np.linalg.norm(g, axis=1)[:, None]
 
@@ -723,6 +906,38 @@ def spline(ctrl, n):
         p0, p1, p2, p3 = C[i], C[i + 1], C[i + 2], C[i + 3]
         out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
     return np.array(out)
+
+
+def strap_on(g, L, pts, width, thick, paint="straps", gap=0.0025):
+    """A strap laid over a layer's surface: its path pulled onto the surface and eased (it bridges a seam or a
+    shoulder strap rather than stepping over it), and each of its two edges laid on the surface too, so it lies
+    across a curve instead of standing off it."""
+    P, N = project(L, pts)
+    for _ in range(3):                                   # (eased along its length, then kept out of the cloth)
+        Q = P.copy()
+        Q[1:-1] = (P[:-2] + 2 * P[1:-1] + P[2:]) / 4
+        d = L.at_points(Q)
+        P = Q + N * np.maximum(gap - d, 0.0)[:, None]
+    n_ = len(P)
+    T = np.gradient(P, axis=0)
+    T /= np.linalg.norm(T, axis=1)[:, None]
+    B = np.cross(T, N)
+    B /= np.linalg.norm(B, axis=1)[:, None]
+    edges = []
+    for sgn in (1.0, -1.0):
+        E_, En = project(L, P + B * sgn * width * 0.5)
+        edges.append((E_ + En * gap, En))
+    (E1, N1), (E2, N2) = edges
+    verts, faces = [], []
+    for i in range(n_):
+        verts += [E1[i] + N1[i] * thick, E1[i], E2[i], E2[i] + N2[i] * thick]
+    for i in range(n_ - 1):
+        j = i + 1
+        for k in range(4):
+            faces.append((4 * i + k, 4 * i + (k + 1) % 4, 4 * j + (k + 1) % 4, 4 * j + k))
+    faces.append((3, 2, 1, 0))
+    faces.append((4 * (n_ - 1), 4 * (n_ - 1) + 1, 4 * (n_ - 1) + 2, 4 * (n_ - 1) + 3))
+    g._add(verts, faces, paint)
 
 
 # ================================================================================================ the kit
@@ -759,7 +974,10 @@ def build_kit(J, spec, body_ls, Z=None):
     collar = body_ls[3]
     for side in (1.0, -1.0):
         p, nrm = on_surface(collar, (0.3, 0.036 * side, Z(1.452)), (-1.0, -0.3 * side, 0.0))
-        g.box(p + nrm * 0.0005, (0.0022, 0.02, 0.0105), "lower", frame_from(nrm, (0.0, 0.0, 1.0)))
+        if "crown" in J:                                # (small patches in the darker field grey)
+            g.box(p + nrm * 0.0004, (0.0016, 0.015, 0.0075), "helmet", frame_from(nrm, (0.0, 0.0, 1.0)))
+        else:
+            g.box(p + nrm * 0.0005, (0.0022, 0.02, 0.0105), "lower", frame_from(nrm, (0.0, 0.0, 1.0)))
     out["details"] = (g.build("details"), None)
     # ---- the ammunition pouches: three cells either side of the buckle, on the belt
     L = Layer("pouches", "straps")
@@ -772,16 +990,14 @@ def build_kit(J, spec, body_ls, Z=None):
             c = p0 + n0 * 0.028
             L.add(RoundBox(c, (0.021, 0.0195, 0.04), 0.008, R), 0.0)
             L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, 0.021, 0.016), 0.006, R), 0.003)
-    out["pouches"] = (mesh_from_layers("pouches", [L], 0.0025, 320), None)
+    out["pouches"] = (mesh_from_layers("pouches", [L], 0.0025, 260), None)
     # ---- the Y-straps: from the belt in front, over each shoulder, joining in the middle of the back
     g = Geo()
     for side in (1.0, -1.0):
         ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.082, 1.03), (0.13, 0.09, 1.16), (0.125, 0.1, 1.28), (0.09, 0.112, 1.4),
                 (0.025, 0.12, 1.468), (-0.05, 0.112, 1.45), (-0.12, 0.085, 1.37), (-0.142, 0.045, 1.29), (-0.145, 0.006, 1.235))]
-        P, N = project(tunic, spline(ctrl, 14))
-        g.band(P + N * 0.004, N, 0.032, 0.004, "straps")
-    P, N = project(tunic, spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 4))
-    g.band(P + N * 0.004, N, 0.036, 0.004, "straps")
+        strap_on(g, tunic, spline(ctrl, 22), 0.032, 0.004)
+    strap_on(g, tunic, spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 7), 0.036, 0.004)
     out["straps"] = (g.build("straps"), None)
     # ---- what hangs from the belt: bread bag (right hip), water bottle (behind it), entrenching tool (left hip)
     L = Layer("bread_bag", "pack")
@@ -793,39 +1009,52 @@ def build_kit(J, spec, body_ls, Z=None):
     L.add(RoundBox(c, (0.032, 0.11, 0.075), 0.02, R))
     flap.add(RoundBox(c + R @ np.array((0.006, 0.0, 0.03)), (0.03, 0.112, 0.05), 0.016, R))
     out["bread_bag"] = (mesh_from_layers("bread_bag", [L, flap], 0.003, 160), "pelvis")
-    L = Layer("bottle", "pack")
+    # the water bottle: a flat kidney-shaped flask in a felt cover, its cup strapped over the shoulder of it, hung
+    # flat on the outside of the bread bag toward the back
+    bag_c, bag_R = c, R                                  # (the bread bag's middle and frame: x out, y forward, z up)
+    L = Layer("bottle", "blanket")
     cup = Layer("cup", "steel")
-    p0, n0 = project(tunic, [(-0.3, -0.16, Z(0.89))])
-    p0, n0 = p0[0], n0[0]
-    R = frame_from(n0, (0.0, 0.0, 1.0))
-    c = p0 + n0 * 0.08
-    L.add(Ellipsoid(c, (0.03, 0.05, 0.085), R))
-    cup.add(RoundCone(c + R @ np.array((0.0, 0.0, 0.07)), c + R @ np.array((0.0, 0.0, 0.11)), 0.03, 0.028), 0.0)
-    out["bottle"] = (mesh_from_layers("bottle", [L, cup], 0.003, 140), "pelvis")
+    strap = Layer("bottle_strap", "straps")
+    fc = bag_c + bag_R @ np.array((0.032 + 0.021, -0.05, -0.012))
+    Rf = bag_R @ rot_euler(-8.0, 0, 0)                     # (hanging a little canted)
+    L.add(Ellipsoid(fc, (0.021, 0.058, 0.088), Rf))
+    L.sub(Ellipsoid(fc - Rf[:, 0] * 0.07, (0.056, 0.085, 0.13), Rf), 0.012)        # (the kidney's hollow, to the bag)
+    cup.add(Tube(fc + Rf[:, 2] * 0.048, -0.034, 0.03, (0.027, 0.054), (0.026, 0.052), 0.008, Rf), 0.0)
+    cup.sub(Ellipsoid(fc - Rf[:, 0] * 0.07, (0.056, 0.085, 0.13), Rf), 0.008)
+    for zz in (0.06, -0.035):                            # (the straps round it, the cup held by the upper one)
+        strap.add(Tube(fc + Rf[:, 2] * zz, -0.007, 0.007, (0.029, 0.06), (0.029, 0.06), 0.002, Rf), 0.0)
+    strap.sub(Ellipsoid(fc - Rf[:, 0] * 0.07, (0.054, 0.083, 0.13), Rf), 0.0)
+    strap.add(RoundBox(fc + Rf @ np.array((0.0, 0.0, 0.1)), (0.008, 0.009, 0.03), 0.003, Rf), 0.004)      # (its hook)
+    out["bottle"] = (mesh_from_layers("bottle", [L, cup, strap], 0.0025, 200), "pelvis")
+    # the entrenching tool: in its carrier flat on the left hip, a little behind, blade up, the handle down and back
+    # along the outside of the thigh (clear of it when he kneels or lies)
     L = Layer("shovel_case", "straps")
     hnd = Layer("shovel_handle", "wood")
-    p0, n0 = project(tunic, [(-0.08, 0.3, Z(0.88))])
+    zb_ = Z(1.0)
+    p0, n0 = project(tunic, [(-0.1, 0.3, zb_ - 0.085)])
     p0, n0 = p0[0], n0[0]
-    R = frame_from(n0, (0.0, 0.0, 1.0))
-    c = p0 + n0 * 0.024
-    L.add(RoundBox(c, (0.017, 0.072, 0.088), 0.012, R))
-    hnd.add(RoundCone(c + R @ np.array((0.0, 0.03, -0.07)), c + R @ np.array((0.0, 0.095, -0.175)), 0.016, 0.015))
-    hnd.add(Sphere(c + R @ np.array((0.0, 0.097, -0.18)), 0.02), 0.005)
-    out["shovel"] = (mesh_from_layers("shovel", [L, hnd], 0.003, 150), "pelvis")
+    n0 = _n(n0 * np.array((1.0, 1.0, 0.0)))
+    R = frame_from(n0, (0.0, 0.0, 1.0)) @ rot_euler(28.0, 0, 0)        # (its top tipped forward, so the handle trails back)
+    c = p0 + n0 * 0.026
+    L.add(RoundBox(c, (0.013, 0.064, 0.08), 0.012, R))
+    L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.062)), (0.012, 0.067, 0.026), 0.01, R), 0.004)      # (its flap)
+    hnd.add(RoundCone(c + R @ np.array((0.0, 0.0, -0.06)), c + R @ np.array((0.0, 0.0, -0.2)), 0.0145, 0.0135))
+    hnd.add(Sphere(c + R @ np.array((0.0, 0.0, -0.205)), 0.0175), 0.005)
+    out["shovel"] = (mesh_from_layers("shovel", [L, hnd], 0.0025, 170), "pelvis")
     # ---- by nation
     if spec["canister"]:
+        # the gas-mask canister: upright, slung behind the right hip below the belt, tucked close
         L = Layer("canister", "helmet")
-        a, b = np.array((-0.175, -0.125, Z(0.845))), np.array((-0.175, 0.125, Z(0.885)))
-        p0, n0 = project(tunic, [(-0.3, 0.0, Z(0.865))])
-        off = p0[0][0] - 0.052 - 0.006
-        a[0] = b[0] = off
-        L.add(RoundCone(a, b, 0.052, 0.052))
-        Rax = frame_from(b - a)
-        Rax = np.stack([Rax[:, 1], Rax[:, 2], Rax[:, 0]], axis=1)          # (local z along the canister)
-        for t in (0.12, 0.5, 0.88):
-            L.add(Torus(a + (b - a) * t, 0.0535, 0.0055, Rax), 0.003)
-        L.add(Tube(b - (b - a) / np.linalg.norm(b - a) * 0.01, -0.015, 0.012, (0.056, 0.056), (0.055, 0.055), 0.006, Rax), 0.002)
-        out["canister"] = (mesh_from_layers("canister", [L], 0.003, 170), "pelvis")
+        p0, n0 = project(tunic, [(-0.3, -0.07, zb_ - 0.1)])
+        p0, n0 = p0[0], n0[0]
+        n0 = _n(n0 * np.array((1.0, 1.0, 0.0)))
+        Rax = frame_from(n0, (0.0, 0.0, 1.0)) @ rot_euler(-12.0, 0, 0)
+        cc = p0 + n0 * 0.036
+        L.add(Tube(cc, -0.1, 0.095, (0.037, 0.037), (0.037, 0.037), 0.011, Rax))
+        for t_ in (-0.065, 0.0, 0.065):
+            L.add(Torus(cc + Rax[:, 2] * t_, 0.0375, 0.0035, Rax), 0.003)          # (its fluting)
+        L.add(Tube(cc + Rax[:, 2] * 0.095, -0.012, 0.013, (0.04, 0.04), (0.039, 0.039), 0.006, Rax), 0.002)     # (the lid)
+        out["canister"] = (mesh_from_layers("canister", [L], 0.0025, 190), "pelvis")
     if spec["pack"]:
         L = Layer("pack", "pack")
         roll = Layer("bedroll", "pack")
@@ -894,19 +1123,26 @@ HELMETS = {
 }
 
 
-def build_helmet(kind, J, sides=24):
+def build_helmet(kind, J, sides=None):
     """One helmet as a rigid shell (outside, rolled rim, inside) with its chin strap, placed on the head in the rest
     pose. The head bone's own frame is the model's (x forward, z up), so the helmet file is the same shape moved to
     the head bone's head."""
-    k = HELMETS[kind]
-    if "crown" in J:                                   # (MakeHuman's man: on his skull as measured)
-        C = np.array((J["skull_x"] - 0.004 + k["dx"], 0.0, J["crown"] - 0.095))
+    k = dict(HELMETS[kind])
+    if "crown" in J:
+        # MakeHuman's man: seated so the brim comes to the brow with a finger's gap over the crown, as wide as his skull
+        sides = sides or 36
+        dome_rings = 6
+        C = np.array((J["skull_x"] - 0.004 + k["dx"], 0.0, J["crown"] - 0.108))
+        k["az"] += 0.013
+        k["ay"] *= (J["skull_half"][1] + 0.025) / 0.108
+        k["ax"] *= (J["skull_half"][0] + 0.023) / 0.122
     else:
+        sides = sides or 24
+        dome_rings = 4
         C = np.array((J["head"][0] + 0.004 - 0.01 + k["dx"], 0.0, 1.655))
     th = 0.0045 if not k.get("cloth") else 0.006
     nexp = k.get("n", 2.0)
     outer, inner = [], []
-    dome_rings = 4
     for i in range(sides):
         f = 2 * math.pi * i / sides
         rho = 1.0 / math.sqrt((math.cos(f) / k["ax"]) ** 2 + (math.sin(f) / k["ay"]) ** 2)
@@ -996,7 +1232,10 @@ def build_helmet(kind, J, sides=24):
             for q in pts:
                 v = q - centre
                 nrm.append(v / np.linalg.norm(v))
-            g.band(pts, nrm, 0.012, 0.003, "straps")
+            if "eye_x" in J:
+                g.cord(spline(ctrl, 9), [_n(q - centre) for q in spline(ctrl, 9)], 0.011, 0.0035, "straps")
+            else:
+                g.band(pts, nrm, 0.012, 0.003, "straps")
     ob = g.build("helmet_" + kind, sharp=55.0)
     return ob
 
@@ -1025,17 +1264,17 @@ def build_rifle():
     wood.add(RoundBox((0.085, 0.0, 0.012), (0.08, 0.02, 0.03), 0.015), 0.02)                             # round the action
     wood.add(RoundBox((0.405, 0.0, 0.026), (0.255, 0.0172, 0.02), 0.0155), 0.03)                        # fore-end
     wood.add(RoundCone((0.24, 0.0, 0.052), (0.59, 0.0, 0.05), 0.0122, 0.0108), 0.006)                   # upper handguard
-    rifle = mesh_from_layers("rifle_stock", [wood], 0.0025, 250)
+    rifle = mesh_from_layers("rifle_stock", [wood], 0.0025, 300)
     g = Geo()
     st = "steel"
     bz = 0.042
     g.box((-0.3225, 0.0, -0.026), (0.003, 0.0215, 0.058), st, rot_euler(0, -4, 0))                     # butt plate
-    g.tube((-0.06, 0.0, 0.04), (0.17, 0.0, bz), 0.0165, 0.0155, st, 10)                                  # receiver
-    g.tube((0.17, 0.0, bz), (0.78, 0.0, bz), 0.0105, 0.0085, st, 8)                                      # barrel
-    g.tube((0.38, 0.0, 0.031), (0.394, 0.0, 0.031), 0.026, 0.026, st, 10, squash=1.1)                    # bands
-    g.tube((0.6, 0.0, 0.034), (0.618, 0.0, 0.034), 0.023, 0.023, st, 10, squash=1.0)
+    g.tube((-0.06, 0.0, 0.04), (0.17, 0.0, bz), 0.0165, 0.0155, st, 14)                                  # receiver
+    g.tube((0.17, 0.0, bz), (0.78, 0.0, bz), 0.0105, 0.0085, st, 12)                                     # barrel
+    g.tube((0.38, 0.0, 0.031), (0.394, 0.0, 0.031), 0.026, 0.026, st, 14, squash=1.1)                    # bands
+    g.tube((0.6, 0.0, 0.034), (0.618, 0.0, 0.034), 0.023, 0.023, st, 14, squash=1.0)
     g.box((0.762, 0.0, 0.057), (0.007, 0.0028, 0.011), st)                                               # front sight
-    g.tube((0.752, 0.0, 0.058), (0.774, 0.0, 0.058), 0.012, 0.012, st, 6)                               # its hood
+    g.tube((0.752, 0.0, 0.058), (0.774, 0.0, 0.058), 0.012, 0.012, st, 12, caps=False)                            # its hood
     g.box((0.205, 0.0, 0.061), (0.028, 0.011, 0.008), st, taper=0.8)                                     # rear sight
     g.box((0.085, 0.0, -0.019), (0.042, 0.0145, 0.0035), st)                                             # magazine floorplate
     loop = [(0.0 + 0.026 * math.cos(t), 0.0, -0.016 - 0.018 * math.sin(t)) for t in np.linspace(0.15, math.pi - 0.15, 6)]
@@ -1047,9 +1286,9 @@ def build_rifle():
     g.absorb(rifle)
     rifle = g.build("rifle")
     b = Geo()
-    b.tube((-0.105, 0.0, 0.042), (-0.055, 0.0, 0.042), 0.012, 0.0125, st, 8)                            # bolt
+    b.tube((-0.105, 0.0, 0.042), (-0.055, 0.0, 0.042), 0.012, 0.0125, st, 12)                           # bolt
     b.tube((-0.05, -0.006, 0.042), (-0.062, -0.052, 0.024), 0.0042, 0.0042, st, 6)                      # its handle
-    b.tube((-0.06, -0.05, 0.025), (-0.066, -0.064, 0.016), 0.0085, 0.0075, st, 6)                       # the knob
+    b.tube((-0.06, -0.05, 0.025), (-0.066, -0.064, 0.016), 0.0085, 0.0075, st, 10)                      # the knob
     bolt = b.build("rifle_bolt")
     return rifle, bolt
 
@@ -1072,11 +1311,11 @@ def build_lmg():
     g.box((0.05, 0.0, 0.068), (0.09, 0.012, 0.004), st)                                                  # its top cover rib
     g.box((0.06, 0.088, 0.034), (0.036, 0.066, 0.017), st, rot_euler(0, 0, -6))                          # magazine, on the left
     g.box((0.064, 0.152, 0.034), (0.032, 0.006, 0.019), st)                                              # its floor
-    g.tube((0.16, 0.0, bz), (0.5, 0.0, bz), 0.023, 0.022, st, 10)                                       # cooling jacket
+    g.tube((0.16, 0.0, bz), (0.5, 0.0, bz), 0.023, 0.022, st, 14)                                       # cooling jacket
     for x in (0.2, 0.28, 0.36, 0.44):
         g.tube((x, 0.0, bz), (x + 0.012, 0.0, bz), 0.026, 0.026, st, 10)                                 # its ribs
-    g.tube((0.5, 0.0, bz), (0.72, 0.0, bz), 0.011, 0.0105, st, 8)                                        # barrel
-    g.tube((0.72, 0.0, bz), (0.78, 0.0, bz), 0.013, 0.0165, st, 8)                                       # flash hider
+    g.tube((0.5, 0.0, bz), (0.72, 0.0, bz), 0.011, 0.0105, st, 12)                                       # barrel
+    g.tube((0.72, 0.0, bz), (0.78, 0.0, bz), 0.013, 0.0165, st, 12)                                      # flash hider
     g.box((0.69, 0.0, 0.062), (0.006, 0.003, 0.012), st)                                                 # front sight
     g.box((0.13, 0.0, 0.079), (0.02, 0.012, 0.01), st)                                                   # rear sight
     for x in (0.285, 0.375):
@@ -1326,6 +1565,9 @@ def M4(R=None, t=(0.0, 0.0, 0.0)):
     return M
 
 
+KNEE_FLOOR = 0.045                               # (the lowest a knee's joint may go: a knee on the ground)
+
+
 class Rig:
     """The skeleton's rest, and the solver that turns a pose said in plain terms into bone rotations."""
 
@@ -1338,6 +1580,10 @@ class Rig:
         self.M0 = {b.name: b.matrix_local.copy() for b in arm.data.bones}
         self.hand0 = {s: tuple(np.array(v) for v in J["hand_axes_" + s]) for s in ("l", "r")}
         self.prev_q = {}
+        # the low poses (kneeling, lying) were set out on a man whose pelvis rests 0.95 m up and whose legs reach 0.822 m:
+        # on another man the pelvis's drop and the feet's spread from it are scaled to his build (1 on the first man)
+        reach = 0.99 * sum(np.linalg.norm(np.array(J[b]) - np.array(J[a])) for a, b in (("thigh_l", "calf_l"), ("calf_l", "foot_l")))
+        self.fit = (float(self.H0["pelvis"][2]) / 0.95, float(reach) / 0.822)
         if "eye_r" in J:
             self.eye0 = {s: np.array(J["eye_" + s]) for s in ("l", "r")}
         else:
@@ -1389,10 +1635,14 @@ class Rig:
         return dist - dist_c          # (how far short it fell: 0 when reached)
 
     # ---- the whole pose
-    def solve(self, P):
+    def solve(self, P, lift_knees=4):
         st = {"D": {}, "H": {}, "short": {}}
         st["D"]["root"], st["H"]["root"] = np.eye(3), np.zeros(3)
-        st["H"]["pelvis"] = self.H0["pelvis"] + np.asarray(P.get("pelvis_at", (0, 0, 0)), float)
+        pa = np.asarray(P.get("pelvis_at", (0, 0, 0)), float)
+        low = float(np.clip((-pa[2] - 0.2) / 0.2, 0.0, 1.0))        # (only the low poses: the gaits are fitted already)
+        kz, kl = 1.0 + (self.fit[0] - 1.0) * low, 1.0 + (self.fit[1] - 1.0) * low
+        pa = pa * np.array((1.0, 1.0, kz))
+        st["H"]["pelvis"] = self.H0["pelvis"] + pa
         st["D"]["pelvis"] = E(*P.get("pelvis", (0, 0, 0)))
         for b in ("spine_01", "spine_02", "chest", "neck", "head"):
             self._child(st, b, E(*P.get(b, (0, 0, 0))))
@@ -1408,9 +1658,17 @@ class Rig:
             pole = f.get("pole")
             if pole is None:
                 pole = Df @ np.array((1.0, 0.0, 0.0))
-            st["short"]["leg_" + s] = self.two_bone(st, "thigh_" + s, "calf_" + s, "foot_" + s, f["at"], pole)
+            at = np.asarray(f["at"], float).copy()
+            at[:2] = st["H"]["pelvis"][:2] + (at[:2] - st["H"]["pelvis"][:2]) * kl
+            st["short"]["leg_" + s] = self.two_bone(st, "thigh_" + s, "calf_" + s, "foot_" + s, at, pole)
             self._child(st, "foot_" + s, Dw=Df)
             self._child(st, "ball_" + s, R_axis((0, 1, 0), -f.get("toe", 0.0)))
+        # a knee is never let through the ground: where one would go, the pelvis is lifted and the pose solved again
+        knee = min(float(st["H"]["calf_l"][2]), float(st["H"]["calf_r"][2]))
+        if lift_knees and knee < KNEE_FLOOR - 0.002:
+            pa0 = np.asarray(P.get("pelvis_at", (0, 0, 0)), float).copy()
+            pa0[2] += (KNEE_FLOOR - knee) / kz
+            return self.solve(dict(P, pelvis_at=tuple(pa0)), lift_knees=lift_knees - 1)
         # the weapon
         W = P["weapon"](self, st) if callable(P["weapon"]) else P["weapon"]
         st["D"]["weapon"], st["H"]["weapon"] = W[:3, :3], W[:3, 3] + W[:3, :3] @ (self.H0["weapon"] - self.H0["weapon"])
@@ -1509,10 +1767,11 @@ class Rig:
 # collar, cuffs, folds, pockets, buttons, boots and soles are our own shapes laid on it. Whatever the uniform covers of
 # the skin is cut away; the head, the neck and the hands stay, thinned to the triangle budget.
 SOLE = 0.02                        # the boots' soles lift him: made 1.73 m tall, he stands 1.75 m in his boots
-CURL = (30.0, 45.0, 25.0)          # his fingers half shut in the rest pose (the thumb a third as much), ready for a rifle
+CURL = (34.0, 62.0, 38.0)          # his fingers half shut in the rest pose (the thumb a third as much), ready for a rifle
 GRIP_ALONG, GRIP_OUT = 0.78, 0.03  # a gripped stock's middle: so far from the wrist toward the knuckles, so far off the palm
 NATION_SEED = {"GER": 3, "POL": 7}  # whose face each army's exported man has (the squad's men get faces of their own)
-BUDGET = {"uniform": 3250, "head": 1750, "hand": 380}
+DETAIL = 0.005                                 # (how much the uniform's thinning spares its sharp places)
+BUDGET = {"uniform": 2450, "head": 1260, "hand": 520}       # (the uniform gains about 600 more where it is cut along its paints)
 
 
 def _axis_resample(G, q, lo, h, axis, far):
@@ -1562,6 +1821,14 @@ class GridField:
         self.lo = self.glo.copy() if lo is None else np.maximum(np.asarray(lo, float), self.glo)
         self.hi = ghi if hi is None else np.minimum(np.asarray(hi, float), ghi)
         self.c, self.R = (self.lo + self.hi) / 2, None
+        self.boxed = lo is not None or hi is not None          # (kept to its box wherever it is asked, not only on the grid)
+
+    def _box(self, px, py, pz):
+        """The distance to its box (negative inside): the field is the cloth cut by the box."""
+        c, h = (self.lo + self.hi) / 2, (self.hi - self.lo) / 2
+        qx, qy, qz = np.abs(px - c[0]) - h[0], np.abs(py - c[1]) - h[1], np.abs(pz - c[2]) - h[2]
+        out = np.sqrt(np.maximum(qx, 0) ** 2 + np.maximum(qy, 0) ** 2 + np.maximum(qz, 0) ** 2)
+        return out + np.minimum(np.maximum(np.maximum(qx, qy), qz), 0.0)
 
     def d(self, px, py, pz):
         px, py, pz = np.asarray(px), np.asarray(py), np.asarray(pz)
@@ -1569,10 +1836,29 @@ class GridField:
             # (a whole block of the sculpting grid: resampled axis by axis)
             G = _axis_resample(self.G, px.ravel(), self.glo[0], self.gh, 0, self.far)
             G = _axis_resample(G, py.ravel(), self.glo[1], self.gh, 1, self.far)
-            return _axis_resample(G, pz.ravel(), self.glo[2], self.gh, 2, self.far)
+            G = _axis_resample(G, pz.ravel(), self.glo[2], self.gh, 2, self.far)
+            if self.boxed:
+                G = np.maximum(G, self._box(px, py, pz))
+            return G
         bx, by, bz = np.broadcast_arrays(px, py, pz)
         P = np.stack([bx.ravel(), by.ravel(), bz.ravel()], axis=1)
-        return trilinear(self.G, self.glo, self.gh, P, self.far).reshape(bx.shape)
+        out = trilinear(self.G, self.glo, self.gh, P, self.far).reshape(bx.shape)
+        if self.boxed:
+            out = np.maximum(out, self._box(bx, by, bz))
+        return out
+
+
+class Blend:
+    """Two shapes joined smoothly (over `k` metres) into one, to be used as one shape."""
+
+    def __init__(self, a, b, k):
+        self.a, self.b, self.k = a, b, k
+        self.lo, self.hi = np.minimum(a.lo, b.lo), np.maximum(a.hi, b.hi)
+        self.c, self.R = (self.lo + self.hi) / 2, None
+
+    def d(self, px, py, pz):
+        from sculpt import smin
+        return smin(self.a.d(px, py, pz), self.b.d(px, py, pz), self.k)
 
 
 class Both:
@@ -1728,7 +2014,7 @@ def joints_of(man):
     J["skull_x"] = float((skull[:, 0].max() + skull[:, 0].min()) / 2)
     J["skull_half"] = (float((skull[:, 0].max() - skull[:, 0].min()) / 2), float(np.abs(skull[:, 1]).max()))
     ex = J["eye_l"][0]
-    prof = B[(np.abs(B[:, 1]) < 0.008) & (B[:, 0] > ex - 0.005) & (B[:, 2] < eye_z - 0.05)]
+    prof = B[(np.abs(B[:, 1]) < 0.008) & (B[:, 0] > ex - 0.005) & (B[:, 2] < eye_z - 0.05) & (B[:, 2] > J["neck"][2])]
     men = prof[np.argmin(prof[:, 2])]                                  # the bottom of the chin
     J["chin"] = (float(men[0]), 0.0, float(men[2]))
     J["eye_x"] = float(ex)
@@ -1799,7 +2085,7 @@ def uniform_layers(man, J, spec, LM):
     print(f"  shells read as fields in {time.time() - t0:.0f} s")
     Z = LM["Z"]
     tunic, trousers, boots = Layer("tunic", "tunic"), Layer("trousers", "trousers"), Layer("boots", "boots")
-    collar, cuffs, soles = Layer("collar", "tunic"), Layer("cuffs", "tunic"), Layer("soles", "boots")
+    collar, cuffs, soles = Layer("collar", "trousers"), Layer("cuffs", "tunic"), Layer("soles", "leather")
     layers = [tunic, trousers, boots, collar, cuffs, soles]
     BIGBOX = 3.0
     # ---- the tunic: the suit over the chest, back and arms, loose at the waist; the skirt over the hips to the hem
@@ -1811,11 +2097,18 @@ def uniform_layers(man, J, spec, LM):
     LEGS = ("pelvis", "spine_01", "thigh_l", "thigh_r")
     tunic.add(tights.cloth(loose, lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.02), default=OFF))
     # the skirt hangs over the hips and the trousers from the belt, flaring a little to the hem
-    flare = lambda P: 0.024 + 0.012 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0)
-    skirt_box = dict(lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.02), hi=(BIGBOX, BIGBOX, LM["belt"] + 0.03))
-    tunic.add(skirt.cloth(ARMS, more=flare, **skirt_box), 0.02)
-    tunic.add(tights.cloth({b: 0.0 for b in LEGS}, more=flare, default=OFF, **skirt_box), 0.02)
+    flare = lambda P: 0.026 + 0.02 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0) ** 1.5
+    skirt_box = dict(lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.02), hi=(BIGBOX, BIGBOX, LM["belt"] + 0.016))   # (its top hidden under the belt)
+    # (the skirt's shell and the suit's hips joined smoothly into one: the skirt is narrower than the thighs here and there)
+    tunic.add(Blend(skirt.cloth(ARMS, more=flare, **skirt_box),
+                    tights.cloth({b: 0.0 for b in LEGS}, more=flare, default=OFF, **skirt_box), 0.05), 0.02)
     tunic.cut(HalfSpace((0.0, 0.0, LM["hem"]), (0.0, 0.0, -1.0)), 0.004)
+    # the turned hem: the skirt's last 2 cm a little thicker, a clean edge under it
+    hem_box = dict(lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.01), hi=(BIGBOX, BIGBOX, LM["hem"] + 0.021))
+    hem = lambda P: flare(P) + 0.0035
+    tunic.add(Blend(skirt.cloth(ARMS, more=hem, **hem_box),
+                    tights.cloth({b: 0.0 for b in LEGS}, more=hem, default=OFF, **hem_box), 0.05), 0.002)
+    tunic.cut(HalfSpace((0.0, 0.0, LM["hem"]), (0.0, 0.0, -1.0)), 0.0025)
     ax = LM["neck_axis"]
     tunic.cut(HalfSpace(LM["collar_c"] + ax * 0.004, ax), 0.004)
     (nrx, nry), nmid, nfwd = neck_size(man, LM)
@@ -1825,17 +2118,11 @@ def uniform_layers(man, J, spec, LM):
         cut_at = wr - fa * 0.03
         tunic.sub(Both(HalfSpace(cut_at, -fa), Sphere(cut_at + fa * 0.05, 0.11)), 0.0)
     # (the shapes over it are placed on the tunic as it stands so far)
-    # the folds: the sleeve gathered in rings at the elbow, where the arm bends
     for s, side in (("l", 1.0), ("r", -1.0)):
         sh, el, wr = (np.array(J[k + s]) for k in ("upperarm_", "lowerarm_", "hand_"))
         fa = _n(wr - el)
         Rc = ring_frame(fa)
-        folds = []
-        for off, tilt in ((-0.06, 10), (-0.012, 8), (0.04, 12), (0.075, -6)):
-            c = el + fa * off
-            folds.append((c, ring_axes(tunic, c, Rc), tilt))
-        for c, (rx, ry), tilt in folds:
-            tunic.add(Torus(c, rx - 0.004, 0.0105, Rc @ rot_euler(tilt, tilt * 0.4, 0), major_y=ry - 0.004), 0.011)
+        # (no rings of folds at the elbow: at this many faces they read as dents, and they crush when the arm bends)
         # the turned-back cuff at the sleeve's end
         cc = wr - fa * 0.048
         rx, ry = ring_axes(tunic, cc, Rc)
@@ -1863,10 +2150,7 @@ def uniform_layers(man, J, spec, LM):
         a1 = np.array((cx + math.cos(ang + lean * 4) * 0.2, math.sin(ang + lean * 4) * 0.2, zb + 0.075 + 0.012 * math.cos(2.3 * k)))
         (p0, p1), (n0, n1) = project(tunic, [a0, a1])
         tunic.add(RoundCone(p0 - n0 * 0.007, p1 - n1 * 0.0105, 0.0135, 0.011), 0.012)
-        b0 = np.array((cx + math.cos(ang + 0.1) * 0.22, math.sin(ang + 0.1) * 0.22, zb - 0.028))
-        b1 = np.array((cx + math.cos(ang + 0.13) * 0.22, math.sin(ang + 0.13) * 0.22, zb - 0.075))
-        (q0, q1), (m0, m1) = project(tunic, [b0, b1])
-        tunic.add(RoundCone(q0 - m0 * 0.009, q1 - m1 * 0.012, 0.0125, 0.011), 0.012)
+        # (none below it: on the skirt, at this many faces, they read as crumpling)
     # and where the back of the tunic wrinkles across the shoulder blades
     for z, w in ((Z(1.36), 0.06), (Z(1.3), 0.075)):
         (p0, p1), (n0, n1) = project(tunic, [(-0.3, w, z + 0.01), (-0.3, -w, z - 0.008)])
@@ -1886,25 +2170,20 @@ def uniform_layers(man, J, spec, LM):
             tunic.add(RoundBox(flap, (0.0075, half[1] + 0.004, 0.018), 0.006, R), 0.003)
             LM["pockets"].append((p, R, half))
     # ---- the trousers: the suit over the seat and legs, full in the thigh
+    boot_top = LM["knee"] - 0.075 if spec["tall_boots"] else LM["ankle"] + 0.045
+    tuck = boot_top if spec["tall_boots"] else LM["ankle"] + 0.22            # (where the trousers go into the boot or gaiter)
     trousers.add(tights.cloth({"pelvis": 0.012, "spine_01": 0.012, "thigh_l": 0.017, "thigh_r": 0.017, "calf_l": 0.009,
                                "calf_r": 0.009, "foot_l": 0.006, "foot_r": 0.006, "ball_l": 0.006, "ball_r": 0.006},
-                              hi=(BIGBOX, BIGBOX, LM["belt"] + 0.04), default=OFF))
-    boot_top = LM["knee"] - 0.075 if spec["tall_boots"] else LM["ankle"] + 0.045
+                              hi=(BIGBOX, BIGBOX, LM["belt"] + 0.04), default=OFF,
+                              more=lambda P: -0.011 * np.clip((tuck + 0.012 - P[:, 2]) / 0.03, 0.0, 1.0)))
     for s, side in (("l", 1.0), ("r", -1.0)):
-        hip, knee, ank = (np.array(J[k + s]) for k in ("thigh_", "calf_", "foot_"))
-        Rk = ring_frame(knee - hip)
-        folds = []
-        for off, tilt in ((0.07, 12), (0.02, 14), (-0.03, -10)):
-            c = knee + _n(knee - hip) * off
-            folds.append((c, ring_axes(trousers, c, Rk), tilt))
         if spec["tall_boots"]:
+            # the trousers bloused over the boot's top: one soft roll, a little lower at the back
+            hip, knee, ank = (np.array(J[k + s]) for k in ("thigh_", "calf_", "foot_"))
+            c = leg_point(J, s, boot_top + 0.013)
             Rs_ = ring_frame(knee - ank)
-            for z, tilt in ((boot_top + 0.016, 8), (boot_top + 0.04, -10)):
-                c = leg_point(J, s, z)
-                folds.append((c, ring_axes(trousers, c, Rs_), tilt))
-        for c, (rx, ry), tilt in folds:
-            trousers.add(Torus(c, rx - 0.003, 0.011, ring_frame(knee - hip if c[2] > LM["knee"] - 0.06 else knee - ank)
-                               @ rot_euler(tilt, tilt * 0.5, 0), major_y=ry - 0.003), 0.012)
+            rx, ry = ring_axes(trousers, c, Rs_)
+            trousers.add(Torus(c, rx + 0.002, 0.0125, Rs_ @ rot_euler(0, -6, 0), major_y=ry + 0.002), 0.016)
     # ---- the boots: the suit's feet and calves made boots, with a toe, a heel and a sole of their own
     boots.add(tights.cloth({"calf_l": 0.012, "calf_r": 0.012, "foot_l": 0.009, "foot_r": 0.009, "ball_l": 0.008, "ball_r": 0.008},
                            hi=(BIGBOX, BIGBOX, boot_top + 0.02), default=OFF))
@@ -1953,53 +2232,177 @@ def uniform_layers(man, J, spec, LM):
     return layers
 
 
-def uniform_weights(piece, man):
-    """The uniform takes the weights of the shell it was made from: the nearest points of the suit and the skirt."""
-    from mathutils import kdtree
-    srcs = [man["tights"], man["skirt"]]
+def uniform_weights(piece, man, LM=None):
+    """The uniform takes the weights of the shell it was made from: at each point, those of the nearest place on the
+    suit (or, for the tunic's skirt, on the skirt), mixed across that face; then evened out along the uniform itself so
+    the cloth bends smoothly where two bones meet."""
+    from mathutils.bvhtree import BVHTree
     names = [g.name for g in man["tights"].vertex_groups]
-    pts, Ws = [], []
-    for ob in srcs:
+
+    def source(ob, keep=None):
         W, nm = weights_of(ob)
         Wm = np.zeros((len(W), len(names)))
         for j, n in enumerate(nm):
             if n in names:
                 Wm[:, names.index(n)] = W[:, j]
-        V = np.array([v.co for v in ob.data.vertices])
-        if ob is man["skirt"]:
-            keep = V[:, 2] > 0.6                       # (the skirt's top only: the tunic's skirt hangs from it)
-            V, Wm = V[keep], Wm[keep]
-        pts.append(V)
-        Ws.append(Wm)
-    P = np.vstack(pts)
-    W = np.vstack(Ws)
-    kd = kdtree.KDTree(len(P))
-    for i, p in enumerate(P):
-        kd.insert(p, i)
-    kd.balance()
-    out = np.zeros((len(piece.data.vertices), len(names)))
-    for v in piece.data.vertices:
-        tot = 0.0
-        for co, j, d in kd.find_n(v.co, 4):
-            w = 1.0 / max(d, 1e-3)
-            out[v.index] += W[j] * w
-            tot += w
-        out[v.index] /= tot
+        V = [tuple(v.co) for v in ob.data.vertices]
+        tris = []
+        for p_ in ob.data.polygons:
+            vs = list(p_.vertices)
+            if keep is not None and not all(keep[i] for i in vs):
+                continue
+            for i in range(1, len(vs) - 1):
+                tris.append((vs[0], vs[i], vs[i + 1]))
+        return BVHTree.FromPolygons(V, tris), np.array(V), np.array(tris), Wm
+
+    Vs = np.array([v.co for v in man["skirt"].data.vertices])
+    srcs = [source(man["tights"]), source(man["skirt"], Vs[:, 2] > 0.6)]
+    me = piece.data
+    P = np.array([v.co for v in me.vertices])
+    # the tunic's skirt (tunic paint below the belt) hangs from the skirt; all else from the suit
+    use_skirt = np.zeros(len(P), bool)
+    if LM is not None:
+        tun = [i for i, m in enumerate(me.materials) if m.name.split(".")[0] == "tunic"]
+        on_tunic = np.zeros(len(P), bool)
+        for p_ in me.polygons:
+            if p_.material_index in tun:
+                on_tunic[list(p_.vertices)] = True
+        use_skirt = on_tunic & (P[:, 2] < LM["belt"] - 0.01) & (P[:, 2] > LM["hem"] - 0.05)
+    out = np.zeros((len(P), len(names)))
+    for i, co in enumerate(P):
+        bvh, V, T, W = srcs[1 if use_skirt[i] else 0]
+        loc, nrm, fi, d = bvh.find_nearest(co)
+        if fi is None:
+            bvh, V, T, W = srcs[0]
+            loc, nrm, fi, d = bvh.find_nearest(co)
+        a, b, c = V[T[fi]]
+        q = np.array(loc)
+        v0, v1, v2 = b - a, c - a, q - a
+        d00, d01, d11, d20, d21 = v0 @ v0, v0 @ v1, v1 @ v1, v2 @ v0, v2 @ v1
+        den = max(d00 * d11 - d01 * d01, 1e-12)
+        wb = (d11 * d20 - d01 * d21) / den
+        wc = (d00 * d21 - d01 * d20) / den
+        bary = np.clip(np.array((1.0 - wb - wc, wb, wc)), 0.0, 1.0)
+        bary /= bary.sum()
+        out[i] = bary @ W[T[fi]]
+    # evened out along the uniform: a few steps toward the mean of its neighbours
+    Ed = np.zeros(len(me.edges) * 2, np.int64)
+    me.edges.foreach_get("vertices", Ed)
+    Ed = Ed.reshape(-1, 2)
+    cnt = np.bincount(Ed.ravel(), minlength=len(P)).astype(float)[:, None]
+    for _ in range(3):
+        acc = np.zeros_like(out)
+        np.add.at(acc, Ed[:, 0], out[Ed[:, 1]])
+        np.add.at(acc, Ed[:, 1], out[Ed[:, 0]])
+        out = 0.5 * out + 0.5 * acc / np.maximum(cnt, 1.0)
     set_weights(piece, out, names, 4, 0.02)
 
 
-def thin(ob, tris):
-    """Decimate a mesh object to about `tris` triangles (its weights and paints go with it)."""
+def thin(ob, tris, spare=0.0):
+    """Decimate a mesh object to about `tris` triangles (its weights and paints go with it). With `spare`, the sharply
+    curved places (a knuckle, the cleft between two fingers) are spared by that much and the broad ones thinned more."""
     have = sum(len(p.vertices) - 2 for p in ob.data.polygons)
     if have <= tris:
         return ob
     mod = ob.modifiers.new("thin", "DECIMATE")
     mod.ratio = tris / have
+    if spare > 0.0:
+        me = ob.data
+        Nv = np.zeros(len(me.vertices) * 3)
+        me.vertices.foreach_get("normal", Nv)
+        Nv = Nv.reshape(-1, 3)
+        Ed = np.zeros(len(me.edges) * 2, np.int64)
+        me.edges.foreach_get("vertices", Ed)
+        Ed = Ed.reshape(-1, 2)
+        turn = 1.0 - (Nv[Ed[:, 0]] * Nv[Ed[:, 1]]).sum(axis=1)
+        k = np.zeros(len(Nv))
+        np.maximum.at(k, Ed[:, 0], turn)
+        np.maximum.at(k, Ed[:, 1], turn)
+        sharp = np.clip((k - 0.01) / 0.08, 0.0, 1.0)
+        vg = ob.vertex_groups.new(name="spare")
+        for i in range(len(Nv)):
+            vg.add([i], float(1.0 - 0.95 * sharp[i]), "REPLACE")
+        mod.vertex_group = vg.name
+        mod.vertex_group_factor = spare
     bpy.context.view_layer.objects.active = ob
     with bpy.context.temp_override(object=ob, active_object=ob):
         bpy.ops.object.modifier_apply(modifier=mod.name)
+    g = ob.vertex_groups.get("spare")
+    if g is not None:
+        ob.vertex_groups.remove(g)
     ob.data.validate()
     return ob
+
+
+def finger_bones(man, s):
+    """The hand's finger bones (MakeHuman's joints, as curled): [(finger, joint, head, tail)], finger 1 the thumb."""
+    S = s.upper()
+    mj = man["mh_joints"]
+    return [(f, k, np.array(mj[f"finger{f}-{k}.{S}____head"]), np.array(mj[f"finger{f}-{k}.{S}____tail"]))
+            for f in range(1, 6) for k in range(1, 4)]
+
+
+def _near_bone(P, bones):
+    """For each point, the nearest finger bone: its index, the point on it, how far along it (0..1)."""
+    best = np.full(len(P), np.inf)
+    idx = np.zeros(len(P), int)
+    Q = np.zeros_like(P)
+    T = np.zeros(len(P))
+    for i, (f, k, a, b) in enumerate(bones):
+        ab = b - a
+        t = np.clip(((P - a) @ ab) / (ab @ ab), 0.0, 1.0)
+        q = a + t[:, None] * ab
+        d = np.linalg.norm(P - q, axis=1)
+        m = d < best
+        best[m], idx[m], Q[m], T[m] = d[m], i, q[m], t[m]
+    return idx, Q, T, best
+
+
+def slim_fingers(ob, man, s, by=0.17):
+    """MakeHuman's fingers drawn in a little toward their bones (a soldier's hands, not a mitten), from the
+    knuckles out."""
+    me = ob.data
+    P = np.array([v.co for v in me.vertices])
+    bones = finger_bones(man, s)
+    idx, Q, T, d = _near_bone(P, bones)
+    kk = np.array([bones[i][1] for i in idx])
+    ff = np.array([bones[i][0] for i in idx])
+    w = np.where(kk > 1, 1.0, np.clip((T - 0.25) / 0.4, 0.0, 1.0))
+    w = np.where(ff == 1, w * (kk > 1), w)               # (the thumb from its middle joint out)
+    w *= d < 0.016
+    P = Q + (P - Q) * (1.0 - by * w)[:, None]
+    me.vertices.foreach_set("co", P.astype(np.float32).ravel())
+    me.update()
+
+
+def hand_marks(P, man):
+    """The nails and the knuckles, as two amounts at each point near a finger (0 elsewhere): for the pictures' skin."""
+    nail = np.zeros(len(P), np.float32)
+    knuckle = np.zeros(len(P), np.float32)
+    for s in ("l", "r"):
+        bones = finger_bones(man, s)
+        palm = np.mean([b[2] for b in bones if b[1] == 1 and b[0] > 1], axis=0)
+        near = np.nonzero(np.linalg.norm(P - palm, axis=1) < 0.16)[0]
+        if not len(near):
+            continue
+        idx, Q, T, d = _near_bone(P[near], bones)
+        for j, (i, q, t, dist) in enumerate(zip(idx, Q, T, d)):
+            f, k, a, b = bones[i]
+            if dist > 0.02:
+                continue
+            ax = _n(b - a)
+            to_palm = palm - q
+            to_palm = to_palm - ax * (to_palm @ ax)
+            if np.linalg.norm(to_palm) < 1e-6:
+                continue
+            back = -_n(to_palm)                                   # (the back of the finger: away from the palm)
+            out = P[near[j]] - q
+            c = (out @ back) / max(np.linalg.norm(out), 1e-9)
+            if k == 3:
+                nail[near[j]] = float(np.clip((t - 0.42) / 0.14, 0, 1) * np.clip((c - 0.35) / 0.25, 0, 1))
+            if k in (1, 2) and not (f == 1 and k == 1):
+                knuckle[near[j]] = max(knuckle[near[j]], float(np.exp(-(t / 0.22) ** 2) * np.clip((c - 0.2) / 0.4, 0, 1)))
+    return nail, knuckle
 
 
 def skin_parts(man, layers, nation):
@@ -2044,7 +2447,8 @@ def skin_parts(man, layers, nation):
             thin(o, BUDGET["head"])
         else:
             o.name = "hand_" + ("l" if y > 0 else "r")
-            thin(o, BUDGET["hand"])
+            slim_fingers(o, man, "l" if y > 0 else "r")
+            thin(o, BUDGET["hand"], spare=0.002)
         keep.append(o)
     for o in keep:
         o.data.materials.clear()
@@ -2077,7 +2481,7 @@ def join_meshes(objs, name):
     return ob
 
 
-def body_attributes(body, J):
+def body_attributes(body, J, man=None):
     """The skin's `scalp` (how much short hair, from MakeHuman's group) and the eyes' `look` (how near a point of an
     eyeball is to its front: the iris and pupil are painted by it in the pictures), as point attributes."""
     me = body.data
@@ -2098,10 +2502,21 @@ def body_attributes(body, J):
             co = np.array(me.vertices[i].co)
             c = np.array(J["eye_l"] if co[1] > 0 else J["eye_r"])
             look[i] = _n(co - c)[0]
-    for nm, vals in (("scalp", scalp), ("look", look)):
+    co_ = np.zeros(n * 3, np.float32)
+    me.vertices.foreach_get("co", co_)
+    nail, knuckle = hand_marks(co_.reshape(-1, 3).astype(float), man) if man else (np.zeros(n, np.float32),) * 2
+    for nm, vals in (("scalp", scalp), ("look", look), ("nail", nail), ("knuckle", knuckle)):
         if nm not in me.attributes:
             me.attributes.new(nm, "FLOAT", "POINT")
         me.attributes[nm].data.foreach_set("value", vals)
+    # each point's place about the middle of the eyes (the skin's marks are drawn from it in the pictures)
+    mid = (np.array(J["eye_l"]) + np.array(J["eye_r"])) / 2
+    co = np.zeros(n * 3, np.float32)
+    me.vertices.foreach_get("co", co)
+    face = (co.reshape(-1, 3) - mid).astype(np.float32)
+    if "face" not in me.attributes:
+        me.attributes.new("face", "FLOAT_VECTOR", "POINT")
+    me.attributes["face"].data.foreach_set("vector", face.ravel())
 
 
 # ================================================================================================ the man, put together
@@ -2113,13 +2528,14 @@ def assemble(nation, weapon="rifle", seed=None):
     t0 = time.time()
     man = mh_body(nation, seed)
     J = joints_of(man)
+    fit_body(J)
     LM = landmarks(J)
     ls = uniform_layers(man, J, spec, LM)
-    cloth = mesh_from_layers("uniform", ls, 0.0034, BUDGET["uniform"])
-    uniform_weights(cloth, man)
+    cloth = mesh_from_layers("uniform", ls, 0.0034, BUDGET["uniform"], cut_paints=True, detail=DETAIL)
+    uniform_weights(cloth, man, LM)
     parts = skin_parts(man, ls, nation)
     body = join_meshes([cloth] + parts, "body_" + nation)
-    body_attributes(body, J)
+    body_attributes(body, J, man)
     kitp = build_kit(J, spec, ls, LM["Z"])
     helmet = build_helmet(spec["helmet"], J)
     if weapon == "rifle":
@@ -2167,6 +2583,7 @@ def assemble_sculpted(nation, weapon="rifle", J=None):
     """The first pass (kept for the before-and-after picture): the man sculpted from numbers, dressed, armed and rigged.
     Returns a dict of his objects and his Rig."""
     J = J or joints()
+    fit_body(J)
     spec = NATION_KIT[nation]
     LOOK_NOW.update(LOOK.get(nation, LOOK["GER"]))
     t0 = time.time()
@@ -2223,6 +2640,31 @@ def assemble_sculpted(nation, weapon="rifle", J=None):
             "weapon_part": part, "sockets": sockets, "J": J, "spec": spec, "weapon_kind": weapon}
 
 
+def studio_smooth(m):
+    """For the pictures only (never in the exports): one level of subdivision when rendered, on the body and uniform,
+    the helmet and the kit's round things, so no curve shows a facet at close range."""
+    for ob in [m["body"], m["helmet"]] + [k for k in m["kit"] if k.name.split(".")[0] in ("bottle", "canister", "bread_bag", "pack", "roll",
+                                                                                          "pouches", "shovel")]:
+        if not any(md.type == "SUBSURF" for md in ob.modifiers):
+            md = ob.modifiers.new("studio_smooth", "SUBSURF")
+            md.levels = 0
+            md.render_levels = 1
+            md.quality = 2
+            # (a sharp edge of the mesh, a hem's or a flap's, is creased so the smoothing does not melt it)
+            me = ob.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            cr = np.zeros(len(bm.edges), np.float32)
+            for e in bm.edges:
+                if len(e.link_faces) == 2:
+                    a = e.calc_face_angle(0.0)
+                    cr[e.index] = float(np.clip((a - math.radians(50.0)) / math.radians(20.0), 0.0, 0.85))
+            bm.free()
+            if "crease_edge" not in me.attributes:
+                me.attributes.new("crease_edge", "FLOAT", "EDGE")
+            me.attributes["crease_edge"].data.foreach_set("value", cr)
+
+
 def man_objects(m):
     return [m["body"]] + m["kit"] + [m["helmet"], m["weapon"], m["weapon_part"]]
 
@@ -2270,7 +2712,7 @@ def aim(yaw=0.0, pitch=0.0, relief=-0.045, kick=0.0, rise=0.0):
 
 
 def stand_feet(ahead=0.05, apart=0.12, back=-0.06):
-    return {"foot_l": {"at": (ahead, apart, 0.088), "yaw": 8.0}, "foot_r": {"at": (back, -apart, 0.088), "yaw": -12.0}}
+    return {"foot_l": {"at": (ahead, apart, ANKLE), "yaw": 8.0}, "foot_r": {"at": (back, -apart, ANKLE), "yaw": -12.0}}
 
 
 def base_stand(t=0.0):
@@ -2326,32 +2768,57 @@ def label(path, texts, size=26):
     im.save(path)
 
 
-def picture_before_after(m, out, fast=False):
-    """Today's lay figure (Rifleman_Stahl, from the game's file) beside the new German soldier: same light, same camera."""
+def picture_before_after(m, out, fast=False, first=None):
+    """Today's lay figure (Rifleman_Stahl, from the game's file), the first pass (`first`: the soldier sculpted from
+    numbers) and the new German soldier on MakeHuman's man, side by side: same light, same camera, same stance."""
     sc = bpy.context.scene
-    old = load_game_model(os.path.join(REPO, "Content", "Models", "Rifleman_Stahl.json"), LOOK["GER"], "Rifleman_Stahl", (0.0, -0.62, 0.0))
-    m["arm"].location = (0.0, 0.62, 0.0)
-    rig = m["rig"]
-    P = base_stand()
-    P["foot_l"] = {"at": (0.17, 0.11, 0.088), "yaw": 5.0}
-    P["foot_r"] = {"at": (-0.1, -0.12, 0.088), "yaw": -10.0, "pitch": 0.0}
-    P["pelvis_at"] = (0.02, 0.0, -0.02)
-    rig.key(rig.solve(P), 1)
+    men = [m] + ([first] if first else [])
+    old = load_game_model(os.path.join(REPO, "Content", "Models", "Rifleman_Stahl.json"), LOOK["GER"], "Rifleman_Stahl")
+    old.location = (0.0, -1.0 if first else -0.62, 0.0)
+    turn = math.radians(-16.0) if first else 0.0       # (three abreast, each turned a little to the camera's left)
+    old.rotation_euler = (0.0, 0.0, turn)
+    for man, y in ((m, 1.0 if first else 0.62), (first, 0.0)):
+        if man is None:
+            continue
+        fit_body(man["J"])                              # (each stands on his own legs' measures)
+        man["arm"].location = (0.0, y, 0.0)
+        man["arm"].rotation_euler = (0.0, 0.0, turn)
+        rig = man["rig"]
+        P = base_stand()
+        P["foot_l"] = {"at": (0.17, 0.11, ANKLE), "yaw": 5.0}
+        P["foot_r"] = {"at": (-0.1, -0.12, ANKLE), "yaw": -10.0, "pitch": 0.0}
+        P["pelvis_at"] = (0.02, 0.0, -0.02)
+        rig.key(rig.solve(P), 1)
+    fit_body(m["J"])
     sc.frame_set(1)
     kit.studio()
     ground = kit.backdrop("CFC6B4")
     cam = kit.camera(lens=50)
-    kit.orbit(cam, (0.0, 0.0, 0.9), 5.6, 6.0, 22.0)
+    if first:
+        cam.data.lens = 60
+        kit.orbit(cam, (0.0, 0.0, 0.88), 7.6, 5.0, 0.0)
+    else:
+        kit.orbit(cam, (0.0, 0.0, 0.9), 5.6, 6.0, 22.0)
     shared_render(640 if fast else 1280, 360 if fast else 720, 16 if fast else 48)
     t = time.time()
     kit.still(out)
     print(f"  before-after: {time.time() - t:.0f} s")
     W = 640 if fast else 1280
-    label(out, [(int(W * 0.05), int(W * 0.03), "Today: the lay figure (Rifleman_Stahl)"),
-                (int(W * 0.56), int(W * 0.03), "New: the German soldier")], size=13 if fast else 26)
+    if first:
+        size = 13 if fast else 26
+        font = kit._font(size)
+        texts = []
+        for cx, t in ((1 / 6, "Today: the lay figure"), (1 / 2, "First pass: sculpted"), (5 / 6, "New: MakeHuman body")):
+            texts.append((int(W * cx - font.getlength(t) / 2), int(W * 0.025), t))
+        label(out, texts, size=size)
+    else:
+        label(out, [(int(W * 0.05), int(W * 0.03), "Today: the lay figure (Rifleman_Stahl)"),
+                    (int(W * 0.56), int(W * 0.03), "New: the German soldier")], size=13 if fast else 26)
     bpy.data.objects.remove(old)
     bpy.data.objects.remove(ground)
-    m["arm"].location = (0.0, 0.0, 0.0)
+    for man in men:
+        man["arm"].location = (0.0, 0.0, 0.0)
+        man["arm"].rotation_euler = (0.0, 0.0, 0.0)
     return out
 
 
@@ -2470,9 +2937,27 @@ def keyed(keys):
 
 
 # ---- walking and running
+# (the measures of the man the clips are posed on: set by fit_body from his joints; these are the sculpted man's)
+ANKLE = 0.088                                    # the ankle's height above the ground, standing in boots
 FOOT_HEEL = np.array((-0.061, 0.0, -0.088))      # the heel's ground point from the ankle
 FOOT_BALL = np.array((0.146, 0.0, -0.088))       # the ball's
-LEG_REACH = 0.822
+LEG_REACH = 0.822                                # how far a leg reaches from the hip, all but straight
+HIPS = {"l": (0.0, 0.09, 0.915), "r": (0.0, -0.09, 0.915)}
+PRONE_HEIGHT = 0.135                             # the pelvis's height lying prone
+
+
+def fit_body(J):
+    """Fit the clips' measures to the man they are posed on (his ankles, hips and legs) and remake the gaits."""
+    global ANKLE, FOOT_HEEL, FOOT_BALL, LEG_REACH, HIPS, PRONE_Z, WALK, RUN, FLEE
+    ANKLE = float(J["foot_l"][2])
+    FOOT_HEEL = np.array((-0.061, 0.0, -ANKLE))
+    FOOT_BALL = np.array((0.146, 0.0, -ANKLE))
+    lt = np.linalg.norm(np.array(J["calf_l"]) - np.array(J["thigh_l"]))
+    lc = np.linalg.norm(np.array(J["foot_l"]) - np.array(J["calf_l"]))
+    LEG_REACH = 0.99 * float(lt + lc)
+    HIPS = {s: tuple(J["thigh_" + s]) for s in ("l", "r")}
+    PRONE_Z = PRONE_HEIGHT - 0.95                  # (the rig scales the pelvis's drop to the man: see Rig.fit)
+    WALK, RUN, FLEE = make_gaits()
 
 
 class Gait:
@@ -2551,7 +3036,7 @@ class Gait:
         for s, side in (("l", 1.0), ("r", -1.0)):
             f, _ = self.foot(t, s)
             a = np.array(f["at"])
-            hip = np.array((0.0 - 0.0, 0.09 * side, 0.915))
+            hip = np.array(HIPS[s])
             dx, dy = a[0] - hip[0] - self.lean, a[1] - hip[1]
             h2 = LEG_REACH ** 2 - dx * dx - dy * dy
             if h2 <= 0:
@@ -2615,10 +3100,14 @@ def c_idle(t):
     return breathe(P, t, 4.0)
 
 
-WALK = Gait(1.1, 1.5, 0.58, 0.07, center=-0.085, width=0.105, heel=-16.0, push=52.0, flat=(0.12, 0.45), base=-0.012, bob=0.012)
-RUN = Gait(0.7, 2.45, 0.35, 0.17, center=-0.08, width=0.1, heel=-6.0, push=56.0, flat=(0.1, 0.35), base=-0.07, bob=0.02, lean=0.05)
-FLEE = Gait(0.65, 2.8, 0.33, 0.2, center=-0.095, width=0.1, heel=-4.0, push=58.0, flat=(0.1, 0.33), base=-0.045, bob=0.025,
-            right=0.32 / 0.65, lean=0.03)
+def make_gaits():
+    return (Gait(1.1, 1.5, 0.58, 0.07, center=-0.085, width=0.105, heel=-16.0, push=52.0, flat=(0.12, 0.45), base=-0.012, bob=0.012),
+            Gait(0.7, 2.45, 0.35, 0.17, center=-0.08, width=0.1, heel=-6.0, push=56.0, flat=(0.1, 0.35), base=-0.07, bob=0.02, lean=0.05),
+            Gait(0.65, 2.8, 0.33, 0.2, center=-0.095, width=0.1, heel=-4.0, push=58.0, flat=(0.1, 0.33), base=-0.045, bob=0.025,
+                 right=0.32 / 0.65, lean=0.03))
+
+
+WALK, RUN, FLEE = make_gaits()
 
 
 def gait_pose(g, t, lean, twist, sway, P):
@@ -2698,7 +3187,7 @@ def aim_stand(t=0.0):
     P = {"pelvis_at": (-0.02, 0.0, -0.03), "pelvis": (2.0, 0.0, -30.0), "spine_01": (3.0, 0.0, -2.0), "spine_02": (3.0, 0.0, -2.0),
          "chest": (4.0, -2.0, -1.0), "neck": (4.0, -3.0, 16.0), "head": (8.0, -11.0, 17.0),
          "clavicle_l": (0.0, 12.0), "clavicle_r": (8.0, 10.0),
-         "foot_l": {"at": (0.2, 0.14, 0.088), "yaw": -12.0}, "foot_r": {"at": (-0.23, -0.14, 0.088), "yaw": -55.0},
+         "foot_l": {"at": (0.2, 0.14, ANKLE), "yaw": -12.0}, "foot_r": {"at": (-0.23, -0.14, ANKLE), "yaw": -55.0},
          "weapon": aim(), "hand_l": held("l", pole=(0.4, 0.15, -1.0)), "hand_r": held("r", pole=(-0.2, -1.0, -0.05)),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
     return P
@@ -2710,7 +3199,7 @@ def kneel_base(t=0.0, aimed=True):
     P = {"pelvis_at": (-0.2, 0.0, -0.49), "pelvis": (6.0, 0.0, -24.0), "spine_01": (4.0, 0.0, -2.0), "spine_02": (5.0, 0.0, -2.0),
          "chest": (6.0, -2.0, -2.0), "neck": (2.0, -3.0, 14.0), "head": (7.0, -11.0, 14.0),
          "clavicle_l": (0.0, 14.0), "clavicle_r": (8.0, 10.0),
-         "foot_l": {"at": (0.3, 0.17, 0.088), "yaw": -10.0, "pole": (1.0, 0.25, 0.3)},
+         "foot_l": {"at": (0.3, 0.17, ANKLE), "yaw": -10.0, "pole": (1.0, 0.25, 0.3)},
          "foot_r": {"at": (-0.5, -0.2, 0.105), "yaw": -40.0, "pitch": 72.0, "toe": 62.0, "pole": (1.0, -0.2, -0.6)},
          "weapon": aim(), "hand_l": held("l", pole=(0.2, 0.2, -1.0)), "hand_r": held("r", pole=(-0.2, -1.0, -0.1)),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
@@ -2725,13 +3214,13 @@ PRONE_Z = -0.815
 
 
 def prone_base(t=0.0, arch=0.5, weapon="rifle"):
-    """Lying to fire: the body a little to the right of the line of fire, legs apart and toes dug in, down on the
-    elbows with the back a little arched, the head up to look along the sights."""
+    """Lying to fire: the body a little to the right of the line of fire, legs apart, the feet lying toes down with the
+    heels turned out, down on the elbows with the back a little arched, the head up to look along the sights."""
     P = {"pelvis_at": (0.0, 0.03, PRONE_Z), "pelvis": (86.0, 2.0, -9.0), "spine_01": (-7.0 * arch, 0.0, 3.0),
          "spine_02": (-10.0 * arch, 0.0, 3.0), "chest": (-12.0 * arch, -5.0, 3.0), "neck": (-32.0, -1.0, 4.0), "head": (-22.0, -9.0, 5.0),
          "clavicle_l": (8.0, 14.0), "clavicle_r": (10.0, 10.0),
-         "foot_l": {"at": (-0.82, 0.3, 0.115), "yaw": 15.0, "pitch": 82.0, "toe": 50.0, "pole": (-0.1, 0.3, -1.0)},
-         "foot_r": {"at": (-0.84, -0.28, 0.115), "yaw": -25.0, "pitch": 82.0, "toe": 50.0, "pole": (-0.1, -0.3, -1.0)},
+         "foot_l": {"at": (-0.8, 0.3, 0.125), "yaw": 22.0, "pitch": 132.0, "roll": -12.0, "toe": 12.0, "pole": (-0.1, 0.3, -1.0)},
+         "foot_r": {"at": (-0.82, -0.28, 0.125), "yaw": -28.0, "pitch": 132.0, "roll": 12.0, "toe": 12.0, "pole": (-0.1, -0.3, -1.0)},
          "weapon": aim(), "weapon_kind": weapon,
          "hand_l": held("l", slide=(-0.16, 0.0, 0.0), pole_world=(0.0, 0.3, -1.0)),
          "hand_r": held("r", pole_world=(-0.1, -1.0, -1.3)),
@@ -2827,7 +3316,7 @@ def c_go_prone(t):
     """Down on the right knee, then forward onto the elbows, the legs thrown back, the rifle kept up out of the dirt."""
     knee = kneel_base(aimed=False)
     knee.update({"pelvis_at": (-0.12, 0.0, -0.47), "spine_01": (10.0, 0, 0), "spine_02": (12.0, 0, 0), "chest": (12.0, 0, 0),
-                 "foot_l": {"at": (0.32, 0.16, 0.088), "yaw": -5.0, "pole": (1.0, 0.25, 0.3)},
+                 "foot_l": {"at": (0.32, 0.16, ANKLE), "yaw": -5.0, "pole": (1.0, 0.25, 0.3)},
                  "foot_r": {"at": (-0.35, -0.18, 0.105), "yaw": -20.0, "pitch": 70.0, "toe": 55.0, "pole": (1.0, -0.2, -0.6)},
                  "weapon": port_arms(lift=0.08, out=0.12)})
     fall = {"pelvis_at": (0.0, 0.02, -0.6), "pelvis": (55.0, 0.0, -6.0), "spine_01": (4.0, 0, 0), "spine_02": (4.0, 0, 0),
@@ -2913,14 +3402,14 @@ def c_throw(t):
                 neck=(0.0, 0.0, 22.0), head=(-4.0, 0.0, 24.0), clavicle_r=(14.0, -12.0), pelvis_at=(-0.06, 0.0, -0.04),
                 hand_r={"at": (-0.32, -0.32, 1.66), "a": (-0.2, 0.0, 1.0), "n": (1.0, 0.0, 0.0), "pole_world": (-0.3, -1.0, -0.6)},
                 fingers_r=70.0, thumb_r=50.0,
-                foot_l={"at": (0.36, 0.15, 0.088), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, 0.088), "yaw": -40.0})
+                foot_l={"at": (0.36, 0.15, ANKLE), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, ANKLE), "yaw": -40.0})
     step = dict(wind, foot_l={"at": (0.22, 0.15, 0.17), "yaw": 0.0, "pitch": -10.0})
     release = dict(base_stand(), weapon=one_hand(lift=0.0, ahead=-0.1), hand_l=hold_l,
                    pelvis=(10.0, 0.0, 8.0), spine_01=(8.0, -2.0, 8.0), spine_02=(8.0, -2.0, 10.0), chest=(10.0, -3.0, 12.0),
                    neck=(-8.0, 0.0, -10.0), head=(-6.0, 0.0, -8.0), clavicle_r=(16.0, 14.0), pelvis_at=(0.08, 0.0, -0.06),
                    hand_r={"at": (0.62, -0.18, 1.7), "a": (0.7, 0.0, 0.7), "n": (0.2, 0.9, -0.2), "pole_world": (-0.6, -0.6, -1.0)},
                    fingers_r=5.0, thumb_r=0.0,
-                   foot_l={"at": (0.36, 0.15, 0.088), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, 0.088), "yaw": -25.0, "pitch": 30.0, "toe": 30.0})
+                   foot_l={"at": (0.36, 0.15, ANKLE), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, ANKLE), "yaw": -25.0, "pitch": 30.0, "toe": 30.0})
     follow = dict(release, pelvis=(16.0, 0.0, 14.0), chest=(14.0, -3.0, 14.0), spine_02=(10.0, -2.0, 10.0),
                   hand_r={"at": (0.45, 0.12, 0.95), "a": (0.3, 0.3, -0.9), "n": (-0.3, 0.9, 0.0), "pole_world": (-0.4, -1.0, 0.2)},
                   fingers_r=20.0, neck=(-10.0, 0.0, -6.0), head=(-8.0, 0.0, -4.0))
@@ -2970,7 +3459,7 @@ def c_die_back(t):
                weapon=port_arms(lift=0.1, out=0.08))
     stagger = {"pelvis_at": (-0.18, 0.0, -0.17), "pelvis": (-12.0, 2.0, 8.0), "spine_01": (-6.0, 0, 3.0), "spine_02": (-10.0, 0, 3.0),
                "chest": (-12.0, 2.0, 4.0), "neck": (-8.0, 0, 10.0), "head": (-10.0, 4.0, 14.0), "clavicle_l": (14.0, -8.0), "clavicle_r": (14.0, -8.0),
-               "foot_l": {"at": (0.12, 0.13, 0.12), "yaw": 8.0, "pitch": -15.0}, "foot_r": {"at": (-0.32, -0.15, 0.088), "yaw": -20.0},
+               "foot_l": {"at": (0.12, 0.13, 0.12), "yaw": 8.0, "pitch": -15.0}, "foot_r": {"at": (-0.32, -0.15, ANKLE), "yaw": -20.0},
                "weapon": drop_rifle((0.35, -0.2, 0.55), 30.0, 60.0), "hand_l": limp((0.05, 0.42, 1.0), (0.2, 0.5, -0.8), (0.0, -1.0, 0.0), (-0.5, 0.6, -0.4)),
                "hand_r": limp((0.0, -0.42, 0.95), (0.2, -0.5, -0.8), (0.0, 1.0, 0.0), (-0.5, -0.6, -0.4)), "fingers_l": 10.0, "fingers_r": 10.0}
     falling = {"pelvis_at": (-0.42, 0.0, -0.55), "pelvis": (-50.0, 4.0, 10.0), "spine_01": (-6.0, 0, 3.0), "spine_02": (-8.0, 0, 3.0),
@@ -3134,11 +3623,17 @@ def make_lods(m, lod):
         n = tris_of(c)
         r = min(1.0, max(ratio, 14.0 / max(n, 1)))
         if r < 0.98:
+            # (where two cloths nearly touch the mesh has an edge shared by more than two faces, which the thinning will
+            # not pass: such edges are split first)
+            bm = bmesh.new()
+            bm.from_mesh(c.data)
+            nm = [e for e in bm.edges if not e.is_manifold and not e.is_boundary]
+            if nm:
+                bmesh.ops.split_edges(bm, edges=nm)
+                bm.to_mesh(c.data)
+            bm.free()
             d = c.modifiers.new("lod", "DECIMATE")
-            d.ratio = r
-            if ob is m["body"]:
-                d.use_symmetry = True
-                d.symmetry_axis = "Y"
+            d.ratio = r                                   # (not mirrored: MakeHuman's faces are not quite symmetric)
             bpy.context.view_layer.objects.active = c
             with bpy.context.temp_override(object=c, active_object=c):
                 bpy.ops.object.modifier_apply(modifier=d.name)
@@ -3387,8 +3882,9 @@ def export_props(info):
     """helmets/<kind>.glb (each one rigid, its origin at the head bone's head, x forward, z up: put it on socket_head
     with no offset) and weapons/rifle.glb, weapons/lmg.glb (origin at the weapon bone's head, the right hand's grip;
     the bolt and the bipod are child nodes turning about their own origins)."""
-    J = joints()
     kit.fresh(FPS)
+    man = mh_body("GER")                                 # (the helmets are seated on MakeHuman's man, as on the soldiers)
+    J = joints_of(man)
     LOOK_NOW.update(LOOK["GER"])
     info["helmets"] = {}
     for kind in HELMETS:
@@ -3614,6 +4110,7 @@ def setup_field(m, fast):
 def pictures_movies(info, fast=False, keys=None):
     sc = kit.fresh(FPS)
     m = assemble("GER")
+    studio_smooth(m)
     bake_clips(m, sorted({n for k in MOVIES for n, _, _ in MOVIES[k][0]}))
     ground, cam = setup_field(m, fast)
     bpy.context.scene.cycles.transparent_max_bounces = 32
@@ -3631,13 +4128,14 @@ def two_men(fast=False):
     men = []
     for nation, y in (("GER", -0.55), ("POL", 0.55)):
         m = assemble(nation)
+        studio_smooth(m)
         for mt in bpy.data.materials:                     # (so the next man gets his own colours)
             if not mt.name.startswith(("GER_", "POL_", "backdrop", "ground")):
                 mt.name = nation + "_" + mt.name
         m["arm"].location = (0.0, y, 0.0)
         P = base_stand()
-        P["foot_l"] = {"at": (0.12, 0.12, 0.088), "yaw": 6.0}
-        P["foot_r"] = {"at": (-0.06, -0.12, 0.088), "yaw": -8.0}
+        P["foot_l"] = {"at": (0.12, 0.12, ANKLE), "yaw": 6.0}
+        P["foot_r"] = {"at": (-0.06, -0.12, ANKLE), "yaw": -8.0}
         pose_once(m["arm"], m["rig"], P, 0)
         men.append(m)
     return men
@@ -3705,6 +4203,7 @@ def clone_man(m, place, turn):
 def pictures_squad(info, fast=False):
     sc = kit.fresh(FPS)
     m = assemble("GER")
+    studio_smooth(m)
     for ob in (m["weapon"], m["weapon_part"]):
         ob.hide_render = True
     m["arm"].location = (0.0, 0.0, -50.0)          # (the pattern man is kept out of sight)
@@ -3749,15 +4248,20 @@ def pictures_squad(info, fast=False):
 
 def pictures_before_after(info, fast=False):
     kit.fresh(FPS)
+    first = assemble_sculpted("GER")
     m = assemble("GER")
+    studio_smooth(m)
     t = time.time()
-    picture_before_after(m, stage_path("pictures", "before-after.png"), fast)
+    picture_before_after(m, stage_path("pictures", "before-after.png"), fast, first=first)
     info.setdefault("render", {})["before-after"] = f"{time.time() - t:.0f} s"
     deliver("pictures/before-after.png")
 
 
 # ================================================================================================ the hero clip
 HERO_SECONDS, HERO_FPS = 8.0, 30
+
+
+HERO_SEEDS = [3, 11, 17, 23, 29, 31, 37, 41, 43, 47, 53, 59]    # (each man's face and build: man 0 is the German of the files)
 
 
 def hero_plan(seed=11):
@@ -4030,10 +4534,6 @@ def pictures_hero(info, fast=False):
     t0 = time.time()
     stage = battle_set.build()
     print(f"  stage built in {time.time() - t0:.0f} s")
-    m = assemble("GER")
-    for ob in (m["weapon"], m["weapon_part"]):
-        ob.hide_render = True
-    m["arm"].location = (0.0, 0.0, -50.0)
     frames = int(HERO_SECONDS * HERO_FPS)
     men = hero_plan()
     fx = Effects(seed=7)
@@ -4041,28 +4541,15 @@ def pictures_hero(info, fast=False):
     for man in men:
         yaw = math.radians(man["turn"])
         fwd = Vector((math.cos(yaw), math.sin(yaw), 0.0))
-        arm, pieces = clone_man(m, (man["x"], man["y"], 0.0), man["turn"])
+        # each man his own: his face and build from his own seed, dressed and rigged on himself
+        m = assemble("GER", weapon=man["weapon"], seed=HERO_SEEDS[man["i"]])
+        studio_smooth(m)
+        fit_body(m["J"])                                # (his clips on his own legs' measures)
+        arm = m["arm"]
+        arm.location = (man["x"], man["y"], 0.0)
+        arm.rotation_euler = (0.0, 0.0, yaw)
         man["arm"] = arm
-        if man["weapon"] == "lmg":
-            gun, bipod = build_lmg()
-            Wm = Matrix.Translation(Vector(arm.data.bones["weapon"].head_local))
-            for ob, bone in ((gun, "weapon"), (bipod, "bipod")):
-                ob.data.transform(Wm)
-                mark_rest(ob)
-                skin_rigid(ob, bone)
-                attach(ob, arm)
-                ob.matrix_parent_inverse = Matrix.Identity(4)
-        else:
-            for ob in (m["weapon"], m["weapon_part"]):
-                c = ob.copy()
-                bpy.context.scene.collection.objects.link(c)
-                c.hide_render = False
-                c.parent = arm
-                c.matrix_parent_inverse = Matrix.Identity(4)
-                for md in c.modifiers:
-                    if md.type == "ARMATURE":
-                        md.object = arm
-        rig = Rig(arm, m["J"])
+        rig = m["rig"]
         arm.animation_data_create()
         arm.animation_data.action = bpy.data.actions.new(f"hero_{man['i']}")
         shots, dusts = hero_events(man)
@@ -4166,23 +4653,37 @@ CLIP_ABOUT = {
 
 
 LIMITS = [
-    "Hands are mitts (four fingers as one, a separate thumb), as asked: they close round the grips but have no separate fingers.",
-    "Weights come from Blender's bone heat. In the deepest poses (prone, the deaths) the shoulders and hips crease and the tunic "
-    "can pinch at the armpit; there is no cloth simulation.",
-    "In a few transitions the two-bone IK cannot quite reach and a hand trails its target for a moment: go_prone (the right hand "
-    "up to 12 cm off the grip for about 0.2 s while the rifle comes down), die_back and die_forward (about 8 cm while the arms "
-    "fly), throw_grenade (6 cm). Every other clip reaches within 3 cm, most exactly.",
-    "The rigid kit on the pelvis (bread bag, bottle, entrenching tool, gas-mask canister) can dip into the thighs or the ground "
-    "in the prone and dying poses.",
-    "The face is sculpted, not textured or animated; at the closest camera the triangle budget shows as some faceting.",
-    "The folds are soft ridges sculpted into the mesh (there are no normal maps): they read close up and in raking light, "
-    "faintly at the game's distance.",
+    "The fingers are MakeHuman's own, slimmed a little and half curled in the rest pose; the rig closes the four fingers "
+    "together with one bone (fingers_l/r) and the thumb with another, so a hand wraps a grip but cannot point or spread.",
+    "The uniform takes its weights from MakeHuman's clothing shells (the nearest place on the suit, or on the skirt for the "
+    "tunic's skirt, evened along the cloth); the head, neck and hands keep MakeHuman's own. There is no cloth simulation: in "
+    "the deepest poses (prone, the deaths) the tunic can crease at the armpits and the hips.",
+    "In a few transitions the two-bone IK cannot quite reach and a hand or foot trails its target for a moment: go_prone (the "
+    "right hand up to 5 cm off the grip for about 0.1 s, the feet 3 cm as he lands), die_back (the left hand 7 cm while the "
+    "arms fly), die_forward (3 cm), throw_grenade (the left foot 4 cm). Every other clip reaches exactly.",
+    "Where a knee would go through the ground, the solver lifts the pelvis for that frame (no knee joint goes below 4.5 cm), "
+    "so a man going down can sit a touch high for a moment.",
+    "The clips' low poses (kneeling, lying) were set out on the first, sculpted man and are scaled to MakeHuman's man by the "
+    "rig (his pelvis's drop and his feet's spread); the standing poses and the gaits are fitted to his legs directly.",
+    "The kit on the pelvis (bread bag, water bottle, entrenching tool, gas-mask canister) is rigid: lying down the canister "
+    "and the bottle stand up off the back and hip as real kit would, and in the deaths a piece can dip into a thigh or "
+    "the ground.",
+    "The face is MakeHuman's (a different one for each seed), with no texture: brows, stubble, the flush and the nails are "
+    "studio shading from each point's place on the face or hand. The game gets the plain skin paint.",
+    "The folds are few and sculpted into the mesh (no normal maps): the cloth bunched above the belt, wrinkles across the "
+    "shoulder blades, the turned hem, the trousers bloused over the boot tops. Rings of folds at the elbows and knees were "
+    "taken out: at this triangle count they read as dents.",
+    "The pictures subdivide the body, the helmet and the round kit once when rendering (studio only, with the sharp edges "
+    "creased). The files carry the plain LOD0 mesh, so at the very closest camera the game shows more facets than the "
+    "pictures.",
     "The cloth wear in the pictures (mottling, dust on knees and boots, darker folds) is a studio material; the exports carry "
     "plain paint colours for the game to tint.",
     "lmg_burst only makes sense with the LMG (soldier_GER_lmg.glb); on a rifleman's file the rifle goes where the LMG would be.",
     "Only the German has a game JSON, as asked; the Pole's .glb has the same skeleton and clips.",
+    "The locomotion and the falls (idle, walk, run, flee, go_prone, cower, the deaths) are still ours: they are to be "
+    "swapped for the mocap animator's clips (mocap.py) when those arrive; the weapon actions stay ours.",
     "The hero clip's men stand on the stage's rolling ground by their root only: on a slope a foot can float or sink a "
-    "centimetre or two (the long grass hides most of it).",
+    "centimetre or two (the stubble hides most of it).",
 ]
 
 
@@ -4197,8 +4698,9 @@ def write_readme(info):
       "(stahl helmet, tall boots, gas-mask canister) and the Polish rifleman (round helmet, ankle boots with gaiters, pack), "
       "as FIGURES has them (Rifleman_Stahl, Rifleman_Round). Our own design throughout: no other game's or maker's names, models, "
       "art or animation were used or looked at.\n")
-    w("Made entirely by `Tools/battle_units/soldier.py` with its helper `sculpt.py` (distance-field sculpting and meshing) and "
-      "`kit.py` (scene, camera, export helpers). Run it with the `bpy` module (Blender 5.0.1): `python soldier.py` does everything; "
+    w("Made entirely by `Tools/battle_units/soldier.py` with its helpers `human.py` (MakeHuman's man: mesh, skeleton, "
+      "weights, clothing shells), `sculpt.py` (distance-field sculpting and meshing) and `kit.py` (scene, camera, export "
+      "helpers). Run it with the `bpy` module (Blender 5.0.1): `python soldier.py` does everything; "
       "`python soldier.py --only export` remakes just the files; steps are export, before_after, hero, turntable, movies, squad, "
       "readme, and `--fast` makes small test pictures. The export takes about three minutes; the pictures some hours on two "
       "cores (times below). The hero clip resumes where it stopped if it is run again.\n")
@@ -4215,19 +4717,24 @@ def write_readme(info):
     w("| `weapons/rifle.glb`, `weapons/lmg.glb` | the bolt-action rifle and the light machine gun, rigid, the bolt and the bipod as child nodes |")
     w("| `pictures/` | before-after.png, squad_advance (the hero clip), turntable, five clip movies, squad.png (below) |\n")
     w("## What he is\n")
-    w("- **Body**: one continuous skinned mesh, 1.75 m tall, about 7.5 heads. Sculpted as distance fields: skull, jaw, a brow "
-      "ridge over eye sockets deep enough to hold shadow, dark eyes, cheekbones with hollows under them, nose, lips, ears with "
-      "a rim and a bowl; hands as mitts with a separate thumb; the tunic (a stand collar with dark collar tabs, a button strip "
-      "with five buttons, four patch pockets with buttoned flaps, a skirt over the hips, shoulder straps, turned-back cuffs), "
-      "trousers, and boots on proud soles with heels (tall marching boots for the German; ankle boots with canvas gaiters and "
-      "their straps for the Pole). Each cloth is a layer joined hard to the next, so the collar, cuffs, hems, soles and boot "
-      "tops are real edges. Folds are sculpted into the mesh: rings of gathered cloth at the elbows and knees, the tunic "
-      "bunched above and below the belt (more at the back), wrinkles across the shoulder blades, the trousers bloused over the "
-      "boot tops. The head and the hands are their own islands of the same mesh, tucked into the collar and cuffs.")
+    w("- **Body**: MakeHuman's base man (CC0; built by `human.py`), 1.73 m and 1.75 m in his boots: his head, neck and "
+      "hands are MakeHuman's mesh, thinned to the budget, with his own eyes, a different face for each seed (the German "
+      "files are seed 3, the Pole seed 7, the hero squad twelve seeds of their own), and his fingers slimmed a little and "
+      "half curled to hold a rifle. The skin the uniform covers is deleted.")
+    w("- **Uniform**: made from MakeHuman's clothing shells (the tights and the skirt) read as distance fields, each face "
+      "pushed out by how loose the cloth is over its bones, and our own shapes laid on them: the tunic (a stand collar with "
+      "small collar patches, a button strip with five buttons, four patch pockets with buttoned flaps, a skirt over the hips "
+      "with a turned hem, shoulder straps, turned-back cuffs), the trousers bloused over the boot tops, and boots on proud "
+      "soles with heels (tall marching boots for the German; ankle boots with canvas gaiters and their straps for the "
+      "Pole). Each cloth is a layer joined hard to the next and the mesh is cut along where the paints meet, so the collar, "
+      "cuffs, hem, soles and boot tops are clean edges. The cloth bunches above the belt and wrinkles across the shoulder "
+      "blades.")
     w("- **Kit** (separate meshes on the same skeleton): belt with buckle (skinned like the body), three-cell ammunition pouches "
-      "either side of the buckle, Y-straps, bread bag, water bottle with cup, entrenching tool, and the gas-mask canister "
-      "(German) or the pack with a blanket roll on top (Polish); the bag, bottle, tool, canister ride rigidly on the pelvis and "
-      "the pack on the chest.")
+      "either side of the buckle, Y-straps laid over the shoulders, the bread bag on the right hip with the water bottle (a "
+      "flat kidney-shaped flask in a felt cover, its cup strapped on) hung flat on it, the entrenching tool in its carrier "
+      "flat on the left hip with the handle down and back along the thigh, and the gas-mask canister upright behind the "
+      "right hip (German) or the pack with a blanket roll on top (Polish); the bag, bottle, tool and canister ride rigidly "
+      "on the pelvis and the pack on the chest.")
     w("- **Helmets**: twelve kinds as rigid shells (outside, rolled rim, inside, chin strap): stahl, round and dome first, then "
       "brodie, pot, soviet, adrian, eastern, cap, peaked, sun and fieldcap. Each one's origin is the head bone's head with "
       "x forward and z up, so it sits on `socket_head` with no offset.")
@@ -4236,6 +4743,13 @@ def write_readme(info):
       "sling) and a generic light machine gun (a perforated barrel jacket, a side box magazine on the left, a pistol grip, a "
       "carry handle, a folding bipod). Origin at the right hand's grip; both ride on the `weapon` bone (the bolt and the "
       "bipod on their own bones under it).\n")
+    w("## The body: MakeHuman\n")
+    w("The man is MakeHuman's base mesh, skeleton, weights and proxy shells (the MakeHuman project's assets, released CC0), "
+      "read by `human.py`. For our clips `human.py` maps MakeHuman's joints onto our 26 bones: the pelvis takes spine05, "
+      "spine_01 takes spine04, spine_02 takes spine03 and spine02, the chest takes spine01 and the breasts; each upper arm takes both "
+      "of MakeHuman's upper-arm bones; the shoulder (shoulder01) is shared half and half between the clavicle and the upper "
+      "arm; the upper arm's pivot sits three quarters of the way out along the shoulder joint; and `build(..., curl=)` bends "
+      "the fingers in the rest mesh.\n")
     w("## Triangles\n")
     w("| | LOD0 | LOD1 | LOD2 |")
     w("|---|---|---|---|")
@@ -4246,7 +4760,8 @@ def write_readme(info):
               f"| {nation} rifleman (man + kit + helmet + rifle) | {t_[0]:,} | {t_[1]:,} | {t_[2]:,} |")
     if "GER_lmg" in tr:
         w(f"| GER gunner (with the LMG instead) | {tr['GER_lmg']:,} | | |")
-    w("\nBudgets: LOD0 about 9,000 (raised from 6,000 for the folds and the face, as the art lead allowed), LOD1 about 1,800, "
+    w("\nBudgets: LOD0 about 9,000 (raised from 6,000 for the folds and the face, as the art lead allowed): uniform about "
+      "2,900 with its cut edges, head 1,260, hands 520 each, helmet 1,144, rifle 800; LOD1 about 1,800, "
       "LOD2 about 600. LOD1 and LOD2 are the LOD0 meshes thinned; LOD2 leaves off the bolt, buttons and tabs, water bottle, "
       "entrenching tool and Y-straps.\n")
     if "GER" in parts:
@@ -4258,7 +4773,8 @@ def write_readme(info):
           ", LMG " + str(info.get("lmg")) + " (as separate files).\n")
     w("## Materials\n")
     w("Named by paint, as build_tank.py's FIGURE_PAINTS (the game colours them from the unit table): `tunic, trousers, boots, "
-      "lower, straps, helmet, pack, skin, wood, steel`, and `eye` (in soldier_GER.json the eyes are painted as `boots`). The "
+      "lower, straps, helmet, pack, skin, wood, steel, leather` (the soles), `blanket` (the water bottle's felt), and `eye` (in "
+      "soldier_GER.json the eyes are painted as `boots`). The "
       "exports carry plain studio colours; the cloth mottling in the pictures is a studio material only.\n")
     w("## Axes and units\n")
     w("Metres; the man faces +X, Z up, feet on z = 0, between his feet at x = y = 0. Blender, the .glb and the .fbx have y to "
@@ -4274,8 +4790,8 @@ def write_readme(info):
         a = bones[i]
         b = bones[i + half] if i + half < len(bones) else None
         w(f"| `{a[0]}` | {a[1] or '-'} | | " + (f"`{b[0]}` | {b[1] or '-'} |" if b else " | |"))
-    w("\n`root` stays at the origin (no root motion). `pelvis` moves (its offset is keyed). `fingers_l/r` close the mitt and "
-      "`thumb_l/r` the thumb. `weapon` (child of root) carries the gun and is placed by the clips; `bolt` slides and lifts "
+    w("\n`root` stays at the origin (no root motion). `pelvis` moves (its offset is keyed). `fingers_l/r` close the four "
+      "fingers together and `thumb_l/r` the thumb. `weapon` (child of root) carries the gun and is placed by the clips; `bolt` slides and lifts "
       "on it (the rifle's bolt) and `bipod` folds (the LMG's legs). Only the deforming bones carry body weight; the "
       "weapon, bolt and bipod carry only the gun. Every point has at most four bones.\n")
     w("## Sockets\n")
@@ -4362,8 +4878,9 @@ def write_readme(info):
       "`part2`, `w2`, `bones`, `sockets`, `clips`) are ignored by the old reader. Its `about` gives the skinning formula. Its "
       "clips were checked against the glb: bone heads skinned from the JSON alone land within 0.1 mm of Blender's.\n")
     w("## The pictures\n")
-    w("- `pictures/before-after.png` (1280x720, 48 samples): today's lay figure (Rifleman_Stahl from the game's file, painted "
-      "by number) beside the new German, the same camera and sun.")
+    w("- `pictures/before-after.png` (1280x720, 48 samples): three abreast under the same camera and sun: today's lay "
+      "figure (Rifleman_Stahl from the game's file, painted by number), the first pass (the soldier sculpted from numbers) "
+      "and the new German on MakeHuman's man.")
     w("- `pictures/turntable.mp4/.gif`: the German and the Pole side by side, a full turn in 6 s at 15 frames a second "
       "(960x540, 16 samples, denoised).")
     w("- `pictures/walk`, `run`, `fire_stand`, `prone` (go_prone then fire_prone twice), `die_back` (.mp4 and .gif, 30 frames "
@@ -4372,8 +4889,8 @@ def write_readme(info):
       "should stay put on it). The muzzle flash, light and smoke in fire_stand and prone, and the dust where he goes "
       "down, are the shared Effects (below), studio stand-ins only; the game makes its own from the events.")
     w("- `pictures/squad_advance.mp4/.gif` (the hero clip, 8 s, 960x540, 30 frames a second, 16 samples): the squad of twelve "
-      "(the gunner in the middle) advances north across the stubble east of the road on the battle stage (battle_set.py), "
-      "each man at his own pace and step; one by one they go to ground (three kneel) and open fire, each when he is ready, and "
+      "(the gunner in the middle), each with his own face and build from his own seed, advances north across the stubble "
+      "east of the road on the battle stage (battle_set.py), each man at his own pace and step; one by one they go to ground (three kneel) and open fire, each when he is ready, and "
       "the gunner unfolds his bipod and fires bursts. A low game camera behind the right of the line moves up with them. "
       "Muzzle flashes (a short flame and a brief light), small grey smoke puffs and tan dust where men drop are the sea and "
       "air team's tested Effects (shared/sea-air/stage.py), copied into soldier.py and scaled down for small arms; they are "

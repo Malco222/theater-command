@@ -1,19 +1,23 @@
 """Real motion capture for the soldier: the CMU motion-capture library retargeted onto human.py's 27-bone rig.
 
 Why: Brian asked (2026-11-18) for the soldiers to move "a lot more realistic". Hand-keyed cycles hit a ceiling, so the
-body's movement comes from the Carnegie Mellon University Graphics Lab motion-capture database, which its makers
-released for any use (see mocap_cmu/CREDITS.md: "The data used in this project was obtained from mocap.cs.cmu.edu.
-The database was created with funding from NSF EIA-0196217."). The BVH files are the 2010 MotionBuilder-friendly
-conversion; mocap_cmu/fetch_cmu.py downloads the takes we use. Nothing here comes from any game.
+body's movement comes from the Carnegie Mellon University Graphics Lab motion-capture database, free for research
+and commercial projects (the data itself may not be resold; see mocap_cmu/CREDITS.md, which carries the credit: "The
+data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF
+EIA-0196217."). The BVH files are the 2010 MotionBuilder-friendly conversion; mocap_cmu/fetch_cmu.py downloads the
+takes we use. Nothing here comes from any game.
 
     import human, mocap
     man = human.build(seed=3, nation="GER", stand=0.02, curl=(30, 45, 25))
-    mocap.apply(man["armature"], "walk")                 # makes the action `walk` from mocap_cmu/clips.json
+    act = mocap.apply(man["armature"], "walk")           # makes the action `walk` from mocap_cmu/clips.json
     mocap.apply_all(man["armature"])                     # every clip, one action each
-    mocap.rifle_arms(man["armature"], act, "port")       # both hands on a rifle, the body's mocap underneath
+    act2, miss = mocap.rifle_arms(man["armature"], act, "port", name="walk_port")
+                                                         # both hands on a rifle (port or ready), baked to plain keys,
+                                                         # the walk underneath; adds the `weapon` bone (hand_r's child)
 
-    python mocap.py build            rebuilds mocap_cmu/clips.json from the BVH files (fetch them first)
-    python mocap.py preview [clip..] renders the preview films and the contact sheet
+    python mocap.py build [clip..]    rebuilds mocap_cmu/clips.json from the BVH files (fetch them first)
+    python mocap.py preview [clip..]  renders preview films (a name "walk+port" previews rifle_arms on the walk)
+    python mocap.py sheet [clip..]    the contact sheet clips.png from the rendered frames
 
 HOW THE RETARGET WORKS
   * The BVH is read by a small parser here (numpy), its skeleton posed by forward kinematics, and turned from CMU's
@@ -25,10 +29,15 @@ HOW THE RETARGET WORKS
     neck, head and feet are matched as they stand (our rest is upright and flat-footed, as CMU's T pose is).
   * The pelvis follows CMU's hip joints scaled by the ratio of the two men's leg lengths; the man is set on the
     ground from his soles; the feet are locked on the ground while in contact, by two-bone IK on the legs, and the
-    toes are kept out of the ground.
+    toes are kept out of the ground. In the loops a landing foot glides down onto the ground in its last frames
+    (our heel, tipped up, reaches lower than the actor's, and would otherwise touch early and skid in).
   * Loops: the best matching cycle in the take is cut, its seam closed by spreading the small difference over the
     cycle, and resampled to 30 fps with the last frame equal to the first. Travel is removed (IN PLACE); `stride` is
     the metres the man travels per loop, so the game sets play rate = speed / stride * length and the feet stay put.
+  * One-shots may be played at a changing speed (`speeds`), get a jolt at the hit (`jolt`) and have the arms part
+    way to slack (`limp`): fall_forward uses all three so it reads as a man hit, not one lying down.
+  * CMU has no belly crawl, so `crawl` (the low crawl under fire, rifle across the forearms) is keyed by hand on the
+    rig: belly_crawl() and its settings in CRAWL. `crawl_high` is the captured hands-and-knees crawl.
 
 CLIPS.JSON (Blender's frame: x forward, y LEFT, z up, metres; quaternions w, x, y, z)
   bones[b][f]   the bone's rotation relative to its rest, in its PARENT's space: the bone's local rotation (in its
@@ -594,11 +603,12 @@ def resample(m, times):
     return out
 
 
-def two_bone_ik(m, side, target, weight, heads=None):
+def two_bone_ik(m, side, target, weight, heads=None, chain=("thigh_", "calf_", "foot_"), pole=None):
     """Bend thigh and calf so the ankle reaches `target` (F, 3) where weight (F,) > 0, the knee staying in the plane
-    the mocap gave it; the foot keeps its world rotation. Soft near full stretch, so the knee never snaps."""
+    the mocap gave it; the foot keeps its world rotation. Soft near full stretch, so the knee never snaps.
+    chain=("upperarm_", "lowerarm_", "hand_") does the same for an arm."""
     r = m.rest
-    th, ca, ft = r.i("thigh_" + side), r.i("calf_" + side), r.i("foot_" + side)
+    th, ca, ft = (r.i(c + side) for c in chain)
     hd = m.heads() if heads is None else heads
     hip, knee, ank = hd[:, th], hd[:, ca], hd[:, ft]
     L1 = np.linalg.norm(r.head[ca] - r.head[th])
@@ -611,7 +621,7 @@ def two_bone_ik(m, side, target, weight, heads=None):
     dist_e = np.where(dist > soft, Ls - s * np.exp(-(dist - soft) / s), dist)
     dist_e = np.maximum(dist_e, abs(L1 - L2) + 0.02)
     dh = _norm(d)
-    pole = knee - hip
+    pole = (knee - hip) if pole is None else np.broadcast_to(pole, knee.shape)
     pole = pole - dh * np.sum(pole * dh, 1)[:, None]
     ph = _norm(pole)
     cos_a = np.clip((L1 ** 2 + dist_e ** 2 - L2 ** 2) / (2 * L1 * dist_e), -1, 1)
@@ -626,6 +636,93 @@ def two_bone_ik(m, side, target, weight, heads=None):
     Wc = Gc @ G @ m.W[:, ca]
     m.W[:, th], m.W[:, ca] = Wt, Wc
     return np.linalg.norm(ank_n - T, axis=1)
+
+
+# How far above the ground each joint must stay when the body is down on it (its flesh, at our man's build):
+# lying on the belly the pelvis is about 11 cm up, the chest 15, a knee or an elbow on the ground 4-5.
+CLEAR = {"pelvis": 0.11, "spine_01": 0.12, "spine_02": 0.14, "chest": 0.15, "neck": 0.12, "head": 0.10,
+         "upperarm_l": 0.07, "upperarm_r": 0.07, "lowerarm_l": 0.04, "lowerarm_r": 0.04,
+         "calf_l": 0.05, "calf_r": 0.05}
+
+
+def body_clear(m, k=4):
+    """Lift the whole man (smoothly) wherever a joint of his trunk, a knee or an elbow would sit deeper than its
+    flesh allows: the actor's proportions are not ours, so on the floor ours would sink. Returns the lift."""
+    r = m.rest
+    g = r.sole["ground"] - 0.02                     # (the bare skin's ground: `stand` lifts only the boots' soles)
+    hd = m.heads()
+    need = np.zeros(len(m))
+    for n, c in CLEAR.items():
+        need = np.maximum(need, g + c - hd[:, r.i(n), 2])
+    need = np.maximum(need, 0.0)
+    wide = np.max(np.stack([np.concatenate([need[i:], np.repeat(need[-1:], i)]) if i >= 0 else
+                            np.concatenate([np.repeat(need[:1], -i), need[:i]]) for i in range(-k, k + 1)]), 0)
+    lift = smooth(wide[:, None], k)[:, 0]
+    m.H[:, 2] += lift
+    return lift
+
+
+def hands_clear(m, clear=0.035):
+    """Keep each wrist at least `clear` above the ground (a hand flat on it), by two-bone IK on the arm."""
+    r = m.rest
+    g = r.sole["ground"] - 0.02
+    for s in ("l", "r"):
+        hd = m.heads()
+        w = hd[:, r.i("hand_" + s)]
+        pen = np.maximum(0.0, g + clear - w[:, 2])
+        if pen.max() < 1e-4:
+            continue
+        pen = smooth(pen[:, None], 2)[:, 0]
+        two_bone_ik(m, s, w + np.outer(pen, [0, 0, 1]), (pen > 0).astype(float), hd,
+                    chain=("upperarm_", "lowerarm_", "hand_"))
+
+
+def hand_steps(m, stride, lift=0.05, knee_v=0.3, pad=2):
+    """On hands and knees (a loop): each hand planted on the ground, then stepping forward while the knee of the
+    other side moves (the crawl's diagonal gait), lifted `lift` at the top of its step. (The crawl's actor slid her
+    hands along the floor; ours step.) By two-bone IK on the arms; the hands keep their captured angle."""
+    r = m.rest
+    N = len(m) - 1
+    v = stride / N
+    hd = m.heads()
+    out = {}
+    for s, o in (("l", "r"), ("r", "l")):
+        kp = hd[:N, r.i("calf_" + o)]
+        ksp = np.linalg.norm((np.roll(kp, -1, 0) - kp)[:, :2] + np.array([v, 0.0]), axis=1) * m.fps   # travelling
+        moving = ksp > knee_v
+        if not moving.any():
+            continue
+        # the longest run of the knee moving, round the loop
+        best, start = (0, 0), None
+        for k in range(2 * N):
+            if moving[k % N]:
+                start = k if start is None else start
+                if k - start + 1 > best[1] - best[0]:
+                    best = (start, k + 1)
+            else:
+                start = None
+        a, b = best[0] - pad, min(best[1] + pad, best[0] - pad + N - 4)
+        L, S = b - a, N - (b - a)
+        w = hd[:N, r.i("hand_" + s)]
+        k_of = (np.arange(N) - b) % N                                # frames since the stance began
+        st = k_of < S
+        x0 = float(np.mean(w[st, 0])) + v * (S - 1) / 2             # (the planted hand's mean where it was)
+        y0 = float(np.mean(w[st, 1]))
+        T = w.copy()
+        T[st, 0] = x0 - v * k_of[st]
+        T[st, 1] = y0
+        j = k_of[~st] - S
+        u = (j + 1) / (L + 1)
+        e = u * u * (3 - 2 * u)
+        T[~st, 0] = (x0 - v * S) * (1 - e) + x0 * e
+        T[~st, 1] = y0
+        T[~st, 2] = w[~st, 2] + lift * np.sin(np.pi * u)
+        T = np.concatenate([T, T[:1]])
+        two_bone_ik(m, s, T, np.ones(N + 1), hd, chain=("upperarm_", "lowerarm_", "hand_"))
+        hd = m.heads()
+        out[s] = (int(a % N), int(b % N))
+    m.W[-1], m.H[-1] = m.W[0], m.H[0]
+    return out
 
 
 def contacts(h, speed, ground, h_tol=0.035, v_tol=0.45, min_len=3):
@@ -646,7 +743,7 @@ def contacts(h, speed, ground, h_tol=0.035, v_tol=0.45, min_len=3):
 
 
 def foot_lock(m, stride=0.0, loop=False, h_tol=0.035, v_tol=0.45, sides=("l", "r"), report=None, reach=0.996,
-              merge=2):
+              merge=2, glide=0):
     """Plant the feet: while a foot is on the ground its sole stays where it landed (in the travelling frame, so in
     place it slides back at exactly the body's speed), first about the ankle, then about the ball as the heel lifts.
     Where a planted leg could not reach its foot (our man's legs and hips are not the actor's), the pelvis dips just
@@ -676,7 +773,9 @@ def foot_lock(m, stride=0.0, loop=False, h_tol=0.035, v_tol=0.45, sides=("l", "r
         ball_tr = trav + np.einsum("fij,j->fi", work.W[:, ft], ball_loc)
         spd = np.minimum(np.linalg.norm(np.gradient(trav[:, :2], axis=0), axis=1),
                          np.linalg.norm(np.gradient(ball_tr[:, :2], axis=0), axis=1)) * work.fps
-        cs = contacts(sh, spd, ground, h_tol, v_tol)
+        # each foot measured from its own lowest (a retargeted foot can stand a little high or low)
+        base_h = min(float(np.percentile(sh, 3)), ground + 0.06)
+        cs = contacts(sh, spd, base_h, h_tol, v_tol)
         merged = []
         for c in cs:                                                   # (a flicker of a frame or two is not a step)
             if merged and c[0] - merged[-1][1] <= merge:
@@ -753,11 +852,23 @@ def foot_lock(m, stride=0.0, loop=False, h_tol=0.035, v_tol=0.45, sides=("l", "r
                     "ik_err_max": round(float(err[sl][wgt[sl] > 0].max()) if (wgt[sl] > 0).any() else 0.0, 4)}
         hd = work.heads()
     stats["pelvis_drop_max"] = round(float(drop[N:2 * N].max() if loop else drop.max()), 4)
-    # nothing below the ground: lift a sinking foot by IK, and bend a sinking toe up
+    # nothing below the ground: lift a sinking foot by IK, and bend a sinking toe up. With `glide` (the loops: a man
+    # on his feet), a landing foot glides down onto the ground over that many frames before its contact (our heel,
+    # tipped up, reaches lower than the actor's did, so it would otherwise touch while still moving and skid in)
     for s in sides:
+        floor = np.full(F, ground)
+        sh0 = sole_heights(work, hd, s)[s][0]
+        prev_end = 0
+        for (c0, c1) in plan[s][2]:
+            a = max(c0 - glide, prev_end + 1)
+            if c0 - a >= 2:
+                H = max(sh0[a] - ground, 0.0)
+                f = np.arange(a, c0)
+                floor[f] = np.maximum(floor[f], ground + H * ((c0 - f) / (c0 - a)) ** 2)
+            prev_end = c1
         for _ in range(2):
             sh, P = sole_heights(work, hd, s)[s]
-            pen = np.maximum(0.0, ground - sh)
+            pen = np.maximum(0.0, floor - sh)
             if pen.max() < 0.002:
                 break
             ft = r.i("foot_" + s)
@@ -814,7 +925,7 @@ def new_action(armature, name, quats, locs=None, frame0=1, cyclic=False):
         co[0::2] = np.arange(frame0, frame0 + n)
         co[1::2] = values
         fc.keyframe_points.foreach_set("co", co.tolist())
-        fc.keyframe_points.foreach_set("interpolation", [2] * n)       # LINEAR (enum index), keys every frame
+        fc.keyframe_points.foreach_set("interpolation", [1] * n)       # LINEAR (enum index), keys every frame
         if cyclic:
             fc.modifiers.new("CYCLES")
         fc.update()
@@ -934,13 +1045,50 @@ def steady_span(m, tol=0.12):
     return int(lo), int(hi), float(med)
 
 
+def subtree(rest, bone):
+    out = [rest.i(bone)]
+    for b, p in enumerate(rest.parent):
+        if p in out:
+            out.append(b)
+    return out
+
+
+def bend(m, bone, ang, axis=None):
+    """Turn `bone` and everything it carries by `ang` radians about a world axis through its head (default his
+    crosswise axis, so + leans forward)."""
+    r = m.rest
+    if axis is None:
+        yaw = yaw_of(m)
+        axis = np.stack([-np.sin(yaw), np.cos(yaw), np.zeros_like(yaw)], 1)
+    R = axis_angle(axis, np.broadcast_to(np.asarray(ang, float), (len(m),)))
+    for b in subtree(r, bone):
+        m.W[:, b] = R @ m.W[:, b]
+
+
+def crouch(m, drop, lean):
+    """A crouch laid over a motion: the pelvis lower by `drop` metres, the trunk leant forward `lean` degrees
+    (spread over the three spine bones, the head kept looking ahead), and the legs bent by IK so every foot keeps
+    exactly the path the capture gave it, so the stride and the planted feet are unchanged."""
+    r = m.rest
+    hd = m.heads()
+    ankles = {s: hd[:, r.i("foot_" + s)].copy() for s in ("l", "r")}
+    m.H[:, 2] -= drop
+    for b in ("spine_01", "spine_02", "chest"):
+        bend(m, b, math.radians(lean) / 3)
+    bend(m, "neck", -math.radians(lean) * 0.75)
+    hd2 = m.heads()
+    for s in ("l", "r"):
+        two_bone_ik(m, s, ankles[s], np.ones(len(m)), hd2)
+        hd2 = m.heads()
+
+
 def make_loop(spec, rest, verbose=True):
     """A looping clip from spec: take, travel (bool), span (capture frames to search, optional), period (source
     frames, optional), head (target head pitch, degrees, optional), ground percentile, lock (bool)."""
     m = take_motion(spec["take"], rest)
     travel = spec.get("travel", True)
     if spec.get("span"):
-        lo, hi = spec["span"][0] - 1, spec["span"][1] - 1
+        lo, hi = max(0, spec["span"][0] - 1), min(len(m) - 1, spec["span"][1] - 1)
     elif travel:
         lo, hi, _ = steady_span(m)
     else:
@@ -953,13 +1101,49 @@ def make_loop(spec, rest, verbose=True):
     N = len(loop) - 1
     n_out = max(2, int(round(N * FPS / m.fps)))
     out = resample(loop, np.linspace(0, N, n_out + 1))
-    dz = ground_fit(out, spec.get("ground", 20), both=spec.get("both_feet", not travel))
+    if spec.get("floor_loop"):                       # (on hands and knees: the knees stand on the ground)
+        hd = out.heads()
+        knees = np.minimum(hd[:, rest.i("calf_l"), 2], hd[:, rest.i("calf_r"), 2])
+        dz = rest.sole["ground"] - 0.02 + CLEAR["calf_l"] - float(np.percentile(knees, 10))
+        out.H[:, 2] += dz
+    else:
+        dz = ground_fit(out, spec.get("ground", 20), both=spec.get("both_feet", not travel))
+    if spec.get("crouch"):
+        crouch(out, *spec["crouch"])
     rep = {}
-    if spec.get("lock", True):
-        foot_lock(out, stride, loop=True, report=rep, v_tol=spec.get("v_tol", 0.45), h_tol=spec.get("h_tol", 0.035))
+    if spec.get("lock", not spec.get("floor_loop")):
+        foot_lock(out, stride, loop=True, report=rep, v_tol=spec.get("v_tol", 0.45), h_tol=spec.get("h_tol", 0.035),
+                  glide=6)
+    if spec.get("floor_loop"):
+        rep["floor_lift_max"] = round(float(np.max(body_clear(out))), 3)
+        if spec.get("hand_steps"):
+            rep["hand_steps"] = hand_steps(out, stride)
+        hands_clear(out)
+        out.W[-1], out.H[-1] = out.W[0], out.H[0]
     info = {"take": spec["take"], "a": a + 1, "b": b + 1, "cost": round(float(cost), 4), "period": int(per),
             "stride": round(stride, 3), "frames": n_out + 1, "dz": round(float(dz), 3), "contacts": rep,
             "speed": round(stride / (n_out / FPS), 3) if travel else 0.0}
+    if verbose:
+        print(spec["name"], info)
+    return out, info
+
+
+def derive(spec, src, verbose=True):
+    """A clip cut from another, already made: output frames derive[1]..derive[2] of clip derive[0], maybe played
+    backwards and faster. go_prone is get_up backwards, so it ends exactly where get_up starts."""
+    m0, info0 = src
+    _, a, b = spec["derive"]
+    m = m0.slice(a, b + 1)
+    if spec.get("reverse"):
+        m.W, m.H = m.W[::-1].copy(), m.H[::-1].copy()
+    out = resample(m, np.arange(0, len(m) - 1 + 1e-6, spec.get("speed", 1.0)))
+    out.W[-1], out.H[-1] = m.W[-1], m.H[-1]                     # (the very last pose, exactly)
+    pv = m.rest.i("pelvis")
+    fps_src = 4                                                  # capture frames per output frame
+    ca, cb = info0["a"] + a * fps_src, info0["a"] + b * fps_src
+    info = {"take": info0["take"], "a": ca, "b": cb, "frames": len(out), "dz": info0.get("dz", 0.0),
+            "contacts": {}, "end_offset": [round(float(x), 3) for x in out.H[-1] - m.rest.head[pv]],
+            "derived": f"{spec['derive'][0]} frames {a + 1}-{b + 1}" + (" reversed" if spec.get("reverse") else "")}
     if verbose:
         print(spec["name"], info)
     return out, info
@@ -971,31 +1155,602 @@ def make_once(spec, rest, verbose=True):
     m = take_motion(spec["take"], rest)
     a, b = spec["frames"]
     m = m.slice(a - 1, b)
+    if spec.get("reverse"):                                      # (played backwards: a get-up becomes a lying-down)
+        m.W, m.H = m.W[::-1].copy(), m.H[::-1].copy()
     yaw0 = spec.get("yaw", None)
-    face_at = 0 if spec.get("face_at", "start") == "start" else len(m) - 1
-    win = slice(max(0, face_at - 10), face_at + 10) if face_at == 0 else slice(face_at - 10, None)
+    if spec.get("anchor"):                                       # (a capture frame to face +X and stand at the origin)
+        face_at = spec["anchor"] - a
+    else:
+        face_at = 0 if spec.get("face_at", "start") == "start" else len(m) - 1
+    win = slice(max(0, face_at - 10), face_at + 10)
     ang = -np.angle(np.mean(np.exp(1j * yaw_of(m)[win]))) if yaw0 is None else -math.radians(yaw0)
     turn(m, ang)
     pv = rest.i("pelvis")
     m.H[:, :2] -= m.H[face_at, :2] - rest.head[pv][:2]
     if spec.get("head") is not None:
         level_head(m, spec["head"])
-    out = resample(m, np.arange(0, len(m) - 1 + 1e-6, m.fps / FPS))
+    if spec.get("speeds"):                  # (a speed that changes: (capture frame of the cut, speed) knots)
+        kn = np.array(spec["speeds"], float)
+        times, t = [], 0.0
+        while t < len(m) - 1:
+            times.append(t)
+            t += m.fps / FPS * float(np.interp(t, kn[:, 0], kn[:, 1]))
+        times = np.array(times + [len(m) - 1.0])
+    else:
+        times = np.arange(0, len(m) - 1 + 1e-6, m.fps / FPS * spec.get("speed", 1.0))
+    out = resample(m, times)
+    if spec.get("limp"):                    # (the arms part way to hanging slack: (capture frame, how far) knots)
+        kn = np.array(spec["limp"], float)
+        w = np.interp(times, kn[:, 0], kn[:, 1])
+        L = to_local(out)
+        for s_ in ("l", "r"):
+            for nm in ("upperarm_", "lowerarm_", "hand_"):
+                bi = rest.i(nm + s_)
+                L[:, bi] = slerp_mats(L[:, bi], np.broadcast_to(np.eye(3), L[:, bi].shape), w)
+        out = from_local(rest, L, out.H, FPS)
+    if spec.get("jolt"):                    # (the hit: the trunk snaps `deg` forward (+) or back (-) at frame f0,
+        f0, deg = spec["jolt"]              # the head lagging a frame, and both settle within about 8 frames)
+        t = np.arange(len(out)) - f0
+        p1 = np.where(t > 0, t / 2.0 * np.exp(1 - t / 2.0), 0.0)
+        p2 = np.where(t > 1, (t - 1) / 2.0 * np.exp(1 - (t - 1) / 2.0), 0.0)
+        jd = math.radians(deg)
+        bend(out, "spine_02", 0.4 * jd * p1)
+        bend(out, "chest", 0.6 * jd * p1)
+        bend(out, "neck", -0.6 * jd * p1 + 0.7 * jd * p2)
     k = int(spec.get("ground_frames", 6))
     gsl = slice(0, k) if spec.get("ground_at", "start") == "start" else slice(len(out) - k, None)
     sh = sole_heights(out)
     low = np.minimum(sh["l"][0], sh["r"][0])[gsl]
     dz = rest.sole["ground"] - float(np.median(low)) + spec.get("dz", 0.0)
     out.H[:, 2] += dz
+    if spec.get("land"):                    # (the actor fell onto a mat, sank into it and bounced: from frame f1 on,
+        f0, f1 = spec["land"]               # his lowest part lies on the ground; from f0 to f1 he is eased down to it)
+        hd = out.heads()
+        g = rest.sole["ground"] - 0.02
+        ex = np.min([hd[:, rest.i(n), 2] - (g + c) for n, c in CLEAR.items()], 0)
+        t = np.arange(len(out))
+        u = np.clip((t - f0) / max(1, f1 - f0), 0, 1)
+        o = np.where(t >= f1, -ex, -ex[f1] * u * u * (3 - 2 * u))
+        out.H[:, 2] += smooth(o[:, None], 1)[:, 0]
     rep = {}
+    lift = body_clear(out) if spec.get("floor", False) else 0.0
     if spec.get("lock", True):
         foot_lock(out, 0.0, loop=False, report=rep, v_tol=spec.get("v_tol", 0.3), h_tol=spec.get("h_tol", 0.03))
+    if spec.get("floor", False):
+        hands_clear(out)
+    rep["floor_lift_max"] = round(float(np.max(lift)), 3)
     end = out.H[-1] - rest.head[pv]
     info = {"take": spec["take"], "a": a, "b": b, "frames": len(out), "dz": round(dz, 3), "contacts": rep,
             "end_offset": [round(float(x), 3) for x in end]}
     if verbose:
         print(spec["name"], info)
     return out, info
+
+
+# ------------------------------------------------------------------------------------------------ the rifle
+# How the hands hold the rifle, agreed with the soldier artist. The rifle's frame (and the `weapon` bone's, a child
+# of hand_r): origin at the right hand's grip, just behind the trigger; +Y along the barrel to the muzzle; +Z up out
+# of the rifle's top (the sights); +X to the rifle's right. The right hand holds the grip (the small of the stock);
+# the left hand is under the fore-end LEFT_HAND metres further along the barrel and LEFT_DROP below its axis.
+LEFT_HAND = 0.35
+LEFT_DROP = 0.0          # (the fore-end sits in the left hand's curled fingers; raise to rest it on the palm)
+# The right hand's hold, the same for every carry (the weapon bone is fixed to it): round the wrist of the stock,
+# the palm on its right side facing left (-x), the hand (wrist to knuckles) forward and down, square to the stock's
+# wrist, the fingers curled round under it. (hand's axis wrist to knuckles, palm normal), in the rifle's frame.
+GRIP_R = ((0.0, 0.6, -0.8), (-1.0, 0.0, 0.0))
+# The carries, in our rest man's frame (x forward, y left, z up, metres), before the trunk turns:
+#   hold, at  the point `hold` metres along the barrel from the grip (0 the grip, -0.3 the butt) is held `at` this
+#             point by the body, riding the chest (the butt in the shoulder for the ready)
+#   barrel  which way the barrel points;  up  which way the rifle's top (its sights) faces
+#   twist   how far the trunk turns right (deg; the neck and head turn back to the front); lean  extra chest lean
+#   steady  how much of the chest's sway the rifle leaves out (0 = it turns with the chest, 1 = keeps the carry's
+#           angle and only rides up and down); the carry's mean angle is always `barrel`/`up` whatever the lean
+#   grip_l  the left hand's hold (hand axis, palm normal) in the rifle's frame
+#   pole_r/pole_l  which way each elbow points (rest frame);  clav  how far each clavicle (r, l) gives toward the hand
+RIFLE_POSES = {
+    # across the chest, muzzle up past the left shoulder, sights toward him; the right hand at the small of the
+    # stock by the right hip, the left hand round the fore-end from the left, back of the hand forward
+    "port": dict(hold=0.0, at=(0.28, -0.12, 1.10), barrel=(0.10, 0.62, 0.78), up=(-1.0, 0.0, 0.0), twist=8.0,
+                 lean=0.0, steady=0.35, grip_l=((0.0, 0.25, -0.97), (1.0, 0.0, 0.0)),
+                 pole_r=(-0.2, -0.7, -0.7), pole_l=(-0.1, 0.4, -0.9), clav=(0.3, 0.3)),
+    # the butt in the right shoulder, muzzle forward and 15 degrees down, the left hand under the fore-end palm up
+    "ready": dict(hold=-0.30, at=(-0.02, -0.12, 1.43), barrel=(0.966, 0.0, -0.259), up=(0.259, 0.0, 0.966),
+                  twist=34.0, lean=6.0, steady=0.6, grip_l=((0.8, 0.5, 0.0), (0.0, 0.0, 1.0)),
+                  pole_r=(-0.35, -0.9, -0.25), pole_l=(0.0, 0.25, -1.0), clav=(0.25, 0.6)),
+}
+
+
+def _frame(y, z):
+    """A rotation matrix whose Y axis is y and Z axis (made square to it) is z."""
+    y = _norm(np.asarray(y, float))
+    z = np.asarray(z, float)
+    z = _norm(z - y * np.sum(y * z, -1, keepdims=True))
+    x = np.cross(y, z)
+    return np.stack([x, y, z], -1)
+
+
+# human.build's hand, read off MakeHuman's joints (the same for every seed): in the left hand bone's own frame (the
+# right's is its mirror, x negated), the palm's normal (out of the palm), the hand's true axis (wrist to the middle
+# knuckle: the bone runs to the index knuckle) and the middle knuckle; HAND_LEN is the bone's length they go with.
+PALM_N = (0.722, 0.045, -0.691)
+HAND_AXIS = (-0.201, 0.969, -0.146)
+MID_KNUCKLE = (-0.0228, 0.1103, -0.0166)
+HAND_LEN = 0.1184
+
+
+def hand_grips(rest, grip_l=None, hole=0.034, back=0.004):
+    """For each hand: its rotation relative to the rifle's frame (G, so hand = rifle @ G) and the point of the hand
+    that holds (in the hand bone's frame: the middle of the fist's hole, `hole` metres out of the palm from the
+    middle knuckle and `back` metres toward the wrist). `grip_l` is the left hand's hold (as RIFLE_POSES'); the
+    right's is GRIP_R."""
+    out = {}
+    for s in ("l", "r"):
+        h = rest.i("hand_" + s)
+        k = np.linalg.norm(rest.tail[h] - rest.head[h]) / HAND_LEN
+        mir = np.array([1.0, 1.0, 1.0]) if s == "l" else np.array([-1.0, 1.0, 1.0])
+        a, n = _norm(np.array(HAND_AXIS) * mir), np.array(PALM_N) * mir
+        n = _norm(n - a * (n @ a))
+        grip_local = np.array(MID_KNUCKLE) * mir * k + n * hole - a * back
+        ar, nr = GRIP_R if s == "r" else (grip_l or RIFLE_POSES["ready"]["grip_l"])
+        ar, nr = _norm(np.asarray(ar, float)), np.asarray(nr, float)
+        nr = _norm(nr - ar * (nr @ ar))
+        B_r = np.stack([ar, nr, np.cross(ar, nr)], -1)                # rifle frame: hand axis, palm normal, third
+        B_h = np.stack([a, n, np.cross(a, n)], -1)                    # the same in the hand bone's frame
+        out[s] = (B_r @ B_h.T, grip_local)
+    return out
+
+
+def motion_of_action(armature, action, rest=None):
+    """Read an action (rotation quaternion keys on the bones, location on the pelvis) back into a Motion."""
+    rest = rest or Rest.of(armature)
+    fcs = {}
+    for fc in _fcurves(action):
+        fcs[(fc.data_path, fc.array_index)] = fc
+    f0, f1 = int(round(action.frame_range[0])), int(round(action.frame_range[1]))
+    frames = np.arange(f0, f1 + 1)
+    F, B = len(frames), len(rest.names)
+    L = np.tile(np.eye(3), (F, B, 1, 1))
+    for b, n in enumerate(rest.names):
+        key = f'pose.bones["{n}"].rotation_quaternion'
+        if (key, 0) in fcs:
+            q = np.array([[fcs[(key, i)].evaluate(f) for i in range(4)] for f in frames])
+            L[:, b] = quat_to_mat(q)
+    pv = rest.i("pelvis")
+    key = 'pose.bones["pelvis"].location'
+    loc = np.array([[fcs[(key, i)].evaluate(f) if (key, i) in fcs else 0.0 for i in range(3)] for f in frames])
+    H = rest.head[pv] + loc @ rest.R[pv].T
+    m = from_local(rest, L, H, FPS)
+    m.frames = frames
+    return m
+
+
+def _fcurves(action):
+    try:
+        import kit
+        return kit.fcurves_of(action)
+    except Exception:
+        out = []
+        for layer in action.layers:
+            for strip in layer.strips:
+                for bag in strip.channelbags:
+                    out += list(bag.fcurves)
+        return out
+
+
+def carry_rifle(m, pose="port", cyclic=False, clav=None):
+    """The arms of Motion m put on a rifle carried at `pose` ("port" or "ready", or a dict like RIFLE_POSES'), the
+    legs, pelvis and the rest of the capture untouched. The rifle rides the chest (its bob and sway carry it, eased by
+    `steady`), the trunk turns for the ready, the clavicles give a little toward the hands, then each arm reaches its
+    grip by two-bone IK and the hand takes the grip's angle. Returns (m, rifle_frames (F, 4, 4), hand_error (F, 2))."""
+    r = m.rest
+    P = RIFLE_POSES[pose] if isinstance(pose, str) else pose
+    F = len(m)
+    ch = r.i("chest")
+    yaw = np.unwrap(yaw_of(m))                                  # his heading: steady over a loop, eased otherwise
+    yaw = np.full(F, yaw[:-1].mean()) if cyclic else smooth(yaw, 15)
+    # the trunk: a turn to the right (the head turning back), and a little more lean for the ready
+    if P.get("twist"):
+        for b in ("spine_01", "spine_02", "chest"):
+            bend(m, b, -math.radians(P["twist"]) / 3, axis=np.array([0.0, 0.0, 1.0]))
+        bend(m, "neck", math.radians(P["twist"]) * 0.55, axis=np.array([0.0, 0.0, 1.0]))
+        bend(m, "head", math.radians(P["twist"]) * 0.45, axis=np.array([0.0, 0.0, 1.0]))
+    if P.get("lean"):
+        bend(m, "chest", math.radians(P["lean"]))
+        bend(m, "neck", -math.radians(P["lean"]))
+    hd = m.heads()
+    # the carry as designed (rest man, trunk turned): the rifle's frame Fr and the held point, kept in the chest's
+    # frame so the chest carries it
+    Rt = rot_z(-math.radians(P.get("twist", 0.0)))
+    Fr = _frame(P["barrel"], P["up"])
+    hold = np.array([0.0, P.get("hold", 0.0), 0.0])
+    chest_rest_turned = Rt @ r.R[ch]
+    pivot = r.head[r.i("spine_01")]
+    head_c = pivot + Rt @ (r.head[ch] - pivot)
+    loc_in_chest = chest_rest_turned.T @ (np.array(P["at"], float) - head_c)
+    rot_in_chest = chest_rest_turned.T @ Fr
+    Wc = m.W[:, ch]
+    held = hd[:, ch] + np.einsum("fij,j->fi", Wc, loc_in_chest)
+    # the angle: the carry's own, turned with his heading, plus (1 - steady) of the chest's sway about its mean
+    A = rot_z(-yaw) @ Wc @ rot_in_chest                          # the chest-carried angle, in his heading's frame
+    A0 = A[0]
+    Am = A0 @ rot_exp(rot_log(A0.T @ A).mean(0))                  # its mean
+    sway = rot_exp(rot_log(A @ Am.T) * (1.0 - P.get("steady", 0.0)))
+    rot = rot_z(yaw) @ sway @ Fr
+    # a touch of inertia: the rifle lags its carrier by a frame or two
+    k = 2
+    if cyclic:
+        n = F - 1
+        ext = lambda a: np.concatenate([a[n - k:n], a[:n], a[:k + 1]])
+        held = smooth(ext(held), k)[k:k + F]
+        rv = rot_log(np.swapaxes(rot[:1], -1, -2) @ rot)
+        rot = rot[:1] @ rot_exp(smooth(ext(rv), k)[k:k + F])
+    else:
+        held = smooth(held, k)
+        rv = rot_log(np.swapaxes(rot[:1], -1, -2) @ rot)
+        rot = rot[:1] @ rot_exp(smooth(rv, k))
+    pos = held - np.einsum("fij,j->fi", rot, hold)                # the grip
+    grips = hand_grips(r, P.get("grip_l"))
+    targets = {}
+    for s in ("r", "l"):
+        G, gl = grips[s]
+        Rh = rot @ G
+        pt = pos if s == "r" else pos + rot[:, :, 1] * LEFT_HAND - rot[:, :, 2] * LEFT_DROP
+        wrist = pt - np.einsum("fij,j->fi", Rh, gl)
+        targets[s] = (Rh, wrist, pt)
+    # the clavicles give toward the hands (shoulders forward and up as the arms reach)
+    clav = P.get("clav", (0.3, 0.3)) if clav is None else clav
+    clav = dict(zip(("r", "l"), np.broadcast_to(np.asarray(clav, float), (2,))))
+    for s in ("r", "l"):
+        cl, ua = r.i("clavicle_" + s), r.i("upperarm_" + s)
+        cur = hd[:, ua] - hd[:, cl]
+        want = targets[s][1] - hd[:, cl]
+        G_ = swing(cur, want)
+        part = rot_exp(rot_log(G_) * clav[s])
+        for b in subtree(r, "clavicle_" + s):
+            m.W[:, b] = part @ m.W[:, b]
+    hd = m.heads()
+    err = np.zeros((F, 2))
+    for k_, s in enumerate(("r", "l")):
+        Rh, wrist, pt = targets[s]
+        pole_rest = np.array(P["pole_" + s], float)
+        pole = np.einsum("fij,j->fi", Wc @ r.R[ch].T, pole_rest)
+        two_bone_ik(m, s, wrist, np.ones(F), hd, chain=("upperarm_", "lowerarm_", "hand_"), pole=pole)
+        h = r.i("hand_" + s)
+        m.W[:, h] = Rh
+        for b in subtree(r, "hand_" + s)[1:]:
+            p = r.parent[b]
+            m.W[:, b] = m.W[:, p] @ r.R[p].T @ r.R[b]
+        hd = m.heads()
+        err[:, k_] = np.linalg.norm(hd[:, h] - wrist, axis=1)
+    frames = np.tile(np.eye(4), (F, 1, 1))
+    frames[:, :3, :3], frames[:, :3, 3] = rot, pos
+    # the rifle rides the right hand from here: put its frame where the hand actually got to
+    G, gl = grips["r"]
+    h = r.i("hand_r")
+    frames[:, :3, :3] = m.W[:, h] @ G.T
+    frames[:, :3, 3] = hd[:, h] + np.einsum("fij,j->fi", m.W[:, h], gl)
+    return m, frames, err
+
+
+def weapon_bone(armature, rest=None):
+    """The `weapon` bone (a child of hand_r, at the grip, +Y along the barrel, +Z up): made if the rig lacks it, from
+    the agreed grip, so a rifle parented to it sits in the right hand however the arms move."""
+    import bpy
+    if "weapon" in armature.data.bones:
+        return armature.data.bones["weapon"]
+    rest = rest or Rest.of(armature)
+    G, gl = hand_grips(rest)["r"]
+    h = rest.i("hand_r")
+    Rw = rest.R[h] @ G.T
+    head = rest.head[h] + rest.R[h] @ gl
+    from mathutils import Vector
+    bpy.context.view_layer.objects.active = armature
+    mode = armature.mode
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = armature.data.edit_bones.new("weapon")
+    eb.head = Vector(head)
+    eb.tail = Vector(head + Rw[:, 1] * 0.25)
+    eb.align_roll(Vector(Rw[:, 2]))
+    eb.parent = armature.data.edit_bones["hand_r"]
+    eb.use_deform = False
+    bpy.ops.object.mode_set(mode=mode if mode in ("OBJECT", "POSE") else "OBJECT")
+    armature.pose.bones["weapon"].rotation_mode = "QUATERNION"
+    return armature.data.bones["weapon"]
+
+
+def rifle_arms(armature, action, rifle_pose="port", name=None, clav=None):
+    """Both hands on a rifle at the port (across the chest) or at the ready (butt in the shoulder), the action's
+    body moving underneath. Bakes plain keys into `action` (or into a copy called `name`), on the trunk, clavicles,
+    arms and hands; adds the `weapon` bone if the rig lacks it. Returns (action, worst hand error in metres)."""
+    import bpy
+    rest = Rest.of(armature)
+    m = motion_of_action(armature, action, rest)
+    cyclic = bool(getattr(action, "use_cyclic", False))
+    m, frames, err = carry_rifle(m, rifle_pose, cyclic=cyclic, clav=clav)
+    weapon_bone(armature, rest)
+    Q = m.local_quats()
+    keep = {"pelvis", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "ball_l", "ball_r", "root"}
+    quats = {n: Q[:, b] for b, n in enumerate(rest.names) if n not in keep}
+    act = action
+    if name:
+        act = action.copy()
+        act.name = name
+    _write_quats(armature, act, quats, m.frames)
+    return act, float(err.max())
+
+
+def _write_quats(armature, act, quats, frames):
+    """Replace (or make) the rotation keys of the given bones in `act`, one key per frame."""
+    fcs = {(fc.data_path, fc.array_index): fc for fc in _fcurves(act)}
+    bag = None
+    for layer in act.layers:
+        for strip in layer.strips:
+            for b_ in strip.channelbags:
+                bag = b_
+    for bone, q in quats.items():
+        q = np.array(q, float)
+        for k in range(1, len(q)):
+            if np.dot(q[k], q[k - 1]) < 0:
+                q[k] = -q[k]
+        for i in range(4):
+            key = (f'pose.bones["{bone}"].rotation_quaternion', i)
+            fc = fcs.get(key)
+            if fc is None:
+                fc = bag.fcurves.new(key[0], index=i)
+                fc.group = bag.groups.get(bone) or bag.groups.new(bone)
+            fc.keyframe_points.clear()
+            fc.keyframe_points.add(len(frames))
+            co = np.empty(2 * len(frames))
+            co[0::2], co[1::2] = frames, q[:, i]
+            fc.keyframe_points.foreach_set("co", co.tolist())
+            fc.keyframe_points.foreach_set("interpolation", [1] * len(frames))      # LINEAR
+            fc.update()
+
+
+# ------------------------------------------------------------------------------------------------ the low crawl
+# CMU has no belly crawl, so `crawl` is keyed by hand on the rig: chest and hips on the ground, the head low and
+# looking ahead, the rifle lying across in front of the face on the forearms (the right hand on the wrist of the
+# stock, the fore-end over the left forearm), and one elbow with the same side's knee drawn up together, side by
+# side in turn. Each elbow and knee is planted while it pulls or pushes, so it stays put on the ground as the game
+# carries the man forward at `stride` per loop.
+CRAWL = dict(
+    frames=54, stride=0.40,             # one loop (both sides) and the ground it covers
+    draw=0.2, pull=0.3, glide=0.15,     # parts of a loop: a side drawing up, then pulling; the body's speed meanwhile
+    pelvis_z=0.125,                     # the pelvis head's height, lying on the belly
+    neck_up=48.0, head_up=22.0,         # the head raised to look ahead, low
+    el_fwd=0.17, el_out=0.235, el_z=0.045,       # an elbow planted this far ahead of and out from its shoulder
+    kn_fwd=0.12, kn_out=0.40, kn_z=0.055,        # a knee drawn up: this far ahead of and out from its hip
+    kn_back=0.40, kn_in=0.14,                    # the other leg, straight: its knee this far behind and out
+    kn_early=0.1, kn_ext=0.22,                   # the knee starts up before its elbow; the leg straightens in this
+    pf_frog=40.0, pf_straight=55.0,              # feet pointed (degrees) on the drawn-up and the straight leg
+    fa_left=25.0, fa_right=48.0,                 # each forearm's angle in from straight ahead
+    fa_rise_l=0.05, fa_rise_r=0.11,              # and its rise toward the hand
+    psi=5.0, psi_lo=-8.0, psi_hi=25.0,           # the rifle's muzzle this far forward of pointing straight left
+)
+
+
+def smoothstep(u):
+    u = np.clip(u, 0.0, 1.0)
+    return u * u * (3 - 2 * u)
+
+
+def cyc_smooth(x, k):
+    """smooth() round a loop whose last frame equals its first."""
+    n = len(x) - 1
+    ext = np.concatenate([x[n - k:n], x[:n], x[:k + 1]])
+    return smooth(ext[:, None] if ext.ndim == 1 else ext, k)[k:k + n + 1].reshape(x.shape)
+
+
+def aim_limb(m, upper, lower, P1, P2, h0=None):
+    """Put two bones exactly on the points given (F, 3): `upper` from its head to the joint P1, `lower` from P1 to
+    P2 (the points must sit at the bones' lengths). The turn that takes each rest bone onto its target also takes
+    the rest pose's hinge (h0, by default square to the two rest bones) onto the target's bend, so the joint bends
+    the way it was built to. Returns the two turns and the target hinge (F, 3)."""
+    r = m.rest
+    a, b = r.i(upper), r.i(lower)
+    P0 = m.heads()[:, a]
+    end = [k for k, p in enumerate(r.parent) if p == b and not r.names[k].startswith(("thumb", "fingers"))][0]
+    u0, l0 = _norm(r.head[b] - r.head[a]), _norm(r.head[end] - r.head[b])
+    h0 = _norm(np.cross(u0, l0)) if h0 is None else _norm(np.asarray(h0, float))
+    u1, l1 = _norm(P1 - P0), _norm(P2 - P1)
+    h1 = np.cross(u1, l1)
+    h1 = _norm(np.where((np.linalg.norm(h1, axis=1) < 1e-3)[:, None], h0, h1))
+
+    def frame(d, h):
+        h = _norm(h - d * np.sum(d * h, -1, keepdims=True))
+        return np.stack(np.broadcast_arrays(d, h, np.cross(d, h)), -1)
+    Ru = frame(u1, h1) @ np.swapaxes(frame(u0, h0), -1, -2)
+    Rl = frame(l1, h1) @ np.swapaxes(frame(l0, h0), -1, -2)
+    m.W[:, a] = Ru @ r.R[a]
+    m.W[:, b] = Rl @ r.R[b]
+    return Ru, Rl, h1
+
+
+def hand_frame(axis, palm, side):
+    """The hand bone's rotation for a hand whose true axis (wrist to middle knuckle) and palm face the given
+    world ways (from human.build's measured hand, PALM_N and HAND_AXIS)."""
+    mir = np.array([1.0, 1.0, 1.0]) if side == "l" else np.array([-1.0, 1.0, 1.0])
+    a, n = _norm(np.array(HAND_AXIS) * mir), np.array(PALM_N) * mir
+    n = _norm(n - a * (n @ a))
+    axis = _norm(np.asarray(axis, float))
+    palm = np.asarray(palm, float)
+    palm = _norm(palm - axis * np.sum(palm * axis, -1, keepdims=True))
+    return np.stack([axis, palm, np.cross(axis, palm)], -1) @ np.stack([a, n, np.cross(a, n)], -1).T
+
+
+def _cradle_frame(psi, th):
+    """The rifle lying on its left side across in front of him: barrel `psi` forward of straight left, rising `th`,
+    its sights facing back toward him."""
+    Y = np.stack([np.sin(psi) * np.cos(th), np.cos(psi) * np.cos(th), np.sin(th)], 1)
+    Z = np.stack([-np.cos(psi), np.sin(psi), np.zeros_like(psi)], 1)
+    return _frame(Y, Z)
+
+
+def belly_crawl(rest, P=None):
+    """The low crawl (a loop, in place), keyed on our rig from CRAWL. Returns (Motion, info)."""
+    P = dict(CRAWL, **(P or {}))
+    r = rest
+    N, stride, draw, pull = P["frames"], P["stride"], P["draw"], P["pull"]
+    F = N + 1
+    u = np.arange(F) / N
+    X_, Y_, Z_ = np.eye(3)
+    # the body over the ground: a surge on each pull, a slow glide while a side draws up; in place, what is left
+    fine = np.linspace(0, 1, 2001)
+    v = np.full_like(fine, P["glide"])
+    for o in (0.0, 0.5):
+        ph = (fine - o) % 1.0
+        w = (ph >= draw) & (ph < draw + pull)
+        v[w] += ((0.5 * stride - P["glide"] * draw) / pull - P["glide"]) * (1 - np.cos(2 * np.pi * (ph[w] - draw) / pull))
+    v *= stride / np.trapz(v, fine)
+    Xg = np.concatenate([[0], np.cumsum(0.5 * (v[1:] + v[:-1]) * np.diff(fine))])
+    xp = np.interp(u, fine, Xg) - stride * u
+    xp -= xp[:-1].mean()
+    xp_of = lambda uu: np.interp(uu % 1.0, u, xp)
+    # the prone man: our rest turned 90 degrees forward (face down, head to +X), the root left as it is
+    W = np.einsum("ij,bjk->bik", axis_angle(Y_, math.pi / 2), r.R)[None].repeat(F, 0)
+    W[:, r.i("root")] = r.R[r.i("root")]
+    pv = r.i("pelvis")
+    s = np.cos(2 * np.pi * (u - draw))             # +1: the left side drawn up; -1: the right
+    H = np.zeros((F, 3))
+    H[:, 0] = r.head[pv][0] + xp
+    H[:, 2] = P["pelvis_z"] + 0.006 * np.abs(s)
+    m = Motion(r, W, H, FPS)
+    # the trunk: the pelvis turns and rolls toward the side drawing up, the spine bends that way (concave), a little
+    # arch lifts the shoulders, the neck and head come up to look ahead
+    bend(m, "pelvis", -math.radians(7) * s, axis=Z_)
+    bend(m, "pelvis", math.radians(6) * s, axis=X_)
+    for b_, e in (("spine_01", 2.0), ("spine_02", 3.0), ("chest", 2.0)):
+        bend(m, b_, -math.radians(e), axis=Y_)
+        bend(m, b_, math.radians(14 / 3) * s, axis=Z_)
+    bend(m, "spine_02", -math.radians(9) * s, axis=X_)
+    bend(m, "neck", -math.radians(P["neck_up"]), axis=Y_)
+    bend(m, "neck", -math.radians(6) * s, axis=Z_)
+    bend(m, "head", -math.radians(P["head_up"]), axis=Y_)
+    bend(m, "head", -math.radians(4) * s, axis=Z_)
+    # the shoulders drawn forward for the reach, the reaching side more
+    for side, sg in (("l", 1.0), ("r", -1.0)):
+        reach = 0.5 + 0.5 * sg * s
+        bend(m, "clavicle_" + side, -sg * np.radians(14 + 10 * reach), axis=Z_)
+        bend(m, "clavicle_" + side, sg * math.radians(8), axis=X_)
+    hd = m.heads()
+    ln = lambda a, b: float(np.linalg.norm(r.head[r.i(b)] - r.head[r.i(a)]))
+    L = dict(ua=ln("upperarm_l", "lowerarm_l"), fa=ln("lowerarm_l", "hand_l"), th=ln("thigh_l", "calf_l"),
+             sh=ln("calf_l", "foot_l"))
+    # where each elbow and knee goes (phi: 0 when that side starts to draw up)
+    plan = {}
+    for side, sg, off in (("l", 1.0, 0.0), ("r", -1.0, 0.5)):
+        phi = (u - off) % 1.0
+        phi[-1] = phi[0]
+        shx, shy = hd[:, r.i("upperarm_" + side), 0].mean(), hd[:, r.i("upperarm_" + side), 1].mean()
+        # the elbow: drawn up and forward, planted for half a loop (its own pull, then the other side's draw), then
+        # dragged along with the body while the other side pulls
+        x_plant = shx + P["el_fwd"]
+        pl_end = x_plant - stride * 0.5
+        x, z = np.empty(F), np.full(F, P["el_z"])
+        a_ = (phi >= draw) & (phi < draw + 0.5)
+        x[a_] = x_plant - stride * (phi[a_] - draw)
+        b_ = phi >= draw + 0.5
+        x[b_] = pl_end + xp_of(phi[b_] + off) - xp_of(draw + 0.5 + off)
+        x_back = pl_end + xp_of(1.0 + off) - xp_of(draw + 0.5 + off)
+        c_ = phi < draw
+        x[c_] = x_back + (x_plant - x_back) * smoothstep(phi[c_] / draw)
+        z[c_] += 0.03 * np.sin(np.pi * phi[c_] / draw)
+        E = np.stack([x, np.full(F, shy + sg * P["el_out"]), z], 1)
+        # the knee: planted through its push, swung back as the leg straightens and dragged straight, then drawn up
+        # in an arc round the hip to plant again
+        hip = hd[:, r.i("thigh_" + side)]
+        hx, hy = hip[:, 0].mean(), hip[:, 1].mean()
+        k_plant = np.array([hx + P["kn_fwd"], hy + sg * P["kn_out"]])
+        rel_end = np.array([P["kn_fwd"] - stride * pull, sg * P["kn_out"]])
+        rel_ext = np.array([-P["kn_back"], sg * P["kn_in"]])
+
+        def arc(r0, r1, t):
+            a0, a1 = math.atan2(sg * r0[1], r0[0]), math.atan2(sg * r1[1], r1[0])
+            d0, d1 = np.hypot(*r0), np.hypot(*r1)
+            return np.cos(a0 + (a1 - a0) * t) * (d0 + (d1 - d0) * t), sg * np.sin(a0 + (a1 - a0) * t) * (d0 + (d1 - d0) * t)
+        Kx, Ky, Kz = np.empty(F), np.empty(F), np.full(F, P["kn_z"])
+        pa = (phi >= draw) & (phi < draw + pull)
+        Kx[pa], Ky[pa] = k_plant[0] - stride * (phi[pa] - draw), k_plant[1]
+        pb = (phi >= draw + pull) & (phi < 1 - P["kn_early"])
+        rx, ry = arc(rel_end, rel_ext, smoothstep((phi[pb] - draw - pull) / P["kn_ext"]))
+        Kx[pb], Ky[pb] = hip[pb, 0] + rx, hip[pb, 1] + ry
+        pc = (phi < draw) | (phi >= 1 - P["kn_early"])
+        kph = (np.where(phi[pc] >= 1 - P["kn_early"], phi[pc] - 1, phi[pc]) + P["kn_early"]) / (draw + P["kn_early"])
+        rx, ry = arc(rel_ext, k_plant - np.array([hx, hy]), smoothstep(kph))
+        Kx[pc], Ky[pc] = hip[pc, 0] + rx, hip[pc, 1] + ry
+        Kz[pc] += 0.015 * np.sin(np.pi * kph)
+        K = np.stack([Kx, Ky, Kz], 1)
+        ang = np.degrees(np.arctan2(sg * (K[:, 1] - hip[:, 1]), K[:, 0] - hip[:, 0]))
+        plan[side] = dict(E=E, K=K, straight=np.clip((ang - 80) / (155 - 80), 0, 1))
+    # the legs: the knee as planned (a thigh's length from the hip), the shin back along the ground on its inner
+    # side when drawn up, back and a little up when straight (the toes on the ground), the foot pointed
+    for side, sg in (("l", 1.0), ("r", -1.0)):
+        p = plan[side]
+        hp = m.heads()[:, r.i("thigh_" + side)]
+        K = hp + L["th"] * _norm(p["K"] - hp)
+        st = p["straight"][:, None]
+        A = K + L["sh"] * _norm(np.array([-0.95, -sg * 0.22, 0.06]) * (1 - st) + np.array([-0.99, -sg * 0.03, 0.10]) * st)
+        _, Rl, h1 = aim_limb(m, "thigh_" + side, "calf_" + side, K, A, h0=-r.R[r.i("thigh_" + side)][:, 0])
+        pf = np.radians(P["pf_frog"] + (P["pf_straight"] - P["pf_frog"]) * p["straight"])
+        fo, ba = r.i("foot_" + side), r.i("ball_" + side)
+        m.W[:, fo] = axis_angle(h1, pf) @ Rl @ r.R[fo]
+        m.W[:, ba] = m.W[:, fo] @ r.R[fo].T @ r.R[ba]
+    # the arms: a planted elbow stays put, the clavicle giving so the shoulder keeps an upper arm's length from it;
+    # each forearm lies on the ground, in and forward
+    fore = lambda a, sg, rise: _norm(np.array([math.cos(math.radians(a)), -sg * math.sin(math.radians(a)), rise]))
+    Es, Wr_, clav = {}, {}, {}
+    for side, sg, al, rise in (("l", 1.0, P["fa_left"], P["fa_rise_l"]), ("r", -1.0, P["fa_right"], P["fa_rise_r"])):
+        hd = m.heads()
+        E = plan[side]["E"]
+        C, S = hd[:, r.i("clavicle_" + side)], hd[:, r.i("upperarm_" + side)]
+        cl = np.linalg.norm(S - C, axis=1)
+        nrm, d = _norm(E - C), np.linalg.norm(E - C, axis=1)
+        a = (cl ** 2 - L["ua"] ** 2 + d ** 2) / (2 * d)
+        cen = C + nrm * a[:, None]
+        q = S - cen
+        q -= nrm * np.sum(q * nrm, 1)[:, None]
+        G = swing(S - C, cen + _norm(q) * np.sqrt(np.maximum(cl ** 2 - a ** 2, 0.0))[:, None] - C)
+        clav[side] = float(np.degrees(np.linalg.norm(rot_log(G), axis=1)).max())
+        for b in subtree(r, "clavicle_" + side):
+            m.W[:, b] = G @ m.W[:, b]
+        S = m.heads()[:, r.i("upperarm_" + side)]
+        Es[side] = S + L["ua"] * _norm(E - S)
+        Wr_[side] = Es[side] + L["fa"] * fore(al, sg, rise)
+    # the rifle: in the right hand (the agreed grip, so the weapon bone carries it), lying across with its fore-end
+    # over the left forearm, the muzzle kept as near `psi` as that allows
+    G_r, gl_r = hand_grips(r)["r"]
+    El, Wl = Es["l"], Wr_["l"]
+    lam = np.linspace(-0.1, 1.35, 59)
+    psi0 = math.radians(P["psi"])
+    psi = np.full(F, psi0)
+    for _ in range(3):
+        Rh = _cradle_frame(psi, np.zeros(F)) @ G_r
+        o = Wr_["r"] + np.einsum("fij,j->fi", Rh, gl_r)
+        T = El[:, None, :] + lam[None, :, None] * (Wl - El)[:, None, :]
+        ang = np.arctan2(T[..., 0] - o[:, None, 0], T[..., 1] - o[:, None, 1])
+        k = np.argmin(np.abs(ang - psi0), 1)
+        psi = cyc_smooth(np.clip(ang[np.arange(F), k], math.radians(P["psi_lo"]), math.radians(P["psi_hi"])), 3)
+    Tk = T[np.arange(F), k]
+    th = cyc_smooth(np.arctan2(Tk[:, 2] + 0.055 - o[:, 2], np.hypot(*(Tk[:, :2] - o[:, :2]).T)), 3)
+    Rh = _cradle_frame(psi, th) @ G_r
+    for side in ("l", "r"):
+        aim_limb(m, "upperarm_" + side, "lowerarm_" + side, Es[side], Wr_[side])
+        h = r.i("hand_" + side)
+        m.W[:, h] = Rh if side == "r" else hand_frame(fore(P["fa_left"] - 10, 1.0, -0.15), (0.0, 0.0, -1.0), "l")
+        for b in subtree(r, "hand_" + side)[1:]:
+            m.W[:, b] = m.W[:, r.parent[b]] @ r.R[r.parent[b]].T @ r.R[b]
+    m.W[-1], m.H[-1] = m.W[0], m.H[0]
+    info = {"take": None, "a": None, "b": None, "stride": stride, "frames": F, "speed": round(stride / (N / FPS), 3),
+            "contacts": {"clavicle_give_max_deg": {k_: round(v_, 1) for k_, v_ in clav.items()}},
+            "rifle_psi_deg": [round(float(np.degrees(psi.min())), 1), round(float(np.degrees(psi.max())), 1)]}
+    return m, info
+
+
+def make_keyed(spec, rest, verbose=True):
+    m, info = {"belly_crawl": belly_crawl}[spec["make"]](rest, spec.get("params"))
+    if verbose:
+        print(spec["name"], {k: v for k, v in info.items()})
+    return m, info
 
 
 # ------------------------------------------------------------------------------------------------ previews
@@ -1008,7 +1763,7 @@ def preview_man(seed=0):
     import human
     import kit
     man = human.build(seed=seed, nation="GER", stand=0.02, curl=(30, 45, 25))
-    grey = kit.material("matt_grey", kit.hex_rgb("8C8B86"), rough=0.75, spec=0.3)
+    grey = kit.material("matt_grey", kit.hex_rgb("A3A29E"), rough=0.8, spec=0.3)
     for ob in [man["body"]] + man["eyes"]:
         ob.data.materials.clear()
         ob.data.materials.append(grey)
@@ -1019,7 +1774,7 @@ def preview_man(seed=0):
     return man
 
 
-def render_clip(man, clip, c, out_base, work, step=2, loops=1, cam_yaw=35.0, dist=4.6, threads=2, samples=16):
+def render_clip(man, clip, c, out_base, work, step=2, loops=1, cam_yaw=35.0, dist=4.8, threads=2, samples=16):
     """Render one clip of clips.json (already applied as an action) to out_base.mp4/.gif. A looping travel clip is
     played as the game plays it: the man carried forward at stride per loop, the camera going with him over the
     field, so any foot sliding shows against the ground."""
@@ -1036,12 +1791,12 @@ def render_clip(man, clip, c, out_base, work, step=2, loops=1, cam_yaw=35.0, dis
         if f.endswith(".png"):
             os.remove(os.path.join(work, f))
     k = 1
-    tgt_z = c.get("cam_z", 0.85)
+    tgt_z = c.get("cam_z", 0.86)
     for t in range(0, total, step):
         sc.frame_set(1 + (t % (n - 1) if c.get("loop") else t))
         x = speed * t / FPS
         arm.location = (x, 0, 0)
-        kit.orbit(cam, (x + c.get("cam_dx", 0.0), 0, tgt_z), c.get("cam_dist", dist), c.get("cam_pitch", 6.0), cam_yaw)
+        kit.orbit(cam, (x + c.get("cam_dx", 0.0), 0, tgt_z), c.get("cam_dist", dist), c.get("cam_pitch", 5.0), cam_yaw)
         sc.render.filepath = os.path.join(work, f"{k:04d}.png")
         bpy.ops.render.render(write_still=True)
         k += 1
@@ -1050,8 +1805,38 @@ def render_clip(man, clip, c, out_base, work, step=2, loops=1, cam_yaw=35.0, dis
     return out_base
 
 
+def rifle_proxy(armature):
+    """A plain rifle-sized stand-in (1.11 m, boxes) on the `weapon` bone, for previews of rifle_arms."""
+    import bpy
+    import bmesh
+    import kit
+    me = bpy.data.meshes.new("rifle_proxy")
+    bm = bmesh.new()
+    for y0, y1, w, h, zc in ((-0.33, -0.05, 0.040, 0.10, -0.03),      # butt
+                             (-0.05, 0.05, 0.030, 0.040, -0.005),     # the wrist of the stock, where the right hand is
+                             (0.05, 0.20, 0.040, 0.060, 0.0),         # receiver and magazine
+                             (0.20, 0.55, 0.040, 0.045, -0.004),      # fore-end, where the left hand is
+                             (0.55, 0.78, 0.018, 0.018, 0.012)):      # barrel
+        r = bmesh.ops.create_cube(bm, size=1.0)
+        for v in r["verts"]:
+            v.co.x *= w
+            v.co.y = (y0 + y1) / 2 + v.co.y * (y1 - y0)
+            v.co.z = zc + v.co.z * h
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("rifle_proxy", me)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.data.materials.append(kit.material("proxy_wood", kit.hex_rgb("6B4A2B"), rough=0.6))
+    ob.parent = armature
+    ob.parent_type = "BONE"
+    ob.parent_bone = "weapon"
+    ob.location = (0, -armature.data.bones["weapon"].length, 0)         # (a bone child sits at the bone's tail)
+    return ob
+
+
 def preview(names=None, out_dir=PREVIEW_DIR, work_dir="/home/user/art/mocap/frames", clips=None, step=2):
-    """Preview films for the named clips (all by default) and the contact sheet clips.png."""
+    """Preview films for the named clips (all by default). A name "clip+pose" (say "walk+port") previews
+    rifle_arms on that clip, with a stand-in rifle, as clip_pose."""
     import bpy
     import kit
     clips = clips or load_clips()
@@ -1060,16 +1845,32 @@ def preview(names=None, out_dir=PREVIEW_DIR, work_dir="/home/user/art/mocap/fram
     kit.studio(sun_elev=40, sun_turn=-40)
     kit.field_ground()
     man = preview_man()
-    kit.camera(lens=50)
+    arm = man["armature"]
+    kit.camera(lens=42)
     sc = kit.render_setup(640, 360, samples=16)
     sc.render.threads_mode = "FIXED"
     sc.render.threads = 2
+    rifle = None
     for nm in names:
-        c = clips[nm]
-        apply(man["armature"], nm, clips)
+        clip, _, pose = nm.partition("+")
+        c = clips[clip]
+        act = apply(arm, clip, clips)
+        out = clip
+        if pose:
+            act, err = rifle_arms(arm, act, pose, name=f"{clip}_{pose}")
+            arm.animation_data.action = act
+            arm.animation_data.action_slot = act.slots[0]
+            out = f"{clip}_{pose}"
+            rifle = rifle or rifle_proxy(arm)
+            print(nm, "worst hand miss", round(err, 4), flush=True)
+        elif c.get("rifle"):                # (a clip that carries the rifle in its own arms, as the low crawl)
+            weapon_bone(arm)
+            rifle = rifle or rifle_proxy(arm)
+        if rifle:
+            rifle.hide_render = not (pose or c.get("rifle"))
         loops = 2 if c.get("loop") and c["frames"] < 60 else 1
-        render_clip(man, nm, c, os.path.join(out_dir, nm), os.path.join(work_dir, nm), step=step, loops=loops)
-        print("preview", nm, flush=True)
+        render_clip(man, out, c, os.path.join(out_dir, out), os.path.join(work_dir, out), step=step, loops=loops)
+        print("preview", out, flush=True)
     return names
 
 
@@ -1080,8 +1881,152 @@ def sheet(names, out_dir=PREVIEW_DIR, work_dir="/home/user/art/mocap/frames", cl
     ims, labels = [], []
     for nm in names:
         fr = sorted(f for f in os.listdir(os.path.join(work_dir, nm)) if f.endswith(".png"))
-        pick = clips[nm].get("sheet_at", 0.5)
+        pick = clips.get(nm, {}).get("sheet_at", 0.5)
         ims.append(os.path.join(work_dir, nm, fr[min(len(fr) - 1, int(pick * (len(fr) - 1)))]))
         labels.append(nm)
     return kit.sheet(ims, os.path.join(out_dir, "clips.png"), cols=4, labels=labels,
                      title="The soldier's motion capture (CMU data, retargeted)")
+
+
+# The game's clips: which CMU take each comes from and how it is cut. `frames` are capture frames at 120 fps,
+# counted from 1 after the BVH's added T pose; a loop's own frames are chosen by find_cycle within `span`.
+CLIPS = [
+    dict(name="walk", take="35_01", loop=True, head=4,
+         note="Subject 35, plain walk. One full two-step cycle."),
+    dict(name="run", take="35_18", loop=True, head=0, ground=10,
+         note="Subject 35, run/jog: the same man as the walk."),
+    dict(name="idle", take="77_02", loop=True, travel=False, period=480, head=6,
+         note="Subject 77 (careful actions), standing: weight shifts, a glance about."),
+    dict(name="march", take="21_06", loop=True, head=2,
+         note="Subject 21, 'soldiers march': a parade march with straight arms swung to the shoulder."),
+    dict(name="advance", take="35_18", loop=True, head=None, ground=10, crouch=(0.14, 28),
+         note="The run (35_18) with a crouch laid over it: pelvis 14 cm lower, trunk 28 degrees further forward, "
+              "head kept up, knees bent by IK on the captured foot paths (CMU's own careful runs, 77_10-13, "
+              "are short bursts and circles that do not loop)."),
+    dict(name="creep", take="136_09", loop=True, head=8,
+         note="Subject 136, 'walk crouched': knees bent, trunk forward, a careful crouched walk."),
+    dict(name="get_up", take="77_16", frames=(150, 520), anchor=470, ground_at="end", floor=True,
+         cam_dx=0.35, cam_z=0.55, sheet_at=0.45,
+         note="Subject 77: from lying on the belly, push up, a knee forward, up into a careful ready crouch."),
+    dict(name="go_prone", derive=("get_up", 0, 80), take="77_16", reverse=True, speed=1.4,
+         cam_dx=0.35, cam_z=0.55, sheet_at=1.0,
+         note="get_up's first 2.7 s played backwards and 1.4x faster: from the ready crouch down onto a knee, the "
+              "hands, and flat on the belly. Its last frame is get_up's first, so the two chain exactly."),
+    dict(name="fall_forward", take="140_01", frames=(170, 560), reverse=True, face_at="start",
+         speeds=[(0, 2.4), (40, 2.6), (90, 4.4), (300, 4.4), (322, 1.0), (390, 1.0)],
+         jolt=(1, 18.0), limp=[(0, 0.0), (50, 0.0), (120, 0.65), (310, 0.65), (390, 0.4)],
+         ground_at="start", floor=True, cam_dx=0.4, cam_z=0.55, sheet_at=1.0,
+         note="140_01's get-up from face down, played backwards: a jolt at the hit (the trunk snaps forward, the "
+              "head lags), the knees buckle and he drops at up to 4.4x (the fall about 1.8x faster than a plain "
+              "2.1x reversal), the arms only half catching him (part way to slack), then he settles at real "
+              "speed. CMU has no shot-and-collapse take."),
+    dict(name="fall_back", take="90_18", frames=(63, 300), face_at="start", ground_at="start", floor=True,
+         jolt=(1, -12.0), land=(6, 16), lock=False, cam_dx=-0.4, cam_z=0.55, sheet_at=0.6,
+         note="Subject 90, 'rug pull fall', with a jolt at the hit (the trunk snaps back, the head lags): the feet "
+              "go from under him and he lands on his back, in real time (about half a second from the feet going "
+              "to the ground). The actor fell onto a mat, sank into it and bounced; ours is eased down in the fall "
+              "and stays on the ground."),
+    dict(name="stumble", take="77_19", loop=True, span=(60, 540), period=72, head=None,
+         note="Subject 77, 'limping, hurt right leg': bent over, a quick step on the good leg."),
+    dict(name="cower", take="79_73", loop=True, travel=False, span=(400, 680), period=200, head=None,
+         note="Subject 79, 'scared': hunched, hands up by the face."),
+    dict(name="duck", take="77_09", frames=(200, 540), face_at="start", ground_at="start", cam_z=0.7, sheet_at=0.25,
+         note="Subject 77, 'duck to avoid flying object': drops into a crouch with the head down, then rises."),
+    dict(name="crawl", make="belly_crawl", loop=True, rifle=True, cam_z=0.3, cam_pitch=14.0, cam_dist=3.6,
+         sheet_at=0.2,
+         note="Keyed by hand (CMU has no belly crawl): the low crawl under fire. Chest and hips on the ground, the "
+              "head low, the rifle across the forearms in the right hand; one elbow and the same side's knee draw up "
+              "together, side by side in turn; elbows and knees planted while they pull. 0.40 m a loop."),
+    dict(name="crawl_high", take="111_03", loop=True, span=(560, 1200), period=240, head=None, floor_loop=True,
+         hand_steps=True,
+         note="Subject 111, crawling on hands and knees (a woman, pregnant: the only clean crawl in the library), "
+              "for moving behind low cover. She slid her hands along the floor; ours are planted and step "
+              "(hand_steps), each with the other side's knee."),
+]
+
+
+def clip_data(m, info, spec):
+    """A Motion (at 30 fps) as a clips.json entry."""
+    r = m.rest
+    loop = bool(spec.get("loop"))
+    d = m.parent_deltas()
+    pv = r.i("pelvis")
+    src = (f"CMU {spec['take']} frames {info['a']}-{info['b']}" if spec.get("take") else
+           "keyed by hand on the rig (no capture)")
+    c = {"fps": FPS, "frames": len(m), "loop": loop,
+         "length": round((len(m) - 1) / FPS if loop else len(m) / FPS, 4),
+         "stride": info.get("stride", 0.0) if loop and spec.get("travel", True) else 0.0,
+         "speed": info.get("speed", 0.0) if loop else 0.0,
+         "source": src, "leg": round(0.5 * (r.leg("l") + r.leg("r")), 5), "note": spec.get("note", ""),
+         "bones": {n: np.round(d[n], 5).tolist() for n in r.names if r.parent[r.i(n)] >= 0},
+         "pelvis_loc": np.round(m.H - r.head[pv], 5).tolist()}
+    if "end_offset" in info:
+        c["end_offset"] = info["end_offset"]
+    for k in ("sheet_at", "cam_z", "cam_dist", "cam_pitch", "cam_dx", "rifle"):
+        if k in spec:
+            c[k] = spec[k]
+    return c
+
+
+ABOUT = {
+    "credit": "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding "
+              "from NSF EIA-0196217.",
+    "rig": "human.py (27 bones), reference man human.build(seed=0, stand=0.02, curl=(30, 45, 25)), 1.75 m",
+    "frame": "Blender's: x forward, y LEFT, z up, metres. For Unreal's y-right frame mirror quaternions as "
+             "(w, -x, y, -z) and locations as (x, -y, z).",
+    "bones": "per bone, per frame, [w, x, y, z]: the rotation D relative to the bone's rest, in its PARENT's space "
+             "(the bone's local rotation in its parent's frame = D * RestLocal). Blender pose quaternion = "
+             "RestLocal^-1 * D * RestLocal.",
+    "pelvis_loc": "per frame [x, y, z]: the pelvis head's offset from its rest place, in the armature's space. The root "
+                  "bone never moves (IN PLACE). Scale it by (this man's leg / leg) for another man.",
+    "loops": "frames includes the closing frame, equal to the first: length = (frames - 1) / fps. Play rate for a "
+             "travel loop = speed / stride * length (stride: metres travelled per loop by this 1.75 m man).",
+}
+
+
+def build(names=None, out=CLIPS_JSON, verbose=True):
+    """Retarget the CLIPS onto the reference man and write clips.json (only `names` if given, keeping the rest)."""
+    import kit
+    import human
+    kit.fresh(FPS)
+    man = human.build(seed=0, nation="GER", stand=0.02, curl=(30, 45, 25))
+    rest = Rest.of(man["armature"], man["body"])
+    data = {}
+    if names and os.path.exists(out):
+        data = json.load(open(out))
+    motions = {}
+    for spec in CLIPS:
+        if names and spec["name"] not in names and not any(
+                s_.get("derive", (None,))[0] == spec["name"] for s_ in CLIPS if s_["name"] in names):
+            continue
+        if spec.get("derive"):
+            m, info = derive(spec, motions[spec["derive"][0]], verbose=verbose)
+        elif spec.get("make"):
+            m, info = make_keyed(spec, rest, verbose=verbose)
+        else:
+            m, info = (make_loop if spec.get("loop") else make_once)(spec, rest, verbose=verbose)
+        motions[spec["name"]] = (m, info)
+        if names and spec["name"] not in names:
+            continue
+        data[spec["name"]] = clip_data(m, info, spec)
+        data[spec["name"]]["build"] = {k: v for k, v in info.items() if k not in ("contacts",)}
+        data[spec["name"]]["build"]["ik"] = {k: (v if not isinstance(v, dict) else v.get("ik_err_max"))
+                                             for k, v in info.get("contacts", {}).items()}
+    order = [s["name"] for s in CLIPS if s["name"] in data]
+    data = {"_about": ABOUT, **{n: data[n] for n in order}}
+    with open(out, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+    return data
+
+
+if __name__ == "__main__":
+    sys.path.insert(0, HERE)
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+    cmd = args[0] if args else "build"
+    if cmd == "build":
+        build(args[1:] or None)
+    elif cmd == "preview":
+        names = preview(args[1:] or None)
+    elif cmd == "sheet":
+        clips = load_clips()
+        sheet(args[1:] or [n for n in clips if not n.startswith("_")], clips=clips)
