@@ -7,7 +7,7 @@ import data from '../../data/campaign/traits.json';
 import { turnToDate } from '../core/ticket';
 import { allied, atWar, headline } from './game';
 import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
-import { provinceYield } from './economy';
+import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
 import { techTraits } from './tech';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
@@ -203,9 +203,11 @@ export function traitMoney(g: Game, nat: string): TraitMoney {
       add(t, oil * (t.oil - 1), wells);
     }
     if (t.relocate) {
-      let fac = 0;
-      for (const r of g.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g, nat, r.ctrl)) fac += r.fac;
-      add(t, fac * t.relocate, fac);
+      // (They count whole wherever they land. Only a factory lost on the far side of the world itself is worth no more
+      // gone east than it counted where it stood: ruling b466, economy.ts farShare.)
+      let fac = 0, counted = 0;
+      for (const r of g.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g, nat, r.ctrl)) { fac += r.fac; counted += r.fac * farShare(r); }
+      add(t, counted * t.relocate, fac);
     }
   }
   return out;

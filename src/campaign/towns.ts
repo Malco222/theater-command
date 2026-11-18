@@ -17,7 +17,7 @@ import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, colonyPurse, farColony, landFactor, landShare, provinceYield } from './economy';
+import { BUDGET, budgeted, colonyPurse, farColony, farShare, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldOverseas, fieldYield, resRules } from './resources';
@@ -111,8 +111,8 @@ export interface TownView {
 /** What a province pays its own country a month at its best: land, harbour, oilfield, factories, and the seat of government. */
 export function worthOf(g: Game, r: Region): number {
   if (!budgeted(g)) return Math.round(r.fac * BUDGET.scale);
-  // (What it truly pays: a colony on the far side of the world a tenth, Korea and Formosa as home ground. The rider
-  // b462 to ruling 231 and ruling b466; economy.ts.)
+  // (What it truly pays: a colony on the far side of the world a tenth, Korea and Formosa as home ground, the Soviet
+  // Union's ground beyond the old chart at its share. The rider b462 to ruling 231 and ruling b466; economy.ts.)
   const k = colonyPurse(r) ? BUDGET.overseas : 1;
   const far = farColony(r) ? BUDGET.farColony : null;
   const seat = g.nations[r.owner];
@@ -120,8 +120,8 @@ export function worthOf(g: Game, r: Region): number {
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
   const f = landFactor(r);
-  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
-    + r.fac * (far?.fac ?? 1) + capital;
+  const pays = (BUDGET.land[r.terrain] * k * f * landShare(r) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
+    + r.fac * (far?.fac ?? 1)) * farShare(r) + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 

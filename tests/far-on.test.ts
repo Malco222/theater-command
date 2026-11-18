@@ -19,7 +19,7 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
-import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
+import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
@@ -32,6 +32,7 @@ import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinsOn, stalemates, startOpen } from '../src/campaign/staff';
 import { prizeOf, townAt, townName, worthOf } from '../src/campaign/towns';
+import { TRAITS, traitMoney } from '../src/campaign/traits';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
@@ -579,9 +580,12 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
       expect(r.overseas && !farColony(r), name).toBe(true);
       expect(provinceYield(g, r, 'UK').port, name).toBeCloseTo(BUDGET.port * BUDGET.overseas * landFactor(r), 9);
     }
+    // (Home ground out there is no colony. The Soviet Union's beyond the old chart counts at a share of its own, below.)
     const sverdlovsk = g.regions.find((r) => r.id >= FAR_FIRST && r.owner === 'SOV' && r.fac > 0 && !r.overseas)!;
     expect(farColony(sverdlovsk)).toBe(false);
-    expect(provinceYield(g, sverdlovsk, 'SOV').fac).toBe(sverdlovsk.fac);
+    expect(provinceYield(g, sverdlovsk, 'SOV').fac).toBeCloseTo(sverdlovsk.fac * farShare(sverdlovsk), 9);
+    const tokyo = g.regions.find((r) => r.owner === 'JAP' && r.fac > 1 && !r.overseas)!;
+    expect(provinceYield(g, tokyo, 'JAP').fac).toBe(tokyo.fac);
     // Britain's far colonies together: about 3.5 a month where they paid 35.4.
     let sum = 0, n = 0;
     for (const r of g.regions) if (r.owner === 'UK' && r.ctrl === 'UK' && farColony(r)) { sum += provinceYield(g, r, 'UK').total; n++; }
@@ -672,8 +676,9 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     const islands = g.regions.filter((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && !r.overseas).reduce((s, r) => s + r.fac, 0);
     expect(g.byName['Dairen'].fac).toBe(1);
     expect(lineFactories(g, 'JAP')).toBe(islands + 2);
-    // Home ground on the far side counts in full: the Soviet Union's works beyond the Volga are her own.
-    expect(lineFactories(g, 'SOV')).toBe(g.regions.filter((r) => r.owner === 'SOV' && r.ctrl === 'SOV').reduce((s, r) => s + r.fac, 0));
+    // Home ground on the far side counts with the home country's: Australia's works are her own.
+    expect(lineFactories(g, 'AUS')).toBe(g.regions.filter((r) => r.owner === 'AUS' && r.ctrl === 'AUS' && !r.overseas).reduce((s, r) => s + r.fac, 0));
+    expect(lineFactories(g, 'AUS')).toBeGreaterThan(0);
   });
 
   it("shows on a town's coins what the ground truly pays its own country, after the tenth (ruling b466)", () => {
@@ -695,5 +700,57 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     const alexandria = g.byName['Alexandria'];
     expect(worthOf(g, alexandria)).toBe(Math.max(1, Math.round((BUDGET.land[alexandria.terrain] * BUDGET.overseas * landFactor(alexandria) * landShare(alexandria) + BUDGET.port * BUDGET.overseas * landFactor(alexandria) + alexandria.fac) * BUDGET.scale)));
   });
-});
 
+  it("counts the Soviet Union's ground beyond the old chart at its share, for all it pays and for lines (ruling b466)", () => {
+    const g = grand();
+    const F = BUDGET.farHome.SOV;
+    expect(Object.keys(BUDGET.farHome)).toEqual(['SOV']);
+    // (The share is the design director's to set; at 1 nothing changes. The rule is tested whatever it is.)
+    expect(F).toBeGreaterThanOrEqual(0);
+    expect(F).toBeLessThanOrEqual(1);
+    const hers = (shore: number): typeof g.regions => g.regions.filter((r) => r.owner === 'SOV' && r.ctrl === 'SOV' && shoreOf(r) === shore);
+    const sum = (rs: typeof g.regions): number => rs.reduce((t, r) => t + r.fac, 0);
+    const west = hers(0), east = hers(2);
+    // The old chart's fifty-seven factories already carry the Soviet war economy; the fifty-seven beyond it count at the share.
+    expect([sum(west), sum(east)]).toEqual([57, 57]);
+    expect(east.length).toBe(169);
+    for (const r of west) { expect(farShare(r), r.name).toBe(1); expect(provinceYield(g, r, 'SOV').fac, r.name).toBe(r.fac); }
+    // One factor on the whole of what the ground pays: factories, land, harbour and an oilfield's money alike.
+    for (const r of east) {
+      expect(farShare(r), r.name).toBe(F);
+      const y = provinceYield(g, r, 'SOV');
+      expect(y.fac, r.name).toBeCloseTo(r.fac * F, 9);
+      expect(y.land, r.name).toBeCloseTo(BUDGET.land[r.terrain] * landFactor(r) * landShare(r) * F, 9);
+      expect(y.port, r.name).toBeCloseTo(r.port ? BUDGET.port * landFactor(r) * F : 0, 9);
+      expect(y.oil, r.name).toBeCloseTo(r.oil ? BUDGET.oil * F : 0, 9);
+      expect(y.total, r.name).toBeCloseTo(y.fac + y.land + y.port + y.oil, 9);
+    }
+    expect(lineFactories(g, 'SOV')).toBeCloseTo(57 + 57 * F, 9);
+    // An oilfield's oil is another matter (ruling 194): Guryev's wells give her depots what they always did.
+    const field = g.byName['Guryev'];
+    expect(field).toMatchObject({ owner: 'SOV', oil: true });
+    expect(east).toContain(field);
+    expect(fieldYield(g, field)).toBe(RES.oil.fields[field.name] ?? RES.oil.fields._default);
+    // Her town's coins tell the same sum.
+    const works = east.find((r) => r.fac > 0)!;
+    expect(worthOf(g, works)).toBe(F > 0 ? Math.max(1, Math.round(provinceYield(g, works, 'SOV', true).total * BUDGET.scale)) : 0);
+    // The share goes with the ground: a conqueror's is reckoned on the same count.
+    const taken = provinceYield(g, works, 'JAP');
+    expect(taken.fac).toBeCloseTo(works.fac * F * PRODUCTION.occupiedIncome, 9);
+    expect(taken.land).toBeCloseTo(BUDGET.land[works.terrain] * BUDGET.occupied * landFactor(works) * landShare(works) * F, 9);
+    // No other country's home ground out there takes a share.
+    for (const r of g.regions) if (r.owner !== 'SOV' && shoreOf(r) === 2) expect(farShare(r), r.name).toBe(1);
+    // The factories that go east ahead of the enemy count whole wherever they land: the trait's share of an old-chart
+    // factory lost to Germany goes on earning. One lost beyond the old chart is worth no more gone than where it stood.
+    const move = (TRAITS as unknown as { nations: Record<string, { traits: { id: string; relocate?: number }[] }> }).nations.SOV.traits.find((t) => t.id === 'urals')!.relocate!;
+    expect(move).toBeGreaterThan(0);
+    setWar(g, 'GER', 'SOV');
+    const urals = (): number => traitMoney(g, 'SOV').lines.find((l) => l.key === 'trait:urals')?.amount ?? 0;
+    const lost = west.find((r) => r.fac > 0)!;
+    expect(urals()).toBe(0);
+    lost.ctrl = 'GER';
+    expect(urals()).toBeCloseTo(lost.fac * move, 9);
+    works.ctrl = 'GER';
+    expect(urals()).toBeCloseTo((lost.fac + works.fac * F) * move, 9);
+  });
+});

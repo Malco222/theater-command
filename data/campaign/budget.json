@@ -21,6 +21,8 @@
     "land": 0.1, "port": 0.1, "oil": 0.1, "fac": 0.1,
     "home": ["Karafuto", "Formosa", "Taihoku", "Seoul", "Pyongyang", "Hamhung", "Chongjin", "Pusan", "Kwangju", "Sinuiju", "Kangnung", "Kanggye"]
   },
+  "_farHome": "Ruling b466 (the design director, 18 Nov 2026): the share at which a country's own home ground on the far side of the world counts. It is one factor on the whole of what that ground pays (factories, land, harbours and an oilfield's money) and on the factories a staff's corps form by, as the far colony's tenth above covers all four parts. The old chart's Soviet Union already carries the Soviet war economy, so with the far side on her ground beyond the old chart would be counted twice. The share is the design director's to set against ruling 228 item 5's bands (Soviet output over German at stops 1 and 2 with nobody playing: 1.1 to 1.6 in 1942, 0.9 to 1.3 in 1943); it stands at 1, which changes nothing, until the fit is ruled on (pacific-six/ruling-231/b466). The share goes with the ground: a conqueror's is reckoned on the same count. The factories that go east ahead of the enemy (traits.json 'urals') count whole wherever they land. An oilfield's oil is ruling 194's and is not touched. No province stands there while the far side's switch is off.",
+  "farHome": { "SOV": 1 },
   "upkeep": {
     "corps": {
       "inf": 0.04,

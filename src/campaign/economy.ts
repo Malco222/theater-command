@@ -97,6 +97,8 @@ export const BUDGET = budgetData as unknown as {
    * own economy and pay it as home ground does (Korea, Formosa, Karafuto).
    */
   farColony: { land: number; port: number; oil: number; fac: number; home: string[] };
+  /** Ruling b466: the share at which a country's own home ground on the far side counts, for its pay and for lines. */
+  farHome: Record<string, number>;
   /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
   landFactor: Record<string, number>;
   upkeep: { corps: Record<Kind, number>; ships: Record<ShipClass, number>; air: { ftr: number; bmr: number }; peace: number };
@@ -153,6 +155,15 @@ const FAR_HOME = new Set(BUDGET.farColony.home);
 export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
 /** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
 export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) === 2;
+/**
+ * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
+ * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
+ * pays (factories, land, harbour and an oilfield's money) and on the factories a staff counts its lines by, as the
+ * colony's tenth is. The old chart's Soviet Union already carries the Soviet war economy, so her ground beyond it
+ * would be counted twice. It goes with the ground, as ruling 214's land factor does: a conqueror's share is reckoned
+ * on the same count. An oilfield's oil is another matter (resources.ts, ruling 194).
+ */
+export const farShare = (r: Region): number => (!r.overseas && shoreOf(r) === 2 ? BUDGET.farHome[r.owner] ?? 1 : 1);
 
 /**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
@@ -163,7 +174,9 @@ export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) ==
 export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false, bare = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
-  const works = workingFactories(g, r);
+  // (A country's own home ground on the far side of the world counts at its share, every part of its pay: ruling b466.)
+  const share = farShare(r);
+  const works = workingFactories(g, r) * share;
   if (!budgeted(g)) { const fac = own ? works : works * PRODUCTION.occupiedIncome; return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac }; }
   // An administration set up on conquered ground makes it pay more of what it is worth.
   const lift = own ? 0 : hallShare(g, r);
@@ -176,10 +189,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
   const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
   const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1) * share;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) : 0;
-  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
+  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
@@ -622,11 +635,12 @@ export function gunsWanted(g: Game, nat: string): boolean {
 /**
  * The factories a computer staff counts its lines by: those of the home country alone. A colony's never add a line
  * (rider b462 to ruling 231: with the far side on, India's fourteen and three more gave Britain five lines for three,
- * and India's army comes by its rows). Korea's, Formosa's and Karafuto's count with Japan's own (budget.json).
+ * and India's army comes by its rows). Korea's, Formosa's and Karafuto's count with Japan's own (budget.json), and
+ * the Soviet Union's beyond the old chart at their share (ruling b466, 'farHome').
  */
 export function lineFactories(g: Game, nat: string): number {
   let home = 0;
-  for (const r of g.regions) if (isHome(g, nat, r) && !colonyPurse(r)) home += r.fac;
+  for (const r of g.regions) if (isHome(g, nat, r) && !colonyPurse(r)) home += r.fac * farShare(r);
   return home;
 }
 
