@@ -269,8 +269,8 @@ public:
 	bool LessonDeed(const FString& Deed, bool bCard, FLessonDesk& Out);
 	/** "later", "back:<id>", "again:<id>", "all", "on", "off", "close" or "tip": see the bridge's lessonAct. */
 	bool LessonAct(const FString& Action, bool bCard, const TArray<int32>& InHand, FLessonDesk& Out);
-	/** The Guide's list of the ten lessons. */
-	FLessonGuide LessonGuide();
+	/** The Guide's list of the ten lessons, as the screen stands (the lesson due now is "waiting for you"). */
+	FLessonGuide LessonGuide(bool bCard = false, const TArray<int32>& InHand = TArray<int32>());
 	/** FIRST COMMAND's button on the door, and the campaign it starts (asked before any campaign is under way). */
 	FLessonDoor LessonDoor();
 	/** (Trap 1) Lays out the card that opens a war played from its first month as the month's card, for the reports page. */

@@ -203,10 +203,11 @@ void ACampaignGameMode::LayOutWar()
 	}
 }
 
-bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level, const FString& Depth, int32 History)
+bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
 {
 	FString Error;
-	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Seed, Error, Level, Depth, History))
+	// (Rules 84.3.3) bFirstCommand: the campaign the door's FIRST COMMAND opens, which the rules mark as its own.
+	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Seed, Error, Level, Depth, History, bFirstCommand))
 	{
 		UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
 		return false;

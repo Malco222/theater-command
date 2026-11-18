@@ -156,6 +156,7 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	}
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
+	Opening.Door = Rules->LessonDoor(); // (rules 84.3.3: FIRST COMMAND's words, lit until the ten are done)
 	Opening.bCanReturn = Rules->IsRunning();
 	if (bShow && !Opening.bVisible)
 	{
@@ -721,6 +722,34 @@ void ACampaignPlayerController::AnswerBegin(bool bBegin)
 	else if (Kind == 1 || Kind == 2)
 	{
 		BeginGrandCampaign(Kind == 2);
+	}
+	else if (Kind == 4)
+	{
+		BeginFirstCommand();
+	}
+}
+
+void ACampaignPlayerController::BeginFirstCommand()
+{
+	// (Ruling 141; rules 84.3.3.) FIRST COMMAND's campaign is the rules' own (lessons.json: Germany, from its first
+	// month, at Cadet and Field command), begun as the door's other wars are, and marked as FIRST COMMAND's: the
+	// notes are on, and the ten are armed again if all were done.
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = GetSession();
+	if (!Mode || !Rules || Opening.bWorking)
+	{
+		return;
+	}
+	const FLessonDoor Door = Rules->LessonDoor();
+	if (!Door.bValid || Door.Nation.IsEmpty())
+	{
+		return;
+	}
+	if (Mode->StartCampaign(Door.Nation, Door.From, TEXT("grand"), NewSeed(), Door.Level, Door.Depth, 0, true))
+	{
+		bFreshCampaign = true;
+		EnterCampaign();
+		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
 }
 
@@ -2502,10 +2531,112 @@ void ACampaignPlayerController::OpenGuide()
 	{
 		return;
 	}
+	// The same key puts away whichever of the Guide's pages is open.
+	if (bLessonGuideOpen)
+	{
+		CloseLessonGuide();
+		return;
+	}
 	if (Document.bValid && Document.Title == TEXT("How to play"))
 	{
-		CloseDocument(); // the same key puts the page away again
+		CloseDocument();
 		return;
+	}
+	// (Rules 84.3.3; ruling 147.) In a war he leads, the Guide opens on its list of the ten lessons: the typed page of
+	// rules is its second, behind "How a month works".
+	if (!OpenLessonGuide())
+	{
+		OpenHowToPlay();
+	}
+}
+
+bool ACampaignPlayerController::OpenLessonGuide()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || Session->GetView().Human.IsEmpty())
+	{
+		return false;
+	}
+	FLessonGuide Guide = Session->LessonGuide(LessonCardOpen(), PickedCorps);
+	if (!Guide.bValid)
+	{
+		return false;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	CloseResearch();
+	CloseGenerals();
+	CloseDocument();
+	LessonGuidePage = MoveTemp(Guide);
+	bLessonGuideOpen = true;
+	++LessonGuideRevision;
+	GuideOverPage = bPageOpen ? Page.Id : FString(); // (a card open under it stays; another opened after takes its place)
+	return true;
+}
+
+void ACampaignPlayerController::RefreshLessonGuide()
+{
+	FCampaignSession* Session = GetSession();
+	if (!bLessonGuideOpen || !Session)
+	{
+		return;
+	}
+	FLessonGuide Guide = Session->LessonGuide(LessonCardOpen(), PickedCorps);
+	if (Guide.bValid)
+	{
+		LessonGuidePage = MoveTemp(Guide);
+		++LessonGuideRevision;
+	}
+}
+
+void ACampaignPlayerController::PressGuide(const FString& Action)
+{
+	if (!bLessonGuideOpen)
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (Action.StartsWith(TEXT("back:")))
+	{
+		// (a row waiting for him: its note comes back, and the Guide closes on it, as the browser's does)
+		bLessonGuideOpen = false;
+		++LessonGuideRevision;
+	}
+	// (Asked as the note's own presses are: at once where no order is being answered, else once it is. The list is
+	// read again with the answer.)
+	LessonActsOwed.Add(Action);
+	bLessonsDue = true;
+	if (Afterwards.Num() == 0 && !IsAnswering())
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::CloseLessonGuide()
+{
+	if (!bLessonGuideOpen)
+	{
+		return;
+	}
+	bLessonGuideOpen = false;
+	++LessonGuideRevision;
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	bLessonsDue = true; // (the notes stood aside while it was open: the desk is asked again)
+}
+
+void ACampaignPlayerController::OpenHowToPlay()
+{
+	EndNewsreel();
+	if (bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible)
+	{
+		return;
+	}
+	if (bLessonGuideOpen)
+	{
+		bLessonGuideOpen = false; // (from the list's "How a month works": the typed page takes its place)
+		++LessonGuideRevision;
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
@@ -3478,6 +3609,38 @@ void ACampaignPlayerController::SpeakAdviser()
 	}
 }
 
+void ACampaignPlayerController::SpeakLesson(const FLessonNote& Note)
+{
+	// (Rules 84.3.3; the design director's brief: "the same notes in the 3D game from the same list, read aloud by the
+	// built-in voice when the voice is on". The deed line is read last.) A tip is its one line; the closing note its
+	// heading and sentences. Each part ends as a sentence does, so that the voice stops between them.
+	FString Words;
+	auto Add = [&Words](const FString& Part)
+	{
+		const FString Said = Part.TrimStartAndEnd();
+		if (Said.IsEmpty())
+		{
+			return;
+		}
+		Words += (Words.IsEmpty() ? TEXT("") : TEXT(" ")) + Said;
+		if (!Said.EndsWith(TEXT(".")) && !Said.EndsWith(TEXT("?")) && !Said.EndsWith(TEXT("!")) && !Said.EndsWith(TEXT(":")))
+		{
+			Words += TEXT(".");
+		}
+	};
+	if (Note.Kind != TEXT("tip"))
+	{
+		Add(Note.Head);
+	}
+	Add(Note.Text);
+	if (Note.Kind == TEXT("lesson"))
+	{
+		Add(Note.Deed);
+	}
+	// (A note is said at once, cutting short whatever was being said; the lines waiting keep their turn after it.)
+	Speak(Words, TEXT("Daniel"), 176, 1);
+}
+
 bool ACampaignPlayerController::IsFrameHidden() const
 {
 	// ("-TheaterNoFrame" takes a run's pictures with the frame put away)
@@ -3585,6 +3748,12 @@ void ACampaignPlayerController::ResetLessons()
 	Lessons = FLessonDesk();
 	LessonNote = LessonGone = LessonLaid = FLessonNote();
 	bLessonNote = bLessonLaid = bLessonsDue = bOpeningCardOwed = bLessonStampOwed = bLessonGoneStamped = bLessonNoteHidden = bArsenalStrip = bArsenalStripPutAway = false;
+	bLessonLaidSpoken = false;
+	if (bLessonGuideOpen)
+	{
+		bLessonGuideOpen = false;
+		++LessonGuideRevision;
+	}
 	++LessonArrival;
 	LessonCameAt = 0.0;
 	LessonGoneAt = LessonStampAt = -1.0;
@@ -3605,7 +3774,7 @@ bool ACampaignPlayerController::IsLessonQuiet() const
 	// (the browser's quiet(): nothing while the other nations move, a film runs, the map is not his to look at, the
 	// GUIDE is open, or the card lesson 1 lies on is still to open)
 	return !IsMapShown() || bWatching || Announcements.Num() > 0 || WarPrompt.bVisible || bMomentOn || bOpeningCardOwed || BriefingAt > 0.0
-		|| (Document.bValid && Document.Title == TEXT("How to play"));
+		|| bLessonGuideOpen || (Document.bValid && Document.Title == TEXT("How to play"));
 }
 
 bool ACampaignPlayerController::HasLessonNote() const
@@ -3695,6 +3864,7 @@ void ACampaignPlayerController::AskLessons()
 	Stamped.Append(Desk.Stamped);
 	Desk.Stamped = MoveTemp(Stamped);
 	TakeLessons(Desk);
+	RefreshLessonGuide(); // (the Guide's list, if it is open, as the notebook now stands)
 }
 
 void ACampaignPlayerController::TakeLessons(const FLessonDesk& Desk)
@@ -4650,6 +4820,10 @@ void ACampaignPlayerController::Escape()
 	{
 		DismissAnnouncement();
 	}
+	else if (bLessonGuideOpen)
+	{
+		CloseLessonGuide();
+	}
 	else if (Document.bValid)
 	{
 		CloseDocument();
@@ -4864,6 +5038,33 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		// What the note points at this frame (the screen draws a button's; the ground's is laid here).
 		AimLesson();
+		// (The Guide's list is a card over the war: whatever else is opened, or the others' turn, takes its place.)
+		if (bLessonGuideOpen && (Opening.bVisible || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Document.bValid || bArsenalOpen || bLedgerOpen
+			|| bDiplomacyOpen || bResearchOpen || bGeneralsOpen || (bPageOpen ? Page.Id : FString()) != GuideOverPage))
+		{
+			bLessonGuideOpen = false;
+			++LessonGuideRevision;
+			bLessonsDue = true;
+		}
+		// (The brief.) The note is read aloud as it comes, when the voice is on: its heading, its sentences, and its
+		// deed line last; lesson 1 as it is laid on the card.
+		if (HasLessonNote() && LessonSpokenArrival != LessonArrival)
+		{
+			LessonSpokenArrival = LessonArrival;
+			SpeakLesson(LessonNote);
+		}
+		if (IsLessonLaid() && !IsLessonQuiet())
+		{
+			if (!bLessonLaidSpoken)
+			{
+				bLessonLaidSpoken = true;
+				SpeakLesson(LessonLaid);
+			}
+		}
+		else
+		{
+			bLessonLaidSpoken = false;
+		}
 	}
 	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{

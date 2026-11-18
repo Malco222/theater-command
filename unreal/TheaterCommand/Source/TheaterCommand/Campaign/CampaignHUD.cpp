@@ -4073,6 +4073,518 @@ namespace
 		TAttribute<FBox2D> Frame;
 	};
 
+	/**
+	 * (The kit's shadow-lit) The lamp's light round a box: 18 px of brass-300 fading out from its edge. The box's own
+	 * brass-300 rim is its 1 px ring. Drawn before the box, which covers what falls inside it.
+	 */
+	void PaintLampGlow(FSlateWindowElementList& OutDrawElements, int32 Layer, const FGeometry& Geometry, const FVector2D& At, const FVector2D& Size, double Radius, double K)
+	{
+		const FLinearColor Brass300(FColor::FromHex(TEXT("E0B872")));
+		const double Spreads[4] = { 15.0, 10.0, 5.5, 2.0 };
+		const float Glows[4] = { 0.035f, 0.06f, 0.09f, 0.14f };
+		for (int32 Step = 0; Step < 4; ++Step)
+		{
+			const double E = Spreads[Step] * K;
+			const FSlateRoundedBoxBrush Halo(FLinearColor::White, static_cast<float>(Radius + E));
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer, Geometry.ToPaintGeometry(Size + FVector2D(2.0 * E, 2.0 * E), FSlateLayoutTransform(At - FVector2D(E, E))), &Halo,
+				ESlateDrawEffect::None, Brass300.CopyWithNewOpacity(Glows[Step]));
+		}
+	}
+
+	/** (Ruling 141) The lamp on the door's FIRST COMMAND until the ten lessons are done: its light, round the button over it. */
+	class SLampGlow : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SLampGlow) : _Lit(true) {}
+			SLATE_ATTRIBUTE(bool, Lit)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Lit = Args._Lit;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			return FVector2D::ZeroVector;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			if (Lit.Get())
+			{
+				PaintLampGlow(OutDrawElements, LayerId, Geometry, FVector2D::ZeroVector, Geometry.GetLocalSize(), 5.0, 0.9);
+			}
+			return LayerId + 1;
+		}
+
+	private:
+		TAttribute<bool> Lit;
+	};
+
+	/**
+	 * (Rules 84.3.3; the art director's look brief, section 6; the kit's tc-panel, tc-step, tc-seg and tc-close.) The
+	 * Guide's first page: a kit panel 640 wide, THE GUIDE · FIRST COMMAND over "The ten lessons" and one line of state,
+	 * then the ten in rows 38 high under a small label for each month. Done: a brass-700 edge, a brass-500 disc with a
+	 * tick, and SHOW ME AGAIN at the right. Waiting: a brass-300 edge, its number in a ring, WAITING FOR YOU; a click
+	 * brings its note back, and only the first waiting row carries the lamp's glow. To come: a dashed edge, faint, "when
+	 * its moment comes". At the foot the setting with the kit's joined ON and OFF, and the way on to the typed page of
+	 * rules, the Guide's second (ruling 147). The kit's round stud closes it, as Esc and H do. The brief's measures are
+	 * pixels of the 1600 by 1000 frame: 0.9 of them on the table's frame of 900 high.
+	 */
+	class SLessonGuide : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SLessonGuide) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			const FLaid& L = Laid();
+			return L.bValid ? FVector2D(L.W, L.H) : FVector2D::ZeroVector;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FLaid& L = Laid();
+			if (!L.bValid)
+			{
+				return LayerId;
+			}
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto P = [](double Pixels) { return Pixels * K; };
+			const FLinearColor Desk900(FColor::FromHex(TEXT("17120D"))), Desk800(FColor::FromHex(TEXT("211A13"))), Desk700(FColor::FromHex(TEXT("2D241A"))), Desk600(FColor::FromHex(TEXT("3D3125")));
+			const FLinearColor Line(FColor::FromHex(TEXT("4B3D2D"))), Brass700(FColor::FromHex(TEXT("8A6B3B"))), Brass500(FColor::FromHex(TEXT("B08D57"))), Brass300(FColor::FromHex(TEXT("E0B872")));
+			const FLinearColor Brass100(FColor::FromHex(TEXT("F4DEA8"))), OnBrass(FColor::FromHex(TEXT("1E1608"))), Paper100(FColor::FromHex(TEXT("EDE6D6"))), Paper200(FColor::FromHex(TEXT("E2D7BC")));
+			const FLinearColor TextMuted(FColor::FromHex(TEXT("A89F8D"))), TextFaint(FColor::FromHex(TEXT("8F8573"))), SegLight(FColor::FromHex(TEXT("ECC884")));
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			auto Fill = [&](int32 Layer, const FVector2D& At, const FVector2D& Size, const FLinearColor& Ink)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(At)), &Solid, ESlateDrawEffect::None, Ink);
+			};
+			// (a rounded plate: its fill, and an edge of its own colour; a clear fill leaves the edge alone)
+			auto Plate = [&](int32 Layer, const FVector2D& At, const FVector2D& Size, double Radius, const FLinearColor& Ink, const FLinearColor& Edge, double Thick)
+			{
+				const FSlateRoundedBoxBrush Brush(FLinearColor::White, static_cast<float>(Radius), Edge, static_cast<float>(Thick));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(At)), &Brush, ESlateDrawEffect::None, Ink);
+			};
+			auto Stroke = [&](int32 Layer, const TArray<FVector2D>& Points, const FLinearColor& Ink, double Thick)
+			{
+				FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, static_cast<float>(Thick));
+			};
+			auto Dashes = [&](int32 Layer, const FVector2D& From, const FVector2D& To, const FLinearColor& Ink)
+			{
+				const double Long = FVector2D::Distance(From, To);
+				const FVector2D Way = Long > 0.0 ? (To - From) / Long : FVector2D::ZeroVector;
+				for (double Along = 0.0; Along < Long; Along += P(7.0))
+				{
+					Stroke(Layer, { From + Way * Along, From + Way * FMath::Min(Along + P(4.0), Long) }, Ink, 1.0);
+				}
+			};
+			auto Write = [&](int32 Layer, const FString& Words, const FVector2D& At, const FSlateFontInfo& Face, const FLinearColor& Ink)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, Layer, Geometry.ToPaintGeometry(Measure->Measure(Words, Face), FSlateLayoutTransform(At)), Words, Face, ESlateDrawEffect::None, Ink);
+			};
+			// (words set in the middle of a band: from its left, or ending at its right)
+			auto WriteIn = [&](int32 Layer, const FString& Words, double X, double Top, double High, const FSlateFontInfo& Face, const FLinearColor& Ink, bool bFromRight)
+			{
+				const FVector2D Size = Measure->Measure(Words, Face);
+				Write(Layer, Words, FVector2D(bFromRight ? X - Size.X : X, Top + (High - Size.Y) * 0.5), Face, Ink);
+				return Size;
+			};
+			auto Hovered = [&L, this](int32 Spot) { return Spot != INDEX_NONE && Spot == HoverSpot && L.Spots.IsValidIndex(Spot); };
+
+			// ---- The panel: opaque desk, a brass-700 edge, and its four clamps.
+			Plate(LayerId, FVector2D::ZeroVector, FVector2D(L.W, L.H), P(4.0), Desk900, Brass700, 1.0);
+			for (const FVector2D& Corner : { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) })
+			{
+				const double CX = P(5.0) + Corner.X * (L.W - P(10.0)), CY = P(5.0) + Corner.Y * (L.H - P(10.0));
+				const double DX = Corner.X > 0.5 ? -P(14.0) : P(14.0), DY = Corner.Y > 0.5 ? -P(14.0) : P(14.0);
+				Stroke(LayerId + 1, { FVector2D(CX + DX, CY), FVector2D(CX, CY), FVector2D(CX, CY + DY) }, Brass500, P(2.0));
+			}
+			const int32 Layer = LayerId + 2;
+
+			// ---- The head, and the round stud that closes it.
+			Write(Layer, L.Label, FVector2D(P(Pad), P(L.LabelY)), L.LabelFace, Brass500);
+			Write(Layer, L.Head, FVector2D(P(Pad), P(L.HeadY)), L.HeadFace, Paper100);
+			Write(Layer, L.State, FVector2D(P(Pad), P(L.StateY)), L.StateFace, TextMuted);
+			{
+				const FSpot& Close = L.Spots[L.CloseSpot];
+				const bool bHot = Hovered(L.CloseSpot);
+				Plate(Layer, Close.Box.Min, Close.Box.GetSize(), Close.Box.GetSize().X * 0.5, bHot ? Desk600 : Desk700, bHot ? Brass300 : Brass700, 1.0);
+				const FVector2D C = Close.Box.GetCenter();
+				const double Arm = P(5.5);
+				Stroke(Layer + 1, { C + FVector2D(-Arm, -Arm), C + FVector2D(Arm, Arm) }, bHot ? Brass100 : Paper100, P(1.6));
+				Stroke(Layer + 1, { C + FVector2D(Arm, -Arm), C + FVector2D(-Arm, Arm) }, bHot ? Brass100 : Paper100, P(1.6));
+			}
+
+			// ---- The months, and the ten in their rows.
+			for (const FLabelLaid& Label : L.Labels)
+			{
+				Write(Layer, Label.Words, FVector2D(P(Pad), P(Label.Y)), L.LabelFace, Brass500);
+			}
+			const double RowX = P(Pad), RowW = L.W - 2.0 * P(Pad), RowH = P(38.0);
+			for (const FRowLaid& Each : L.Rows)
+			{
+				const FLessonRow& Row = Each.Row;
+				const FVector2D At(RowX, P(Each.Y)), Size(RowW, RowH);
+				const bool bDone = Row.State == TEXT("done"), bNow = Row.State == TEXT("now");
+				const bool bHot = Hovered(Each.Spot);
+				if (bNow && Row.bLit)
+				{
+					PaintLampGlow(OutDrawElements, Layer, Geometry, At, Size, P(4.0), K);
+				}
+				if (bDone)
+				{
+					Plate(Layer + 1, At, Size, P(4.0), Desk800, Brass700, 1.0);
+				}
+				else if (bNow)
+				{
+					Plate(Layer + 1, At, Size, P(4.0), Desk700, bHot ? Brass100 : Brass300, 1.0);
+				}
+				else
+				{
+					// (to come: no ground of its own, and a dashed edge)
+					const FVector2D A = At + FVector2D(0.5, 0.5), B = At + Size - FVector2D(0.5, 0.5);
+					Dashes(Layer + 1, A, FVector2D(B.X, A.Y), Line);
+					Dashes(Layer + 1, FVector2D(B.X, A.Y), B, Line);
+					Dashes(Layer + 1, B, FVector2D(A.X, B.Y), Line);
+					Dashes(Layer + 1, FVector2D(A.X, B.Y), A, Line);
+				}
+				// Its disc: 22 across, 8 in from the left.
+				const double Disc = P(22.0);
+				const FVector2D DiscAt(At.X + P(8.0), At.Y + (RowH - Disc) * 0.5);
+				if (bDone)
+				{
+					Plate(Layer + 2, DiscAt, FVector2D(Disc, Disc), Disc * 0.5, Brass500, Brass500, P(1.5));
+					const double U = P(13.0) / 16.0;
+					const FVector2D O = DiscAt + FVector2D(Disc, Disc) * 0.5 - FVector2D(P(6.5), P(6.5));
+					Stroke(Layer + 3, { O + FVector2D(3.0, 8.4) * U, O + FVector2D(6.2, 11.5) * U, O + FVector2D(13.0, 4.6) * U }, OnBrass, P(2.0));
+				}
+				else
+				{
+					const FLinearColor RingInk = bNow ? Brass300 : TextFaint;
+					Plate(Layer + 2, DiscAt, FVector2D(Disc, Disc), Disc * 0.5, FLinearColor::Transparent, RingInk, P(1.5));
+					const FString Number = FString::FromInt(Row.N);
+					const FVector2D NumberSize = Measure->Measure(Number, L.NumberFace);
+					Write(Layer + 3, Number, DiscAt + (FVector2D(Disc, Disc) - NumberSize) * 0.5, L.NumberFace, RingInk);
+				}
+				// Its name, and what stands at its right.
+				const double NameX = DiscAt.X + Disc + P(12.0), RightX = At.X + RowW - P(12.0);
+				if (bDone)
+				{
+					// SHOW ME AGAIN: the kit's quiet word, underlined 2 under its letters.
+					const bool bAgainHot = Hovered(Each.Spot);
+					const FVector2D Word = WriteIn(Layer + 2, L.Again, RightX, At.Y, RowH - P(2.0), L.QuietFace, bAgainHot ? Brass100 : Brass300, true);
+					Fill(Layer + 2, FVector2D(RightX - Word.X, At.Y + (RowH - P(2.0) + Word.Y) * 0.5 + P(1.0)), FVector2D(Word.X, 1.0), bAgainHot ? Brass100 : Brass700);
+					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Paper200, false);
+				}
+				else if (bNow)
+				{
+					WriteIn(Layer + 2, L.Waiting, RightX, At.Y, RowH, L.WaitFace, Brass100, true);
+					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Brass100, false);
+				}
+				else
+				{
+					WriteIn(Layer + 2, L.Later, RightX, At.Y, RowH, L.LaterFace, TextFaint, true);
+					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.LaterNameFace, TextMuted, false);
+				}
+			}
+
+			// ---- The foot: a rule, the setting and its joined ON and OFF, and the way on to the rules.
+			Fill(Layer, FVector2D(P(Pad), P(L.RuleY)), FVector2D(L.W - 2.0 * P(Pad), 1.0), Line);
+			WriteIn(Layer, L.Setting, P(Pad), P(L.SettingY), P(36.0), L.SettingFace, Paper100, false);
+			{
+				const FSpot& On = L.Spots[L.OnSpot];
+				const FSpot& Off = L.Spots[L.OffSpot];
+				const FBox2D Seg(On.Box.Min, Off.Box.Max);
+				Plate(Layer, Seg.Min, Seg.GetSize(), P(4.0), Desk800, Brass700, 1.0);
+				for (const int32 Spot : { L.OnSpot, L.OffSpot })
+				{
+					const FSpot& Part = L.Spots[Spot];
+					const bool bChosen = (Spot == L.OnSpot) == L.bOn;
+					const FVector2D In = Part.Box.Min + FVector2D(1.0, 1.0), InSize = Part.Box.GetSize() - FVector2D(2.0, 2.0);
+					if (bChosen)
+					{
+						// (the kit's lit half: brass, a little lighter at the top)
+						Fill(Layer + 1, In, InSize, Brass300);
+						Fill(Layer + 1, In, FVector2D(InSize.X, InSize.Y * 0.5), SegLight.CopyWithNewOpacity(0.55f));
+					}
+					else if (Hovered(Spot))
+					{
+						Fill(Layer + 1, In, InSize, Desk700);
+					}
+					const FVector2D WordSize = Measure->Measure(Part.Act == TEXT("on") ? L.OnWord : L.OffWord, L.SegFace);
+					Write(Layer + 2, Part.Act == TEXT("on") ? L.OnWord : L.OffWord, Part.Box.GetCenter() - WordSize * 0.5, L.SegFace, bChosen ? OnBrass : Hovered(Spot) ? Paper100 : TextMuted);
+				}
+				Fill(Layer + 2, FVector2D(Off.Box.Min.X, Seg.Min.Y + 1.0), FVector2D(1.0, Seg.GetSize().Y - 2.0), Line);
+			}
+			{
+				// "How a month works", the kit's quiet word: the way on to the typed page of rules.
+				const bool bHot = Hovered(L.RulesSpot);
+				const FVector2D Size = WriteIn(Layer, L.RulesWord, P(Pad), P(L.RulesY), P(18.0), L.QuietFace, bHot ? Brass100 : Brass300, false);
+				Fill(Layer, FVector2D(P(Pad), P(L.RulesY) + (P(18.0) + Size.Y) * 0.5 + P(2.0)), FVector2D(Size.X, 1.0), bHot ? Brass100 : Brass700);
+			}
+			return Layer + 4;
+		}
+
+		virtual FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			HoverSpot = SpotAt(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
+			return FReply::Unhandled();
+		}
+
+		virtual void OnMouseLeave(const FPointerEvent& Event) override
+		{
+			HoverSpot = INDEX_NONE;
+		}
+
+		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (!Controller.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+			{
+				return FReply::Handled();
+			}
+			const FLaid& L = Laid();
+			const int32 Spot = SpotAt(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
+			if (!L.Spots.IsValidIndex(Spot))
+			{
+				return FReply::Handled(); // (the page takes its clicks: nothing behind it is pressed)
+			}
+			const FString Act = L.Spots[Spot].Act;
+			ACampaignPlayerController* C = Controller.Get();
+			if (Act == TEXT("close"))
+			{
+				C->CloseLessonGuide();
+			}
+			else if (Act == TEXT("rules"))
+			{
+				C->OpenHowToPlay();
+			}
+			else if ((Act == TEXT("on") && L.bOn) || (Act == TEXT("off") && !L.bOn))
+			{
+				// (the half already chosen: nothing to change)
+			}
+			else
+			{
+				C->PressGuide(Act);
+			}
+			return FReply::Handled();
+		}
+
+		virtual FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override
+		{
+			return Laid().Spots.IsValidIndex(SpotAt(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()))) ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Unhandled();
+		}
+
+	private:
+		static constexpr double K = 0.9;
+		static constexpr double Pad = 28.0;
+
+		/** A thing on the page that takes a click (in the widget's own measure), and what it does. */
+		struct FSpot
+		{
+			FBox2D Box = FBox2D(ForceInit);
+			FString Act;
+		};
+		struct FRowLaid
+		{
+			FLessonRow Row;
+			FString Name; // (its name, shortened to fit if it must)
+			double Y = 0.0;
+			int32 Spot = INDEX_NONE;
+		};
+		struct FLabelLaid
+		{
+			FString Words;
+			double Y = 0.0;
+		};
+		/** The page set out: in the brief's pixels down the page (P() turns them into the widget's), its width already turned. */
+		struct FLaid
+		{
+			bool bValid = false;
+			int32 Revision = INDEX_NONE;
+			double W = 0.0, H = 0.0;
+			FString Label, Head, State, Setting;
+			FString Again = TEXT("SHOW ME AGAIN"), Waiting = TEXT("WAITING FOR YOU"), Later = TEXT("when its moment comes");
+			FString OnWord = TEXT("ON"), OffWord = TEXT("OFF"), RulesWord = TEXT("HOW A MONTH WORKS ›");
+			bool bOn = true;
+			double LabelY = 0.0, HeadY = 0.0, StateY = 0.0, RuleY = 0.0, SettingY = 0.0, RulesY = 0.0;
+			TArray<FLabelLaid> Labels;
+			TArray<FRowLaid> Rows;
+			TArray<FSpot> Spots;
+			int32 CloseSpot = INDEX_NONE, OnSpot = INDEX_NONE, OffSpot = INDEX_NONE, RulesSpot = INDEX_NONE;
+			FSlateFontInfo LabelFace, HeadFace, StateFace, NameFace, LaterNameFace, NumberFace, QuietFace, WaitFace, LaterFace, SettingFace, SegFace;
+		};
+
+		/** The page as the controller has it now, set out again only when it changes. */
+		const FLaid& Laid() const
+		{
+			if (!Controller.IsValid() || !Controller->IsLessonGuideOpen())
+			{
+				return Kept; // (as last set out: it is not drawn while closed)
+			}
+			const int32 Revision = Controller->GetLessonGuideRevision();
+			if (!Kept.bValid || Kept.Revision != Revision)
+			{
+				Kept = Lay(Controller->GetLessonGuide());
+				Kept.Revision = Revision;
+				HoverSpot = INDEX_NONE;
+			}
+			return Kept;
+		}
+
+		static FLaid Lay(const FLessonGuide& Guide)
+		{
+			FLaid L;
+			if (!Guide.bValid)
+			{
+				return L;
+			}
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto P = [](double Pixels) { return Pixels * K; };
+			auto Pt = [](double Pixels) { return static_cast<float>(Pixels * K * 0.75); }; // (a face is asked for in points)
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			L.bValid = true;
+			L.W = P(640.0);
+			L.Label = Guide.Label.ToUpper();
+			L.Head = Guide.Head;
+			L.State = Guide.State;
+			L.Setting = Guide.Setting;
+			L.bOn = Guide.bOn;
+			L.LabelFace = Typed(Pt(11.0), true, 140);
+			L.HeadFace = Serif(TEXT("Bold"), Pt(24.0));
+			L.StateFace = Serif(TEXT("Italic"), Pt(15.0));
+			L.NameFace = Serif(TEXT("Bold"), Pt(14.0));
+			L.LaterNameFace = Serif(TEXT("Regular"), Pt(14.0));
+			L.NumberFace = Typed(Pt(11.0), true);
+			L.QuietFace = Typed(Pt(11.0), true, 60);
+			L.WaitFace = Typed(Pt(11.0), true, 100);
+			L.LaterFace = Typed(Pt(12.0));
+			L.SettingFace = Typed(Pt(13.0));
+			L.SegFace = Typed(Pt(13.0), true, 80);
+			// The close stud, 32 across, at the top right.
+			FSpot& Close = L.Spots.AddDefaulted_GetRef();
+			Close.Box = FBox2D(FVector2D(L.W - P(19.0 + 32.0), P(18.0)), FVector2D(L.W - P(19.0), P(50.0)));
+			Close.Act = TEXT("close");
+			L.CloseSpot = 0;
+			double Y = 26.0;
+			L.LabelY = Y;
+			Y += 14.0 + 6.0;
+			L.HeadY = Y;
+			Y += 30.0 + 2.0;
+			L.StateY = Y;
+			Y += 22.0;
+			const double RowW = 640.0 - 2.0 * Pad;
+			for (int32 Group = 0; Group < Guide.Groups.Num(); ++Group)
+			{
+				Y += 14.0;
+				const FString Words = Guide.GroupLabels.IsValidIndex(Group) ? Guide.GroupLabels[Group].ToUpper() : FString();
+				if (!Words.IsEmpty())
+				{
+					FLabelLaid& Label = L.Labels.AddDefaulted_GetRef();
+					Label.Words = Words;
+					Label.Y = Y;
+					Y += 14.0 + 8.0;
+				}
+				for (int32 Index = 0; Index < Guide.Groups[Group].Num(); ++Index)
+				{
+					if (Index > 0)
+					{
+						Y += 6.0;
+					}
+					FRowLaid& Each = L.Rows.AddDefaulted_GetRef();
+					Each.Row = Guide.Groups[Group][Index];
+					Each.Y = Y;
+					const bool bDone = Each.Row.State == TEXT("done"), bNow = Each.Row.State == TEXT("now");
+					const FString& Right = bDone ? L.Again : bNow ? L.Waiting : L.Later;
+					const FSlateFontInfo& RightFace = bDone ? L.QuietFace : bNow ? L.WaitFace : L.LaterFace;
+					const FSlateFontInfo& NameFace = bDone || bNow ? L.NameFace : L.LaterNameFace;
+					// (the name keeps clear of what stands at the right, and is cut short with a mark if it must be)
+					const double Room = P(RowW - 8.0 - 22.0 - 12.0 - 12.0 - 16.0) - Wide(Right, RightFace);
+					Each.Name = Each.Row.Head;
+					if (Wide(Each.Name, NameFace) > Room)
+					{
+						while (Each.Name.Len() > 1 && Wide(Each.Name + TEXT("…"), NameFace) > Room)
+						{
+							Each.Name.LeftChopInline(1);
+						}
+						Each.Name = Each.Name.TrimEnd() + TEXT("…");
+					}
+					if (bDone)
+					{
+						// SHOW ME AGAIN, a quiet word at the right: only the word takes the click.
+						const double RightEdge = P(Pad + RowW - 12.0), WordW = Wide(L.Again, L.QuietFace);
+						FSpot& Again = L.Spots.AddDefaulted_GetRef();
+						Again.Box = FBox2D(FVector2D(RightEdge - WordW - P(6.0), P(Y + 6.0)), FVector2D(RightEdge + P(6.0), P(Y + 32.0)));
+						Again.Act = TEXT("again:") + Each.Row.Id;
+						Each.Spot = L.Spots.Num() - 1;
+					}
+					else if (bNow)
+					{
+						// A row waiting for him: the whole row brings its note back.
+						FSpot& Back = L.Spots.AddDefaulted_GetRef();
+						Back.Box = FBox2D(FVector2D(P(Pad), P(Y)), FVector2D(P(Pad + RowW), P(Y + 38.0)));
+						Back.Act = TEXT("back:") + Each.Row.Id;
+						Each.Spot = L.Spots.Num() - 1;
+					}
+					Y += 38.0;
+				}
+			}
+			Y += 18.0;
+			L.RuleY = Y;
+			Y += 1.0 + 14.0;
+			L.SettingY = Y;
+			{
+				// ON and OFF, joined, at the right: each its word and 16 either side, 36 high with the edge.
+				const double OnW = Wide(L.OnWord, L.SegFace) + P(32.0), OffW = Wide(L.OffWord, L.SegFace) + P(32.0);
+				const double Right = P(640.0 - Pad), Top = P(Y);
+				FSpot& Off = L.Spots.AddDefaulted_GetRef();
+				Off.Box = FBox2D(FVector2D(Right - OffW, Top), FVector2D(Right, Top + P(36.0)));
+				Off.Act = TEXT("off");
+				L.OffSpot = L.Spots.Num() - 1;
+				FSpot& On = L.Spots.AddDefaulted_GetRef();
+				On.Box = FBox2D(FVector2D(Right - OffW - OnW, Top), FVector2D(Right - OffW, Top + P(36.0)));
+				On.Act = TEXT("on");
+				L.OnSpot = L.Spots.Num() - 1;
+			}
+			Y += 36.0 + 10.0;
+			L.RulesY = Y;
+			{
+				FSpot& Rules = L.Spots.AddDefaulted_GetRef();
+				Rules.Box = FBox2D(FVector2D(P(Pad) - P(4.0), P(Y) - P(3.0)), FVector2D(P(Pad) + Wide(L.RulesWord, L.QuietFace) + P(4.0), P(Y + 21.0)));
+				Rules.Act = TEXT("rules");
+				L.RulesSpot = L.Spots.Num() - 1;
+			}
+			Y += 18.0 + 24.0;
+			L.H = P(Y);
+			return L;
+		}
+
+		int32 SpotAt(const FVector2D& Here) const
+		{
+			const FLaid& L = Laid();
+			for (int32 Index = 0; Index < L.Spots.Num(); ++Index)
+			{
+				if (L.Spots[Index].Box.IsInside(Here))
+				{
+					return Index;
+				}
+			}
+			return INDEX_NONE;
+		}
+
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+		mutable FLaid Kept;
+		mutable int32 HoverSpot = INDEX_NONE;
+	};
+
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -4253,6 +4765,10 @@ namespace
 			ClearBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f);
 			PlainButton = MakeButtonStyle(CardFill, CardHover, Faint, 1.0f);
 			PlateButton = MakeButtonStyle(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), FLinearColor(0.35f, 0.22f, 0.08f, 0.16f), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 1.0f);
+			// (Rules 84.3.3; ruling 141) FIRST COMMAND on the door: the kit's dark button, its brass-300 rim lit by the lamp
+			// until the ten lessons are done, then its plain brass-700 one.
+			FirstDoorLit = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2D241A"))), 5.0f, FLinearColor(FColor::FromHex(TEXT("E0B872"))), 1.5f);
+			FirstDoorPlain = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2D241A"))), 5.0f, FLinearColor(FColor::FromHex(TEXT("8A6B3B"))), 1.0f);
 			ChosenCard = MakeButtonStyle(FLinearColor(0.12f, 0.09f, 0.045f, 0.98f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), BrightBrass, 2.0f);
 			FootBrush = FSlateRoundedBoxBrush(FLinearColor(0.03f, 0.026f, 0.021f, 0.98f), 5.0f, Brass.CopyWithNewOpacity(0.8f), 1.0f);
 			WatchBrush = FSlateRoundedBoxBrush(FLinearColor(0.16f, 0.15f, 0.13f, 1.0f), 2.0f, Faint, 1.0f);
@@ -4664,11 +5180,30 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 								[
-									SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
-									.ToolTipText(FText::FromString(TEXT("How to play: the table, a month, moving and attacking, and what every button is for. (H)")))
-									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
+									SNew(SOverlay)
+									+ SOverlay::Slot()
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+										SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+										.ToolTipText(FText::FromString(TEXT("The Guide: the ten lessons of FIRST COMMAND, done, waiting and to come; and how to play, the table, a month and what every button is for. (H)")))
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+										]
+									]
+									// (Rules 84.3.3; the look brief, section 6: the kit's tc-count on GUIDE's top right corner, the notes he
+									// has folded away with LATER. None waiting, no badge.)
+									+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.0f, -8.0f, -8.0f, 0.0f))
+									[
+										SNew(SBorder).BorderImage(&BadgeBrush).Padding(FMargin(5.0f, 0.0f))
+										.Visibility_Lambda([this]()
+										{
+											const FCampaignSession* Rules = Controller.IsValid() ? Controller->GetSession() : nullptr;
+											return Rules && !Rules->GetView().Human.IsEmpty() && Controller->GetLessonsWaiting() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+										})
+										[
+											SNew(STextBlock).Font(Typed(10, true)).ColorAndOpacity(DeskInk)
+											.Text_Lambda([this]() { return FText::AsNumber(Controller.IsValid() ? Controller->GetLessonsWaiting() : 0); })
+										]
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
@@ -6167,6 +6702,19 @@ namespace
 						]
 					]
 
+					// (Rules 84.3.3; the art director's look brief, section 6.) The Guide's first page: the ten lessons, over
+					// the veil, above any card left open under it. GUIDE or H opens it in a war he leads; the stud, Esc or H
+					// puts it away.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsLessonGuideOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SLessonGuide).Controller(Controller)
+						]
+					]
+
 					// (Rules 84.3.3, FIRST COMMAND; the art director's look brief, ruling 147.) The staff's note: at its home
 					// under the date card, at its second home under the small map, or as the slip in the left margin of a
 					// card that veils the map. Over every card and room, under the films and the great moments.
@@ -6668,6 +7216,45 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("1939 TO 1945"))).Font(Font(TEXT("Bold"), 12, 520)).ColorAndOpacity(Brass)
+									]
+
+									// (Rules 84.3.3; ruling 141.) FIRST COMMAND on the title band, above CONTINUE YOUR CAMPAIGN: lit with the
+									// kit's lamp, never brass, until the ten lessons are done; "New here? Learn as you play.", and then
+									// "The ten lessons again." It begins the campaign the rules name for it, after ruling 130's question
+									// where a campaign is saved.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 10.0f, 0.0f)
+									[
+										SNew(SOverlay)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().Door.bValid ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SOverlay::Slot()
+										[
+											SNew(SLampGlow).Visibility(EVisibility::HitTestInvisible)
+											.Lit_Lambda([this]() { return Controller.IsValid() && !Controller->GetOpening().Door.bAllDone; })
+										]
+										+ SOverlay::Slot()
+										[
+											SNew(SBorder).Padding(FMargin(0.0f))
+											.BorderImage_Lambda([this]() { return Controller.IsValid() && !Controller->GetOpening().Door.bAllDone ? &FirstDoorLit : &FirstDoorPlain; })
+											[
+												SNew(SButton).ButtonStyle(&PlateButton).ContentPadding(FMargin(24.0f, 7.0f, 24.0f, 8.0f)).IsFocusable(false)
+												.ToolTipText(FText::FromString(TEXT("Germany, September 1939, at Cadet and Field command: your staff runs every desk but the armies, and ten staff notes teach the war as you play it.")))
+												.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(4); } return FReply::Handled(); })
+												[
+													SNew(SVerticalBox)
+													+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+													[
+														SNew(STextBlock).Font(Serif(TEXT("Bold"), 17.0f, 80))
+														.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && !Controller->GetOpening().Door.bAllDone ? FLinearColor(FColor::FromHex(TEXT("F4DEA8"))) : Cream); })
+														.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetOpening().Door.Label.ToUpper()) : FText::GetEmpty(); })
+													]
+													+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 1.0f, 0.0f, 0.0f)
+													[
+														SNew(STextBlock).Font(Typed(8.5f, false, 120)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.86f))
+														.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetOpening().Door.Line.ToUpper()) : FText::GetEmpty(); })
+													]
+												]
+											]
+										]
 									]
 
 									// The campaign saved on this computer, and the way back to the one under way.
@@ -13311,6 +13898,7 @@ namespace
 		TSharedPtr<SHorizontalBox> Cards;
 		int32 ShownRevision = -1;
 		FSlateBrush PanelBrush;
+		FSlateBrush FirstDoorLit, FirstDoorPlain; // (rules 84.3.3) FIRST COMMAND's button on the door, lit and plain
 		FSlateBrush PaperBrush;
 		FSlateBrush BindingBrush;
 		FSlateBrush StripBrush;

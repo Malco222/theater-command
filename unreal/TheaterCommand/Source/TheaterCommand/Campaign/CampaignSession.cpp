@@ -4966,11 +4966,11 @@ bool FCampaignSession::LessonAct(const FString& Action, bool bCard, const TArray
 	return CallRules(TEXT("lessonAct"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Action), *LessonMomentArgs(bCard, InHand)), Object) && ReadLessonDesk(Object, Out);
 }
 
-FLessonGuide FCampaignSession::LessonGuide()
+FLessonGuide FCampaignSession::LessonGuide(bool bCard, const TArray<int32>& InHand)
 {
 	FLessonGuide Out;
 	TSharedPtr<FJsonObject> Object;
-	if (!CallRules(TEXT("guide"), TEXT("[{}]"), Object) || !Object.IsValid())
+	if (!CallRules(TEXT("guide"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand)), Object) || !Object.IsValid())
 	{
 		return Out;
 	}

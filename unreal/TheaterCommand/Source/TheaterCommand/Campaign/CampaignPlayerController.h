@@ -216,9 +216,11 @@ struct FOpening
 	FText SavedLine; // empty when there is nothing to continue
 	// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be lost. The
 	// beginning that waits on the player's answer: 0 none; 1 the grand campaign, led; 2 the grand campaign,
-	// watched; 3 a scenario (its group and side).
+	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND.
 	int32 AskKind = 0;
 	int32 AskGroup = 0, AskSide = 0;
+	// (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the title band: its words, and whether the ten are done.
+	FLessonDoor Door;
 	int32 Revision = 0;
 };
 
@@ -505,7 +507,7 @@ public:
 	/**
 	 * (Ruling 130.) Begins a new war from the opening screen: at once where no campaign is saved on this computer,
 	 * and otherwise only after the player has been asked, with the saved campaign named. Kind is 1 for the grand
-	 * campaign led, 2 for it watched, 3 for a scenario.
+	 * campaign led, 2 for it watched, 3 for a scenario, 4 for FIRST COMMAND.
 	 */
 	void AskToBegin(int32 Kind, int32 GroupIndex = 0, int32 SideIndex = 0);
 	/** The answer to that question: begin the new war and let the saved one go, or keep it. */
@@ -592,8 +594,14 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
-	/** How to play, as a page over the table. */
+	/** GUIDE, or H: in a war he leads, the Guide's list of the ten lessons (rules 84.3.3); otherwise, or from that
+	 * list, How to play, as a page over the table (the Guide's second page, ruling 147). The same key puts either away. */
 	void OpenGuide();
+	/** How to play: the typed page of rules. */
+	void OpenHowToPlay();
+	/** (Ruling 141) The door's FIRST COMMAND: the campaign the rules name for it (Germany, from September 1939, at Cadet
+	 * and Field command), marked as FIRST COMMAND's. Through AskToBegin(4) where a campaign is saved. */
+	void BeginFirstCommand();
 
 	/** A room the rules set out themselves: the secret service, the last act. */
 	const FOfficePage& GetPage() const { return Page; }
@@ -862,6 +870,14 @@ public:
 	const FLessonNote& GetLaidLesson() const { return LessonLaid; }
 	/** The notes put away with LATER, waiting in the GUIDE (its count). */
 	int32 GetLessonsWaiting() const { return Lessons.Waiting; }
+	/** (Rules 84.3.3) The Guide's first page, the ten lessons, is open, and what it lists. */
+	bool IsLessonGuideOpen() const { return bLessonGuideOpen; }
+	const FLessonGuide& GetLessonGuide() const { return LessonGuidePage; }
+	int32 GetLessonGuideRevision() const { return LessonGuideRevision; }
+	/** A press on the Guide's list: "back:<id>" (a row waiting for him: its note comes back, and the Guide closes on
+	 * it), "again:<id>" (SHOW ME AGAIN), "on" or "off" (the setting). */
+	void PressGuide(const FString& Action);
+	void CloseLessonGuide();
 	/** The note's own words to press: "later", "close" (the closing note), "tip" (a tip put away), "send" (a stamped note sent now). */
 	void PressLesson(const FString& Action);
 	/** (Ruling 147(a).) What the note at its home must never cover, in pixels of the screen: the army in hand, and the flag it points at. */
@@ -1300,6 +1316,18 @@ private:
 	FBox2D LessonNoteOnScreen = FBox2D(ForceInit);
 	FString GroundAimLaid;
 	void AimLesson();
+	// (The Guide's list.) Open, what it lists, and the page under it, which it gives way to if another is opened.
+	bool bLessonGuideOpen = false;
+	FLessonGuide LessonGuidePage;
+	int32 LessonGuideRevision = 0;
+	FString GuideOverPage;
+	bool OpenLessonGuide();
+	void RefreshLessonGuide();
+	// (The brief: the notes "read aloud by the built-in voice when the voice is on", the deed line last.) The note
+	// last read, by its arrival; and whether lesson 1, laid on the card that is open, has been read.
+	int32 LessonSpokenArrival = -1;
+	bool bLessonLaidSpoken = false;
+	void SpeakLesson(const FLessonNote& Note);
 	bool PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const;
 	bool GroundSpotOnScreen(int32 Region, FVector2D& Out, FVector& Foot) const;
 	void LayGroundPointer(const FLessonAim& Aim);
