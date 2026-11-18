@@ -45,7 +45,7 @@ if (Blasts) { Blasts->End(); Blasts.Reset(); }
 Lamps and day: a flash's lamp is full on the first frame drawn after the flash, about half on the next, then out
 (Tick draws first, then lights; call Tick once a frame, or a lamp lasts a single frame). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
 warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
-shows every one; a close tracer (under 100 m) is drawn whole, muzzle to strike.
+shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
 Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are matched in lower case, as in the recipe:
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
@@ -98,7 +98,7 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
   It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
 - The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
   ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
-  for home. Each burst is about 10 to 16 puffs.
+  for home. Each burst is about 12 to 19 puffs.
 - The preview: `./fxpreview recipe.txt out air hmg 6,20,95,245 960x540 burst` (one burst, close) or `... 360 960x540
   flak` (heavy guns round a flying aircraft).
 

@@ -105,7 +105,7 @@ namespace TheaterFx
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
-		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across, and thinner to match)
+		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
 		uint32_t LumpSeed = 0;
@@ -116,6 +116,7 @@ namespace TheaterFx
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
 		mutable bool bShown = false; // (laid at least once: a light shorter than a frame is kept until it has been)
+		bool bWhole = false; // (a light: however late its first frame comes, that frame shows it whole, as one shorter than a frame is)
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)

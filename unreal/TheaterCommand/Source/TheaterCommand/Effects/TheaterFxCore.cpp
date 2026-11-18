@@ -35,10 +35,12 @@ namespace TheaterFx
 		}
 
 		/** A light shorter than a frame (a flash, a flicker, a close tracer) that no frame has laid yet: it is kept, and
-		 * laid at full strength on the next frame, so a battle at 30 frames a second or less still sees it. */
+		 * laid at full strength on the next frame, so a battle at 30 frames a second or less still sees it. A light
+		 * marked whole (each piece of one flash) is laid the same way however long it lives, so in a slow frame the
+		 * pieces of one flash keep their weights to each other. */
 		bool Unseen(const TheaterFx::Bit& B)
 		{
-			return B.bLight && B.Life < 0.06 && !B.bShown;
+			return B.bLight && (B.Life < 0.06 || B.bWhole) && !B.bShown;
 		}
 
 		uint64_t PlaceKey(const Vec& At)
@@ -1959,6 +1961,7 @@ namespace TheaterFx
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			B.bLight = true;
+			B.bWhole = true; // (a slow frame shows the glow, spikes and heart together, never the white heart alone)
 			Bits.push_back(B);
 		};
 		const double Tilt = D.U(0.0, 2.0 * Pi);
@@ -2534,13 +2537,19 @@ namespace TheaterFx
 		const double MetresAPixel = Dist / std::max(Eye.PixelsPerRadian, 1.0);
 		if (B.Form == Bit::Shape::Puff && B.LeastPx > 0.0)
 		{
-			// (a puff never shrinks on the screen below LeastPx across: far off it is held at that size and made thinner
-			// to match, so a far burst stays see-through smoke and never a solid dot)
-			const double Least = 0.5 * B.LeastPx * MetresAPixel;
-			if (Rad < Least)
+			// (a puff never shrinks on the screen below LeastPx across its long way: far off it is held at that size and
+			// made thinner to match, so a far burst stays see-through smoke and never a solid dot. A drawn-out puff is
+			// held by its length, so a thin wisp stays thin and never outgrows the lobes it trails from)
+			double Long = 1.0;
+			if (B.Smear <= 0.0 && B.Stretch > 1.0001 && B.Along.Length() > 0.5)
 			{
-				A *= std::sqrt(Rad / Least);
-				Rad = Least;
+				Long = 1.0 + (B.Stretch - 1.0) * (B.Along - Eye.Forward * B.Along.Dot(Eye.Forward)).Length();
+			}
+			const double Least = 0.5 * B.LeastPx * MetresAPixel;
+			if (Rad * Long < Least)
+			{
+				A *= std::sqrt(std::max(0.0, Rad * Long) / Least);
+				Rad = Least / Long;
 			}
 		}
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
