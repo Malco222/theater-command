@@ -5042,8 +5042,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		// What the note points at this frame (the screen draws a button's; the ground's is laid here).
 		AimLesson();
-		// (The Guide's list is a card over the war: whatever else is opened, or the others' turn, takes its place.)
-		if (bLessonGuideOpen && (Opening.bVisible || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Document.bValid || bArsenalOpen || bLedgerOpen
+		// (The Guide's list is a card over the war: whatever else is opened, the others' turn, or a reel (the briefing's
+		// flight plays as one), takes its place.)
+		if (bLessonGuideOpen && (Opening.bVisible || bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Document.bValid || bArsenalOpen || bLedgerOpen
 			|| bDiplomacyOpen || bResearchOpen || bGeneralsOpen || (bPageOpen ? Page.Id : FString()) != GuideOverPage))
 		{
 			bLessonGuideOpen = false;

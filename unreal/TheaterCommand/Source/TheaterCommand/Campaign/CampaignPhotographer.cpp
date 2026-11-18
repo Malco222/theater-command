@@ -1082,6 +1082,7 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 	Controller->CloseMenu();
 	Controller->CloseDocument();
+	Controller->CloseLessonGuide(); // (84.3.3: the Guide's list, left up by 14e2, is put away before the next picture)
 	Controller->CloseLedger();
 	Controller->CloseDiplomacy();
 	Controller->CloseResearch();
