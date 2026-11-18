@@ -5228,6 +5228,34 @@ void ACampaignMapActor::BuildWaterways()
 		}
 		RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())] = MoveTemp(Path);
 	}
+	// Open water beyond Europe, as a fine sheet of ground shows it: the chart draws no land there (or, outside the
+	// chart's frame, the world's real heights lie at or below the sea), there and two units round.
+	// (Seen at Quebec in the first picture of the rule below: asked only of the one place, a ribbon broke off on dry
+	// land short of its first bridge. The chart draws the estuary's head as a channel a unit or two across, which no
+	// sheet of ground shows as water: the very channel the ribbon is there to stand for.)
+	auto SeaAt = [this](const FVector2D& At)
+	{
+		if (Data.FindRegionAt(At.X, At.Y) != INDEX_NONE)
+		{
+			return false;
+		}
+		if (Data.IsCharted(At.X, At.Y))
+		{
+			for (const TArray<FVector2D>& Ring : Data.Land)
+			{
+				if (FCampaignMapData::PointInRing(Ring, At.X, At.Y))
+				{
+					return false; // (land no province claims, or a lake cut out of it: the lakes have their own rule)
+				}
+			}
+			return true;
+		}
+		return WorldTerrain.HasElevation() && WorldTerrain.MetresAt(WrapX(At.X), At.Y) <= 0.0f;
+	};
+	auto OpenSeaAt = [&SeaAt](const FVector2D& At)
+	{
+		return SeaAt(At) && SeaAt(At + FVector2D(2.0, 0.0)) && SeaAt(At - FVector2D(2.0, 0.0)) && SeaAt(At + FVector2D(0.0, 2.0)) && SeaAt(At - FVector2D(0.0, 2.0));
+	};
 	TArray<int32> RiverUnderFrom; // where a river's ribbon goes under the ribbon of the river it joins
 	RiverUnderFrom.Init(MAX_int32, Land.Rivers.Num());
 	if (Data.bWorld)
@@ -5245,6 +5273,13 @@ void ACampaignMapActor::BuildWaterways()
 			TArray<FVector2D>& Mine = RiverLaid[Index];
 			if (Mine.Num() < 6 || (Mine[0].X >= 0.0 && Mine[0].Y >= 0.0 && Mine[0].X <= Data.Width && Mine[0].Y <= Data.Height))
 			{
+				continue;
+			}
+			if (OpenSeaAt(Mine.Last()))
+			{
+				// (The art director, 18 November 2026, at Quebec: a river that ends in open water ends there. The St
+				// Lawrence, whose line stops in its estuary, was taken for a tributary of a small river twenty-eight
+				// units off and carried on to it, across the estuary and the far shore.)
 				continue;
 			}
 			// (the river it ends on, if it ends on one: the one whose line lies nearest its last point. The rules give a
@@ -5363,34 +5398,10 @@ void ACampaignMapActor::BuildWaterways()
 		int32 MeetsWater = MAX_int32;
 		if (bRiverBeyond)
 		{
-			auto OpenWater = [this](const FVector2D& At)
-			{
-				if (Data.FindRegionAt(At.X, At.Y) != INDEX_NONE)
-				{
-					return false;
-				}
-				if (Data.IsCharted(At.X, At.Y))
-				{
-					for (const TArray<FVector2D>& Ring : Data.Land)
-					{
-						if (FCampaignMapData::PointInRing(Ring, At.X, At.Y))
-						{
-							return false; // (land no province claims, or a lake cut out of it: the rule below is the lakes')
-						}
-					}
-					return true;
-				}
-				return WorldTerrain.HasElevation() && WorldTerrain.MetresAt(WrapX(At.X), At.Y) <= 0.0f;
-			};
 			OverWater.Init(false, Path.Num());
 			for (int32 K = Path.Num() / 2 + 1; K < Path.Num(); ++K)
 			{
-				// (Seen at Quebec in the first picture of this rule: asked only of the chart, the ribbon broke off on dry
-				// land short of its first bridge. The chart draws the estuary's head as a channel a unit or two across,
-				// which no sheet of ground shows as water: the very channel the ribbon is there to stand for. Open water
-				// is water two units from any land, all round, as a fine sheet's smoothed coast will show it.)
-				OverWater[K] = OpenWater(Path[K]) && OpenWater(Path[K] + FVector2D(2.0, 0.0)) && OpenWater(Path[K] - FVector2D(2.0, 0.0))
-					&& OpenWater(Path[K] + FVector2D(0.0, 2.0)) && OpenWater(Path[K] - FVector2D(0.0, 2.0));
+				OverWater[K] = OpenSeaAt(Path[K]);
 				if (OverWater[K] && MeetsWater == MAX_int32)
 				{
 					MeetsWater = K;
@@ -14073,9 +14084,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				}
 				if (bFlicker)
 				{
-					// (the flash at the muzzle: pale, small, and gone with the frame)
+					// (the flash at the muzzle: small, pale yellow, and gone with the frame. Seen at three tenths of a
+					// unit and near white in the first picture, it was a lamp on each wing.)
 					bDrawingLight = true;
-					Draw(Muzzle, 0.3 * Table, FLinearColor(1.0f, 0.95f, 0.72f), 0.85f);
+					Draw(Muzzle, 0.15 * Table, FLinearColor(0.82f, 0.7f, 0.3f), 0.7f);
 					bDrawingLight = false;
 				}
 			};
@@ -14121,11 +14133,16 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 	}
 
-	// The tracer rounds in flight: each a short solid streak of yellow, paler at its heart, with a tail that thins away
+	// The tracer rounds in flight: each a solid streak of yellow, paler at its heart, with a tail that thins away
 	// behind it. Never drawn under about three pixels across, however high the eye stands. (The modeller's yellow is
-	// to be seen at about 213, 199, 104: not amber, and not white.)
+	// to be seen at about 213, 199, 104: not amber, and not white. A puff's ink is laid in the light's own measure
+	// and the screen's is another: laid at those figures it was seen near white, 236, 229, 172. It is laid at the
+	// figures that are seen as his.)
+	// (Its length: the modeller's streak is half a bomber's wingspan long, which on this table, where the fighters fly
+	// within a wingspan of the bombers, would join gun to mark in one line. First drawn at eight tenths of a unit,
+	// as the old streaks were, it could hardly be seen beside a bomber. It is three units, under a third of a wingspan.)
 	{
-		const FLinearColor TracerYellow(213.0f / 255.0f, 199.0f / 255.0f, 104.0f / 255.0f), TracerPale(0.96f, 0.93f, 0.74f);
+		const FLinearColor TracerYellow(0.665f, 0.571f, 0.138f), TracerPale(0.87f, 0.80f, 0.42f);
 		bDrawingLight = true;
 		for (int32 K = TracerRounds.Num() - 1; K >= 0; --K)
 		{
@@ -14139,13 +14156,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FVector Head = Round.From + Round.Velocity * Age;
 			const FVector Flies = Round.Velocity.GetSafeNormal();
 			const double Pixel = FMath::Max(FVector::Distance(EyeAt, Head), 1.0) / PixelsAtOne; // (what one pixel of the window spans there)
-			const double HalfWide = FMath::Max(0.05 * Table, 2.0 * Pixel);
-			const double Long = FMath::Max(0.8 * Table, 9.0 * HalfWide);
+			const double HalfWide = FMath::Max(0.09 * Table, 2.0 * Pixel);
+			// (and no longer than it has yet flown: it grows out of the muzzle)
+			const double Long = FMath::Min(FMath::Max(3.0 * Table, 9.0 * HalfWide), FMath::Max(Round.Velocity.Size() * Age, 2.0 * HalfWide));
 			// (it burns out over its last tenth of a second)
 			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(TracerBurns - 0.1, TracerBurns, Age));
-			DrawSmear(Head - Flies * (0.95 * Long), Flies, 0.6 * Long, 0.5 * HalfWide, TracerYellow, 0.5f * Burning, 0.5); // the tail, thinning
-			DrawSmear(Head - Flies * (0.45 * Long), Flies, 0.45 * Long, HalfWide, TracerYellow, 0.95f * Burning, 0.7, 0.9f * Burning); // the streak, solid
-			DrawSmear(Head - Flies * (0.3 * Long), Flies, 0.26 * Long, 0.5 * HalfWide, TracerPale, 1.0f * Burning, 0.6, 0.85f * Burning); // its paler heart
+			DrawSmear(Head - Flies * (0.9 * Long), Flies, 0.6 * Long, 0.55 * HalfWide, TracerYellow, 0.6f * Burning, 0.5); // the tail, thinning
+			DrawSmear(Head - Flies * (0.4 * Long), Flies, 0.4 * Long, HalfWide, TracerYellow, 1.0f * Burning, 0.75, 0.95f * Burning); // the streak, solid
+			DrawSmear(Head - Flies * (0.25 * Long), Flies, 0.2 * Long, 0.45 * HalfWide, TracerPale, 0.9f * Burning, 0.6, 0.7f * Burning); // its paler heart
 		}
 		bDrawingLight = false;
 	}
