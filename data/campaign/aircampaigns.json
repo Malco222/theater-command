@@ -41,7 +41,7 @@
   },
   {
    "from": 0.03,
-   "words": "Borne while new aircraft and crews matched the losses: about 5% a raid could be kept up, 7% for long could not."
+   "words": "Bearable while new aircraft and crews matched the losses: about 5% a raid could be kept up, 7% for long could not."
   },
   {
    "from": 0,
@@ -1489,7 +1489,7 @@
   }
  },
  "gunners": {
-  "_about": "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on ground held by 'vs'. 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
+  "_about": "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on Japan's home islands ('regions', held by 'vs'); elsewhere its heavy-box rows stand (the historian, 21:08Z: the B-24s and B-25s flew the day raids on the Philippines, New Guinea, Borneo and Formosa). 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
   "night": 0.05,
   "ground": 0.07,
   "box": {
@@ -1505,7 +1505,31 @@
     "JAP"
    ],
    "from": 58,
-   "ratio": 0.5
+   "ratio": 0.5,
+   "regions": [
+    "Sapporo",
+    "Kushiro",
+    "Aomori",
+    "Akita",
+    "Sendai",
+    "Niigata",
+    "Tokyo",
+    "Yokohama",
+    "Nagano",
+    "Shizuoka",
+    "Nagoya",
+    "Kanazawa",
+    "Kyoto",
+    "Osaka",
+    "Okayama",
+    "Hiroshima",
+    "Shimonoseki",
+    "Shikoku",
+    "Fukuoka",
+    "Nagasaki",
+    "Kumamoto",
+    "Kagoshima"
+   ]
   },
   "day": {
    "_default": [
@@ -1538,7 +1562,7 @@
    "Bombers with power turrets by day, 1939-40 (0.15)": "Britain's day bombers from September 1939 to December 1940 (1 to 16: the Wellingtons and Hampdens).",
    "Medium bombers in formation with more guns, 1942-45 (0.15)": "Every nation's day bombers from January 1942 (29), America's excepted.",
    "Heavy bomber boxes (0.4 beyond escort, 0.2 escorted all the way)": "America's day bombers, every month, keyed by whether an escort reached the target. The game's one American bomber is the heavy; its B-25s and B-26s are not told apart.",
-   "B-29 by day over Japan (0.5)": "America's day raids on ground Japan holds, from June 1944 (58).",
+   "B-29 by day over Japan (0.5)": "America's day raids on Japan's home islands while Japan holds them, from June 1944 (58); elsewhere the heavy-box rows.",
    "Any bomber by night (0.05)": "Every night raid.",
    "Ground-attack aircraft with a rear gunner (0.07)": "Every nation's strikes on troops ('ground' and 'line'), whatever the year: the game's bombers flying close support stand for the Il-2s and Ju 87s."
   }

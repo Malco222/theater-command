@@ -23,7 +23,7 @@ import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombSt
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, guardsLand, kmTo, whyNotMission,
 } from './air';
-import { allied, atWar, headline } from './game';
+import { allied, atWar, headline, theWords } from './game';
 import { hasTech } from './tech';
 import { byHand } from './depth';
 import { stopDef } from './history';
@@ -46,7 +46,7 @@ export const AC = data as unknown as {
   repair: Record<string, RepairRow>;
   book: BookRow[];
   radar: { tech: string; control: string; ground: number; record: ChainRow[]; night: Record<string, [number, number][]> };
-  gunners: { night: number; ground: number; day: Record<string, [number, number][]>; box: { nats: string[]; alone: number; escorted: number }; b29: { nat: string; vs: string[]; from: number; ratio: number } };
+  gunners: { night: number; ground: number; day: Record<string, [number, number][]>; box: { nats: string[]; alone: number; escorted: number }; b29: { nat: string; vs: string[]; from: number; ratio: number; regions: string[] } };
 };
 interface ChainRow { nat: string; from: number; name: string; by: string; ground: number; plural?: boolean; regions?: string[]; where?: string }
 
@@ -158,7 +158,7 @@ export function skyFought(g: Game, nat: string, region: number, won: boolean): S
 function skyNews(g: Game, s: SkyFight, region: number, out: boolean): void {
   const adj = g.nations[s.by].adj, place = g.regions[region].name, foe = g.nations[g.regions[region].ctrl]?.adj ?? 'enemy';
   const text = s.state === 'held'
-    ? `The ${adj} air force has won the sky over ${place}: ${out ? `the ${foe} fighters there are knocked out on their fields` : `for ${AC.sky.months} months running the ${foe} air force could not match it there`}. It holds that sky for as long as it keeps the numbers and keeps flying there.`
+    ? `The ${adj} air force has won the sky over ${place}: ${out ? `the ${foe} fighters there are knocked out on their fields` : `for ${AC.sky.months} months running the ${foe} air force could not match it there`}. It holds that sky for as long as it keeps the numbers and keeps flying over it.`
     : `The ${adj} air force has lost the battle for the sky over ${place}: for ${AC.sky.months} months running the ${foe} fighters there outnumbered it.`;
   headline(g, 'battle', text, s.by, region, { arm: 'air', ...(s.state === 'held' ? { won: s.by, lost: g.regions[region].ctrl } : { won: g.regions[region].ctrl, lost: s.by }) });
 }
@@ -309,7 +309,7 @@ export function chainAt(g: Game, r: Region, record: ChainRow[]): ChainRow | null
   }
   if (!hasTech(g, nat, AC.radar.tech)) return null;
   const n = g.nations[nat];
-  return { nat, from: g.turn, name: `the ${n?.adj ?? nat} early-warning chain`, by: n?.name ?? nat, ground: AC.radar.ground };
+  return { nat, from: g.turn, name: `the ${n?.adj ?? nat} radar chain`, by: n?.name ?? nat, ground: AC.radar.ground };
 }
 
 /**
@@ -324,7 +324,7 @@ export function gunnerRatio(g: Game, nat: string, m: AirMission, target: number,
   if (m === 'ground' || m === 'line') return G.ground;
   if (G.box.nats.includes(nat)) {
     const r = m === 'strike' || m === 'fleet' ? undefined : g.regions[target];
-    if (r && nat === G.b29.nat && g.turn >= G.b29.from && G.b29.vs.includes(r.ctrl)) return G.b29.ratio;
+    if (r && nat === G.b29.nat && g.turn >= G.b29.from && G.b29.vs.includes(r.ctrl) && G.b29.regions.includes(r.name)) return G.b29.ratio;
     return escorted ? G.box.escorted : G.box.alone;
   }
   return rowAt(G.day[nat] ?? G.day._default, g.turn);
@@ -431,7 +431,7 @@ export function whyNotCampaign(g: Game, nat: string, kind: CampaignKind, targets
 
 const nameFor = (g: Game, nat: string, kind: CampaignKind, targets: number[], night: boolean): string => {
   const place = g.regions[targets[0]].name + (targets.length > 1 ? ` and ${targets.length - 1} more` : '');
-  return kind === 'sky' ? `The battle for the sky over ${place}` : kind === 'support' ? `Support for the offensive at ${place}` : `The bombing of ${place}${night ? ' by night' : ''}`;
+  return theWords(kind === 'sky' ? `The battle for the sky over ${place}` : kind === 'support' ? `Support for the offensive at ${place}` : `The bombing of ${place}${night ? ' by night' : ''}`);
 };
 
 /** Opens a campaign: its groups fly it from this month on, until it is called off. Null if it cannot be opened. */
@@ -454,7 +454,7 @@ function addCampaign(g: Game, nat: string, kind: CampaignKind, targets: number[]
 }
 
 /** Ends a campaign: its groups go back on patrol. */
-export function callOff(g: Game, id: number, why = 'Called off.'): boolean {
+export function callOff(g: Game, id: number, why = 'You called it off.'): boolean {
   const c = g.ac?.campaigns.find((x) => x.id === id && x.off === undefined);
   if (!c) return false;
   endCampaign(g, c, why);
@@ -477,6 +477,11 @@ function endCampaign(g: Game, c: AirCampaign, why: string): void {
   if (c.nat === g.human) headline(g, 'info', `${c.name} has ended after ${monthsWord(g.turn - c.since)}: ${why.charAt(0).toLowerCase()}${why.slice(1)}`, c.nat);
 }
 
+/** "August to September 1940" within a year, "August 1940 to May 1941" across years. */
+const span = (a: number, b: number): string => {
+  const A = turnToDate(a), B = turnToDate(b);
+  return A.year === B.year ? `${A.label.split(' ')[0]} to ${B.label}` : `${A.label} to ${B.label}`;
+};
 const monthsWord = (n: number): string => (n <= 0 ? 'less than a month' : n === 1 ? 'a month' : `${n} months`);
 
 // ---- Campaigns: the month ---------------------------------------------------------------------------------------
@@ -518,7 +523,7 @@ export function campaignOrders(g: Game, nat: string): void {
     const book = c.book !== undefined;
     if (!main.length) { if (!book) endCampaign(g, c, 'Its air groups are gone.'); continue; }
     const targets = c.targets.filter((t) => g.regions[t] && atWar(g, nat, g.regions[t].ctrl));
-    if (!targets.length) { if (!book) endCampaign(g, c, c.kind === 'support' ? 'Its offensive is over: the ground is taken.' : 'Its targets are no longer in enemy hands.'); continue; }
+    if (!targets.length) { if (!book) endCampaign(g, c, c.kind === 'support' ? 'Its offensive is over, the ground taken.' : 'Its targets are no longer in enemy hands.'); continue; }
     const ready = main.filter((f) => f.flew !== g.turn);
     if (!ready.length) continue;
     let target = -1;
@@ -721,12 +726,13 @@ export function campaignView(g: Game, nat: string): CampaignRow[] {
     const sent = e?.sent ?? 0, rate = sent > 0 ? now / sent : 0;
     const skies = c.kind === 'sky' || c.kind === 'support' ? c.targets.map((t) => {
       const s = skyFight(g, t), place = g.regions[t].name;
-      if (!s || !allied(g, s.by, nat)) return { place, state: 'not yet fought' as const, words: `The battle for the sky over ${place} has not begun.` };
+      if (!s || !allied(g, s.by, nat)) return { place, state: 'not yet fought' as const, words: theWords(`The battle for the sky over ${place} has not begun.`) };
+      const left = AC.sky.months - s.run;
       const words = s.now === 'held' ? `Held since ${month(s.won ?? s.turn)}. It stays held while the air force keeps the numbers there and keeps flying over it.`
-        : s.now === 'lost' ? `Lost: the enemy's fighters have outnumbered ours there for ${-s.run} months running.`
-        : s.run > 0 ? `Contested: ${s.run} month${s.run === 1 ? '' : 's'} of ${AC.sky.months} won by numbers. One more and the sky is ours.`
-        : radarGuard(g, nat, t) ? 'Contested: the enemy has radar over his own ground, and only a fight won counts there.'
-        : 'Contested: to win it, outnumber the enemy aircraft that can reach it by half again, two months running, or knock out his fighters on their fields.';
+        : s.now === 'lost' ? `Lost: the enemy's fighters have outnumbered yours there for ${-s.run} months running.`
+        : s.run > 0 ? `Contested: your numbers have held it for ${monthsWord(s.run)}. Hold it ${left === 1 ? 'one more month' : `${left} more months`} and the sky is yours.`
+        : radarGuard(g, nat, t) ? 'Contested: the enemy has a warning chain over this ground, so numbers alone do not win it here; only a fight won counts.'
+        : "Contested: to win it, outnumber the enemy aircraft that can reach it by half again, two months running, or knock out the enemy's fighters on their fields.";
       return { place, state: s.now, words };
     }) : [];
     const damage: CampaignRow['damage'] = [];
@@ -735,7 +741,7 @@ export function campaignView(g: Game, nat: string): CampaignRow[] {
       if (!s || s.victim !== g.regions[t].ctrl) continue;
       const place = g.regions[t].name, down = heldDown(g, g.regions[t], k), done = s.land[g.turn] ?? 0, back = s.mended;
       const what = k === 'oil' ? `${place}'s oil` : `${place}'s output`;
-      damage.push({ place, kind: k, done, down, back, words: `${pc(down)} of ${what} is down this month${done > 0 ? `, ${pc(done)} of it from this month's raids` : ''}; ${pc(back)} came back since last month. Only raids that come back before the repair is done keep it down.` });
+      damage.push({ place, kind: k, done, down, back, words: theWords(`${pc(down)} of ${what} is down${done > 0 ? `: ${pc(done)} from this month's raids, the rest from earlier raids not yet repaired` : ', all from earlier raids not yet repaired'}. ${pc(back)} has come back since last month. Only raids repeated before the repairs are done keep it down.`) });
     }
     const b = built ? (c.kind === 'sky' ? built[1] : built[2] ?? built[1]) : 0, tr = trained ? trained[1] : 0;
     out.push({
@@ -743,8 +749,8 @@ export function campaignView(g: Game, nat: string): CampaignRow[] {
       targets: c.targets.map((t) => g.regions[t].name), groups: c.groups.map(name).filter(Boolean), escorts: c.escorts.map(name).filter(Boolean),
       skies, damage,
       losses: { month: now, all, sent, rate, band: sent > 0 ? lossBand(rate) : 'Nothing flown yet this month.' },
-      replace: { built: b, trained: tr, words: `The works build about ${b} ${c.kind === 'sky' ? 'fighters' : 'bombers'} a month and the schools train about ${tr} pilots. This month the campaign lost ${now}.` },
-      ...(c.book !== undefined ? { book: `History's campaign: ${AC.book[c.book].what}, ${month(AC.book[c.book].from)} to ${month(AC.book[c.book].to)}.` } : {}),
+      replace: { built: b, trained: tr, words: `The works build about ${b} ${c.kind === 'sky' ? 'fighters' : 'bombers'} a month and the schools train about ${tr} pilots. This month the campaign lost ${now} aircraft.` },
+      ...(c.book !== undefined ? { book: `History's campaign: ${AC.book[c.book].what}, ${span(AC.book[c.book].from, AC.book[c.book].to)}.` } : {}),
     });
   }
   return out;

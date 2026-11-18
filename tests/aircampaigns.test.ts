@@ -249,7 +249,7 @@ describe('a campaign is a standing order', () => {
     const { g, ids, ruhr } = raf();
     expect(whyNotCampaign(g, 'UK', 'bomb', [ruhr], ids, { night: true })).toBeNull();
     const c = openCampaign(g, 'UK', 'bomb', [ruhr], ids, { night: true })!;
-    expect(c.name).toBe('The bombing of Ruhr by night');
+    expect(c.name).toBe('The bombing of the Ruhr by night');
     const reps = airBattles(g, 'UK');
     expect(reps.some((r) => r.mission === 'night' && r.region === ruhr)).toBe(true);
     expect(c.log).toHaveLength(1);
@@ -327,6 +327,21 @@ describe('a campaign is a standing order', () => {
     expect(lossBand(0.01)).toMatch(/Light/);
   });
 
+  it("reads in the UI director's words: the player is 'you', places take 'the' (21:06Z)", () => {
+    const { g, ids, ruhr } = raf();
+    const c = openCampaign(g, 'UK', 'bomb', [ruhr], ids, { night: true })!;
+    expect(c.name).toBe('The bombing of the Ruhr by night');
+    airBattles(g, 'UK');
+    // Germany has already moved this month, so the raid's harm falls on its next month's output.
+    g.turn++;
+    const [row] = campaignView(g, 'UK');
+    expect(row.damage[0].words).toMatch(/^\d+(\.\d)?% of the Ruhr's output is down: \d+(\.\d)?% from this month's raids, the rest from earlier raids not yet repaired\. \d+(\.\d)?% has come back since last month\. Only raids repeated before the repairs are done keep it down\.$/);
+    expect(row.replace.words).toMatch(/This month the campaign lost \d+ aircraft\.$/);
+    g.human = 'UK';
+    callOff(g, c.id);
+    expect(g.headlines[g.headlines.length - 1].text).toMatch(/^The bombing of the Ruhr by night has ended after a month: you called it off\.$/);
+  });
+
   it('is kept in a save', () => {
     const { g, ids, ruhr } = raf();
     openCampaign(g, 'UK', 'bomb', [ruhr], ids, { night: true });
@@ -392,7 +407,7 @@ describe("radar by the tree and the record (riders b553 and b558, Brian's \"if y
     const h = grand();
     h.turn = 12;
     learn(h, 'FRA', 'earlywarning');
-    expect(warned(raid(h, 'GER', 'FRA', 'Paris'))).toBe('The French early-warning chain gives warning');
+    expect(warned(raid(h, 'GER', 'FRA', 'Paris'))).toBe('The French radar chain gives warning');
   });
 
   it("at the stops that follow the book each great power's chain comes on the record's month, over the record's ground, whatever its research", () => {
@@ -425,9 +440,9 @@ describe("radar by the tree and the record (riders b553 and b558, Brian's \"if y
     // At stops 3 to 5 the tree rules: the record's part-ground rows give way to it.
     setStop(g, 3, true);
     g.turn = 23;
-    expect(chain(g, 'Moscow')).toBe('the Soviet early-warning chain');
-    expect(chain(g, 'Kiev')).toBe('the Soviet early-warning chain');
-    expect(chain(g, 'Paris')).toBe('the French early-warning chain');
+    expect(chain(g, 'Moscow')).toBe('the Soviet radar chain');
+    expect(chain(g, 'Kiev')).toBe('the Soviet radar chain');
+    expect(chain(g, 'Paris')).toBe('the French radar chain');
     g.turn = 1;
     expect(chain(g, 'Bremen')).toBeUndefined();
   });
@@ -518,8 +533,11 @@ describe("radar by the tree and the record (riders b553 and b558, Brian's \"if y
       return gunnerRatio(g, nat, o.m ?? 'bomb', place, !!o.night, !!o.escort);
     };
     const london = g.byName.London.id, ruhr = g.byName.Ruhr.id, japan = g.byName.Rome.id;
-    // Ground Japan holds (the Europe chart has none, so a stand-in province changes hands).
+    // Ground Japan holds (the Europe chart has none, so a stand-in province changes hands): first an outer island, then a home island.
     g.regions[japan].ctrl = 'JAP';
+    g.regions[japan].name = 'Formosa';
+    expect(at('USA', japan, 60)).toBe(0.4);
+    g.regions[japan].name = 'Tokyo';
     expect(at('GER', london, 12)).toBe(0.07);
     expect(at('UK', ruhr, 4)).toBe(0.15);
     expect(at('UK', ruhr, 20)).toBe(0.07);
