@@ -1465,12 +1465,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    * too close to its own men to fire on enough of it.
    */
   airWhyNot(s: Side, run?: [number, number, number, number]): string | null {
-    if (!this.airOn[s]) return 'None on call';
+    if (!this.airOn[s]) return 'No fighters on call';
     if (this.airLeft[s] <= 0) return 'All strikes flown';
     if (this.contactAt === null) return 'After the armies meet';
-    if (this.flying(s)) return 'On the way';
-    if (this.t < this.airNext[s]) return 'Not ready yet';
-    if (run && this.clearShare(s, run) < LAND.air.least) return 'Too close to our men';
+    if (this.flying(s)) return 'A strike is on its way';
+    if (this.t < this.airNext[s]) { const w = Math.ceil(this.airNext[s] - this.t); return `Ready in ${Math.floor(w / 60)}:${String(w % 60).padStart(2, '0')}`; }
+    if (run && this.clearShare(s, run) < LAND.air.least) return 'Too close to your own men';
     return null;
   }
 
@@ -1580,7 +1580,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.airNext[s] = this.airLeft[s] > 0 ? this.t + LAND.air.every : Infinity;
     const human = this.ticket[s].human;
     // The staff's call on the player's side says so; his own needs no word, nor does the enemy's (he sees its planes).
-    this.say({ what: 'land:air-call', side: s, text: human && !r ? 'The staff called in the planes.' : '', x: legs[0].flight.run[0], y: legs[0].flight.run[1], extra: { flights: legs.map((l) => l.flight.id), runs: legs.map((l) => l.flight.run), eta: LAND.air.eta, by: r ? 'you' : 'staff' } });
+    this.say({ what: 'land:air-call', side: s, text: human && !r ? 'The staff called in the fighters.' : '', x: legs[0].flight.run[0], y: legs[0].flight.run[1], extra: { flights: legs.map((l) => l.flight.id), runs: legs.map((l) => l.flight.run), eta: LAND.air.eta, by: r ? 'you' : 'staff' } });
     return true;
   }
 
@@ -1699,18 +1699,19 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * The words a strafing run leaves in the dispatches, for the player's side only and never naming a block he does not
-   * know (b464(2)): his own run, the blocks it struck; theirs, his blocks it struck. Drafts for the UI director.
+   * know (b464(2)): his own run, the blocks it struck; theirs, his blocks it struck. The UI director's words (21:18Z):
+   * "strafed and bombed" where the run let bombs go.
    */
   private strafeWords(s: Side, l: Leg): string {
     const me: Side | null = this.ticket.att.human ? 'att' : this.ticket.def.human ? 'def' : null;
     if (!me) return '';
-    const hit = [...l.struck].map((id) => this.unit(id)!);
+    const hit = [...l.struck].map((id) => this.unit(id)!), did = l.dropped > 0 ? 'strafed and bombed' : 'strafed';
     if (s === me) {
       const seen = hit.filter((u) => this.known(u));
-      return !hit.length ? 'Your fighters found nothing under their run.' : seen.length ? `Your fighters strafed ${seen.map((u) => this.named(u)).join(' and ')}.` : 'Your fighters strafed the enemy line.';
+      return !hit.length ? 'Your fighters found nothing under their run.' : seen.length ? `Your fighters ${did} ${seen.map((u) => this.named(u)).join(' and ')}.` : `Your fighters ${did} the enemy line.`;
     }
     const mine = hit.filter((u) => u.side === me);
-    return mine.length ? `${this.ticket[s].adj} fighters strafed your ${mine.map((u) => u.name).join(' and your ')}.` : '';
+    return mine.length ? `${this.ticket[s].adj} fighters ${did} your ${mine.map((u) => u.name).join(' and your ')}.` : '';
   }
 
   /**
@@ -1725,9 +1726,18 @@ export class LandBattle implements BattleSim<LandUnit> {
       for (let i = 0; i < falls; i++, n++) {
         const f = k.legs[n % k.legs.length].flight;
         const m = mix(f.id * 7919 + n * 131 + 17), kind = m < 0.3 ? 'explode' : m < 0.7 ? 'burn' : 'spin';
-        this.say({ what: 'air:lost', side: k.side, text: '', x: Math.round(f.x * 10) / 10, y: Math.round(f.y * 10) / 10, extra: { flight: f.id, kind, chutes: kind !== 'explode' && mix(f.id * 613 + n * 7) < 0.5 ? 1 : 0, over: k.side === 'att' ? 'enemy' : 'own', air: 'ftr', alt: Math.round(f.alt) }, cue: 'plane_down' });
+        this.say({ what: 'air:lost', side: k.side, text: this.lostWords(k.side), x: Math.round(f.x * 10) / 10, y: Math.round(f.y * 10) / 10, extra: { flight: f.id, kind, chutes: kind !== 'explode' && mix(f.id * 613 + n * 7) < 0.5 ? 1 : 0, over: k.side === 'att' ? 'enemy' : 'own', air: 'ftr', alt: Math.round(f.alt) }, cue: 'plane_down' });
       }
     }
+  }
+
+  /** A fighter down, in the player's dispatches (the UI director, 21:18Z): his own to ground fire, or theirs to his men. */
+  private lostWords(s: Side): string {
+    const me: Side | null = this.ticket.att.human ? 'att' : this.ticket.def.human ? 'def' : null;
+    if (!me) return '';
+    if (s === me) return 'Ground fire brought down one of your fighters.';
+    const adj = this.ticket[s].adj, word = adj === 'Enemy' ? 'enemy' : adj;
+    return `Your men brought down ${/^[AEIOUaeiou]/.test(word) ? 'an' : 'a'} ${word} fighter.`;
   }
 
   /** What each side's fighters flew and lost, by group, for the campaign's bill (FieldResult.air). */

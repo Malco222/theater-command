@@ -535,7 +535,7 @@ function updateTop(force = false): void {
   const airBtn = byId('airBtn'), airSt = byId('airState');
   if (airBtn && airSt) {
     const a = b.airView().air?.[S.scene.me];
-    const said = !a || over ? '' : a.eta !== null ? `On the way ${mmss(a.eta)}` : a.left <= 0 ? 'All flown' : a.ready ? `Ready · ${a.left} left` : a.nextIn !== null ? `Next ${mmss(a.nextIn)} · ${a.left} left` : b.contactAt === null ? 'After the armies meet' : `${a.left} left`;
+    const said = !a || over ? '' : a.eta !== null ? `Over the field in ${mmss(a.eta)}` : a.left <= 0 ? 'All flown' : a.ready ? `Ready · ${a.left} left` : a.nextIn !== null ? `Ready in ${mmss(a.nextIn)} · ${a.left} left` : b.contactAt === null ? 'After the armies meet' : `${a.left} left`;
     if (airSt.textContent !== said) airSt.textContent = said;
     airBtn.classList.toggle('is-lit', !!S.scene.air);
     airBtn.classList.toggle('is-off', !a?.ready || over);
@@ -653,8 +653,10 @@ function wireBattle(): void {
     const [fx, fy] = toField(sc, px, py);
     // Air support armed: the run a strike would fly from here, as the field lays it.
     if (sc.air && (!down || (!down.touch && down.button === 0) || (down.button === 2 && !down.moved))) {
-      const run = b.airRunAt(sc.me, fx, fy);
-      sc.air = { run, ok: b.airWhyNot(sc.me, run) === null };
+      const run = b.airRunAt(sc.me, fx, fy), why = b.airWhyNot(sc.me, run);
+      sc.air = { run, ok: why === null };
+      // The red run says why (the UI director, 21:18Z).
+      if (why) S.tag = { text: why, until: now() + 0.6, air: true };
       canvas.style.cursor = 'crosshair';
     }
     if (!down) {
@@ -677,8 +679,9 @@ function wireBattle(): void {
       // Air support armed: the right-drag is the run itself.
       const [ax, ay] = toField(sc, down.x, down.y);
       // As the field will fly it: kept on the field and to its longest.
-      const run = b.airRun([ax, ay, fx, fy]);
-      sc.air = { run, ok: b.airWhyNot(sc.me, run) === null };
+      const run = b.airRun([ax, ay, fx, fy]), why = b.airWhyNot(sc.me, run);
+      sc.air = { run, ok: why === null };
+      if (why) S.tag = { text: why, until: now() + 0.6, air: true };
     } else if (down.button === 2) {
       const ids = chosen();
       if (ids.length) {

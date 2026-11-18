@@ -175,11 +175,11 @@
 //     called by the staff, so a player who forgets his planes is never short of them. The enemy's are called by its
 //     staff by the same rule, never aimed sharper.
 //   The button: "Air support" in the field's top bar where view.air[me] is set, its state beside it ("Ready · 2 left",
-//     "Next 0:31 · 2 left", "On the way 0:07", "All flown", "After the armies meet"); then the player points at the
+//     "Ready in 0:31 · 2 left", "Over the field in 0:07", "All flown", "After the armies meet"); then the player points at the
 //     ground and the run shows as a band 60 m wide, brass where it can be flown and red where TC.battleAirRun's why is
-//     set ("Too close to our men", where our men are under too much of it); a click calls it. The browser page's
+//     set ("Too close to your own men", where his men are under too much of it; the field's tag says it); a click calls it. The browser page's
 //     battle page does all of this with plain marks: copy its behaviour, not its look. The words are the UI director's
-//     to change (b533(d)).
+//     (21:18Z review).
 //   view.flights: [{ id, side, nat, year, models, x, y, alt, face, phase, run }], each flight two to four fighters drawn
 //     as one picture (models), never a unit: nothing on the field fires at it or is hidden by it. x, y field metres,
 //     alt metres above the ground, face radians as the units'. phase 'in' (flying to the start of its run), 'run'
@@ -190,15 +190,16 @@
 //   Events (all with side, t, and x, y where they happen):
 //     'land:air-call' { flights, runs, eta, by: 'you' | 'staff' } when a strike is called; x, y the first run's start.
 //       Its flights are in view.flights from then, phase 'in', eta seconds out. Text on the player's side when his
-//       staff called it: "The staff called in the planes."
+//       staff called it: "The staff called in the fighters."
 //     'land:air-in' { flight, run, models, alt, nat, year, heading }, cue 'fighter_pass': the flight is over the start
 //       of its run and drops onto it. Its engines are the 'fighter_loop' bed while it is in view.flights.
 //     'land:strafe' { flight, from, to, width, secs }, cue 'machine_gun', at the same moment: the guns open down the
 //       run from 'from' to 'to', 60 m wide, for secs seconds: the fighter's 'fire' clip and its muzzles gun.1..N, the
 //       strike of the rounds walking down the strip as the flight flies it. No words.
 //     'land:strafed' { flight, on } as the run ends: 'on' lists the blocks it struck that the player can see. Its text,
-//       on the player's side: "Your fighters strafed the 4th Rifle Division." (or "the enemy line", or "found nothing
-//       under their run"); on his own men: "Soviet fighters strafed your 1st Panzer Division." No cue.
+//       on the player's side: "Your fighters strafed the 4th Rifle Division." ("strafed and bombed" where the run let
+//       bombs go; or "the enemy line", or "found nothing under their run"); on his own men: "Soviet fighters strafed
+//       your 1st Panzer Division." No cue.
 //     'land:bomb-drop' { flight, from: { x, y, alt }, to: { x, y }, at }: a bomb let go from the flight's 'bombs'
 //       socket, two a run, from the year its nation first flew fighter-bombers (the historian's table: Germany, the
 //       Soviets and Italy 1941; Britain and America 1942; Japan and France 1943; Poland never; others 1942); before
@@ -209,8 +210,9 @@
 //       sheet (reach 45 m), sound 'bomb_single_01' or '_02'. It leaves a 'crater' zone like a shell's. 'on' and
 //       'armour' only for a block the player knows; over one he does not, it bursts as on its ground. A bomb costs no
 //       model of its own: it is a picture of the strike's blow, which the field pays with the run.
-//     'air:lost' { flight, kind, chutes, over, air: 'ftr', alt }, cue 'plane_down': one fighter of the flight falls
-//       as the strike pulls away, for each whole plane the campaign's price for a strike comes to (never the dice):
+//     'air:lost' { flight, kind, chutes, over, air: 'ftr', alt }, cue 'plane_down', text on the player's side ("Ground
+//       fire brought down one of your fighters." / "Your men brought down a Soviet fighter."): one fighter of the flight
+//       falls as the strike pulls away, for each whole plane the campaign's price for a strike comes to (never the dice):
 //       kind 'burn', 'spin' or 'explode' (its clips 'smoking', then 'fall_burn', 'fall_spin' or 'fall_explode');
 //       chutes, how many 'bail_out' (0 or 1). Brian, 19:33Z: "if a plane gets hit show the bullet holes or flak holes":
 //       before 'smoking', lay her <Name>Damage model on her and hold 'damage.flak' at 2 or 3 (ground fire;
@@ -488,7 +490,7 @@ export function battleCalls(h: BattleHooks) {
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
-      if (!land) return { run: null, why: 'None on call' };
+      if (!land) return { run: null, why: 'No fighters on call' };
       // A drawn run as the field will fly it (kept on the field and to its longest), or the one pointed at.
       const run: [number, number, number, number] = x1 !== undefined && y1 !== undefined ? land.airRun([x, y, x1, y1]) : land.airRunAt(ses.me, x, y);
       return { run, why: land.airWhyNot(ses.me, run) };
@@ -534,7 +536,11 @@ export function battleCalls(h: BattleHooks) {
       if (!raid) return null;
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
       if (!t.ticket) return null;
-      const sim = new AirSim(t.ticket);
+      // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act
+      // out (the air battles thread, 2dc2da46). Written so it holds before that AirSim reaches this branch and after; once
+      // it has, this is plain new AirSim(t.ticket, { show: true }).
+      const Shown = AirSim as unknown as new (ticket: typeof t.ticket, opts: { show?: boolean }) => AirSim;
+      const sim = new Shown(t.ticket, { show: true });
       // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
       // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
       const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));

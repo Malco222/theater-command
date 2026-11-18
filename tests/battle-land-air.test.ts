@@ -145,14 +145,14 @@ describe('calling a strike', () => {
     const met = b.contactAt!;
     while (!b.over && b.t < met + LAND.air.first - 1) b.step();
     expect(b.airReady('att')).toBe(false);
-    expect(b.airWhyNot('att')).toBe('Not ready yet');
+    expect(b.airWhyNot('att')).toMatch(/^Ready in 0:0[1-9]$/);
     const ev = fight(b);
     const calls = ev.filter((e) => e.what === 'land:air-call' && e.side === 'att');
     expect(calls.length).toBeGreaterThan(0);
     expect(calls[0].extra!.by).toBe('staff');
     expect(calls[0].t).toBeGreaterThanOrEqual(met + LAND.air.first + LAND.air.wait - 0.15);
     // On the player's side the staff's call says so.
-    expect(calls[0].text).toBe('The staff called in the planes.');
+    expect(calls[0].text).toBe('The staff called in the fighters.');
   });
   it('his own call goes down the run he points at, and its guns never fire within reach of his own men', () => {
     const b = new LandBattle(ticket({ att: ON(0.1) }));
@@ -162,7 +162,7 @@ describe('calling a strike', () => {
     // Down his own line: refused.
     const mine = b.units.filter((u) => u.side === 'att' && u.state !== 'gone');
     const own = mine[0];
-    expect(b.airWhyNot('att', [own.x - 100, own.y, own.x + 100, own.y])).toBe('Too close to our men');
+    expect(b.airWhyNot('att', [own.x - 100, own.y, own.x + 100, own.y])).toBe('Too close to your own men');
     expect(b.command({ do: 'land:air', x0: own.x - 100, y0: own.y, x1: own.x + 100, y1: own.y }, 'att')).toBe(false);
     // At the enemy block nearest the middle of his line: down its frontage.
     const foe = b.units.filter((u) => u.side === 'def' && u.state !== 'gone').sort((p, q) => Math.abs(p.x - 1500) - Math.abs(q.x - 1500))[0];
@@ -170,7 +170,7 @@ describe('calling a strike', () => {
     expect(Math.hypot((run[0] + run[2]) / 2 - foe.x, (run[1] + run[3]) / 2 - foe.y)).toBeLessThan(1);
     if (b.airWhyNot('att', run) === null) {
       expect(b.command({ do: 'land:air', x0: run[0], y0: run[1], x1: run[2], y1: run[3] }, 'att')).toBe(true);
-      expect(b.airWhyNot('att')).toBe('On the way');
+      expect(b.airWhyNot('att')).toBe('A strike is on its way');
       const ev = fight(b);
       const call = ev.find((e) => e.what === 'land:air-call' && e.side === 'att');
       expect(b.log.find((e) => e.what === 'land:air-call' && e.side === 'att')!.extra!.by).toBe('you');
