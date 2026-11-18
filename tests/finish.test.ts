@@ -49,8 +49,8 @@ describe('the data', () => {
     expect(lib.finish.notice).toBe(3);
     expect(lib.finish.push).toBeGreaterThanOrEqual(2);
     expect(LIB.finish.notice).toBe(lib.finish.notice);
-    // Nothing acts before the chief enemy's fall unless the data says so.
-    expect(lib.finish.before).toBe(false);
+    // The letter of ruling 115(b) and (c): Vichy's end and a freed country's old wars do not wait for Germany's fall.
+    expect(lib.finish.before).toBe(true);
   });
 });
 
@@ -63,44 +63,45 @@ describe('a fallen country\'s wars', () => {
     expect(g.nations.FRA.atWar).toEqual([]);
   });
 
-  it('are taken up again in the month its liberators\' chief enemy falls, where their alliance still fights them', () => {
+  it('are taken up again as it returns, where its liberator\'s alliance still fights them', () => {
     const g = world();
     eastern(g);
     // France was at war with Italy when it fell; the Soviet Union, which frees it, never was.
     g.flags['fw:FRA:ITA'] = g.nations.FRA.fellOn!.turn;
     freeParis(g, 'SOV');
     expect(g.nations.FRA.alive).toBe(true);
+    expect(g.nations.GER.alive).toBe(true);
     expect(atWar(g, 'FRA', 'GER')).toBe(true);
-    // While Germany stands it fights its liberator's wars and no others, as it always has.
-    expect(atWar(g, 'FRA', 'ITA')).toBe(false);
-    finishMonthEnd(g);
-    expect(atWar(g, 'FRA', 'ITA')).toBe(false);
-    capitulate(g, 'GER', 'SOV');
-    finishMonthEnd(g);
     expect(atWar(g, 'FRA', 'ITA')).toBe(true);
     expect(atWar(g, 'SOV', 'ITA')).toBe(false);
-    expect(g.headlines.some((h) => /France takes up its old war with Italy again/.test(h.text))).toBe(true);
   });
 
-  it('are taken up as it returns, if the chief enemy has fallen already', () => {
+  it('wait for the month its liberators\' chief enemy falls where the data says so', () => {
     const g = world();
     eastern(g);
     g.flags['fw:FRA:ITA'] = g.nations.FRA.fellOn!.turn;
-    capitulate(g, 'GER', 'SOV');
-    freeParis(g, 'UK');
-    expect(g.nations.FRA.alive).toBe(true);
-    expect(atWar(g, 'FRA', 'ITA')).toBe(true);
-  });
-
-  it('are taken up as it returns while the chief enemy stands only where the data says so', () => {
-    const g = world();
-    eastern(g);
-    g.flags['fw:FRA:ITA'] = g.nations.FRA.fellOn!.turn;
-    LIB.finish.before = true;
-    try { freeParis(g, 'SOV'); } finally { LIB.finish.before = false; }
-    expect(g.nations.FRA.alive).toBe(true);
-    expect(atWar(g, 'FRA', 'ITA')).toBe(true);
-    expect(atWar(g, 'SOV', 'ITA')).toBe(false);
+    LIB.finish.before = false;
+    try {
+      freeParis(g, 'SOV');
+      expect(g.nations.FRA.alive).toBe(true);
+      expect(atWar(g, 'FRA', 'GER')).toBe(true);
+      // While Germany stands it fights its liberator's wars and no others.
+      expect(atWar(g, 'FRA', 'ITA')).toBe(false);
+      finishMonthEnd(g);
+      expect(atWar(g, 'FRA', 'ITA')).toBe(false);
+      capitulate(g, 'GER', 'SOV');
+      finishMonthEnd(g);
+      expect(atWar(g, 'FRA', 'ITA')).toBe(true);
+      expect(atWar(g, 'SOV', 'ITA')).toBe(false);
+      expect(g.headlines.some((h) => /France takes up its old war with Italy again/.test(h.text))).toBe(true);
+      // And a country freed after the fall takes them up as it returns.
+      const h = world();
+      eastern(h);
+      h.flags['fw:FRA:ITA'] = h.nations.FRA.fellOn!.turn;
+      capitulate(h, 'GER', 'SOV');
+      freeParis(h, 'UK');
+      expect(atWar(h, 'FRA', 'ITA')).toBe(true);
+    } finally { LIB.finish.before = true; }
   });
 
   it('are left alone where nobody of its liberator\'s side fights them any longer', () => {
@@ -125,7 +126,7 @@ describe('a fallen country\'s wars', () => {
 });
 
 describe('Vichy', () => {
-  it('does not outlive Germany: with France free again in Paris its ground and its troops are France\'s', () => {
+  it('ends in the month France is free again in Paris: its ground and its troops are France\'s', () => {
     const g = world();
     eastern(g);
     const held = g.regions.filter((r) => r.ctrl === 'VIC').map((r) => r.id);
@@ -133,10 +134,7 @@ describe('Vichy', () => {
     expect(held.length).toBeGreaterThan(5);
     freeParis(g, 'UK');
     expect(g.nations.FRA.alive).toBe(true);
-    // While Germany stands it stands beside a free France, as it always has.
-    finishMonthEnd(g);
-    expect(g.nations.VIC.alive).toBe(true);
-    capitulate(g, 'GER', 'SOV');
+    expect(g.nations.GER.alive).toBe(true);
     finishMonthEnd(g);
     expect(g.nations.VIC.alive).toBe(false);
     expect(g.regions.filter((r) => r.ctrl === 'VIC' || r.owner === 'VIC')).toEqual([]);
@@ -171,15 +169,19 @@ describe('Vichy', () => {
     expect(h.nations.VIC.alive).toBe(true);
   });
 
-  it('ends with a free France in Paris while Germany stands only where the data says so', () => {
+  it('waits for Germany\'s fall where the data says so', () => {
     const g = world();
     eastern(g);
     freeParis(g, 'UK');
-    LIB.finish.before = true;
-    try { finishMonthEnd(g); } finally { LIB.finish.before = false; }
-    expect(g.nations.GER.alive).toBe(true);
-    expect(g.nations.VIC.alive).toBe(false);
-    expect(g.headlines.some((h) => /France is free again in Paris/.test(h.text))).toBe(true);
+    LIB.finish.before = false;
+    try {
+      finishMonthEnd(g);
+      expect(g.nations.VIC.alive).toBe(true);
+      capitulate(g, 'GER', 'SOV');
+      finishMonthEnd(g);
+      expect(g.nations.VIC.alive).toBe(false);
+      expect(g.headlines.some((h) => /With Germany beaten, its ground/.test(h.text))).toBe(true);
+    } finally { LIB.finish.before = true; }
   });
 });
 
