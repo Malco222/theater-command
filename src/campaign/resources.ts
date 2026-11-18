@@ -4,6 +4,7 @@
 // When a stock runs dry the forces get only what came in that month, and fight, fly, sail and recover worse.
 // Every number lives in data/campaign/resources.json. The historical scenarios do not use any of this.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/resources.json';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
@@ -73,6 +74,13 @@ export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
   if (!r.oil) return 0;
   return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
 }
+
+/**
+ * True for a field that gives its holder's depots nothing at home: a field on colony ground is oil overseas (ruling
+ * 194, point 1, brought in by ruling 231). Nobody draws it at home, owner or conqueror. It feeds the lane that names
+ * it, and where no lane does it waits for one. (No field of the old chart or the Americas stands on colony ground.)
+ */
+export const fieldOverseas = (r: Region): boolean => r.oil && !!r.overseas;
 
 /** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
 export const fieldOut = (g: Game, r: Region): number => (resRules(g) && (g.flags[`oilout:${r.id}`] ?? 0) > g.turn ? (g.flags[`oilcut:${r.id}`] ?? 0) / 100 : 0);
@@ -343,7 +351,8 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     let own = 0, nOwn = 0, taken = 0, nTaken = 0;
     for (const r of g.regions) {
       // The wells lie outside the town: an army that holds the field round it has them, though the town holds (prizes.ts).
-      if (!r.oil || prizeTaker(g, r, 'oil') !== nat) continue;
+      // (A field on colony ground gives nothing at home: fieldOverseas.)
+      if (!r.oil || fieldOverseas(r) || prizeTaker(g, r, 'oil') !== nat) continue;
       if (r.owner === nat) { own += fieldYield(g, r, nat); nOwn++; } else { taken += fieldYield(g, r, nat); nTaken++; }
     }
     // The wells and plants at home work for as long as the homeland is held.

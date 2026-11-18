@@ -15,6 +15,7 @@
 //   mpl:<nat>   the lowest warning the player has been given (1 half gone, 2 three quarters gone, 3 spent)
 //   mpe:<nat>   the last month in which no class comes of age, after one was called up early
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/manpower.json';
 import { turnToDate } from '../core/ticket';
 import { MEN_PER_DIV, type Game } from './types';

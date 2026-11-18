@@ -16,13 +16,15 @@
 // from the player's railhead.
 
 import railData from '../generated/campaign-rails.json';
-import worldRails from '../generated/world-americas-rails.json';
+import americasRails from '../generated/world-americas-rails.json';
+import wholeRails from '../generated/world-whole-rails.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/railways.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { downBetween } from './rivers';
-import { EASTERN, allied, atWar, headline, inDesert } from './game';
+import { allied, atWar, headline, inDesert, lineOwner } from './game';
 import { besieged } from './siege';
 import { junctionOpenTo, worksBurnt } from './prizes';
 
@@ -40,7 +42,7 @@ export const RAILWAYS = data as unknown as {
 /** The lines of the map of Europe. */
 export const RAIL_LINKS: RailLink[] = (railData as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 /** Those of the wider world (tools/build-rails.mjs world), whose provinces are numbered on from Europe's. */
-export const WORLD_RAIL_LINKS: RailLink[] = (worldRails as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+export const WORLD_RAIL_LINKS: RailLink[] = ((FAR_STAGE ? wholeRails : americasRails) as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 const ALL_LINKS: RailLink[] = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
 /** The lines on a game's map: Europe's, and the wider world's where the campaign is played on it. */
 export const railLinks = (g: Game): RailLink[] => (g.flags.world === 1 ? ALL_LINKS : RAIL_LINKS);
@@ -283,7 +285,7 @@ export function railheadAt(g: Game, nat: string, region: number): Railhead {
   if (!groundRules(g)) return AT_HOME;
   const r = g.regions[region];
   if (inDesert(r)) return AT_HOME;
-  if (EASTERN.deepOwners.includes(r.owner) && !EASTERN.deepOwners.includes(nat)) return AT_HOME;
+  if (lineOwner(g, r.owner) && !lineOwner(g, nat)) return AT_HOME;
   const road = railheads(g, nat)?.[region] ?? 0;
   if (road <= 0) return AT_HOME;
   for (const [far, attack, defence] of RAILWAYS.railhead) if (road <= far) return { road, attack, defence };

@@ -14,6 +14,7 @@ import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
 import namesData from '../../data/campaign/air-names.json';
 import carrierData from '../../data/campaign/carriers.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
@@ -34,6 +35,7 @@ import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope } from './world';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
+import { mapDist } from './wrap';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -221,7 +223,7 @@ export function airPool(g: Game, nat: string): AirPool {
 /** Kilometres between the centres of two regions. */
 export function km(g: Game, a: number, b: number): number {
   const A = g.regions[a], B = g.regions[b];
-  return Math.hypot(A.x - B.x, A.y - B.y) * AIR.kmPerUnit;
+  return mapDist(g, A.x, A.y, B.x, B.y) * AIR.kmPerUnit;
 }
 
 /** How far a base is from a sea: nothing if it stands on its shore, otherwise the distance to the nearest shore. */
@@ -1097,7 +1099,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
     let out: Region | null = null, bd = Infinity;
     for (const r of g.regions) {
       if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r) || prizeOut(g, r, 'airfield') > 0) continue;
-      const d = Math.hypot(r.x - old.x, r.y - old.y);
+      const d = mapDist(g, r.x, r.y, old.x, old.y);
       if (d < bd) { bd = d; out = r; }
     }
     return out;

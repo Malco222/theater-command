@@ -574,7 +574,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       if (!prize) return '';
       if (prize.capitalOf && prize.capitalOf !== me) return gone ? '' : `The seat of ${theName(g.nations[prize.capitalOf])}'s government is in your hands.`;
       if (prize.factories > 0) return gone ? `Its ${plural(prize.factories, 'factory', 'factories')} ${prize.factories === 1 ? 'is' : 'are'} lost to you.` : `Its ${plural(prize.factories, 'factory', 'factories')} now ${prize.factories === 1 ? 'works' : 'work'} for you.`;
-      if (prize.oil > 0) return gone ? 'Its oil is lost to you.' : 'Its oil now flows to your depots.';
+      // (A field on colony ground gives nothing at home, to owner or conqueror: resources.ts fieldOverseas.)
+      if (prize.oil > 0 && !reg!.overseas) return gone ? 'Its oil is lost to you.' : 'Its oil now flows to your depots.';
       if (prize.harbour) return gone ? 'Its harbour is closed to your ships.' : 'Its harbour is open to your ships.';
       return '';
     };

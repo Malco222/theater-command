@@ -4,6 +4,7 @@
 // own moves are events that fire only if their conditions still hold.
 // The numbers and the events live in data/campaign/diplomacy.json.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
@@ -20,6 +21,7 @@ import { mayJoin, stopDef, stopOf } from './history';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
+import { mapDist2 } from './wrap';
 import { guarantorsOf, type Guarantor } from './guarantees';
 
 export interface DiploEvent {
@@ -600,7 +602,7 @@ export function withdraw(g: Game, nat: string, from: Region): void {
     let best: Region | null = null, bd = 1e12;
     for (const r of g.regions) {
       if (r.owner !== nat || r.ctrl !== nat || r.units.length >= STACK) continue;
-      const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2;
+      const d = mapDist2(g, r.x, r.y, from.x, from.y);
       if (d < bd) { bd = d; best = r; }
     }
     if (best) relocate(g, c, best); else removeCorps(g, c);

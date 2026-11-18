@@ -3,13 +3,20 @@
 // knows (ships by class, aircraft on the coasts, admirals, readiness), and every number
 // lives in data/campaign/navy.json and data/campaign/seas.json.
 
+import { mapDist } from './wrap';
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-americas.json';
+import americasMap from '../generated/world-americas.json';
+import wholeMap from '../generated/world-whole.json';
+import { FAR_STAGE } from './stage';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
+
+/** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
+const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { capOver, deckWorth, syncWings } from './carriers';
@@ -17,6 +24,8 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
+import { lineShut } from './line';
+import { stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -49,7 +58,16 @@ export const NAVY = data as unknown as {
   fleets: FleetRow[];
   building: { nat: string; fleet: string; cls: ShipClass; from: number; to: number; perMonth: number }[];
   arrivals: [number, string, string, Partial<Ships>, string][];
+  /** The far side: a fleet's base by date. None in the older files. */
+  moves?: FleetMove[];
 };
+
+/**
+ * A fleet's base by date (navy.json, 'moves'; the Pacific planner's rows): in its month a computer-run navy moves
+ * the fleet's base to the province named, if its country holds the place, and only at the stops of the history dial
+ * the row names (every stop where it names none). A player's fleet moves when he says.
+ */
+export interface FleetMove { turn: number; nat: string; fleet: string; base: string; port: string; home: string; words: string; stops?: number[] }
 
 /** The grand campaign's navy: escorts bound to lanes, destroyers that hunt, guns that shell a coast. See fleets.json. */
 export const FLEETS = fleetData as unknown as {
@@ -123,14 +141,15 @@ export function shipList(s: Ships): string {
 
 let lookup: Int8Array | null = null;
 let lookCols = 0;
-let wide: Int8Array | null = null;
+// The wider world's lookup holds sea numbers past 127 once the far side is on the chart (145 seas): two bytes a cell.
+let wide: Int16Array | null = null;
 
 /** The same on the wider world: its chart is laid out in the same squares, from its own west edge, each row as runs of [sea, squares]. */
 function seaAtWide(x: number, y: number): number {
   const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
   const md = W.seas;
   if (!wide) {
-    wide = new Int8Array(md.cols * md.grid.length).fill(-1);
+    wide = new Int16Array(md.cols * md.grid.length).fill(-1);
     md.grid.forEach((row, r) => {
       let c = 0;
       for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0 && c < md.cols; k--) wide![r * md.cols + c++] = row[i];
@@ -528,6 +547,9 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   for (const p of [to, from]) if (!p.port) return `${placeName(p.name, true)} has no port: troops are shipped from one port to another.`;
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
   if (thornGround(g, to, c.nat)) return `${g.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
+  // (By the book a computer staff ships nobody into a harbour beyond the record's line, as it lands nobody there: a
+  // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
+  if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
   for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
@@ -614,6 +636,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
   // Guns and engineers land on no enemy shore by themselves (ruling 211(a), the grand campaign).
   if (gunsRule(g) && !cs.some(fights) && !allied(g, nat, to.ctrl) && !gunsMayFollow(g, cs[0], to)) return aloneLine(cs);
+  // (By the book a computer staff lands nobody beyond the record's line: line.ts. Never the player's.)
+  if (lineShut(g, nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
@@ -1351,6 +1375,7 @@ export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
   for (const row of NAVY.fleets) {
     if (row.nat !== nat || (row.from ?? 1) !== g.turn || g.turn <= 1 || g.fleets.some((f) => f.nat === nat && f.name === row.name)) continue;
+    if (row.base && !g.byName[row.base]) continue; // a fleet of ground this campaign's chart does not reach
     const f = addFleet(g, row);
     headline(g, 'info', `${f.name} forms at ${f.port}.`, nat);
   }
@@ -1359,10 +1384,22 @@ export function navalUpkeep(g: Game, nat: string): void {
   for (const [turn, who, fleet, ships, what] of NAVY.arrivals) {
     const f = who === nat && turn === g.turn ? named(fleet) : undefined;
     if (!f) continue;
-    for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
+    // A count below none is ships leaving for another fleet (the far side's rows): never more than are there, and the words say where they go.
+    const leaving = CLASSES.some((c) => (ships[c] ?? 0) < 0);
+    for (const c of CLASSES) f.ships[c] = Math.max(0, f.ships[c] + (ships[c] ?? 0));
     // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
     const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
-    headline(g, 'info', `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`, nat);
+    headline(g, 'info', leaving ? `${cap(what)}.` : `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`, nat);
+  }
+  for (const m of NAVY.moves ?? []) {
+    if (m.nat !== nat || m.turn !== g.turn || nat === g.human || (m.stops && !m.stops.includes(stopOf(g)))) continue;
+    const f = named(m.fleet), r = g.byName[m.base], sea = zoneOf(g, m.home);
+    if (!f || !r || r.ctrl !== nat || r.id === f.base || sea < 0) continue;
+    f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+    delete f.lane;
+    g.supplyDirty = true;
+    syncWings(g);
+    headline(g, 'info', `${m.words}.`, nat);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;
@@ -1506,7 +1543,7 @@ function newBase(g: Game, f: Fleet): boolean {
   let best: Region | null = null, bd = 1e9;
   for (const r of g.regions) {
     if (!r.port || !r.seas.length || r.ctrl !== f.nat || !canSailTo(g, f, r)) continue;
-    const d = Math.hypot(r.x - old.x, r.y - old.y);
+    const d = mapDist(g, r.x, r.y, old.x, old.y);
     if (d < bd) { bd = d; best = r; }
   }
   if (best) {

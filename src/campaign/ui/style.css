@@ -2479,3 +2479,6 @@ button.uchip:hover { border-color: var(--brass); }
   .tray { right: auto; max-width: calc(100% - 64px); }
   .tray .cards { flex: 0 1 auto; }
 }
+
+/* The far end of the world drawn again beyond the seam, where the chart goes all the way round it: only to be seen. */
+#map .wrapcopy { pointer-events: none; }

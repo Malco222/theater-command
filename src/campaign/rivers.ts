@@ -12,12 +12,15 @@
 // cannot cross.
 
 import riverData from '../generated/campaign-rivers.json';
-import worldRivers from '../generated/world-americas-rivers.json';
+import americasRivers from '../generated/world-americas-rivers.json';
+import wholeRivers from '../generated/world-whole-rivers.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
 import { allied, atWar, headline } from './game';
+import { tieBars, whyTieBars } from './far';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
 /** A river between two neighbouring regions (a is the lower id), and where on the map its bridge stands. */
@@ -43,7 +46,7 @@ export const CROSSINGS: Crossing[] = (riverData as unknown as { crossings: numbe
  * Those of the wider world (tools/build-rivers.mjs world). Its provinces are numbered on from Europe's and its
  * rivers follow Europe's in the list, so a crossing is found by its two provinces on either map.
  */
-const WIDE = worldRivers as unknown as { rivers: River[]; crossings: number[][] };
+const WIDE = (FAR_STAGE ? wholeRivers : americasRivers) as unknown as { rivers: River[]; crossings: number[][] };
 const ALL_RIVERS: River[] = [...RIVERS, ...WIDE.rivers];
 export const WORLD_CROSSINGS: Crossing[] = WIDE.crossings.map(([a, b, river, x, y]) => ({ a, b, river: river + RIVERS.length, x, y }));
 const ALL_CROSSINGS: Crossing[] = [...CROSSINGS, ...WORLD_CROSSINGS];
@@ -81,14 +84,17 @@ export function downBetween(g: Game, a: number, b: number): boolean {
 /** Whether a corps of this kind cannot cross: anything on wheels or tracks, while the bridges are down. */
 export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boolean => WHEELS.has(kind) && downBetween(g, from, to);
 
-/** Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or bridges down. */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id);
+/**
+ * Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or
+ * bridges down. On the far side, also a strike from a client's ground into a war the client is not in (far.ts).
+ */
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from);
 
 /** The plain reason a corps cannot make that move, for either interface to show, or null if it can. */
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
   const high = whyBarred(g, c, to);
   if (high) return high;
-  if (!noCrossing(g, c.kind, from, to.id)) return null;
+  if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from);
   const x = crossingOf(from, to.id)!;
   return `The bridges over the ${riverName(x)} between ${g.regions[from].name} and ${to.name} are down. ${c.name} cannot cross until engineers rebuild them.`;
 }

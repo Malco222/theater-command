@@ -11,7 +11,7 @@ import { addCorps, assess, createGame, declareWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import {
-  TRAITS, alertNation, costMul, eliteCount, eliteIn, eliteOf, eliteRule, openTraits, priceOf, traitAttack, traitDefence, traitDrafts,
+  TRAITS, alertNation, costMul, eliteCount, eliteIn, eliteOf, eliteRule, levyRule, openTraits, priceOf, traitAttack, traitDefence, traitDrafts,
   traitFleet, traitMoney, traitNames, traitRule, traitSeaLoss, traitSealift, traitsMonth, traitsOf, whyNoElite,
 } from '../src/campaign/traits';
 import { TECH } from '../src/campaign/tech';
@@ -55,6 +55,8 @@ describe('the data', () => {
         const rules = ['attack', 'defence', 'income', 'incomeMul', 'oil', 'relocate', 'drafts', 'cost', 'sealift', 'alert', 'partisans', 'fleet', 'seaLoss'].filter((k) => (t as any)[k] !== undefined);
         expect(t.builtin ? rules.length === 0 && !!t.rule : rules.length > 0 && !t.rule, `${nat}.${t.id}`).toBe(true);
         expect(traitRule(t).length, `${nat}.${t.id}`).toBeGreaterThan(10);
+        // A levy on a row the game already has carries its words by hand: they end with the levy's own sentence.
+        if (t.builtin && t.levy) expect(t.rule!.endsWith(` ${levyRule(t.levy)}`), `${nat}.${t.id}`).toBe(true);
       }
       const u = row.unit;
       if (!u) continue;

@@ -25,6 +25,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { RIVALS, builtUp, frontAshore, joinsOn, landingForce, massing, oceanRuns, opensOn, seaBase, stalemates, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
+import { FAR_STAGE } from '../src/campaign/stage';
 import { WORLD, beyondEurope, overseasOf } from '../src/campaign/world';
 import open from '../data/campaign/open.json';
 
@@ -78,7 +79,9 @@ describe('history\'s shores (rulings 39 and 40)', () => {
     // A colony overseas is open to it always (North Africa, where its first landing of the real war went in).
     expect(R('Tripoli').overseas).toBe(true);
     expect(opensOn(g, 'USA', R('Tripoli'))).toBe(true);
-    expect(joinsOn(g, 'CAN', R('Tripoli'))).toBe(true);
+    // (To Canada too on the older chart. With the whole world on it a colony across an ocean is shut to her for good:
+    // ruling 231, 3, and its rider b462. See shores-79.test.ts.)
+    expect(joinsOn(g, 'CAN', R('Tripoli'))).toBe(!FAR_STAGE);
     expect(opensOn(g, 'CAN', R('Brittany'))).toBe(false);
     // A staff with no list goes where it judges best. (Britain's has one since Version 79.)
     for (const nat of ['GER', 'ITA', 'SOV']) for (const name of ['Bergen', 'Brittany', 'Holland']) { expect(opensOn(g, nat, R(name))).toBe(true); expect(joinsOn(g, nat, R(name))).toBe(true); }

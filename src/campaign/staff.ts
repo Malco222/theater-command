@@ -10,6 +10,7 @@ import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
 import { openStores } from './resources';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';
@@ -18,6 +19,7 @@ import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
+import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -32,8 +34,9 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, theName, weather } from './game';
+import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
+import { tieWar } from './far';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -72,6 +75,11 @@ export interface Op {
   /** The works and the peace of the Winter War (winter.ts). */
   works?: Record<string, [number, ...string[]]>;
   peace?: { cede: string[]; from: number; by: number; after: number; chance: number };
+  /**
+   * By the book (a stop that dates this choice), the front it is meant for opens no general offensive while it waits:
+   * not out of impatience, not on a staff's temper row (ruling 215(b): Japan's offensive of 1944 in China).
+   */
+  wait?: boolean;
 }
 
 /**
@@ -274,6 +282,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   }
 
   const wx = weather(g);
+  const long = lineOwners(g);
   const out: Front[] = [];
   for (const [comp, f] of found) {
     // Works only stop an attack that comes from the country they were built against: the best way in is what counts.
@@ -321,7 +330,23 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     let atk = 0, fixed = 0;
     // Deep in Russia in the bad months an army that has not learned the country attacks at a fraction of its strength.
     const deep = edge.filter((id) => EASTERN.deepOwners.includes(g.regions[id].owner)).length * 2 >= edge.length;
-    const season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    let season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    // Ruling 221 (S): where the long line runs on ground the Russian winter does not reach, a staff reckons it as it
+    // reckons the winter: the strength its corps would have one province past the line they hold, averaged along the edge.
+    if (EASTERN.lineReckon && !long.includes(nat)) {
+      const reach = g.reach[nat];
+      const far = edge.filter((id) => long.includes(g.regions[id].owner) && !EASTERN.deepOwners.includes(g.regions[id].owner));
+      if (reach && far.length) {
+        let sum = 0;
+        for (const id of far) {
+          let best = Infinity;
+          for (const j of g.regions[id].nb) if (f.ours.has(j)) best = Math.min(best, reach[j]);
+          const len = (best === Infinity ? 0 : best) + EASTERN.stepFresh;
+          sum += (EASTERN.bands.find(([max]) => len <= max) ?? EASTERN.bands[EASTERN.bands.length - 1])[1];
+        }
+        season *= sum / far.length;
+      }
+    }
     for (const c of g.corps) {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];
@@ -638,6 +663,8 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
     const t = g.regions[id];
     // Behind strong works there is no way in; a place nobody holds is walked into, not attacked.
     if (f.depth[id] !== 1 || (beside && !beside.nb.includes(id)) || !atWar(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length) continue;
+    // (By the book, no main effort goes for ground beyond the record's line: line.ts.)
+    if (lineShut(g, nat, t)) continue;
     const doors = t.nb.filter((j) => (ours.has(j) || (beside && j === beside.id)) && allied(g, nat, fieldCtrl(g, g.regions[j])));
     if (!doors.length) continue;
     const front: Corps[] = [], back: Corps[] = [];
@@ -845,10 +872,20 @@ function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
 /** Whom an operation would still add to this nation's enemies: the living, not on its own side, not yet at war with it. */
 const targets = (g: Game, nat: string, op: Op): string[] => (op.declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e));
 
-/** The front a new war would open, weighed before it is declared. */
+/**
+ * A great offensive against an enemy the nation is at war with already (it declares on nobody and is no side-show):
+ * the enemies it names in its own conditions ('war:ME,HIM') who are still fighting. Empty for every other choice.
+ */
+const inWar = (g: Game, nat: string, op: Op): string[] => (op.side || (op.declare ?? []).length ? [] : (op.if ?? [])
+  .filter((c) => c.startsWith(`war:${nat},`)).map((c) => c.slice(nat.length + 5)).filter((e) => g.nations[e]?.alive && atWar(g, nat, e)));
+
+/** The front a new war would open, weighed before it is declared; for a great offensive in a war already on, its front as it stands. */
 export function prospect(g: Game, nat: string, op: Op, skip: FrontOpts['skip']): Front | null {
   const extra = new Set(targets(g, nat, op));
-  if (!extra.size) return null;
+  if (!extra.size) {
+    const foes = inWar(g, nat, op);
+    return foes.length ? fronts(g, nat, { skip, busy: (f) => onSince(g, nat, f) > 0 }).find((f) => f.enemies.some((e) => foes.includes(e))) ?? null : null;
+  }
   return fronts(g, nat, { extra, skip, busy: (f) => onSince(g, nat, f) > 0 }).find((f) => f.enemies.some((e) => extra.has(e))) ?? null;
 }
 
@@ -899,6 +936,9 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   const planned = (f: Front): boolean => list.some((op) => meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
     && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
   const hurried = (op: Op): boolean => real.some((f) => meant(op, f) && boldness(g, nat, f) > 0);
+  // By the book, a front that waits on a dated choice carrying 'wait' opens no general offensive (ruling 215(b)).
+  const waits = (f: Front): boolean => list.some((op) => op.wait && meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
+    && leash(g, nat, op.id).kind === 'dated' && (bookIf(nat, op.id) ?? op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
 
   for (const f of real) {
     const since = onSince(g, nat, f);
@@ -918,7 +958,7 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       const none = T.attackAt >= 50;
       const eager = !k ? usual : none ? (k >= I.after.length ? I.any : usual) : Math.max(I.floor, usual * I.ratio[k - 1]);
       // (A front where the last offensive was one in name only waits for more strength, or for patience to run out.)
-      if (f.ratio >= eager && !(!k && shy(g, nat, f))) {
+      if (f.ratio >= eager && !(!k && shy(g, nat, f)) && !waits(f)) {
         setOn(g, nat, f, g.turn);
         g.flags[`st:gain:${nat}`] = g.turn;
         if (f.ratio < usual) {
@@ -940,7 +980,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   const book = !!stopDef(g).book;
   const go = (k: number, beside = false): void => {
     const op = list[k];
-    const who = targets(g, nat, op);
+    // (A great offensive in a war already on is opened against the enemies it names.)
+    const who = (op.declare ?? []).length ? targets(g, nat, op) : inWar(g, nat, op);
     const last = list[flag(g, `st:goOp:${nat}`) - 1];
     if (book && last?.landings && !op.landings && g.turn - flag(g, `st:go:${nat}`) === 1) { g.flags[`st:landAt:${nat}`] = flag(g, `st:go:${nat}`); g.flags[`st:landOp:${nat}`] = flag(g, `st:goOp:${nat}`); }
     g.flags[`st:done:${nat}:${op.id}`] = g.turn;
@@ -1142,6 +1183,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
     phase.staging = { ...(phase.staging ?? {}), ...op.staging };
   }
+  // By the book, ground beyond the record's line is named in none of the staff's orders (line.ts).
+  const open = (nm: string): boolean => !g.byName[nm] || !lineShut(g, nat, g.byName[nm]);
+  for (const k of ['targets', 'objectives', 'axis', 'haltOrder'] as const) if (phase[k]?.some((nm) => !open(nm))) phase[k] = phase[k]!.filter(open);
   return phase;
 }
 
@@ -1354,7 +1398,8 @@ export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolea
  * whose landing the harbour is, where it is one. A staff that waits behind its allies (Version 79, ruling 60:
  * Canada, the island's guard) goes on from its base not before 'joinFrom', and only behind one of the allies named
  * under 'behind': into that ally's landing, a harbour he holds, or one where his field corps stand in it or next to
- * it. That holds at the stops of the history dial where history's dates do.
+ * it. That holds at the stops of the history dial where history's dates do, and there, with the whole world on the
+ * chart, a colony across an ocean is shut to such a staff for good (ruling 231, 3, and its rider b462).
  */
 export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
   const P = planned(g, nat);
@@ -1366,7 +1411,16 @@ export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
     if (P?.join && !P.join.includes(r.owner)) return false;
     return behindToStay(g, nat, r, W.behind ?? []);
   }
-  if (!P || r.overseas || ownShore(g, nat, r)) return true;
+  // A colony overseas is open always (ruling 60(b)1). Not to a staff that waits behind its allies, once the whole
+  // world is on the chart (ruling 231, 3, and its rider b462): the island's guard holds against it at the stops where
+  // history's dates hold, and a colony across an ocean stays shut to it for good. Canada's corps cross only to
+  // Britain, and go on from it as below, to the continent, not before 1943 and behind a British or an American
+  // landing; her army never went to Africa as a formation. (On the older chart a colony near an enemy was a rare
+  // thing. With Italy's Horn of Africa on it there is one from June 1940, and Canada's army sailed for Tripoli and
+  // Alexandria.) A colony on its own side of the ocean is open to it as ever: no ocean is crossed for it.
+  const guard = !!P?.behind && dated(g) && farOn(g);
+  if (!P || ownShore(g, nat, r)) return true;
+  if (r.overseas) return !guard || shoreOf(r) === shoreOf(g.nations[nat].capital);
   if (P.join && !P.join.includes(r.owner)) return false;
   if (!P.behind || !dated(g) || based(P, r)) return true;
   const B = P.behind;
@@ -2034,6 +2088,7 @@ export function stalemates(g: Game): [string, string][] {
     const B = g.nations[b];
     if (!(A.id < b) || !B?.alive || B.dormant) continue;
     if (me !== null && (A.id === me || b === me || atWar(g, me, A.id) || atWar(g, me, b))) continue;
+    if (tieWar(g, A.id, b)) continue; // the far side: a client makes no separate peace while its patron fights on (far.ts)
     const sa = sideOf(g, A.id), sb = sideOf(g, b);
     const since = Math.max(lastBattle(sa, sb), massed(sa, sb), massed(sb, sa), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
     if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;
