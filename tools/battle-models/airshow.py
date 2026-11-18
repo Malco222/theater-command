@@ -88,7 +88,13 @@ class Plane:
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed
         self.clip = self.m.clips
+        self.load = {}
+        self.carry("torpedo")
         self.put(self.at)
+
+    def carry(self, load):
+        """Which of her loads she is seen with, where she has two (a torpedo, or bombs for bombing from high up)."""
+        self.load = self.play("load." + load, 0.0)
 
     def play(self, clip, t):
         return rigid.pose_of(self.m, self.clip[clip], max(t, 0.0)) if t >= 0 and clip in self.clip else {}
@@ -98,7 +104,7 @@ class Plane:
             self.at = Vector(at)
         if q is not None:
             self.q = q
-        self.pose = rigid.merge(*poses)
+        self.pose = rigid.merge(self.load, *poses)
         rigid.apply_pose(self.arm, self.pose, model=self.m)
         self.arm.location = self.at
         self.arm.rotation_mode = "QUATERNION"

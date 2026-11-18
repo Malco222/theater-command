@@ -42,6 +42,10 @@ def main():
     A = Air(clouds=12.0)
     stage.render_setup(w, h, spp)
     p = Plane(A, name, record=rec)
+    for c in extra:
+        if c.startswith("load."):                        # (clip=load.bombs@0: she is seen with that load, not her usual one)
+            p.carry(c.split("@")[0][5:])
+    extra = [c for c in extra if not c.startswith("load.")]
     poses = [p.play("fly", 0.6)] + [p.play(c.split("@")[0], float(c.split("@")[1])) for c in extra]
     p.put((0, 0, 0), *poses)
     A.at(0.0)

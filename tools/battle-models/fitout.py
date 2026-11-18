@@ -24,11 +24,14 @@ PAINTS = {"inside": "39423A", "leather": "3A2B20", "skin": "C59B7C", "suit": "5E
 SUITS = {"UK": ("4D5666", "C9A227"), "GER": ("5C6670", "A39A5C"), "USA": ("6E6247", "C9A227"), "JAP": ("5A4632", "6B5A3C"), "SOV": ("3F3B33", "4A4538"),
          "*": ("5E5A46", "6A6650")}
 # Which machines carry guns over the engine, firing through the airscrew.
-NOSE_GUNS = {"Bf109", "Zero", "Fw190", "Yak", "Fighter"}
+NOSE_GUNS = {"Bf109", "Zero", "Fw190", "Yak", "Fighter", "Dauntless", "Val"}
 # Cannon in a jet's nose, each a port in her skin: (how far along her, where round her in degrees, 90 being her top).
 NOSE_CANNON = {"Me262": [(3.72, 68.0), (3.72, 112.0), (3.5, 40.0), (3.5, 140.0)]}
 # Who sits under each hood where it is not one pilot: (which hood, how far forward, how far to port, which way he looks).
-SEATS = {"Stuka": [(0, 0.75, 0.0, 0.0), (0, -1.55, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
+SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180.0)], "Val": [(0, 0.75, 0.0, 0.0), (0, -1.4, 0.0, 180.0)],
+         "Dauntless": [(0, 0.7, 0.0, 0.0), (0, -1.5, 0.0, 180.0)], "Avenger": [(0, 1.5, 0.0, 0.0), (0, -0.6, 0.0, 0.0)],
+         "DiveBomber": [(0, 0.7, 0.0, 0.0), (0, -1.3, 0.0, 180.0)], "TorpedoBomber": [(0, 1.15, 0.0, 0.0), (0, -0.3, 0.0, 0.0), (0, -1.7, 0.0, 180.0)],
+         "Stuka": [(0, 0.75, 0.0, 0.0), (0, -1.55, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
          "He111": [(0, -0.45, 0.0, 180.0)], "Lancaster": [(0, 7.45, 0.3, 0.0), (0, 6.95, -0.3, 0.0), (0, 5.6, 0.0, 0.0)],
          "B17": [(0, 6.05, 0.34, 0.0), (0, 6.05, -0.34, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)]}
 # Who is seen through a glass nose: (forward, to port, height above the fuselage's middle or None for 'up under the glass', looks).
@@ -398,6 +401,13 @@ def bomb_bay(m, f, s, G, hull):
         ring += [Vector((ring[-1].x, ring[-1].y, roof)), Vector((ring[0].x, ring[0].y, roof))]
         c = sum(ring, Vector()) / len(ring)
         m.add(ring + [c], [(k, (k + 1) % len(ring), len(ring)) for k in range(len(ring))], "inside", False, inward)
+    # her torpedo, where her bay can hold one instead of bombs
+    if getattr(f, "bay_torpedo", None):
+        long, r = f.bay_torpedo
+        m.use("torpedo")
+        at = Vector((xm + 0.5 * long, 0.0, hull.at(xm, lo).z + r + 0.06))
+        m.lathe(at, -X, [(0.0, 0.0), (0.06, 0.1), (0.22, 0.2), (0.5, r), (long - 1.0, r), (long - 0.35, 0.1), (long, 0.03)], "torpedo", 14 if m.fine else 8)
+        m.lathe(at - X * (long - 0.4), -X, [(0.0, r), (0.38, r)], "torpedo", 12 if m.fine else 8, caps=(False, False))
     # her bombs, in two rows on their racks
     m.use("bombs")
     wide = abs(hull.at(xm, lo).y)
@@ -413,6 +423,27 @@ def bomb_bay(m, f, s, G, hull):
             m.use("plane")                                 # (her racks stay with her when the bombs go)
             m.rod(at - X * 0.55 + Z * 0.15, Vector((at.x - 0.55, at.y, roof)), 0.025, "gunmetal", sides=4)
             m.use("bombs")
+
+
+# The machines whose flaps are full of holes (they were opened as brakes in the dive, and the holes kept her tail from
+# shaking): (from how far out, to how far out, the shares of the chord the rows stand at).
+HOLED = {"Dauntless": (0.95, 3.1, (0.8, 0.86, 0.92))}
+
+
+def holed_flaps(m, f, s, G, hull):
+    if f.name not in HOLED or not m.fine:
+        return
+    y0, y1, rows = HOLED[f.name]
+    for hand, nm in ((-1.0, "port"), (1.0, "starboard")):
+        W = G["Wing"](s["wing"], hand)
+        m.use(f"flap.{nm}" if f"flap.{nm}" in m.part_at else f"wing.{nm}")
+        n = int((y1 - y0) / 0.15)
+        for c in rows:
+            for k in range(n + 1):
+                y = y0 + (y1 - y0) * k / n
+                for upper in (True, False):
+                    p, out = W.at(y, c, upper), W.out(y, c, upper)
+                    m.disc(port(p) + port(out) * 0.005, port(out), 0.032, "engine", 8)
 
 
 def rivets(m, f, s, G, hull):
@@ -722,5 +753,6 @@ def fit(m, f, s, G, hull):
     jets(m, f, s, G, hull)
     fasteners(m, f, s, G, hull)
     rivets(m, f, s, G, hull)
+    holed_flaps(m, f, s, G, hull)
     boots(m, f, s, G, hull)
     lamps(m, f, s, G, hull)
