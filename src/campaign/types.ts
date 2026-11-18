@@ -464,6 +464,8 @@ export interface BattleReport {
   gates?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
+  /** Close air support (the grand campaign, air.json 'close'): the air strikes each side's groups on ground support flew over the battle. */
+  air?: { att: number; def: number };
   /** The garrison of a besieged town came out against the army round it. */
   sally?: boolean;
   /**
@@ -916,6 +918,13 @@ export interface AirFleet extends Storied {
   scouted?: number;
   /** A fighter group's standing order to stick with one bomber group: that group's id. It goes on every day raid the bombers fly, as far as its fighters reach. */
   escorts?: number;
+  /**
+   * A land fighter group's standing order 'Ground support' (the grand campaign, air.json 'close'): it flies over its
+   * own side's land battles within its fighters' reach, and does not meet raids or escort.
+   */
+  close?: boolean;
+  /** The week it last flew over a battle on that order, as month x 10 + week: one battle a week. */
+  closeAt?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
   /**

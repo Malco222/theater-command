@@ -65,6 +65,8 @@ export const AIR = data as unknown as {
   sky: { win: number; least: number; lasts: number; land: number; seaOwn: number; seaFoe: number };
   airfields: { holds: number };
   ready: { support: number; rest: number; flying: number; sortie: number; nightSortie: number; defend: number; move: number; floor: number };
+  /** Close air support (Brian's ask of 2026-11-18): see the note in the data. */
+  close: { on: boolean; most: number; full: number; strike: number; strikes: [number, number]; counts: number; least: number; ready: number; loss: number; enemySky: number; ai: { share: number } };
   fleets: FleetRow[];
   plan: AirPlan[];
 };
@@ -361,7 +363,7 @@ export function fightersOver(g: Game, region: number, against: string): number {
   const holder = g.regions[region].ctrl;
   let n = 0;
   for (const f of g.airFleets) {
-    if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
+    if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
     n += f.ftr * cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
   }
   return n;
@@ -429,6 +431,80 @@ export function skyByNumbers(g: Game, aN: Set<string>, dN: Set<string>, region: 
     if (r.mission === 'superiority' && r.region === region && !(by(r.attNat) && r.sky)) return null;
   }
   return side;
+}
+
+// ---- Close air support (Brian's ask of 2026-11-18, 18:58Z; air.json 'close') ----------------------------------------
+
+export const CLOSE = AIR.close;
+/** True where fighter groups may be put on ground support: the grand campaign, with the switch on. */
+export const closeRules = (g: Game): boolean => CLOSE.on === true && g.flags.open === 1;
+
+/** One group on call over a battle: what it brings, and the aircraft it loses on each air strike it flies there. */
+export interface CloseGroup { id: number; name: string; nat: string; planes: number; lose: number }
+/** One side's on-call air over a battle: its weight W, the share of its side's strength it makes, the air strikes, and the groups. */
+export interface CloseSide { W: number; share: number; strikes: number; groups: CloseGroup[] }
+/** What close air support does to one land battle: the air edge after it, and each side's part. */
+export interface CloseAir { edge: number; att: CloseSide; def: CloseSide }
+
+/** What W on call adds to its side of the air edge: up to 'most', at 'full' aircraft. It alone may carry the edge past 1 (b536). */
+export const closeEdge = (W: number): number => CLOSE.most * Math.min(1, Math.max(0, W) / CLOSE.full);
+
+/**
+ * The ground-support groups that can fly over a land battle in `region` for the side of `nats` against `enemies`: land
+ * fighter groups on that order, of those nations or of an ally at war with the other side, with fighters, fit to fly,
+ * that have not flown a raid this month or another battle this week, within their fighters' reach. Each is worth its
+ * fighters x reach x airfields x readiness x technology x fuel. `underFoe`: the other side holds the sky over it.
+ */
+export function closeOf(g: Game, nats: Set<string>, enemies: Set<string>, region: number, underFoe = false): CloseSide {
+  const out: CloseSide = { W: 0, share: 0, strikes: 0, groups: [] };
+  if (!closeRules(g)) return out;
+  const stamp = g.turn * 10 + g.week;
+  for (const f of g.airFleets) {
+    if (!f.close || f.ftr <= 0 || f.ship !== undefined || f.mission !== 'support' || f.flew === g.turn || f.ready < CLOSE.least || f.closeAt === stamp) continue;
+    if (!g.nations[f.nat]?.alive) continue;
+    const ours = nats.has(f.nat) || ([...nats].some((x) => allied(g, x, f.nat)) && [...enemies].some((e) => atWar(g, f.nat, e)));
+    if (!ours || ![...enemies].some((e) => atWar(g, f.nat, e))) continue;
+    const reachOf = cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
+    if (reachOf <= 0) continue;
+    const planes = f.ftr * reachOf;
+    out.W += planes * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * fuelAir(g, f.nat);
+    // (No dice: the air war never touches the land war's luck. Under the other side's sky more of them are lost.)
+    const lose = Math.min(f.ftr, Math.round(planes * CLOSE.loss * (underFoe ? CLOSE.enemySky : 1)));
+    out.groups.push({ id: f.id, name: f.name, nat: f.nat, planes: Math.round(planes), lose });
+  }
+  return out;
+}
+
+/** The air strikes a side's on-call air makes over a battle: W / strike, between strikes[0] and strikes[1], where it counts for anything. */
+export const closeStrikes = (side: CloseSide): number =>
+  side.share >= CLOSE.counts && side.groups.length ? clamp(Math.round(side.W / CLOSE.strike), CLOSE.strikes[0], CLOSE.strikes[1]) : 0;
+
+/**
+ * Books a land battle's close air support to the groups that flew it, once: each loses its aircraft for every air strike
+ * its side flew (`sorties`, by group id: the field's own count where the battle was fought on the field, else the
+ * strikes the card gave), pays 'ready' readiness, and is done for the week. A side that made no strike flies none.
+ */
+export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Record<number, number>): void {
+  if (!air) return;
+  const stamp = g.turn * 10 + g.week;
+  for (const [side, home] of [[air.att, false], [air.def, true]] as const) {
+    if (!side.strikes && !sorties) continue;
+    for (const k of side.groups) {
+      const f = g.airFleets.find((x) => x.id === k.id);
+      const n = sorties ? sorties[k.id] ?? 0 : side.strikes;
+      if (!f || n <= 0) continue;
+      const lost = Math.min(f.ftr, k.lose * n);
+      if (lost > 0) {
+        const p = airPool(g, f.nat);
+        // Pilots who come down over their own ground mostly fly again; over the enemy's, few do.
+        const back = Math.round(lost * (home ? AIR.pilots.home : AIR.pilots.away));
+        f.ftr -= lost; f.lost.ftr += lost;
+        p.lostFtr += lost; p.pilots += back; p.lostPilots += lost - back;
+      }
+      f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
+      f.closeAt = stamp;
+    }
+  }
 }
 
 /** True when enemy fighters still defend the sky over a coast and the invader has not won it: no invasion fleet can cross under them. */
@@ -1251,7 +1327,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // Who comes up is comesUp()'s (ruling 225): over troops and ships any enemy fighter in reach, over the land itself the
   // groups that guard that ground, and carrier fighters only where their fleet is.
   for (const f of g.airFleets) {
-    if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, nat)) continue;
+    if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, nat)) continue;
     if (!comesUp(g, f, m, target, zone)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     let w = cover(d, reach(f, g).ftrRange) * crowding(g, f);
@@ -1716,6 +1792,8 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
   const mine = airFleetsOf(g, nat).filter((f) => !afloat(f) || !byHand(g, nat, 'navy'));
   // A group that has flown this month already stays away until the next.
   for (const f of mine) if (f.flew !== g.turn) { f.mission = 'support'; f.target = -1; }
+  // (Its ground support is decided afresh each month, once its fighters are based: closeStaff.)
+  if (closeRules(g)) for (const f of mine) delete f.close;
   if (!n.alive || !n.atWar.length) return;
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
@@ -1845,6 +1923,30 @@ export function effortBattles(g: Game, nat: string, ph?: PlanPhase | null): numb
 }
 
 /**
+ * A staff's ground support (close air support, the design director's b536): while its main army is on the attack,
+ * the staff puts on ground support the land fighter groups that reach the battles of its main effort, nearest first,
+ * up to close.ai.share of its land fighters; the rest patrol, guard its troops and cities, and fly its sweeps and
+ * escorts as before. On the defensive, or while the army is being brought up, every group patrols. The grand campaign,
+ * with the switch on, only.
+ */
+function closeStaff(g: Game, mine: AirFleet[], battles: number[]): void {
+  if (!closeRules(g) || !battles.length) return;
+  const land = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined && !afloat(f));
+  let left = CLOSE.ai.share * land.reduce((s, f) => s + f.ftr, 0);
+  const near = (f: AirFleet): number => Math.min(...battles.map((b) => kmTo(g, f, b)));
+  const can = land
+    .filter((f) => f.mission === 'support' && f.flew !== g.turn && f.ready >= CLOSE.least && battles.some((b) => cover(kmTo(g, f, b), reach(f, g).ftrRange) > 0))
+    .map((f) => ({ f, d: near(f) }))
+    .sort((a, b) => a.d - b.d || a.f.id - b.f.id);
+  for (const { f } of can) {
+    if (f.ftr > left) continue;
+    f.close = true;
+    delete f.escorts;
+    left -= f.ftr;
+  }
+}
+
+/**
  * Where a staff's bombers stand (ruling 227, b447): while it has a main effort, each bomber group goes to the airfield
  * from which it reaches most of that effort's battles, and moves only when that is clearly better than where it is
  * (airwar.json ai.basing, as the fighters). With no main effort the bombers stay where they are. Groups that flew or
@@ -1896,7 +1998,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   const you = B ? seat(g) : null;
   const rng = airRng(g, `staff:${nat}`);
   const used = new Set<number>();
-  const fit = (f: AirFleet): boolean => !used.has(f.id) && f.flew !== g.turn && f.mission === 'support';
+  // (A group on ground support flies over the army's battles, not on raids or sweeps.)
+  const fit = (f: AirFleet): boolean => !used.has(f.id) && f.flew !== g.turn && f.mission === 'support' && !f.close;
   const leads = (): AirFleet[] => mine.filter((f) => fit(f) && f.kind !== 'ftr' && f.bmr >= rules.least && f.ready >= R.ready);
   const fightersAt = (base: number): AirFleet[] => mine.filter((x) => fit(x) && x.kind === 'ftr' && x.ftr > 0 && homeOf(x) === base && x.ready >= AIRWAR.ai.escortReady);
   // The front: enemy-held ground with enemy troops on it, beside this nation's own field corps, and how many of its divisions stand against each.
@@ -1993,6 +2096,7 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   const battles = effortBattles(g, nat, ph);
   baseByThreat(g, nat, mine, beaches, battles);
   baseBombers(g, nat, mine, battles);
+  if (ph?.posture === 'attack') closeStaff(g, mine, battles);
   let flown = 0;
   for (let k = 0; k < R.sweeps && (front.size || beaches.length); k++) {
     let best: { t: number; fleets: AirFleet[]; v: number } | null = null;
