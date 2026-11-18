@@ -83,12 +83,30 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
 
 /**
  * What the field cost, for the campaign's bill (ruling 226(6)): each corps' own share lost, so the side's bill falls on
- * its corps as the field had it, and each side's share, so the after card's headline and its field line agree.
+ * its corps as the field had it, and each side's share, so the after card's headline and its field line agree; and the
+ * army that broke, whose bill the rules settle for the pursuit (b464).
  */
 export function fieldBill(result: FieldResult): FieldBill {
   const corps: Record<number, number> = {};
   for (const f of result.forces ?? []) corps[f.corps] = f.lost;
-  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective' };
+  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective', ...(result.broke ? { broke: result.broke } : {}) };
+}
+
+/**
+ * The after card's line for the pursuit (b464, the UI director's words), straight after the field's strength line:
+ * where the army that broke was booked more men than its share lost on the field, the rest fell in the pursuit and as
+ * prisoners. Null where it was not (a rounding's worth is not a pursuit). The price line already counts these men.
+ */
+export function pursuitLine(t: FieldTicket<LandPlace>, result: FieldResult, rep: BattleReport): string | null {
+  const s = result.broke;
+  // Only where the army that broke also lost the day, as the bill has it (game.ts: R under 1.2 for the attack).
+  if (!s || (s === 'def') !== result.R >= 1.2) return null;
+  const us = s === 'att' ? rep.attackers : rep.defenders;
+  const lost = Math.max(s === 'att' ? rep.attLost : rep.defLost, us.reduce((a, u) => a + u.lost, 0));
+  const onField = Math.round(result.lost[s] * t[s].forces.reduce((a, f) => a + f.men, 0));
+  const more = lost - onField;
+  if (more <= Math.max(10, onField * 0.01)) return null;
+  return `After ${t[s].human ? 'your army' : `the ${t[s].adj} army`} broke, it lost ${more.toLocaleString('en-GB')} more men in the pursuit and as prisoners.`;
 }
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */

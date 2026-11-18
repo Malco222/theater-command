@@ -243,10 +243,13 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
 function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: string, byId: Map<number, LandUnit>, b: LandBattle): void {
   const z = s.cam.z;
   const [sx, sy] = toScreen(s, u.x, u.y);
-  const w = Math.max(8, u.w * z), d = Math.max(4, u.d * z);
+  // An enemy block he has not met (b464(2)): a plain block in its colour, at the plain size, where it stands and facing
+  // its way. No sign, bar, state or works mark.
+  const shown = b.known(u), [bw0, bd0] = boxOf(u, b);
+  const w = Math.max(8, bw0 * z), d = Math.max(4, bd0 * z);
   if (sx < -w || sy < -w || sx > s.W + w || sy > s.H + w) return;
   const mine = u.side === s.me, picked = s.sel.has(u.id), hot = s.hover === u.id;
-  const routing = u.state === 'routing';
+  const routing = u.state === 'routing' && shown;
 
   // The fight: short flashes along the front edge, toward whoever it is fighting. TODO(polish): the 3D game's muzzle flash and smoke.
   if (u.act === 'fight' && u.engaged !== undefined) {
@@ -254,9 +257,8 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     if (e) {
       const [ex, ey] = toScreen(s, e.x, e.y);
       if (u.kind === 'art') {
-        // Guns fire over the line: a faint arc to what they hit.
-        x.strokeStyle = 'rgba(42,45,47,.28)'; x.lineWidth = 1; x.setLineDash([2, 6]);
-        x.beginPath(); x.moveTo(sx, sy); x.quadraticCurveTo((sx + ex) / 2, Math.min(sy, ey) - 40, ex, ey); x.stroke(); x.setLineDash([]);
+        // Guns fire over the line: a faint arc to what they hit. Guns he has not met show only where their shells fall.
+        if (shown) { x.strokeStyle = 'rgba(42,45,47,.28)'; x.lineWidth = 1; x.setLineDash([2, 6]); x.beginPath(); x.moveTo(sx, sy); x.quadraticCurveTo((sx + ex) / 2, Math.min(sy, ey) - 40, ex, ey); x.stroke(); x.setLineDash([]); }
         const k = (s.now * 1.3 + u.id * 0.37) % 1;
         if (k < 0.25) { x.fillStyle = `rgba(90,80,70,${0.5 - k * 2})`; x.beginPath(); x.arc(ex + Math.sin(u.id * 7.1 + s.now) * 18 * z * 3, ey + Math.cos(u.id * 3.3 + s.now) * 10, 4 + k * 30, 0, Math.PI * 2); x.fill(); }
       } else {
@@ -292,14 +294,14 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   x.lineWidth = Math.max(2, Math.min(4, 7 * z));
   x.beginPath(); x.moveTo(-w / 2, -d / 2); x.lineTo(w / 2, -d / 2); x.stroke();
   // Its state, round the edge: brass for chosen, amber for wavering, red for running.
-  const ring = picked ? BRASS : u.state === 'wavering' ? AMBER : routing ? ALARM : null;
+  const ring = picked ? BRASS : !shown ? null : u.state === 'wavering' ? AMBER : routing ? ALARM : null;
   if (ring) {
     x.strokeStyle = ring; x.lineWidth = picked ? 2.5 : 2;
     if (!picked && u.state === 'wavering') x.setLineDash([5, 3]);
     x.strokeRect(-w / 2 - 2.5, -d / 2 - 2.5, w + 5, d + 5); x.setLineDash([]);
   }
   // The sign, once the block is big enough to carry one.
-  if (w >= 22 && d >= 9) {
+  if (shown && w >= 22 && d >= 9) {
     const sw = Math.min(w * 0.5, d * 1.7), sh = Math.min(d * 0.62, sw / 1.6);
     x.strokeStyle = PAPER; x.fillStyle = PAPER; x.lineWidth = Math.max(1, Math.min(2, sh / 7)); x.lineCap = 'round';
     sign(x, u.kind, sw, sh);
@@ -307,7 +309,7 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   // TODO(polish): its models. The 3D game stands figures0 models in ranks inside this box and fades one for each share lost (figures).
   // In its works: a short run of the dug line, three notches of its square wave in paper along the block's front edge,
   // inside it (the art director, slice 3), so it never doubles the fortress troops' own notched sign.
-  if (inWorks(u, b) && w >= 16) {
+  if (shown && inWorks(u, b) && w >= 16) {
     const q = Math.min(1.6, Math.max(1, 3 * z)), step = 2.4 * q, up = 1.6 * q;
     const run = 6 * step, x0 = -run / 2, y0 = -d / 2 + 2 + up;
     x.strokeStyle = PAPER; x.lineWidth = 1; x.lineCap = 'butt'; x.lineJoin = 'miter';
@@ -316,8 +318,8 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     x.stroke();
   }
   // Strength at the block's back edge, a fixed gap behind it, turning with it (the UI director, 10): every block's,
-  // the enemy's too, so he can size them up (ruling 226(7)).
-  {
+  // the enemy's too, so he can size them up (ruling 226(7)), once he has met them (b464(2)).
+  if (shown) {
     const bw = Math.max(18, w * 0.8), by = d / 2 + 4;
     x.globalAlpha = 1;
     x.fillStyle = 'rgba(14,11,8,.75)'; x.fillRect(-bw / 2 - 1, by - 1, bw + 2, 5);
@@ -335,12 +337,15 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
 function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandBattle): void {
   const z = s.cam.z;
   const [sx, sy] = toScreen(s, u.x, u.y);
-  const w = Math.max(8, u.w * z), d = Math.max(4, u.d * z);
+  const [bw0, bd0] = boxOf(u, b);
+  const w = Math.max(8, bw0 * z), d = Math.max(4, bd0 * z);
   const mine = u.side === s.me;
   x.save();
   {
     const st = u.fellBack ? ' · Falling back' : u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`;
-    const label = mine ? `${u.name}${st}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${s.sel.size ? ' · Right-click to attack' : ''}`;
+    const attack = s.sel.size ? ' · Right-click to attack' : '';
+    // One he has not met (b464(2), the UI director's words): his country and "troops", never a division, a strength or a state.
+    const label = mine ? `${u.name}${st}` : !b.known(u) ? `${b.ticket[u.side].adj} troops, not identified${attack}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${attack}`;
     x.font = '700 12px "Courier Prime", ui-monospace, monospace';
     const tw = x.measureText(label).width;
     const lx = Math.min(s.W - tw - 14, Math.max(6, sx - tw / 2 - 6)), half = Math.max(w, d) / 2;
@@ -366,6 +371,14 @@ function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandB
     x.fillStyle = '#2a2118'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(label, lx + 6, ly + 10.5);
   }
   x.restore();
+}
+
+/**
+ * The box a block is drawn in: its own, or for an enemy block he has not met the plain size every such block shares, so
+ * its depth never gives its arm away (b464(2)).
+ */
+export function boxOf(u: LandUnit, b: LandBattle): [number, number] {
+  return b.known(u) ? [u.w, u.d] : LAND.size.inf;
 }
 
 /** A block standing in works: dug in where it began, or on fieldworks or a bunker. */

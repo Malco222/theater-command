@@ -18,6 +18,7 @@ import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
 import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
+import { pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
 import { drawFrame, signSvg, toField, toScreen, type Scene } from './draw';
@@ -226,6 +227,8 @@ let ctx: CanvasRenderingContext2D;
 
 function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: PracticeGround | null = null): void {
   const b = new LandBattle(t);
+  // A defence the card did not know (b453): its blocks show only where they stand until his have fought them (b464(2)).
+  b.fog = !!o?.band;
   S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
@@ -725,8 +728,7 @@ function ask(kind: 'withdraw' | 'staff'): void {
     // The staff's chance now, from the strength each side has left (the UI director's words for ruling 226(5)).
     const b = S.b, where = b.ticket.place.name, band = S.offer?.band;
     // A defence the card did not know (b453): the chance as the staff's band reads it now, never the card's own.
-    const k = b.ticket.reckoning, bal = b.standing(), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
-    const [lo, hi] = band ? [chanceAt(band.lo, r, k.dice), chanceAt(band.hi, r, k.dice)] : [b.chanceNow(), b.chanceNow()];
+    const [lo, hi] = band ? [b.chanceAt(band.lo), b.chanceAt(band.hi)] : [b.chanceNow(), b.chanceNow()];
     const pc = (x: number): number => Math.round(x * 100);
     // A practice ground is not a place to take (the UI director, after the retest).
     const what = S.offer ? `take ${esc(where)}` : 'win it';
@@ -862,17 +864,6 @@ function frame(): void {
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** How the day went against the chance the staff gave it, in the UI director's plain words (no dice on the player's page). */
-/**
- * The staff's chance at a card's odds, the fight having moved the balance by r since: what chanceNow reckons from the
- * ticket's own odds, for the staff's band where the defence was not known (b453).
- */
-function chanceAt(card: number, r: number, dice: [number, number]): number {
-  if (card * dice[0] >= RATIO.carry) return 1;
-  if (card * dice[1] < RATIO.carry) return 0;
-  const now = card * r;
-  return Math.max(0, Math.min(1, (dice[1] - RATIO.carry / Math.max(1e-6, now)) / (dice[1] - dice[0])));
-}
-
 function reckoned(carried: boolean, chance: number, practice = false): string {
   if (chance >= 0.995) return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
   if (chance <= 0.005) return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
@@ -915,7 +906,10 @@ function showAfter(): void {
   const chance = S.offer?.band ? S.offer.band.guess : diceChance(k.odds, k.dice);
   const A = t.att.adj, D = t.def.adj;
   const pct = (x: number): string => (x < 1e-4 ? 'none' : x < 0.005 ? 'less than 1%' : `about ${Math.round(x * 100)}%`);
-  const shown = bill ? [r.lines[0], `Your attack lost ${pct(bill.att)} of its strength, the defence ${pct(bill.def)}.`, ...r.lines.slice(1)] : r.lines;
+  // The army that broke, booked more than the field cost it: the pursuit's line straight after the strength line (b464).
+  const pursuit = rep ? pursuitLine(t, r, rep) : null;
+  const shown = bill ? [r.lines[0], `Your attack lost ${pct(bill.att)} of its strength, the defence ${pct(bill.def)}.`, ...r.lines.slice(1)]
+    : pursuit ? [...r.lines.slice(0, 2), pursuit, ...r.lines.slice(2)] : r.lines;
   const fieldLines = shown.map((l) => `<li>${esc(l)}</li>`).join('');
   let told = '', price = '', sides = '';
   if (rep) {

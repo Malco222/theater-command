@@ -43,6 +43,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   contactAt: number | null = null;
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
+  /**
+   * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
+   * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
+   */
+  fog = false;
 
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
@@ -82,11 +87,21 @@ export class LandBattle implements BattleSim<LandUnit> {
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;
     if (!ev.cue && ONE_SHOTS[ev.what]) ev.cue = ONE_SHOTS[ev.what];
+    // A block the player has not met is never named in a dispatch, nor its state told (b464(2)): the line stays blank,
+    // the sound stands.
+    const u = ev.unit !== undefined ? this.unit(ev.unit) : undefined;
+    if (u && !this.known(u)) ev.text = '';
     this.events.push(ev);
     this.log.push(ev);
   }
 
   unit(id: number): LandUnit | undefined { return this.units.find((u) => u.id === id); }
+
+  /**
+   * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
+   * once one of his has fought it or it has struck one of his in contact (found), and once the battle is over.
+   */
+  known(u: LandUnit): boolean { return !this.fog || this.ticket[u.side].human || !!u.found || this.over !== null; }
 
   /** A block's name in a dispatch: the side nobody plays carries its country, so it never reads like the player's own (ruling 226(7)). */
   named(u: LandUnit): string { return this.ticket[u.side].human ? u.name : `${this.ticket[u.side].adj} ${u.name}`; }
@@ -399,6 +414,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       u.engaged = t?.id;
       if (!t) continue;
       if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
+      // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
+      // their guns firing from far back are not contact (b464(2)).
+      if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0 };
@@ -965,6 +983,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       winner: verdict, how, seconds: Math.round(this.t), lost, men, R: Math.round(r * 1000) / 1000,
       level: levelOf(r, men.att > men.def), lines,
       forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0 })),
+      ...(how === 'rout' || how === 'destroyed' ? { broke: loser } : {}),
     };
     if (verdict !== winner) this.over.lines.push('The day went their way, but the campaign counts it as close as the odds allowed.');
     this.say({ what: 'end', text: lines[0] });
@@ -1020,6 +1039,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     return Math.max(0, Math.min(1, (k.dice[1] - RATIO.carry / Math.max(1e-6, now)) / (k.dice[1] - k.dice[0])));
   }
 
+  /**
+   * The staff's chance at a card's own odds, the fight having moved the balance since the card: for the staff's band
+   * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
+   */
+  chanceAt(card: number): number {
+    const k = this.ticket.reckoning, bal = this.standing(), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+    if (card * k.dice[0] >= RATIO.carry) return 1;
+    if (card * k.dice[1] < RATIO.carry) return 0;
+    const now = card * r;
+    return Math.max(0, Math.min(1, (k.dice[1] - RATIO.carry / Math.max(1e-6, now)) / (k.dice[1] - k.dice[0])));
+  }
+
   /** Hand it to the staff (ruling 217(4), the button named in b348): the rest is rolled on the dice, at the ratio then standing. */
   toDice(): void {
     if (this.over) return;
@@ -1031,7 +1062,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   view(as?: Side): BattleView<LandUnit> {
     const ev = this.events;
     this.events = [];
-    void as; // Every block on the field is in sight in the first slice. TODO(polish): fog of war on the field.
+    void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
     return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
   }
 }

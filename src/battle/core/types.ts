@@ -248,6 +248,8 @@ export interface FieldResult {
   lines: string[];
   /** Each campaign force's share of its strength lost on the field, for a domain that pays some of the bill exactly. */
   forces: { corps: number; side: Side; lost: number }[];
+  /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
+  broke?: Side;
   /** The domain's own exact results the campaign must apply as they happened (sea: ships sunk by fleet and class). */
   extra?: Record<string, unknown>;
 }

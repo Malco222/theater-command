@@ -3,7 +3,7 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut } from '../src/battle/core';
-import { buildField, coverAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { buildField, coverAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING } from '../src/campaign/rivers';
 import { createGame, hostileUnits } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
@@ -330,6 +330,61 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(said + quiet).toBeGreaterThan(10);
   });
 
+  it('an unscouted defence shows him only where it stands until one of his has fought it, and the fight is the same (b464(2))', () => {
+    for (const [ground, seed] of [['plains', 3], ['hills', 11], ['desert', 29]] as const) {
+      const play = (fog: boolean): { b: LandBattle; said: string[] } => {
+        const b = new LandBattle(sampleTicket(ground, 1.3, { humanAtt: true, seed }));
+        b.fog = fog;
+        b.ai.def = true;
+        const said: string[] = [];
+        if (fog) {
+          expect(b.units.filter((u) => u.side === 'def').some((u) => b.known(u))).toBe(false);
+          expect(b.units.filter((u) => u.side === 'att').every((u) => b.known(u))).toBe(true);
+        }
+        plainAttack(b);
+        for (let i = 0; i < 20000 && !b.over; i++) {
+          b.step();
+          for (const e of b.view('att').events) {
+            const u = e.unit !== undefined ? b.unit(e.unit) : undefined;
+            // A dispatch names a block of theirs only once he knows it.
+            if (u && u.side === 'def' && !b.known(u)) expect(e.text).toBe('');
+            if (e.text) said.push(e.text);
+          }
+          if (fog && b.over === null) {
+            for (const u of b.units) if (u.side === 'def' && !u.found) for (const t of said) expect(t.includes(u.name)).toBe(false);
+          }
+        }
+        return { b, said };
+      };
+      const open = play(false), shut = play(true);
+      // Words and pictures only: the same battle to the last block.
+      expect(shut.b.over).toEqual(open.b.over);
+      expect(shut.b.units.map((u) => [u.x, u.y, u.str, u.mor, u.state])).toEqual(open.b.units.map((u) => [u.x, u.y, u.str, u.mor, u.state]));
+      // Met in the fight, a block is known; once the battle is over, every block is.
+      expect(shut.b.units.some((u) => u.side === 'def' && u.found)).toBe(true);
+      expect(shut.b.units.every((u) => shut.b.known(u))).toBe(true);
+    }
+  });
+  it('a block his guns shell from far back is known to him; theirs shelling his from far back is not (b464(2))', () => {
+    const t = sampleTicket('plains', 1.3, { humanAtt: true, seed: 3 });
+    const gf = t.def.forces.find((f) => f.kind === 'art')!;
+    t.att.forces.push({ ...gf, corps: 999, nat: t.att.forces[0].nat, dug: false, name: 'Gun group' });
+    const b = new LandBattle(t);
+    b.fog = true;
+    b.ai.def = true;
+    const gun = b.units.find((u) => u.side === 'att' && u.kind === 'art')!;
+    const foes = b.units.filter((u) => u.side === 'def' && u.kind !== 'art');
+    const foe = foes.reduce((m, f) => (Math.hypot(f.x - gun.x, f.y - gun.y) < Math.hypot(m.x - gun.x, m.y - gun.y) ? f : m));
+    expect(b.command({ do: 'attack', units: [gun.id], target: foe.id }, 'att')).toBe(true);
+    for (let i = 0; i < 600 && gun.engaged !== foe.id; i++) b.step();
+    expect(gun.engaged).toBe(foe.id);
+    expect(b.gap(gun, foe)).toBeGreaterThan(LAND.guns.closeAt);
+    expect(b.known(foe)).toBe(true);
+    const far = b.units.filter((u) => u.side === 'def' && u.kind === 'art' && u.engaged !== undefined && b.gap(u, b.unit(u.engaged)!) >= LAND.guns.closeAt);
+    expect(far.length).toBeGreaterThan(0);
+    expect(far.some((u) => b.known(u))).toBe(false);
+  });
+
   it('a river crossing is a bridgehead, not a heap: no box drawn on another, none left standing in the river (the art director, b439)', () => {
     // The practice river, as the art director looks at it: at a minute, a minute and a half and two minutes.
     const p = PRACTICE_GROUNDS.find((x) => x.river)!;
@@ -652,6 +707,68 @@ describe('the hand-off with a real campaign', () => {
     expect(blocks.length).toBe(LAND.blocks.regiments);
     expect(blocks.map((u) => u.name)).toEqual(['1st', '2nd', '3rd'].map((n) => `${n} Regiment, 7th Armoured`));
     expect(blocks.every((u) => u.parent === '7th Armoured')).toBe(true);
+  });
+  it('an army that broke pays the rules\' bill for that result, or the field\'s if larger; the winner pays the field\'s (b464)', () => {
+    type Rep = NonNullable<ReturnType<typeof handBack>>;
+    const lostBy = (x: Rep, s: 'att' | 'def'): number => (s === 'att' ? Math.max(x.attLost, x.attackers.reduce((a, u) => a + u.lost, 0)) : Math.max(x.defLost, x.defenders.reduce((a, u) => a + u.lost, 0)));
+    let n = 0, pursued = 0;
+    for (const seed of [3, 5, 7, 9, 11]) {
+      const g = playing(seed), twin = playing(seed);
+      const { c, r } = anAttack(g);
+      const t = landTicket(g, [c], r);
+      if (!t) continue;
+      const b = new LandBattle(t);
+      b.ai.att = b.ai.def = true;
+      runOut(b);
+      const o = b.over!;
+      const rep = handBack(g, [c], r, o)!;
+      const s = o.broke;
+      if (!s) { expect(pursuitLine(t, o, rep)).toBeNull(); continue; }
+      expect(s).toBe(o.winner === 'att' ? 'def' : 'att');
+      // SEND THEM IN for the same result: the twin campaign's own attack with the dice landing on the field's R.
+      const tw = anAttack(twin);
+      const staff = orderAttack(twin, [tw.c], tw.r, o.R)!;
+      const men = (x: 'att' | 'def'): number => t[x].forces.reduce((a, f) => a + f.men, 0);
+      const field = o.lost[s] * men(s);
+      expect(lostBy(rep, s) / Math.max(lostBy(staff, s), field)).toBeCloseTo(1, 1);
+      // The winner as before: within a fifth of what the field cost it.
+      const w = s === 'att' ? 'def' : 'att';
+      if (o.lost[w] > 0.01) { const k = lostBy(rep, w) / (o.lost[w] * men(w)); expect(k).toBeGreaterThan(1 / 1.2); expect(k).toBeLessThan(1.2); }
+      // The after card says where the rest came from, in the UI director's words, only where there is a rest.
+      const line = pursuitLine(t, o, rep);
+      const more = lostBy(rep, s) - Math.round(field);
+      if (more > Math.max(10, field * 0.01)) {
+        expect(line).toBe(`After ${t[s].human ? 'your army' : `the ${t[s].adj} army`} broke, it lost ${more.toLocaleString('en-GB')} more men in the pursuit and as prisoners.`);
+        expect(line).toMatch(/^After (your|the [A-Z][a-z]+) army broke, it lost \d{1,3}(,\d{3})* more men in the pursuit and as prisoners\.$/);
+        pursued++;
+      } else expect(line).toBeNull();
+      n++;
+    }
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(pursued).toBeGreaterThanOrEqual(1);
+  });
+  it('a broken army of several corps pays the whole of the rules\' bill, though the field hit one corps hardest (b464)', () => {
+    // Poznan, September 1939: Army Poznan and the Wielkopolska Cavalry at long odds. The field hits the cavalry hardest,
+    // so its share of the bill reaches the most a corps can lose; the rest of the pursuit falls on Army Poznan.
+    type Rep = NonNullable<ReturnType<typeof handBack>>;
+    const lost = (x: Rep): number => Math.max(x.defLost, x.defenders.reduce((a, u) => a + u.lost, 0));
+    let n = 0;
+    for (const seed of [4, 6, 7]) {
+      const g = playing(seed), twin = playing(seed);
+      const r = g.regions.find((x) => x.name === 'Poznan')!, cs = candidates(g, r);
+      const t = landTicket(g, cs, r);
+      if (!t || t.def.forces.length < 2) continue;
+      const b = new LandBattle(t);
+      b.ai.att = b.ai.def = true;
+      runOut(b);
+      const o = b.over!;
+      if (o.broke !== 'def') continue;
+      const rep = handBack(g, cs, r, o)!;
+      const staff = orderAttack(twin, candidates(twin, twin.regions[r.id]), twin.regions[r.id], o.R)!;
+      expect(lost(rep) / lost(staff)).toBeCloseTo(1, 1);
+      n++;
+    }
+    expect(n).toBeGreaterThanOrEqual(2);
   });
   it('with no battle fought, the rules run exactly as before', () => {
     const g1 = playing(5), g2 = playing(5);

@@ -54,6 +54,11 @@ export interface LandUnit extends UnitBase {
   /** In contact this battle already (for the first-contact dispatch). */
   met: boolean;
   /**
+   * The player knows it (b464(2), LandBattle.known): a block of his has fought it, his guns from far back too, or it
+   * has struck one of his in contact (its guns firing from far back do not count). Nothing in the fight reads it.
+   */
+  found?: boolean;
+  /**
    * Carried off by its army's break while it still stood: it falls back in order and reads so, never Routing, which
    * belongs to the blocks that broke (the design director, after the slice 3 review). What it leaves behind on the
    * field is counted as a runner's, as before, so the field's figures and the fairness tests do not move.
