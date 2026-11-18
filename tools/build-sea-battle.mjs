@@ -56,5 +56,14 @@ ${js}
 </script>
 `;
 writeFileSync('dist/sea-battle.html', page(link));
+// --open=N: the page body again, the fonts written in when they could be had, opening straight into practice card N
+// (the copy published for Brian opens on "Carriers against a battle line", 1).
+const open = process.argv.find((a) => a.startsWith('--open='));
+if (open) {
+  const n = Number(open.slice(7));
+  const opening = `<script>window.SEA_OPEN = { practice: ${JSON.stringify(n)} };</script>\n`;
+  writeFileSync('dist/sea-battle-open.html', page(faces ? `<style>\n${faces}</style>` : link).replace('<div id="app"></div>', `<div id="app"></div>\n${opening}`));
+  console.log(`built dist/sea-battle-open.html, opening on practice card ${n}`);
+}
 writeFileSync('dist/sea-battle-play.html', `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>\n<body>\n${page(faces ? `<style>\n${faces}</style>` : link)}</body>\n</html>\n`);
 console.log(`built dist/sea-battle.html (${Math.round(page(link).length / 1024)} KB) and dist/sea-battle-play.html${faces ? ' with the fonts written in' : ''}`);

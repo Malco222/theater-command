@@ -1,6 +1,9 @@
 /* The fleet action page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
    is scoped to .sea, so the field battle page never sees it. */
 
+/* The page is the desk at night in every theme: the browser's own controls and scrollbars follow it. */
+:root { color-scheme: dark; }
+
 /* ---- The chooser ---- */
 .sea .nw { white-space: nowrap; }
 .sea .offer .otop .tc-data { white-space: nowrap; }
@@ -53,6 +56,11 @@
 .sea .wdbtn { display: inline-grid; align-items: center; justify-items: center; }
 .sea .wdbtn > .wd-word { grid-area: 1 / 1; }
 .sea .wdbtn > .wd-word.is-off { visibility: hidden; }
+/* A question under the buttons is as wide as its two answers need, never under the kit's 320: END THE CHASE and KEEP
+   FIGHTING side by side need 344, so KEEP FIGHTING stays on its paper and the box inside the page's edge (the second
+   Playtester, b467 snag 1). Its words take the box's width and give it none. */
+.sea .wask { width: max-content; min-width: 320px; max-width: calc(100vw - 28px); }
+.sea .wask p { width: 0; min-width: 100%; }
 /* Where a break gauge would be thinner than 56 the subtitle folds from the first second (sea-page.ts fitTitle); what is
    still short after that stands, never under 32: the middle's floor of 294 above (the UI director, b467). */
 /* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */

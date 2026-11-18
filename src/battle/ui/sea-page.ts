@@ -276,10 +276,12 @@ function updateTray(force = false): void {
       if (said) what.title = said; else what.removeAttribute('title');
     }
     const st = el.querySelector<HTMLElement>('.ustate')!;
-    // Once the action is over nothing is under way: the card says so (the design director, b356, b368).
-    const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
+    // Once the action is over nothing is under way: the card says so (the design director, b356, b368). A piece that was
+    // wavering or breaking off says only that the action is over: the fight its nerve was in has ended (b467 snag c).
+    const over = !!S.sim!.over, shaken = over && (u.state === 'wavering' || u.state === 'routing');
+    const doing = over ? (live(u) && !shaken ? 'action over' : '') : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
     // Where the line will not fit, the chip keeps the state in words and lets the order go (it shows in the chip's title).
-    const word = STATE_WORD[u.state];
+    const word = shaken ? 'Action over' : STATE_WORD[u.state];
     const full = `<b>${word}</b>${doing ? `<span class="act"> · ${doing}</span>` : ''}`;
     if (st.dataset.full !== full) {
       st.dataset.full = full;
@@ -287,7 +289,7 @@ function updateTray(force = false): void {
       if (doing && st.scrollWidth > st.clientWidth + 0.5) st.innerHTML = `<b>${word}</b>`;
       el.title = `${u.name}: ${word}${doing ? ` · ${doing}` : ''}`;
     }
-    st.className = `ustate tc-data${u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
+    st.className = `ustate tc-data${shaken ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
   trayMore();
 }
@@ -599,6 +601,13 @@ function clampCam(): void {
 // ---- Orders -----------------------------------------------------------------------------------------------------------
 
 function chosen(): number[] { return [...S.scene.sel].filter((id) => { const u = unit(id); return !!u && orderable(u); }); }
+/** The ships H and R act on: those in hand; in a chase with none in hand, the whole fleet, as the plain order would have
+ *  it in hand, so the order lets the beaten enemy go (the design director, b467 snag b). */
+function chosenOrFleet(): number[] {
+  const c = chosen(), sim = S.sim;
+  if (c.length || !sim || sim.over || sim.brokenSide === null || sim.brokenSide === S.scene.me) return c;
+  return sim.units.filter((u) => u.side === S.scene.me && orderable(u)).map((u) => u.id);
+}
 // In the chase an order no longer drops the clock (b458, 1): one to hold, break off or steer for a point lets the beaten
 // enemy go and the sim ends the action there (sim.ts letGo), so the after card comes at once; one to attack it is a
 // pursuit, and the chase runs on fast. Only the speed keys take the chase's clock in hand (setClock).
@@ -779,8 +788,8 @@ window.addEventListener('keydown', (e) => {
     case '1': setClock(1); break;
     case '2': setClock(2); break;
     case '3': setClock(4); break;
-    case 'h': give({ do: 'hold', units: chosen() }); break;
-    case 'r': give({ do: 'withdraw', units: chosen() }); break;
+    case 'h': give({ do: 'hold', units: chosenOrFleet() }); break;
+    case 'r': give({ do: 'withdraw', units: chosenOrFleet() }); break;
     case 'Escape': if (S.asking || S.handing) keepFighting(); else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
     case 'Tab': {
       e.preventDefault();
@@ -965,4 +974,8 @@ function showAfter(): void {
 (window as unknown as { __sea: unknown }).__sea = { state: S, give, showChooser, startBattle, practiceTicket, PRACTICE, toScreen };
 
 showChooser();
+// A page built to open on one practice card (tools/build-sea-battle.mjs --open=N) goes straight into that action; its
+// after card's CONTINUE comes back to the chooser with every card on it.
+const opening = (window as unknown as { SEA_OPEN?: { practice?: number } }).SEA_OPEN?.practice;
+if (opening !== undefined && PRACTICE[opening]) startBattle(practiceTicket(PRACTICE[opening]), null);
 requestAnimationFrame(frame);
