@@ -39,6 +39,7 @@ class Show:
     def __init__(self, name, tmp, speed=12.0, wind=None, month=None, **sea):
         kit.fresh()
         self.m, self.yard = ships.BUILDERS[name](True)
+        ships.in_month(self.m, month)                               # (her decks as that month had them)
         self.ob, self.arm = rigid.to_blender(self.m, stage.ship_look)
         self.park = deckpark.range_on(self.m, self.arm, month)      # (a carrier's aircraft, ranged on her deck)
         h = self.yard.h

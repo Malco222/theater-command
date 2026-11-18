@@ -34,6 +34,7 @@ def main():
             traceback.print_exc()
             print("FAILED", name, e, flush=True)
             continue
+        ships.in_month(m)                        # (her last coat: an American deck is the war's dark blue)
         ob, arm = rigid.to_blender(m, stage.ship_look)
         deckpark.range_on(m, arm)                # (a carrier's aircraft, ranged on her deck)
         stage.Sea(wave=1.2, cells=360, fine=3.0)

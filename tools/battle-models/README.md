@@ -103,8 +103,11 @@ it ride that part, so it rolls and goes down with her. When her air group is up,
 
 A range (`deckpark.py`) is eleven machines, two abreast and one between, noses forward. Each is that aircraft's own
 plain mesh (the `far` mesh of her own file: the same shape, paints, camouflage blend and marks as the one that
-flies) with her airscrew stopped and nobody in her, standing on her undercarriage with her tail down and a wooden
-chock (`chock`) before and behind each main wheel. A Hellcat is ranged without the tank under her middle. Parts:
+flies) with nobody in her, standing on her undercarriage with her tail down and a wooden chock (`chock`) before and
+behind each main wheel. Her airscrew is stopped, each machine's at its own angle (eleven stopped alike read as one
+aircraft copied eleven times), and the last hand's breadth of each blade is a paint of its own, `blade_tip`: yellow
+where her own airscrew wears yellow tips. On the generic fighter it is the blade's black, and the file's
+`blade_tip_for` gives the yellow and the owners whose machines wear it (America, Britain, Japan). A Hellcat is ranged without the tank under her middle. Parts:
 `park` (root) and `plane.1` … `plane.11` (fixed, pivot on the deck under the machine), so the game can take them
 off the deck one at a time. In the file: `machine` (the aircraft it is made of), `places` (where each stands),
 `pitch` (how far her nose is up, degrees), and the aircraft's own `schemes`, `mark_months`, `nation_paint`,
@@ -116,6 +119,14 @@ American star changes with the rest. The generic fighter is painted for her owne
 Two keys on a range's `marks` that an aircraft's do not have: `part` (the machine the mark is on) and `up` (which
 way is up for the mark, since she stands nose-high). The range's plain mesh (`far`) is a simple stand-in shape per
 machine, about 2,000 triangles for the eleven; the fine one is 37,000 to 42,000.
+
+### Decks by the month
+
+A ship's file may carry `schemes`, read exactly as an aircraft's are: a list of `{from: YYYY-MM, name, colours}`
+where `colours` holds only the paints that change, and she is painted in the last one whose month has come. So far
+there is one: American wooden decks (`planks` on `Battleship_USA`, `Cruiser_USA`, `Carrier_USA`) are stained dark
+blue from 1941-12 (`DECK_STAIN` in `ships.py`); pale wood was the peacetime deck. Japan's decks stay wood and
+Britain's armoured flight deck stays grey. The pictures show a ship in her last coat unless a month is given.
 
 ### Using them in a battle
 

@@ -23,6 +23,7 @@ def main():
     kit.fresh()
     t = time.time()
     m, yard = ships.BUILDERS[name](True)
+    ships.in_month(m)
     ob, arm = rigid.to_blender(m, stage.ship_look)
     deckpark.range_on(m, arm)
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s")

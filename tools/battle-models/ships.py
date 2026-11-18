@@ -1135,6 +1135,40 @@ BUILDERS = {
     "Submarine_USA": lambda fine: submarine("USA", fine),
 }
 
+# American wooden decks were stained dark blue for the war (the art director, 2026-11-18; pale wood was the peacetime
+# deck): by the month, as an aircraft's coats are. A ship's file lists such coats under `schemes`, each
+# {from: YYYY-MM, name, colours (only the paints that change)}; the game paints her in the last one whose month has come.
+DECK_STAIN = {"USA": ("1941-12", "decks stained dark blue", "3E4B5C")}
+
+
+def _by_month(build, tag):
+    def made(fine):
+        m, yard = build(fine)
+        when, name, stain = DECK_STAIN[tag]
+        names = list(m.paints)
+        used = {names[p] for p in m.fpaint}
+        if "planks" in used:
+            colours = {"planks": stain}
+            if "flight" in used and m.paints["flight"] == m.paints["planks"]:
+                colours["flight"] = stain                # (a carrier's lifts and round-downs, planked as her deck is)
+            m.info.setdefault("file", {})["schemes"] = [{"from": when, "name": name, "colours": colours}]
+        return m, yard
+    return made
+
+
+for _name in list(BUILDERS):
+    if _name.rpartition("_")[2] in DECK_STAIN:
+        BUILDERS[_name] = _by_month(BUILDERS[_name], _name.rpartition("_")[2])
+
+
+def in_month(m, month=None):
+    """For the pictures: paints a ship as she is in a month (YYYY-MM); with no month, in her last coat."""
+    coats = [c for c in m.info.get("file", {}).get("schemes", []) if month is None or c["from"] <= month]
+    if coats:
+        m.paints.update(coats[-1]["colours"])
+    return m
+
+
 # the ships of a convoy and a landing (merchants.py) are built with this file's pieces, so they are brought in last
 import merchants  # noqa: E402
 

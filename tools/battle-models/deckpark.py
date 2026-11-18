@@ -6,7 +6,7 @@ of her part `deckpark`. So one carrier serves every year of the war, and her dec
 
 Each machine in a range is that aircraft's own plain model (the far mesh of her file: the same shape, paints,
 camouflage and markings as the one that flies), without the blur of her airscrew and with nobody in her, standing on
-her undercarriage, tail down, chocked. Each is a part of its own (`plane.1`, `plane.2`, ...), so the game can take
+her undercarriage, tail down, chocked, her airscrew stopped at her own angle. Each is a part of its own (`plane.1`, `plane.2`, ...), so the game can take
 them off the deck one at a time. The file carries the aircraft's own `schemes` and `mark_months`, so the range is
 painted by the month exactly as the aircraft is.
 """
@@ -28,6 +28,8 @@ _STOOD = {}
 PITCH = {"Hellcat": 13.0, "Zero": 11.5}                 # (how far her nose is up as she stands, degrees; 12 where not said)
 NO_TANK = {"Hellcat"}                                    # (ranged without the long-range tank under her middle)
 TAIL_R = 0.13                                            # (her tailwheel's radius)
+TIP = 0.06                                               # (the painted tip of a blade: this much of its length)
+TIP_YELLOW = "D9B224"
 
 
 def plain(kind):
@@ -147,9 +149,20 @@ def standing(kind):
                 faces.append(tuple(b + i for i in f))
                 paints.append("chock"); by_point.append(False); smooth.append(False)
 
+    # her airscrews: the tip of each blade is a paint of its own, and what turns with each is kept, so that every
+    # machine of a range can be stopped with her blades at her own angle
+    rot = tip.to_3x3()
+    screws = []
+    for pi, part in enumerate(pm.parts):
+        if not part.name.startswith("prop.") or part.name.endswith(".blur"):
+            continue
+        hub, axis = tip @ part.pivot + lift, (rot @ Vector(part.axis)).normalized()
+        mine = [n for n, k in enumerate(keep) if pm.fpart[k] == pi]
+        mine += cut_tips(verts, faces, paints, by_point, smooth, (coat, blend, soot), [n for n in mine if paints[n] == "blade"], hub, axis, pf.screw * (1.0 - TIP))
+        screws.append({"hub": hub, "axis": axis, "points": sorted({i for n in mine for i in faces[n]}), "blades": int(pf.spec.get("blades", 3)) if isinstance(pf.spec, dict) else 3})
+
     # her markings, as her own file gives them, on what shows from above and abeam
     marks = []
-    rot = tip.to_3x3()
     for mk in pm.marks or []:
         if mk["tag"] == "#":
             continue
@@ -161,9 +174,68 @@ def standing(kind):
             up = X if abs(n.z) > 0.7 else Z
             marks.append({"tag": mk["tag"], "at": tip @ p + lift, "facing": rot @ n, "up": rot @ up, "radius": mk["radius"], "curve": mk.get("curve")})
     out = dict(pm=pm, pf=pf, verts=verts, faces=faces, paints=paints, by_point=by_point, smooth=smooth, coat=coat, blend=blend, soot=soot,
-               marks=marks, pitch=th, leg=leg, wheels=[tip @ w + lift for w in wheels], rw=rw)
+               marks=marks, pitch=th, leg=leg, wheels=[tip @ w + lift for w in wheels], rw=rw, screws=screws,
+               tips=any(names[p] == "blur_tip" for p in pm.fpaint))
     _STOOD[kind] = out
     return out
+
+
+def cut_tips(verts, faces, paints, by_point, smooth, per_point, which, hub, axis, r_cut):
+    """Cuts the faces numbered in `which` where they cross a radius from an axis, and paints what lies outside it
+    `blade_tip`. Returns the numbers of the faces it added."""
+    def radius(i):
+        d = verts[i] - hub
+        return (d - axis * d.dot(axis)).length
+
+    made, added = {}, []
+
+    def between(a, b):
+        key = (min(a, b), max(a, b))
+        if key not in made:
+            ra, rb = radius(a), radius(b)
+            verts.append(verts[a].lerp(verts[b], (r_cut - ra) / (rb - ra)))
+            for row, empty in zip(per_point, (None, 0.0, 0.0)):
+                row.append(empty)
+            made[key] = len(verts) - 1
+        return made[key]
+
+    def put(ring, paint, like, at=None):
+        fans = [tuple(ring)] if len(ring) <= 4 else [(ring[0], ring[j], ring[j + 1]) for j in range(1, len(ring) - 1)]
+        for n, f in enumerate(fans):
+            if at is not None and n == 0:
+                faces[at], paints[at] = f, paint
+                continue
+            faces.append(f); paints.append(paint); by_point.append(by_point[like]); smooth.append(smooth[like])
+            added.append(len(faces) - 1)
+
+    for k in which:
+        f = faces[k]
+        out = [radius(i) > r_cut for i in f]
+        if all(out):
+            paints[k] = "blade_tip"
+            continue
+        if not any(out):
+            continue
+        inner, outer = [], []
+        for j, a in enumerate(f):
+            (outer if out[j] else inner).append(a)
+            if out[j] != out[(j + 1) % len(f)]:
+                c = between(a, f[(j + 1) % len(f)])
+                inner.append(c)
+                outer.append(c)
+        put(inner, "blade", k, at=k)
+        put(outer, "blade_tip", k)
+    return added
+
+
+def stopped(st, i):
+    """The points of machine `i` of a range, her airscrew stopped at her own angle (no two alike)."""
+    vs = list(st["verts"])
+    for sc in st["screws"]:
+        turn = Matrix.Rotation(2.0 * math.pi / sc["blades"] * ((i + 1) * 0.6180339887 % 1.0), 3, sc["axis"])
+        for j in sc["points"]:
+            vs[j] = turn @ (st["verts"][j] - sc["hub"]) + sc["hub"]
+    return vs
 
 
 def places(pf):
@@ -203,6 +275,7 @@ def park(kind, fine=True):
     pm, pf = st["pm"], st["pf"]
     paints = dict(pm.paints)
     paints["chock"] = CHOCK
+    paints["blade_tip"] = TIP_YELLOW if st["tips"] else paints["blade"]      # (yellow where her own airscrew wears yellow tips)
     title = pm.title.replace(" (our own model)", "")
     m = Model("DeckPark_" + kind, f"{title}s ranged on a carrier's deck (our own model)", "deck park", paints, fine)
     m.part("park", None, (0, 0, 0), kind="root", note="the whole range: it stands at the pivot of the carrier's part `deckpark` and rides with it")
@@ -216,7 +289,7 @@ def park(kind, fine=True):
             stand_in(m, o, pf.half * 2.0, pf.long)
             continue
         n0 = len(m.faces)
-        m.raw([v + o for v in st["verts"]], st["faces"], st["paints"], name, coat=st["coat"], blend=st["blend"], soot=st["soot"], by_point=st["by_point"])
+        m.raw([v + o for v in stopped(st, i)], st["faces"], st["paints"], name, coat=st["coat"], blend=st["blend"], soot=st["soot"], by_point=st["by_point"])
         m.fsmooth[n0:] = st["smooth"]
         for mk in st["marks"]:
             m.marks.append({"tag": mk["tag"], "at": mirror(mk["at"] + o), "radius": mk["radius"], "facing": mirror(mk["facing"]), "up": mirror(mk["up"]),
@@ -227,7 +300,12 @@ def park(kind, fine=True):
                       "about_park": "A range of aircraft for a carrier's deck. Stand it at the pivot of her part `deckpark` (x forward, z up; its own "
                                     "origin is the deck under the foremost row) and let it ride with that part. `places` is where each machine "
                                     "stands, `pitch` how far her nose is up in degrees. Paint and markings by the month are the aircraft's own: "
-                                    "`schemes`, `mark_months`, `nation_paint`, exactly as in her own file."}
+                                    "`schemes`, `mark_months`, `nation_paint`, exactly as in her own file. The paint `blade_tip` is the tip of "
+                                    "each stopped blade: yellow where her own airscrew wears yellow tips. On a machine painted for her owner "
+                                    "(`nation_paint`) it is the blade's own black, and `blade_tip_for` says which owners' machines wear it "
+                                    "yellow."}
+    if src.get("nation_paint"):
+        m.info["file"]["blade_tip_for"] = {"colour": TIP_YELLOW, "owners": ["USA", "UK", "JAP"]}
     for k in ("nation_paint", "number_ink", "clear", "schemes", "mark_months", "year", "finish"):
         if k in src:
             m.info["file"][k] = src[k]
@@ -283,6 +361,8 @@ def range_on(ship, ship_arm, month=None, own=None):
     gloss = in_month(m, month)
     if ship.name == "Carrier_USA" and m.info["file"]["machine"] == "CarrierFighter":
         m.paints.update(planes._BLUE_GREY)               # (the game paints a plain machine for her owner: America's blue-grey of 1941 and 1942)
+    if m.info["file"].get("blade_tip_for") and ship.name in ("Carrier_USA", "Carrier"):
+        m.paints["blade_tip"] = TIP_YELLOW               # (America's and Britain's airscrews wear yellow tips)
     ob, arm = rigid.to_blender(m, (lambda *a: airshow.plane_look(*a, gloss=gloss)), crease=50.0)
     made = [ob, arm] + marks.put(m, ob, arm, own=own or own_for(ship, month))
     bone = ship_arm.data.bones["deckpark"]
