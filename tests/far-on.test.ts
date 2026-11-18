@@ -31,7 +31,7 @@ import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resource
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinsOn, stalemates, startOpen } from '../src/campaign/staff';
-import { prizeOf, townName } from '../src/campaign/towns';
+import { prizeOf, townAt, townName, worthOf } from '../src/campaign/towns';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
@@ -674,6 +674,26 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(lineFactories(g, 'JAP')).toBe(islands + 2);
     // Home ground on the far side counts in full: the Soviet Union's works beyond the Volga are her own.
     expect(lineFactories(g, 'SOV')).toBe(g.regions.filter((r) => r.owner === 'SOV' && r.ctrl === 'SOV').reduce((s, r) => s + r.fac, 0));
+  });
+
+  it("shows on a town's coins what the ground truly pays its own country, after the tenth (ruling b466)", () => {
+    const g = grand();
+    // Every province in its own country's hands: the worth a town shows is the pay, in money as the interface shows it.
+    for (const r of g.regions) {
+      if (r.ctrl !== r.owner) continue;
+      const pays = provinceYield(g, r, r.owner, true).total;
+      expect(worthOf(g, r), r.name).toBe(pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0);
+    }
+    // Calcutta, three factories and a harbour: it paid Britain over 300 and pays her a tenth of it.
+    const calcutta = g.byName['Calcutta'];
+    expect(townAt(g, calcutta.id)!.worth).toBe(worthOf(g, calcutta));
+    expect(worthOf(g, calcutta)).toBeGreaterThan(30);
+    expect(worthOf(g, calcutta)).toBeLessThan(36);
+    // Hamhung, Japan's home ground by the exception: its factory whole.
+    expect(worthOf(g, g.byName['Hamhung'])).toBeGreaterThan(100);
+    // An older colony reads as it always did.
+    const alexandria = g.byName['Alexandria'];
+    expect(worthOf(g, alexandria)).toBe(Math.max(1, Math.round((BUDGET.land[alexandria.terrain] * BUDGET.overseas * landFactor(alexandria) * landShare(alexandria) + BUDGET.port * BUDGET.overseas * landFactor(alexandria) + alexandria.fac) * BUDGET.scale)));
   });
 });
 

@@ -17,7 +17,7 @@ import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
+import { BUDGET, budgeted, colonyPurse, farColony, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldOverseas, fieldYield, resRules } from './resources';
@@ -111,13 +111,17 @@ export interface TownView {
 /** What a province pays its own country a month at its best: land, harbour, oilfield, factories, and the seat of government. */
 export function worthOf(g: Game, r: Region): number {
   if (!budgeted(g)) return Math.round(r.fac * BUDGET.scale);
-  const k = r.overseas ? BUDGET.overseas : 1;
+  // (What it truly pays: a colony on the far side of the world a tenth, Korea and Formosa as home ground. The rider
+  // b462 to ruling 231 and ruling b466; economy.ts.)
+  const k = colonyPurse(r) ? BUDGET.overseas : 1;
+  const far = farColony(r) ? BUDGET.farColony : null;
   const seat = g.nations[r.owner];
   const capital = r.cap && seat && seat.capital === r.id ? BUDGET.capital : 0;
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
   const f = landFactor(r);
-  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
+  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
+    + r.fac * (far?.fac ?? 1) + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 
