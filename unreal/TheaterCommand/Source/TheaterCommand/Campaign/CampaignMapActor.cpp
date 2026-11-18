@@ -13567,6 +13567,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				BlastFrameSaid = Frame;
 				UE_LOG(LogTheater, Display, TEXT("Effects: the barrage stands at frame %d of its shot at %.1f s"), Frame, BlastFrames);
 			}
+			else if (Frame >= 0)
+			{
+				// (The kit's lamps and its shortest flashes go by the frames it draws, not by its clock: a lamp is full in
+				// the first frame drawn after its flash is born, half in the next, then out. So each frame of the shot is
+				// drawn once and then stands until the next: a still shows what that one frame of play would show. Drawn
+				// over and over at one moment, as it was, a lamp was out long before the still was taken.)
+				bBlastTicked = true;
+			}
 		}
 		if (!bBlastTicked)
 		{
