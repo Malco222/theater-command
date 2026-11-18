@@ -127,10 +127,11 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
-	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men)
+	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow)
 	{
-		const double GrassA[3] = { ToLinear(124), ToLinear(132), ToLinear(74) };
-		const double GrassB[3] = { ToLinear(98), ToLinear(96), ToLinear(60) };
+		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white)
+		const double GrassA[3] = { ToLinear(bSnow ? 226 : 124), ToLinear(bSnow ? 230 : 132), ToLinear(bSnow ? 236 : 74) };
+		const double GrassB[3] = { ToLinear(bSnow ? 196 : 98), ToLinear(bSnow ? 202 : 96), ToLinear(bSnow ? 212 : 60) };
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
 		for (int Y = 0; Y < C.H; ++Y)
 		{
@@ -278,10 +279,10 @@ namespace
 	{
 		const std::vector<Vec>& P = Fx.Points();
 		const std::vector<uint8_t>& Rgba = Fx.Colours();
-		const int Rim = Battle::Ring;
+		const int Rim = Fx.Ring();
 		for (int Each = 0; Each < N; ++Each)
 		{
-			const int First = Each * Battle::PerPuff;
+			const int First = Each * Fx.PerPuff();
 			auto Tri = [&](int A, int B, int Cc)
 			{
 				const Vec Pts[3] = { P[static_cast<size_t>(A)], P[static_cast<size_t>(B)], P[static_cast<size_t>(Cc)] };
@@ -398,7 +399,7 @@ int main(int Argc, char** Argv)
 		const int NL = Fx.Lamps(Now, Lamps, 2);
 		Canvas C;
 		C.Init(W, H);
-		Paint(C, Shot, Lamps, NL, Men);
+		Paint(C, Shot, Lamps, NL, Men, Ground == "snow");
 		Puffs(C, Shot, Fx, N);
 		char Name[256];
 		std::snprintf(Name, sizeof(Name), "%s/%s-%s-f%03d.ppm", OutDir.c_str(), Size.c_str(), Ground.c_str(), Frame);

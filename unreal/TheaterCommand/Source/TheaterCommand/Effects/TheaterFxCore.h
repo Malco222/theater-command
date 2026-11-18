@@ -11,9 +11,9 @@
  * look is tuned there and not here.
  *
  * Nothing here knows Unreal. Places are in metres, Z up, time in seconds. What it gives back each frame is a list of
- * soft puffs, each a middle point and two rings of eight (the shape the campaign map's smoke uses, so one material
- * and one triangle list serve both), already turned to the eye, coloured, and laid far to near; a few lamps for the
- * flashes; and the camera's jolt, which the caller adds to its own camera if it wants it.
+ * soft puffs, each a middle point and two rings of points (the shape the campaign map's smoke uses, with
+ * game.puff_sides points a ring, so one material serves both), already turned to the eye, coloured, and laid far to
+ * near; a few lamps for the flashes; and the camera's jolt, which the caller adds to its own camera if it wants it.
  *
  * Lessons the shapes follow (the art director's sheet, art-director/explosions):
  * - the earth is the star of a land hit: a wide torn fan of dark jets, uneven, thinnest and torn at the tip, clods
@@ -103,6 +103,8 @@ namespace TheaterFx
 		double Heart = 0.5, Rim = 0.0; // how thick it is at half its radius, and at its edge, as shares of its middle
 		double LeastPx = 0.0;
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
+		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
+		uint32_t LumpSeed = 0;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
 		bool bHug = false; // rides the ground as it moves (skirts)
@@ -151,7 +153,10 @@ namespace TheaterFx
 		/** Lays everything alive at Now for this eye into Points and Colours (PerPuff points a puff, far to near).
 		 * Returns how many puffs; the rest of the room up to the last frame's count is folded away. */
 		int Draw(double Now, const View& Eye);
-		static constexpr int Ring = 8, PerPuff = 2 * Ring + 1;
+		/** Each puff is a middle and two rings of Ring() points (game.puff_sides, 16 unless the recipe says less), so
+		 * PerPuff() points; it is fixed at Setup, so the mesh's triangles never change. */
+		int Ring() const { return Sides; }
+		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
@@ -208,6 +213,7 @@ namespace TheaterFx
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
 		int MaxPuffs = 3000;
+		int Sides = 16, PointsPerPuff = 33;
 		int LastDrawn = 0;
 		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
 		Vec LastEye;
@@ -234,6 +240,7 @@ namespace TheaterFx
 		double Height(double X, double Y) const;
 		Paint PaintOf(const std::string& Ground) const;
 		void Throw(Bit& B) const; // a clod's flight worked out against the ground
+		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 
 		void Wink(double T0, const Vec& At, double Scale, Dice& D);
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
@@ -246,7 +253,7 @@ namespace TheaterFx
 
 		Vec Where(const Bit& B, double Age) const;
 		Vec Going(const Bit& B, double Age) const;
-		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye);
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0);
 		bool LayBit(int Slot, const Bit& B, double Now, const View& Eye);
 	};
 }
