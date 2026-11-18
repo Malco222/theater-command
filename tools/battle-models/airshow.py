@@ -249,7 +249,8 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
     def tongue(t, root, flow, v, long, kind, col, col2, life, drift, alpha=0.92, splay=0.16):
         d = (flow + across(flow, g.uniform(0.0, splay))).normalized()
         wide = long * g.uniform(0.2, 0.32)
-        p = fx.puff(t, root + d * (0.5 * long), vel=v, life=life, r=(0.72, 1.0), col=col, col2=col2, alpha=alpha, kind=kind, wind=drift, squash=(0.5 * long, 0.5 * wide, 0.5 * wide),
+        # (its blunt root end is set back into the place that burns: showing, a row of them read as round heads with tails)
+        p = fx.puff(t, root + d * (0.36 * long), vel=v, life=life, r=(0.72, 1.0), col=col, col2=col2, alpha=alpha, kind=kind, wind=drift, squash=(0.5 * long, 0.5 * wide, 0.5 * wide),
                     fade_in=0.006, grow=0.5, hold=0.55, cool=1.0)
         p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
@@ -352,8 +353,8 @@ def strikes(fx, plane, t0, t1, sockets=("fuel", "engine.1", "tank.port")):
         for i in range(4):
             d = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1)))
             d = d.normalized() if d.length > 0.05 else Z.copy()
-            long = g.uniform(0.45, 1.0)
-            wide = long * g.uniform(0.28, 0.42)
+            long = g.uniform(0.45, 1.0) * 1.25
+            wide = long * g.uniform(0.28, 0.42) * 0.5        # (thin spits; fat ones were petals stuck on her)
             k = g.uniform(0.8, 1.2)
             p = fx.puff(t, p0 + d * long * 0.4, vel=plane.vel + d * g.uniform(3, 9), life=g.uniform(0.07, 0.12), r=(0.6, 1.0), col=(0.15 * k, 0.028 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
                         kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.0, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.006, grow=0.5, hold=0.4, cool=1.0)
