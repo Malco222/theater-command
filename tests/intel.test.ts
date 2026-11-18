@@ -361,7 +361,9 @@ describe('an agent\'s work', () => {
     expect(whyNotMission(g, 'GER', 9999, 'watch')).toMatch(/no such agent/);
     // The room shows the same answers.
     const view = secretService(g)!.agents.find((x) => x.id === paris.id)!;
-    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil']);
+    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans']);
+    // (Ruling 235: a great power steals no plans of capital ships; it draws its own.)
+    expect(view.missions.find((m) => m.id === 'bbPlans')!.why).toMatch(/own designs/);
     expect(view.missions.find((m) => m.id === 'oil')!.ok).toBe(false);
     expect(view.missions.find((m) => m.id === 'watch')!.now).toBe(true);
     expect(view.missions.find((m) => m.id === 'factory')!.success).toBeCloseTo(INTEL.missions.factory.success!, 9);

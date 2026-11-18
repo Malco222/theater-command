@@ -74,6 +74,8 @@ export interface Nation {
   corpsNo: number;
   /** Public opinion, from -100 (wants the Allies) to +100 (wants the Axis), and the leaning it drifts back to. */
   opinion: number;
+  /** A smaller nation's plans of battleships or carriers, taken or stolen from a great power (plans.ts), in the order gained. */
+  plans?: PlanHeld[];
   home: number;
   /** Political capital: what a government can spend on diplomacy. */
   pc: number;
@@ -1087,8 +1089,11 @@ export interface Passing {
   player?: boolean;
 }
 
-/** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'guard';
+/** What an agent is doing: watching, reading a government's books, an act of sabotage, a theft of plans, or guarding the home country. */
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'bbPlans' | 'cvPlans' | 'guard';
+
+/** Plans of one capital ship a smaller nation holds (Brian, 18 November): whose they are, how it got them, and when. */
+export interface PlanHeld { hull: 'bb' | 'cv'; from: string; how: 'taken' | 'stolen'; turn: number }
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {

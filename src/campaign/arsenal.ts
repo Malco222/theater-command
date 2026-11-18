@@ -18,6 +18,7 @@ import { atWar, headline } from './game';
 import { majorsOf } from './diplomacy';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
+import { onPlans, whyNoPlans } from './plans';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -521,13 +522,15 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const full = hull === 'tp' && liftBought(g, nat) >= ARSENAL.lift.most;
     const cost = priceOf(g, nat, `ship:${hull}`, spec.cost);
     const one = hull === 'tp' ? '' : NAVY.classes[hull].one, many = hull === 'tp' ? '' : NAVY.classes[hull].many;
-    const held = gate(`ship:${hull}`);
+    // (Brian, 18 November: the smaller nations lay down battleships and carriers only on a great power's plans, plans.ts.)
+    const noPlans = whyNoPlans(g, nat, hull);
+    const held = noPlans || onPlans(g, nat, hull) ? null : gate(`ship:${hull}`);
     out.push({
       ...(held ? { tech: held.tech } : {}),
       key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
       note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new fleet there.`,
-      why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
+      why: noPlans ?? held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
   }
 

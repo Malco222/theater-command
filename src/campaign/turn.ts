@@ -2,6 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { plansView } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
@@ -1435,6 +1436,14 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
+
+/**
+ * The great power whose plans each country lays its battleships and carriers down on (Brian, 18 November; plans.ts):
+ * `{ SWE: { bb: 'GER', cv: null }, UK: { bb: 'UK', cv: 'UK' }, ... }`. A great power names itself, a dominion Britain,
+ * Vichy and Free France France; a smaller country the power whose plans it gained last, or null when it holds none.
+ * The 3D game draws a smaller navy's battleship or carrier as that power's model, in its own grey and under its own flag.
+ */
+export const capitalPlans = (g: Game): Record<string, { bb: string | null; cv: string | null }> => plansView(g);
 
 /** Any fleet as a card: its admiral, where it is, what it is doing, and its ships by class. */
 export function fleetView(g: Game, id: number): FleetCard | null {

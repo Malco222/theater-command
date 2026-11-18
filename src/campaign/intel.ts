@@ -13,7 +13,9 @@
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, Game, IntelNote, Mission, Region } from './types';
-import { allied, atWar, bloc, fieldArmy, headline } from './game';
+import { allied, atWar, bloc, declareWar, fieldArmy, headline } from './game';
+import { ARSENAL, yardLevel } from './arsenal';
+import { PLANS, buildsOwn, givesPlans, grantPlans, planRules, plansFrom, type CapitalHull } from './plans';
 import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
 import { turnToDate } from '../core/ticket';
 import { levelIndex } from './difficulty';
@@ -29,7 +31,7 @@ export const INTEL = data as unknown as {
   missions: Record<Mission, MissionRow>;
   skill: { caught: number; success: number; guard: number };
   risk: { capital: number; war: number; heat: number; heatMonths: number; lieLow: number };
-  caught: { opinion: number };
+  caught: { opinion: number; war?: number };
   battle: { attack: number };
   enemy: { chance: number; quiet: number; level: number[]; services: string[]; kinds: { factory: number; rail: number }; near: number; far: number; most: number };
   estimate: { round: number };
@@ -469,9 +471,15 @@ export function retire(g: Game, nat: string, id: number): boolean {
 
 // ---- Missions -------------------------------------------------------------------------------------------
 
-export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'guard'];
+export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans', 'guard'];
 const SABOTAGE: Mission[] = ['factory', 'rail', 'oil'];
 export const isSabotage = (m: Mission): boolean => SABOTAGE.includes(m);
+/** A theft of a great power's plans of battleships or of carriers (Brian, 18 November; plans.ts): tried once, like an act of sabotage. */
+const THEFT: Partial<Record<Mission, CapitalHull>> = { bbPlans: 'bb', cvPlans: 'cv' };
+export const isTheft = (m: Mission): boolean => THEFT[m] !== undefined;
+/** True for work that is tried once as the month turns, and then the agent lies low. */
+export const triedOnce = (m: Mission): boolean => isSabotage(m) || isTheft(m);
+const HULL_PLANS: Record<CapitalHull, { one: string; many: string }> = { bb: { one: 'battleship', many: 'battleships' }, cv: { one: 'carrier', many: 'carriers' } };
 
 export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text: string }> = {
   watch: { label: 'Watch and report', doing: 'watching', text: 'Reports every army in the province and the provinces around it: each corps, its kind and its strength. In the province itself the agent also reports what is on order there and which air fleets are based there, and your armies attack it harder for knowing its defences.' },
@@ -479,6 +487,8 @@ export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text:
   factory: { label: 'Wreck a factory', doing: 'preparing to wreck a factory', text: 'One working factory is put out of action until engineers rebuild it. Tried once, next month, and then the agent must lie low.' },
   rail: { label: 'Cut the railway', doing: 'preparing to cut the railway', text: 'The track is blown. No train runs through the province until engineers relay it. Tried once, next month, and then the agent must lie low.' },
   oil: { label: 'Fire the oilfield', doing: 'preparing to fire the oilfield', text: `The wells are set alight: the field gives ${Math.round((1 - (data as any).missions.oil.cut) * 100)}% of its oil for ${(data as any).missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
+  bbPlans: { label: 'Steal the battleship plans', doing: 'preparing to steal the battleship plans', text: `In a great power's capital or one of its great naval yards: its battleship plans are copied and got out, and your shipyards can lay down battleships on its designs. Tried once, next month, and then the agent must lie low. An agent caught at it may bring war: ${Math.round((data as any).caught.war * 10)} times in 10 a great power at peace with you declares it.` },
+  cvPlans: { label: 'Steal the carrier plans', doing: 'preparing to steal the carrier plans', text: `In a great power's capital or one of its great naval yards: its carrier plans are copied and got out, and your shipyards can lay down aircraft carriers on its designs. Tried once, next month, and then the agent must lie low. An agent caught at it may bring war: ${Math.round((data as any).caught.war * 10)} times in 10 a great power at peace with you declares it.` },
   guard: { label: 'Guard against saboteurs', doing: 'on guard', text: 'Watches for enemy agents here and in the provinces around, and is some help everywhere at home.' },
 };
 
@@ -510,6 +520,7 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
     if (!host?.alive || host.capital !== r.id || r.owner !== r.ctrl) return 'A government keeps its books in its capital. Send the agent to one.';
     return null;
   }
+  if (isTheft(m)) return whyNoTheft(g, nat, a, r, THEFT[m]!);
   if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}. Sabotage is an act of war.`;
   if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${k} more months`} after the last attempt.`; }
   if (m === 'factory') {
@@ -524,6 +535,19 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   }
   if (!r.oil) return `There is no oilfield at ${r.name}.`;
   if (fieldOut(g, r) > 0) return `The wells at ${r.name} are already burning.`;
+  return null;
+}
+
+/** Why this agent cannot try for a great power's plans of this hull where it stands, or null. At peace as at war. */
+function whyNoTheft(g: Game, nat: string, a: Agent, r: Region, hull: CapitalHull): string | null {
+  const W = HULL_PLANS[hull], host = g.nations[r.ctrl];
+  if (!planRules(g)) return `Every country here draws its own ${W.many}.`;
+  if (buildsOwn(nat)) return `${g.nations[nat].name} lays down ${W.many} on its own designs.`;
+  if (plansFrom(g, nat, hull) !== null) return `Your shipyards already hold plans of ${W.many}.`;
+  if (!PLANS.great.includes(r.ctrl) || r.owner !== r.ctrl) return `Plans of ${W.many} are kept by the great powers, in their capitals and great naval yards. Send the agent to one.`;
+  if (host.capital !== r.id && yardLevel(g, r) < ARSENAL.ships[hull].yard) return `There is no great naval yard at ${r.name}. The plans are kept in the capital and the great yards.`;
+  if (!givesPlans(g, r.ctrl, hull)) return `${host.name} builds no ${W.many} yet: there are no plans to steal.`;
+  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${k} more months`} after the last attempt.`; }
   return null;
 }
 
@@ -635,7 +659,9 @@ function attempt(g: Game, a: Agent): void {
   if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
   else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
-  else text = m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
+  else if (ok && isTheft(m) && grantPlans(g, a.nat, THEFT[m]!, r.ctrl, 'stolen')) { done = true; text = `Agent ${a.name} copies the ${host.adj} ${HULL_PLANS[THEFT[m]!].one} plans at ${r.name} and gets them out. Your shipyards can now lay down ${HULL_PLANS[THEFT[m]!].many} on ${host.adj} designs.`; }
+  else text = isTheft(m) ? `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`
+    : m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
     : m === 'rail' ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.`
       : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
   note(g, a, r.id, done ? 'sabotage' : 'failed', text, done);
@@ -644,6 +670,13 @@ function attempt(g: Game, a: Agent): void {
   a.rest = g.turn + INTEL.risk.lieLow;
   g.intel.heat[r.id] = g.turn + INTEL.risk.heatMonths;
   if (done) learn(g, a, INTEL.missions[m].gain ?? 1);
+}
+
+/** True when the great power that caught this spy at its plans goes to war over it: at peace with the thief, not its ally, at the chance in intel.json. */
+function theftWar(g: Game, a: Agent, host: string): boolean {
+  const H = g.nations[host];
+  if (!H?.alive || host === a.nat || atWar(g, host, a.nat) || allied(g, host, a.nat)) return false;
+  return draw(g, g.turn, a.id, 'war') < (INTEL.caught.war ?? 0);
 }
 
 /** A neutral that catches a spy thinks the worse of the side that sent it. */
@@ -728,10 +761,13 @@ export function intelTick(g: Game, nat: string): void {
     const was = a.mission;
     // The risk is the one the player was shown when the order was given: the alarm an attempt raises counts from next month.
     const risk = caughtChance(g, a, was);
-    if (isSabotage(was)) attempt(g, a);
+    if (triedOnce(was)) attempt(g, a);
     if (draw(g, g.turn, a.id, 'caught') < risk) {
       const host = g.nations[r.ctrl];
-      lose(g, a, `Agent ${a.name} is caught at ${r.name} by ${host.adj} counter-intelligence. Nothing more is heard.${resent(g, a, r.ctrl)}`, 'caught');
+      // (Brian, 18 November: a great power that catches a spy at its plans may declare war on the country that sent it.)
+      const war = isTheft(was) && theftWar(g, a, r.ctrl);
+      lose(g, a, `Agent ${a.name} is caught at ${r.name} by ${host.adj} counter-intelligence. Nothing more is heard.${war ? ` ${host.name} declares war on ${g.nations[nat].name} for the theft of its plans.` : resent(g, a, r.ctrl)}`, 'caught');
+      if (war) { g.flags[`provoked:${r.ctrl}:${nat}`] = g.turn; declareWar(g, r.ctrl, nat); }
       continue;
     }
     a.months = (a.months ?? 0) + 1;
@@ -783,7 +819,7 @@ function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);
   const offers: MissionOffer[] = (out ? MISSIONS.filter((m) => m !== 'guard') : (['guard'] as Mission[])).map((m) => {
     const why = whyNotMission(g, a.nat, a.id, m);
-    return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? '', now: a.mission === m, caught: caughtChance(g, a, m), success: isSabotage(m) ? successChance(a, m) : null };
+    return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? '', now: a.mission === m, caught: caughtChance(g, a, m), success: triedOnce(m) ? successChance(a, m) : null };
   });
   const sees: AgentView['sees'] = [];
   if (work && out) {
