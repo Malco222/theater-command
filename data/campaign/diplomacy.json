@@ -89,12 +89,12 @@
       "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
     },
     {
-      "id": "belgrade-coup", "from": 20, "to": 20,
+      "id": "belgrade-coup", "from": 20, "to": 20, "past": true,
       "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
       "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
     },
     {
-      "id": "italy-east", "from": 23, "to": 24, "mode": "history",
+      "id": "italy-east", "from": 22, "to": 24, "mode": "history",
       "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
       "war": [["ITA", "SOV"]],
       "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
@@ -180,7 +180,7 @@
       "text": "With Africa lost, a quarter of a million men gone into captivity at Tunis and the bombers over Sicily and Rome, the Italian army has no heart left for this war. Its divisions will not fight as they did."
     },
     {
-      "id": "mussolini-falls", "from": 48, "to": 70,
+      "id": "mussolini-falls", "from": 48, "to": 70, "past": true,
       "if": ["alive:ITA", "computer:ITA,47", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
       "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
     },
@@ -319,7 +319,7 @@
       "text": "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
     },
     {
-      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history",
+      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history", "past": true,
       "if": ["alive:SVK", "war:GER,SOV", "allHeld:allies,Lwow"],
       "text": "Slovakia has risen. Part of the Slovak army and thousands of partisans hold the mountains round Banska Bystrica against the German divisions sent in to disarm them, and the Red Army is fighting its way toward them through the Dukla Pass."
     },
