@@ -39,9 +39,21 @@ button { cursor: pointer; }
 .bclock { display: grid; text-align: center; }
 .bclock .tc-data { font-weight: 700; }
 .bspeed { display: flex; gap: 4px; }
+/* PAUSED and PAUSE take the same room, so pausing never folds the bar or unfolds it: one bar height at a given
+   width (the UI director, 245e366). */
+.bspeed #pauseWord { display: inline-block; min-width: calc(6ch + .6em); }
 .bspeed .tc-btn.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
 .bbal { flex: 1; min-width: 220px; max-width: 420px; display: grid; gap: 3px; }
 .bends #ratio { white-space: nowrap; }
+/* The staff's band (b453) in the card's words is longer than the bar: it folds at the dot, the card's line over the
+   one for now. The second line keeps room for its longest figures, so the bar's height holds still while the clock runs. */
+.bends #ratio .fact + .fact { min-width: calc(30ch + 1.4em); }
+/* The balance never slides under the buttons: at its narrowest it still holds both names and the odds, and the bar
+   folds its buttons onto a second row first, as the fleet action's does (the UI director, 245e366). The odds line keeps
+   room for its longest figures, so the fold follows the width alone, never the odds of the moment. */
+.battle:not(.sea) .bbal { min-width: min-content; }
+.battle:not(.sea) .bends #ratio { min-width: 30ch; text-align: center; }
+.battle:not(.sea) .bends #ratio .facts { text-align: left; }
 .bclock .tc-label { color: var(--paper-300); }
 .bclock .tc-label.is-paused { color: var(--brass-300); }
 /* How near to breaking (ruling 226(3)): under the balance bar, a bar a side in its nation's colour, no numbers;

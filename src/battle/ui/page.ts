@@ -38,6 +38,8 @@ const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p
 const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
 const TERRAIN_WORD: Record<Terrain, string> = { plains: 'Open country', forest: 'Forest', hills: 'Hill country', mountain: 'Mountains', marsh: 'Marsh', urban: 'City streets', desert: 'Open desert' };
+/** A range as the attack card says it: "between 7.7 and 13.3 to 1" (the UI director, 245e366: every range in words). */
+const between = (lo: number, hi: number): string => `between ${lo.toFixed(1)} and ${hi.toFixed(1)} to 1`;
 /** Facts in a row that fold whole: the dot between two goes with the fold, never ending or starting a line (brief check 19). */
 const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
 /** "Warsaw, the capital"; "the town of Gdynia". */
@@ -448,7 +450,10 @@ function updateTop(force = false): void {
     mark.classList.add('band');
     mark.style.left = at(band.lo);
     mark.style.width = `${Math.max(0.5, (100 * band.hi) / (1 + band.hi) - (100 * band.lo) / (1 + band.lo)).toFixed(1)}%`;
-    el('ratio').textContent = `Card ${band.lo.toFixed(1)}–${band.hi.toFixed(1)} to 1 · now ${(band.lo * r).toFixed(1)}–${(band.hi * r).toFixed(1)} to 1`;
+    // The card's own words for a range, never a dash (the UI director, 245e366), folding at the dot where the bar is
+    // narrow. The line is only rewritten when it changes, so the fold holds still while the clock runs.
+    const ratio = el('ratio'), said = facts([`Card ${between(band.lo, band.hi)}`, `now ${between(band.lo * r, band.hi * r)}`]);
+    if (ratio.dataset.said !== said) { ratio.innerHTML = said; ratio.dataset.said = said; }
   } else {
     const share = bal.att / Math.max(1e-6, bal.att + bal.def);
     el('balA').style.width = `${(share * 100).toFixed(1)}%`;
