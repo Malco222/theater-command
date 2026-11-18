@@ -9,7 +9,7 @@ import { gateBar, gateViews } from '../src/campaign/gates';
 import { canPass, gateShutSince, gatesTick, setGate } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { tradeIncome } from '../src/campaign/trade';
+import { endTrade, signTrade, tradeIncome } from '../src/campaign/trade';
 import { FORT_NO_ORDERS, beginHuman, canOrder, corpsDetail, endHuman, gateQuestion, humanUp, orderGate, stepAI, whyNotGate, whyNotOrder } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
@@ -26,6 +26,16 @@ function nextMonth(g: Game): void {
   beginHuman(g);
 }
 const gateOf = (g: Game, name: RegExp): number => g.gates.findIndex((x) => name.test(x.name));
+/**
+ * On the cities chart no agreement of the first day sails through the canal: the Dominican Republic's trade with
+ * Guatemala keeps to the Caribbean. So Peru and the Dominican Republic each give up one agreement (Chile's with Peru,
+ * Haiti's with the Dominican Republic) and sign one with each other, whose goods go through it.
+ */
+function canalTrade(g: Game): void {
+  expect(endTrade(g, 'CHL', 'PER')).toBe(true);
+  expect(endTrade(g, 'HAI', 'DOM')).toBe(true);
+  expect(signTrade(g, 'PER', 'DOM', new Map(), true)).not.toBeNull();
+}
 const passes = (g: Game, i: number, nat: string): boolean => canPass(g, g.gates[i].a, g.gates[i].b, nat);
 
 describe('the gate its holder can shut', () => {
@@ -55,6 +65,7 @@ describe('the gate its holder can shut', () => {
 
   it('the question names whose trade goes the long way round, with a figure, and changes nothing', () => {
     const g = seat('USA');
+    canalTrade(g);
     const p = gateOf(g, /Panama/);
     gateQuestion(g, p); // any forecast refreshes the supply cache once
     const before = saveGame(g);
@@ -144,6 +155,7 @@ describe('the gate its holder can shut', () => {
 
   it('trade through a shut gate goes the long way round or stops, from the month the gate is shut', () => {
     const g = seat('USA');
+    canalTrade(g);
     const p = gateOf(g, /Panama/), gt = g.gates[p];
     const crossing = (): typeof g.trade => g.trade.filter((d) => d.way === 'sea' && d.state !== 'cut' && d.seas.some((z, k) => k > 0 && ((d.seas[k - 1] === gt.a && z === gt.b) || (d.seas[k - 1] === gt.b && z === gt.a))));
     const was = crossing().map((d) => ({ a: d.a, b: d.b, pays: d.worth * (1 - d.lost), income: tradeIncome(g, d.a) }));

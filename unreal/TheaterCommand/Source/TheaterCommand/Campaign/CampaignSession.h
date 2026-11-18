@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/Future.h"
 #include "Campaign/CampaignView.h"
 
 class FRulesHost;
@@ -65,7 +66,8 @@ public:
 	 */
 	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr);
 	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
-	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId);
+	/** Army, ArmyIds: (one voice after a press) the army in hand's name as its tray names it, and its corps in the field, so that the line names whom it is true of. */
+	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 	/**
 	 * (Ruling 102.) The province of the army the round goes to next, by the rules' own order: those not yet visited
 	 * this round first, the nearest to From (on the map's own scale) among equals. InOutSeen is the round so far and
@@ -91,11 +93,13 @@ public:
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */
-	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote = nullptr);
+	/** Army, ArmyIds: as for PlanMarch. A march kept is answered by one sentence naming the army, or so many corps of it, or the one corps. */
+	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote = nullptr, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 
 	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
 	/** bOpening: the card is being opened, so the staff may bring in everyone the roads will carry where that beats the pick. */
-	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening = false);
+	/** bGlance: for the pointer's tip, which reads only the odds; the rules leave out the card's soften row, the dearest part. */
+	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening = false, bool bGlance = false);
 
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);
@@ -121,6 +125,8 @@ public:
 	FApproachPlan PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId);
 	/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; empty where he has none there. */
 	FString GarrisonWhy(int32 RegionId);
+	/** (Rules 84.2.5; ruling 211(a).) Why these corps cannot go forward onto that ground by themselves ("Guns cannot take ground alone. ..."), in the rules' own sentence; empty where they can, and before that version. */
+	FString WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId);
 	bool OrderGate(int32 GateId, bool bShut, FString& OutNote);
 	/** (Rules 84.2.) The warning where the corps in hand are the last to hold a gate's province: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
 	FString GateLeft(const TArray<int32>& CorpsIds);
@@ -146,7 +152,8 @@ public:
 	/** Sends the given corps by rail. Returns the ones that went. */
 	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutSaid = nullptr);
 	/** (Rulings 110, 112, 118.) What the trains will do for these corps this month; March is where they can walk to. */
-	FRailShow RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March);
+	/** Army, ArmyIds: as for PlanMarch, so that "No train for the American army this month" is said of the army where it is true of all of it. */
+	FRailShow RailShow(const TArray<int32>& CorpsIds, const TArray<int32>& March, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
 	/** The pointer's words for a province beyond their march. */
 	FRailTip RailTip(const TArray<int32>& CorpsIds, int32 RegionId);
 
@@ -238,7 +245,7 @@ public:
 	bool InviteToLeague(const FString& Nation, FString& OutNote);
 
 	/** The player declares war on a country he is at peace with. */
-	bool Declare(const FString& Nation);
+	bool Declare(const FString& Nation, FString* Said = nullptr);
 
 	/** One corps' service record: what it is, its honours with their citations, and its diary. */
 	FDocumentPage Record(int32 CorpsId);
@@ -253,14 +260,70 @@ public:
 	DECLARE_MULTICAST_DELEGATE(FOnViewChanged);
 	FOnViewChanged OnViewChanged;
 
+	/**
+	 * (Speed: the design director's mark 1 for build 414, a press's own work under a tenth of a second.) The orders that
+	 * cost most on the Mac (a march about 47 ms in the rules, a landing 85, a sortie 67) are answered on a thread of
+	 * their own, so that the frame of the press waits for nothing. The picture of the war is read from the answer on
+	 * that thread too, and the questions the army in hand asks straight after (how it stands, where it can reach, what
+	 * the trains can do, the province's card) are asked there in the same trip and kept, so that the frames that show
+	 * the answer ask the rules nothing. Each was checked against the rules: asked twice it answers the same, and it
+	 * leaves the saved game as it found it. The game's own picture changes only on the game thread, when the answer is
+	 * taken (Deliver). Every other call into the rules waits for an answer still being worked out, and takes it first.
+	 * With bAside false (the photographer), or "tc.Speed.RulesAside 0", the order is answered at once, as before.
+	 */
+	struct FHandNext
+	{
+		/** The province the army in hand will be in, and its corps there before the tray leaves out those that cannot be ordered. */
+		int32 Region = INDEX_NONE;
+		TArray<int32> Ids;
+		/** The province whose card is shown after the order. */
+		int32 Selected = INDEX_NONE;
+		/** A hand that marches (not one at sea or on the railway): it asks where it can reach, and what the trains can do. */
+		bool bPlain = true;
+		/** The nation's adjective as the tray's head names its army ("the German army"), where no general leads it. */
+		FString Adjective;
+	};
+	/** The marches an order made, and the rules' sentence on it. */
+	struct FMoveAnswer
+	{
+		TArray<FCorpsMove> Moved;
+		FString Note;
+	};
+	/** Each Guess is run on the rules' thread, on the answer as read there: it may use only what it was given. Then is run on the game thread. */
+	void MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
+		TFunction<FHandNext(const FMoveAnswer&)>&& Guess, TFunction<void(const FMoveAnswer&)>&& Then);
+	void LandAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bAside, TFunction<FHandNext(const FLandingResult&)>&& Guess, TFunction<void(const FLandingResult&)>&& Then);
+	/** Function: "attack", "take" (bAssault as Take's), "storm" or "sally" (no corps: the province says who). */
+	void FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
+		TFunction<FHandNext(const FAttackResult&)>&& Guess, TFunction<void(const FAttackResult&)>&& Then);
+	/** True from an order given aside until its Then has been run. */
+	bool IsAnswering() const { return Aside.IsValid() || static_cast<bool>(AsideThen); }
+	/** Once a frame, from the player's controller: where the answer is in, it is taken and its Then is run. bWait: waited for, where it is still being worked out. */
+	void Deliver(bool bWait = false);
+
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
+	struct FAside;
+	/** The order on the rules' thread: Guess (there) says what the hand will ask next; Then (here) is given the answer, or nothing where the rules failed. */
+	void Order(const FString& Function, const FString& ArgumentsJson, bool bAside, TFunction<FHandNext(const TSharedPtr<FJsonObject>&)>&& Guess, TFunction<void(const TSharedPtr<FJsonObject>&)>&& Then);
+	/** Waits for an order still being answered, where there is one, and takes its picture of the war and the answers kept with it. Its Then is left for Deliver. */
+	void Settle();
+	/** A new war, or one read in: the order still being answered is taken, and its Then, which belongs to the old war, is dropped. */
+	void DropAside();
 	/** An order that may end in a battle (attack, take): what the rules answer, read as a battle's result. */
 	FAttackResult Fight(const FString& Function, const FString& ArgumentsJson);
 	static FCampaignView ParseView(const TSharedPtr<FJsonObject>& Object);
+	/** ParseView without the speed log's timing, which is kept on the game thread only: for the rules' thread. */
+	static FCampaignView ReadView(const TSharedPtr<FJsonObject>& Object);
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 
 	TUniquePtr<FRulesHost> Host;
+	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
+	TSharedPtr<FAside, ESPMode::ThreadSafe> Aside;
+	TFuture<void> AsideRun;
+	TFunction<void()> AsideThen;
+	/** The rules' last answers to the questions that change nothing, by question and what was asked: see CallRules. */
+	TMap<FString, FString> RulesMemo;
 	FCampaignView View;
 	bool bReady = false;
 	bool bRunning = false;

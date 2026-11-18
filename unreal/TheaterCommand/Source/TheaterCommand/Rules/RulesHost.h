@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HAL/CriticalSection.h"
 
 /**
  * Runs the game's rules.
@@ -44,4 +45,9 @@ public:
 private:
 	struct FImpl;
 	TUniquePtr<FImpl> Impl;
+	/**
+	 * (Speed, b414 mark 1.) The campaign may give an order to the rules on a thread of its own (FCampaignSession::
+	 * MoveAside): one question or order at a time, from whichever thread asks.
+	 */
+	FCriticalSection Gate;
 };

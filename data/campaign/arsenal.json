@@ -1,8 +1,8 @@
 {
   "_about": "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
   "land": {
-    "art": { "label": "Artillery corps", "divs": 2, "cost": 66, "months": 5, "blurb": "Massed guns. Breaks fortified lines and fieldworks in the attack, and thickens any defence it stands in. Slow, weak if caught alone, and as dear as an armoured corps." },
-    "eng": { "label": "Engineer corps", "divs": 1, "cost": 18, "months": 3, "blurb": "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own." }
+    "art": { "label": "Artillery corps", "divs": 2, "cost": 66, "months": 5, "blurb": "Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as a corps of tanks." },
+    "eng": { "label": "Engineer corps", "divs": 1, "cost": 18, "months": 3, "blurb": "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own, and it cannot take ground without infantry or tanks." }
   },
   "needs": { "inf": 0, "mtn": 0, "cav": 0, "eng": 0, "mot": 1, "art": 1, "arm": 2 },
   "air": {
@@ -18,6 +18,55 @@
     "bb": { "label": "Battleship", "count": 1, "cost": 40, "months": 26, "yard": 3, "blurb": "One battleship. Nothing else afloat can stand against it in a gun action, and nothing takes longer to build." }
   },
   "lift": { "most": 4 },
+  "smallAir": {
+    "_about": "Ruling 213(d), with the works rates of 218(d), the grand campaign only (the historian's historian/aircraft-works-213.json). For a smaller power (not one of diplomacy.json's majors) 'works' stands in place of the two- and three-factory test of 'air': it gives the month (1 = September 1939) from which its own works build fighters ('ftr') and bombers ('bmr'), null for never; a works once open stays open while the country stands. 'rate' is the most its works build a month, in air points (fighters, bombers), 'perPoint' aircraft to a point: a wing takes as many months as its works need to build it, and a works builds one wing of a kind at a time; 'earlier' is the rate up to and including month 'until'. A smaller power not listed has no works. 'gifts' are the record's aircraft from abroad, player and computer alike: [month, receiver, air points, 'ftr', 'bmr' or 'mixed' (half each), givers]. A row arrives in its month only while one of its givers stands and is not at war with the receiver (else it is lost, as it is if the receiver has fallen; a receiver not on the map waits for it), as a new air group (or two, for a mixed row) on the receiver's best airfield; with no airfield it waits until there is one.",
+    "perPoint": 35,
+    "works": {
+      "POL": {"ftr": 1, "bmr": 1, "rate": [0.15, 0.3]},
+      "NED": {"ftr": 1, "bmr": 1, "rate": [0.1, 0.05]},
+      "BEL": {"ftr": 1, "bmr": 1, "rate": [0.05, 0.05]},
+      "YUG": {"ftr": 1, "bmr": 1, "rate": [0.1, 0.15]},
+      "SWE": {"ftr": 50, "bmr": 1, "rate": [0.25, 0.35], "earlier": {"until": 30, "rate": [0, 0.1]}},
+      "SUI": {"ftr": 1, "bmr": 37, "rate": [0.25, 0.15]},
+      "FIN": {"ftr": 1, "bmr": 21, "rate": [0.1, 0.05]},
+      "HUN": {"ftr": 13, "bmr": 49, "rate": [1.0, 0.4], "earlier": {"until": 48, "rate": [0.2, 0]}},
+      "ROM": {"ftr": 1, "bmr": 1, "rate": [0.5, 0.25]},
+      "ESP": {"ftr": 1, "bmr": null, "rate": [0.05, null]},
+      "CAN": {"ftr": 6, "bmr": 3, "rate": [1.7, 4.0], "earlier": {"until": 48, "rate": [1.7, 0.6]}},
+      "AUS": {"ftr": 35, "bmr": 21, "rate": [0.35, 0.8], "earlier": {"until": 32, "rate": [0, 0.3]}}
+    },
+    "gifts": [
+      [6, "BUL", 2, "mixed", ["GER"]],
+      [6, "TUR", 2, "mixed", ["UK", "FRA"]],
+      [7, "SWE", 2, "ftr", ["USA"]],
+      [8, "SWE", 2, "ftr", ["ITA"]],
+      [12, "ARG", 1, "ftr", ["ARG"]],
+      [14, "SAF", 2, "mixed", ["UK"]],
+      [14, "THA", 1, "bmr", ["JAP"]],
+      [22, "SAF", 4, "mixed", ["UK"]],
+      [24, "NZL", 1, "bmr", ["UK"]],
+      [28, "SWE", 2, "ftr", ["ITA"]],
+      [34, "BRA", 3, "mixed", ["USA"]],
+      [34, "MEX", 1, "bmr", ["USA"]],
+      [34, "SAF", 3, "mixed", ["UK", "USA"]],
+      [35, "NZL", 2, "mixed", ["USA"]],
+      [37, "MAN", 1, "ftr", ["JAP"]],
+      [40, "THA", 1, "ftr", ["JAP"]],
+      [40, "TUR", 3, "mixed", ["UK", "GER"]],
+      [41, "CHN", 3, "mixed", ["USA"]],
+      [46, "NZL", 2, "mixed", ["USA"]],
+      [46, "SAF", 3, "mixed", ["UK", "USA"]],
+      [48, "BUL", 4, "ftr", ["GER"]],
+      [48, "POR", 2, "ftr", ["UK"]],
+      [52, "BUL", 3, "ftr", ["GER"]],
+      [55, "NZL", 3, "ftr", ["USA"]],
+      [56, "CHN", 3, "mixed", ["USA"]],
+      [58, "SAF", 2, "mixed", ["UK", "USA"]],
+      [62, "BRA", 2, "ftr", ["USA"]],
+      [64, "CHN", 3, "mixed", ["USA"]],
+      [68, "MEX", 1, "ftr", ["USA"]]
+    ]
+  },
   "works": {
     "factory": { "label": "Factory", "cost": 30, "step": 5, "months": 8, "most": { "city": 3, "town": 2 }, "blurb": "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
     "yard": { "label": "Shipyard", "cost": [0, 20, 30, 45], "months": 8, "blurb": "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
@@ -31,8 +80,8 @@
     "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 2,
     "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
     "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1,
-    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Kennebec": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
-    "Nova Scotia": 1, "Vancouver": 1,
+    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
+    "Nova Scotia": 1, "Vancouver": 1, "Esquimalt": 1,
     "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
   },
   "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },

@@ -260,13 +260,14 @@ describe('a liberated country', () => {
     expect(news.region).toBe(paris.id);
     expect(g.passings.length).toBe(rolled + 1);
     const p = g.passings[rolled];
-    // Four provinces since Version 76: Martinique and French Guiana, in British keeping since the fall, come home too.
-    expect(p).toMatchObject({ kind: 'freed', nat: 'FRA', by: 'UK', how: 'freed', capital: paris.id, provinces: 4, corps: 3, side: 'allies', turn: g.turn });
-    for (const name of ['Martinique', 'French Guiana']) expect(g.byName[name].ctrl, name).toBe('FRA');
+    // Four provinces since Version 76: Martinique and French Guiana, in British keeping since the fall, come home too;
+    // five since the cities version, with Cayenne, French Guiana's city.
+    expect(p).toMatchObject({ kind: 'freed', nat: 'FRA', by: 'UK', how: 'freed', capital: paris.id, provinces: 5, corps: 3, side: 'allies', turn: g.turn });
+    for (const name of ['Martinique', 'French Guiana', 'Cayenne']) expect(g.byName[name].ctrl, name).toBe('FRA');
     const card = passingCard(g, p);
     expect(card.title).toBe('France is free');
     expect(card.kicker).toMatch(/^Liberated · /);
-    expect(card.text).toMatch(/British troops hold Paris\. France returns to the war beside the Allies: 4 provinces are back under its own flag, and 3 new corps are forming at Paris\./);
+    expect(card.text).toMatch(/British troops hold Paris\. France returns to the war beside the Allies: 5 provinces are back under its own flag, and 3 new corps are forming at Paris\./);
     expect(card.more).toMatch(/stands for as long as Paris does/);
     // The card of its fall now says it came back.
     expect(passingCard(g, g.passings.find((x) => x.nat === 'FRA' && x.kind === 'fell')!).more).toMatch(/since been liberated/);

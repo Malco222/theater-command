@@ -279,8 +279,8 @@ describe('room on the roads', () => {
     const going = limitAttackers(g, [...inf, ...guns], target);
     expect(going.filter((c) => c.kind === 'inf').length).toBe(cap);
     expect(going.filter((c) => c.kind === 'art').length).toBe(F.guns);
-    // Guns support somebody: with no one else to go in they take the roads themselves.
-    expect(limitAttackers(g, guns.slice(0, F.guns), target).length).toBe(F.guns);
+    // Guns support somebody: with no one else to go in they open no attack (Version 84.2.5, ruling 211(a)).
+    expect(limitAttackers(g, guns.slice(0, F.guns), target)).toEqual([]);
     // The forecast and the battle count the same force.
     const look = attackOutlook(g, [...inf, ...guns], target)!;
     expect(look.lines.find((x) => x.label === 'Artillery')).toBeTruthy();

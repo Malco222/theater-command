@@ -302,7 +302,7 @@ export function traitLevy(g: Game, nat: string): number {
   levyMen(g, nat, L.men);
   g.flags[`lv:${nat}`] = count + 1;
   g.flags[`lvt:${nat}`] = g.turn;
-  headline(g, 'event', `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+  headline(g, 'event', `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
   return L.men;
 }
 

@@ -7,6 +7,7 @@
 // draw. Every number is in data/campaign/fleets.json. None of it touches the history campaigns.
 
 import { byHand } from './depth';
+import { tenthPct } from '../core/math';
 import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
@@ -358,7 +359,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
     plan.lines.push({ label: 'The town', value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
     if (town) plan.lines.push({ label: 'The shelling', value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : 'Little more can be broken', effect: townHitText(g, r, town, 'shells', false) });
   } else {
-    plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${(plan.nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });
+    plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${tenthPct(plan.nation)} of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });
   }
   if (fort > 0) plan.lines.push({ label: 'Shore batteries', value: `Fortress level ${fort}`, effect: `About ${Math.round(plan.reply * 100)}% of the cruisers and destroyers that stand in are likely to be sunk` });
   plan.lines.push({ label: 'Readiness', value: `${Math.round(f.ready * 100)}% now`, effect: `${Math.round(plan.ready * 100)}% afterwards: a bombardment wears the ships and empties the magazines` });
@@ -393,7 +394,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   } else {
     output = plan.output; nation = plan.nation;
     stopOutput(g, f.nat, r.ctrl, nation);
-    result = `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.`;
+    result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
   }
   const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ['ca', 'dd']) : none();
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;

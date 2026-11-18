@@ -99,8 +99,10 @@ struct FViewCorps
 	int32 MovesMax = 0;
 	int32 MarchTo = INDEX_NONE; // (release 1) the province it is marching to on a standing order
 	int32 MarchMonths = 0; // and about how many months it has still to go
+	bool bMarchNext = false; // (one voice after a press) and that it has still to set off, as the next month opens
 	bool bCanOrder = false; // the player may give this corps orders right now
 	FString NoOrders; // (rules 84.1, ruling 176(c)) why a corps of his own never takes orders, in the rules' sentence: "Fortress troops man their works and do not move."
+	FString Garrison; // (rules 84.2.4) a corps of his own inside a town: the rules' refusal naming the town ("First Army is the garrison of Pittsburgh. ...")
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
@@ -443,6 +445,9 @@ struct FMonthBand
 	// own side (a green edge); and a warning whose month of grace is spent (its label on cream, a cream edge).
 	FString Title, Sub, Note;
 	bool bGood = false, bSpent = false;
+	// (Rules 84.2.6; ruling 211(c).) A warning that ends with the help of his home ground's first alarm: its SHOW ON MAP
+	// is a press on the tray's red row, from the first alarm (it picks that army up and centres the town).
+	bool bAlarm = false;
 };
 
 /** One box of the month's score. */
@@ -457,7 +462,10 @@ struct FMonthRow
 {
 	FString Picture, Sign, Place, Tag;
 	int32 Tone = 0; // 1 good news, -1 bad, 2 something that blocks or warns
-	FString A, B; // the two flags, the attacker's first
+	FString A, B; // the two flags: his side's, then the other side's
+	// (Rules 84.2.6.) The word that goes with the tag and the other side's name, so the row reads whole with no picture:
+	// "WON from Mexico", "LOST to Mexico", "HELD against Canada", "BESIEGED by Canada". Empty where the rules give none.
+	FString JoinWord, JoinName;
 	FString Text;
 	TArray<FMonthFigure> Figures;
 	int32 Region = INDEX_NONE;
@@ -578,6 +586,10 @@ struct FApproachRow
 	FString How; // its river and ground in a word
 	FString Says; // enemy ground on the way: what the march does there
 	TArray<int32> Road; // the provinces marched through, the approach itself last
+	TArray<int32> Going; // (the code checker, 17 November) the corps of the hand that can reach it this month: they alone go
+	FString River; // (sheet 34) the river between it and the enemy, by name, or empty: "across the Vistula" is said in the bright ink
+	FString RiverWords; // "no river to cross", or "across the Vistula" (", bridges down")
+	FString Ground; // the rules' key for its ground; the card prints the game's own word for it
 };
 
 /** The march up and the attack planned as one order: the game's pick first, then up to three more ways. */
@@ -587,6 +599,8 @@ struct FApproachPlan
 	FString Name; // the enemy's province
 	TArray<FApproachRow> Rows;
 	FString None; // where nothing beside the enemy can be reached this month: the sentence that says so and names the nearest
+	// (Sheet 34.) The card's two sides: where the road starts, the hand in numbers, and the enemy as far as the fog shows.
+	FString From, Ours, Foe, FoeName, FoeLine;
 };
 
 struct FGateAsk
@@ -740,6 +754,35 @@ struct FViewDesk
 	FString Tip;
 };
 
+/**
+ * (Rules 84.2.6; ruling 211(c); the UI director's sheet 35.) The alarm that names the cure: an enemy army on his home
+ * ground, or a home town of his fallen or besieged. The row's sentences are the rules' own, in order, the first bold.
+ */
+struct FHomeAlarm
+{
+	FString Case; // stands, taken, storm or stores; (84.3) empty: his ground still in enemy hands with nobody in it
+	int32 Region = INDEX_NONE; // where the enemy stands: the town a press centres
+	FString By; // the enemy nation's tag
+	TArray<FString> Lines; // the enemy and where; what it can reach next month (left out where nothing is); the help
+	int32 HelpRegion = INDEX_NONE; // where the nearest army of his that can come stands: a press puts it in hand
+	TArray<int32> HelpCorps; // and the corps of it a press picks up (the rules' own; all of them there where none are given)
+	int32 SendTo = INDEX_NONE; // the province the paper says to right-click
+	FString Hand; // and the paper's line then: "The army round Vancouver is in hand. Right-click Pittsburgh to send it."
+};
+
+/** (Rules 84.2.6; ruling 211(a) as passed at 16:54 UTC.) His own guns left alone round an enemy town: his siege's own row. */
+struct FGunsAlone
+{
+	int32 Region = INDEX_NONE; // the town they stand round: a press centres it
+	FString What; // guns, engineers, or both
+	bool bRed = false; // red while infantry or tanks of his can reach the town this month; plain where none can
+	FString Line; // the rules' sentence: "Only guns are left round Vancouver: send infantry or tanks this month, or the siege is raised."
+	// (Rules 84.3.) On a red row: the infantry or tanks of his that can reach them this month, the nearest army's, which
+	// a press picks up, and where they stand.
+	TArray<int32> HelpCorps;
+	int32 From = INDEX_NONE;
+};
+
 struct FCampaignView
 {
 	FString Rules; // "stand-in" until the real rules are bundled in
@@ -791,6 +834,8 @@ struct FCampaignView
 	// deals with it ("generals", "research", "arsenal") and a word of explanation.
 	struct FToDo { FString Screen; FString Text; FString Tip; };
 	TArray<FToDo> ToDo;
+	TArray<FHomeAlarm> Alarms; // (rules 84.2.6) the alarm's rows, nearest his capital first; empty until the rules have it
+	TArray<FGunsAlone> Alone; // (rules 84.2.6) his own guns left alone round an enemy town; empty until the rules have it
 	// The towns' own buildings, four numbers each: region, line (0 market, 1 farm, 2 school, 3 camp, 4 hospital,
 	// 5 hall), the level that stands, and 1 while the next is going up.
 	TArray<int32> Civic;
@@ -919,6 +964,9 @@ struct FAttackPreview
 	TArray<FString> Allies; // the allied countries whose corps march in the attack
 	FString Prize; // what taking the place is worth, in a sentence
 	FString Refused; // why the troops there may not be attacked at all (they stand on a neutral's ground): then nothing else is filled in
+	// (The UI director, 17 November.) Why the corps picked cannot go in by themselves (guns or engineers alone, ruling
+	// 211(a)), in the rules' sentence: the card still opens on them, with no forecast and this sentence at its foot.
+	FString Alone;
 	// (Rules 84.1; rulings 175(c), 177, 178.) A march onto enemy ground with no army in its field: what it meets
 	// ("open", "gates", "guard", "garrison", "unknown"), the rules' sentence for it, and the slip's and the card's
 	// words. Where the town's guard will fight (bForecast) the fields above carry the assault as the army arrives,

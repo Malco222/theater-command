@@ -19,6 +19,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
 import { openAirWar, openWorldAir, skyDenies } from './air';
+import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
@@ -103,6 +104,7 @@ export function startOpen(g: Game, wide = true): Game {
   openWorldAir(g);
   openStores(g);
   openAirWar(g);
+  openSmallAir(g);
   openCarriers(g);
   openSieges(g);
   openMorale(g);

@@ -12,13 +12,14 @@
 import { byHand } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
+import namesData from '../../data/campaign/air-names.json';
 import carrierData from '../../data/campaign/carriers.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
-import { clamp } from '../core/math';
+import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, routineNews, worksOf } from './game';
+import { allied, atWar, headline, routineNews, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -326,12 +327,12 @@ function addAir(g: Game, r: FleetRow): AirFleet | null {
 }
 
 /** A new air fleet with no aircraft yet, on airfields the nation holds: the grand campaign's arsenal fills it. In the air war it is an air group of one kind. */
-export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr'): AirFleet {
+export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr', strength = 0): AirFleet {
   const taken = (x: string): boolean => g.airFleets.some((f) => f.name === x);
   let unique = name;
   for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
   const f: AirFleet = {
-    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind, strength, r) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
     mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
   if (kind) { f.kind = kind; f.parent = unique; f.share = 1; }
@@ -343,14 +344,70 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
 
 const ordinal = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
 
-/** The next name on a nation's list of air groups of one kind: "3rd Bomber Group". */
-function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr'): string {
+/** A rung of a country's ladder of air formation names (ruling 220, the historian's data/campaign/air-names.json). */
+export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number }
+const NAMES = namesData as unknown as { near: [number, number]; navyBases: string[]; ladders: Record<string, Rung[]> };
+
+/** A country's homeland is lost while it does not hold its own capital. */
+const homeLost = (g: Game, nat: string): boolean => { const n = g.nations[nat]; return !n || !n.alive || n.capital < 0 || g.regions[n.capital]?.ctrl !== nat; };
+
+/**
+ * The rungs a country's new air group may be named for this month: its ladder's rows that hold now (from, until),
+ * and while its homeland is lost only the rows of its forces in exile, where it has them. Japan's navy names the
+ * groups based on the Pacific islands, its army the rest (and all of them while the map cannot tell).
+ */
+export function rungsOf(g: Game, nat: string, base: Region | null): Rung[] {
+  const ladder = (nat === 'JAP' && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+  const now = ladder.filter((r) => (r.from ?? 1) <= g.turn && g.turn <= (r.until ?? Infinity));
+  const exile = now.filter((r) => /in exile/.test(r.rung));
+  return exile.length && homeLost(g, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
+}
+
+/** The rung nearest a group's full strength by ratio, among those near it (half to twice the rung's), or null. */
+export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number): Rung | null {
+  const [lo, hi] = NAMES.near;
+  let best: Rung | null = null, bd = Infinity;
+  for (const r of rungs) {
+    const v = r[kind];
+    if (!(v > 0) || strength < lo * v || strength > hi * v) continue;
+    const d = Math.abs(Math.log(strength / v));
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+}
+
+/** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
+export function formName(form: string, n: number): string {
+  return form
+    .replace(/\{n\+(\d+)\}/g, (_, k: string) => String(n + Number(k)))
+    .replace(/\{nth_fr\}/g, n === 1 ? (/R[ée]giment/i.test(form) ? '1er' : '1re') : `${n}e`)
+    .replace(/\{nth_nl\}/g, `${n}e`)
+    .replace(/\{nth\}/g, ordinal(n))
+    .replace(/\{n\}/g, String(n));
+}
+
+/**
+ * A new air group's name, taken once as it is formed and kept as it is worn down (ruling 220): the rung of its
+ * country's ladder nearest its full strength, with the next number of that rung; where no rung is near, the plain
+ * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
+ */
+function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
+  const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
+  const rungs = rungsOf(g, nat, base);
+  for (let left = rungs; left.length;) {
+    const r = nearestRung(left, kind, strength);
+    if (!r) break;
+    const form = r.form[kind];
+    // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation: once it is taken, the next rung.
+    if (!/\{n/.test(form)) { if (!taken(form)) return form; left = left.filter((x) => x !== r); continue; }
+    const key = `agn:${nat}:${kind}:${r.rung}`;
+    let name: string;
+    do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(form, g.flags[key]); } while (taken(name));
+    return name;
+  }
   const key = `agn:${nat}:${kind}`;
   let name: string;
-  do {
-    g.flags[key] = (g.flags[key] ?? 0) + 1;
-    name = (AIRWAR.groups.names[nat] ?? AIRWAR.groups.names._default)[kind].replace('{nth}', ordinal(g.flags[key])).replace('{n}', String(g.flags[key]));
-  } while (g.airFleets.some((f) => f.nat === nat && f.name === name));
+  do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
 }
 
@@ -390,7 +447,7 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     out.push(grp);
   });
   // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!);
+  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
   return out;
 }
 
@@ -421,22 +478,39 @@ export function openWorldAir(g: Game): void {
 export function openAirWar(g: Game): void {
   if (g.flags.airwar === 1) return;
   g.flags.airwar = 1;
-  const S = AIRWAR.fields.seed;
-  const seed = (id: number, cls: number): void => { if (fieldClass(g, id) < cls) g.flags[`af:${id}`] = cls; };
-  for (const r of g.regions) {
-    if (r.cap) seed(r.id, S.base);
-    else if (r.fac >= S.city.fac || r.vp >= S.city.vp) seed(r.id, S.city.class);
-    else if (r.fac >= S.town.fac || r.vp >= S.town.vp) seed(r.id, S.town.class);
-  }
-  for (const row of AIR.fleets) { const b = g.byName[row.base]; if (b && !row.scripted) seed(b.id, S.base); }
-  for (const f of [...g.airFleets]) { seed(f.base, S.base); splitFleet(g, f); }
+  seedFields(g);
+  for (const f of [...g.airFleets]) { seedField(g, f.base, AIRWAR.fields.seed.base); splitFleet(g, f); }
 }
+
+const seedField = (g: Game, id: number, cls: number): void => { if (fieldClass(g, id) < cls) g.flags[`af:${id}`] = cls; };
+
+/**
+ * The first day's airfields, from region `from` on: a capital's, a city's and a town's by its factories and victory
+ * points, and the base of every air force on the record. A campaign saved on a smaller chart lays them on the ground
+ * drawn since when it is loaded (world.ts, settleNewGround); a field already there is never made smaller.
+ */
+export function seedFields(g: Game, from = 0): void {
+  const S = AIRWAR.fields.seed;
+  for (let i = from; i < g.regions.length; i++) seedField(g, i, groundClass(g.regions[i]));
+  for (const row of AIR.fleets) { const b = g.byName[row.base]; if (b && b.id >= from && !row.scripted) seedField(g, b.id, S.base); }
+}
+
+/** The first day's airfield for a province by its ground alone: a capital's air base, a city's airfield, a town's landing ground. */
+const groundClass = (r: Region): number => {
+  const S = AIRWAR.fields.seed;
+  return r.cap ? S.base : r.fac >= S.city.fac || r.vp >= S.city.vp ? S.city.class : r.fac >= S.town.fac || r.vp >= S.town.vp ? S.town.class : 0;
+};
+
+/** The airfield the first day gives a province on today's chart, the base of an air force on the record included (seedFields). */
+export const seedClass = (g: Game, r: Region): number =>
+  Math.max(groundClass(r), AIR.fleets.some((row) => !row.scripted && g.byName[row.base]?.id === r.id) ? AIRWAR.fields.seed.base : 0);
 
 // ---- Bases and orders ---------------------------------------------------------------------
 
 export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
   if (r.id === f.base) return 'It is already based there.';
+  if (thornGround(g, r, f.nat)) return `${g.nations[r.owner].name} keeps its own air force: no group of its allies is based there.`;
   // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
   // field of an enemy province has the use of its airfield after a month, and a wrecked one serves nobody.
   if (!airfieldOpenTo(g, f.nat, r)) {
@@ -1109,7 +1183,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     raid(g, nat, r.ctrl, nation);
     // The air war: a province with no industry has no output to stop, and the raid is judged on its railway alone.
     value += airWar(g) && r.fac <= 0 ? 0 : cut * 1000;
-    result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : '';
+    // (No line where no bombs fell.)
+    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
@@ -1176,7 +1251,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
     shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
-    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${(worst[1] * 100).toFixed(1)}% of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
+    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.

@@ -48,17 +48,34 @@ public:
 	 * keeps under it, so that ground the player sees rests at about six tenths of its day brightness, at least half
 	 * again as bright as the fog beside it and no bluer than that fog. One place holds the numbers for the room's
 	 * lights and for the map's paint. ("-TheaterMoonLook=key,fill,sky,keyR,keyG,keyB,skyR,skyG,skyB,haze,politics,
-	 * sunR,sunG,sunB,shadeR,shadeG,shadeB" tries others without a rebuild.)
+	 * sunR,sunG,sunB,shadeR,shadeG,shadeB,hazeFloor" tries others without a rebuild.)
 	 */
 	struct FMoonLook
 	{
-		float Key = 3.0f, Fill = 0.55f, Sky = 0.52f; // the lamp's, the fill's and the sky's strength at full night
-		FLinearColor KeyColour = FLinearColor(0.3f, 0.5f, 1.0f);
-		FLinearColor SkyColour = FLinearColor(0.42f, 0.58f, 1.0f);
-		float Haze = 1.35f; // how much of the day's share of light the fog of war's haze keeps by night
-		float Politics = 0.42f; // how much of a nation's colour its ground keeps by night (0.94 by day)
-		FLinearColor Sun = FLinearColor(0.77f, 0.81f, 1.0f); // the land's own printed light and shade by the moon
-		FLinearColor Shade = FLinearColor(0.44f, 0.48f, 0.7f);
+		// (Found by measure on 17 November 2026, from Germany's chair over the Saar and from America's over Texas and
+		// New York. Before: key 3.0 of (0.3, 0.5, 1.0), fill 0.55, sky 0.52 of (0.42, 0.58, 1.0), haze 1.35, politics
+		// 0.42: Germany's own ground stood at (31, 58, 75) beside fog at (23, 33, 45), and America's at (41, 62, 81)
+		// beside Mexico's at (25, 43, 63): as dark as the fog and bluer. Now: Germany's (58, 80, 85) beside fog at
+		// (30, 37, 44), nearly twice as bright as it and about two thirds of its day brightness; America's (76, 90, 87).)
+		float Key = 3.35f, Fill = 0.60f, Sky = 0.56f; // the lamp's, the fill's and the sky's strength at full night
+		FLinearColor KeyColour = FLinearColor(0.55f, 0.68f, 1.0f);
+		FLinearColor SkyColour = FLinearColor(0.60f, 0.70f, 1.0f);
+		float Haze = 0.72f; // how much of the day's share of light the fog of war's haze keeps by night: less, so that the fog stays as dark as it was built while the ground in view is lifted
+		float Politics = 0.60f; // how much of a nation's colour its ground keeps by night (0.94 by day)
+		float HazeFloor = 1.0f; // how much of the haze's floor (the least it lets through) is kept by night: lower, and the fog stays dark while the ground in view is lifted
+		FLinearColor Sun = FLinearColor(0.90f, 0.90f, 1.0f); // the land's own printed light and shade by the moon
+		FLinearColor Shade = FLinearColor(0.55f, 0.58f, 0.72f);
+		// (The art director's check of ruling 205(a), 17 November 2026: about a sixth of Germany's own ground by night
+		// was as dark as the fog beside it or darker. Measured cell by cell, those patches were the woods: the dark
+		// cloth of a wood and the trees standing on it kept 0.44 of their day brightness by night where open ground
+		// keeps 0.6, and a wood is dark to begin with. By night the cloth is laid thinner, so that the moonlit ground
+		// and its nation's colour show through it, and the trees are dimmed less.)
+		// (Measured over the Saar from Germany's chair: a wood's floor in Hesse went from (21, 38, 45), under the fog's
+		// (29, 37, 45), to (38, 55, 62), half as bright again as the fog; the share of Germany's ground at the fog's
+		// level or darker fell from 16 to 13 parts in 100, and what is left is the trees' own dark sides, the pieces
+		// and the hills' shade, which keeps seven tenths of the open ground's brightness.)
+		float Woods = 0.5f; // how much of its day strength the woods' dark cloth keeps by night
+		FLinearColor Trees = FLinearColor(0.80f, 0.95f, 1.15f); // the trees' own tint by the moon (it was (0.36, 0.56, 0.8))
 	};
 	static const FMoonLook& MoonLook();
 	/**

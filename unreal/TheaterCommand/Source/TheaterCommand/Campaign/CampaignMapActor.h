@@ -9,6 +9,7 @@
 #include "Campaign/CampaignTerrain.h"
 #include "Campaign/CampaignView.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignTextures.h"
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
@@ -89,6 +90,13 @@ public:
 	/** The same, but clear of every bump within a short reach: for lines drawn over rough ground, which a ridge would otherwise cut. */
 	FVector SurfacePointOver(double X, double Y, double Lift) const;
 
+	/**
+	 * (Speed: tc.Speed.KeptHeights.) SurfacePointOver, kept: for the lines laid again and again on the same ground (the
+	 * frontiers, the front line, the enemy's reach), each point is worked out once and kept, the very same answer,
+	 * until a fine sheet of the world stands up or is taken away over it (the only thing that changes the ground's height).
+	 */
+	FVector SurfacePointKept(double X, double Y, double Lift) const;
+
 	int32 RegionAtWorld(const FVector& World) const;
 
 	void SetSelectedRegion(int32 RegionId);
@@ -99,9 +107,10 @@ public:
 	/**
 	 * The whole-world map: is fine ground the view wants still being modelled? It is built on another thread, two
 	 * sheets at a time, and until it stands the coarse sheet shows in its place, with no lesser river, lake or
-	 * clearing on it. (A picture of the world waits for it.)
+	 * clearing on it. (A picture of the world waits for it, and for the haze beyond the map while it is being laid
+	 * on another thread, tc.Speed.FogAside.)
 	 */
-	bool AreFineSheetsComing() const { return bFineSheetsComing; }
+	bool AreFineSheetsComing() const { return bFineSheetsComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
@@ -167,8 +176,12 @@ public:
 	/** The given nation's piece in a region, if it has one there. */
 	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
 
-	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
-	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/**
+	 * Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it.
+	 * The enemy's reach goes with it, unless bKeepEnemyReach: then the enemy's wash and its dashed line stand until the
+	 * ShowEnemyReach that follows replaces them (the controller's orders laid out over frames).
+	 */
+	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false, bool bKeepEnemyReach = false);
 	/**
 	 * (release 1) With an army in hand: the regions the enemy the player can see could strike next month. They take a
 	 * faint wash, and a dashed red line is drawn where that ground ends inside the player's own country (the front
@@ -496,8 +509,35 @@ private:
 		UMaterialInstanceDynamic* SeaPaint = nullptr;
 		TArray<UObject*> Kept; // its pictures and its paints, which FineKeep holds for the engine
 		UProceduralMeshComponent* Sea = nullptr;
+		TMap<FName, CampaignTextures::FLevels> Ahead; // (speed) its pictures with their smaller copies, made on the thread that modelled it
+		TSet<int32> FogFor; // (speed) the haze its fog picture among them was made for
+		int32 DressStage = 0; // (speed: tc.Speed.DressSteps) how far DressFineSheet has gone with it
+		FBox2D HoldersChanged = FBox2D(ForceInit); // (speed: tc.Speed.HoldersLock) ground that changed hands while it was being modelled, painted again before it is dressed
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
+	/**
+	 * (Speed: tc.Speed.FogAside.) The staff's paper over ground beyond the map, laid on another thread when the haze
+	 * moves: the world's picture and each dressed fine sheet's, for the haze as it was asked for, then put on the table
+	 * one picture a frame.
+	 */
+	struct FFogAside
+	{
+		int32 For = 0; // (FogAsked when it was begun)
+		TArray<bool> Hidden;
+		bool bAnyHidden = false;
+		TArray<FColor> World;
+		TArray<TPair<TSharedPtr<FFineSheet, ESPMode::ThreadSafe>, TArray<FColor>>> Sheets;
+	};
+	TSharedPtr<FFogAside, ESPMode::ThreadSafe> FogAside;
+	TFuture<void> FogAsideBuilding;
+	int32 FogAsked = 0; // (how often the haze beyond has moved)
+	int32 FogLaying = INDEX_NONE; // (the next of its pictures to put on the table: 0 the world's, then its sheets; none while it is being laid)
+	void LaunchFogAside();
+	void UpdateFogAside();
+	/** Which provinces beyond the map are under the haze, as HazeSet stands now. */
+	void HiddenBeyond(TArray<bool>& OutHidden, bool& bOutAny) const;
+	/** One picture of the staff's paper beyond the map (on any thread). */
+	static void LayFog(const TArray<bool>& Hidden, bool bAnyHidden, const FCampaignGround& Painted, const FCampaignTerrain& Shape, TArray<FColor>& OutPixels);
 	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> FineKeep;
@@ -506,6 +546,8 @@ private:
 	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
+	/** (Speed: tc.Speed.FineAside.) The pictures DressFineSheet makes, with their smaller copies, made ahead on the thread that models the sheet. */
+	static void PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& Haze);
 	void StandFineSheet(FFineSheet& Sheet);
 	void DropFineSheet(FFineSheet& Sheet);
 	/** Stands the coarse world sheet's tiles over a box up afresh, after a hole in it has been made or closed. */
@@ -530,8 +572,8 @@ private:
 	float GroundAt(double X, double Y) const;
 	/** How much of the ground at a place is land, anywhere in the world: 0 open sea, 0.5 the shoreline, 1 well inland. */
 	float CoverAt(double X, double Y) const;
-	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets. */
-	void RepaintBeyond(const FBox2D& Changed);
+	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets (or on Only, alone). */
+	void RepaintBeyond(const FBox2D& Changed, FFineSheet* Only = nullptr);
 	/** The staff's paper over ground beyond the map's own box that nobody of the player's can see. */
 	void FogBeyond();
 	// A setting of the land's or the sea's paint goes to every sheet's copy of it.
@@ -818,6 +860,7 @@ private:
 	};
 	TArray<FTrain> Trains;
 	double NextTrain = 0.0;
+	bool bTrainShadowsCast = true; // ("tc.Speed.TrainShadows", for measuring only)
 	void UpdateTrains(const FVector& CameraFocus, float CameraDistance);
 	/** (Ruling 125.) Makes a train up for the province it sets out from: a flak wagon at its tail where guns guard the line, a second behind the tender at level 3. */
 	void MakeUpTrain(FTrain& Train, int32 FromRegion) const;
@@ -903,6 +946,11 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> FrontLineMesh;
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
+	/** (Speed: tc.Speed.FrontWeights.) Lays one weight of the front line (0 or 1) or both (INDEX_NONE); false if there is no front. */
+	bool LayFrontLine(int32 Only, bool bOwed);
+	int32 FrontLineOwed = INDEX_NONE; // the weight still to be laid, a frame after the other
+	uint64 FrontLineOwedFrame = 0;
+	float FrontLineSeenFrom = 0.0f; // (the eye's distance at the last look, for which weight is laid first)
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	bool bPiecesShown = true;
@@ -992,6 +1040,10 @@ private:
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
 	bool bSmokeMade = false;
+	int32 SmokeRoom = 0; // (Speed: "tc.Speed.SmokeTrim") how many puffs the mesh on the graphics chip has room for
+	int32 SmokeRoomSpare = 0; // frames running that less room would have done
+	TArray<FVector> SmokeSentVertices; // (the puffs in use, and the two corners that keep the bounds: see UpdateSmoke)
+	TArray<FColor> SmokeSentColours;
 	// Flak (Brian picked "hanging smoke" on 16 November 2026, after the solid bursts: "its solid", "and looks like a
 	// ball"). A burst is soft see-through smoke drawn with the smoke's own puffs, never a mesh or a ball. It is born
 	// at a place and stays there, drifting slowly downwind, while the bombers fly on and leave a greying wake.
@@ -1072,6 +1124,42 @@ private:
 		float Start = 0.0f;
 	};
 	TArray<FInkRun> InkRuns;
+	// (speed: tc.Speed.KeptHeights) the points SurfacePointKept has worked out, by squares of the world as it is kept
+	mutable TMap<FIntPoint, TMap<FVector, FVector>> KeptPoints;
+	mutable int32 KeptPointsFor = -1; // (the provinces the map had when they were kept: another map, and they are dropped)
+	mutable float KeptPointsScale = 0.0f;
+	/** A fine sheet has stood up or been taken away over Box: the points kept on and around it are worked out again. */
+	void ForgetKeptPoints(const FBox2D& Box);
+	float HighlightMoon = 0.0f; // the moonlight the picked and the pointed province's edges were last drawn for
+	uint64 FrontLineDue = 0, BordersDue = 0; // (speed) the frame (GFrameCounter) in which the front line and the frontier lines, put off by a press, are drawn; 0 none
+	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
+	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
+	/**
+	 * (Speed, tc.Speed.BordersKept.) One edge of a province's outline that a line is drawn along, learned once: the
+	 * outlines never change, only who holds the ground either side of them, and with it which of the three lines the
+	 * edge is (the frontier, the province line, the pale province line on dark ground) and how wide.
+	 */
+	struct FBorderEdge
+	{
+		int32 Region = INDEX_NONE; // (where in the map's provinces the one whose outline it is stands: of the two, the one with the lower number)
+		int32 Other = INDEX_NONE; // (the province across it)
+		FVector2D A = FVector2D::ZeroVector;
+		FVector2D Dir = FVector2D::ZeroVector;
+		FVector2D Side = FVector2D::ZeroVector;
+		double Length = 0.0;
+		int32 Steps = 1;
+		FBox2D Bounds = FBox2D(ForceInit); // (where its ribbon's points lie, and a little more)
+		int32 Line = INDEX_NONE; // (the section it was last laid in: 0 the frontier, 1 the province line, 2 the pale one)
+		TArray<FVector> Laid[2]; // (its ribbon's points as laid, at a province line's width [0] and a frontier's [1]: made when first wanted, and again when the ground under them changes)
+	};
+	TArray<FBorderEdge> BorderEdges;
+	int32 BorderEdgesFor = -1; // (how many provinces the map had when they were learned)
+	float BorderEdgesScale = 0.0f; // (the height the ground was laid at then: another, and every ribbon is laid again)
+	bool bBorderLineStale[3] = { true, true, true }; // (a section to be handed to the graphics chip again)
+	void LearnBorderEdges();
+	void BuildBordersKept();
+	/** A fine sheet has stood up or been taken away over Box: the frontier lines over and around it are laid again next time. */
+	void ForgetBorderEdges(const FBox2D& Box);
 	double InkBegan = 0.0, PaintStepped = 0.0;
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);
@@ -1122,6 +1210,16 @@ private:
 	float RiversDrawnFor = -1.0f;
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
+	/**
+	 * (Speed: tc.Speed.RiverInks.) The rivers' inks as they were laid before the haze, point for point in each of the
+	 * river mesh's two sections, and the province each point asks the haze of (none for sand and islands); with these
+	 * RecolourRivers darkens them where the haze lies now without laying the rivers again. False if it cannot.
+	 */
+	TArray<FColor> RiverPlainInks[2];
+	TArray<int32> RiverInkRegions[2];
+	bool bRiverInksKept[2] = { false, false };
+	bool bRiverInksFor = false;
+	bool RecolourRivers();
 	/** How deep the snow lies at a place on the map (0 to 1) when the winter is this hard. */
 	static float SnowLying(const FVector2D& Place, float Hard);
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
@@ -1214,6 +1312,22 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownFarMesh;
 	int32 TownsFarShown = -1; // 1 while the far towns are the ones drawn, 0 the near, -1 not yet said
+	/**
+	 * (Speed, 17 November 2026; "tc.Speed.TownSquares".) The same towns cut into squares of country, near form and far
+	 * form, a mesh to each square. One mesh the size of the world is drawn whole every frame wherever the eye is, and
+	 * drawn whole again into every part of the shadows that changes; a square out of view is not drawn at all. While
+	 * the towns stand in squares, TownMesh and TownFarMesh are left empty.
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownSquares;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TownFarSquares;
+	int32 TownsCut = -1; // 1 while the towns stand in squares, 0 in one piece, -1 not built yet
+	int32 TownShadowsCast = -1; // ("tc.Speed.TownShadows", for measuring only) 1 while the near towns throw shadows
+	/** Shows the near towns (and their windows' panes) or the far ones, in whichever pieces they stand. */
+	void ShowTownForm(bool bFar);
+	/** (for measuring only) Whether the near towns throw shadows. */
+	void SetTownShadows(bool bCast);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;

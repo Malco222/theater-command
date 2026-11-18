@@ -125,7 +125,9 @@ describe('the order of the rows (ruling 64)', () => {
     // A land battle carries two figures, ours first; the front's row carries its count.
     expect(rows[2].figures).toEqual([{ n: '9,000', label: 'lost' }, { n: '20,000', label: 'theirs' }]);
     expect(rows[3].figures).toEqual([{ n: '2', label: 'provinces' }]);
-    expect(rows[3].line).toBe('Two provinces occupied without a battle.');
+    // (Version 84.2.6: "WON from ..." and the count as the figure; the line is "No battle was fought.")
+    expect(rows[3].line).toBe('No battle was fought.');
+    expect(rows[3].figures[0].n).toBe('2');
     // Each battle row opens its battle report, and shows its place on the map.
     expect(rows[2].report).toEqual({ type: 'land', id: g.reports[g.reports.length - 3].id });
     expect(rows[2].region).toBe(a.id);
@@ -229,7 +231,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ place: a.name, tag: 'LOST', tone: 'bad', head: `The ring closes at ${a.name}`, follows: '5 German corps are cut off from all supply.', line: 'The ring closes: 5 corps are cut off.' });
     expect(card.lead!.figures).toEqual([{ n: '151,638', label: 'men cut off' }]);
-    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`LOST ${b.name}`, `HELD ${townName(capital)}`, `HELD ${townName(city)}`, `LOST ${c.name}`]);
+    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`LOST ${b.name}`, `BESIEGED ${townName(capital)}`, `BESIEGED ${townName(city)}`, `LOST ${c.name}`]);
   });
 
   it('Britain, June 1940: the army cut off leads, the city held sits below, and the fleet action lost comes after the ground', () => {
@@ -242,7 +244,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     ringAt(g, a, 4, '128,417');
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ place: a.name, tag: 'LOST' });
-    expect(card.rows.map((r) => `${r.tag} ${r.arm}`)).toEqual(['HELD land', 'LOST sea']);
+    expect(card.rows.map((r) => `${r.tag} ${r.arm}`)).toEqual(['BESIEGED land', 'LOST sea']);
   });
 
   it('a capital is never below a lesser place of the same stamp, whatever the lesser place cost', () => {
@@ -293,8 +295,8 @@ describe('the weight of the news (rulings 84 and 95)', () => {
   it('Germany, September 1939: the fleet action won leads the sea and air, and the lost submarine is a row below', () => {
     const g = game();
     const mark = monthMark(g, ME);
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
-    sea(g, { attNat: ME, defNat: 'POL', zoneName: 'the Baltic Sea', att: [fleet(ME, 'Baltic Station', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4, ss: 5 }, { dd: 2, ss: 1 })], won: true });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    sea(g, { attNat: ME, defNat: 'POL', zoneName: 'the Baltic Sea', att: [fleet(ME, 'Swinemunde Fleet', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4, ss: 5 }, { dd: 2, ss: 1 })], won: true });
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ kind: 'FLEET ACTION', tag: 'WON', place: 'the Baltic Sea' });
     expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual(['SUNK Western Approaches']);
@@ -312,7 +314,7 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     expect(card.lead).toMatchObject({ kind: 'FLEET ACTION', place: 'the Norwegian Sea' });
     expect(card.rows[0]).toMatchObject({ tag: 'SUNK', tone: 'bad', place: 'North Sea', line: 'Torpedoed: a battleship of the Battle Fleet.', figures: [{ n: '1', label: 'battleship lost' }] });
     // And escorts that sink a submarine of his in the same month as a fleet action against the same navy are still a row.
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
     expect(monthCard(g, mark, ME).rows.map((r) => r.place)).toEqual(['North Sea', 'Western Approaches']);
     // A fleet action lost, smaller than the one won beside it, still comes first: a loss counts double.
     const h = game();
@@ -482,9 +484,9 @@ describe('one story is told once, and in the room the card has', () => {
   it('submarines sunk are a headline and a figure, and the row says who sank them', () => {
     const g = game();
     const mark = monthMark(g, ME);
-    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Command sink 2 German submarines in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
+    news(g, { kind: 'battle', arm: 'sea', text: 'The escorts of the Western Approaches Fleet sink 2 German submarines in the Western Approaches.', nat: 'UK', won: 'UK', lost: ME });
     const card = monthCard(g, mark, ME);
-    expect(card.lead).toMatchObject({ place: 'Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Command.' });
+    expect(card.lead).toMatchObject({ place: 'Western Approaches', tag: 'SUNK', tone: 'bad', head: 'Two German submarines sunk', line: 'Sunk by escorts of the Western Approaches Fleet.' });
     expect(card.lead!.figures).toEqual([{ n: '2', label: 'submarines lost' }]);
   });
 
@@ -606,8 +608,8 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
     const g = game();
     const mark = monthMark(g, ME);
     const baltic = g.seas.findIndex((z) => /Baltic/.test(z.name));
-    sea(g, { attNat: ME, defNat: 'POL', zone: baltic, zoneName: g.seas[baltic].name, att: [fleet(ME, 'Baltic Station', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4 }, { dd: 2 })], won: true });
-    news(g, { kind: 'battle', arm: 'sea', text: `The escorts of the Western Approaches Command sink 1 German submarine in the ${g.seas[0].name.replace(/^the /i, '')}.`, nat: 'UK', won: 'UK', lost: ME });
+    sea(g, { attNat: ME, defNat: 'POL', zone: baltic, zoneName: g.seas[baltic].name, att: [fleet(ME, 'Swinemunde Fleet', { ca: 2, dd: 6 })], def: [fleet('POL', 'Polish Navy', { dd: 4 }, { dd: 2 })], won: true });
+    news(g, { kind: 'battle', arm: 'sea', text: `The escorts of the Western Approaches Fleet sink 1 German submarine in the ${g.seas[0].name.replace(/^the /i, '')}.`, nat: 'UK', won: 'UK', lost: ME });
     const card = monthCard(g, mark, ME);
     expect(card.lead).toMatchObject({ arm: 'sea', sea: baltic });
     expect(card.lead!.region).toBeUndefined();
@@ -799,6 +801,42 @@ describe('at home, what his staff did, and elsewhere', () => {
     expect(said).toHaveLength(1);
     expect(said[0].replace(/\.$/, '')).toBe('No. 1 Bomber Group bombs Viipuri');
   });
+
+  it('nor one that opens with a German ordinal, and a number that ends a sentence still ends it (the third playtester, 84.3.1)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '2. Fliegerdivision bombs Rotterdam. The docks burn.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'The 10. Armee is cut down to 2. The rest are taken.', nat: 'BRA' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('2. Fliegerdivision bombs Rotterdam');
+    expect(said).toContain('The 10. Armee is cut down to 2');
+  });
+
+  it('an air formation\'s ordinal holds its sentence together wherever it stands (ruling 220\'s names)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea. Ships were hit.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace. The raids cut the roads.', nat: 'BRA' });
+    news(g, { kind: 'battle', text: 'Losses were 1 and 2. The rest came home.', nat: 'ARG' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea');
+    expect(said).toContain('Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace');
+    expect(said).toContain('Losses were 1 and 2');
+  });
+
+  it('several countries that declare war on him share one band, a sentence with its verb, "the" in lower case past the first', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    for (const nat of ['CUB', 'DOM']) declareWar(g, nat, ME);
+    expect(monthCard(g, mark, ME).bands[0].head).toBe('Cuba and the Dominican Republic declare war on Germany');
+    const h = game();
+    const mark2 = monthMark(h, ME);
+    const many = ['CUB', 'DOM', 'HAI', 'GUA', 'HON', 'NIC', 'COS', 'PAN', 'ELS', 'ECU'];
+    for (const nat of many) declareWar(h, nat, ME);
+    const head = monthCard(h, mark2, ME).bands[0].head;
+    expect(head.length).toBeLessThanOrEqual(76);
+    expect(head).toMatch(/^Cuba, the Dominican Republic, .+ and \d+ more declare war on Germany$/);
+  });
 });
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {
@@ -905,11 +943,11 @@ describe("the foot boxes give a line whole where the box has room (the art direc
     const g = game();
     const mark = monthMark(g, ME);
     const city = germanCity(g);
-    // The field is lost and the town holds: the row is stamped HELD.
+    // The field is lost and the town holds: the row is stamped BESIEGED (HELD before Version 84.2.6).
     land(g, city, { attNat: 'POL', defNat: ME, attackers: [unit('POL')], defenders: [unit(ME)], taken: true, siege: true } as never);
     news(g, { kind: 'info', text: `Your staff on the loss of ${city.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight stronger.`, nat: ME });
     const card = monthCard(g, mark, ME);
-    const held = [card.lead, ...card.rows].some((r) => r?.place === city.name && r.tag === 'HELD');
+    const held = [card.lead, ...card.rows].some((r) => r?.place === city.name && (r.tag === 'HELD' || r.tag === 'BESIEGED'));
     expect(card.also).toEqual([`Your staff on the ${held ? 'battle at' : 'loss of'} ${city.name}: the line was dug in and it still broke.`]);
   });
   it('marches: a halt comes first, and armies that arrive at one place are one line', () => {

@@ -377,7 +377,7 @@ describe('what ends an agreement', () => {
     war(g, 'GER', 'SOV');
     tradeTick(g, 'GER');
     expect(deal(g, 'GER', 'SOV')).toBeUndefined();
-    expect(g.headlines.some((h) => /War ends your trade with Soviet Union/.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /War ends your trade with the Soviet Union/.test(h.text))).toBe(true);
   });
 
   it('the fall of either', () => {

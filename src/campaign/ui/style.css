@@ -35,6 +35,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .brand { font-family: var(--head); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 17px; white-space: nowrap; }
 .brand small { display: block; font-weight: 500; letter-spacing: .2em; font-size: 10px; color: var(--ink-3); margin-top: -2px; }
 .when { font-family: var(--head); font-size: 22px; font-weight: 600; white-space: nowrap; line-height: 1; }
+/* The plate while the other staffs work (ruling 204): the new month, the staff now moving, a thin line that fills. */
+.when small.staffs { font-style: italic; color: var(--ink); }
+.when .wline { display: block; height: 2px; margin-top: 3px; border-radius: 1px; background: var(--panel-3); overflow: hidden; }
+.when .wline i { display: block; height: 100%; background: var(--brass); }
+#app.working .main, #app.working #barbtns { pointer-events: none; }
 .when small { display: block; font-family: var(--body); font-size: 11px; font-weight: 400; color: var(--ink-2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 44vw; }
 .spacer { flex: 1; min-width: 0; }
 .btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 4px; padding: 7px 12px; font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
@@ -53,6 +58,14 @@ svg#map { width: 100%; height: 100%; display: block; touch-action: none; cursor:
 svg#map.drag { cursor: grabbing; }
 /* The sheet over the map for whatever turns or flickers (ruling 206): the same box and the same view as the map, and no press lands on it. */
 .mapfx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; user-select: none; }
+/* What a turning ring meets is drawn again on the sheet, over the ring, and stands still: the piece on the map keeps its place and is not shown. */
+#units .ctr.covered { visibility: hidden; }
+svg#mapfx.near .lbl, svg#mapfx.mid .lbl.big, svg#mapfx.lensworth.mid .lbl { opacity: 1; }
+svg#mapfx.near .figs, svg#mapfx.mid .figs.capital, svg#mapfx.mid .figs.city, svg#mapfx.lensworth.mid .figs { opacity: 1; }
+svg#mapfx.mid .ctr.led .cmdr { display: block; }
+svg#mapfx.mid .ctr.led .size { display: none; }
+#fxcover .pennant .box { stroke: #14181d; stroke-width: 1.6; }
+#fxcover .pennant { filter: drop-shadow(0 .4px .6px rgba(0, 0, 0, .55)); }
 .land { fill: #d9d3c2; stroke: var(--sea-line); stroke-width: .6; }
 .reg { stroke: rgba(42, 45, 47, .38); stroke-width: .5; stroke-linejoin: round; }
 .reg:hover { filter: brightness(1.07); }
@@ -397,6 +410,7 @@ button.corps:hover { border-color: var(--ink-3); }
 .evcard.warn p { font-family: var(--body); font-size: 13.5px; font-weight: 400; letter-spacing: 0; line-height: 1.4; color: var(--ink); }
 .cross { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
 .cross.plan { border-left-color: var(--brass); }
+.cross.short { margin-top: 3px; margin-left: 14px; padding: 6px 10px; border-left-color: #a8563f; }
 .cross .crhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cross .crhead b { font-family: var(--head); font-size: 15px; letter-spacing: .04em; }
 .cross .crloss { font-size: 12px; white-space: nowrap; }
@@ -460,7 +474,11 @@ svg.flag { display: inline-block; vertical-align: -2px; border-radius: 1.5px; fl
 .card header .kick { font-family: var(--head); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); }
 .card header h2 { font-size: 28px; margin-top: 2px; }
 .card .body { padding: 14px 18px; }
-.card footer { padding: 12px 18px 16px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--line); }
+/* The foot of every card is fixed: the body scrolls above it, and the order never leaves the screen (ruling 204). */
+.card footer { padding: 12px 18px 16px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--line); position: sticky; bottom: 0; z-index: 3; background: var(--panel); }
+.card.long footer { box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
+.card footer kbd { margin-left: 9px; }
+@media (max-width: 900px) { .card footer kbd { display: none; } }
 .x { position: absolute; right: 10px; top: 10px; background: none; border: 0; font-size: 22px; color: var(--ink-3); line-height: 1; padding: 4px 8px; }
 .verdict { font-family: var(--head); font-size: 32px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 1; }
 .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start; margin: 12px 0; }
@@ -591,6 +609,7 @@ button.buy:hover { border-color: var(--brass); }
 .frow b { display: block; font-size: 13.5px; }
 .frow small { color: var(--ink-2); font-size: 11.5px; }
 .frow .stand { white-space: nowrap; }
+.frow .grow { flex: 1; min-width: 0; }
 .follows { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); }
 .follows li { margin: 0 0 5px; }
 .follows b { color: var(--ink); }
@@ -2017,6 +2036,8 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-tile u { display: flex; align-items: center; gap: 7px; text-decoration: none; font-size: 12px; letter-spacing: .14em; color: var(--mc-dim); font-weight: 700; }
 .mc-tile b { display: block; font: 700 30px/1.1 var(--mc-serif); margin-top: 3px; color: var(--c); white-space: nowrap; }
 .mc-tile.t-plain b { color: var(--mc-ink); }
+/* The score describes the month, so a loss is set in the title's cream and never red (rulings 160 and 163(d)). */
+.mc-tile.t-bad b { color: rgb(237, 229, 213); }
 .mc-tile small { font-size: 13px; color: var(--mc-soft); }
 .mc-main { display: grid; grid-template-columns: 470px minmax(0, 1fr); gap: 22px; margin-top: 12px; }
 .mc-main.solo { grid-template-columns: minmax(0, 1fr); }
@@ -2038,6 +2059,11 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 7px; }
 .mc-row { position: relative; display: grid; grid-template-columns: 92px 34px minmax(0, 1fr) auto 38px; align-items: center; column-gap: 9px; background: var(--mc-panel); border-left: 6px solid var(--c); border-radius: 4px; padding: 5px 10px 5px 6px; height: 71px; }
 .mc-row.red { background: linear-gradient(90deg, #6a281d, #4a2018); }
+/* Ruling 160: a row of a band's class that found no band (Denmark FALLEN, Italy WAR, the news) takes the brass band's
+   ground and edge bar, its tag brass-300 in the kit's on-brass ink; a freeing his side did keeps its green. */
+.mc-row.brass { background: linear-gradient(90deg, rgb(108, 80, 36), rgb(85, 63, 29)); }
+.mc-row.brass:not(.t-good) { --c: rgb(224, 184, 114); }
+.mc-row.brass:not(.t-good) .mc-chip { color: rgb(30, 22, 8); }
 .mc-row.opens:hover { background: #47423d; }
 .mc-row .tpic { width: 92px; height: 59px; border: 1px solid #1c1712; }
 .mc-nopic { width: 92px; height: 59px; display: flex; align-items: center; justify-content: center; }
@@ -2282,6 +2308,13 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .mc-banner.good small { color: #cfe0bb; }
 .mc-banner.good .mc-alt { border-color: #9fbb86; }
 .mc-banner b.tight { font-size: 19.5px; text-overflow: clip; }
+/* News that is no alarm (Britain stays out of Canada's war: ruling 211(b)): the kit's brass band, `tc-band--news`. */
+/* The news and, by ruling 160, a band of class 2 (WAR, FALLEN, FREED): brass on the dark ground, (108,80,36) to
+   (85,63,29), a brass-300 edge bar and a 1 px brass-700 edge. Red is the dated warning's alone. */
+.mc-banner.news, .mc-banner.brass { background: linear-gradient(90deg, #6c5024, #553f1d); border-color: #8a6b3b; border-left-color: #e0b872; }
+.mc-banner.news .k, .mc-banner.brass .k { color: #f3e2bd; }
+.mc-banner.news small, .mc-banner.brass small { color: #e6d5b0; }
+.mc-banner.news .mc-alt, .mc-banner.brass .mc-alt { border-color: #b89a62; }
 .wayhit.dim { opacity: .45; }
 .card footer.raidfoot { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
 
@@ -2367,3 +2400,81 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .tc-carry { display: flex; align-items: center; height: 20px; }
 .tc-carry > span { display: flex; min-width: 16px; align-items: center; gap: 4px; padding: 0 7px; border-left: 1px solid var(--line); font: 700 12px/1 ui-monospace, 'Courier New', monospace; color: var(--ink); }
 .tc-carry > span:first-child { border-left: 0; padding-left: 0; }
+
+/* Version 84.2.6: the alarm, first in the tray (ruling 211(c)): an enemy army on his home ground, in red with the
+   warning sign, three sentences with the first in bold; and his guns left alone round an enemy's town (211(a)),
+   red while infantry or tanks of his can reach them this month, plain where none can. */
+.alert.home { border-right-color: var(--red); background: linear-gradient(90deg, rgba(92, 30, 22, .94), rgba(58, 22, 18, .94)); border-color: #8c3a2c; text-align: left; }
+.alert.home:hover { border-color: var(--red); }
+.alert.home .sign { color: #ffb19c; margin-right: 5px; }
+.alert.home b { color: #ffe3d8; font-weight: 600; }
+.alert.home .of { color: #e6a593; font-size: 11px; white-space: nowrap; }
+.alert.gunsalone { border-right-color: var(--red); }
+.alerts.inpane .alert.home, .alerts.inpane .alert.gunsalone { border-left-color: var(--red); }
+/* Version 84.2.6: the other side's name in words beside its flag on a fronts row ("WON from Mexico"). */
+.mc-cn { font-size: 12px; color: var(--mc-dim); margin-left: 4px; white-space: nowrap; }
+/* ---- Smooth, easy play (Version 84.3, ruling 204) ---- */
+/* Why a button is off, beside it: the lock sign and one sentence. */
+.whyoff { display: inline-flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); text-align: left; }
+.whyoff svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.card footer .whyoff { align-self: center; margin-right: auto; max-width: 62%; }
+/* An order's card in brief: who leads, the count in one line, each corps a chip. */
+.fside.brief { gap: 6px; padding: 9px 10px; }
+.fline { font-size: 13px; color: var(--ink-2); }
+.fline b { font-family: var(--head); font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: .02em; }
+.fside.def .fline { text-align: right; }
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 1px; }
+.fside.def .fchips { justify-content: flex-end; }
+.uchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: inherit; font-size: 12.5px; line-height: 1.2; min-width: 0; }
+.uchip svg.ctr { width: 26px; height: 18px; flex: none; }
+.uchip svg.flag { flex: none; }
+.uchip b { font-weight: 600; white-space: nowrap; }
+.uchip small { font-size: 11px; color: #f0b3a5; white-space: nowrap; }
+.uchip small.held { color: var(--ink-3); }
+button.uchip { cursor: pointer; }
+button.uchip:hover { border-color: var(--brass); }
+.uchip.pick { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
+.uchip.out { border-style: dashed; }
+.uchip.out svg.ctr, .uchip.out b { opacity: .5; }
+.uchip.stale, .uchip.unknown { border-style: dashed; }
+.uchip.unknown { background: rgba(60, 68, 80, .3); color: var(--ink-2); }
+.uchip.unknown b { font-weight: 400; font-style: italic; }
+.fmid .against { font-family: Georgia, 'PT Serif', 'Times New Roman', serif; font-style: italic; font-size: 15px; color: var(--ink-3); }
+.body.atk .faceoff { margin-bottom: 10px; }
+.body.atk .balance { margin: 2px 0 0; }
+.body.atk .prizeline { margin: 10px 0 0; }
+.body.atk .facepart { margin: 10px 0 0; }
+.body.atk .note.massnote { margin: 10px 0 0; }
+/* A fold: a brass arrow, the name, and what is inside said beside it. */
+.tcfolds { display: flex; flex-wrap: wrap; gap: 2px 26px; margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+.tcfold { flex: 0 1 auto; min-width: 0; }
+.tcfold.open { flex: 1 0 100%; }
+.foldhead { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 2px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.foldhead .farrow { flex: none; width: 0; height: 0; border-left: 7px solid var(--brass); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; transition: transform .12s; align-self: center; }
+.tcfold.open > .foldhead .farrow { transform: rotate(90deg); }
+.foldhead b { font-family: var(--head); font-size: 13.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
+.foldhead span { font-size: 12.5px; color: var(--ink-2); }
+.foldhead:hover b { color: var(--brass); }
+.foldbody { padding: 2px 0 8px 15px; }
+.softbody { display: grid; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.softbody .btn.scoutnow { display: inline-flex; }
+/* Where he already is: the lit, current one, which takes no press. */
+/* A battle won as forecast, told on the map (ruling 204): the paper slip over the province, and the WON stamp on it for the month. */
+.rslip { position: absolute; z-index: 6; display: grid; gap: 2px; width: max-content; max-width: 348px; padding: 9px 13px 10px; background: #e2d7bc; color: #2a2118; border-radius: 3px; box-shadow: 0 8px 22px rgba(0, 0, 0, .55), 0 0 0 1px rgba(42, 33, 24, .4); }
+.rslip[hidden] { display: none; }
+.rslip::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: -6px; width: 12px; height: 12px; margin-left: -6px; background: #e2d7bc; transform: rotate(45deg); box-shadow: 2px 2px 2px rgba(0, 0, 0, .28); }
+.rslip.loose::after { display: none; }
+.rslip .rv { font: 700 18px/22px Georgia, 'Times New Roman', serif; color: #3f6b36; }
+.rslip .rl { font: 400 12.5px/17px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; }
+.rslip .rread { justify-self: start; margin-top: 5px; padding: 3px 9px 2px; font: 700 11px/15px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; letter-spacing: .1em; text-transform: uppercase; color: #2a2118; background: transparent; border: 1px solid rgba(42, 33, 24, .55); border-radius: 3px; }
+.rslip .rread:hover { background: rgba(42, 33, 24, .12); }
+.wonstamp { cursor: pointer; }
+.wonstamp rect { fill: rgba(226, 215, 188, .93); stroke: #3f6b36; stroke-width: 1.1; }
+.wonstamp text { font: 700 6.6px Georgia, 'Times New Roman', serif; letter-spacing: .6px; fill: #3f6b36; text-anchor: middle; pointer-events: none; }
+.afield .afhead.current { cursor: default; }
+.afield .afhead.current b { color: var(--brass); }
+/* The tray is as wide as what it holds, so the ground south of the army in hand stays in sight. */
+@media (min-width: 821px) {
+  .tray { right: auto; max-width: calc(100% - 64px); }
+  .tray .cards { flex: 0 1 auto; }
+}

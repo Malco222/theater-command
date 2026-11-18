@@ -144,5 +144,16 @@ private:
 	bool LoadNations(const FString& Path, FString& OutError);
 	bool LoadSetup(const FString& Path, FString& OutError);
 
+	/**
+	 * (Speed: tc.Speed.RegionGrid.) The map ruled into squares, each listing the provinces whose bounds reach into it,
+	 * in the provinces' own order: FindRegionAt looks only at those, and finds the same province the whole list would.
+	 */
+	void RuleRegionGrid();
+	FVector2D GridMin = FVector2D::ZeroVector, GridMax = FVector2D::ZeroVector;
+	double GridCell = 0.0;
+	int32 GridNX = 0, GridNY = 0;
+	TArray<int32> GridStart; // (where each square's list begins in GridRegions, square by square, and one more for the end)
+	TArray<int32> GridRegions; // (indices into Regions)
+
 	bool bLoaded = false;
 };
