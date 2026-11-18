@@ -67,6 +67,7 @@ import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, man
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
+import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
@@ -91,6 +92,9 @@ function closePhase(g: Game, nat: string): void {
     // A fallen country whose capital its friends hold, with no enemy corps in or next to it, returns at the month's
     // end, dated the month that ends (ruling 229, part 2; the grand campaign).
     liberationMonth(g);
+    // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
+    // power's fall this month turns its conquerors on the great powers their allies still fight.
+    finishMonthEnd(g);
     // (And no country is left at war with its own side's members, whatever path took it to that side: ruling 229, 3.)
     sidesAtPeace(g);
     g.phase = 0; g.turn++; g.week = 1;
@@ -102,6 +106,8 @@ function closePhase(g: Game, nat: string): void {
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);
+    // The wars an alliance gave notice of when its enemy fell, now due (ruling 115).
+    finishMonthOpen(g);
     // Wars nobody can fight any longer end in an armistice (the grand campaign).
     stalemates(g);
   }

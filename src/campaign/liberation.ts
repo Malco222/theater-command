@@ -26,6 +26,8 @@ export const LIB = data as unknown as {
   never: string[];
   army: { perVp: number; most: number; divs: number; str: number; org: number; xp: number };
   lines: { freed: string; freedAfter: string; freedSelf: string; sides: Record<Bloc, string> };
+  /** Finishing the war together (ruling 115, finish.ts): months of notice before an ally's war is joined, and how long the staff presses it. */
+  finish: { notice: number; push: number };
 };
 
 const fill = (line: string, vars: Record<string, string | number>): string => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
@@ -54,6 +56,19 @@ export function recordFall(g: Game, nat: string, by: string, how: Passing['how']
     weeks: (g.turn - 1) * 4 + week, ...(g.human === nat ? { player: true } : {}),
   });
 }
+
+/**
+ * Keeps who a nation was at war with at the moment it leaves the war (the grand campaign; ruling 115): called before
+ * its wars are struck off. A freed country takes those wars up again, and its conquerors' allies finish theirs.
+ */
+export function rememberWars(g: Game, nat: string): void {
+  if (g.flags.open !== 1) return;
+  for (const k of Object.keys(g.flags)) if (k.startsWith(`fw:${nat}:`)) delete g.flags[k];
+  for (const e of g.nations[nat]?.atWar ?? []) if (g.nations[e]?.alive) g.flags[`fw:${nat}:${e}`] = g.turn;
+}
+
+/** The nations a fallen country was at war with when it fell (the grand campaign), in the order of their ids. */
+export const warsAtFall = (g: Game, nat: string): string[] => Object.keys(g.flags).filter((k) => k.startsWith(`fw:${nat}:`)).map((k) => k.slice(4 + nat.length)).sort();
 
 /** The roll for a campaign saved before it was kept: one entry for each nation that remembers its own fall. */
 export function rollFromMemory(g: Game): Passing[] {
@@ -124,7 +139,7 @@ export const monthsEnd = (g: Game, X: Nation): string => (g.turn - (X.fellOn?.tu
 // ---- The return -----------------------------------------------------------------------------
 
 /** Hands a country back every province of its own that its allies hold. Returns how many changed hands. */
-function handBack(g: Game, X: Nation): number {
+export function handBack(g: Game, X: Nation): number {
   let back = 0;
   for (const r of g.regions) {
     const mine = r.owner === X.id || (X.id === 'FRA' && r.owner === 'VIC' && r.vichy);
@@ -171,6 +186,14 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   }
   X.atWar = [];
   for (const e of [...H.atWar]) if (e !== nat && g.nations[e]?.alive && !allied(g, nat, e)) setWar(g, nat, e);
+  // It rejoins the war of those who freed it (ruling 115(c)): at war again with every country that was at war with
+  // it when it fell and still fights one of its liberator's alliance, whether or not the liberator itself does.
+  for (const e of warsAtFall(g, nat)) {
+    if (e === nat || !g.nations[e]?.alive || allied(g, nat, e) || atWar(g, nat, e)) continue;
+    if (!Object.values(g.nations).some((A) => A.alive && A.id !== nat && allied(g, A.id, by) && A.atWar.includes(e))) continue;
+    setWar(g, nat, e);
+    g.flags[`war:${nat}:${e}`] = g.turn;
+  }
   // Its ground: whatever its new allies hold of it is its own again.
   cap.cap = true;
   const provinces = handBack(g, X);
@@ -358,6 +381,15 @@ export function passingCard(g: Game, p: Passing): PassingCard {
       text: `${p.after && g.nations[p.after] ? `With ${theName(g.nations[p.after])} beaten, ${cap?.name ?? 'the capital'} is in ${B.adj} hands` : `${B.adj} troops hold ${cap?.name ?? 'the capital'}`}. ${Name} returns to the war ${side}: ${p.provinces ? `${count(p.provinces, 'province')} ${p.provinces === 1 ? 'is' : 'are'} back under its own flag` : 'its flag flies over its capital again'}, and ${army}.`,
       more: p.player ? 'The country is yours to lead again. What its allies win back of it from now on is handed over to you at once.' : `It is run by its own government as ${p.by === g.human ? 'your ally' : `an ally of ${theName(B)}`}. What its allies win back of its ground from now on is handed over to it at once, and it stands for as long as ${cap?.name ?? 'its capital'} does.`,
       facts: [{ label: 'Freed by', value: B.name }, { label: 'Provinces returned', value: String(p.provinces) }, { label: 'Army raised', value: count(p.corps ?? 0, 'corps', 'corps') }],
+    };
+  }
+  // A government and not a country (ruling 115(b)): Vichy's end is France's ground come home, and is told so.
+  if (p.nat === 'VIC' && p.by === 'FRA' && p.how === 'annexed') {
+    return {
+      ...base, kicker: `Dissolved · ${when}`, title: 'The government at Vichy is no more',
+      text: `${Name} ended in ${when}. Its ${count(p.provinces, 'province')} at home, and its ground overseas, ${p.provinces === 1 ? 'is' : 'are'} France's again.`,
+      more: 'France is whole again under its own government, and what was Vichy\'s fights beside it.',
+      facts: [{ label: 'Passed to', value: B.name }, { label: 'Home provinces', value: String(p.provinces) }, { label: 'Week of the war', value: String(p.weeks ?? (p.turn - 1) * 4 + p.week) }],
     };
   }
   const week = p.weeks !== undefined ? ((p.weeks - 1) % 4) + 1 : p.week;

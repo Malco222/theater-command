@@ -18,7 +18,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
-import { afterFall, recordFall, retaken, standsFreed } from './liberation';
+import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
@@ -2631,6 +2631,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
   recordFall(g, nat, by, 'beaten');
+  // (Who it was at war with is kept: a freed country takes those wars up again, and its conquerors' allies finish theirs.)
+  rememberWars(g, nat);
   // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
   // France that had been liberated and falls a second time.
   const armistice = nat === 'FRA' && !g.flags.dom && !X.freedOn;
