@@ -233,13 +233,13 @@ describe('FIRST COMMAND, played', () => {
     expect(closingOwed(g, b)).toBe(false);
   });
 
-  it('fills the city lesson\'s place names, and says "The province" where no siege stands', () => {
+  it('fills the city lesson\'s place names, and reads the design director\'s words where no siege stands', () => {
     const g = firstHour();
     const w = lessonWords(g, LESSONS.find((l) => l.id === 'city')!, 'browser');
-    expect(w.text.startsWith('The province is not yours until its town falls.')).toBe(true);
+    expect(w.text.startsWith('The province is not yours until its city falls.')).toBe(true);
   });
 
-  it('names a province once where it is named for its town, and its town where it is not (the cities chart)', () => {
+  it('names a province once where it is named for its city, and its town where it is not (the cities chart)', () => {
     const g = firstHour();
     const city = LESSONS.find((l) => l.id === 'city')!;
     const ger = g.corps.find((c) => c.nat === 'GER' && !c.dead)!;
@@ -251,7 +251,7 @@ describe('FIRST COMMAND, played', () => {
     };
     const same = enemy.find((r) => townName(r) === r.name)!, other = enemy.find((r) => townName(r) !== r.name)!;
     expect(g.flags.sieges).toBe(1);
-    expect(besiege(same).startsWith(`${same.name} is not yours until its town falls.`)).toBe(true);
+    expect(besiege(same).startsWith(`${same.name} is not yours until its city falls.`)).toBe(true);
     expect(besiege(other).startsWith(`${placeName(other.name, true)} is not yours until ${townName(other)} falls.`)).toBe(true);
   });
 });
