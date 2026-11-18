@@ -2890,7 +2890,10 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
   // Ruling 221 (F): troops lifted off the coast of a country their own is fighting are landed at the nearest harbour
   // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
   // goes on. Without it they are taken home, and from an island home nothing ever ships them back (paper 20, finding 3).
-  if (EASTERN.nearRefuge && from.owner !== c.nat && atWar(g, c.nat, from.owner)) {
+  // It is a rule of the grand campaign, at every stop of its dial: history's campaigns lift their troops off as they
+  // were measured to (with the far side's switch on the row is laid for every game, and four wars in 24 of the 1939
+  // campaign played differently from May 1941 until this asked: tests/far-history-same.test.ts).
+  if (EASTERN.nearRefuge && g.flags.open === 1 && from.owner !== c.nat && atWar(g, c.nat, from.owner)) {
     const near = nearHarbour(g, c.nat, from);
     if (near) return near;
   }
