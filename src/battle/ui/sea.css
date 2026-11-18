@@ -58,6 +58,9 @@
 .sea .ftag[hidden], .sea .fwarn[hidden] { display: none; }
 .sea .fwarn { padding: 6px 14px; border-radius: 2px; background: var(--amber); color: #2a1a06; font: 700 14px/20px var(--font-serif); box-shadow: 0 2px 8px rgba(0, 0, 0, .45); text-align: center; }
 .sea .bacts { flex: none; }
+/* WITHDRAW greyed while the player's own fleet is breaking off (b458 review): the kit's grave hover comes after its
+   greyed rule and would light the button up under the pointer as though it could be pressed, so it stays grey here. */
+.sea .bacts .tc-btn[disabled], .sea .bacts .tc-btn[disabled]:hover { color: var(--text-faint); background: var(--desk-800); border-color: var(--line); box-shadow: none; cursor: default; }
 @media (max-width: 1279px) { .sea .bbar { flex-wrap: wrap; } }
 
 /* ---- The tray: chips narrow to fit up to twelve at 1280; past that the row shows whole chips only, and a small card
@@ -69,7 +72,10 @@
 .sea .ucard .uwhat { display: grid; min-width: 0; }
 .sea .ucard .uwhat b { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sea .ucard .uwhat small { display: flex; align-items: center; gap: 4px; min-width: 0; font: 400 12px/15px var(--font-typed); color: var(--text-muted); }
-.sea .ucard .uwhat small span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The fleet's name is never cut (b458, 6): sea-page.ts sizeChips makes the chip as wide as the longest of the tray's
+   fleet names needs, taking the kit's next size down where the names' own width will not hold it at 12. */
+.sea .ucard .uwhat small span { white-space: nowrap; }
+.sea .tray.is-smallfleet .ucard .uwhat small span { font-size: 11px; }
 .sea .ucard .bsign { flex: none; width: 28px; height: 14px; }
 /* A meter's name and number on one line, its bar full width beneath, so a narrow chip keeps all three. */
 .sea .ucard .tc-meter { grid-template-columns: 1fr auto; grid-template-areas: "l n" "b b"; row-gap: 2px; column-gap: 6px; }

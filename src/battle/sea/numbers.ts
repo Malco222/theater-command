@@ -13,10 +13,10 @@ export const SEA = seaData as unknown as {
   speeds: { slow: number; cruise: number; flank: number; accel: number };
   fire: { rate: number; hull: number; far: number; endOn: number; damaged: number; retarget: number };
   nerve: { hit: number; near: number; nearR: number; quiet: number; mend: number; waver: number; wavering: number; break: number };
-  side: { breakAt: number; spread: number; admiral: number; pursuit: number };
+  side: { breakAt: number; spread: number; admiral: number; pursuit: number; hurt: number };
   strike: { windup: number; every: number; share: number; radius: number };
   air: { every: number; share: number };
-  pieces: { most: number; frontage: number };
+  pieces: { most: number; front: number };
   ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
 };

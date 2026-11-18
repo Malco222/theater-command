@@ -2,7 +2,8 @@
 // campaign's own reckoning of these fleets and that water, never set by hand (the design director, b402), so a newcomer's
 // first actions keep the card's promise; tests/battle-sea-obvious.test.ts plays each as a newcomer would.
 import type { Side } from '../core/types';
-import type { PlainFleet } from './ticket';
+import { plainTicket, type PlainFleet } from './ticket';
+import type { SeaTicket } from './types';
 
 export interface Practice { name: string; about: string; sea: string; att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>> }
 // Nations and fleets the campaign has, in seas it names, so a practice action reads as the campaign's own would. The
@@ -22,3 +23,13 @@ export const PRACTICE: Practice[] = [
     att: [{ name: 'Force H', nat: 'UK', ships: { ca: 6, dd: 22 } }], def: [{ name: '1st Fleet', nat: 'ITA', ships: { bb: 3, ca: 2, dd: 2 } }] },
 ];
 
+/**
+ * A practice action's ticket, with no game behind it: the field is headed by the card's own name ("Two battle lines"),
+ * as the land's practice field is, not by the sea's (b458, 5); the sea it is fought in stays in the opening dispatch,
+ * and the facts line under the title says "Practice" and the fleets. The player has the attacking side unless asked.
+ */
+export function practiceTicket(p: Practice, seed: number, human: Side | null = 'att'): SeaTicket {
+  const t = plainTicket({ att: p.att, def: p.def, air: p.air, seed, human, zoneName: p.sea, title: p.name });
+  t.date = 'Practice'; // Not a month of the war: these fleets never met like this.
+  return t;
+}

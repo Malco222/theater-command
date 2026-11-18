@@ -22,6 +22,7 @@ import { DICE, RULES_CLASSES, SEA } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
+import { hurtAfloat, ofFleet, theFleet } from './words';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -58,8 +59,15 @@ export function enemyNearestMiddle(units: readonly SeaUnit[], side: Side): SeaUn
 
 interface Strike { at: number; side: Side; target: number; weight: number; from: string; count: number }
 
-/** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit). */
-export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; toDice?: boolean }
+/** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit); and
+ *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). */
+export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean }
+
+/** The orders that let a beaten enemy go, given by the side chasing it (b458, 1): hold, break off (a piece, or the whole
+ *  fleet with WITHDRAW), or steer for a point on its own sea (STEER, and ownSea). */
+const LET_GO = new Set<string>(['hold', 'withdraw', 'withdrawAll', 'move', 'line']);
+/** The orders that steer for a point: they let the beaten enemy go only where the point is the chaser's own sea. */
+const STEER = new Set<string>(['move', 'line']);
 
 export class SeaSim implements BattleSim<SeaUnit> {
   readonly domain = 'sea' as const;
@@ -93,8 +101,6 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private contactAt: number | null = null;
   /** Each fleet has been said to be near breaking off (ruling 226(3)): once a side. */
   private warned: Record<Side, boolean> = { att: false, def: false };
-  /** Battle time of the coasts' last raid. */
-  private lastAir = -Infinity;
   private readonly lastHit = new Map<number, number>();
   private readonly look = new Map<number, number>();
   /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
@@ -194,8 +200,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   fired(): boolean { return this.lostShare('att') + this.lostShare('def') > 0; }
 
   /** The staff's chance for the attacker were the rest handed to them now: the dice's run at the ratio then standing,
-   *  as the staff reckon it (the day's own luck, which settles it, is not theirs to know). */
+   *  as the staff reckon it (the day's own luck, which settles it, is not theirs to know); in a chase, sure for the
+   *  chaser. */
   handChance(): number {
+    // Once a fleet has broken off the staff can only give the sea to the chaser (the 'dice' order), and they say so.
+    if (this.broken) return this.broken === 'def' ? 1 : 0;
     const k = this.ticket.reckoning, [d0, d1] = k.dice;
     if (k.odds * d1 < 1) return 0;
     if (k.odds * d0 >= 1) return 1;
@@ -212,11 +221,59 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // Once the enemy has broken off, a side's ships run it down at full speed, the player's as the staff's, until the
     // player gives an order of their own: then they do as told (b402: the newcomer's chase is the staff's).
     if (ok && chasing && c.do !== 'dice' && c.do !== 'auto') this.chaseTaken[by] = true;
+    if (ok && chasing) {
+      // An order to attack a beaten enemy is a pursuit: a carrier sent after it may fly new strikes (b458, 1).
+      if (c.do === 'attack' || c.do === 'ability') {
+        const target = c.target;
+        for (const id of c.units) { const u = this.byId.get(id); if (u && u.side === by && u.extra.cls === 'cv' && target !== undefined) this.pursuing.set(id, target); }
+      }
+      // An order to hold, break off or steer for a point on the chaser's own sea lets the beaten enemy go: the action ends
+      // there (b458, 1). A course among or past the beaten fleet runs it down, as an order to attack does: a right-click
+      // that misses a fleeing hull by a few pixels never ends the action the player meant to press.
+      if (LET_GO.has(c.do) && (!STEER.has(c.do) || this.steersHome(c, by))) this.letGo(by);
+    }
     return ok;
+  }
+
+  /**
+   * Whether a point lies on a side's own sea while it chases a beaten enemy (b458, 1): nearer the middle of its own fleet
+   * still in the fight than the beaten fleet's middle and than every enemy piece still afloat. A course for such a point
+   * lets the enemy go; one among the beaten fleet, or past it, runs it down. Each enemy, and the enemy's middle, cuts the
+   * sea in two along the line halfway between it and the side's middle, so the side's own sea is the part on its side of
+   * every such line: a line ordered with both ends there lies there whole.
+   */
+  ownSea(side: Side, x: number, y: number): boolean {
+    const all = this.units.filter((u) => u.side === side && live(u)), fighting = all.filter((u) => u.state !== 'routing');
+    const mine = fighting.length ? fighting : all, theirs = this.units.filter((u) => u.side !== side && live(u));
+    if (!mine.length || !theirs.length) return true;
+    const mid = (us: SeaUnit[]): [number, number] => [us.reduce((n, u) => n + u.x, 0) / us.length, us.reduce((n, u) => n + u.y, 0) / us.length];
+    const [mx, my] = mid(mine), [tx, ty] = mid(theirs), home = Math.hypot(x - mx, y - my);
+    return Math.hypot(x - tx, y - ty) > home && theirs.every((e) => Math.hypot(e.x - x, e.y - y) > home);
+  }
+
+  /** A steer order whose every point is the side's own sea (ownSea). */
+  private steersHome(c: Command | SeaCommand, by: Side): boolean {
+    if (c.do === 'move') return this.ownSea(by, c.x, c.y);
+    if (c.do === 'line') return this.ownSea(by, c.x0, c.y0) && this.ownSea(by, c.x1, c.y1);
+    return false;
+  }
+
+  /**
+   * The side chasing a beaten enemy lets it go (b458, 1): the action ends at once, the side that broke off beaten and
+   * every loss as it stands, booked as any other ending is (the after card, and the campaign through handoff.ts). An
+   * order to hold, break off or steer for a point on its own sea does this (command); false unless this side's enemy
+   * has broken off and the action is still on.
+   */
+  letGo(side: Side): boolean {
+    if (this.over || this.broken === null || this.broken === side) return false;
+    this.finish(side, 'withdrew');
+    return true;
   }
 
   /** The player's sides take the chase in hand with their first order after the enemy breaks off. */
   private readonly chaseTaken: Record<Side, boolean> = { att: false, def: false };
+  /** Carriers the player has sent after a beaten enemy since it broke off, and at whom: only these strike in the chase. */
+  private readonly pursuing = new Map<number, number>();
 
   private order(c: Command | SeaCommand, by: Side): boolean {
     const mine = (ids: number[] | undefined): SeaUnit[] => (ids ?? []).map((id) => this.byId.get(id)).filter((u): u is SeaUnit => !!u && u.side === by && steady(u));
@@ -258,8 +315,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
         return us.length > 0;
       }
       case 'withdrawAll': {
-        if (c.side !== by || this.broken) return false;
-        this.breakSide(by, true);
+        // Once the enemy has broken off, the chasing fleet breaking off lets it go (command: b458, 1); a fleet that has
+        // broken off itself has nothing left to withdraw.
+        if (c.side !== by || this.broken === by) return false;
+        if (!this.broken) this.breakSide(by, true);
         return true;
       }
       case 'ability': {
@@ -289,6 +348,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
         this.handedBy = by;
         const k = this.ticket.reckoning;
         const R = diceNow(k.odds, k.dice, { att: 1 - this.lostShare('att'), def: 1 - this.lostShare('def') }, (this.luck - k.dice[0]) / (k.dice[1] - k.dice[0]));
+        // Once a fleet has broken off, the sea is the chaser's whoever hands it over: the staff settle only by how much,
+        // the dice's ratio held to the chaser's side of the line as a fought ending's is (seaRatio). Never the fleet that
+        // broke off, a moment after it was said to have had enough.
+        if (this.broken) { const w = other(this.broken); this.finish(w, 'time', true, w === 'att' ? Math.max(1, R) : Math.min(0.999, R)); return true; }
         this.finish(R >= 1 ? 'att' : 'def', 'time', true, R);
         return true;
       }
@@ -348,11 +411,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
         if (!foe || !live(foe) || foe.state === 'routing') this.orders.delete(u.id);
       }
       // A carrier with no strike ordered sends one whenever its aircraft are ready, at its fleet's common target, so a
-      // newcomer's one order and the staff's play strike the same ship (b402).
-      if (u.extra.cls === 'cv' && steady(u)) {
+      // newcomer's one order and the staff's play strike the same ship (b402). Once a side has broken off, no carrier
+      // flies a new strike unless the player has sent it after the beaten enemy since (b458, 1): the staff's carriers,
+      // and the player's left to themselves, let it go. A strike already in the air still lands.
+      if (u.extra.cls === 'cv' && steady(u) && (this.broken === null || this.pursuing.has(u.id))) {
         // The order as it stands now: one that has just lapsed falls through to the common target, as at-will play does.
-        const still = this.orders.get(u.id);
-        const ordered = still?.kind === 'attack' ? this.byId.get(still.target) : undefined;
+        // In the chase, the enemy it was sent after while that one is still afloat (an order on a ship breaking off lapses).
+        const still = this.orders.get(u.id), sent = this.pursuing.get(u.id);
+        const ordered = still?.kind === 'attack' ? this.byId.get(still.target) : sent !== undefined ? this.byId.get(sent) : undefined;
         const common = this.byId.get(this.focus[u.side]);
         const foe = ordered && live(ordered) ? ordered : common && live(common) ? common : this.heaviest(other(u.side));
         if (foe) this.strike(u, foe);
@@ -704,7 +770,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
-      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet } });
       // A ship going down shakes the pieces near it by the weight it carried, measured against its side's: a destroyer
       // lost shakes less than a battleship, and a fleet of many light ships no more for the same weight lost (b438).
       const shake = (SEA.nerve.near * this.info.get(u.id)!.weight) / Math.max(1e-6, this.weight0[side]);
@@ -712,14 +778,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
-      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
     }
     if (u.extra.ships <= 0) {
       // A piece whose last ship went out of the fight burning has left the field; one whose last ship sank is gone.
       u.state = u.extra.sunk >= u.extra.ships0 || !(u.extra.burnt as number | undefined) ? 'gone' : 'withdrawn';
       u.str = u.state === 'gone' ? 0 : u.str;
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
-      const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} of the ${u.extra.fleet}`;
+      const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
     }
   }
@@ -736,7 +802,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!at) continue;
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from the ${s.from} find ${this.told(at)}.`, extra: { count: s.count } });
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count } });
     }
   }
 
@@ -756,7 +822,6 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.splash(at, weight, side);
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + weight;
       this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${this.told(at)}.` });
-      this.lastAir = this.t;
     }
   }
 
@@ -858,7 +923,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
         : share(now) - share(k) >= 0.05 ? `The staff settled the rest of the action in the ${zone} from where it stood: what you had won stays won.`
           : `The staff settled the rest of the action in the ${zone} from where it stood.`);
     }
-    const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...(toDice ? { toDice } : {}) };
+    // The ships each fleet took home badly hurt (b458, 3): those that went out of the fight burning, and those still
+    // afloat at half their hull or less, on the field or gone home.
+    const hurt: Record<number, SeaShips> = {};
+    for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
+    for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
+    const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(toDice ? { toDice } : {}) };
     this.over = {
       winner, how, seconds: this.t, lost, men: crews, R, level: seaLevel(R), lines, forces,
       extra: extra as unknown as Record<string, unknown>,
@@ -868,10 +938,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   // ---- What the screens draw --------------------------------------------------------------------------------------
 
-  /** A piece in a sentence, by what it is and whose, the fleet taking "the" as English does (log b370): "a battleship of the Home Fleet", "3 destroyers of the Home Fleet". */
+  /** A piece in a sentence, by what it is and whose, the fleet taking "the" only where English does (log b370, b458 6):
+   *  "a battleship of the Home Fleet", "3 destroyers of Force H". */
   private told(u: SeaUnit, start = false): string {
     const c = RULES_CLASSES[u.extra.cls as SeaClass], n = Math.max(1, u.extra.ships);
-    const s = n === 1 ? `a ${c.one} of the ${u.extra.fleet}` : `${n} ${c.many} of the ${u.extra.fleet}`;
+    const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${n} ${c.many} ${ofFleet(u.extra.fleet)}`;
     return start ? s[0].toUpperCase() + s.slice(1) : s;
   }
 
@@ -929,10 +1000,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** The side that has broken off the action and is making for port, while the other chases; null before. */
   get brokenSide(): Side | null { return this.broken; }
 
-  /** Nothing is happening yet: no gun has reached an enemy, no strike is in the air and no raid has just come in. The
-   *  screens run time fast while it holds, and again after an early strike has come and gone (ruling 226(1); the
-   *  design director, 20:18 UTC). Once the guns have met it never holds again. */
-  get quiet(): boolean { return this.contactAt === null && this.strikes.length === 0 && this.t - this.lastAir >= 10; }
+  /** Nothing is happening yet: no gun has reached an enemy. The screens run time fast while it holds (ruling 226(1)).
+   *  Strikes and the coasts' raids are counted, not flown, so one in the air does not end it, before or after it lands
+   *  (b458, 2a): it holds until the guns meet, and once they have it never holds again. A side that breaks off before
+   *  they meet ends it too: what follows is the chase, not the approach. */
+  get quiet(): boolean { return this.contactAt === null && this.broken === null; }
 }
 
 const TAU = Math.PI * 2;

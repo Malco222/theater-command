@@ -99,9 +99,10 @@ export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips
 
 /**
  * A ticket with no game behind it: two sides' fleets, their coasts' air, and a seed. 'odds', if given, scales the
- * defender's fleets so the two sides meet at exactly those odds (tests and calibration only).
+ * defender's fleets so the two sides meet at exactly those odds (tests and calibration only). 'title' heads the field
+ * in place of the sea's ("Two battle lines" for a practice action: practice.ts).
  */
-export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string }): SeaTicket {
+export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string }): SeaTicket {
   let id = 1;
   const make = (p: PlainFleet, side: Side): FleetTicket => ({
     id: id++, name: p.name, nat: p.nat, side,
@@ -121,7 +122,7 @@ export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Par
   const nat = (side: Side): string => fleets.find((f) => f.side === side)?.nat ?? side;
   return {
     domain: 'sea', kind: SEA_KIND, seed: o.seed, turn: 0, date: 'September 1939',
-    title: `The action in the ${o.zoneName ?? 'North Sea'}`,
+    title: o.title ?? `The action in the ${o.zoneName ?? 'North Sea'}`,
     place: { zone: 0, zoneName: o.zoneName ?? 'North Sea', fleets, air },
     att: sideTicket(nat('att'), nat('att'), '#5577aa', o.human === 'att', fleets.filter((f) => f.side === 'att')),
     def: sideTicket(nat('def'), nat('def'), '#aa5544', o.human === 'def', fleets.filter((f) => f.side === 'def')),

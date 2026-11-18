@@ -126,6 +126,28 @@ describe('a played action stands in place of the dice', () => {
     expect((rep.won ? battle : home).stance).toBe('port');
   });
 
+  it('a chase let go (b458, 1) is booked as any other ending: the side that broke off beaten, the losses as they stood', () => {
+    const { g, home, battle } = meet(5);
+    const [a] = seaAhead(g, ukClose);
+    const sim = new SeaSim(a.ticket);
+    sim.ai.att = true; sim.ai.def = true;
+    while (!sim.over && sim.brokenSide === null) sim.step();
+    expect(sim.over).toBeNull();
+    const chaser = sim.brokenSide === 'att' ? 'def' : 'att';
+    const mine = sim.units.filter((u) => u.side === chaser && u.state === 'steady').map((u) => u.id);
+    expect(sim.command({ do: 'hold', units: mine }, chaser)).toBe(true);
+    expect(sim.over!.winner).toBe(chaser);
+    const x = sim.over!.extra as unknown as SeaLosses;
+    closeWith(g, new Map([[a.key, { meeting: a.meeting, fought: foughtOf(sim.over!) }]]), ukClose);
+    const rep = g.seaReports[g.seaReports.length - 1];
+    expect(rep.odds).toBe(sim.over!.R);
+    expect(rep.won).toBe(chaser === 'att');
+    for (const c of SURFACE) {
+      expect(rep.att[0].sunk[c], `Home Fleet ${c}`).toBe(x.sunk[home.id][c]);
+      expect(rep.def[0].sunk[c], `Battle Fleet ${c}`).toBe(x.sunk[battle.id][c]);
+    }
+  });
+
   it('handed to the dice part-way, the rules sink as at that ratio, and never fewer than had gone down', () => {
     for (let seed = 1; seed <= 6; seed++) {
       const { g, battle } = meet(seed);

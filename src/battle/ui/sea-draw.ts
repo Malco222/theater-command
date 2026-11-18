@@ -554,10 +554,11 @@ function hullBar(x: CanvasRenderingContext2D, lay: SeaLayout, p: DrawnPiece, str
  * block, else the nearest clear place above it, below the piece (whose half box is hw by hh round cx, its middle
  * foot + 3 + hh below), or past either end of it, kept on the sea between top and the foot of the screen.
  */
-function openWater(cx: number, foot: number, w: number, h: number, hw: number, hh: number, blocks: [number, number, number, number][], top: number, W: number, H: number): [number, number] {
+function openWater(cx: number, foot: number, w: number, h: number, hw: number, hh: number, blocks: [number, number, number, number][], top: number, W: number, H: number, hard: [number, number, number, number][] = []): [number, number] {
   const fitX = (v: number): number => Math.max(w / 2 + 6, Math.min(W - w / 2 - 6, v));
   const fitY = (v: number): number => Math.max(top + h, Math.min(H - 4, v));
-  const clear = (lx: number, ly: number): boolean => !blocks.some(([a, b, c, d]) => lx - w / 2 < c && lx + w / 2 > a && ly - h < d && ly > b);
+  const off = (bs: [number, number, number, number][], lx: number, ly: number): boolean => !bs.some(([a, b, c, d]) => lx - w / 2 < c && lx + w / 2 > a && ly - h < d && ly > b);
+  const clear = (lx: number, ly: number): boolean => off(blocks, lx, ly);
   const mid = foot + 3 + hh;
   const tries: [number, number, number][] = [];
   for (let d = 0; d <= 240; d += 3) {
@@ -567,6 +568,9 @@ function openWater(cx: number, foot: number, w: number, h: number, hw: number, h
   for (let d = 0; d <= 120; d += 3) for (const k of [-1, 1]) tries.push([cx + k * (hw + 4 + w / 2 + d), mid + h / 2, hh + h / 2 + hw + w / 2 + d]);
   tries.sort((p, q) => p[2] - q[2]);
   for (const [tx, ty] of tries) { const lx = fitX(tx), ly = fitY(ty); if (clear(lx, ly)) return [lx, ly]; }
+  // Where no open water is near (a crowded sea, the view far out), the nearest place off the 'hard' blocks at least: a
+  // STRIKE chip and the other line of words are never written over (b458, 6), though a hull may be.
+  for (const [tx, ty] of tries) { const lx = fitX(tx), ly = fitY(ty); if (off(hard, lx, ly)) return [lx, ly]; }
   return [fitX(cx), fitY(foot)];
 }
 
@@ -775,9 +779,21 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
     if (over) labels.push({ text: hoverText(sim, u, s.me, s.sel.size), p, first: true });
     else if (held && s.sel.size === 1) labels.push({ text: shownName(u, sim.ticket), p, first: false });
   }
+  // Strikes on their way in: a ring closing on the target as they come, round the whole of the piece, its word on a
+  // small paper chip outside the ring, on the side away from the ships, never over a hull (the art director,
+  // keep-together 3). The chips are placed before any words, so the words keep off them (b458, 6).
+  const rings: { p: DrawnPiece; k: number; rr: number; chip: Chip }[] = [];
+  for (const ib of s.inbound) {
+    const t = byId.get(ib.target), p = at(ib.target);
+    if (!t || !p || !live(t)) continue;
+    const k = Math.max(0, Math.min(1, (ib.lands - sim.t) / SEA.strike.windup));
+    const rr = Math.hypot(...halfBox(lay, p)) + 6 + 40 * k;
+    rings.push({ p, k, rr, chip: placeStrikeChip(x, lay, p, rr, W, H, (s.clearTop ?? 50) + 4) });
+  }
   // At most two lines of words, each over open water: above its piece's outline where that is clear, else the nearest
-  // place that is, up or down or past the row's end, never across a hull or the other line of words, kept on the sea
-  // below the dispatch strip (the UI director, keep-together review). The name is placed first, the hover after it.
+  // place that is, up or down or past the row's end, never across a hull, a STRIKE chip or the other line of words,
+  // kept on the sea below the dispatch strip (the UI director, keep-together review). The name is placed first, the
+  // hover after it.
   x.font = '700 12px "Courier Prime", monospace'; x.textAlign = 'center'; x.textBaseline = 'bottom';
   const top = (s.clearTop ?? 50) + 16;
   const blocks: [number, number, number, number][] = [];
@@ -786,25 +802,24 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
     blocks.push([a - ex - 2, b - ey - 2, a + ex + 2, b + ey + 2]);
   }
   for (const q of framed) { const [hw, hh] = halfBox(lay, q, PICK + 1); blocks.push([q.x - hw, q.y - hh, q.x + hw, q.y + hh]); }
+  // The chips and the words already placed are never written over, even where every place near is taken (openWater).
+  const hard: [number, number, number, number][] = rings.map(({ chip: c }) => [c.cx - c.w / 2 - 3, c.cy - c.h / 2 - 3, c.cx + c.w / 2 + 3, c.cy + c.h / 2 + 3]);
+  blocks.push(...hard);
   for (const lb of labels.sort((p, q) => Number(p.first) - Number(q.first))) {
     const w = x.measureText(lb.text).width, h = 15;
     const [hw, hh] = halfBox(lay, lb.p, PICK + 1);
-    const [lx, ly] = openWater(lb.p.x, lb.p.y - hh - 3, w, h, hw, hh, blocks, top, W, H);
+    const [lx, ly] = openWater(lb.p.x, lb.p.y - hh - 3, w, h, hw, hh, blocks, top, W, H, hard);
     blocks.push([lx - w / 2 - 2, ly - h - 2, lx + w / 2 + 2, ly + 2]);
+    hard.push([lx - w / 2 - 2, ly - h - 2, lx + w / 2 + 2, ly + 2]);
     x.lineWidth = 3; x.strokeStyle = 'rgba(14,11,8,.85)'; x.strokeText(lb.text, lx, ly);
     x.fillStyle = '#ede6d6'; x.fillText(lb.text, lx, ly);
   }
 
-  // Strikes on their way in: a ring closing on the target as they come, round the whole of the piece. Its word on a
-  // small paper chip outside the ring, on the side away from the ships, never over a hull (the art director, keep-together 3).
-  for (const ib of s.inbound) {
-    const t = byId.get(ib.target), p = at(ib.target);
-    if (!t || !p || !live(t)) continue;
-    const k = Math.max(0, Math.min(1, (ib.lands - sim.t) / SEA.strike.windup));
-    const rr = Math.hypot(...halfBox(lay, p)) + 6 + 40 * k;
+  // The strikes' rings and chips, where they were placed above.
+  for (const { p, k, rr, chip } of rings) {
     x.strokeStyle = `rgba(138,107,59,${0.6 + 0.4 * (1 - k)})`; x.lineWidth = 1.5; x.setLineDash([3, 4]);
     x.beginPath(); x.arc(p.x, p.y, rr, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
-    strikeChip(x, lay, p, rr, W, H, (s.clearTop ?? 50) + 4);
+    drawStrikeChip(x, chip);
   }
 
   // What has just happened on the water: the moment a ship goes down (a ring that spreads and fades), strikes and raids.
@@ -853,11 +868,15 @@ function ringWord(x: CanvasRenderingContext2D, word: string, cx: number, top: nu
   x.fillStyle = '#5c4626'; x.fillText(word, cx, top);
 }
 
+/** A STRIKE chip's word, middle and size, in screen pixels. */
+interface Chip { word: string; cx: number; cy: number; w: number; h: number }
+
 /**
- * STRIKE on a small paper chip just outside the strike's ring, on the side away from the ships round it, and clear of
- * every hull: tried first straight away from them, then turning a twelfth of the way round each side at a time.
+ * Where STRIKE stands on its small paper chip: just outside the strike's ring, on the side away from the ships round it,
+ * and clear of every hull: tried first straight away from them, then turning a twelfth of the way round each side at a
+ * time.
  */
-function strikeChip(x: CanvasRenderingContext2D, lay: SeaLayout, p: DrawnPiece, rr: number, W: number, H: number, top: number): void {
+function placeStrikeChip(x: CanvasRenderingContext2D, lay: SeaLayout, p: DrawnPiece, rr: number, W: number, H: number, top: number): Chip {
   x.font = '700 12px "Courier Prime", monospace';
   const word = 'STRIKE', w = Math.ceil(x.measureText(word).width) + 12, h = 18;
   // Away from the ships near the ring: the target's own and any others.
@@ -883,10 +902,16 @@ function strikeChip(x: CanvasRenderingContext2D, lay: SeaLayout, p: DrawnPiece, 
     if (i === 0) { cx = tx; cy = ty; }
     if (clear && onSea) { cx = tx; cy = ty; break; }
   }
-  const lx = Math.round(cx - w / 2) + 0.5, ly = Math.round(cy - h / 2) + 0.5;
-  x.fillStyle = '#e2d7bc'; x.fillRect(lx, ly, w, h);
-  x.strokeStyle = 'rgba(92,70,38,.55)'; x.lineWidth = 1; x.strokeRect(lx, ly, w, h);
-  x.fillStyle = '#5c4626'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(word, cx, cy + 1);
+  return { word, cx, cy, w, h };
+}
+
+/** STRIKE on its chip, where placeStrikeChip put it. */
+function drawStrikeChip(x: CanvasRenderingContext2D, c: Chip): void {
+  const lx = Math.round(c.cx - c.w / 2) + 0.5, ly = Math.round(c.cy - c.h / 2) + 0.5;
+  x.font = '700 12px "Courier Prime", monospace';
+  x.fillStyle = '#e2d7bc'; x.fillRect(lx, ly, c.w, c.h);
+  x.strokeStyle = 'rgba(92,70,38,.55)'; x.lineWidth = 1; x.strokeRect(lx, ly, c.w, c.h);
+  x.fillStyle = '#5c4626'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(c.word, c.cx, c.cy + 1);
 }
 
 /**

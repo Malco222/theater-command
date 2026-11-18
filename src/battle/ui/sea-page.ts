@@ -19,11 +19,12 @@ import type { Command, FieldEvent, Side } from '../core/types';
 import { closeWith, foughtOf, seaAhead, type SeaAhead } from '../sea/handoff';
 import { SEA } from '../sea/numbers';
 import { SeaSim, type SeaLosses } from '../sea/sim';
-import { PRACTICE, type Practice } from '../sea/practice';
-import { plainTicket, type PlainFleet } from '../sea/ticket';
+import { PRACTICE, practiceTicket as practicePlain, type Practice } from '../sea/practice';
+import { plainTicket } from '../sea/ticket';
 import type { SeaClass, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from '../sea/types';
+import { andList, repairLines } from '../sea/words';
 import { toField, toScreen, type Camera } from './draw';
-import { aircraftOf, aircraftSaid, drawSea, layoutSea, live, pieceAt, piecesIn, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
+import { aircraftOf, aircraftSaid, drawSea, layoutSea, live, PICK, pieceAt, piecesIn, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
 
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -37,8 +38,6 @@ const cap = (k: string): string => `<span class="tc-key">${k}</span>`;
  *  under that, where "Space pause" joins it because the clock's buttons drop their key caps there. */
 const KEYS = facts(['Click or drag a box: pick up', 'Right-click: steer there, or engage an enemy', 'Right-drag: form a line', `${cap('H')} hold`, `${cap('R')} break off`, `${cap('Tab')} next`, `${cap('Esc')} put down`, 'Arrows or two-finger drag: look round', `<span class="knarrow">${cap('Space')} pause</span>`])
   .replace('<span class="fact">Arrows', '<span class="kbreak"></span><span class="fact">Arrows');
-/** A list as English says it: "a, b and c". */
-const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const CLASS_ONE: Record<SeaClass | 'ss', [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
 /** Ships by kind, a kind at 0 left out: ["1 battleship", "2 cruisers"]. */
 const shipBits = (s: Partial<Record<SeaClass | 'ss', number>>): string[] =>
@@ -71,7 +70,7 @@ interface State {
   closing: boolean;
   /** A fleet has broken off and time runs fast through the chase, until the player takes it in hand (b402, 3). */
   chasing: boolean;
-  /** The player has given an order or set a speed since a fleet broke off: the chase runs at his speed. */
+  /** The player has set the clock's speed since a fleet broke off: the chase runs at their speed (b458, 1: orders do not). */
   chaseByHand: boolean;
   /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
   tag: { text: string; until: number } | null;
@@ -113,12 +112,12 @@ function campaignAction(seed: number): FromCampaign | null {
 let nations: Game['nations'] | null = null;
 function practiceTicket(p: Practice): SeaTicket {
   nations ??= createGame(1, null).nations;
-  const t = plainTicket({ att: p.att, def: p.def, seed: 1 + Math.floor(Math.random() * 1e6), air: p.air, human: 'att', zoneName: p.sea });
+  // Headed by the card's name, "Practice" and the fleets in the facts under it (b458, 5: practice.ts).
+  const t = practicePlain(p, 1 + Math.floor(Math.random() * 1e6));
   for (const side of ['att', 'def'] as Side[]) {
     const n = nations[t[side].nat];
     if (n) { t[side].adj = n.adj; t[side].color = n.color; } else t[side].adj = side === 'att' ? 'Your' : 'Enemy';
   }
-  t.date = 'Practice'; // Not a month of the war: these fleets never met like this.
   return t;
 }
 
@@ -174,7 +173,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   S.sim = sim; S.from = from; S.screen = 'battle';
   const sc = S.scene;
   sc.me = t.att.human ? 'att' : 'def';
-  sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
+  sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = []; resting = null;
   sc.layout = undefined; sc.keep = undefined; S.follow = true;
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
@@ -202,7 +201,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
       <div class="bacts">
         <button class="tc-btn" data-act="dice" title="The staff settles the rest at once, from where the action stands.">Hand it to the staff</button>
         <button class="tc-btn tc-btn--grave" data-act="withdraw">Withdraw</button>
-        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="Withdraw the fleet?"><p>Withdraw the fleet? The action ends and the sea is theirs.</p><div class="wbtns"><button class="tc-btn" data-act="wgo">Withdraw</button><button class="tc-btn tc-btn--primary" data-act="wstay">Keep fighting</button></div></div>
+        <div class="wask tc-paper" id="wask" hidden role="alertdialog" aria-label="${WITHDRAW_ASK.label}"><p id="waskText">${WITHDRAW_ASK.text}</p><div class="wbtns"><button class="tc-btn" data-act="wgo">${WITHDRAW_ASK.yes}</button><button class="tc-btn tc-btn--primary" data-act="wstay">Keep fighting</button></div></div>
         <div class="wask tc-paper" id="sask" hidden role="alertdialog" aria-label="Hand the action to the staff?"><p id="saskText"></p><div class="wbtns"><button class="tc-btn" data-act="sgo">Hand it over</button><button class="tc-btn tc-btn--primary" data-act="sstay">Keep fighting</button></div></div>
       </div>
     </header>
@@ -321,6 +320,15 @@ function sizeChips(): void {
   }
   let w = probe('.ustate', `<b>${STATE_WORD.steady}</b><span class="act"> · ${ORDER_WORD.attack}</span>`);
   for (const n of names) w = Math.max(w, probe('.uwhat b', esc(n)));
+  // The fleet's whole name beside the ship's sign, never cut (b458, 6): at the line's own size where the chip the names
+  // need holds it, else at the kit's next size down (11 px, sea.css .is-smallfleet), and the chip as wide as that needs.
+  // The line keeps its height, so the card does too.
+  const fleets = new Set(S.sim!.units.filter((u) => u.side === S.scene.me).map((u) => u.extra.fleet));
+  const small = c.querySelector<HTMLElement>('.uwhat small')!, sign = small.querySelector<SVGElement>('.bsign');
+  const beside = (sign ? sign.getBoundingClientRect().width : 0) + (parseFloat(getComputedStyle(small).columnGap) || 0);
+  const fleetW = (): number => Math.max(0, ...[...fleets].map((f) => probe('.uwhat small span', esc(f)))) + beside;
+  tray.classList.remove('is-smallfleet');
+  if (fleetW() > w) { tray.classList.add('is-smallfleet'); w = Math.max(w, fleetW()); }
   const cs = getComputedStyle(c);
   CHIP_W = Math.ceil(w + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth));
   tray.style.setProperty('--chip', `${CHIP_W}px`);
@@ -373,9 +381,25 @@ function handQuestion(sim: SeaSim): string {
     : `Hand the action to the staff? No shot has been fired: they settle the whole action at once. ${chance}`;
 }
 
+/** WITHDRAW's question, its label and the button that agrees; once the enemy has broken off, withdrawing lets it go and
+ *  the sea is the player's (b458, 1), so the button that agrees says so too, not "Withdraw" under "the sea is yours". */
+const WITHDRAW_ASK = { text: 'Withdraw the fleet? The action ends and the sea is theirs.', label: 'Withdraw the fleet?', yes: 'Withdraw' };
+const LET_GO_ASK = { text: 'Break off the chase? The action ends here and the sea is yours.', label: 'Break off the chase?', yes: 'Break off' };
+/** WITHDRAW while the player's own fleet is breaking off: there is nothing left to withdraw, so the button stands down. */
+const ALREADY_GOING = 'Your fleet is already breaking off.';
+
 /** Puts a question to the player and stops the clock while it stands; the answer that changes nothing starts it again. */
 function ask(which: 'asking' | 'handing'): void {
   if (S.asking || S.handing) return;
+  if (which === 'asking') {
+    const broken = S.sim!.brokenSide;
+    // The player's own fleet breaking off has nothing to withdraw: no question promises an ending that cannot come.
+    if (broken === S.scene.me || S.sim!.over) return;
+    const q = broken !== null ? LET_GO_ASK : WITHDRAW_ASK;
+    document.getElementById('waskText')!.textContent = q.text;
+    document.getElementById('wask')!.setAttribute('aria-label', q.label);
+    document.querySelector<HTMLElement>('[data-act="wgo"]')!.textContent = q.yes;
+  }
   S.resume = S.clock.speed === 0 ? 0 : S.clock.speed;
   S.clock.set(0);
   S[which] = true;
@@ -418,6 +442,9 @@ function updateTop(force = false): void {
   el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
   (el('wask') as HTMLElement).hidden = !S.asking;
+  // While the player's own fleet is breaking off WITHDRAW has nothing to do, so it is greyed and says why.
+  const wd = document.querySelector<HTMLButtonElement>('[data-act="withdraw"]')!, going = sim.brokenSide === me;
+  if (wd.disabled !== going) { wd.disabled = going; if (going) wd.title = ALREADY_GOING; else wd.removeAttribute('title'); }
   (el('sask') as HTMLElement).hidden = !S.handing;
   if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
   // The foot of what stands over the top of the sea, so the far ports' name and the opening view keep clear of it.
@@ -435,8 +462,9 @@ function updateTop(force = false): void {
   }
   if (tagEl.innerHTML !== tag) tagEl.innerHTML = tag;
   tagEl.hidden = !tag;
-  // Ours at three quarters of the way to breaking off: a line in amber that stands until it passes.
-  const warn = !sim.over && sim.nearBreak(me) >= 0.75 && sim.nearBreak(me) < 1;
+  // Ours at three quarters of the way to breaking off: a line in amber that stands until it passes, and goes the moment
+  // either fleet breaks off (b458, 4): the player never sees it beside the enemy's break.
+  const warn = !sim.over && sim.brokenSide === null && sim.nearBreak(me) >= 0.75 && sim.nearBreak(me) < 1;
   el('fwarn').hidden = !warn;
   if (warn && !el('fwarn').textContent) el('fwarn').textContent = 'Your fleet is near breaking off: pull back the worn, or hand it to the staff.';
   // The speed strip shows for the ships in hand, lit at the speed they all share.
@@ -547,15 +575,10 @@ function clampCam(): void {
 // ---- Orders -----------------------------------------------------------------------------------------------------------
 
 function chosen(): number[] { return [...S.scene.sel].filter((id) => { const u = unit(id); return !!u && orderable(u); }); }
-const give = (c: Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed }): boolean => {
-  // Whether a chase was already on before this order: an order that itself ends the action (withdraw) does not take
-  // a chase in hand, so the last minutes run fast however the fleet broke off.
-  const inChase = S.sim!.brokenSide !== null;
-  const ok = S.sim!.command(c as Command, S.scene.me);
-  // An order in the chase takes it in hand: time drops back to the speed set (b402, 3).
-  if (ok && inChase) S.chaseByHand = true;
-  return ok;
-};
+// In the chase an order no longer drops the clock (b458, 1): one to hold, break off or steer for a point lets the beaten
+// enemy go and the sim ends the action there (sim.ts letGo), so the after card comes at once; one to attack it is a
+// pursuit, and the chase runs on fast. Only the speed keys take the chase's clock in hand (setClock).
+const give = (c: Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed }): boolean => S.sim!.command(c as Command, S.scene.me);
 /** A piece the player may take in hand: their own, afloat and not breaking off. */
 const mineToTake = (id: number): boolean => { const u = unit(id); return !!u && u.side === S.scene.me && orderable(u); };
 
@@ -569,6 +592,7 @@ function wireBattle(): void {
     if (S.screen !== 'battle') return;
     const [px, py] = pos(e);
     canvas.setPointerCapture(e.pointerId);
+    resting = null;
     const touch = e.pointerType === 'touch';
     down = { x: px, y: py, button: e.button, touch, moved: false, px, py };
     if (touch) hold = window.setTimeout(() => { if (down && !down.moved) { orderAt(down.x, down.y); down = null; } }, 450);
@@ -578,15 +602,7 @@ function wireBattle(): void {
     if (!sim) return;
     const [px, py] = pos(e);
     const [fx, fy] = toField(sc, px, py);
-    if (!down) {
-      // The whole drawn piece is under the pointer, every hull and the water between, as its outline shows (the UI
-      // director, keep-together 2).
-      const id = pieceAt(sc, px, py, (i) => { const x = unit(i); return !!x && live(x); });
-      const u = id !== null ? unit(id) : undefined;
-      sc.hover = u ? u.id : null;
-      canvas.style.cursor = u && u.side !== sc.me && sc.sel.size ? 'crosshair' : u && u.side === sc.me ? 'pointer' : 'default';
-      return;
-    }
+    if (!down) { resting = [px, py]; rehover(); return; }
     if (Math.hypot(px - down.x, py - down.y) > 6) down.moved = true;
     if (!down.moved) return;
     if (down.touch || down.button === 1) { byHand(); sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam(); }
@@ -607,6 +623,9 @@ function wireBattle(): void {
     const [px, py] = pos(e);
     const d = down;
     down = null;
+    // The pointer rests where it was let go, if that is on the sea: the hover follows what comes under it from there.
+    resting = !d.touch && px >= 0 && py >= 0 && px <= sc.W && py <= sc.H ? [px, py] : null;
+    if (!resting) sc.hover = null;
     if (d.touch) { if (!d.moved) pickAt(px, py, false); return; }
     if (d.button === 0) {
       if (sc.box) {
@@ -617,7 +636,10 @@ function wireBattle(): void {
         sc.box = null;
       } else pickAt(px, py, e.shiftKey);
     } else if (d.button === 2) {
-      if (sc.line) {
+      // In the chase a right-drag shorter than a hull is a right-click whose pointer slipped: it gives the click's order
+      // where the button went down (b458, 1), so a press on a fleeing ship that drifts a few pixels still engages it.
+      const chase = sim.brokenSide !== null && sim.brokenSide !== sc.me;
+      if (sc.line && chase && Math.hypot(px - d.x, py - d.y) < hullOnScreen()) { sc.line = null; orderAt(d.x, d.y); } else if (sc.line) {
         const ids = chosen();
         if (ids.length) give({ do: 'line', units: ids, x0: sc.line.x0, y0: sc.line.y0, x1: sc.line.x1, y1: sc.line.y1 });
         sc.line = null;
@@ -628,8 +650,8 @@ function wireBattle(): void {
   canvas.addEventListener('pointerup', up);
   // The hover goes the moment the pointer leaves the sea, as hovers do everywhere else in the game: a stale one reads as
   // a fact about a ship the player is no longer pointing at (the UI director, 2b1f0e3).
-  canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
-  canvas.addEventListener('pointercancel', () => { down = null; sc.box = null; sc.line = null; });
+  canvas.addEventListener('pointerleave', () => { resting = null; if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
+  canvas.addEventListener('pointercancel', () => { down = null; resting = null; sc.hover = null; sc.box = null; sc.line = null; });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     byHand();
@@ -672,6 +694,27 @@ function wireBattle(): void {
     if (u) { byHand(); sc.cam.x = u.x; sc.cam.y = u.y; sc.cam.z = Math.max(sc.cam.z, 0.12); clampCam(); }
   });
 }
+
+/** Where the pointer rests on the sea, in screen pixels, while it is over it with no button held; null otherwise. */
+let resting: [number, number] | null = null;
+/**
+ * The hover is the piece under the pointer now. The ships move under a pointer at rest, and the view moves with them,
+ * so it is looked for again every frame, not only when the pointer moves: the line goes when its ship sails out from
+ * under the pointer, and never stands over open water for a ship the pointer has left (b458, 6). The whole drawn piece
+ * counts, every hull and the water between, as its outline shows (the UI director, keep-together 2).
+ */
+function rehover(): void {
+  const sc = S.scene;
+  if (!resting || !S.sim || S.screen !== 'battle') return;
+  const id = pieceAt(sc, resting[0], resting[1], (i) => { const x = unit(i); return !!x && live(x); });
+  const u = id !== null ? unit(id) : undefined;
+  sc.hover = u ? u.id : null;
+  const cur = u && u.side !== sc.me && sc.sel.size ? 'crosshair' : u && u.side === sc.me ? 'pointer' : 'default';
+  if (canvas.style.cursor !== cur) canvas.style.cursor = cur;
+}
+/** The longest hull of the ships in hand as the sea draws them, and never under the pick's own margin each way: a
+ *  right-drag shorter than this, in the chase, is a right-click. */
+const hullOnScreen = (): number => Math.max(2 * PICK, ...chosen().map((id) => S.scene.layout?.pieces.get(id)?.L ?? 0));
 
 function pickAt(px: number, py: number, add: boolean): void {
   const sc = S.scene;
@@ -747,10 +790,10 @@ function frame(): void {
   S.last = t;
   S.scene.now = t;
   const sim = S.sim;
-  // Until the action begins, the core clock runs fast on its own, then drops back to the speed the player set; and
-  // again once an early strike has come and gone with nothing in contact or in the air (ruling 226, 1; 20:18 UTC).
-  // Once a fleet has broken off, time runs fast through the chase until the action ends, unless the player takes the
-  // chase in hand with an order or a speed (the design director, b402, 3).
+  // Until the guns meet, the core clock runs fast on its own, then drops back to the speed the player set (ruling 226,
+  // 1): a strike or a raid in the air does not stop it, since they are counted, not flown (b458, 2a). Once a fleet has
+  // broken off, time runs fast through the chase until the action ends, unless the player takes the chase's clock in
+  // hand with a speed key (b402, 3; b458, 1: an order lets the enemy go or pursues it, and neither slows the clock).
   const chase = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
   S.clock.rush = sim.quiet || chase ? APPROACH : 1;
   S.clock.advance(sim, dt);
@@ -766,11 +809,15 @@ function frame(): void {
     S.dispatch = m > 0 ? { t: sim.t, what: 'contact', text: `The fleets are closing: in range in about ${m === 1 ? 'a minute' : `${m} minutes`}.`, unit: -1 } : null;
     S.dispatchAge = 0;
   }
-  // Our own fleet near breaking off is said on the standing warning above the field, not as a dispatch too.
-  for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
+  // Our own fleet near breaking off is said on the standing warning above the field, not as a dispatch too; and once a
+  // fleet has broken off, neither side's near-breaking line is said at all (b458, 4).
+  const broke = sim.brokenSide !== null;
+  for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && (e.side === S.scene.me || broke))) { S.dispatch = e; S.dispatchAge = 0; }
+  if (broke && S.dispatch?.what === 'nearBreak') { S.dispatch = null; document.getElementById('dispatch')!.innerHTML = ''; }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
   if (S.follow) followFleets(dt);
+  rehover();
   drawSea(ctx, sim, S.scene);
   updateTop();
   updateTray();
@@ -844,7 +891,7 @@ function showAfter(): void {
   // over, who holds the sea, what went down in sight, and the ships that came home for repair.
   const x = r.extra as unknown as SeaLosses;
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
-  const bySide = (side: Side, what: 'sunk' | 'burnt'): SeaShips => {
+  const bySide = (side: Side, what: 'sunk' | 'burnt' | 'hurt'): SeaShips => {
     const n: SeaShips = { bb: 0, cv: 0, ca: 0, dd: 0 };
     for (const f of t.place.fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) n[c] += x[what][f.id]?.[c] ?? 0;
     return n;
@@ -859,12 +906,12 @@ function showAfter(): void {
   const lossLine = x.toDice
     ? noShot ? '' : noneSunk ? 'Before you handed it to the staff, no ship had gone down on either side.' : `Before you handed it to the staff, you had lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`
     : headline ? '' : noneSunk ? 'No ship went down on either side.' : `You lost ${lost(me)} and ${people(t[them].adj)} ${lost(them)}.`;
-  const hm = count(bySide(me, 'burnt')), ht = count(bySide(them, 'burnt'));
-  const theirShips = (n: number): string => `${n} ${t[them].adj} ${n === 1 ? 'ship' : 'ships'}`;
-  const repairLine = hm && ht ? `${hm} of your ships came home for repair, and ${theirShips(ht)}.`
-    : hm ? `${hm} of your ships came home for repair.` : ht ? `${theirShips(ht)} came home for repair.` : '';
+  // The ships each side took home badly hurt, every one named by its kind (b458, 3): out of the fight burning, or
+  // afloat at half its hull or less, so a close victory reads as one. Handed to the staff, only those burning: the
+  // staff's settlement may yet sink a ship that was afloat when it took over.
+  const repair = repairLines({ att: bySide('att', x.toDice ? 'burnt' : 'hurt'), def: bySide('def', x.toDice ? 'burnt' : 'hurt') }, me, t[them].adj);
   // The staff's line, then the facts, then what stood before the hand-over (the UI director, sea-226 mend 6).
-  const list = (x.toDice ? [staffLine, r.lines[0], repairLine, lossLine] : [staffLine, r.lines[0], lossLine, repairLine]).filter((l): l is string => !!l);
+  const list = (x.toDice ? [staffLine, r.lines[0], ...repair, lossLine] : [staffLine, r.lines[0], lossLine, ...repair]).filter((l): l is string => !!l);
   const sides = rep ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} fleet</h3><ul>${rep![sd].map((s) => `<li><b>${esc(s.fleet)}</b> <span>lost ${esc(andList(shipBits(s.sunk)) || 'no ships')}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
   const veil = document.createElement('div');
   veil.className = 'veil';

@@ -9,7 +9,10 @@ import { RULES_CLASSES, SEA } from '../src/battle/sea/numbers';
 import { diceRange, lossShares, seaChance, seaLevel, seaRatio, shipWords, sunkCaps } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
 import { plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
-import { SEA_CLASSES, type SeaUnit } from '../src/battle/sea/types';
+import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/battle/sea/types';
+import { foughtOf } from '../src/battle/sea/handoff';
+import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
+import { hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
 
 const HOME: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, cv: 1, ca: 3, dd: 8 } };
 const BATTLE: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3, dd: 12 } };
@@ -83,14 +86,36 @@ describe('the pieces', () => {
     const pieces = (side: 'att' | 'def'): number => units.filter((u) => u.side === side).length;
     expect(pieces('att')).toBeGreaterThan(pieces('def'));
     for (const c of ['bb', 'ca', 'dd'] as const) expect(front('att', c), c).toBeCloseTo(front('def', c), 6);
-    // A side of pieces.frontage weight stands at the natural spacing: 650 m between big ships, 500 m between fours.
+    // Each row is pieces.front metres times its share of its side's weight, its pieces evenly along it (b458): on a side
+    // of 3 battleships, 4 cruisers and 8 destroyers (weight 50) the battleships stand pieces.front x 10/50 apart, the
+    // cruisers pieces.front x 3/50 and the fours of destroyers pieces.front x 4/50, whatever their class.
     const even = drawUp(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } }], def: [BATTLE] }).place.fleets).units
       .filter((u) => u.side === 'att');
-    expect(SEA.pieces.frontage).toBe(50);
-    for (const [c, gap] of [['bb', 650], ['ca', 650], ['dd', 500]] as const) {
+    expect(SEA.pieces.front).toBe(3250);
+    for (const [c, w] of [['bb', 10], ['ca', 3], ['dd', 4]] as const) {
       const xs = even.filter((u) => u.extra.cls === c).map((u) => u.x).sort((a, b) => a - b);
-      expect(xs[1] - xs[0], c).toBeCloseTo(gap, 6);
+      expect(xs[1] - xs[0], c).toBeCloseTo((SEA.pieces.front * w) / 50, 6);
     }
+  });
+
+  it("rows of different classes carrying the same share of their side's weight draw up equally wide (b458)", () => {
+    const width = (units: SeaUnit[], side: 'att' | 'def', c: SeaClass): number => {
+      const xs = units.filter((u) => u.side === side && u.extra.cls === c).map((u) => u.x).sort((a, b) => a - b);
+      return ((xs[xs.length - 1] - xs[0]) * xs.length) / (xs.length - 1); // the row's pieces times their spacing
+    };
+    // A quarter of the side's weight in each class: 3 battleships, 3 carriers with decks worth 10/7 of a carrier's
+    // power, 10 cruisers and 30 destroyers (seven fours and a pair), 30 of weight each. Every row is a quarter of
+    // pieces.front wide, though the rows have 3, 3, 10 and 8 pieces.
+    const quarters = drawUp(plainTicket({ seed: 1, def: [BATTLE],
+      att: [{ name: 'A', nat: 'UK', ships: { bb: 3, ca: 10, dd: 30 } }, { name: 'B', nat: 'UK', ships: { cv: 3 }, deck: 10 / 7 }] }).place.fleets).units;
+    for (const c of SEA_CLASSES) expect(width(quarters, 'att', c), c).toBeCloseTo(SEA.pieces.front / 4, 6);
+    // A light line's cruisers stand on the same front as a battle line's battleships when each carries the same share
+    // of its side: 10 cruisers and 10 destroyers against 3 battleships and 10 destroyers, three quarters in each.
+    const lines = drawUp(plainTicket({ seed: 1, odds: 1,
+      att: [{ name: 'A', nat: 'UK', ships: { ca: 10, dd: 10 } }], def: [{ name: 'C', nat: 'ITA', ships: { bb: 3, dd: 10 } }] }).place.fleets).units;
+    expect(width(lines, 'att', 'ca')).toBeCloseTo(width(lines, 'def', 'bb'), 6);
+    expect(width(lines, 'att', 'ca')).toBeCloseTo((SEA.pieces.front * 3) / 4, 6);
+    expect(width(lines, 'att', 'dd')).toBeCloseTo(width(lines, 'def', 'dd'), 6);
   });
 
   it("each side's hulls come to the same multiple of its weight, so toughness picks who sinks, not who wins", () => {
@@ -491,3 +516,353 @@ describe('what the 3D game and the sound read', () => {
     expect(dd.d).toBe(SEA.classes.dd.len * 10);
   });
 });
+
+// ---- The design director's ruling b458 -------------------------------------------------------------------------------
+
+const ships = (o: Partial<SeaShips>): SeaShips => ({ bb: 0, cv: 0, ca: 0, dd: 0, ...o });
+const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
+/** A battle fought a while, then the enemy (the defender) broken off on its admiral's order: the chase is on. */
+function chase(seed = 11, o: { human?: 'att' | 'def' | null; fight?: number } = {}): SeaSim {
+  const sim = battle(seed, { human: o.human === undefined ? 'att' : o.human });
+  run(sim, o.fight ?? 400);
+  expect(sim.over).toBeNull();
+  expect(sim.command({ do: 'withdrawAll', side: 'def' }, 'def')).toBe(true);
+  expect(sim.brokenSide).toBe('def');
+  return sim;
+}
+const mineAfloat = (sim: SeaSim, side: 'att' | 'def' = 'att'): number[] => sim.units.filter((u) => u.side === side && live(u) && u.state !== 'routing').map((u) => u.id);
+
+describe('b458, 1: stopping the chase ends the action', () => {
+  const orders: [string, (sim: SeaSim) => Parameters<SeaSim['command']>[0]][] = [
+    ['hold (H)', (sim) => ({ do: 'hold', units: mineAfloat(sim) })],
+    ['break off (R)', (sim) => ({ do: 'withdraw', units: mineAfloat(sim) })],
+    ['steer for a point (a right-click on the sea)', (sim) => ({ do: 'move', units: mineAfloat(sim), x: 10000, y: 6000 })],
+    ['form a line (a right-drag on the sea)', (sim) => ({ do: 'line', units: mineAfloat(sim), x0: 8000, y0: 6000, x1: 12000, y1: 6000 })],
+  ];
+  for (const [name, order] of orders) {
+    it(`an order to ${name} lets the beaten enemy go: the action ends at once, the side that broke off beaten`, () => {
+      const sim = chase();
+      run(sim, 6);
+      const t = sim.t, lost = { att: sim.lostShare('att'), def: sim.lostShare('def') };
+      expect(sim.command(order(sim), 'att')).toBe(true);
+      const r = sim.over!;
+      expect(r).not.toBeNull();
+      expect(r.winner).toBe('att');
+      expect(r.how).toBe('withdrew');
+      expect(r.seconds).toBe(t);
+      // The losses as they stand, and booked as any ending is: a win for the side that chased, within the dice.
+      expect(r.lost).toEqual(lost);
+      expect(r.R).toBeGreaterThanOrEqual(1);
+      expect(r.level).toBe(seaLevel(r.R));
+      const f = foughtOf(r);
+      expect(f.R).toBe(r.R);
+      expect(f.toDice).toBeUndefined();
+      expect(r.lines[0]).toBe('UK ships hold the North Sea.');
+      // Nothing more happens: no order is taken and a step does nothing.
+      sim.step();
+      expect(sim.t).toBe(t);
+    });
+  }
+
+  it('WITHDRAW in the chase lets the beaten enemy go as R does: the action ends at once, the side that broke off beaten', () => {
+    const sim = chase();
+    run(sim, 6);
+    const t = sim.t, lost = { att: sim.lostShare('att'), def: sim.lostShare('def') };
+    expect(sim.command({ do: 'withdrawAll', side: 'att' }, 'att')).toBe(true);
+    const r = sim.over!;
+    expect(r.winner).toBe('att');
+    expect(r.how).toBe('withdrew');
+    expect(r.seconds).toBe(t);
+    expect(r.lost).toEqual(lost);
+    expect(r.lines[0]).toBe('UK ships hold the North Sea.');
+    // Before any break it is the fleet breaking off, as it always was; and the side that broke off has nothing to withdraw.
+    const early = battle();
+    run(early, 200);
+    expect(early.command({ do: 'withdrawAll', side: 'att' }, 'att')).toBe(true);
+    expect(early.brokenSide).toBe('att');
+    expect(early.over).toBeNull();
+    expect(early.command({ do: 'withdrawAll', side: 'att' }, 'att')).toBe(false);
+    expect(early.over).toBeNull();
+  });
+
+  it('the same orders before any side has broken off end nothing', () => {
+    const sim = battle();
+    run(sim, 200);
+    for (const [, order] of orders) expect(sim.command(order(sim), 'att')).toBe(true);
+    expect(sim.over).toBeNull();
+    expect(sim.letGo('att')).toBe(false);
+  });
+
+  it('an order to attack the beaten enemy is a pursuit: the chase runs on until its time is up', () => {
+    const sim = chase();
+    const foe = sim.units.find((u) => u.side === 'def' && live(u))!;
+    expect(sim.command({ do: 'attack', units: mineAfloat(sim), target: foe.id }, 'att')).toBe(true);
+    expect(sim.over).toBeNull();
+    run(sim, SEA.side.pursuit - 10);
+    expect(sim.over).toBeNull();
+    runOut(sim);
+    expect(sim.over!.winner).toBe('att');
+    expect(sim.over!.seconds).toBeGreaterThanOrEqual(400 + SEA.side.pursuit - 1);
+  });
+
+  it("a course among or past the beaten fleet runs it down; only a course on the chaser's own sea lets it go", () => {
+    // The review of b458: a right-click on the water just past the fleeing enemy, or one that missed a fleeing hull by a
+    // few pixels, ended the action at once. The ruling's let-go is a right-click on the player's own sea.
+    for (const chaser of ['att', 'def'] as const) {
+      const broke = chaser === 'att' ? 'def' : 'att';
+      const sim = battle(11, { human: chaser });
+      run(sim, 400);
+      expect(sim.command({ do: 'withdrawAll', side: broke }, broke)).toBe(true);
+      run(sim, 6);
+      const mid = (side: 'att' | 'def'): [number, number] => {
+        const us = sim.units.filter((u) => u.side === side && live(u));
+        return [us.reduce((n, u) => n + u.x, 0) / us.length, us.reduce((n, u) => n + u.y, 0) / us.length];
+      };
+      // Points along the line from the chaser's middle through the beaten fleet's: beyond it, just past its nearest
+      // ship (a missed pick), and behind the chaser.
+      const points = (): Record<'past' | 'miss' | 'home', [number, number]> => {
+        const [mx, my] = mid(chaser), [tx, ty] = mid(broke), k = 1 / Math.hypot(tx - mx, ty - my), ux = (tx - mx) * k, uy = (ty - my) * k;
+        const near = sim.units.filter((u) => u.side === broke && live(u)).sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my))[0];
+        return { past: [tx + ux * 1500, ty + uy * 1500], miss: [near.x + ux * 150, near.y + uy * 150], home: [mx - ux * 1500, my - uy * 1500] };
+      };
+      const { past, miss, home } = points();
+      expect(sim.ownSea(chaser, ...past), chaser).toBe(false);
+      expect(sim.ownSea(chaser, ...miss), chaser).toBe(false);
+      expect(sim.ownSea(chaser, ...home), chaser).toBe(true);
+      const mine = (): number[] => mineAfloat(sim, chaser);
+      expect(sim.command({ do: 'move', units: mine(), x: past[0], y: past[1] }, chaser)).toBe(true);
+      expect(sim.over, `${chaser}: a course past the beaten fleet`).toBeNull();
+      expect(sim.command({ do: 'move', units: mine(), x: miss[0], y: miss[1] }, chaser)).toBe(true);
+      expect(sim.over, `${chaser}: a course just past a fleeing ship`).toBeNull();
+      // A line with one end among the beaten fleet runs it down too: every point of it must be the chaser's own sea.
+      expect(sim.command({ do: 'line', units: mine(), x0: home[0], y0: home[1], x1: miss[0], y1: miss[1] }, chaser)).toBe(true);
+      expect(sim.over, `${chaser}: a line reaching among the beaten fleet`).toBeNull();
+      // The chase runs on, the chaser's ships on the course they were given ...
+      run(sim, 20);
+      expect(sim.over).toBeNull();
+      // ... until a course for the chaser's own sea lets the beaten fleet go, there and then.
+      const back = points().home, t = sim.t;
+      expect(sim.command({ do: 'move', units: mine(), x: back[0], y: back[1] }, chaser)).toBe(true);
+      const r = sim.over!;
+      expect(r, `${chaser}: a course for its own sea`).not.toBeNull();
+      expect(r.winner).toBe(chaser);
+      expect(r.how).toBe('withdrew');
+      expect(r.seconds).toBe(t);
+    }
+  });
+
+  it("the side that broke off cannot let anyone go, and the player's own fleet broken changes nothing", () => {
+    const sim = battle(11);
+    run(sim, 400);
+    expect(sim.command({ do: 'withdrawAll', side: 'att' }, 'att')).toBe(true);
+    expect(sim.letGo('att')).toBe(false);
+    // The player's ships are all breaking off: there is no one to order, and the action runs to its end.
+    expect(sim.command({ do: 'hold', units: sim.units.filter((u) => u.side === 'att').map((u) => u.id) }, 'att')).toBe(false);
+    expect(sim.over).toBeNull();
+    runOut(sim);
+    expect(sim.over!.winner).toBe('def');
+  });
+
+  it('after a break no carrier flies a new strike unless the player sent it after the beaten enemy', () => {
+    // The Home Fleet's carrier, its aircraft ready the moment the enemy breaks off.
+    const flown = (o: { human: 'att' | null; pursue: boolean }): number => {
+      const sim = chase(11, { human: o.human });
+      events(sim);
+      const cv = piece(sim, 'att', 'cv');
+      for (const a of cv.abilities!) { a.ready = 0; a.winding = false; }
+      if (o.pursue) {
+        const foe = sim.units.find((u) => u.side === 'def' && live(u))!;
+        expect(sim.command({ do: 'attack', units: mineAfloat(sim), target: foe.id }, 'att')).toBe(true);
+      }
+      let n = 0;
+      for (let i = 0; i < 100 && !sim.over; i++) { sim.step(); n += events(sim).filter((e) => e.what === 'ability' && e.unit === cv.id).length; }
+      return n;
+    };
+    expect(flown({ human: 'att', pursue: false }), "the player's carrier left to itself").toBe(0);
+    expect(flown({ human: null, pursue: false }), "the staff's carrier").toBe(0);
+    expect(flown({ human: 'att', pursue: true }), 'sent after the beaten enemy').toBe(1);
+    // Before any break a ready carrier strikes as it always has.
+    const sim = battle(11);
+    run(sim, 400);
+    const cv = piece(sim, 'att', 'cv');
+    for (const a of cv.abilities!) { a.ready = 0; a.winding = false; }
+    events(sim);
+    run(sim, 2);
+    expect(events(sim).some((e) => e.what === 'ability' && e.unit === cv.id)).toBe(true);
+  });
+});
+
+describe('b458, 1 (review): a chase handed to the staff', () => {
+  it('the staff give the sea to the side that chases, whoever hands it over: the dice set only by how much', () => {
+    // At odds where the dice alone would give the action to the fleet that broke off: the attacker at 0.7 to 1 chasing
+    // a defender that broke off at once, and the defender chasing an attacker at 1.5 to 1 that did.
+    for (const [odds, broke] of [[0.7, 'def'], [1.5, 'att']] as const) for (const by of ['att', 'def'] as const) for (const seed of [3, 11, 29]) {
+      const chaser = broke === 'att' ? 'def' : 'att';
+      const sim = battle(seed, { odds, human: by });
+      run(sim, 30);
+      expect(sim.command({ do: 'withdrawAll', side: broke }, broke)).toBe(true);
+      run(sim, 5);
+      expect(sim.fired()).toBe(false);
+      // The dice's own word at this point, before the rule: the side that broke off.
+      expect(odds * sim.luck >= 1, `odds ${odds} seed ${seed}`).toBe(broke === 'att');
+      // The staff's question says what they will do: they are sure of the chaser's win.
+      expect(sim.handChance()).toBe(chaser === 'att' ? 1 : 0);
+      expect(sim.command({ do: 'dice' }, by)).toBe(true);
+      const r = sim.over!;
+      expect(r.winner, `odds ${odds} handed by ${by} seed ${seed}`).toBe(chaser);
+      expect(r.R >= 1).toBe(chaser === 'att');
+      expect(r.level).toBe(seaLevel(r.R));
+      expect(r.how).toBe('time');
+      expect((r.extra as unknown as SeaLosses).toDice).toBe(true);
+      expect(r.lines[0]).toBe(`${sim.ticket[chaser].adj} ships hold the North Sea.`);
+      expect(foughtOf(r).R).toBe(r.R);
+    }
+  });
+
+  it('before any side has broken off the staff settle it as they always have', () => {
+    for (const seed of [3, 11, 29]) {
+      const sim = battle(seed, { odds: 1 });
+      run(sim, 30);
+      expect(sim.handChance()).toBeGreaterThan(0);
+      expect(sim.handChance()).toBeLessThan(1);
+      expect(sim.command({ do: 'dice' }, 'att')).toBe(true);
+      expect(sim.over!.R).toBeCloseTo(sim.luck, 9);
+      expect(sim.over!.winner).toBe(sim.luck >= 1 ? 'att' : 'def');
+    }
+  });
+});
+
+describe('b458, 2a: a strike or a raid in the air does not end the fast approach', () => {
+  it('quiet holds while strikes fly and raids come in, and ends the moment the guns meet, for good', () => {
+    const sim = new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], air: { def: 15 }, seed: 11, human: 'att' }));
+    let flown = 0, landed = 0, raids = 0, met = false;
+    while (!sim.over) {
+      sim.step();
+      for (const e of events(sim)) {
+        if (sim.contactTime !== null) continue;
+        if (e.what === 'ability') flown++;
+        if (e.what === 'sea:strike') landed++;
+        if (e.what === 'sea:air') raids++;
+      }
+      if (sim.contactTime !== null) met = true;
+      expect(sim.quiet, `t ${sim.t}`).toBe(!met);
+    }
+    // Before the guns met, a strike had flown and landed and the coast's aircraft had raided: quiet held through them.
+    expect(met).toBe(true);
+    expect(flown).toBeGreaterThan(0);
+    expect(landed).toBeGreaterThan(0);
+    expect(raids).toBeGreaterThan(0);
+  });
+
+  it('a side breaking off before the guns meet ends it too: what follows is the chase, not the approach', () => {
+    const sim = battle(11);
+    run(sim, 20);
+    expect(sim.contactTime).toBeNull();
+    expect(sim.quiet).toBe(true);
+    expect(sim.command({ do: 'withdrawAll', side: 'att' }, 'att')).toBe(true);
+    expect(sim.quiet).toBe(false);
+    run(sim, 5);
+    expect(sim.quiet).toBe(false);
+  });
+});
+
+describe('b458, 3: the ships each side took home badly hurt', () => {
+  it('a ship afloat at half its hull or less is badly hurt; in a piece of several, the one the wear has reached', () => {
+    expect(hurtAfloat(0.5, 1, 1)).toBe(1);
+    expect(hurtAfloat(0.06, 1, 1)).toBe(1);
+    expect(hurtAfloat(0.51, 1, 1)).toBe(0);
+    expect(hurtAfloat(1, 1, 1)).toBe(0);
+    expect(hurtAfloat(0.6, 4, 3)).toBe(1); // 2.4 hulls: two whole ships and one at 40%
+    expect(hurtAfloat(0.7, 4, 3)).toBe(0); // 2.8 hulls: the third at 80%
+    expect(hurtAfloat(0.1, 4, 1)).toBe(1);
+    expect(hurtAfloat(0, 4, 0)).toBe(0);
+  });
+
+  it("the after card names them by kind, in the repair line's form, yours first", () => {
+    const none = ships({});
+    expect(repairLines({ att: none, def: ships({ bb: 1, ca: 1 }) }, 'att', 'Italian')).toEqual(['2 Italian ships came home for repair: 1 battleship and 1 cruiser.']);
+    expect(repairLines({ att: none, def: ships({ ca: 1 }) }, 'att', 'Italian')).toEqual(['1 Italian cruiser came home for repair.']);
+    expect(repairLines({ att: ships({ dd: 2 }), def: none }, 'att', 'German')).toEqual(['2 of your destroyers came home for repair.']);
+    expect(repairLines({ att: ships({ dd: 1 }), def: ships({ dd: 3 }) }, 'att', 'German')).toEqual(['1 of your destroyers came home for repair.', '3 German destroyers came home for repair.']);
+    expect(repairLines({ att: ships({ bb: 1 }), def: ships({ ca: 1, dd: 2 }) }, 'def', 'British')).toEqual(['3 of your ships came home for repair: 1 cruiser and 2 destroyers.', '1 British battleship came home for repair.']);
+    expect(repairLines({ att: none, def: none }, 'att', 'Italian')).toEqual([]);
+  });
+
+  it('every action books each fleet\'s badly hurt ships: those burning, and those afloat at half their hull or less', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const sim = battle(seed, { human: null, odds: seed % 2 ? 0.9 : 1.3 });
+      runOut(sim);
+      const x = sim.over!.extra as unknown as SeaLosses;
+      for (const f of sim.ticket.place.fleets) {
+        const want = ships({ ...x.burnt[f.id] });
+        for (const u of sim.units) if (u.corps === f.id && u.state !== 'gone' && u.extra.ships > 0 && u.str * u.extra.ships0 - (u.extra.ships - 1) <= 0.5 + 1e-9) want[u.extra.cls as 'bb']++;
+        expect(x.hurt[f.id], `seed ${seed} fleet ${f.name}`).toEqual(want);
+      }
+    }
+  });
+
+  it('Light ships against battleships: a close victory over a beaten fleet names the ships it took home hurt', () => {
+    // The playtester's case: the Italians broke off with a cruiser and a battleship badly hurt, and the card said only
+    // what sank. Played as the staff plays it until a close victory over a fleet that took a ship home hurt.
+    const p = PRACTICE.find((x) => x.name === 'Light ships against battleships')!;
+    for (let seed = 1; seed <= 60; seed++) {
+      const sim = new SeaSim(practiceTicket(p, seed, null));
+      runOut(sim);
+      const r = sim.over!, x = r.extra as unknown as SeaLosses;
+      if (r.winner !== 'att' || r.level !== 'Close victory') continue;
+      const hurt = { att: ships({}), def: ships({}) };
+      for (const f of sim.ticket.place.fleets) for (const c of SEA_CLASSES) hurt[f.side][c] += x.hurt[f.id][c];
+      const theirs = sim.units.filter((u) => u.side === 'def' && u.state !== 'gone' && u.extra.ships > 0 && u.str <= 0.5 && u.extra.ships0 === 1);
+      if (!theirs.length) continue;
+      const lines = repairLines(hurt, 'att', 'Italian');
+      const line = lines.find((l) => l.includes('Italian'))!;
+      expect(line, lines.join(' | ')).toMatch(/came home for repair/);
+      for (const u of theirs) expect(line).toContain(u.extra.cls === 'bb' ? 'battleship' : u.extra.cls === 'ca' ? 'cruiser' : 'destroyer');
+      return;
+    }
+    throw new Error('no close victory with an Italian ship afloat at half its hull in 60 seeds');
+  });
+});
+
+describe('b458, 5: a practice field is headed by its card', () => {
+  it("each practice action's ticket is titled by the card's name and dated Practice; a sea's own action keeps its sea", () => {
+    for (const p of PRACTICE) {
+      const t = practiceTicket(p, 7);
+      expect(t.title).toBe(p.name);
+      expect(t.date).toBe('Practice');
+      expect(t.place.zoneName).toBe(p.sea);
+      expect(t.att.human).toBe(true);
+      // The same fleets and odds as the chooser's card reckons them.
+      expect(t.reckoning.odds).toBeCloseTo(plainTicket({ att: p.att, def: p.def, air: p.air, seed: 1 }).reckoning.odds, 12);
+    }
+    expect(PRACTICE[0].name).toBe('Two battle lines');
+    expect(plainTicket({ att: [HOME], def: [BATTLE], seed: 1, zoneName: 'Ionian Sea' }).title).toBe('The action in the Ionian Sea');
+  });
+});
+
+describe('b458, 6: a fleet in a sentence', () => {
+  it('a fleet whose name ends in "Fleet" takes "the"; any other stands bare', () => {
+    expect(theFleet('Home Fleet')).toBe('the Home Fleet');
+    expect(theFleet('1st Fleet')).toBe('the 1st Fleet');
+    expect(theFleet('Mediterranean Fleet')).toBe('the Mediterranean Fleet');
+    expect(theFleet('Force H')).toBe('Force H');
+    expect(theFleet('Striking Force')).toBe('Striking Force');
+    expect(ofFleet('Force H')).toBe('of Force H');
+    expect(ofFleet('Battle Fleet')).toBe('of the Battle Fleet');
+  });
+
+  it('every dispatch names Force H bare and the 1st Fleet with "the", and never a flotilla or a squadron', () => {
+    const p = PRACTICE.find((x) => x.name === 'Light ships against battleships')!;
+    const said: string[] = [];
+    for (const seed of [1, 2, 3]) {
+      const sim = new SeaSim(practiceTicket(p, seed, null));
+      while (!sim.over) { sim.step(); for (const e of sim.view().events) if (e.text) said.push(e.text); }
+    }
+    const all = said.join('\n');
+    expect(all).not.toMatch(/the Force H/);
+    expect(all).toMatch(/of Force H/);
+    expect(all).toMatch(/of the 1st Fleet/);
+    expect(all).not.toMatch(/flotilla|squadron/i);
+  });
+});
+
