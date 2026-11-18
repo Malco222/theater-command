@@ -10,7 +10,7 @@ import setup from '../../data/campaign/setup-1939.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
+import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
@@ -2803,6 +2803,19 @@ export function holdCallUp(g: Game, nat: string, hold: boolean): boolean {
   return true;
 }
 
+/**
+ * The share of its home industry a nation still holds, as the standing call-up reckons it (the grand campaign): 1 with
+ * every home factory in hand, 0 with none, or for a nation that never had one. Home ground on the far side of the
+ * world counts at its share here as it does for money and for lines (ruling b475, economy.ts farShare): the Soviet
+ * Union's works beyond the old chart are never lost, and counted whole they held a wave at 0.81 to 0.84 of its size
+ * where the old chart's reckoning cut it to 0.61 to 0.68.
+ */
+export function industryHeld(g: Game, nat: string): number {
+  let own = 0, held = 0;
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) { const f = r.fac * farShare(r); own += f; if (r.ctrl === nat) held += f; }
+  return own > 0 ? held / own : 0;
+}
+
 /** A nation with a mobilisation plan raises a wave of new corps every month once it is at war. */
 function mobilise(g: Game, nat: string): void {
   const plan = EASTERN.mobilisation[nat];
@@ -2817,11 +2830,7 @@ function mobilise(g: Game, nat: string): void {
   if (held) g.flags[`mphn:${nat}`] = waited + 1;
   // The grand campaign: once the first waves are in, the standing call-up is only as large as the industry the
   // nation still holds can arm. A country that has lost half its factories raises half the corps.
-  if (g.flags.open === 1 && wave >= plan.perMonth.length) {
-    let own = 0, held = 0;
-    for (const r of g.regions) if (r.owner === nat && !r.overseas) { own += r.fac; if (r.ctrl === nat) held += r.fac; }
-    count = own > 0 ? Math.round(count * Math.pow(held / own, OPEN_CALLUP)) : 0;
-  }
+  if (g.flags.open === 1 && wave >= plan.perMonth.length) count = Math.round(count * Math.pow(industryHeld(g, nat), OPEN_CALLUP));
   // The grand campaign: every corps of the call-up is filled from the reserve of men, and when that is spent the waves stop.
   // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
   if (g.flags.open === 1) count = Math.min(count, wave < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));

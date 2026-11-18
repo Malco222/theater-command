@@ -23,7 +23,7 @@ import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, far
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
 import { NAVY } from '../src/campaign/navy';
@@ -751,5 +751,21 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(urals()).toBeCloseTo(lost.fac * move, 9);
     works.ctrl = 'GER';
     expect(urals()).toBeCloseTo((lost.fac + works.fac * F) * move, 9);
+  });
+
+  it("reckons the Soviet call-up by the industry she holds with her far side at the share (ruling b475)", () => {
+    const g = grand();
+    const F = BUDGET.farHome.SOV;
+    expect(industryHeld(g, 'SOV')).toBe(1);
+    // Germany takes about twenty of the old chart's fifty-seven factories; the fifty-seven beyond it are never lost.
+    let lost = 0;
+    for (const r of g.regions) if (lost < 20 && r.owner === 'SOV' && shoreOf(r) === 0 && r.fac > 0 && !r.cap) { r.ctrl = 'GER'; lost += r.fac; }
+    expect(lost).toBeGreaterThanOrEqual(20);
+    expect(industryHeld(g, 'SOV')).toBeCloseTo((57 - lost + 57 * F) / (57 + 57 * F), 9);
+    // Counted whole, the far side held a wave near its full size; at the share it reads much as the old chart did.
+    expect(industryHeld(g, 'SOV')).toBeLessThan((114 - lost) / 114 - 0.1);
+    expect(industryHeld(g, 'SOV') - (57 - lost) / 57).toBeLessThan(0.05);
+    // A country with no home ground out there reads as it always did.
+    expect(industryHeld(g, 'GER')).toBe(1);
   });
 });
