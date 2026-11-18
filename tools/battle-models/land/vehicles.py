@@ -8,6 +8,7 @@ import tanks_fra
 import tanks_ger
 import tanks_ita
 import tanks_jap
+import tanks_pol
 import tanks_sov
 import tanks_uk
 import tanks_usa
@@ -23,6 +24,7 @@ BUILDERS = {
     "CharB1": tanks_fra.char_b1,
     "M13": tanks_ita.m13,
     "Type97": tanks_jap.type97,
+    "7TP": tanks_pol.tp7,
     "LightTank": tanks_any.light_tank,
     "MediumTank": tanks_any.medium_tank,
 }
@@ -38,6 +40,7 @@ ABOUT = {
     "CharB1": {"nation": "FRA", "role": "heavy tank", "years": "1936-40", "units": "armor (France, Vichy France, Free France)"},
     "M13": {"nation": "ITA", "role": "medium tank", "years": "1940-43", "units": "armor (Italy)"},
     "Type97": {"nation": "JAP", "role": "medium tank", "years": "1938-45", "units": "armor (Japan)"},
+    "7TP": {"nation": "POL", "role": "light tank", "years": "1937-39", "units": "armor (Poland)"},
     "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
     "MediumTank": {"nation": "any", "role": "medium tank", "years": "1940-45", "units": "armor (every nation without a tank of its own, once it has researched medium tanks)"},
 }
