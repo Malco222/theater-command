@@ -213,6 +213,7 @@ ACampaignMapActor::ACampaignMapActor()
 
 bool ACampaignMapActor::BuildMap()
 {
+	TheaterSpeed::ApplyCommandLineSets(); // ("-TheaterSet=": before anything of the table reads a switch)
 	const double StartTime = FPlatformTime::Seconds();
 
 	FString Error;
@@ -14342,8 +14343,12 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	}
 
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
-	UpdateLand(HomeLand, CameraDistance, CameraFocus, false);
-	UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
+	// (Speed: tc.Speed.TileTime. Whether tiles of these two are still to come is kept for the photographer and the
+	// step player, which waited for the fine sheets by AreFineSheetsComing but for these only by the clock: with the
+	// frame's time for tiles limited, fewer could be up at the shot than before. The pre-checker's note on 0108ac6.)
+	const bool bHomeComing = UpdateLand(HomeLand, CameraDistance, CameraFocus, false);
+	const bool bWorldComing = UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
+	bLandTilesComing = bHomeComing || bWorldComing;
 	UpdateFineSheets(CameraDistance, CameraFocus);
 
 	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.

@@ -12,6 +12,7 @@
 #include "SceneView.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformMemory.h"
 #include "Misc/ScopeRWLock.h" // (FRWLock)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -559,11 +560,13 @@ namespace TheaterSpeed
 		}
 	}
 
-	void NoteFrame(float DeltaSeconds, UWorld* World)
+	void ApplyCommandLineSets()
 	{
 		// ("-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1": console variables set from the command line, once,
 		// for a run of the step player with one of the switches the other way. -TheaterTime tries settings against
-		// each other with the eye held in one place, which never takes a fine sheet down or brings new ground up.)
+		// each other with the eye held in one place, which never takes a fine sheet down or brings new ground up.
+		// Done as the table begins to be laid (ACampaignMapActor::BuildMap), so that a switch read only in the laying
+		// is set in time: the pre-checker's note on 0108ac6, where it was done at the first frame, after the laying.)
 		static bool bSetAsked = false;
 		if (!bSetAsked)
 		{
@@ -594,6 +597,11 @@ namespace TheaterSpeed
 				}
 			}
 		}
+	}
+
+	void NoteFrame(float DeltaSeconds, UWorld* World)
+	{
+		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
 		// (a change of tc.Speed.StillMeshes is seen at once: every still mesh's proxy is made again, of the kind now asked for)
 		{
 			static int32 StillWas = -1;
@@ -772,8 +780,9 @@ namespace TheaterSpeed
 			// (What was made in those five seconds; how the fine sheets stand; and how the long frames fell: in the frames
 			// while new ground was being modelled, or in the others. A line of its own, as the RHI thread's is.)
 			const FString Made = MadeLine(MadeWindow);
-			UE_LOG(LogTheater, Display, TEXT("Speed: made: %s; fine sheets now: %d standing, %d on the shelf, %d being modelled; new ground was being modelled in %d of the %d frames, and %d of the %d over 33 ms not beside the step player's look fell in those"),
-				Made.IsEmpty() ? TEXT("nothing") : *Made, SheetsStanding, SheetsShelved, SheetsModelling, WindowModelling, WindowFrames, WindowSlowModelling, WindowSlow - WindowSlowBeside);
+			UE_LOG(LogTheater, Display, TEXT("Speed: made: %s; fine sheets now: %d standing, %d on the shelf, %d being modelled; new ground was being modelled in %d of the %d frames, and %d of the %d over 33 ms not beside the step player's look fell in those; the game holds %.0f MB of memory"),
+				Made.IsEmpty() ? TEXT("nothing") : *Made, SheetsStanding, SheetsShelved, SheetsModelling, WindowModelling, WindowFrames, WindowSlowModelling, WindowSlow - WindowSlowBeside,
+				static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0));
 		}
 		FString Rules;
 		for (const TPair<FString, FRulesTally>& Tally : RulesTallies())

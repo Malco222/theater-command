@@ -110,7 +110,7 @@ public:
 	 * clearing on it. (A picture of the world waits for it, and for the haze beyond the map while it is being laid
 	 * on another thread, tc.Speed.FogAside.)
 	 */
-	bool AreFineSheetsComing() const { return bFineSheetsComing || FogAsideBuilding.IsValid(); }
+	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
@@ -560,6 +560,7 @@ private:
 	TArray<TObjectPtr<UObject>> FineKeep;
 	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
 	bool bFineSheetsComing = false; // the view wants fine ground that does not stand yet
+	bool bLandTilesComing = false; // (speed: tc.Speed.TileTime) ...or tiles of the map's own ground or the world's coarse sheet that are not stood up yet
 	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);

@@ -20,7 +20,8 @@ class APlayerController;
  * (18 November 2026.) A long frame is followed by "made in that frame": the tiles of ground stood up, the still models
  * handed to the draw thread and their points, the pieces whose shadow was switched, and how many fine sheets were being
  * modelled on other threads just then. Every five seconds "made:" has their sum, how the fine sheets stand (standing,
- * on the shelf, being modelled), and how many of the long frames fell while new ground was being modelled. Each fine
+ * on the shelf, being modelled), how many of the long frames fell while new ground was being modelled, and how much
+ * memory the game holds. Each fine
  * sheet says how long its modelling took. Two more jobs are timed: EngineClearOut (the engine's own clearing out of
  * what is no longer used, about once a minute) and StillModelHandOver (the still models made ready for the draw thread
  * at the frame's end).
@@ -82,6 +83,9 @@ class APlayerController;
  *                         unwanted dropped first. Wanted again, its tiles are stood up from the shelf in a few frames:
  *                         it is not modelled again (some seconds on every spare core, in the builder's logs of build
  *                         1634). The same picture either way. 0: dropped whole and modelled again, as before.
+ *                         (A sheet kept is 60 to 80 MB by the pre-checker's count of its arrays: about half a GB
+ *                         for a full shelf, which used to be given back. The log's "made:" line says what the game
+ *                         holds.)
  *   tc.Speed.TileTime     4 (default): the tiles of ground stood up in one frame, over every sheet together, are stopped
  *                         for that frame once they have taken this many ms (one is always stood up; never more than
  *                         five a sheet, as before). The rest come the next frame; the tiles they replace stay until
@@ -104,6 +108,9 @@ namespace TheaterSpeed
 {
 	/** True while the speed log is being written (read once a frame, on the game thread). */
 	bool IsLogging();
+
+	/** ("-TheaterSet=name=value,...") Sets the console variables the command line names, once: as the table begins to be laid. */
+	void ApplyCommandLineSets();
 
 	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
 	void NoteFrame(float DeltaSeconds, UWorld* World);
