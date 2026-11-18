@@ -13499,13 +13499,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// ("-TheaterBlastSlow=8" plays the barrage at an eighth of its pace, so that stills four seconds apart show it
 		// half a second apart. "-TheaterBlastOff=40,90" lays it so that the shot the kit places 40 metres north and
 		// 90 east of its middle falls where the eye looks: the bomb. Both are for the test frames.)
-		static double BlastSlow = 1.0;
+		// ("-TheaterBlastHold=4.033" stops the barrage's clock that many of its own seconds after it is laid: the shell
+		// that lands at 4.0 is then held at its second frame for a still. With the slow pace the clock comes to the
+		// moment in steps of two thousandths of a second.)
+		static double BlastSlow = 1.0, BlastHold = -1.0, BlastLaidAt = 0.0;
 		static FVector BlastOff = FVector::ZeroVector;
 		static bool bBlastAsked = false;
 		if (!bBlastAsked)
 		{
 			bBlastAsked = true;
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastSlow="), BlastSlow);
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastHold="), BlastHold);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -13513,14 +13517,19 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				BlastOff = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0);
 			}
 		}
-		const double BlastNow = Now / FMath::Max(BlastSlow, 0.01);
+		double BlastNow = Now / FMath::Max(BlastSlow, 0.01);
 		if (FVector::DistSquared2D(BlastTestAt, CameraFocus) > FMath::Square(30.0 * UnitScale))
 		{
 			BlastTestAt = CameraFocus;
+			BlastLaidAt = BlastNow;
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
 			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
+		}
+		if (BlastHold >= 0.0)
+		{
+			BlastNow = FMath::Min(BlastNow, BlastLaidAt + BlastHold);
 		}
 		Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
 	}
@@ -14697,10 +14706,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const FVector Athwart = FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up));
 				bDrawingLight = true;
 				// (Measured in the first picture of it, through its own smoke: 212, 119, 77 at its brightest, a dull
-				// orange on the way to peach. A bright ink is paled by the screen; these are laid deeper and redder.)
-				DrawSmear(FlashAt + Lean * (0.05 * W), Lean, 0.15 * W, 0.1 * W, FLinearColor(FColor(178, 30, 6)), 0.9f * Lit0, 0.6);
-				DrawSmear(FlashAt - Lean * (0.06 * W) + Athwart * (0.04 * W), Athwart, 0.1 * W, 0.075 * W, FLinearColor(FColor(204, 46, 8)), 0.95f * Lit0, 0.6);
-				Draw(FlashAt - Athwart * (0.03 * W), 0.05 * W, FLinearColor(FColor(226, 74, 12)), 0.95f * Lit0);
+				// orange on the way to peach. Laid deeper and redder it measured 163, 67, 47, and the art director
+				// ruled it too red, a red stain. Her colours, as they are to be seen: a yellow-orange heart of about
+				// 225, 150, 60, an orange body of about 205, 110, 45, and red-brown only at the torn edge, about
+				// 180, 75, 35. Each is laid a little cleaner than it is to be seen, for the smoke that veils it.)
+				const FLinearColor FlashEdge(FColor(185, 62, 22)), FlashBody(FColor(212, 104, 30)), FlashHeart(FColor(236, 152, 44));
+				DrawSmear(FlashAt + Lean * (0.04 * W), Lean, 0.16 * W, 0.11 * W, FlashEdge, 0.9f * Lit0, 0.6);
+				DrawSmear(FlashAt + Lean * (0.02 * W), Lean, 0.115 * W, 0.08 * W, FlashBody, 0.92f * Lit0, 0.65);
+				DrawSmear(FlashAt - Lean * (0.07 * W) + Athwart * (0.04 * W), Athwart, 0.07 * W, 0.055 * W, FlashBody, 0.9f * Lit0, 0.6);
+				Draw(FlashAt - Athwart * (0.02 * W), 0.05 * W, FlashHeart, 0.95f * Lit0);
 				bDrawingLight = false;
 			}
 		}
