@@ -84,31 +84,6 @@ class CarWorks(CarrierWorks):
                     self.rod(ends[0], ends[1], r, "steel", 4, caps=False)
                 k += 1
 
-    def car_clips(self, burst=0, every=0.13, burst_cue="flak_light_fire", **kw):
-        """A tank's clips for a car on wheels. Her front wheels flop over when she is knocked out, the game steers
-        them, and with `burst` her gun is an automatic one: `fire` is that many rounds, `every` seconds apart."""
-        self.tank_clips(**kw)
-        m = self.m
-        m.clips["start"]["events"][0]["cue"] = None                 # (a lorry's engine, not a tank's)
-        steers = [p for p in ("steer_l", "steer_r") if p in m.part_at]
-        for p in steers:
-            m.clips["knocked_out"]["tracks"].append({"part": p, "turn": [[0.0, 0.0], [0.2, 0.0], [0.75, 15.0], [0.9, 13.0], [1.05, 14.0], [3.0, 14.0]]})
-        if burst:
-            recoil = kw.get("recoil", 0.05)
-            keys, events = [[0.0, 0.0]], []
-            for i in range(burst):
-                t = i * every
-                keys += [[round(t + 0.02, 3), recoil], [round(t + every * 0.8, 3), 0.0]]
-                events.append({"t": round(t, 3), "fx": "muzzle_flash", "socket": "muzzle", "cue": burst_cue if i == 0 else None})
-            long = round(burst * every + 0.6, 2)
-            keys.append([long, 0.0])
-            m.clips["fire"] = {"long": long, "loop": False, "after": "hold", "about": f"a burst from her automatic gun: {burst} rounds, the barrel jumping to each",
-                               "tracks": [{"part": "barrel", "slide": keys}], "events": events}
-        ctl = m.info["file"]["controls"]
-        if steers:
-            ctl["steer"] = {"parts": steers, "what": "the game steers the front wheels inside their lock: + to the right", "limits": m.parts[m.part_at[steers[0]]].limits}
-        return self
-
 
 def sdkfz222(fine=True, tag="GER", paint=None):
     """The light armoured car (Sd.Kfz. 222): 4.8 m long, 1.95 m wide, 2.0 m to the ridge of her screens. Three men: a

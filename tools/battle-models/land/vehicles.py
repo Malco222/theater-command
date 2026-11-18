@@ -5,6 +5,7 @@ field and which of the game's units wear it (the unit table's names, generic-uni
 """
 import armoured_cars
 import carriers
+import flak
 import guns
 import guns_at
 import tank_destroyers
@@ -48,6 +49,9 @@ BUILDERS = {
     "SdKfz222": armoured_cars.sdkfz222,
     "M8": armoured_cars.m8,
     "ArmouredCar": armoured_cars.armoured_car,
+    "M16": flak.m16,
+    "FlakHalftrack": flak.flak_halftrack,
+    "FlakTruck": flak.flak_truck,
 }
 
 ABOUT = {
@@ -80,6 +84,9 @@ ABOUT = {
     "SdKfz222": {"nation": "GER", "role": "armoured car", "years": "1938-45", "units": "scouts ahead of Germany's armor and motorized infantry"},
     "M8": {"nation": "USA", "role": "armoured car", "years": "1943-45", "units": "scouts ahead of the United States' armor (the Free French were lent her too)"},
     "ArmouredCar": {"nation": "any", "role": "armoured car", "years": "1936-45", "units": "scouts ahead of every other army's armor and cavalry"},
+    "M16": {"nation": "USA", "role": "anti-aircraft half-track", "years": "1943-45", "units": "the light flak that rolls with the United States' columns"},
+    "FlakHalftrack": {"nation": "GER", "role": "anti-aircraft half-track", "years": "1940-45", "units": "the light flak that rolls with Germany's armor"},
+    "FlakTruck": {"nation": "any", "role": "anti-aircraft lorry", "years": "1936-45", "units": "the light flak that rolls with every other army's columns"},
 }
 
 
@@ -96,6 +103,7 @@ FACES = {
     "StuG3": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Pak40": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "SdKfz222": [("1938 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "FlakHalftrack": [("1940 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Truck": [("Under her tilt", {}), ("The tilt stowed: her benches", {"tilt": False})],
 }
 

@@ -100,6 +100,34 @@ class CarrierWorks(GunWorks):
         self.extrude(outer + inner, min(y0, y1), max(y0, y1), paint, 0.004)
 
     # ---- what a carrier does ---------------------------------------------------------------------------------
+    def car_clips(self, burst=0, every=0.13, burst_cue="flak_light_fire", muzzles=("muzzle",), **kw):
+        """A tank's clips for a thing on a carrier's wheels (an armoured car, a flak wagon). Her front wheels flop
+        over when she is knocked out, the game steers them, and with `burst` her gun is an automatic one: `fire` is
+        that many rounds, `every` seconds apart, a flash at each of `muzzles` to every round."""
+        self.tank_clips(**kw)
+        m = self.m
+        m.clips["start"]["events"][0]["cue"] = None                 # (a lorry's engine, not a tank's)
+        steers = [p for p in ("steer_l", "steer_r") if p in m.part_at]
+        for p in steers:
+            m.clips["knocked_out"]["tracks"].append({"part": p, "turn": [[0.0, 0.0], [0.2, 0.0], [0.75, 15.0], [0.9, 13.0], [1.05, 14.0], [3.0, 14.0]]})
+        if burst:
+            recoil = kw.get("recoil", 0.05)
+            keys, events = [[0.0, 0.0]], []
+            for i in range(burst):
+                t = i * every
+                keys += [[round(t + 0.02, 3), recoil], [round(t + every * 0.8, 3), 0.0]]
+                for k, mz in enumerate(muzzles):
+                    events.append({"t": round(t, 3), "fx": "muzzle_flash", "socket": mz, "cue": burst_cue if i == 0 and k == 0 else None})
+            long = round(burst * every + 0.6, 2)
+            keys.append([long, 0.0])
+            guns = "guns" if len(muzzles) > 1 else "gun"
+            m.clips["fire"] = {"long": long, "loop": False, "after": "hold", "about": f"a burst from her automatic {guns}: {burst} rounds, the barrel jumping to each",
+                               "tracks": [{"part": "barrel", "slide": keys}], "events": events}
+        ctl = m.info["file"]["controls"]
+        if steers:
+            ctl["steer"] = {"parts": steers, "what": "the game steers the front wheels inside their lock: + to the right", "limits": m.parts[m.part_at[steers[0]]].limits}
+        return self
+
     def carrier_clips(self, idle_cue, drive_cue, dismount=(), mg=None, soft=1.0):
         """The clips a lorry or a half-track has. dismount: (part, degrees, when) for each board or door that is
         thrown open for the men to get down; mg: the socket her machine gun fires from; soft: how soft her springs
@@ -567,7 +595,8 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
     for s in (LEFT, RIGHT):
         v.lathe((xr2 - 0.17, s * 0.9, zg - 0.12), -X, [(0.025, 0.0), (0.025, 0.035), (0.0, 0.04), (0.0, 0.0)], "red", 10)
         v.jerrycan((-2.05, s * (yk - 0.03), zg + 0.004), 90.0)
-    v.roll((xr2 + 0.1, -0.5, zt + 0.07), (xr2 + 0.1, 0.5, zt + 0.07), r=0.075, paint="canvas", straps=3)                      # her tarpaulin, rolled across the stern
+    if troops:                                             # (a gun's barrel sweeps over the stern of a flak wagon)
+        v.roll((xr2 + 0.1, -0.5, zt + 0.07), (xr2 + 0.1, 0.5, zt + 0.07), r=0.075, paint="canvas", straps=3)                  # her tarpaulin, rolled across the stern
 
     # ---- the machine gun behind its shield, over the cab roof's after edge ---------------------------------------
     if troops:
@@ -582,7 +611,7 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
         v.socket("mg", (gx + 0.66, 0.0, gz + 0.25), X, part="mg_mount", note="the machine gun's muzzle")
         v.socket("gunner", (gx - 0.55, 0.0, 0.74), X, part="hull", note="the gunner stands here, behind the shield")
     v.use("hull")
-    v.aerial("aerial", "hull", (x_roof1 + 0.2, -(yt - 0.03), zt), 2.0)
+    v.aerial("aerial", "hull", (x_roof1 + 0.2, -(yt - 0.03), zt) if troops else (x_roof0 - 0.16, -(yt - 0.05), zt), 2.0)      # (a flak wagon's stands clear of her gun)
     v.use("hull")
 
     # ---- sockets ---------------------------------------------------------------------------------------------------
@@ -756,7 +785,8 @@ def m3_halftrack(fine=True, tag="USA", fit="troops", name="M3Halftrack", title="
         v.socket("gunner", (px - 0.5, 0.0, zs), X, part="hull", note="the gunner stands here")
     v.aerial("aerial", "hull", (0.05, -(hw - 0.08), ztop), 2.2)
     v.use("hull")
-    v.roll((bx0 + 0.12, -0.7, ztop + 0.07), (bx0 + 0.12, 0.7, ztop + 0.07), r=0.075, paint="canvas", straps=3)
+    if troops:
+        v.roll((bx0 + 0.12, -0.7, ztop + 0.07), (bx0 + 0.12, 0.7, ztop + 0.07), r=0.075, paint="canvas", straps=3)
     v.silencer((0.2, 0.6, 0.6), (-0.5, 0.6, 0.6), 0.07, bands=2, pipe=[(1.3, 0.5, 0.78), (0.7, 0.6, 0.64), (0.2, 0.6, 0.6)], tail=((-0.5, 0.6, 0.6), (-0.5, 0.85, -0.1)))
     v.socket("exhaust.1", (-0.6, 0.74, 0.56), (-0.5, 0.85, -0.1))
     v.hook((bx0 - 0.02, 0.0, 0.74), -X, 0.09)
