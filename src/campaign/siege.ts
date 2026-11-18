@@ -35,7 +35,7 @@ export const SIEGE = data as unknown as {
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
-  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>> };
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number } };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */
@@ -86,6 +86,21 @@ export function besiegerOf(g: Game, r: Region): string | null {
 
 /** How many corps the town can hold. */
 export const roomIn = (g: Game, r: Region): number => SIEGE.room[townSize(g, r)] + (r.fort ? SIEGE.fortRoom : 0);
+
+// Ruling 139: a staff holds its great cities. (A run outside the browser can turn it off by TC_GREAT=0, read as the modules load.)
+const GG = globalThis as { TC_GREAT?: unknown; process?: { env?: Record<string, string | undefined> } };
+const forcedGreat = GG.TC_GREAT ?? GG.process?.env?.TC_GREAT;
+export const GREAT = { on: forcedGreat !== undefined ? !!forcedGreat && forcedGreat !== '0' : !!SIEGE.ai.great };
+
+/**
+ * A great city (ruling 139): a capital, or a city whose works stand at the level named in siege.json (ai.great.works)
+ * or higher. Its staff fills it before it leaves a corps in the field, and goes to its relief at the capital's odds.
+ */
+export function greatCity(g: Game, r: Region): boolean {
+  if (!GREAT.on || !SIEGE.ai.great || !siegeRules(g)) return false;
+  const size = townSize(g, r);
+  return size === 'capital' || (size === 'city' && !!r.fort && r.fort.lv >= SIEGE.ai.great.works);
+}
 
 /** The share of the town's works that bombardment has broken down, 0 to 1. */
 export const breachOf = (g: Game, r: Region): number => clamp((g.flags[`breach:${r.id}`] ?? 0) / 100, 0, 1);
