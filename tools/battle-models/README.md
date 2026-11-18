@@ -530,6 +530,9 @@ stands so that the glare falls in the gap the camera never visits (`SUN`), and a
   `torpedo_run_loop`,
   `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
   `ramp_drop`, `ramp_winch`.
+- Two exports of the same code write ten aircraft (those with gunners: the heavy and medium bombers, the Stuka, the
+  Val, the Avenger) with the same points in another order over part of the mesh. Each file is whole and right in
+  itself; do not match one file's points to another's by their numbers. The cause is not found yet.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
 - Aircraft that fly have no undercarriage that lowers (the machines of a deck range stand on fixed legs of their
   own). No wings that fold and no arrester hook that drops, so a range is spread wings and all.
