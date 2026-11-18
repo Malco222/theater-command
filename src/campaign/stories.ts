@@ -608,7 +608,8 @@ export function storyMonth(g: Game, nat: string): void {
   if (!mine) return;
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
-  const alive = new Set(g.corps.map((c) => c.id));
+  // (A corps at sea on a long passage is not lost: its rivalry and its meetings wait for it to land.)
+  const alive = new Set([...g.corps.map((c) => c.id), ...(g.atSea ?? []).map((v) => v.corps.id)]);
   for (const r of S.rivals) {
     if (r.over || (alive.has(r.mine) && alive.has(r.theirs))) continue;
     r.over = alive.has(r.mine) ? 'gone' : 'lost';

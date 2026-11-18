@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { whyNotBase } from '../src/campaign/air';
 import { groupBases } from '../src/campaign/airwar';
 import { income, ledger, provinceYield } from '../src/campaign/economy';
-import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, placeName, relocate } from '../src/campaign/game';
 import { whyNotShip } from '../src/campaign/navy';
 import {
   PRIZES, PRIZE_KINDS, airfieldOpenTo, burnChance, burnOrder, harbourOpen, hasPrize, junctionOpenTo, mendPrizes, orderWreckPrize, prizeHolder, prizeIncome,
@@ -373,6 +373,12 @@ describe('wrecking a prize by order', () => {
     expect(wreckPrize(g, bremen, 'harbour', 5)).toBe(true);
     expect(whyNotShip(g, c, bremen)).toMatch(/harbour of Bremen is wrecked: no ship will use it for 5 months/);
     expect(whole === null || !/wrecked/.test(whole)).toBe(true);
+    // A sailing refused for want of a port names the place at fault (the UI director, build 1638).
+    const inland = g.regions.find((r) => r.owner === 'GER' && r.ctrl === 'GER' && !r.port && !r.overseas)!;
+    const noPort = `${placeName(inland.name, true)} has no port: troops are shipped from one port to another.`;
+    expect(whyNotShip(g, c, inland)).toBe(noPort);
+    expect(whyNotShip(g, c, hamburg)).toBe('They are in Hamburg already.');
+    expect(whyNotShip(g, addCorps(g, 'GER', 'Inland corps', 'inf', 3, inland.id, {}), hamburg)).toBe(noPort);
     expect(harbourOpen(g, bremen)).toBe(false);
     expect(provinceYield(g, bremen).port).toBe(0);
 

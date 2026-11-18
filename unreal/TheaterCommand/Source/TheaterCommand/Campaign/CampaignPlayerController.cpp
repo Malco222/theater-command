@@ -186,7 +186,8 @@ void ACampaignPlayerController::LoadGrandNations()
 		Out.Name = FText::FromString(Nation.Name);
 		Out.Blurb = FText::FromString(Nation.Blurb);
 		Out.Standing = FText::FromString(Nation.Standing);
-		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("territory") : TEXT("territories")));
+		// (the UI director, 10:57 on build 1638: provinces, as the brief of round 1 asked, not territories)
+		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("province") : TEXT("provinces")));
 		Out.bMajor = Nation.bMajor;
 		Out.bSmall = Nation.bSmall;
 		Out.Abilities = Nation.Abilities;
@@ -1743,6 +1744,7 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 				Name.Up = -Name.Up;
 			}
 			Name.Alpha = Provinces;
+			Name.bShadowed = Word.bOverRoofs;
 			continue;
 		}
 		const float Alpha = Word.bSea ? Seas : Countries;
@@ -2126,6 +2128,46 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 			}
 			SelectRegion(Where);
 			SetProvinceTab(2);
+		}
+	}
+	else if (Screen.StartsWith(TEXT("siege:")) && Map.IsValid())
+	{
+		// (Brian, 18 November 2026.) A town he besieges: the view goes there and the army round it is taken in hand,
+		// so that its tray, with STORM lit on it, is what he sees. With no army to take up, the province's orders.
+		const int32 Where = FCString::Atoi(*Screen.Mid(6));
+		if (Map->GetData().Regions.IsValidIndex(Where))
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				const FVector2D At = Map->GetData().Regions[Where].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), 0.3f);
+			}
+			PutDownFleet();
+			SelectRegion(Where);
+			if (PickUpArmyIn(Where))
+			{
+				CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+			}
+			else
+			{
+				SetProvinceTab(2);
+			}
+		}
+	}
+	else if (Screen.StartsWith(TEXT("field:")) && Map.IsValid())
+	{
+		// (Version 86: a crowded airfield's row. The view goes to the field and its page is opened, as OPEN THE AIRFIELD does.)
+		const int32 Where = FCString::Atoi(*Screen.Mid(6));
+		if (Map->GetData().Regions.IsValidIndex(Where))
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				const FVector2D At = Map->GetData().Regions[Where].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+			}
+			PutDownFleet();
+			SelectRegion(Where);
+			OpenPage(TEXT("airfield"));
 		}
 	}
 	else if (Screen == TEXT("generals"))
@@ -2660,7 +2702,7 @@ void ACampaignPlayerController::OpenHowToPlay()
 	};
 	Add(TEXT("THE TABLE"),
 		TEXT("You are looking down at a map table. Drag to move across it, scroll to zoom, and right-drag (or press Q and E) to turn the view. ")
-		TEXT("Every flag is an army, a fleet or an air fleet, and the number under it is its strength. Click any territory to see who holds it and what it has."));
+		TEXT("Every flag is an army, a fleet or an air fleet, and the number under it is its strength. Click any province to see who holds it and what it has."));
 	Add(TEXT("A MONTH"),
 		TEXT("Each turn is one month. Give your orders, then press END THE MONTH, or Enter. The other nations move, and the month's news is shown at the top right. ")
 		TEXT("Every corps has a few moves each month: marching through friendly ground costs one, and entering enemy ground costs more."));
@@ -2682,7 +2724,7 @@ void ACampaignPlayerController::OpenHowToPlay()
 		TEXT("When the war between the alliances is decided, DIPLOMACY gains a door to THE LAST ACT. You can take the victory and keep the peace, or choose World Domination, where every nation still standing fights every other."));
 	Add(TEXT("MONEY AND BUILDING"),
 		TEXT("Every province you hold pays into your treasury each month. The treasury is at the top left: click it, or LEDGER, for the books.\n")
-		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own territories first, so the game knows where to build. Works you build stand on the map."));
+		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own provinces first, so the game knows where to build. Works you build stand on the map."));
 	Add(TEXT("OIL AND SUPPLIES"),
 		TEXT("In the grand campaign a great power keeps stocks of oil and of supplies. The two gauges under the treasury show how full the depots are and how many months they will last; rest the mouse on one to read where it comes from and where it goes. ")
 		TEXT("Tanks, aircraft and ships burn oil, and the people at home and the army eat supplies. Much of both comes by sea along the dashed lanes on the map: pale where cargoes get through, amber where raiders are at them, red where the lane is cut. The game warns you when a stock has six months left."));
@@ -3203,7 +3245,8 @@ bool ACampaignPlayerController::IsMarchSlipShown() const
 {
 	// (One voice after a press.) The first lesson for an army picked up with no moves left: never the result of an
 	// order, and any order to that army puts it away.
-	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
+	// (not for corps inside a town: they march nowhere, this month or next, until they take the field)
+	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook && Tray.FieldButton.IsEmpty();
 }
 
 void ACampaignPlayerController::DismissMarchSlip()
@@ -3842,7 +3885,9 @@ void ACampaignPlayerController::AskLessons()
 		return;
 	}
 	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
-	// the way is gathered, for the note on the screen to take its stamp.
+	// the way is gathered, for the note on the screen to take its stamp. (Lesson 10's note says its words for the
+	// ARSENAL while the ARSENAL is open: the UI director, build 1640.)
+	Session->SetLessonPageOpen(bArsenalOpen);
 	TArray<FString> Stamped;
 	FLessonDesk Desk;
 	for (const TPair<FString, bool>& Deed : LessonDeedsOwed)
@@ -4994,8 +5039,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		OpenPage(TEXT("reports"));
 	}
 	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
-	// asked again whenever what only the screen sees has changed (the card open, the army in hand, his month or the
-	// others'), or an order of his has been answered; and only once no order is being answered.
+	// asked again whenever what only the screen sees has changed (the card open, the ARSENAL open, the army in hand, his
+	// month or the others'), or an order of his has been answered; and only once no order is being answered.
 	{
 		const double Now = FPlatformTime::Seconds();
 		if (LessonStampUntil > 0.0 && Now >= LessonStampUntil)
@@ -5024,7 +5069,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		if (const FCampaignSession* Seen = GetSession())
 		{
-			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u);
+			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u) | (bArsenalOpen ? 8u : 0u);
 			Key = HashCombine(Key, GetTypeHash(Seen->GetView().Turn));
 			for (const int32 Id : PickedCorps)
 			{
@@ -5192,8 +5237,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		const FCampaignSession* Now = GetSession();
 		const bool bFighting = FPlatformTime::Seconds() < BattleMusicUntil || FaceOff.bVisible;
-		Mode->SetMusicMood(bFighting ? TEXT("battle") : (Now && !Opening.bVisible && !Now->GetView().bAtWar && !Now->GetView().Human.IsEmpty()) ? TEXT("quiet") : TEXT("theme"));
+		// (Brian's score, 18 November 2026: the theme is the opening screen's; a country at war has its own two pieces.)
+		const bool bInPlay = Now && !Opening.bVisible && !Now->GetView().Human.IsEmpty();
+		Mode->SetMusicMood(bFighting ? TEXT("battle") : !bInPlay ? TEXT("theme") : Now->GetView().bAtWar ? TEXT("war") : TEXT("quiet"));
 		Mode->DuckMusic(Newsreel.bOn);
+		// One of his wars has ended: The Long Walk Home. (Counted from one month to the next of the same chair; a game
+		// loaded or begun anew starts the count again.)
+		if (bInPlay)
+		{
+			const FCampaignView& Seen = Now->GetView();
+			int32 Mine = 0;
+			for (int32 K = 0; K + 1 < Seen.Wars.Num(); K += 2)
+			{
+				Mine += Seen.Wars[K] == Seen.Human || Seen.Wars[K + 1] == Seen.Human ? 1 : 0;
+			}
+			if (MusicWarsOf == Seen.Human && Seen.Turn >= MusicWarsTurn && Seen.Turn <= MusicWarsTurn + 1 && Mine < MusicWars)
+			{
+				Mode->PlayHomecoming();
+			}
+			MusicWarsOf = Seen.Human;
+			MusicWars = Mine;
+			MusicWarsTurn = Seen.Turn;
+		}
+		else
+		{
+			MusicWarsOf.Reset();
+		}
 	}
 
 	// The first time evening comes on in the room, it is said what is happening and how to hold the day.
@@ -6978,6 +7047,52 @@ void ACampaignPlayerController::LayOutLook()
 	}
 }
 
+void ACampaignPlayerController::TrayTownOrder(int32 Which)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0 || IsAnswering())
+	{
+		return;
+	}
+	if (Which == 0)
+	{
+		// (Ruling 182: no storm is fought without its card. The card says why where the storm cannot be made.)
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		OpenStormCard(ArmyRegion, true);
+		return;
+	}
+	// (copies: the tray is set out again as each order is carried out)
+	const TArray<FString> Actions = Which == 1 ? Tray.GarrisonActions : Tray.FieldActions;
+	const int32 Here = ArmyRegion;
+	FString Said;
+	bool bAny = false;
+	for (const FString& Action : Actions)
+	{
+		FString Note;
+		if (Session->OrderInProvince(Action, Here, Note))
+		{
+			bAny = true;
+			Said = Note;
+		}
+		else if (Said.IsEmpty())
+		{
+			Said = Note;
+		}
+	}
+	if (bAny)
+	{
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::Play(this, TEXT("marching"), 0.5f);
+	}
+	RefreshOrders();
+	RefreshRegionPanel(Here);
+	if (!Said.IsEmpty())
+	{
+		Notify(Said, 6.0);
+	}
+}
+
 void ACampaignPlayerController::SetPending(int32 RegionId)
 {
 	PendingTarget = RegionId;
@@ -6987,6 +7102,12 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		: bByRail
 		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
 		: TEXT("Right-click where they should go, or drag the flag there. Esc puts them down."));
+	if (!bBySea && !bByRail && !Tray.StormButton.IsEmpty())
+	{
+		// (an army that stands round an enemy town is told how the town is attacked)
+		Tray.Hint = FText::FromString(TEXT("Press ") + Tray.StormButton.ToString()
+			+ TEXT(" above, or right-click the town, to attack it. A right-click elsewhere marches them away. Esc puts them down."));
+	}
 	{
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
@@ -7494,6 +7615,47 @@ void ACampaignPlayerController::RefreshOrders()
 	if (const FString* Could = View.Joins.Find(ArmyRegion))
 	{
 		Tray.JoinButton = FText::FromString(FString::Printf(TEXT("ASK %s CORPS TO JOIN"), *Could->ToUpper()));
+	}
+	// The town's orders for the army in hand, on its own tray (Brian, 18 November 2026): storm the town it stands
+	// round, go into the town of the province it stands in, or come out of it. They are the province's own orders,
+	// offered by the rules; a storm still opens its card first (ruling 182).
+	Tray.StormButton = Tray.StormTip = Tray.GarrisonButton = Tray.GarrisonTip = Tray.FieldButton = FText::GetEmpty();
+	Tray.GarrisonActions.Reset();
+	Tray.FieldActions.Reset();
+	if (ArmyRegion != INDEX_NONE && PickedCorps.Num() > 0 && View.bHumanUp)
+	{
+		FString Town;
+		for (const FProvinceOption& Option : Session->Province(ArmyRegion).Options)
+		{
+			if (!Option.bEnabled)
+			{
+				continue;
+			}
+			if (Option.Action == TEXT("work:storm"))
+			{
+				Tray.StormButton = FText::FromString(Option.Label.ToUpper()); // ("Storm Panama City")
+				Tray.StormTip = FText::FromString(Option.Detail + TEXT(" Its card shows the odds first, and KEEP UP THE SIEGE leaves it be."));
+			}
+			else if (Option.Action.StartsWith(TEXT("work:garrison:")) && PickedCorps.Contains(FCString::Atoi(*Option.Action.Mid(14))))
+			{
+				Tray.GarrisonActions.Add(Option.Action);
+				FString Who;
+				Option.Label.Split(TEXT(": into "), &Who, &Town); // ("First Army: into New York")
+			}
+			else if (Option.Action.StartsWith(TEXT("work:field:")) && PickedCorps.Contains(FCString::Atoi(*Option.Action.Mid(11))))
+			{
+				Tray.FieldActions.Add(Option.Action);
+			}
+		}
+		if (Tray.GarrisonActions.Num() > 0)
+		{
+			Tray.GarrisonButton = FText::FromString(Town.IsEmpty() ? FString(TEXT("GARRISON THE TOWN")) : TEXT("GARRISON ") + Town.ToUpper());
+			Tray.GarrisonTip = FText::FromString(TEXT("The corps in hand go into the town and hold its walls. A town with troops inside does not fall to an army that only marches in: it must be besieged or stormed. Inside, they neither march nor attack until they TAKE THE FIELD again."));
+		}
+		if (Tray.FieldActions.Num() > 0)
+		{
+			Tray.FieldButton = FText::FromString(TEXT("TAKE THE FIELD"));
+		}
 	}
 	// (Version 64) Two corps of the army worn thin, which could be folded into one.
 	Tray.FoldButton = FText::GetEmpty();
@@ -8229,6 +8391,18 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			if (!Why.IsEmpty())
 			{
 				Notify(Why, 10.0);
+				return;
+			}
+		}
+		if (bBySea)
+		{
+			// (The UI director, 18 November 2026; ruling 204.) A refusal by sea says why: the first test the place
+			// fails, in the rules' own words, as the browser shows it. ("Leeds has no coast."; "All the shipping is in
+			// use this month."; a sea the enemy has closed.)
+			const FString Why = Session->WhyNotBySea(PickedCorps, RegionId);
+			if (!Why.IsEmpty())
+			{
+				Notify(Why, 8.0);
 				return;
 			}
 		}
@@ -9088,7 +9262,10 @@ namespace
 
 namespace
 {
-	/** The Battle Ticket as text: every line of it, and the lines that matter most, which a long ticket opens folded to. */
+	/**
+	 * The Battle Ticket as text: every line of it, and the lines that matter most, which a long ticket opens folded to.
+	 * (The UI director's review of build 1628: no dashes in the game's words; a line's parts join with the game's own dot.)
+	 */
 	void WriteTicket(const TArray<FTicketLine>& Ticket, FFaceOff& Out)
 	{
 		static const TCHAR* const Key[] = { TEXT("Forces"), TEXT("Troops"), TEXT("Dug in"), TEXT("Supply"), TEXT("Earlier attacks"), TEXT("Weight of attack") };
@@ -9097,7 +9274,7 @@ namespace
 		{
 			const FString Text = Line.Effect.IsEmpty()
 				? FString::Printf(TEXT("%s:  %s"), *Line.Label, *Line.Value)
-				: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect);
+				: FString::Printf(TEXT("%s:  %s  \u00B7  %s"), *Line.Label, *Line.Value, *Line.Effect);
 			Lines.Add(Text);
 			for (const TCHAR* Label : Key)
 			{

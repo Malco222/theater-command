@@ -103,6 +103,7 @@ export function menSpare(g: Game, nat: string): number {
   if (!menRules(g)) return Infinity;
   let short = 0;
   for (const c of g.corps) if (c.nat === nat && !c.dead) short += (1 - c.str) * c.divs;
+  for (const v of g.atSea ?? []) if (v.nat === nat) short += (1 - v.corps.str) * v.corps.divs;
   return menLeft(g, nat) - short;
 }
 

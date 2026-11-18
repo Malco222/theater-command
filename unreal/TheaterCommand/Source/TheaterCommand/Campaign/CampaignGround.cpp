@@ -229,6 +229,43 @@ namespace
 		return FMath::Max(3300.0f - 65.0f * FMath::Max(FMath::Abs(Latitude) - 25.0f, 0.0f), 200.0f);
 	}
 
+	/**
+	 * (World detail, item 3, the art director's order of 17 November 2026: mountains that read as mountains from
+	 * playing height.) Beyond Europe, above the hills, the small folds of the ground come back into its light and
+	 * shade and the shade is cut deeper, as the Alps' is; and the snow lies above her tree line. Five numbers: the
+	 * height in metres where it begins (it is whole 900 above that), how much of the small folds comes back (0 to 1),
+	 * how much deeper the shade is cut (0.5: half as deep again), how far above the tree line the snow begins, and over
+	 * how many metres it comes in. ("-TheaterMountains=1400,1,0.5,0,500" tries another; without it the land is as it was.)
+	 */
+	struct FMountainLook
+	{
+		bool bOn = false;
+		float From = 1400.0f, Folds = 1.0f, Deep = 0.5f, SnowOver = 0.0f, SnowBand = 500.0f;
+	};
+	const FMountainLook& MountainLook()
+	{
+		static FMountainLook Kept;
+		static bool bRead = false;
+		if (!bRead)
+		{
+			bRead = true;
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterMountains="), Asked, false))
+			{
+				Asked.ParseIntoArray(Parts, TEXT(","));
+				Kept.bOn = !(Parts.Num() == 1 && FCString::Atof(*Parts[0]) <= 0.0f);
+				float* const Numbers[] = { &Kept.From, &Kept.Folds, &Kept.Deep, &Kept.SnowOver, &Kept.SnowBand };
+				for (int32 K = 0; K < Parts.Num() && K < 5; ++K)
+				{
+					*Numbers[K] = FCString::Atof(*Parts[K]);
+				}
+				Kept.SnowBand = FMath::Max(Kept.SnowBand, 50.0f);
+			}
+		}
+		return Kept;
+	}
+
 	/** The snow line at a point, in metres: the world's where it is reckoned, Europe's own 2,950 where it is not. */
 	float LookSnowOr(const TArray<float>& LookSnow, int32 Index)
 	{
@@ -427,6 +464,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LookNorth[Idx] = 0.0f;
 			// (the snow line falls toward the poles: about 5,000 metres from the equator to 25 degrees, then 100 lower for each degree)
 			LookSnow[Idx] = 5000.0f - 100.0f * FMath::Max(FMath::Abs(Latitude) - 25.0f, 0.0f);
+			if (MountainLook().bOn)
+			{
+				LookSnow[Idx] = WorldTreeLine(Latitude) + MountainLook().SnowOver; // (the art director: the snow lies above her tree line)
+			}
 			if (Out <= 0.0f)
 			{
 				continue;
@@ -1368,7 +1409,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			if (Beyond > 0.0f)
 			{
 				// (one snow height for the whole world would whiten New Guinea and leave Alaska bare)
-				Snow = FMath::Lerp(Snow, 0.9f * FMath::SmoothStep(LookSnow[Idx], LookSnow[Idx] + 800.0f, Metres[Idx]) * (1.0f - 0.5f * SnowLean), Beyond);
+				Snow = FMath::Lerp(Snow, 0.9f * FMath::SmoothStep(LookSnow[Idx], LookSnow[Idx] + (MountainLook().bOn ? MountainLook().SnowBand : 800.0f), Metres[Idx]) * (1.0f - 0.5f * SnowLean), Beyond);
 			}
 			const float Sand = 0.35f * (1.0f - FMath::SmoothStep(0.1f, 0.75f, Shore)); // (a thin strand, not a halo round every coast)
 
@@ -1447,7 +1488,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const float Lowland = (1.0f - FMath::SmoothStep(200.0f, 400.0f, Metres[Idx])) * LowlandCalm();
 			auto Fall = [&](const TArray<float>& Heights, int32 IA, int32 JA, int32 IB, int32 JB, int32 Steps) { return (Heights[Terrain.Index(IA, JA)] - Heights[Terrain.Index(IB, JB)]) / static_cast<float>(Steps * Terrain.Cell); };
 			// (SMOOTH HILLS: the broad shape whole, and a third of the small folds over it; the broken ground of the steeps is a fold too)
-			const float Folds = SmallFolds();
+			// (mountains beyond Europe: above the hills the small folds come back and the shade is cut deeper; see MountainLook)
+			const float Mountain = MountainLook().bOn && bBeyond ? Beyond * FMath::SmoothStep(MountainLook().From, MountainLook().From + 900.0f, Metres[Idx]) : 0.0f;
+			const float Folds = FMath::Lerp(SmallFolds(), 1.0f, Mountain * MountainLook().Folds);
 			auto Hill = [&](int32 IA, int32 JA, int32 IB, int32 JB, int32 Steps)
 			{
 				const float Shape = Fall(Broad, IA, JA, IB, JB, Steps);
@@ -1455,7 +1498,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			};
 			const float SlopeX = FMath::Lerp(Hill(IE, J, IW, J, IE - IW), Fall(Gentle, IE, J, IW, J, IE - IW), Lowland) + Rough * 0.13f * Folds * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
 			const float SlopeY = FMath::Lerp(Hill(I, JS, I, JN, JS - JN), Fall(Gentle, I, JS, I, JN, JS - JN), Lowland) + Rough * 0.13f * Folds * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
-			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
+			const float Cut = ReliefStrength() * (1.0f + MountainLook().Deep * Mountain);
+			const FVector3f Leaning = FVector3f(-SlopeX * Cut, -SlopeY * Cut, 1.0f).GetSafeNormal();
 			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
 			Sun *= 1.0f - 0.42f * Thrown[Idx];
 			if (bWaters && Terrain.Cell <= 3.0 && RiverHalf[Idx] > 0.0f && RiverWater[Idx] < -1.5f)

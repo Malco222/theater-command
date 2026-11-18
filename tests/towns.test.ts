@@ -193,6 +193,21 @@ describe('the prize', () => {
     expect(p.items.some((i) => i.key === 'capital' || i.key === 'fort' || i.key === 'frees')).toBe(false);
   });
 
+  it('says ground that pays nothing pays nothing, not 0 a month (the UI director, review-1441x878 section 7)', () => {
+    // (Outside the grand campaign only factories pay: a province without one pays nothing.)
+    const g = createGame(3, 'GER');
+    const own = g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && r.fac === 0)!;
+    const p = prizeOf(g, own.id, 'GER')!;
+    expect(p.kind).toBe('yours');
+    expect(p.income).toBe(0);
+    expect(p.line.startsWith(`${townName(own)} pays nothing into your treasury`)).toBe(true);
+    const ally = g.regions.find((r) => r.ctrl !== 'GER' && allied(g, 'GER', r.ctrl) && r.fac === 0)!;
+    const q = prizeOf(g, ally.id, 'GER')!;
+    expect(q.kind).toBe('ally');
+    expect(q.line).toContain('your ally, and pays nothing into its treasury');
+    expect(`${p.line} ${q.line}`).not.toMatch(/\b0 a month/);
+  });
+
   it('says what taking an enemy province would bring, and what it would cost the enemy', () => {
     const g = open('GER');
     const w = g.byName.Warsaw;
@@ -247,7 +262,10 @@ describe('the prize', () => {
     expect(p.capitalOf).toBeNull();
     expect(p.items.map((i) => i.key)).toContain('frees');
     expect(p.items.find((i) => i.key === 'income')!.text).toContain("Poland's treasury");
-    expect(p.line).toMatch(/^Taking Warsaw frees Poland, which returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the end of next month with no enemy corps in or next to it: Poland returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.items.find((i) => i.key === 'frees')!.text).toBe('The capital of Poland, which has fallen. Take it and hold it to the end of next month, with no enemy corps in or next to it, and Poland returns to the war on your side');
+    g.turn++;
+    expect(prizeOf(g, w, 'FRA')!.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the month's end with no enemy corps in or next to it: /);
     // Its conqueror frees nobody by holding it, and nor does a country that is not in the war.
     expect(prizeOf(g, w, 'GER')!.frees).toBeNull();
     expect(prizeOf(g, w, 'SWE')!.frees).toBeNull();

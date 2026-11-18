@@ -1,0 +1,271 @@
+{
+ "about": "The real recordings the 3D game plays, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it.",
+ "sounds": [
+  {
+   "moment": "bomber_drone",
+   "recording": "bomber_drone",
+   "what": "Bombers pass overhead",
+   "sources": [
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "fighter_pass",
+   "recording": "fighter_pass",
+   "what": "A fighter flashes past",
+   "sources": [
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "machine_gun",
+   "recording": "machine_gun",
+   "what": "A machine gun opens up from the flank",
+   "sources": [
+    {
+     "title": "M240G Live Fire Prime Cuts",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "rifles",
+   "recording": "rifles",
+   "what": "Rifle fire along a line",
+   "sources": [
+    {
+     "title": "U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll)",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "ship_guns",
+   "recording": "ship_guns",
+   "what": "A warship's guns fire",
+   "sources": [
+    {
+     "title": "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "ship_horn",
+   "recording": "ship_horn",
+   "what": "A ship sounds its horn",
+   "sources": [
+    {
+     "title": "Ship Horn - Fog Horn - Cruise Ship Grand Princess",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/coalcon/sounds/636075/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "battle",
+   "recording": "battle_loop",
+   "what": "A firefight",
+   "sources": [
+    {
+     "title": "U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll)",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "M240G Live Fire Prime Cuts",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Distant WW2 Gunfire Kent",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170478/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bugle",
+   "recording": "bugle_call",
+   "what": "A bugle calls the men to action",
+   "sources": [
+    {
+     "title": "Corneta Militar",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Boscoricardo17/sounds/868980/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "explosion",
+   "recording": "explosion_far_01",
+   "what": "An explosion a long way off (take 1)",
+   "sources": [
+    {
+     "title": "distant explosions",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Kostrava/sounds/320788/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "field_gun",
+   "recording": "field_gun_fire",
+   "what": "A field gun fires",
+   "sources": [
+    {
+     "title": "GUNArtl_69thFieldArtilleryGun01_InMotionAudio_FREESampleSunday",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/InMotionAudio/sounds/702245/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "halftrack",
+   "recording": "halftrack_drive_loop",
+   "what": "A half-track on the move",
+   "sources": [
+    {
+     "title": "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)",
+     "creator": "rafowell",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "marching",
+   "recording": "marching_loop",
+   "what": "A column marches",
+   "sources": [
+    {
+     "title": "marching boots",
+     "creator": "klankbeeld",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/klankbeeld/sounds/172369/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "siren",
+   "recording": "air_raid_siren_short",
+   "what": "An air raid siren (short)",
+   "sources": [
+    {
+     "title": "Alarm, Air Raid Siren, Test, Devonport, Sony PCM M-10",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/audiojacked/sounds/336640/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_engine",
+   "recording": "tank_loop",
+   "what": "Tanks on the move",
+   "sources": [
+    {
+     "title": "Tank T-34 Eesti Vabadusvõitluse Muuseumis",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://commons.wikimedia.org/wiki/File:Tank_T-34_Eesti_Vabadusv%C3%B5itluse_Muuseumis.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Taistelunäytös Lippujuhlan päivä 2014 18 T-34-85",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_18_T-34-85.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tank_gun",
+   "recording": "tank_gun_01",
+   "what": "A tank fires its main gun",
+   "sources": [
+    {
+     "title": "2-37 AR, 1ID Hones Lethality During M1A2 Abrams Gunnery (1017452)",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:2-37_AR,_1ID_Hones_Lethality_During_M1A2_Abrams_Gunnery_(1017452).webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "truck_engine",
+   "recording": "lorry_drive_loop",
+   "what": "A lorry engine under way",
+   "sources": [
+    {
+     "title": "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)",
+     "creator": "rafowell",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  }
+ ]
+}

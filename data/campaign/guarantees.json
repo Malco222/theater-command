@@ -1,0 +1,29 @@
+{
+  "_about": "The guarantees of 1939 the declare-war card names, and the game keeps (ruling 229, part 3, from the historian's facts: /mnt/project-files/historian/ruling-229-facts.md, section 3). Each runs one way: the great power comes in for the small country, never the reverse, and none of them is a friendship (relations.json keeps those, for opinion and the League). In the grand campaign, when a country is attacked by a power its guarantee covered, each guarantor run by the computer declares war on the attacker the same day, as a mother country standing by a dominion does: it declares nothing else by it, and a country outside both blocs stays outside. A guarantor the player leads is never forced: he is told, and the Declare war card is his. 'against' is a list of the powers covered, 'any' for every power, or 'europe' for every power whose capital is in Europe. 'from' and 'to' are the months the guarantee stood (Romania renounced its guarantee on 1 July 1940, month 11). A guarantee ends with its guarantor's fall (France's at its armistice), and a guaranteed country that has joined another alliance than its guarantor's when it is attacked has none (one in the League of small nations keeps its guarantees). 'consult' marks a guarantee that bound its guarantor against any other power only to consult: Poland's protocol bound Britain and France against Germany alone (the Soviet march of 17 September 1939 brought no war). The words are the UI director's (ui-director/words-guarantees-229.md): 'tie' is what the guarantee is, the start of the card's line for each guarantor, whose end 'clauses' gives as it stands for the player looking ('comes', 'war', 'consult', 'free': not bound); 'keeps' is what the news says it keeps when it is honoured; 'yours' is what the news tells a player who leads the guarantor, whom it never forces. 'deter' is how much less likely a computer-run staff is to open an operation against a country a guarantor would come in for, as the League's deter is.",
+  "deter": 0.5,
+  "rows": [
+    {"by": "UK", "for": "POL", "against": ["GER"], "from": 1, "consult": true, "tie": "Poland's guarantor against Germany since August 1939", "keeps": "the guarantee of August 1939 to Poland", "yours": "which you guaranteed in August 1939"},
+    {"by": "FRA", "for": "POL", "against": ["GER"], "from": 1, "consult": true, "tie": "Poland's guarantor against Germany since August 1939", "keeps": "the guarantee of August 1939 to Poland", "yours": "which you guaranteed in August 1939"},
+    {"by": "UK", "for": "GRE", "against": "any", "from": 1, "tie": "Greece's guarantor since April 1939", "keeps": "the guarantee of April 1939 to Greece", "yours": "which you guaranteed in April 1939"},
+    {"by": "FRA", "for": "GRE", "against": "any", "from": 1, "tie": "Greece's guarantor since April 1939", "keeps": "the guarantee of April 1939 to Greece", "yours": "which you guaranteed in April 1939"},
+    {"by": "UK", "for": "ROM", "against": "any", "from": 1, "to": 10, "tie": "Romania's guarantor since April 1939", "keeps": "the guarantee of April 1939 to Romania", "yours": "which you guaranteed in April 1939"},
+    {"by": "FRA", "for": "ROM", "against": "any", "from": 1, "to": 10, "tie": "Romania's guarantor since April 1939", "keeps": "the guarantee of April 1939 to Romania", "yours": "which you guaranteed in April 1939"},
+    {"by": "UK", "for": "TUR", "against": "europe", "from": 2, "tie": "Turkey's guarantor against any European power since October 1939", "keeps": "the treaty of October 1939 with Turkey", "yours": "which you bound yourself to aid in October 1939"},
+    {"by": "FRA", "for": "TUR", "against": "europe", "from": 2, "tie": "Turkey's guarantor against any European power since October 1939", "keeps": "the treaty of October 1939 with Turkey", "yours": "which you bound yourself to aid in October 1939"},
+    {"by": "UK", "for": "BEL", "against": ["GER"], "from": 1, "tie": "Belgium's guarantor against Germany since 1937", "keeps": "the pledge of 1937 to Belgium", "yours": "which you pledged to defend in 1937"},
+    {"by": "FRA", "for": "BEL", "against": ["GER"], "from": 1, "tie": "Belgium's guarantor against Germany since 1937", "keeps": "the pledge of 1937 to Belgium", "yours": "which you pledged to defend in 1937"},
+    {"by": "UK", "for": "POR", "against": "any", "from": 1, "tie": "Portugal's ally since 1373, the oldest alliance in Europe", "keeps": "the alliance of 1373 with Portugal", "yours": "which you have stood by since 1373"}
+  ],
+  "lines": {
+    "clauses": {
+      "comes": "it declares war on you the same month.",
+      "war": "it is at war with you already.",
+      "consult": "against you it would consult with {Name}, not declare war.",
+      "free": "it is not bound to declare war on you."
+    },
+    "head": "{Guarantors} {stand} by {Name}",
+    "text": "{Guarantors} {declare} war on {foe}: {they} {keeps}.",
+    "calls": "{Name} calls on your guarantee",
+    "asks": "{Foe} has attacked {name}, {yours}. Whether to declare war on {foe} is yours to decide, on the Declare war card."
+  }
+}

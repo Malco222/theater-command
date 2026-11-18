@@ -32,12 +32,19 @@ public:
 	int32 GetMusicLevel() const { return MusicLevel; }
 	void SetMusicLevel(int32 Level);
 	/**
-	 * The music follows the war: "theme" for a country at war, "quiet" for one at peace, "battle" while there is
-	 * fighting to watch. One piece fades out as the next fades in. A piece that has not been made is passed over.
+	 * The music follows the war: "theme" on the opening screen, "quiet" for a country at peace, "war" for one at war,
+	 * "battle" while there is fighting to watch. One piece fades out as the next fades in. Where the score has been
+	 * brought in (Brian's songs and the three written to go with them), each mood has two or three pieces that take
+	 * turns; without it the three made pieces play as they did, the theme standing for the war as well.
 	 */
 	void SetMusicMood(const FString& Mood);
 	/** Plays the music softly under a voice (the newsreel's), and brings it back up afterwards. */
 	void DuckMusic(bool bDown);
+	/**
+	 * (Brian's score.) One of the player's wars has ended: The Long Walk Home is played once, now. When it has ended
+	 * the pieces of the mood take their turns again. Nothing happens where the score has not been brought in.
+	 */
+	void PlayHomecoming();
 
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
@@ -76,6 +83,20 @@ private:
 	TMap<FString, TObjectPtr<UAudioComponent>> Pieces; // every piece that has been made, by its mood
 	FString MusicMood = TEXT("theme");
 	bool bMusicDucked = false;
+	// The score (Music/Score in the game's folder): its pieces, which of them each mood plays in turn, and whose turn it is.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAudioComponent>> ScorePlayers;
+	TMap<FString, TArray<int32>> ScoreOf;
+	TMap<FString, int32> ScoreTurn;
+	int32 HomePiece = INDEX_NONE; // The Long Walk Home
+	bool bHomePlaying = false;
+	double PieceEndsAt = 0.0; // when the piece now playing will have run its length (a piece of the score is played once through)
+	/** Starts the piece now in hand, fading it in, and notes when it will end. */
+	void StartPiece(float FadeSeconds);
+	/** The piece a mood plays now: the score's, in its turn, or the made piece. Nothing where there is neither. */
+	UAudioComponent* PieceFor(const FString& Mood) const;
+	/** How loud the music is to be now: the player's setting, the opening screen's theme clearly heard, and the newsreel's voice over it. */
+	float NowVolume() const;
 	float MusicVolume = 0.55f;
 	int32 MusicLevel = 1;
 };

@@ -33,3 +33,28 @@ for wav, name in pieces:
     sound.set_editor_property("looping", True)
     unreal.EditorAssetLibrary.save_asset(f"/Game/Campaign/Music/{name}", only_if_is_dirty=False)
     unreal.log(f"Theater Command: music imported, {name}, {sound.get_editor_property('duration'):.1f} seconds")
+
+# The score: Brian's five songs and the three pieces written to go with them (Music/Score in the game's folder; see
+# its README). Each keeps its own name under /Game/Campaign/Music/Score and is played once through, not on a loop:
+# the pieces of a mood take turns (CampaignGameMode.cpp).
+score = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Music", "Score")
+if os.path.isdir(score):
+    for wav in sorted(os.listdir(score)):
+        if not wav.endswith(".wav"):
+            continue
+        name = wav[:-4]
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", os.path.join(score, wav))
+        task.set_editor_property("destination_path", "/Game/Campaign/Music/Score")
+        task.set_editor_property("destination_name", name)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("save", True)
+        unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+        sound = unreal.load_asset(f"/Game/Campaign/Music/Score/{name}")
+        if sound is None:
+            unreal.log_warning(f"Theater Command: the score's {name} was not imported")
+            continue
+        sound.set_editor_property("looping", False)
+        unreal.EditorAssetLibrary.save_asset(f"/Game/Campaign/Music/Score/{name}", only_if_is_dirty=False)
+        unreal.log(f"Theater Command: the score imported, {name}, {sound.get_editor_property('duration'):.1f} seconds")

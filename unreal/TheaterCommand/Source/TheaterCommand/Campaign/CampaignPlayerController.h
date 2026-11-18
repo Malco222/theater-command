@@ -143,6 +143,13 @@ struct FArmyTray
 	bool bLean = false; // the picked corps take no drafts
 	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
 	FText FoldButton, FoldTip; // (Version 64) two corps of the army are worn thin and could be folded into one. Empty when there are none
+	// (Brian, 18 November 2026: "troops should be able to garrison a city", and of an army beaten into its town, "im not
+	// able to attack them again".) The town's orders for the army in hand, as plain buttons on its own tray: until
+	// then they stood only under ORDERS on the province's card, and a right-click on the town.
+	FText StormButton, StormTip; // "STORM PANAMA CITY": the army stands round that town and may assault it. Empty when it may not
+	FText GarrisonButton, GarrisonTip; // "GARRISON NEW YORK": corps in hand may go into the town of the province they stand in
+	FText FieldButton; // "TAKE THE FIELD": corps in hand are inside a town and may leave it
+	TArray<FString> GarrisonActions, FieldActions; // the province's own orders that do it, one for each corps
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	FText HintLead; // (ruling 87) and what is said before it, in brass: "No moves left this month."
@@ -176,7 +183,7 @@ struct FOpeningNation
 	FText Name;
 	FText Blurb;
 	FText Standing; // "At peace", or who it is at war with
-	FText Strength; // "28 corps, 36 territories"
+	FText Strength; // "30 corps, 36 provinces"
 	bool bMajor = false;
 	bool bSmall = false; // a small country whose path is its own to choose
 	TArray<FString> Abilities; // what the country does in its own way, a line each
@@ -235,6 +242,7 @@ struct FMapLetter
 	bool bSea = false;
 	bool bInk = false; // (a sea's name on a sea the chart veils: in dark chart ink, or it is lost on the pale veil)
 	FString Whole; // a province's name, written whole here instead of a single letter
+	bool bShadowed = false; // (a province's name that lies over roofs: a soft dark shadow under it)
 };
 
 /** A town's name plate as the screen should draw it this frame. */
@@ -839,6 +847,11 @@ public:
 	void StopLooking();
 	/** Joint armies: asks the allied corps beside the army in hand to march with it; sends one of them home. */
 	void AskAlliesToJoin();
+	/** A town order from the army's own tray: 0 storms the town it besieges (its card first), 1 sends the corps in hand into the town, 2 brings them out. */
+	void TrayTownOrder(int32 Which);
+	// (the score: whose wars were counted last, how many, and in which month, to hear one of them end)
+	FString MusicWarsOf;
+	int32 MusicWars = 0, MusicWarsTurn = 0;
 	void SendBackCorps(int32 CorpsId);
 	/** The nation the player leads; empty when nobody is led. */
 	FString GetPlayerTag() const;

@@ -3964,6 +3964,57 @@ void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 {
 	THEATER_SPEED_SCOPE(SetLand);
 	Land = InLand;
+	// (The art director, 18 November 2026, at Quebec: the rules' bridges over the St Lawrence stood on dry land beside a
+	// pond. The chart's line for that river ends where its estuary begins, a channel too narrow for a sheet of ground
+	// to show as sea, and three of its crossings lie beyond that end. A river is drawn on through its own crossings
+	// that lie beyond its mouth, the nearest first, so that every bridge has water under it.)
+	for (int32 Index = 0; Index < Land.Rivers.Num(); ++Index)
+	{
+		TArray<FVector2D>& Course = Land.Rivers[Index].Course;
+		if (Course.Num() < 2)
+		{
+			continue;
+		}
+		TArray<FVector2D> Beyond;
+		for (const FLandCrossing& Crossing : Land.Crossings)
+		{
+			if (Crossing.River != Index)
+			{
+				continue;
+			}
+			double Off = 1.0e9;
+			for (int32 K = 0; K + 1 < Course.Num(); ++K)
+			{
+				Off = FMath::Min(Off, FMath::PointDistToSegment(FVector(Crossing.At, 0.0), FVector(Course[K], 0.0), FVector(Course[K + 1], 0.0)));
+			}
+			if (Off > 3.0 && FVector2D::Distance(Crossing.At, Course.Last()) < FVector2D::Distance(Crossing.At, Course[0]))
+			{
+				Beyond.Add(Crossing.At);
+			}
+		}
+		const int32 Added = Beyond.Num();
+		while (Beyond.Num() > 0)
+		{
+			int32 Next = 0;
+			for (int32 K = 1; K < Beyond.Num(); ++K)
+			{
+				if (FVector2D::DistSquared(Beyond[K], Course.Last()) < FVector2D::DistSquared(Beyond[Next], Course.Last()))
+				{
+					Next = K;
+				}
+			}
+			if (FVector2D::Distance(Beyond[Next], Course.Last()) > 40.0)
+			{
+				break; // (too far to be this river's own water)
+			}
+			Course.Add(Beyond[Next]);
+			Beyond.RemoveAtSwap(Next);
+		}
+		if (Added > Beyond.Num())
+		{
+			UE_LOG(LogTheater, Display, TEXT("Rivers: the %s is drawn on through %d of its crossings that lie beyond its mouth"), *Land.Rivers[Index].Name, Added - Beyond.Num());
+		}
+	}
 	bLandLaid = true;
 	bWorksShown = false;
 	BuildWaterways();
@@ -6855,9 +6906,9 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 		// Americas stood Baltimore almost on top of Washington. Towns never move. The rule is for towns whose roofs
 		// would really touch across the border between them, not for towns that are merely near: Anzio stands clear
 		// of Rome and is left alone. Where two would touch, the higher-ranked keeps its size, a capital first and then
-		// by what the rules hold the place worth, and the other is built smaller: but never less than the next kit
-		// up from a hamlet, a town of a church and its streets with its quay, eight to a dozen roofs. The greater
-		// town then leaves its rows on that side unbuilt, so that green field shows between the two.
+		// by what the rules hold the place worth, and the other gives way: but it is never less than the next kit
+		// up from a hamlet, a town of a church and its streets with its quay, eight to a dozen roofs. Green field
+		// shows between the two: see below for which of them leaves it.
 		// "-TheaterTownsAsBuilt" leaves every town its first size.)
 		TownHumbled.Init(false, Data.Regions.Num());
 		TownClear.Reset();
@@ -6899,6 +6950,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 			});
 			const double Touching = 1.0; // (under half a house of green between their roofs: they touch)
 			const double CityNeeds = 7.0; // (a city's blocks and square want this much; below it the town's kit is built)
+			const double Row = 4.2; // (a row of a city's blocks and its street)
 			int32 Gave = 0;
 			FString Said;
 			for (int32 A = 1; A < Order.Num(); ++A)
@@ -6909,6 +6961,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 				// (the least it is built: a large town's first size for a city, a small place's for the rest; a capital its own)
 				const double Least = FMath::Min(Was, Lesser.bCapital ? 10.1 : bCity ? 6.4 : 4.4);
 				double Radius = Was;
+				bool bUnder = false;
 				TArray<int32, TInlineAllocator<4>> Beside;
 				FString Names;
 				for (int32 B = 0; B < A; ++B)
@@ -6918,7 +6971,19 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					const double Theirs = FirstTownRadius(Greater) * TownSpreads[Greater.Id];
 					if (Was + Theirs > Apart && Apart - Runs(Lesser, Greater, Was) - Runs(Greater, Lesser, Theirs) < Touching)
 					{
-						Radius = FMath::Min(Radius, FMath::Max((Apart - Theirs) / 1.5, Least));
+						// (The art director, 18 November, on build 1648: "the largest kit that fits while keeping the
+						// field gap". Where the greater town at its full size, with a row of green, would cover the
+						// lesser town's very middle, the lesser stands under it: Baltimore under Washington. It is then
+						// built small, and the greater gives the green. Where the lesser's middle stands clear, it
+						// keeps its own kit and its size and builds away from the greater, leaving its side toward
+						// it unbuilt: Rotterdam, a city on its river mouth, beside Amsterdam.)
+						if (Theirs + Row + 0.8 >= Apart)
+						{
+							bUnder = true;
+							Radius = FMath::Min(Radius, FMath::Max((Apart - Theirs) / 1.5, Least));
+						}
+						// (it keeps its size as well as its kit: seen at a city's first size, with its side toward
+						// Amsterdam left unbuilt, Rotterdam was a square, a church and a few sheds, no city)
 						Beside.Add(Greater.Id);
 						Names += (Names.IsEmpty() ? TEXT("") : TEXT(" and ")) + Greater.Name;
 					}
@@ -6928,25 +6993,35 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					continue;
 				}
 				TownSpreads[Lesser.Id] = static_cast<float>(Radius / Own);
-				TownHumbled[Lesser.Id] = bCity && !Lesser.bCapital && Radius < CityNeeds;
-				// The green between: about a row of a city's blocks, and more beside a larger town; but the greater
-				// town keeps at least three fifths of its reach on that side.
-				const double Green = FMath::Clamp(0.5 * Radius + 3.0, 4.2, 7.0);
+				TownHumbled[Lesser.Id] = bUnder && bCity && !Lesser.bCapital && Radius < CityNeeds;
+				// The green between: about a row of a city's blocks, and more beside a larger town.
+				const double Green = FMath::Clamp(0.5 * Radius + 3.0, Row, 7.0);
 				for (const int32 Id : Beside)
 				{
 					const FCampaignRegion& Greater = Data.Regions[Id];
 					const double Apart = FVector2D::Distance(Lesser.Center, Greater.Center);
 					const double Theirs = FirstTownRadius(Greater) * TownSpreads[Id];
-					const double Keep = FMath::Min(Radius + Green, Apart - 0.6 * Runs(Greater, Lesser, Theirs));
-					if (Keep > 0.0)
+					const double TheirRun = Runs(Greater, Lesser, Theirs);
+					if (Theirs + Row + 0.8 >= Apart)
 					{
-						TownClear.FindOrAdd(Id).Add(FVector(Lesser.Center.X, Lesser.Center.Y, Keep));
+						// (the greater town leaves its rows unbuilt beside the lesser, but keeps three fifths of its reach on that side)
+						const double Keep = FMath::Min(Radius + Green, Apart - 0.6 * TheirRun);
+						if (Keep > 0.0)
+						{
+							TownClear.FindOrAdd(Id).Add(FVector(Lesser.Center.X, Lesser.Center.Y, Keep));
+						}
+					}
+					else
+					{
+						// (the lesser town builds no nearer the greater than a row of green beyond the greater's last roofs)
+						TownClear.FindOrAdd(Lesser.Id).Add(FVector(Greater.Center.X, Greater.Center.Y, TheirRun + Row));
 					}
 				}
 				++Gave;
 				if (Gave <= 8)
 				{
-					Said += FString::Printf(TEXT("%s%s beside %s (%.1f to %.1f%s)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *Names, Was, Radius, TownHumbled[Lesser.Id] ? TEXT(", as a town") : TEXT(""));
+					Said += FString::Printf(TEXT("%s%s beside %s (%.1f to %.1f%s)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *Names, Was, Radius,
+						TownHumbled[Lesser.Id] ? TEXT(", as a town") : bUnder ? TEXT("") : TEXT(": its size kept, building away from it"));
 				}
 			}
 			if (Gave > 0)
@@ -9045,6 +9120,8 @@ void ACampaignMapActor::BuildWords()
 {
 	THEATER_SPEED_SCOPE(BuildWords);
 	MapWords.Reset();
+	int32 NamesMoved = 0;
+	FString NamesOnWater, NamesOverRoofs;
 	// A province's own name, small, lying on its ground: for every province that has no plate, and for every one
 	// whose plate carries its town's name instead.
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -9058,23 +9135,130 @@ void ACampaignMapActor::BuildWords()
 			continue; // (its plate says its name already)
 		}
 		FVector2D At = Region.Centroid;
-		if (bPlate && FVector2D::Distance(At, Region.Center) < 9.0)
+		const double Tall = 1.5; // (a capital letter of the name, in map units)
+		bool bOverRoofs = false;
+		if (bPlate)
 		{
-			// Clear of the town and its plate: north of it, or wherever in the province there is room.
-			for (const FVector2D& Offset : { FVector2D(0.0, -9.0), FVector2D(-10.0, -4.0), FVector2D(10.0, -4.0), FVector2D(0.0, 13.0) })
+			// Clear of the town, its roofs and its plate. (The art director, 18 November 2026, on build 1648: "Holland"
+			// lay across Amsterdam's roofs, where a roof's edge and a spire made its last letters read double. A
+			// place nine units off a town's middle was clear of a small town and inside a capital.) The name lies
+			// wholly on its own province's open ground: at the province's middle where that is clear of the town,
+			// or else round the town, the nearest clear place first, north before south.
+			const double Roofs = TownRadius(Region.Id) + 2.5, HalfWide = 0.55 * Tall * Region.Name.Len() + 0.5;
+			auto Clear = [&](const FVector2D& Spot)
 			{
-				if (Data.FindRegionAt(Region.Center.X + Offset.X, Region.Center.Y + Offset.Y) == Region.Id)
+				if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id || GroundAt(Spot.X, Spot.Y) <= 0.0f)
 				{
-					At = Region.Center + Offset;
-					break;
+					return false;
+				}
+				// (no nearer its own town's middle than the last roofs, anywhere along the word; and the plate hangs south of the middle)
+				const double Across = FMath::Clamp(Region.Center.X, Spot.X - HalfWide, Spot.X + HalfWide);
+				if (FVector2D::Distance(FVector2D(Across, Spot.Y), Region.Center) <= Roofs
+					|| (FMath::Abs(Spot.X - Region.Center.X) < HalfWide + 6.0 && Spot.Y > Region.Center.Y && Spot.Y < Region.Center.Y + Roofs + 5.0))
+				{
+					return false;
+				}
+				// (nor across the roofs of a town next door, where an end of the word lies over the border)
+				for (const int32 Next : Region.Neighbors)
+				{
+					if (Data.Regions.IsValidIndex(Next) && FirstTownRadius(Data.Regions[Next]) > 0.0)
+					{
+						const FVector2D Theirs = Data.Regions[Next].Center;
+						const double Nearest = FMath::Clamp(Theirs.X, Spot.X - HalfWide, Spot.X + HalfWide);
+						if (FVector2D::Distance(FVector2D(Nearest, Spot.Y), Theirs) <= TownRadius(Next) + 1.5)
+						{
+							return false;
+						}
+					}
+				}
+				return true;
+			};
+			if (!Clear(At))
+			{
+				// (The art director, the same day: "a province with no name is a bigger loss than a name over a few
+				// roofs". The nearest open field of its own first; failing that, the water off its own shore; failing
+				// both, it keeps the place it had, a little smaller, with a soft dark shadow under it.)
+				auto OnWater = [&](const FVector2D& Spot)
+				{
+					for (const double End : { -1.0, 0.0, 1.0 })
+					{
+						if (Data.FindRegionAt(Spot.X + End * HalfWide, Spot.Y) != INDEX_NONE)
+						{
+							return false;
+						}
+					}
+					// (its own water: the first land met on the way back to its town is its own)
+					const double Far = FVector2D::Distance(Spot, Region.Center);
+					for (double Back = 1.0; Back < Far; Back += 1.0)
+					{
+						const FVector2D Step = Spot + (Region.Center - Spot) * (Back / Far);
+						const int32 Ashore = Data.FindRegionAt(Step.X, Step.Y);
+						if (Ashore != INDEX_NONE)
+						{
+							return Ashore == Region.Id;
+						}
+					}
+					return false;
+				};
+				const FVector2D Kept = At;
+				int32 Found = 0; // 1 on its own open ground, 2 on its own water
+				for (int32 Pass = 1; Pass <= 2 && Found == 0; ++Pass)
+				{
+					for (double Out = Roofs + 1.5; Out < Roofs + 26.0 && Found == 0; Out += 3.0)
+					{
+						for (const double Bearing : { 0.0, -45.0, 45.0, -90.0, 90.0, 180.0, -135.0, 135.0 })
+						{
+							const double Turn = FMath::DegreesToRadians(Bearing);
+							// (to the side of the town a word needs its own half length more)
+							const FVector2D Spot = Region.Center + FVector2D(FMath::Sin(Turn) * (Out + FMath::Abs(FMath::Sin(Turn)) * HalfWide), -FMath::Cos(Turn) * Out);
+							if (Pass == 1 ? Clear(Spot) : OnWater(Spot))
+							{
+								At = Spot;
+								Found = Pass;
+								break;
+							}
+						}
+					}
+				}
+				if (Found == 1)
+				{
+					++NamesMoved;
+				}
+				else if (Found == 2)
+				{
+					NamesOnWater += (NamesOnWater.IsEmpty() ? TEXT("") : TEXT(", ")) + Region.Name;
+				}
+				else
+				{
+					// (as it lay: north of the town, or wherever in the province there was room nine units off)
+					At = Kept;
+					if (FVector2D::Distance(At, Region.Center) < 9.0)
+					{
+						for (const FVector2D& Offset : { FVector2D(0.0, -9.0), FVector2D(-10.0, -4.0), FVector2D(10.0, -4.0), FVector2D(0.0, 13.0) })
+						{
+							if (Data.FindRegionAt(Region.Center.X + Offset.X, Region.Center.Y + Offset.Y) == Region.Id)
+							{
+								At = Region.Center + Offset;
+								break;
+							}
+						}
+					}
+					bOverRoofs = true;
+					NamesOverRoofs += (NamesOverRoofs.IsEmpty() ? TEXT("") : TEXT(", ")) + Region.Name;
 				}
 			}
 		}
 		FMapWord& Word = MapWords.AddDefaulted_GetRef();
 		Word.Text = Region.Name;
-		Word.Height = 1.5;
+		Word.Height = bOverRoofs ? Tall * 0.85 : Tall;
+		Word.bOverRoofs = bOverRoofs;
 		Word.From = Word.To = At;
 		Word.bRegion = true;
+	}
+	if (NamesMoved > 0 || !NamesOnWater.IsEmpty() || !NamesOverRoofs.IsEmpty())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Names: %d provinces' names are moved onto open ground clear of their towns' roofs; on their own water: %s; over their roofs, smaller and shadowed: %s"),
+			NamesMoved, NamesOnWater.IsEmpty() ? TEXT("none") : *NamesOnWater, NamesOverRoofs.IsEmpty() ? TEXT("none") : *NamesOverRoofs);
 	}
 	// Seas: across the middle of each, in spaced italic capitals.
 	for (const FCampaignSeaZone& Sea : Data.Seas)

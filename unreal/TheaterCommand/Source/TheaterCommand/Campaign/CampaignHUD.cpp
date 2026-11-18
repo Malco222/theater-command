@@ -53,6 +53,33 @@ namespace
 	 * card filled the whole window. It is one number now, so that the frame keeps the same size against the window at
 	 * every size: what it is at 1600 by 1000. "-TheaterOldFrameScale" is the old rule.)
 	 */
+	/**
+	 * A question card's lines, marked for its lettering: a line all in capitals is a section's head and takes the card
+	 * label's style; the rest take the style named (none: the card's plain line). What the rules wrote is kept letter
+	 * for letter: the marks' own signs are made safe first.
+	 */
+	FText CardMarkup(const FString& Plain, const TCHAR* LineStyle = nullptr)
+	{
+		TArray<FString> Lines;
+		Plain.ParseIntoArray(Lines, TEXT("\n"), false);
+		FString Marked;
+		for (int32 K = 0; K < Lines.Num(); ++K)
+		{
+			const FString& Line = Lines[K];
+			int32 Capitals = 0, Small = 0;
+			for (const TCHAR Char : Line)
+			{
+				Capitals += FChar::IsUpper(Char) ? 1 : 0;
+				Small += FChar::IsLower(Char) ? 1 : 0;
+			}
+			const FString Safe = Line.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")).Replace(TEXT("\""), TEXT("&quot;"));
+			const bool bHead = Capitals >= 3 && Small == 0;
+			Marked += (K > 0 ? TEXT("\n") : TEXT(""));
+			Marked += Safe.IsEmpty() ? Safe : bHead ? TEXT("<Head>") + Safe + TEXT("</>") : LineStyle ? FString::Printf(TEXT("<%s>"), LineStyle) + Safe + TEXT("</>") : Safe;
+		}
+		return FText::FromString(Marked);
+	}
+
 	float FrameScale(double PixelsHigh)
 	{
 		static const bool bOldRule = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFrameScale"));
@@ -186,6 +213,16 @@ namespace
 		FSlateFontInfo Info(Face, Size, FName(bBold ? TEXT("Bold") : TEXT("Regular")));
 		Info.LetterSpacing = Spacing;
 		return Info;
+	}
+
+	/**
+	 * The frame's one size of small capital label (the UI director's type floor, ruled on build 1638): the larger
+	 * label size, 10 as the player sees it, with its letter-spacing brought down to 0.04 em so the word grows by a
+	 * few per cent in width, not a quarter. The smaller size that stood beside it, about 8, is retired.
+	 */
+	FSlateFontInfo SmallCaps()
+	{
+		return Typed(9.0f, true, 40);
 	}
 
 	/** Where the pieces of the frame are on the screen this frame (absolute): a town's plate or a province's name is not drawn under one. */
@@ -497,6 +534,14 @@ namespace
 					// (a soft dark edge, so cream letters hold on pale ground and on snow)
 					Type.OutlineSettings.OutlineSize = FMath::Max(1, FMath::RoundToInt32(Size / 22.0f));
 					Type.OutlineSettings.OutlineColor = FMath::Lerp(FLinearColor(0.02f, 0.013f, 0.01f, 0.55f * Each.Alpha), FLinearColor(0.8f, 0.72f, 0.55f, 0.0f), Sheet);
+					if (Each.bShadowed)
+					{
+						// (The art director, 18 November 2026: a province's name that has only its town's roofs to lie on keeps
+						// its place, "slightly smaller with a soft dark shadow over the roofs": a broad dark edge, so that no
+						// roof's pale line joins a letter.)
+						Type.OutlineSettings.OutlineSize = FMath::Max(2, FMath::RoundToInt32(Size / 9.0f));
+						Type.OutlineSettings.OutlineColor = FMath::Lerp(FLinearColor(0.02f, 0.013f, 0.01f, 0.72f * Each.Alpha), FLinearColor(0.8f, 0.72f, 0.55f, 0.0f), Sheet);
+					}
 				}
 				const FString Glyph = bWhole ? Each.Whole : FString(1, &Each.Char);
 				const FVector2D Box = Measure->Measure(Glyph, Type);
@@ -521,6 +566,30 @@ namespace
 				const FLinearColor Day = Each.bInk ? FLinearColor(FColor(60, 80, 95)) : FMath::Lerp(Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204)),
 					Each.bSea ? FLinearColor(FColor(58, 78, 88)) : FLinearColor(FColor(52, 36, 22)), Sheet * (1.0f - Moon));
 				const FLinearColor Ink = FMath::Lerp(Day, FLinearColor(FColor(168, 184, 212)), Moon).CopyWithNewOpacity(Each.Alpha * (1.0f - 0.42f * Moon));
+				if (bWhole)
+				{
+					// (The art director, 18 November 2026: "Hollamd", "Gelderlamd": at the smaller sizes the last letters of
+					// a province's name stood doubled. Drawn as one piece of text and laid on the ground by a turn and a
+					// squeeze, a word came out as two sets of its letters, one set out a tenth wider than the other; it
+					// was so with the engine's edge and without it, and with the letters alone. A country's name, drawn a
+					// letter at a time, never did it. So a province's name is drawn the same way: each letter by itself,
+					// set where the word's own measure puts it.)
+					double Start = -0.5 * Box.X;
+					for (int32 K = 0; K < Glyph.Len(); ++K)
+					{
+						const FString Letter = Glyph.Mid(K, 1);
+						const FVector2D LetterBox = Measure->Measure(Letter, Type);
+						// (where the word's measure, with its letters' own pairing, puts this letter's left edge)
+						const double Left = Start + static_cast<double>(Measure->Measure(Glyph.Left(K), Type).X);
+						if (Letter != TEXT(" "))
+						{
+							const FVector2D Middle = Each.At / Scale + Right * (Left + 0.5 * LetterBox.X);
+							const FGeometry Stood = Geometry.MakeChild(LetterBox, FSlateLayoutTransform(Middle - LetterBox * 0.5), Lying, FVector2D(0.5, 0.5));
+							FSlateDrawElement::MakeText(OutDrawElements, LayerId, Stood.ToPaintGeometry(), Letter, Type, ESlateDrawEffect::None, Ink);
+						}
+					}
+					continue;
+				}
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
 			}
 			return LayerId;
@@ -528,68 +597,6 @@ namespace
 
 	private:
 		TWeakObjectPtr<ACampaignPlayerController> Controller;
-	};
-
-	/**
-	 * (The art director's round 38: "a cut ends after a whole word".) One line of words that is cut, where it must be,
-	 * after a whole word, with the mark of a cut after it. It takes whatever width its row gives it.
-	 */
-	class SWordLine : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SWordLine) {}
-			SLATE_ARGUMENT(FString, Words)
-			SLATE_ARGUMENT(FSlateFontInfo, Face)
-			SLATE_ARGUMENT(FLinearColor, Ink)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Words = Args._Words;
-			Face = Args._Face;
-			Ink = Args._Ink;
-		}
-
-		virtual FVector2D ComputeDesiredSize(float) const override
-		{
-			return FVector2D(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Face));
-		}
-
-		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
-		{
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-			const double Room = Geometry.GetLocalSize().X;
-			FString Shown = Words;
-			if (Measure->Measure(Shown, Face).X > Room + 0.5)
-			{
-				for (;;)
-				{
-					int32 Space = INDEX_NONE;
-					if (!Shown.FindLastChar(TEXT(' '), Space) || Space <= 0)
-					{
-						break;
-					}
-					Shown = Shown.Left(Space);
-					// (a comma, a colon or a dash left hanging at the cut goes with it)
-					while (Shown.Len() > 1 && (Shown.EndsWith(TEXT(",")) || Shown.EndsWith(TEXT(":")) || Shown.EndsWith(TEXT(";")) || Shown.EndsWith(TEXT("\u00B7")) || Shown.EndsWith(TEXT(" "))))
-					{
-						Shown.LeftChopInline(1);
-					}
-					if (Measure->Measure(Shown + TEXT(" \u2026"), Face).X <= Room)
-					{
-						Shown += TEXT(" \u2026");
-						break;
-					}
-				}
-			}
-			FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Shown, Face, ESlateDrawEffect::None, Ink * Style.GetColorAndOpacityTint());
-			return LayerId;
-		}
-
-	private:
-		FString Words;
-		FSlateFontInfo Face;
-		FLinearColor Ink = FLinearColor::White;
 	};
 
 	/**
@@ -1587,15 +1594,26 @@ namespace
 	}
 
 	/**
+	 * (The UI director's review of build 1628, item 2.) How wide a line is drawn, in the widget's own units, at the
+	 * scale it is painted at. Lettering is laid at the size it is shown (at 1,441 by 878 a card paints below its own
+	 * size), and each letter's step rounds to a whole pixel there, so a line measured at scale 1 can be drawn a twentieth
+	 * wider than it measured: the defender's roster, set to the right, ran a letter past its column.
+	 */
+	double PaintWide(const FString& Words, const FSlateFontInfo& Face, double Scale = 1.0)
+	{
+		const double At = Scale > 0.01 ? Scale : 1.0;
+		return static_cast<double>(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Face, static_cast<float>(At)).X) / At;
+	}
+
+	/**
 	 * (The UI director, check 19: no word is cut at an edge, and no line begins or ends with a dot.) A phrase set to a
 	 * measure: where it is wider it folds at its spaces, and with bBracket a name folds before its bracket first
 	 * ("Third Army" over "(2nd Division and 1st Cavalry Division)"). A word is never cut: one wider than the measure
-	 * stands alone on its line.
+	 * stands alone on its line. Scale is the one it is painted at (PaintWide).
 	 */
-	void FoldWords(const FString& Phrase, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, bool bBracket = false)
+	void FoldWords(const FString& Phrase, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, bool bBracket = false, double Scale = 1.0)
 	{
-		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		auto Wide = [&Face, Scale](const FString& Words) { return PaintWide(Words, Face, Scale); };
 		TArray<FString> Pieces;
 		int32 Bracket = INDEX_NONE;
 		if (bBracket && Wide(Phrase) > Room && Phrase.FindChar(TEXT('('), Bracket) && Bracket > 0)
@@ -1665,9 +1683,9 @@ namespace
 	 * (Check 19.) A line of phrases parted by dots ("Odds of 1.5 to 1 in your favour  ·  about 62% to take Mexico
 	 * City"), folded to a measure. A fold falls where a dot stands, and the dot goes with it: the fold parts the two
 	 * facts already, so no line begins or ends with a dot. A phrase wider than the measure on its own folds at a space.
-	 * A line break in the text stays one.
+	 * A line break in the text stays one. Scale is the one it is painted at (PaintWide).
 	 */
-	void FoldPhrases(const FString& Text, const FSlateFontInfo& Face, double Room, TArray<FString>& Out)
+	void FoldPhrases(const FString& Text, const FSlateFontInfo& Face, double Room, TArray<FString>& Out, double Scale = 1.0)
 	{
 		TArray<FString> Paragraphs;
 		Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
@@ -1676,8 +1694,7 @@ namespace
 			Out.Append(Paragraphs); // (not laid out yet: nothing to fold to)
 			return;
 		}
-		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-		auto Wide = [&Measure, &Face](const FString& Words) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+		auto Wide = [&Face, Scale](const FString& Words) { return PaintWide(Words, Face, Scale); };
 		const TCHAR Dot = static_cast<TCHAR>(0x00B7);
 		for (const FString& Paragraph : Paragraphs)
 		{
@@ -1725,7 +1742,7 @@ namespace
 					Line.Reset();
 				}
 				TArray<FString> Folded;
-				FoldWords(Phrase, Face, Room, Folded);
+				FoldWords(Phrase, Face, Room, Folded, false, Scale);
 				for (int32 K = 0; K + 1 < Folded.Num(); ++K)
 				{
 					Out.Add(Folded[K]);
@@ -1766,15 +1783,14 @@ namespace
 			Room = FMath::Max(static_cast<double>(Args._Guess), 24.0);
 		}
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
 			TArray<FString> Lines;
-			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines, LayoutScale);
 			double Widest = 0.0;
 			for (const FString& Line : Lines)
 			{
-				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Line, Face).X));
+				Widest = FMath::Max(Widest, PaintWide(Line, Face, LayoutScale));
 			}
 			return FVector2D(FMath::Min(Widest, Room), Lines.Num() * Step());
 		}
@@ -1784,14 +1800,13 @@ namespace
 			// (the width it is given is the width it folds to from now on)
 			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
 			TArray<FString> Lines;
-			FoldPhrases(Text.Get().ToString(), Face, Room, Lines);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			FoldPhrases(Text.Get().ToString(), Face, Room, Lines, Geometry.Scale);
 			const double High = Step();
 			const FLinearColor Shown = Style.GetColorAndOpacityTint() * Ink;
 			double Y = 0.0;
 			for (const FString& Line : Lines)
 			{
-				const double Wide = static_cast<double>(Measure->Measure(Line, Face).X);
+				const double Wide = PaintWide(Line, Face, Geometry.Scale);
 				const double X = Justify == ETextJustify::Center ? 0.5 * (Room - Wide) : Justify == ETextJustify::Right ? Room - Wide : 0.0;
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, High), FSlateLayoutTransform(FVector2D(FMath::Max(X, 0.0), Y))), Line, Face, ESlateDrawEffect::None, Shown);
 				Y += High;
@@ -1818,8 +1833,10 @@ namespace
 	 * card, in the roster's two forms. Where every corps of the side fits its column on one line, each stands as on the
 	 * kit: "XIX Corps · armoured, 2 divisions · 30,000 men". Where any does not, every corps of that side takes two
 	 * lines: the name alone in the lighter paper (folded before its bracket, else at a space, where it is wider than
-	 * the column) and under it the figures in the darker, which never fold, with no dot between the two, and 5 between
-	 * one corps and the next. The right side is set to the right. Typed 12 on 17, the sheet's pixels.
+	 * the column) and under it the figures in the darker, with no dot between the two, and 5 between one corps and the
+	 * next. The right side is set to the right. Typed 12 on 17, the sheet's pixels. (The UI director's review of build
+	 * 1628, item 2: every line wraps inside its half of the card, at any width; the figures too fold, at their dots,
+	 * where they are wider than the column, and every width is measured at the scale the card is painted at.)
 	 */
 	class SRosterBlock : public SLeafWidget
 	{
@@ -1837,15 +1854,14 @@ namespace
 
 		static constexpr double LineHigh = 17.0, Between = 5.0;
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
 			TArray<FRow> Rows;
-			const double High = Lay(Room, Rows);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const double High = Lay(Room, Rows, LayoutScale);
 			double Widest = 0.0;
 			for (const FRow& Row : Rows)
 			{
-				Widest = FMath::Max(Widest, static_cast<double>(Measure->Measure(Row.Words, Type()).X));
+				Widest = FMath::Max(Widest, PaintWide(Row.Words, Type(), LayoutScale));
 			}
 			return FVector2D(FMath::Min(Widest, Room), High);
 		}
@@ -1854,13 +1870,12 @@ namespace
 		{
 			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
 			TArray<FRow> Rows;
-			Lay(Room, Rows);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			Lay(Room, Rows, Geometry.Scale);
 			const FLinearColor Paper300(FColor::FromHex(TEXT("CDBF9C")));
 			const FSlateFontInfo Face = Type();
 			for (const FRow& Row : Rows)
 			{
-				const double Wide = static_cast<double>(Measure->Measure(Row.Words, Face).X);
+				const double Wide = PaintWide(Row.Words, Face, Geometry.Scale);
 				const double X = bOurs ? 0.0 : FMath::Max(Room - Wide, 0.0);
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, LineHigh), FSlateLayoutTransform(FVector2D(X, Row.Y))), Row.Words, Face,
 					ESlateDrawEffect::None, Style.GetColorAndOpacityTint() * (Row.bFigures ? Paper300 : Cream));
@@ -1878,8 +1893,8 @@ namespace
 
 		static FSlateFontInfo Type() { return Typed(9.0f); } // (typed 12: the sheet's pixels are three quarters of a point)
 
-		/** The rows at a width, top to bottom; returns the height they take. */
-		double Lay(double Width, TArray<FRow>& Rows) const
+		/** The rows at a width and the scale they are painted at, top to bottom; returns the height they take. */
+		double Lay(double Width, TArray<FRow>& Rows, double Scale) const
 		{
 			if (!Player.IsValid())
 			{
@@ -1888,13 +1903,12 @@ namespace
 			const FFaceOff& Face = Player->GetFaceOff();
 			const TArray<FRosterLine>& Roster = bOurs ? Face.OurRoster : Face.TheirRoster;
 			const FSlateFontInfo With = Type();
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 			auto Whole = [](const FRosterLine& Corps) { return Corps.Figures.IsEmpty() ? Corps.Name : Corps.Name + TEXT(" \u00B7 ") + Corps.Figures; };
 			// One form for the whole side: one line a corps only where every corps fits.
 			bool bOneLine = true;
 			for (const FRosterLine& Corps : Roster)
 			{
-				bOneLine = bOneLine && static_cast<double>(Measure->Measure(Whole(Corps), With).X) <= Width;
+				bOneLine = bOneLine && PaintWide(Whole(Corps), With, Scale) <= Width;
 			}
 			auto Add = [&Rows](const FString& Words, bool bFigures, double Y)
 			{
@@ -1915,7 +1929,7 @@ namespace
 				}
 				Y += Index > 0 ? Between : 0.0;
 				TArray<FString> Name;
-				FoldWords(Corps.Name, With, Width, Name, true);
+				FoldWords(Corps.Name, With, Width, Name, true, Scale);
 				for (const FString& Line : Name)
 				{
 					Add(Line, false, Y);
@@ -1923,8 +1937,14 @@ namespace
 				}
 				if (!Corps.Figures.IsEmpty())
 				{
-					Add(Corps.Figures, true, Y); // (the figures never fold: forty letters at most)
-					Y += LineHigh;
+					// (the figures fold where they are wider than the column, at a dot, and the dot goes with the fold)
+					TArray<FString> Figures;
+					FoldPhrases(Corps.Figures, With, Width, Figures, Scale);
+					for (const FString& Line : Figures)
+					{
+						Add(Line, true, Y);
+						Y += LineHigh;
+					}
 				}
 			}
 			return Y;
@@ -1986,8 +2006,7 @@ namespace
 			const FFaceOff& Face = Player->GetFaceOff();
 			static const FSlateColorBrush Solid(FLinearColor::White);
 			const FSlateFontInfo Sentence = Serif(TEXT("Regular"), 11.5f), Slanted = Serif(TEXT("Italic"), 10.5f), Head = Typed(8.5f, true, 140);
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& With) { return static_cast<double>(Measure->Measure(Words, With).X); };
+			auto Wide = [&Geometry](const FString& Words, const FSlateFontInfo& With) { return PaintWide(Words, With, Geometry.Scale); };
 			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& With, const FLinearColor& Ink)
 			{
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(900.0, 30.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, With, ESlateDrawEffect::None, Ink);
@@ -4141,51 +4160,6 @@ namespace
 	};
 
 	/**
-	 * (The UI director, 18 November 2026, on build 1596: every great power in sight.) Where a list on the opening card
-	 * runs on below what shows, it ends in a fade into the card's own leather: thin bands, clear at the top and nearly
-	 * solid at the foot, under the plate that counts what is below.
-	 */
-	class SListFade : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SListFade) : _Fill(FLinearColor::Black) {}
-			SLATE_ARGUMENT(FLinearColor, Fill)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Fill = Args._Fill;
-		}
-
-		virtual FVector2D ComputeDesiredSize(float) const override
-		{
-			return FVector2D::ZeroVector;
-		}
-
-		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
-		{
-			const FVector2D Size = Geometry.GetLocalSize();
-			const int32 Bands = 14;
-			const double Band = Size.Y / Bands;
-			const FSlateRoundedBoxBrush Plain(FLinearColor::White, 0.0f);
-			for (int32 Step = 0; Step < Bands; ++Step)
-			{
-				// (eased: most of the change near the foot, so the last whole row still reads)
-				const float Share = static_cast<float>(Step + 1) / Bands;
-				// (each band from its own top to the next band's, edge to edge: none laid over another, which would
-				// tint the strip between them twice and show as a faint line)
-				const double Top = Step * Band, Bottom = Step + 1 == Bands ? Size.Y : (Step + 1) * Band;
-				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X, Bottom - Top), FSlateLayoutTransform(FVector2D(0.0, Top))), &Plain,
-					ESlateDrawEffect::None, Fill.CopyWithNewOpacity(0.94f * Share * Share));
-			}
-			return LayerId + 1;
-		}
-
-	private:
-		FLinearColor Fill;
-	};
-
-	/**
 	 * (Rules 84.3.3; the art director's look brief, section 6; the kit's tc-panel, tc-step, tc-seg and tc-close.) The
 	 * Guide's first page: a kit panel 640 wide, THE GUIDE · FIRST COMMAND over "The ten lessons" and one line of state,
 	 * then the ten in rows 38 high under a small label for each month. Done: a brass-700 edge, a brass-500 disc with a
@@ -4207,15 +4181,15 @@ namespace
 			Controller = Args._Controller;
 		}
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
-			const FLaid& L = Laid();
+			const FLaid& L = Laid(LayoutScale);
 			return L.bValid ? FVector2D(L.W, L.H) : FVector2D::ZeroVector;
 		}
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
 		{
-			const FLaid& L = Laid();
+			const FLaid& L = Laid(Geometry.Scale);
 			if (!L.bValid)
 			{
 				return LayerId;
@@ -4292,9 +4266,10 @@ namespace
 			{
 				Write(Layer, Label.Words, FVector2D(P(Pad), P(Label.Y)), L.LabelFace, Brass500);
 			}
-			const double RowX = P(Pad), RowW = L.W - 2.0 * P(Pad), RowH = P(38.0);
+			const double RowX = P(Pad), RowW = L.W - 2.0 * P(Pad);
 			for (const FRowLaid& Each : L.Rows)
 			{
+				const double RowH = P(Each.High);
 				const FLessonRow& Row = Each.Row;
 				const FVector2D At(RowX, P(Each.Y)), Size(RowW, RowH);
 				const bool bDone = Row.State == TEXT("done"), bNow = Row.State == TEXT("now");
@@ -4338,25 +4313,33 @@ namespace
 					const FVector2D NumberSize = Measure->Measure(Number, L.NumberFace);
 					Write(Layer + 3, Number, DiscAt + (FVector2D(Disc, Disc) - NumberSize) * 0.5, L.NumberFace, RingInk);
 				}
-				// Its name, and what stands at its right.
+				// Its name, and what stands at its right. (The name's lines stand together in the row's middle.)
 				const double NameX = DiscAt.X + Disc + P(12.0), RightX = At.X + RowW - P(12.0);
+				const double Step = P(L.NameStep), NamesTop = At.Y + (RowH - Step * Each.Names.Num()) * 0.5;
+				auto WriteName = [&](const FSlateFontInfo& WithFace, const FLinearColor& WithInk)
+				{
+					for (int32 Nth = 0; Nth < Each.Names.Num(); ++Nth)
+					{
+						WriteIn(Layer + 2, Each.Names[Nth], NameX, NamesTop + Nth * Step, Step, WithFace, WithInk, false);
+					}
+				};
 				if (bDone)
 				{
 					// SHOW ME AGAIN: the kit's quiet word, underlined 2 under its letters.
 					const bool bAgainHot = Hovered(Each.Spot);
 					const FVector2D Word = WriteIn(Layer + 2, L.Again, RightX, At.Y, RowH - P(2.0), L.QuietFace, bAgainHot ? Brass100 : Brass300, true);
 					Fill(Layer + 2, FVector2D(RightX - Word.X, At.Y + (RowH - P(2.0) + Word.Y) * 0.5 + P(1.0)), FVector2D(Word.X, 1.0), bAgainHot ? Brass100 : Brass700);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Paper200, false);
+					WriteName(L.NameFace, Paper200);
 				}
 				else if (bNow)
 				{
 					WriteIn(Layer + 2, L.Waiting, RightX, At.Y, RowH, L.WaitFace, Brass100, true);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Brass100, false);
+					WriteName(L.NameFace, Brass100);
 				}
 				else
 				{
 					WriteIn(Layer + 2, L.Later, RightX, At.Y, RowH, L.LaterFace, TextFaint, true);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.LaterNameFace, TextMuted, false);
+					WriteName(L.LaterNameFace, TextMuted);
 				}
 			}
 
@@ -4459,8 +4442,9 @@ namespace
 		struct FRowLaid
 		{
 			FLessonRow Row;
-			FString Name; // (its name, shortened to fit if it must)
+			TArray<FString> Names; // (its name, on as many lines as it takes: never cut short)
 			double Y = 0.0;
+			double High = 38.0; // (38, and a line more for each further line of its name)
 			int32 Spot = INDEX_NONE;
 		};
 		struct FLabelLaid
@@ -4473,7 +4457,8 @@ namespace
 		{
 			bool bValid = false;
 			int32 Revision = INDEX_NONE;
-			double W = 0.0, H = 0.0;
+			double Scale = 1.0; // (the scale its names were folded at)
+			double W = 0.0, H = 0.0, NameStep = 0.0;
 			FString Label, Head, State, Setting;
 			FString Again = TEXT("SHOW ME AGAIN"), Waiting = TEXT("WAITING FOR YOU"), Later = TEXT("when its moment comes");
 			FString OnWord = TEXT("ON"), OffWord = TEXT("OFF"), RulesWord = TEXT("HOW A MONTH WORKS ›");
@@ -4486,24 +4471,33 @@ namespace
 			FSlateFontInfo LabelFace, HeadFace, StateFace, NameFace, LaterNameFace, NumberFace, QuietFace, WaitFace, LaterFace, SettingFace, SegFace;
 		};
 
-		/** The page as the controller has it now, set out again only when it changes. */
-		const FLaid& Laid() const
+		/**
+		 * The page as the controller has it now, set out again only when it changes, or when it is drawn at another
+		 * scale (its names fold at the scale they are painted at; Scale 0 keeps the last).
+		 */
+		const FLaid& Laid(double Scale = 0.0) const
 		{
 			if (!Controller.IsValid() || !Controller->IsLessonGuideOpen())
 			{
 				return Kept; // (as last set out: it is not drawn while closed)
 			}
 			const int32 Revision = Controller->GetLessonGuideRevision();
-			if (!Kept.bValid || Kept.Revision != Revision)
+			const double At = Scale > 0.01 ? Scale : Kept.bValid ? Kept.Scale : 1.0;
+			const bool bChanged = !Kept.bValid || Kept.Revision != Revision;
+			if (bChanged || !FMath::IsNearlyEqual(Kept.Scale, At, 0.001))
 			{
-				Kept = Lay(Controller->GetLessonGuide());
+				Kept = Lay(Controller->GetLessonGuide(), At);
 				Kept.Revision = Revision;
-				HoverSpot = INDEX_NONE;
+				Kept.Scale = At;
+				if (bChanged)
+				{
+					HoverSpot = INDEX_NONE;
+				}
 			}
 			return Kept;
 		}
 
-		static FLaid Lay(const FLessonGuide& Guide)
+		static FLaid Lay(const FLessonGuide& Guide, double Scale)
 		{
 			FLaid L;
 			if (!Guide.bValid)
@@ -4532,6 +4526,8 @@ namespace
 			L.LaterFace = Typed(Pt(12.0));
 			L.SettingFace = Typed(Pt(13.0));
 			L.SegFace = Typed(Pt(13.0), true, 80);
+			// (a name's further line: the step of its face, in the brief's pixels)
+			L.NameStep = static_cast<double>(Measure->GetMaxCharacterHeight(L.NameFace)) / K;
 			// The close stud, 32 across, at the top right.
 			FSpot& Close = L.Spots.AddDefaulted_GetRef();
 			Close.Box = FBox2D(FVector2D(L.W - P(19.0 + 32.0), P(18.0)), FVector2D(L.W - P(19.0), P(50.0)));
@@ -4569,23 +4565,23 @@ namespace
 					const FString& Right = bDone ? L.Again : bNow ? L.Waiting : L.Later;
 					const FSlateFontInfo& RightFace = bDone ? L.QuietFace : bNow ? L.WaitFace : L.LaterFace;
 					const FSlateFontInfo& NameFace = bDone || bNow ? L.NameFace : L.LaterNameFace;
-					// (the name keeps clear of what stands at the right, and is cut short with a mark if it must be)
-					const double Room = P(RowW - 8.0 - 22.0 - 12.0 - 12.0 - 16.0) - Wide(Right, RightFace);
-					Each.Name = Each.Row.Head;
-					if (Wide(Each.Name, NameFace) > Room)
+					// (the name keeps clear of what stands at the right; where it is longer it goes on to a second line
+					// and the row grows, never cut short with three dots: the UI director, 08:57 on the review of build
+					// 1628. It folds at the scale it is painted at.)
+					const double Room = P(RowW - 8.0 - 22.0 - 12.0 - 12.0 - 16.0) - PaintWide(Right, RightFace, Scale);
+					FoldWords(Each.Row.Head, NameFace, Room, Each.Names, false, Scale);
+					if (Each.Names.Num() == 0)
 					{
-						while (Each.Name.Len() > 1 && Wide(Each.Name + TEXT("…"), NameFace) > Room)
-						{
-							Each.Name.LeftChopInline(1);
-						}
-						Each.Name = Each.Name.TrimEnd() + TEXT("…");
+						Each.Names.Add(FString());
 					}
+					Each.High = 38.0 + (Each.Names.Num() - 1) * L.NameStep;
+					const double Middle = Y + Each.High * 0.5;
 					if (bDone)
 					{
 						// SHOW ME AGAIN, a quiet word at the right: only the word takes the click.
 						const double RightEdge = P(Pad + RowW - 12.0), WordW = Wide(L.Again, L.QuietFace);
 						FSpot& Again = L.Spots.AddDefaulted_GetRef();
-						Again.Box = FBox2D(FVector2D(RightEdge - WordW - P(6.0), P(Y + 6.0)), FVector2D(RightEdge + P(6.0), P(Y + 32.0)));
+						Again.Box = FBox2D(FVector2D(RightEdge - WordW - P(6.0), P(Middle - 13.0)), FVector2D(RightEdge + P(6.0), P(Middle + 13.0)));
 						Again.Act = TEXT("again:") + Each.Row.Id;
 						Each.Spot = L.Spots.Num() - 1;
 					}
@@ -4593,11 +4589,11 @@ namespace
 					{
 						// A row waiting for him: the whole row brings its note back.
 						FSpot& Back = L.Spots.AddDefaulted_GetRef();
-						Back.Box = FBox2D(FVector2D(P(Pad), P(Y)), FVector2D(P(Pad + RowW), P(Y + 38.0)));
+						Back.Box = FBox2D(FVector2D(P(Pad), P(Y)), FVector2D(P(Pad + RowW), P(Y + Each.High)));
 						Back.Act = TEXT("back:") + Each.Row.Id;
 						Each.Spot = L.Spots.Num() - 1;
 					}
-					Y += 38.0;
+					Y += Each.High;
 				}
 			}
 			Y += 18.0;
@@ -4777,6 +4773,14 @@ namespace
 				TipStyles->Set("Rail", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor(198, 228, 255)))));
 				TipStyles->Set("Strong", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)));
 				TipStyles->Set("Dim", FTextBlockStyle(TipPlain).SetColorAndOpacity(FSlateColor(Muted)));
+				// (The UI director, 18 November 2026, on the landing card: its section heads "take the card label style,
+				// brass small capitals at the label size", as the attack card's WHAT YOU FACE does: SmallCaps(), the frame's
+				// one size of small capital label.)
+				CardPlain = FTextBlockStyle().SetFont(Font(TEXT("Regular"), 13)).SetColorAndOpacity(FSlateColor(Muted));
+				CardStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterCardMarks"));
+				CardStyles->Set("Head", FTextBlockStyle(CardPlain).SetFont(SmallCaps()).SetColorAndOpacity(FSlateColor(Brass)));
+				CardStyles->Set("Amber", FTextBlockStyle(CardPlain).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("D9A441"))))));
+				CardStyles->Set("Red", FTextBlockStyle(CardPlain).SetColorAndOpacity(FSlateColor(Alarm)));
 			}
 			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
 			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
@@ -4857,14 +4861,16 @@ namespace
 							.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? FText::FromString((bOurs ? F->OurName : F->TheirName).ToString().ToUpper()) : FText::GetEmpty(); })
 						]
 					]
-					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					// (The UI director's review of build 1628, item 2: every line wraps inside its half of the card, the
+					// defender's set to the right; the slots give each the column's whole width.)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(Justify)
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurGeneral : F->TheirGeneral) : FText::GetEmpty(); })
 					]
-					+ SVerticalBox::Slot().AutoHeight().HAlign(Align).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+						SNew(SPhraseText).Face(Font(TEXT("Regular"), 11)).Ink(Muted).Justify(Justify).Guess(370.0f)
 						.Text_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return F ? (bOurs ? F->OurStrength : F->TheirStrength) : FText::GetEmpty(); })
 					]
 					// (Check 19.) The corps, in the roster's two forms; the slot gives it the column's whole width.
@@ -4940,16 +4946,18 @@ namespace
 						Edge(TopLeftPiece, SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
 						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::Visible; })
+						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::Visible; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
 						[
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
+								// (The UI director, 11:19 on build 1638: the mark rises to the label size, and as a mark it is the
+								// one label that keeps its wide tracking. The binding grows round it.)
 								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 3.0f, 19.0f, 3.0f))
 								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 8, 320)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
+									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Typed(9.0f, true, 80)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 6.0f, 24.0f, 8.0f))
@@ -5121,7 +5129,7 @@ namespace
 									SNew(SHorizontalBox)
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("YOUR CHIEF OF STAFF SUGGESTS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("YOUR CHIEF OF STAFF SUGGESTS"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 									]
 									+ SHorizontalBox::Slot().AutoWidth()
 									[
@@ -5129,7 +5137,7 @@ namespace
 										.ToolTipText(FText::FromString(TEXT("Send him away. H opens the guide whenever you want it.")))
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->DismissAdviser(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("DISMISS"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+											SNew(STextBlock).Text(FText::FromString(TEXT("DISMISS"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 										]
 									]
 								]
@@ -5165,7 +5173,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(24.0f)
 					[
 						SNew(SVerticalBox)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
+						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
 							Piece(SNew(SHorizontalBox)
@@ -5205,7 +5213,7 @@ namespace
 										.ToolTipText(FText::FromString(TEXT("The Guide: the ten lessons of FIRST COMMAND, done, waiting and to come; and how to play, the table, a month and what every button is for. (H)")))
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+											SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 										]
 									]
 									// (Rules 84.3.3; the look brief, section 6: the kit's tc-count on GUIDE's top right corner, the notes he
@@ -5229,7 +5237,7 @@ namespace
 									SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 									]
 								]
 							]
@@ -5393,6 +5401,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SHorizontalBox)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
@@ -5436,7 +5445,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 									[
@@ -5542,7 +5551,7 @@ namespace
 											.ToolTipText(FText::FromString(TEXT("This army stays where it is this month and is asked for no more orders: NEXT ARMY passes it by. It can still be given an order.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("STAND THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+												SNew(STextBlock).Text(FText::FromString(TEXT("STAND THIS MONTH"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -5552,7 +5561,7 @@ namespace
 											.ToolTipText(FText::FromString(TEXT("This army stands this month. Press to take that back: it waits for orders again.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("STANDING THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+												SNew(STextBlock).Text(FText::FromString(TEXT("STANDING THIS MONTH"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 											]
 										]
 									]
@@ -5640,7 +5649,9 @@ namespace
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(912.0f)
-							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, static_cast<float>(GetTickSpaceGeometry().GetLocalSize().Y) - 44.0f)); })
+							// (the frame's own height, not the window's: the two differ by the frame's scale, and by the window's measure a
+							// tall card ran past the bottom of Brian's window before it began to scroll)
+							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, (ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 972.0f) - 44.0f)); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(34.0f, 24.0f, 22.0f, 26.0f))
 								[
@@ -5702,7 +5713,7 @@ namespace
 									// forecasts is headed by its order's own words, so nobody has to match a forecast to a button.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->NowLabel : FText::GetEmpty(); })
 									]
@@ -5753,7 +5764,7 @@ namespace
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterLabel : FText::GetEmpty(); })
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -5857,7 +5868,7 @@ namespace
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && F->bSoften ? EVisibility::Visible : EVisibility::Collapsed; })
 										+ SVerticalBox::Slot().AutoHeight()
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("SOFTEN THE LINE FIRST"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Text(FText::FromString(TEXT("SOFTEN THE LINE FIRST"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 										[
@@ -5879,7 +5890,7 @@ namespace
 													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bProbeOk; })
 													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ProbeLine(); } return FReply::Handled(); })
 													[
-														SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120))
+														SNew(STextBlock).Font(SmallCaps())
 														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bProbeOk ? BrightBrass : Faint); })
 														.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ProbeLabel : FText::GetEmpty(); })
 													]
@@ -5903,7 +5914,7 @@ namespace
 													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bBombOk; })
 													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BombLine(); } return FReply::Handled(); })
 													[
-														SNew(STextBlock).Text(FText::FromString(TEXT("BOMB THE LINE"))).Font(Font(TEXT("Bold"), 9, 120))
+														SNew(STextBlock).Text(FText::FromString(TEXT("BOMB THE LINE"))).Font(SmallCaps())
 														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bBombOk ? BrightBrass : Faint); })
 													]
 												]
@@ -5919,7 +5930,7 @@ namespace
 									// The Battle Ticket: what the map says about this fight.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -5938,7 +5949,7 @@ namespace
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->TicketHidden > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ToggleTicket(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 											.Text_Lambda([this, Face]()
 											{
 												const FFaceOff* F = Face();
@@ -7072,7 +7083,11 @@ namespace
 						[
 							// (a landing's question carries the reckoning and the holding of the sea: it is broader, so that its lines do not
 							// fold; the march-up card is the landing card's width, sheet 34's 880)
+							// (The UI director, 18 November 2026: the landing card stood 822 of Brian's 893 and was the tallest in the
+							// game. Its flag stands beside its title, 48 high, not above it; and should a card still be taller than
+							// the window, its lines scroll inside it: the title, the verdict and the two buttons never leave the window.)
 							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 900.0f : Controller.IsValid() && Controller->GetWarPrompt().bApproach ? 880.0f : 640.0f); })
+							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, (ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 972.0f) - 44.0f)); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 24.0f))
 								[
@@ -7080,16 +7095,28 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 									[
 										SNew(SBox).WidthOverride(132.0f).HeightOverride(88.0f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
+										.Visibility_Lambda([this]() { return Controller.IsValid() && (Controller->GetWarPrompt().bApproach || Controller->GetWarPrompt().bLanding) ? EVisibility::Collapsed : EVisibility::Visible; })
 										[
 											SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWarPrompt().Tag : FString()); })
 										]
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(TAttribute<FMargin>::CreateLambda([this]() { return FMargin(0.0f, Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 0.0f : 16.0f, 0.0f, 0.0f); }))
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+										SNew(SHorizontalBox)
 										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bLanding ? EVisibility::Visible : EVisibility::Collapsed; })
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWarPrompt().Tag : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
@@ -7121,38 +7148,51 @@ namespace
 										})
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().VerdictUnder : FText::GetEmpty(); })
 									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Body.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Body : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
-									[
-										// (Rules version 83: the test of strength, the card's last note. Plain where the staff would
-										// expect to hold, amber where it is an even thing, red where they would not expect the force to
-										// be still ashore. It never stops him.)
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Ashore.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.ColorAndOpacity_Lambda([this]()
-										{
-											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().AshoreTone : 0;
-											return FSlateColor(Tone == 3 ? Alarm : Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Muted);
-										})
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Ashore : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
-									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Last.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Last : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
-									[
-										// (rules version 73: the warning that the sea behind the beach could be closed, in red)
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Alarm).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Warning.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Warning : FText::GetEmpty(); })
+										// (what scrolls, where the card is taller than the window: the card's lines)
+										SNew(SScrollBox).ScrollBarThickness(FVector2D(4.0, 4.0))
+										+ SScrollBox::Slot()
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												// (a section's head, a line all in capitals, takes the card label's style: brass small capitals)
+												SNew(SRichTextBlock).TextStyle(&CardPlain).DecoratorStyleSet(CardStyles.Get()).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Body.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? CardMarkup(Controller->GetWarPrompt().Body.ToString()) : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+											[
+												// (Rules version 83: the test of strength, the card's last note. Plain where the staff would
+												// expect to hold, amber where it is an even thing, red where they would not expect the force to
+												// be still ashore. It never stops him.)
+												SNew(SRichTextBlock).TextStyle(&CardPlain).DecoratorStyleSet(CardStyles.Get()).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Ashore.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]()
+												{
+													if (!Controller.IsValid())
+													{
+														return FText::GetEmpty();
+													}
+													const int32 Tone = Controller->GetWarPrompt().AshoreTone;
+													return CardMarkup(Controller->GetWarPrompt().Ashore.ToString(), Tone == 3 ? TEXT("Red") : Tone == 2 ? TEXT("Amber") : nullptr);
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Last.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Last : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+											[
+												// (rules version 73: the warning that the sea behind the beach could be closed, in red)
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Alarm).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Warning.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Warning : FText::GetEmpty(); })
+											]
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 22.0f, 0.0f, 0.0f)
 									[
@@ -7234,10 +7274,15 @@ namespace
 					// and e09457e.) The card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12
 					// (48) above and below, its type at full size, so that under the title band (FIRST COMMAND on its own
 					// row, CONTINUE at the end of the pages' row) the seven great powers, the three settings and BEGIN AS ...
-					// all show without scrolling; the smaller nations take what height is left, down to their MORE plate
-					// alone. Where even that is more than the screen less its 48s (a pick whose sentence runs long, on a
-					// short frame), the card stands taller, as tall as it needs, and the 48s give, down to 16; only past
-					// that is it drawn smaller, and never under 0.95 of its size (04:00). (See LookAtList for what it needs.)
+					// all show without scrolling; the smaller nations take what height is left. (The give order of 08:57,
+					// capped at 09:04, after 07:10 and the review of build 1628, item 4.) First the margins, only to bring
+					// in a second whole row of the smaller nations, never a third: where the 48s show fewer and standing
+					// up to 16 from the screen's top and foot shows two, the card stands as tall as the two rows and the MORE
+					// plate's band under them, and the 48s give only that much. Then the list, down to one whole row and
+					// its plate, never less; where even that is more than the screen less its 16s, the card is drawn
+					// smaller, and never under 0.95 of its size; and only past that, on the smallest frame (1,280 by 720),
+					// does the list go down to its plate alone. The summary at the foot is as tall for every nation, so what
+					// the card needs does not change with the pick. (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
@@ -7249,7 +7294,9 @@ namespace
 							SAssignNew(OpeningCardBox, SBox).WidthOverride(1240.0f)
 							.HeightOverride_Lambda([this]()
 							{
-								// (876 on the frame of 1,600 by 1,000, which is 972 high; 1,254 on the frame of 1,280 by 720)
+								// (876 on a frame 972 high. Since build 1638 the frame keeps one size against the window
+								// (FrameScale), so it stands 972 high in a window of any size, and the card is laid out
+								// the same in each; only a window narrower than 4 to 3 draws it smaller, by its width.)
 								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
 								// (never drawn under 0.95 of its size: past that the list is cut at its foot instead)
 								const double Room = FMath::Max(High - 32.0, 1.0);
@@ -7358,49 +7405,63 @@ namespace
 										]
 									]
 									// What the page offers. (The UI director, on build 1596.) The list stands above the settings, never
-									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, it ends
-									// in a fade and a plate counting what is below ("24 MORE ▼"); a click on the plate scrolls it down by
-									// one row of cards. (03:48: the full triangle, a size under the plate's type, so that it sits at the
-									// letters' height and not above them. The small one is in neither the typewriter nor, for certain, the
-									// face of signs it falls back on, and a sign no face has is drawn as an empty box.)
+									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, a plate
+									// counts what is below ("24 MORE ▼"); a click on the plate scrolls it down by one row of cards. (03:48:
+									// the full triangle, a size under the plate's type, so that it sits at the letters' height and not
+									// above them. The small one is in neither the typewriter nor, for certain, the face of signs it falls
+									// back on, and a sign no face has is drawn as an empty box.) (The UI director's review of build 1628,
+									// items 4 and 5.) The list shows whole rows only, no half row: it is as high as the rows that fit
+									// whole, and the plate sits in its own band under the last of them, never on a card; what room is
+									// over stands under the plate (see LookAtList).
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(SOverlay)
-										+ SOverlay::Slot()
+										SAssignNew(ListArea, SBox).VAlign(VAlign_Top)
 										[
-											SAssignNew(StartsScroll, SScrollBox)
-											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
 											[
-												SAssignNew(Starts, SVerticalBox)
-											]
-										]
-										+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 0.0f)
-										[
-											SNew(SBox).HeightOverride(40.0f)
-											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-											[
-												SNew(SListFade).Fill(Leather)
-											]
-										]
-										+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 4.0f)
-										[
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 3.0f, 14.0f, 4.0f)).IsFocusable(false)
-											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
-											.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
-											[
-												SNew(SHorizontalBox)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+												SNew(SBox)
+												.HeightOverride_Lambda([this]()
+												{
+													// (until the list is first measured, the whole area: see LookAtList; and never quite nothing, so
+													// that it is still laid out and measured where the list is down to its plate alone)
+													return FOptionalSize(FMath::Max(ListViewHigh >= 0.0f ? ListViewHigh : ListArea.IsValid() ? static_cast<float>(ListArea->GetTickSpaceGeometry().GetLocalSize().Y) : 0.0f, 1.0f));
+												})
 												[
-													SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
-													.Text_Lambda([this]()
-													{
-														return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE"), ListBelow) : FString(TEXT("MORE")));
-													})
+													SAssignNew(StartsScroll, SScrollBox)
+													// (the checker's fault 2: a wheel event put back on its line has moved nothing, and would otherwise
+													// pass on to the map under the card)
+													.ConsumeMouseWheel(EConsumeMouseWheel::Always)
+													.OnUserScrolled_Lambda([this](float Offset) { SnapList(Offset); })
+													+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+													[
+														SAssignNew(Starts, SVerticalBox)
+													]
 												]
-												// (on the letters' line: both lines are measured by the typewriter's face, so their feet meet)
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+											[
+												SNew(SBox).HeightOverride(PlateBand).HAlign(HAlign_Center).VAlign(VAlign_Center)
+												.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
 												[
-													SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(BrightBrass).Text(FText::FromString(TEXT("\u25BC")))
+													SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 3.0f, 14.0f, 4.0f)).IsFocusable(false)
+													.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
+													[
+														SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+														[
+															SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
+															.Text_Lambda([this]()
+															{
+																return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE"), ListBelow) : FString(TEXT("MORE")));
+															})
+														]
+														// (on the letters' line: both lines are measured by the typewriter's face, so their feet meet)
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+														[
+															SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(BrightBrass).Text(FText::FromString(TEXT("\u25BC")))
+														]
+													]
 												]
 											]
 										]
@@ -7487,11 +7548,13 @@ namespace
 			PlaceLessonNote();
 			PlaceLessonPointer();
 			LookAtList();
-			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
+			// Where the pieces of the frame are now, for the plates and names that must keep out from under them. (A piece
+			// counts only while it is on the screen, every box it stands in shown: one in a row that is put away, as the
+			// bottom row is behind the start screen, keeps no rectangle.)
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
 			{
-				if (Each->GetVisibility().IsVisible())
+				if (IsShownNow(Each))
 				{
 					// (as it was last painted, in the window's own measure: the plates and the names are drawn in that)
 					const FSlateRect Rect = Each->GetPaintSpaceGeometry().GetLayoutBoundingRect();
@@ -7591,7 +7654,7 @@ namespace
 				{
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("DIPLOMACY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Text(FText::FromString(TEXT("DIPLOMACY"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 					];
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 					[
@@ -7639,7 +7702,7 @@ namespace
 						return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false)
 							.OnClicked_Lambda([this, Tab]() { if (Controller.IsValid()) { Controller->SetProvinceTab(Tab); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 							];
 					};
 					if (bProvince && (Recruits.Num() > 0 || Works.Num() > 0))
@@ -7661,7 +7724,7 @@ namespace
 					{
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(Info.OptionsTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 					}
 					// (Ruling 46: "Forming here". A header that sums it up, then a line an order: its sign, what it is, a bar
@@ -7670,7 +7733,7 @@ namespace
 					{
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("FORMING HERE"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(FText::FromString(TEXT("FORMING HERE"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 						if (!Info.FormingHead.IsEmpty())
 						{
@@ -7726,7 +7789,7 @@ namespace
 									return FReply::Handled();
 								})
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 								]
 							]
 						];
@@ -7741,7 +7804,7 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Text(FText::FromString(Info.bPrizeToTake ? TEXT("THE PRIZE") : TEXT("WHAT IT PAYS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+									SNew(STextBlock).Text(FText::FromString(Info.bPrizeToTake ? TEXT("THE PRIZE") : TEXT("WHAT IT PAYS"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 								[
@@ -7762,7 +7825,7 @@ namespace
 						// (Version 64) Fieldworks standing empty here, for a corps of the player's side to take over.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.LeftWorksTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass).AutoWrapText(true)
+							SNew(STextBlock).Text(Info.LeftWorksTitle).Font(SmallCaps()).ColorAndOpacity(Brass).AutoWrapText(true)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7774,7 +7837,7 @@ namespace
 						// (Version 63) Cut off from the rest of its country: what its troops live on, and for how long.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.PocketTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Info.bPocketSpent ? Alarm : BrightBrass).AutoWrapText(true)
+							SNew(STextBlock).Text(Info.PocketTitle).Font(SmallCaps()).ColorAndOpacity(Info.bPocketSpent ? Alarm : BrightBrass).AutoWrapText(true)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7787,7 +7850,7 @@ namespace
 						const bool bBesieged = Info.SiegeTitle.ToString().StartsWith(TEXT("BESIEGED"));
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.SiegeTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(bBesieged ? Alarm : Brass)
+							SNew(STextBlock).Text(Info.SiegeTitle).Font(SmallCaps()).ColorAndOpacity(bBesieged ? Alarm : Brass)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7807,7 +7870,7 @@ namespace
 						// The places of the province that are prizes of their own, and what happens to them if it is lost.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.PlacesTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(Info.PlacesTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7819,7 +7882,7 @@ namespace
 						// The town: its building plots as a row of lots, each with what stands on it, and the way to its plan.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 							.Text(FText::FromString(FString::Printf(TEXT("THE TOWN  \u00B7  %d PLOT%s%s"), Info.Plots.Num(), Info.Plots.Num() == 1 ? TEXT("") : TEXT("S"),
 								Info.PlotsFree > 0 ? *FString::Printf(TEXT(", %d FREE"), Info.PlotsFree) : TEXT(""))))
 						];
@@ -7842,7 +7905,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("The town plan: every plot, what stands on it, and everything that could be built here: commerce, farming, learning, training, medicine and administration.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenTownPlan(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? BrightBrass : Muted)
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? BrightBrass : Muted)
 								.Text(FText::FromString(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? FString::Printf(TEXT("TOWN PLAN  \u00B7  %d TO BUILD"), Info.PlotsCanBuild) : FString(TEXT("TOWN PLAN"))))
 							]
 						];
@@ -8121,7 +8184,7 @@ namespace
 					return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
 						.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 						];
 				};
 				if (Army.bFleet)
@@ -8170,7 +8233,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Everything this fleet could be told to do: every sea in reach with the enemy known there, shipping lanes to escort, coasts to shell, and splitting ships off or joining another fleet.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetOrders(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("ORDERS: ESCORT, SHELL, SPLIT"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Text(FText::FromString(TEXT("ORDERS: ESCORT, SHELL, SPLIT"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 							]
 						];
 					}
@@ -8183,7 +8246,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("The fighters and strike aircraft its carriers bring. Send them to search a sea for the enemy, to strike a fleet your side has found, or to raid ships in a harbour.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetWings(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 								.Text(FText::FromString(FString::Printf(TEXT("CARRIER AIRCRAFT  \u00B7  %d"), Army.FleetAircraft)))
 							]
 						];
@@ -8322,7 +8385,45 @@ namespace
 						.ToolTipText(FText::FromString(TEXT("An ally's corps standing here can march with your army: it keeps its own flag and pay, but takes your orders, attacks beside your corps, and the ground you take together is yours. It goes home when you send it back, or if it is left a month with none of your troops beside it. It does not sail, dig in or get promoted.")))
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskAlliesToJoin(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.JoinButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.JoinButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
+				// (Brian, 18 November 2026.) The town's orders, on the army's own tray: storm the town it stands round (the
+				// one lit button: it is the attack he was looking for), go into the town it stands in, or come out again.
+				if (!Army.StormButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(Army.StormTip)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(0); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.StormButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
+				if (!Army.GarrisonButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(Army.GarrisonTip)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(1); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.GarrisonButton).Font(SmallCaps()).ColorAndOpacity(Muted)
+						]
+					];
+				}
+				if (!Army.FieldButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("The corps in hand leave the town and stand in the open country of the province again, where they can march and attack.")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(2); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.FieldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 				}
@@ -8335,7 +8436,7 @@ namespace
 						.ToolTipText(Army.FoldTip)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFold(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.FoldButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.FoldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 				}
@@ -8417,30 +8518,56 @@ namespace
 		 */
 		FMargin NoticeGap(float* OutWidth) const
 		{
-			FVector2D Size(1920.0, 1080.0);
-			if (GEngine && GEngine->GameViewport)
+			// (The UI director, 18 November 2026, on the by-sea notice at Brian's window: its end ran under NEXT ARMY.
+			// "Its width is bounded by the plates on either side, 16 clear of each, and it wraps inside." The plates'
+			// edges are read where they stand this frame, in the frame's own measure: no window size, and no scale
+			// of the screen's, comes into it, so no size of window or fineness of pixel can put it out.)
+			const float Clear = 16.0f;
+			if (!ScreenRoot.IsValid())
 			{
-				GEngine->GameViewport->GetViewportSize(Size);
+				if (OutWidth)
+				{
+					*OutWidth = 800.0f;
+				}
+				return FMargin(24.0f, 112.0f, 24.0f, 0.0f);
 			}
-			// (window pixels to this screen's units: the frame's own scale and, on top of it, Unreal's for the window's size. The pre-checker's find of 18 November 2026: by the first alone these came out two thirds too large in Brian's window.)
-			const float Scale = FrameScale(Size.Y) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
-			auto Wide = [Scale](const TWeakPtr<SWidget>& Kept) -> float
+			const FGeometry& Frame = ScreenRoot->GetTickSpaceGeometry();
+			const float Whole = static_cast<float>(Frame.GetLocalSize().X);
+			auto Edges = [&Frame](const TWeakPtr<SWidget>& Kept, float& OutLeft, float& OutRight)
 			{
 				const TSharedPtr<SWidget> Widget = Kept.Pin();
-				return Widget.IsValid() && Widget->GetVisibility().IsVisible() ? static_cast<float>(Widget->GetTickSpaceGeometry().GetAbsoluteSize().X) / Scale : 0.0f;
+				if (!Widget.IsValid() || !Widget->GetVisibility().IsVisible())
+				{
+					return false;
+				}
+				const FGeometry& Its = Widget->GetTickSpaceGeometry();
+				if (Its.GetLocalSize().X < 1.0f || Its.GetLocalSize().Y < 1.0f)
+				{
+					return false;
+				}
+				OutLeft = static_cast<float>(Frame.AbsoluteToLocal(Its.GetAbsolutePosition()).X);
+				OutRight = static_cast<float>(Frame.AbsoluteToLocal(Its.GetAbsolutePosition() + Its.GetAbsoluteSize()).X);
+				return OutRight > OutLeft;
 			};
-			const float Calendar = Wide(TopLeftPiece);
-			float Chips = 0.0f;
+			float From = 24.0f, To = Whole - 24.0f, Left = 0.0f, Right = 0.0f;
+			if (Edges(TopLeftPiece, Left, Right))
+			{
+				From = FMath::Max(From, Right + Clear);
+			}
 			for (const TWeakPtr<SWidget>& Each : TopChips)
 			{
-				Chips = FMath::Max(Chips, Wide(Each));
+				// (a chip of the right-hand column: whatever of it lies in the right half of the frame)
+				if (Edges(Each, Left, Right) && Left > Whole * 0.5f)
+				{
+					To = FMath::Min(To, Left - Clear);
+				}
 			}
-			const FMargin Gap(24.0f + (Calendar > 0.0f ? Calendar + 14.0f : 0.0f), 112.0f, 24.0f + (Chips > 0.0f ? Chips + 14.0f : 0.0f), 0.0f);
+			To = FMath::Max(To, From + 292.0f); // (never narrower than a short line and its plate)
 			if (OutWidth)
 			{
-				*OutWidth = static_cast<float>(Size.X) / Scale - Gap.Left - Gap.Right;
+				*OutWidth = To - From;
 			}
-			return Gap;
+			return FMargin(From, 112.0f, FMath::Max(Whole - To, 0.0f), 0.0f);
 		}
 
 		/** Whether a widget is on the screen now: it, and every box it stands in up to the screen's own, is shown. */
@@ -8863,6 +8990,17 @@ namespace
 		}
 
 		/**
+		 * Whether the campaign's own plates are put away: the date plate, and the top right corner with the doors, the
+		 * guide, the menu and END THE MONTH. They are while the newsreel runs, and (the UI director, 10:57 on build
+		 * 1638) while the start screen or its options page is up, opened at the start or over a campaign under way:
+		 * the map alone lies behind the card, veiled as it is.
+		 */
+		bool PlatesAway() const
+		{
+			return Controller.IsValid() && (Controller->GetNewsreel().bOn || Controller->GetOpening().bVisible);
+		}
+
+		/**
 		 * One of the six doors: a round dark button with a brass rim and its sign engraved on it, its name typed
 		 * under it, and (for the design offices) a brass tally of what is waiting behind it.
 		 */
@@ -8898,7 +9036,7 @@ namespace
 					]
 					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+						SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 					]
 				];
 		}
@@ -8910,7 +9048,7 @@ namespace
 				.ToolTipText(FText::FromString(Tip))
 				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
 				];
 		}
 
@@ -8944,7 +9082,7 @@ namespace
 		static FText ArsenalSummary(const FArsenal& Stock)
 		{
 			FString Line = Stock.Region.IsEmpty()
-				? FString(TEXT("No province of yours is selected, so works cannot be built: close this, click one of your territories, and open the arsenal again. Corps, aircraft and ships go where the notes say."))
+				? FString(TEXT("No province of yours is selected, so works cannot be built: close this, click one of your provinces, and open the arsenal again. Corps, aircraft and ships go where the notes say."))
 				: FString::Printf(TEXT("With %s in mind: works are built there, and new corps form up there if it has the industry they need."), *Stock.Region);
 			if (!Stock.bBudget)
 			{
@@ -8957,42 +9095,63 @@ namespace
 		TSharedRef<SWidget> MakeOffer(const FArsenalOffer& Offer)
 		{
 			const bool bCan = Offer.Why.IsEmpty();
+			// (The UI director, 18 November 2026, on build 1640 at Brian's window: a card that could not be ordered stood
+			// at 1.44 to 1 against its ground and could not be read. Its name and its lines keep a muted ink at 4.5 to 1
+			// or better; only its picture and its price are dimmed, and its reason stays. It is no pressed-out button
+			// either: a button that is switched off is greyed whole by the screen. The lines of a card that can be
+			// ordered take the same ink: 5.1 to 1 on the card, where the frame's muted ink stood at 4.4.)
+			const FLinearColor Lines(FColor::FromHex(TEXT("B4AB98")));
 			FString Terms = FString::Printf(TEXT("%s  \u00B7  %d month%s"), *Cash(Offer.Cost), Offer.Months, Offer.Months == 1 ? TEXT("") : TEXT("s"));
 			if (Offer.Upkeep > 0)
 			{
 				Terms += FString::Printf(TEXT("  \u00B7  then %s a month"), *Cash(Offer.Upkeep));
 			}
+			// (Seen at Brian's window, 18 November 2026: "Destroyer flotilla" beside "4 destroyers" read "Destroye:", its
+			// first word cut where the two had no room in the column. What is delivered stands beside the name only
+			// where the name's longest word and it have room together: 19 typed letters beside a picture, 26 without.
+			// Otherwise it opens the line below, as a long description always has.)
+			int32 LongestWord = 0;
+			{
+				TArray<FString> NameWords;
+				Offer.Label.ParseIntoArray(NameWords, TEXT(" "));
+				for (const FString& Word : NameWords)
+				{
+					LongestWord = FMath::Max(LongestWord, Word.Len());
+				}
+			}
+			const bool bPictured = Offer.Key.StartsWith(TEXT("corps:")) || Offer.Key.StartsWith(TEXT("cadre:")) || Offer.Key.StartsWith(TEXT("air:")) || Offer.Key.StartsWith(TEXT("ship:")) || Offer.Key == TEXT("elite") || Offer.Key == TEXT("para");
+			const bool bBeside = Offer.Size.Len() <= 16 && LongestWord + Offer.Size.Len() <= (bPictured ? 19 : 26);
 			TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().FillWidth(1.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bCan ? Cream : Faint).AutoWrapText(true)
+						SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bCan ? Cream : Lines).AutoWrapText(true)
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Offer.Size.Len() <= 16 ? Offer.Size : FString())).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint)
+						SNew(STextBlock).Text(FText::FromString(bBeside ? Offer.Size : FString())).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Lines)
 					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : (Offer.bPoor ? Alarm : Faint)).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : Faint).AutoWrapText(true)
 				];
 			// A long description of what is delivered goes on the line below instead of beside the name.
-			const FString Where = Offer.Size.Len() > 16 ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
+			const FString Where = !bBeside && !Offer.Size.IsEmpty() ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
 			if (!Where.IsEmpty())
 			{
 				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Lines).AutoWrapText(true)
 				];
 			}
 			if (!bCan)
 			{
 				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Muted).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Lines).AutoWrapText(true)
 				];
 			}
 			// A picture of what is on offer, where the game has a model of it: this nation's own tank, aircraft or ship.
@@ -9015,14 +9174,23 @@ namespace
 			{
 				Face->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
 				[
-					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f))
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f)).ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, bCan ? 1.0f : 0.4f))
 					[
 						SNew(SPortrait).Picture(Portrait).Size(FVector2D(78.0, 48.0))
 					]
 				];
 			}
 			Face->AddSlot().FillWidth(1.0f)[Words];
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(9.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(bCan)
+			if (!bCan)
+			{
+				// (a card, not a button: it takes no press, and nothing greys it)
+				return SNew(SBorder).BorderImage(&PlainButton.Normal).Padding(FMargin(9.0f, 7.0f, 11.0f, 8.0f))
+					.ToolTipText(FText::FromString(Offer.Blurb))
+					[
+						Face
+					];
+			}
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(9.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false)
 				.ToolTipText(FText::FromString(Offer.Blurb))
 				.OnClicked_Lambda([this, Key = Offer.Key]()
 				{
@@ -9072,7 +9240,7 @@ namespace
 					List->AddSlot().AutoHeight()
 					[
 						SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
-						.Text(FText::FromString(Column == 3 && Stock.Region.IsEmpty() ? TEXT("Select one of your own territories first.") : TEXT("Nothing on offer here in this campaign.")))
+						.Text(FText::FromString(Column == 3 && Stock.Region.IsEmpty() ? TEXT("Select one of your own provinces first.") : TEXT("Nothing on offer here in this campaign.")))
 					];
 				}
 				// What is already on order goes under the army's column, where there is room.
@@ -9829,8 +9997,9 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()[Top]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 				[
-					// (cut, where it must be, after a whole word: the art director's round 38)
-					SNew(SWordLine).Words(Told.Text).Face(Font(TEXT("Regular"), 11)).Ink(Cream.CopyWithNewOpacity(0.88f)).ToolTipText(FText::FromString(Told.Text))
+					// (The UI director's review of build 1628: no sentence is cut with three dots. The rules give it whole,
+					// and it wraps to a second line and the row grows; a dot falls at a fold, as check 19 has it.)
+					SNew(SPhraseText).Text(FText::FromString(Told.Text)).Face(Font(TEXT("Regular"), 11)).Ink(Cream.CopyWithNewOpacity(0.88f)).Guess(420.0f)
 				]
 			];
 			for (const FMonthFigure& Figure : Told.Figures)
@@ -10054,7 +10223,7 @@ namespace
 					}
 					Label->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
-						SNew(STextBlock).Text(FText::FromString(Box.Label)).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Muted)
+						SNew(STextBlock).Text(FText::FromString(Box.Label)).Font(SmallCaps()).ColorAndOpacity(Muted)
 					];
 					Boxes->AddSlot().FillWidth(1.0f).Padding(K == 0 ? 0.0f : 10.0f, 0.0f, 0.0f, 0.0f)
 					[
@@ -10115,7 +10284,7 @@ namespace
 					[
 						SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(8.0f, 3.0f, 8.0f, 3.0f))
 						[
-							SNew(STextBlock).Text(FText::FromString(Lead.Tag)).Font(Font(TEXT("Bold"), 9, 220)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(FText::FromString(Lead.Tag)).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 					if (!Lead.Stamp.IsEmpty())
@@ -10246,10 +10415,10 @@ namespace
 				if (!Card.Foot.IsEmpty() || bMore)
 				{
 					TSharedRef<SHorizontalBox> Under = SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, bMore ? 12.0f : 0.0f, 0.0f)
 						[
-							// (no line is cut mid-word: where it must be cut, it is cut after a whole word)
-							SNew(SWordLine).Words(Card.Foot).Face(Font(TEXT("Regular"), 11)).Ink(Muted).ToolTipText(FText::FromString(Card.Foot))
+							// (no line is cut: it wraps, the UI director's review of build 1628)
+							SNew(STextBlock).Text(FText::FromString(Card.Foot)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
 						];
 					if (bMore)
 					{
@@ -10355,7 +10524,7 @@ namespace
 							.ToolTipText(FText::FromString(Each.bOk ? TEXT("What your staff ordered this month stands. From next month the desk is yours to run.") : TEXT("The desk is yours again.")))
 							.OnClicked_Lambda(Go(Each.Act))
 							[
-								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Each.bOk ? Cream : Faint)
+								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(SmallCaps()).ColorAndOpacity(Each.bOk ? Cream : Faint)
 							]
 						];
 					}
@@ -10592,11 +10761,11 @@ namespace
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SWordLine).Words(Seat.Name).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint) // (cut after a whole word where it must be)
+					SNew(SPhraseText).Text(FText::FromString(Seat.Name)).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint).Guess(226.0f) // (on to a second line where it must be, never cut)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
-					SNew(SWordLine).Words(Where).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint)
+					SNew(SPhraseText).Text(FText::FromString(Where)).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint).Guess(226.0f)
 					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
@@ -10619,7 +10788,7 @@ namespace
 					SNew(SBorder).BorderImage(&WayTagBrush).Padding(FMargin(6.0f, 2.0f, 6.0f, 2.0f))
 					.ToolTipText(FText::FromString(Seat.bStays ? TEXT("No escort flies by night. Planned by day again, it goes with the bombers.") : TEXT("It could join the raid by day. No escort flies by night.")))
 					[
-						SNew(STextBlock).Text(FText::FromString(Seat.bStays ? TEXT("STAYS HOME") : TEXT("BY DAY ONLY"))).Font(Font(TEXT("Bold"), 8, 160)).ColorAndOpacity(Muted)
+						SNew(STextBlock).Text(FText::FromString(Seat.bStays ? TEXT("STAYS HOME") : TEXT("BY DAY ONLY"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 					]
 				];
 			}
@@ -10630,7 +10799,7 @@ namespace
 					SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass).Padding(FMargin(7.0f, 2.0f, 7.0f, 2.0f))
 					.ToolTipText(FText::FromString(TEXT("The raid is planned round this group. Plan from another group's page to lead with that one.")))
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("LEADS"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("1F1808"))))
+						SNew(STextBlock).Text(FText::FromString(TEXT("LEADS"))).Font(SmallCaps()).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("1F1808"))))
 					]
 				];
 			}
@@ -10658,7 +10827,7 @@ namespace
 				SNew(SHorizontalBox).ToolTipText(FText::FromString(TEXT("How fit the group is to fly. Rest and refit bring it back; a raid and a move both cost it.")))
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("READY"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(bCan ? Muted : Faint)
+					SNew(STextBlock).Text(FText::FromString(TEXT("READY"))).Font(SmallCaps()).ColorAndOpacity(bCan ? Muted : Faint)
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
@@ -10719,7 +10888,7 @@ namespace
 			[
 				SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(8.0f, 3.0f, 8.0f, 3.0f))
 				[
-					SNew(STextBlock).Text(FText::FromString(KindWord)).Font(Font(TEXT("Bold"), 9, 220)).ColorAndOpacity(BrightBrass)
+					SNew(STextBlock).Text(FText::FromString(KindWord)).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 				]
 			];
 			{
@@ -10733,7 +10902,7 @@ namespace
 				}
 				Whose->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(SWordLine).Words(Under).Face(Font(TEXT("Regular"), 11)).Ink(Cream) // (cut after a whole word where it must be)
+					SNew(SPhraseText).Text(FText::FromString(Under)).Face(Font(TEXT("Regular"), 11)).Ink(Cream).Guess(380.0f) // (on to a second line where it must be, never cut)
 				];
 				Print->AddSlot().VAlign(VAlign_Bottom)
 				[
@@ -10857,7 +11026,7 @@ namespace
 						[
 							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass).Padding(FMargin(8.0f, 2.0f, 8.0f, 2.0f))
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("CHOSEN"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Ink)
+								SNew(STextBlock).Text(FText::FromString(TEXT("CHOSEN"))).Font(SmallCaps()).ColorAndOpacity(Ink)
 							]
 						];
 					}
@@ -10885,7 +11054,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(9.0f, 0.0f, 0.0f, 5.0f)
 							[
-								SNew(SWordLine).Words(Way.Verdict).Face(Serif(TEXT("Bold"), 11)).Ink(Cream) // (cut after a whole word where it must be)
+								SNew(SPhraseText).Text(FText::FromString(Way.Verdict)).Face(Serif(TEXT("Bold"), 11)).Ink(Cream).Guess(130.0f) // (on to a second line where it must be, never cut)
 							]
 						];
 						Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[RaidMeter(Way.Success, BrightBrass, 4.0f)];
@@ -10895,7 +11064,7 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight()
 								[
 									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).Font(SmallCaps()).ColorAndOpacity(Muted)]
 									// (the rules' own words, "2% · about 7", with a little more room about the dot)
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Says.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
 								]
@@ -10918,7 +11087,7 @@ namespace
 							Inside->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
 							[
 								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 								+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.StopNote)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))]
 							];
 							for (int32 K = 0; K < Way.Hits.Num() && K < 3; ++K)
@@ -10945,7 +11114,7 @@ namespace
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 2.0f)
 									[
-										SNew(SWordLine).Words(Way.Hits[K].Value).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted) // (cut after a whole word where it must be)
+										SNew(SPhraseText).Text(FText::FromString(Way.Hits[K].Value)).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted).Guess(130.0f) // (on to a second line where it must be, never cut)
 									]
 								];
 							}
@@ -10962,7 +11131,7 @@ namespace
 						Inside->AddSlot().AutoHeight()
 						[
 							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("FIGHTERS LOST"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("FIGHTERS LOST"))).Font(SmallCaps()).ColorAndOpacity(Muted)]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.FightersLost.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
 						];
 					}
@@ -11183,7 +11352,7 @@ namespace
 						.ToolTipText(FText::FromString(TEXT("Every target in reach as a list, with every figure in words.")))
 						.OnClicked_Lambda(Go(Card.AllAct))
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("THE WHOLE LIST"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)
+							SNew(STextBlock).Text(FText::FromString(TEXT("THE WHOLE LIST"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 						]
 					]
 				];
@@ -11372,7 +11541,7 @@ namespace
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  LEVEL %d"), *General.Rank.ToUpper(), General.Level))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  LEVEL %d"), *General.Rank.ToUpper(), General.Level))).Font(SmallCaps()).ColorAndOpacity(Brass)
 					]
 				]
 				// How far he is toward his next level.
@@ -11617,7 +11786,7 @@ namespace
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Field.Pace.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(PaceInk)
+						SNew(STextBlock).Text(FText::FromString(Field.Pace.ToUpper())).Font(SmallCaps()).ColorAndOpacity(PaceInk)
 					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
@@ -11768,7 +11937,7 @@ namespace
 							bHeaded = true;
 							List->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 4.0f)
 							[
-								SNew(STextBlock).Text(FText::FromString(Labs.Eras.IsValidIndex(Tier) ? Labs.Eras[Tier].ToUpper() : FString())).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)
+								SNew(STextBlock).Text(FText::FromString(Labs.Eras.IsValidIndex(Tier) ? Labs.Eras[Tier].ToUpper() : FString())).Font(SmallCaps()).ColorAndOpacity(Faint)
 							];
 						}
 						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeTech(Node)];
@@ -12079,7 +12248,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 							[
-								SNew(STextBlock).Text(FText::FromString(Option.bNow ? TEXT("YOUR PATH TODAY") : TEXT(""))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Gain)
+								SNew(STextBlock).Text(FText::FromString(Option.bNow ? TEXT("YOUR PATH TODAY") : TEXT(""))).Font(SmallCaps()).ColorAndOpacity(Gain)
 							]
 						];
 					if (!Option.Text.IsEmpty())
@@ -12362,7 +12531,7 @@ namespace
 					TSharedRef<SHorizontalBox> Staff = SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 8.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Power.StaffLabel.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Power.bThreat ? Alarm : Brass)
+							SNew(STextBlock).Text(FText::FromString(Power.StaffLabel.ToUpper())).Font(SmallCaps()).ColorAndOpacity(Power.bThreat ? Alarm : Brass)
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
 						[
@@ -12416,9 +12585,9 @@ namespace
 			DiplomacyHead->AddSlot().AutoHeight().Padding(250.0f, 0.0f, 186.0f, 6.0f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left)[SNew(STextBlock).Text(FText::FromString(TEXT("ALLIES"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine < 0.0f ? Gain : Mine > 0.0f ? Alarm : Muted)]
-				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(TEXT("INDEPENDENT"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)]
-				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right)[SNew(STextBlock).Text(FText::FromString(TEXT("AXIS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine > 0.0f ? Gain : Mine < 0.0f ? Alarm : Muted)]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left)[SNew(STextBlock).Text(FText::FromString(TEXT("ALLIES"))).Font(SmallCaps()).ColorAndOpacity(Mine < 0.0f ? Gain : Mine > 0.0f ? Alarm : Muted)]
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(TEXT("INDEPENDENT"))).Font(SmallCaps()).ColorAndOpacity(Faint)]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right)[SNew(STextBlock).Text(FText::FromString(TEXT("AXIS"))).Font(SmallCaps()).ColorAndOpacity(Mine > 0.0f ? Gain : Mine < 0.0f ? Alarm : Muted)]
 			];
 
 			DiplomacyRows->ClearChildren();
@@ -12562,7 +12731,7 @@ namespace
 			{
 				LedgerIn->AddSlot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("Nothing is on order. New corps and works are ordered from a territory's panel."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(TEXT("Nothing is on order. New corps and works are ordered from a province's panel."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
 				];
 			}
 			for (const FLedgerLine& Line : Books.Orders)
@@ -12722,7 +12891,7 @@ namespace
 					: Choices.Num() > 0 ? FString(TEXT("RAISE IT A LEVEL")) : FString(TEXT("COMPLETE: IT CAN BE RAISED NO HIGHER"));
 				TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Heading)).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+					SNew(STextBlock).Text(FText::FromString(Heading)).Font(SmallCaps()).ColorAndOpacity(Brass)
 				];
 				if (Choices.Num() > 0)
 				{
@@ -12994,48 +13163,140 @@ namespace
 
 		/**
 		 * (The UI director, on build 1596.) Whether the opening card's list runs on below what shows, how many cards are
-		 * not wholly in sight below, and how far one row of them is: looked at once a frame, from where the list's rows
+		 * not wholly in sight below, and how high the list stands: looked at once a frame, from where the list's rows
 		 * stand inside it now. Rows scrolled out of sight are not painted, so their places are worked out afresh here
-		 * rather than read from their last painting.
+		 * rather than read from their last painting. (The UI director's review of build 1628, items 4 and 5.) The list
+		 * shows no half row: where it runs on, it stands as high as the lines that fit whole above the plate's band, and
+		 * the plate sits in that band under the last of them; what room is over stands under the plate. A line is each
+		 * of the list's own parts: a heading, a row of cards, a line of the controls. (09:18) A heading travels with the
+		 * line under it, as one: it never ends the list above the plate, and the list never rests on that line with the
+		 * heading scrolled away above it.
 		 */
 		void LookAtList()
 		{
 			bListRunsOn = false;
 			ListBelow = 0;
-			ListStep = 0.0f;
-			if (!StartsScroll.IsValid() || !Starts.IsValid() || !Controller.IsValid() || !Controller->GetOpening().bVisible)
+			if (!StartsScroll.IsValid() || !Starts.IsValid() || !ListArea.IsValid() || !Controller.IsValid() || !Controller->GetOpening().bVisible)
 			{
 				return;
 			}
 			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
 			const FGeometry& Along = Starts->GetTickSpaceGeometry();
+			const double Area = ListArea->GetTickSpaceGeometry().GetLocalSize().Y;
 			// (The checker's note C: the first frame the card shows, the list and its scroll have not been laid out yet,
 			// and a scroll with no size takes its whole list for what runs on below. Until they have a width, nothing is
 			// measured and no plate is shown. A list squeezed to no height still has its width, and is measured.)
-			if (View.GetLocalSize().X <= 0.0f || Along.GetLocalSize().X <= 0.0f || (OpeningCardBox.IsValid() && OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f))
+			if (View.GetLocalSize().X <= 0.0f || Along.GetLocalSize().X <= 0.0f || ListArea->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f
+				|| (OpeningCardBox.IsValid() && OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().X <= 0.0f))
 			{
 				return;
 			}
 			FArrangedChildren Arranged(EVisibility::Visible);
 			Starts->ArrangeChildren(Along, Arranged);
-			// (The UI director, 03:53.) What the card needs: all it holds outside the list, and the list down to the foot
-			// of its first row of cards (the great powers, on the grand campaign's page) with the fade and its plate under
-			// it. The rest of the card does not change with the card's height, so this holds still as the card grows.
-			float Need = 0.0f;
-			const TSharedPtr<SWidget> FirstRow = ListRows.Num() > 0 ? ListRows[0].Key.Pin() : TSharedPtr<SWidget>();
-			if (OpeningCardBox.IsValid() && FirstRow.IsValid())
+			// Each line's top and foot inside the list, wherever the list is scrolled to.
+			ListTops.Reset();
+			ListFeet.Reset();
+			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
 			{
-				for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+				const FGeometry& Each = Arranged[Index].Geometry;
+				ListTops.Add(static_cast<float>(Along.AbsoluteToLocal(Each.GetAbsolutePosition()).Y));
+				ListFeet.Add(static_cast<float>(Along.AbsoluteToLocal(Each.LocalToAbsolute(FVector2D(0.0, Each.GetLocalSize().Y))).Y));
+			}
+			// (The UI director, 09:18.) Which lines are headings: each travels with the line under it, as one. And how
+			// many cards each line holds, for the plate's count.
+			ListHeadAt.Init(false, Arranged.Num());
+			ListCountAt.Init(0, Arranged.Num());
+			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+			{
+				for (const TWeakPtr<SWidget>& Head : ListHeads)
 				{
-					const FArrangedWidget& Each = Arranged[Index];
-					if (&Each.Widget.Get() == FirstRow.Get())
+					if (Head.Pin().Get() == &Arranged[Index].Widget.Get())
 					{
-						const double Foot = Along.AbsoluteToLocal(Each.Geometry.LocalToAbsolute(FVector2D(0.0, Each.Geometry.GetLocalSize().Y))).Y;
-						const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - View.GetLocalSize().Y;
-						Need = static_cast<float>(FMath::CeilToDouble(Outside + Foot + 40.0)); // (40: the fade, the plate within it)
+						ListHeadAt[Index] = true;
 						break;
 					}
 				}
+				for (const TPair<TWeakPtr<SWidget>, int32>& Kept : ListRows)
+				{
+					if (Kept.Key.Pin().Get() == &Arranged[Index].Widget.Get())
+					{
+						ListCountAt[Index] = Kept.Value;
+						break;
+					}
+				}
+			}
+			ListAreaHigh = Area;
+			// (The UI director, 03:53 and 07:10.) What the card needs: all it holds outside the list, and the list down to
+			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
+			// or of its first row on another page, with the plate's band under it. The rest of the card does not change
+			// with the card's height, or with the nation picked, so this holds still as the card grows.
+			// (08:57: margins before a row; capped at 09:04.) On the grand campaign's page the margins give to bring in a
+			// second whole row of the smaller nations, never a third: where the 48s show fewer and standing up to 16
+			// from the screen's top and foot shows two, the card stands as tall as the two rows and their plate's band, and
+			// the margins give only that much (at Brian's window, the 19 that show Brazil's second row). Where the 48s
+			// show two already, or 16 would not show two, it keeps its 48s; a larger frame may show a third row within
+			// them, but never by trimming the margins.
+			float Need = 0.0f;
+			const int32 Keep = Controller->GetOpening().Tab == 0 && ListRows.Num() > 1 ? 1 : 0;
+			const double ScreenHigh = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 0.0;
+			if (OpeningCardBox.IsValid() && ListRows.IsValidIndex(Keep))
+			{
+				const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - Area;
+				const double ListEnd = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+				int32 Within48 = -1;
+				int32 Within16 = -1;
+				float NeedTwo = 0.0f; // (the card's need with two whole rows)
+				for (int32 CardRow = Keep; CardRow < ListRows.Num(); ++CardRow)
+				{
+					const TSharedPtr<SWidget> RowWidget = ListRows[CardRow].Key.Pin();
+					int32 RowAt = INDEX_NONE;
+					for (int32 Nth = 0; RowWidget.IsValid() && Nth < Arranged.Num(); ++Nth)
+					{
+						if (&Arranged[Nth].Widget.Get() == RowWidget.Get())
+						{
+							RowAt = Nth;
+							break;
+						}
+					}
+					if (RowAt == INDEX_NONE)
+					{
+						continue;
+					}
+					// (the last line of the list needs no plate under it)
+					const double RowFoot = static_cast<double>(ListFeet[RowAt]);
+					const float RowNeed = static_cast<float>(FMath::CeilToDouble(Outside + RowFoot + (RowFoot >= ListEnd - 0.5 ? 0.0 : static_cast<double>(PlateBand))));
+					if (CardRow == Keep)
+					{
+						Need = RowNeed;
+					}
+					if (Keep == 0 || ScreenHigh <= 0.0)
+					{
+						break;
+					}
+					if (RowNeed <= ScreenHigh - 96.0 + 0.5)
+					{
+						Within48 = CardRow;
+					}
+					if (RowNeed <= ScreenHigh - 32.0 + 0.5)
+					{
+						Within16 = CardRow;
+					}
+					if (CardRow == Keep + 1)
+					{
+						NeedTwo = RowNeed;
+						break; // (no row past the second is ever bought with the margins)
+					}
+				}
+				if (Keep > 0 && Within48 < Keep + 1 && Within16 >= Keep + 1)
+				{
+					Need = NeedTwo;
+				}
+			}
+			// (What the card needs now turns on the screen's height too: a window drawn to a new size measures afresh.)
+			if (!FMath::IsNearlyEqual(ScreenHigh, OpeningHigh, 0.5))
+			{
+				OpeningHigh = ScreenHigh;
+				OpeningSettle = FMath::Max(OpeningSettle, 3);
 			}
 			// (The checker's note E.) Drawn smaller, the card's text is measured at the scale it is drawn at, a line a whole
 			// pixel high, so what it needs moves a little with the scale, and the scale with what it needs: left free, it
@@ -13049,45 +13310,255 @@ namespace
 			{
 				--OpeningSettle;
 			}
-			bListRunsOn = StartsScroll->GetScrollOffset() < StartsScroll->GetScrollOffsetOfEnd() - 1.0f;
-			if (!bListRunsOn)
+			// Where the list's view begins inside the list: how far it is asked to be scrolled, not where it was last drawn
+			// (the checker's fault 3: drawn, a step near the foot can fall short, the box still sized for the old top).
+			double Top = FMath::Max(static_cast<double>(StartsScroll->GetScrollOffset()), 0.0);
+			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+			// Where the list rests: with a line's top at the top of its view, the list's very top for the first line, and
+			// never with a heading's line alone above it (09:18). (The checker's fault 1.) The list's last stop: the first
+			// from which the rest fits whole in the list's area. The list never rests below it, so its foot is never
+			// pulled up into a line. (Both kept from the last frame while a list just laid out still measures as nothing.)
+			if (End > 0.5)
 			{
-				return;
-			}
-			const double Bottom = View.GetAbsolutePosition().Y + View.GetAbsoluteSize().Y;
-			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
-			{
-				const FArrangedWidget& Each = Arranged[Index];
-				const TPair<TWeakPtr<SWidget>, int32>* Row = ListRows.FindByPredicate([&Each](const TPair<TWeakPtr<SWidget>, int32>& Kept)
+				ListStops.Reset();
+				for (int32 Index = 0; Index < ListTops.Num(); ++Index)
 				{
-					return Kept.Key.Pin().Get() == &Each.Widget.Get();
-				});
-				if (!Row)
-				{
-					continue;
-				}
-				if (Each.Geometry.GetAbsolutePosition().Y + Each.Geometry.GetAbsoluteSize().Y > Bottom + 0.5)
-				{
-					ListBelow += Row->Value;
-					if (ListStep <= 0.0f)
+					if (Index == 0 || !ListHeadAt[Index - 1])
 					{
-						ListStep = static_cast<float>(Each.Geometry.GetLocalSize().Y) + 8.0f; // (a row and the gap under it)
+						ListStops.Add(Index == 0 ? 0.0f : ListTops[Index]);
+					}
+				}
+				ListLastStop = 0.0f;
+				for (const float Stop : ListStops)
+				{
+					ListLastStop = Stop;
+					if (End - static_cast<double>(Stop) <= Area + 0.5)
+					{
+						break;
 					}
 				}
 			}
-			if (ListStep <= 0.0f)
+			// (A belt: a view left off a line's top, by a page changed or a window drawn to a new size, is set on the line
+			// at or above it, never past the last stop. Not while the bar is held: the bar's own snap sees to it. Not in
+			// the frames after a laying out either, while new rows may not yet have their sizes: a list measured as
+			// nothing would send the view back to the top on every pick.)
+			const bool bHeld = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+			if (!bHeld && OpeningSettle == 0 && End > 0.5 && ListStops.Num() > 0 && StartsScroll.IsValid())
 			{
-				ListStep = static_cast<float>(View.GetLocalSize().Y) * 0.6f;
+				float On = 0.0f;
+				for (int32 Index = 0; Index < ListStops.Num() && ListStops[Index] <= static_cast<float>(Top) + 0.5f; ++Index)
+				{
+					On = ListStops[Index];
+				}
+				// ("-TheaterOptionsEnd" rests the OPTIONS page on its last stop: for a picture of the credits at its end,
+				// which the replay tool cannot scroll to)
+				static const bool bFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOptionsEnd"));
+				if (bFromEnd && Controller.IsValid() && Controller->GetOpening().Tab == 2)
+				{
+					On = ListLastStop;
+				}
+				On = FMath::Min(On, ListLastStop);
+				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
+				{
+					StartsScroll->SetScrollOffset(On);
+					ListRest = On;
+					Top = On;
+				}
+			}
+			SizeList(Top);
+		}
+
+		/**
+		 * How high the list stands with its view's top at Top, whether it runs on, and how many cards are not wholly in
+		 * sight below, from the lines LookAtList last measured. Called once a frame, and straight after the list is
+		 * scrolled, so that the box has its new height in the same frame (the checker's fault 3: events come before the
+		 * frame's measuring). Where what is left below fits in the list's area, it shows all of it, and there is no plate.
+		 */
+		void SizeList(double Top)
+		{
+			bListRunsOn = false;
+			ListBelow = 0;
+			const double Area = ListAreaHigh;
+			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+			ListViewTop = static_cast<float>(Top);
+			if (End - Top <= Area + 0.5)
+			{
+				// (no taller than what is left: a view taller than its list would have the box draw it from higher up)
+				ListViewHigh = static_cast<float>(FMath::Min(Area, FMath::Max(End - Top, 1.0)));
+				return;
+			}
+			bListRunsOn = true;
+			// As high as the lines that fit whole above the plate's band; none at all, only on the smallest frame.
+			const double Room = FMath::Max(Area - static_cast<double>(PlateBand), 0.0);
+			double Fit = 0.0;
+			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
+			{
+				// (09:18: a heading never ends the list; the room it would take stays under the plate)
+				const double Foot = static_cast<double>(ListFeet[Index]) - Top;
+				if (Foot > 0.5 && Foot <= Room + 0.5 && !(ListHeadAt.IsValidIndex(Index) && ListHeadAt[Index]))
+				{
+					Fit = FMath::Max(Fit, Foot);
+				}
+			}
+			ListViewHigh = static_cast<float>(FMath::Min(FMath::CeilToDouble(Fit), Room));
+			// The cards not wholly in sight below, for the plate's count (nations, never headings).
+			for (int32 Index = 0; Index < ListFeet.Num() && Index < ListCountAt.Num(); ++Index)
+			{
+				if (ListCountAt[Index] > 0 && static_cast<double>(ListFeet[Index]) - Top > static_cast<double>(ListViewHigh) + 0.5)
+				{
+					ListBelow += ListCountAt[Index];
+				}
 			}
 		}
 
-		/** The plate's click: the list down by one row of cards, never past its end. */
+		/**
+		 * The plate's click: the list down until the first line not wholly in sight shows whole at the foot, its top on
+		 * a line's top (by one row of cards, where the rows below are of one height), never past its end.
+		 */
 		void ScrollListOn()
 		{
-			if (StartsScroll.IsValid())
+			if (!StartsScroll.IsValid() || !bListRunsOn)
 			{
-				StartsScroll->SetScrollOffset(FMath::Min(StartsScroll->GetScrollOffset() + FMath::Max(ListStep, 24.0f), StartsScroll->GetScrollOffsetOfEnd()));
+				return;
 			}
+			float To = -1.0f;
+			float Holds = -1.0f; // (the stop that holds the first line not wholly in sight)
+			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
+			{
+				if (ListFeet[Index] - ListViewTop > ListViewHigh + 0.5f)
+				{
+					// (a heading comes into sight with the line under it)
+					const int32 Whole = ListHeadAt.IsValidIndex(Index) && ListHeadAt[Index] && ListFeet.IsValidIndex(Index + 1) ? Index + 1 : Index;
+					To = ListViewTop + (ListFeet[Whole] - (ListViewTop + ListViewHigh));
+					for (const float Stop : ListStops)
+					{
+						if (Stop <= ListTops[Index] + 0.5f)
+						{
+							Holds = Stop;
+						}
+					}
+					break;
+				}
+			}
+			if (To < 0.0f)
+			{
+				return;
+			}
+			for (const float Line : ListStops)
+			{
+				if (Line > ListViewTop + 0.5f && Line >= To - 0.5f)
+				{
+					To = Line;
+					break;
+				}
+			}
+			// (the checker's note: where a heading and its row stand taller than the view, the step goes no farther than
+			// the heading's own stop, so the heading is never passed by)
+			if (Holds > ListViewTop + 0.5f)
+			{
+				To = FMath::Min(To, Holds);
+			}
+			To = FMath::Min(To, ListLastStop);
+			StartsScroll->SetScrollOffset(To);
+			ListRest = To;
+			ListOwed = 0.0f;
+			ListWheelAt = 0.0;
+			SizeList(To);
+		}
+
+
+		/**
+		 * (Items 4 and 5.) A scroll by the wheel or the bar comes to rest with a line's top at the list's top, so that the
+		 * foot of the list stays on a whole line and the plate's band does not move under the pointer as the rows go by.
+		 * (The checker's fault 2.) A trackpad sends one swipe as a run of small wheel events, so the wheel does not move
+		 * a line an event: what it moves is owed, and the list stays on its line until the debt passes a third of the
+		 * next line's height (at most 24), then steps one line that way; the first event after a pause steps a line at
+		 * once, so that one notch of a wheel, however slow, moves one line. A debt left a quarter of a second is
+		 * forgotten. The bar, held and dragged, rests on the line nearest the thumb.
+		 */
+		void SnapList(float Offset)
+		{
+			if (!StartsScroll.IsValid() || ListStops.Num() == 0)
+			{
+				return;
+			}
+			const float Last = ListLastStop;
+			float To = 0.0f;
+			if (FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton))
+			{
+				float Nearest = TNumericLimits<float>::Max();
+				for (const float Stop : ListStops)
+				{
+					if (Stop <= Last + 0.5f && FMath::Abs(Stop - Offset) < Nearest)
+					{
+						Nearest = FMath::Abs(Stop - Offset);
+						To = Stop;
+					}
+				}
+				ListOwed = 0.0f;
+				ListWheelAt = 0.0;
+			}
+			else
+			{
+				const double Now = FPlatformTime::Seconds();
+				const bool bFresh = Now - ListWheelAt > 0.25;
+				const float Rest = bFresh ? ListViewTop : ListRest;
+				ListOwed = (bFresh ? 0.0f : ListOwed) + (Offset - Rest);
+				ListWheelAt = Now;
+				To = Rest;
+				// (The checker's note: a Mac wheel turned slowly sends a notch as a small delta, which alone would never
+				// pass the debt's mark. The first event after a pause steps a line at once, whatever its size; those that
+				// follow it within the quarter second owe as above.)
+				const float Mark = bFresh && FMath::Abs(ListOwed) > 0.5f ? 0.0f : 24.0f;
+				if (ListOwed > 0.0f)
+				{
+					// (the next line down, not past the last stop)
+					float Next = -1.0f;
+					for (const float Stop : ListStops)
+					{
+						if (Stop > Rest + 0.5f)
+						{
+							Next = Stop;
+							break;
+						}
+					}
+					if (Next < 0.0f || Rest >= Last - 0.5f)
+					{
+						ListOwed = 0.0f; // (at the last stop: nothing more to owe)
+					}
+					else if (ListOwed >= FMath::Min((Next - Rest) / 3.0f, Mark))
+					{
+						To = FMath::Min(Next, Last);
+						ListOwed = 0.0f;
+					}
+				}
+				else if (ListOwed < 0.0f)
+				{
+					// (the line above)
+					float Above = -1.0f;
+					for (int32 Index = ListStops.Num() - 1; Index >= 0; --Index)
+					{
+						if (ListStops[Index] < Rest - 0.5f)
+						{
+							Above = ListStops[Index];
+							break;
+						}
+					}
+					if (Above < 0.0f)
+					{
+						ListOwed = 0.0f; // (at the top)
+					}
+					else if (-ListOwed >= FMath::Min((Rest - Above) / 3.0f, Mark))
+					{
+						To = Above;
+						ListOwed = 0.0f;
+					}
+				}
+			}
+			ListRest = To;
+			// (every event, however small: a move left in the box would be counted again by the next one)
+			StartsScroll->SetScrollOffset(To);
+			SizeList(To);
 		}
 
 		bool StoresShown() const
@@ -13218,6 +13689,14 @@ namespace
 			{
 				return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass);
 			};
+			// (The UI director, 09:18.) A heading of the list travels with the line under it, as one: it never ends the
+			// list above the plate (see LookAtList).
+			auto ListHead = [this, &Heading](const FString& Text) -> TSharedRef<SWidget>
+			{
+				const TSharedRef<SWidget> Made = Heading(Text);
+				ListHeads.Add(TWeakPtr<SWidget>(Made));
+				return Made;
+			};
 
 			// The tabs.
 			OpeningTabs->ClearChildren();
@@ -13239,7 +13718,17 @@ namespace
 
 			Starts->ClearChildren();
 			ListRows.Reset();
+			ListHeads.Reset();
 			OpeningSettle = 3; // (see LookAtList)
+			// (The checker's note: a new page opens at its top, not at the last page's place.)
+			if (Opening.Tab != ListTab && StartsScroll.IsValid())
+			{
+				ListTab = Opening.Tab;
+				StartsScroll->SetScrollOffset(0.0f);
+				ListRest = 0.0f;
+				ListOwed = 0.0f;
+				ListWheelAt = 0.0;
+			}
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
 
@@ -13288,7 +13777,7 @@ namespace
 				AddGrid(Cells, 2);
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)
 				[
-					Heading(TEXT("THE CONTROLS"))
+					ListHead(TEXT("THE CONTROLS"))
 				];
 				const TCHAR* Controls[][2] =
 				{
@@ -13318,6 +13807,98 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Line[1])).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
 						]
 					];
+				}
+				// ---- The credits (the UI director, 18 November 2026): the last section of this page, so that MENU reaches
+				// them too. A line for each creator, A to Z: the name, each recording's title in quotes, and its licence
+				// (each title its own where one creator's differ). Read from Sounds/Real/credits.json in the game's
+				// folder, the one list CREDITS.md is made from; with no list there is no section.
+				{
+					struct FCredited
+					{
+						FString Creator;
+						TArray<TPair<FString, FString>> Titles; // a recording's title, and its licence
+					};
+					static TArray<FCredited> Credits;
+					static bool bRead = false;
+					if (!bRead)
+					{
+						bRead = true;
+						FString Text;
+						TSharedPtr<FJsonObject> Root;
+						const TArray<TSharedPtr<FJsonValue>>* Sounds = nullptr;
+						if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectDir() / TEXT("Sounds/Real/credits.json")))
+							&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) && Root.IsValid() && Root->TryGetArrayField(TEXT("sounds"), Sounds))
+						{
+							for (const TSharedPtr<FJsonValue>& Sound : *Sounds)
+							{
+								const TArray<TSharedPtr<FJsonValue>>* Sources = nullptr;
+								if (!Sound->AsObject().IsValid() || !Sound->AsObject()->TryGetArrayField(TEXT("sources"), Sources))
+								{
+									continue;
+								}
+								for (const TSharedPtr<FJsonValue>& Source : *Sources)
+								{
+									FString Creator, Title, Licence;
+									if (!Source->AsObject().IsValid() || !Source->AsObject()->TryGetStringField(TEXT("creator"), Creator) || Creator.IsEmpty())
+									{
+										continue; // (public domain, or given to it: no credit is owed)
+									}
+									Source->AsObject()->TryGetStringField(TEXT("title"), Title);
+									Source->AsObject()->TryGetStringField(TEXT("licence"), Licence);
+									FCredited* Theirs = Credits.FindByPredicate([&Creator](const FCredited& Each) { return Each.Creator == Creator; });
+									if (!Theirs)
+									{
+										Theirs = &Credits.AddDefaulted_GetRef();
+										Theirs->Creator = Creator;
+									}
+									Theirs->Titles.AddUnique(TPair<FString, FString>(Title, Licence));
+								}
+							}
+							Credits.Sort([](const FCredited& A, const FCredited& B) { return A.Creator.Compare(B.Creator, ESearchCase::IgnoreCase) < 0; });
+						}
+					}
+					if (Credits.Num() > 0)
+					{
+						Starts->AddSlot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 6.0f)
+						[
+							Heading(TEXT("CREDITS"))
+						];
+						Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+							.Text(FText::FromString(TEXT("Sounds recorded by others and shared on freesound.org and Wikimedia Commons, used under Creative Commons licences and cut and mixed for this game. Every licence and link is in CREDITS.md, in the game's folder.")))
+						];
+						const FLinearColor Body(FColor::FromHex(TEXT("B4AB98"))); // (4.5 to 1 or better on the card)
+						for (const FCredited& Each : Credits)
+						{
+							bool bOneLicence = true;
+							for (const TPair<FString, FString>& Title : Each.Titles)
+							{
+								bOneLicence = bOneLicence && Title.Value == Each.Titles[0].Value;
+							}
+							FString Said;
+							for (const TPair<FString, FString>& Title : Each.Titles)
+							{
+								Said += (Said.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::Printf(TEXT("\u201C%s\u201D"), *Title.Key) + (bOneLicence ? FString() : TEXT("  \u00B7  ") + Title.Value);
+							}
+							if (bOneLicence)
+							{
+								Said += TEXT("  \u00B7  ") + Each.Titles[0].Value;
+							}
+							Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 14.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(FText::FromString(Each.Creator)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom)
+								[
+									SNew(STextBlock).Text(FText::FromString(Said)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Body).AutoWrapText(true)
+								]
+							];
+						}
+					}
 				}
 				return;
 			}
@@ -13382,17 +13963,17 @@ namespace
 				// (The UI director, on build 1596.) The great powers in one row of seven compact cards, in the list's own
 				// order; the smaller nations after them in the same cards, eight to a row. (03:53: the label and the row
 				// about 120 in all.)
-				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 4.0f)[Heading(TEXT("THE GREAT POWERS"))];
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 4.0f)[ListHead(TEXT("THE GREAT POWERS"))];
 				AddGrid(Great, 7);
 				if (Small.Num() > 0)
 				{
 					// (03:53: the label says it; the note that was under it is gone.)
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[ListHead(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
 					AddGrid(Small, 8);
 				}
 				if (Rest.Num() > 0)
 				{
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OTHER COUNTRIES"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[ListHead(TEXT("OTHER COUNTRIES"))];
 					AddGrid(Rest, 8);
 				}
 				if (!Opening.GrandNote.IsEmpty())
@@ -13425,14 +14006,14 @@ namespace
 							.ToolTipText(FText::FromString(Level.Blurb + TEXT("\n") + FString::Join(Level.Lines, TEXT("\n"))))
 							.OnClicked_Lambda([this, LevelIndex]() { if (Controller.IsValid()) { Controller->PickLevel(LevelIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Level.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Level.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Blurb : FString();
 					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("DIFFICULTY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("DIFFICULTY"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -13458,14 +14039,14 @@ namespace
 							.ToolTipText(FText::FromString(Depth.Name + TEXT(" (") + Depth.Under + TEXT(")\n") + Depth.Blurb + TEXT("\nOil, supply and manpower are in the game at every depth. You can change the depth, or any one desk, in any month.")))
 							.OnClicked_Lambda([this, DepthIndex]() { if (Controller.IsValid()) { Controller->PickDepth(DepthIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Depth.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Depth.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Under + TEXT(". ") + Opening.Depths[Opening.DepthIndex].Blurb : FString();
 					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HOW DEEP"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HOW DEEP"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -13492,14 +14073,14 @@ namespace
 								Stop.Lines.Num() > 0 ? TEXT("\n") : TEXT(""), *FString::Join(Stop.Lines, TEXT("\n")))))
 							.OnClicked_Lambda([this, StopIndex]() { if (Controller.IsValid()) { Controller->PickHistory(StopIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Stop.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Stop.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Histories.IsValidIndex(Opening.HistoryIndex) ? Opening.Histories[Opening.HistoryIndex].Under + TEXT(". ") + Opening.Histories[Opening.HistoryIndex].Blurb : FString();
 					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HISTORY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HISTORY"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -13519,90 +14100,104 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("JUST WATCH"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
 					]
 				];
-				if (bChosen)
-				{
-					Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				// (Without a pick the BEGIN button keeps its room, unseen, so that the row is as high either way.)
+				Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
+					.Visibility(bChosen ? EVisibility::Visible : EVisibility::Hidden)
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
 					[
-						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
-						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
+						// (the UI director's 84.3 check, item 6: the door's lit button takes Enter, and says so)
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
-							// (the UI director's 84.3 check, item 6: the door's lit button takes Enter, and says so)
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
-								.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
+							.Text(FText::FromString(bChosen ? FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper()) : FString(TEXT("BEGIN"))))
 						]
-					];
-				}
-				if (bChosen)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+					]
+				];
+				// (The UI director's review of build 1628, item 4: the list shows the same rows whichever nation is picked,
+				// so that nothing jumps under the pointer as the player chooses.) The summary stands as high as the tallest
+				// nation's: every nation's lines stand in it, one over another, folded at the summary's own width, and only
+				// the picked one's show; the others keep their room unseen. Nothing picked, none show, in the same room.
+				// (The summary is laid out afresh at every pick; its width is the same at every pick, and is kept, so that a new
+				// pick folds at once at the width the last one had.)
+				auto Wide = [this]() -> float
 				{
-					const FOpeningNation& Nation = Opening.Nations[Opening.NationIndex];
-					TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-							[
-								SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[
-								Buttons
-							]
-						];
+					const float Had = FootSaid.IsValid() ? static_cast<float>(FootSaid->GetTickSpaceGeometry().GetLocalSize().X) : 0.0f;
+					FootWide = Had > 1.0f ? Had : FootWide;
+					return FootWide > 1.0f ? FootWide : 1000.0f; // (before it is first laid out: about the summary's width on the card)
+				};
+				TSharedRef<SOverlay> Said = SAssignNew(FootSaid, SOverlay);
+				for (int32 Index = 0; Index < Opening.Nations.Num(); ++Index)
+				{
+					const FOpeningNation& Nation = Opening.Nations[Index];
+					const bool bShown = Index == Opening.NationIndex;
+					TSharedRef<SVerticalBox> Part = SNew(SVerticalBox).Visibility(bShown ? EVisibility::Visible : EVisibility::Hidden);
 					if (!Nation.Standing.IsEmpty())
 					{
-						Lines->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						Part->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+							SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Brass).WrapTextAt_Lambda(Wide)
 						];
 					}
 					if (!Nation.Blurb.IsEmpty())
 					{
-						Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						Part->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).WrapTextAt_Lambda(Wide)
 						];
 					}
-					Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					// The facts: the date and what the country has, "September 1939 · 30 corps, 36 provinces". (The UI director,
+					// 10:57 on build 1638: the war is said once, in the italic status above, and not again here.)
+					Part->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
-						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).WrapTextAt_Lambda(Wide)
+						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Strength.ToString())))
 					];
 					// What the country does in its own way: its abilities and its special formation, by name.
 					// What each one does is said when the mouse rests on the line, and in the game's own guide.
-					Lines->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
-						.Visibility(Nation.Abilities.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
-						.ToolTipText(FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))))
-						.Text(FText::FromString(AbilityNames(Nation.Abilities)))
-					];
-					Foot = SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 4.0f, 16.0f, 0.0f)
+					if (Nation.Abilities.Num() > 0)
+					{
+						Part->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 						[
-							MakeFlag(Nation.Tag, 96.0f)
-						]
-						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
-						[
-							Lines
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).WrapTextAt_Lambda(Wide)
+							.ToolTipText(bShown ? FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))) : FText::GetEmpty())
+							.Text(FText::FromString(AbilityNames(Nation.Abilities)))
 						];
+					}
+					Said->AddSlot()[Part];
 				}
-				else
-				{
-					Foot = SNew(SHorizontalBox)
+				TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
+							bChosen
+								? StaticCastSharedRef<SWidget>(SNew(STextBlock).Text(Opening.Nations[Opening.NationIndex].Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream))
+								: StaticCastSharedRef<SWidget>(SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted))
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							Buttons
-						];
-				}
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Said
+					];
+				Foot = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 4.0f, 16.0f, 0.0f)
+					[
+						// (the flag's room is kept without a pick, so that the lines fold at the same width)
+						bChosen ? MakeFlag(Opening.Nations[Opening.NationIndex].Tag, 96.0f) : StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(96.0f, 1.0f)))
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+					[
+						Lines
+					];
 				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
 				[
 					SNew(SVerticalBox)
@@ -13637,7 +14232,7 @@ namespace
 			{
 				Starts->AddSlot().AutoHeight().Padding(0.0f, GroupIndex == 0 ? 0.0f : 14.0f, 0.0f, 8.0f)
 				[
-					Heading(Opening.Groups[GroupIndex].Title.ToString().ToUpper())
+					ListHead(Opening.Groups[GroupIndex].Title.ToString().ToUpper())
 				];
 				TArray<TSharedRef<SWidget>> Cells;
 				for (int32 SideIndex = 0; SideIndex < Opening.Groups[GroupIndex].Sides.Num(); ++SideIndex)
@@ -13758,7 +14353,7 @@ namespace
 				Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
 				[
 					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(76.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Brass)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(76.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Brass)]]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 					[
 						SNew(SBox).WidthOverride(120.0f).HeightOverride(6.0f)
@@ -13802,8 +14397,8 @@ namespace
 					Under->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
 						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(118.0f).Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Colour)]]
-						+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(Text.Left(1).ToUpper() + Text.Mid(1) + TEXT("."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Full - 118.0f).LineHeightPercentage(1.1f)]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(128.0f).Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Colour)]]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(Text.Left(1).ToUpper() + Text.Mid(1) + TEXT("."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Full - 128.0f).LineHeightPercentage(1.1f)]
 					];
 				};
 				Ground(TEXT("AT ITS BEST IN"), Note->Good, FLinearColor(FColor::FromHex(TEXT("8FBF6A"))));
@@ -13968,7 +14563,7 @@ namespace
 			{
 				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(Card.Carry.Num() >= 4 ? 6.0f : 0.0f, 0.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("DIGGING  \u00B7  NO WORKS YET"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Muted : Faint)
+					SNew(STextBlock).Text(FText::FromString(TEXT("DIGGING  \u00B7  NO WORKS YET"))).Font(SmallCaps()).ColorAndOpacity(bGoing ? Muted : Faint)
 					.ToolTipText(FText::FromString(TEXT("Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.")))
 				];
 			}
@@ -14073,7 +14668,7 @@ namespace
 				return SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 					[
-						SNew(SBox).WidthOverride(52.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Brass : Faint)]
+						SNew(SBox).WidthOverride(52.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bGoing ? Brass : Faint)]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 					[
@@ -14144,7 +14739,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Send this corps back to its own country's command.")))
 							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->SendBackCorps(Id); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 							]
 						]
 						// The way to the corps' service record: its honours and its diary.
@@ -14155,7 +14750,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Its service record: what it has done, its honours and its diary.")))
 							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->OpenRecord(Id); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("RECORD"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+								SNew(STextBlock).Text(FText::FromString(TEXT("RECORD"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 							]
 						]
 					]
@@ -14302,6 +14897,8 @@ namespace
 		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;
+		FTextBlockStyle CardPlain; // a question card's lines, and the marks inside them: a section's head, an amber line, a red one
+		TSharedPtr<FSlateStyleSet> CardStyles;
 		FSlateBrush MonthBoxBrush, MonthBandBrush, MonthStampBrush, MonthDiscBrush, MonthTagBrush; // the month's card
 		FSlateBrush MonthNewsBrush, MonthLabelBrush;
 		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read
@@ -14336,12 +14933,32 @@ namespace
 		TSharedPtr<SBox> OpeningCardBox;
 		float OpeningNeed = 0.0f;
 		int32 OpeningSettle = 0; // (frames after a laying out in which what is measured is taken as it is)
+		double OpeningHigh = 0.0; // (the screen's height the card was last measured for)
 		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
 		bool bListRunsOn = false;
 		int32 ListBelow = 0;
-		float ListStep = 0.0f;
+		// (The UI director's review of build 1628, items 4 and 5.) The list's whole area, the height its view stands at (the
+		// whole rows that fit; under 0 until it is first measured, when it takes the whole area), how far it is scrolled,
+		// each line's top and foot inside it, and the plate's own band under the last whole row.
+		TSharedPtr<SBox> ListArea;
+		float ListViewHigh = -1.0f;
+		float ListViewTop = 0.0f;
+		TArray<float> ListTops, ListFeet;
+		TArray<float> ListStops; // (where the list may rest: see LookAtList)
+		TArray<bool> ListHeadAt; // (which of the list's lines are headings)
+		TArray<int32> ListCountAt; // (how many cards each of the list's lines holds)
+		double ListAreaHigh = 0.0; // (the list's area, as last measured)
+		TArray<TWeakPtr<SWidget>> ListHeads; // (the headings, as laid out)
+		float ListLastStop = 0.0f; // (the lowest the list rests: from there the rest fits whole)
+		float ListRest = 0.0f; // (the line's top the list rests on, as the wheel last left it)
+		float ListOwed = 0.0f; // (what the wheel has moved and the list not yet: see SnapList)
+		double ListWheelAt = 0.0; // (when the wheel last moved it)
+		int32 ListTab = INDEX_NONE; // (the page the list was last laid out for)
+		static constexpr float PlateBand = 28.0f; // (the plate, about 21 high, with 3 or 4 above and below it)
 		TSharedPtr<SHorizontalBox> OpeningTabs;
 		TSharedPtr<SBox> OpeningFoot;
+		TSharedPtr<SOverlay> FootSaid; // (item 4: every nation's lines, one over another, the picked one's shown)
+		float FootWide = 0.0f; // (and the width they fold at, as last laid out)
 		FSlateBrush FootBrush;
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;

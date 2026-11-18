@@ -19,7 +19,7 @@ import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { ledger } from './economy';
-import { allied, bloc, collapseScore, fieldArmy, headline, relocate, removeCorps, setWar } from './game';
+import { allied, bloc, collapseScore, endVoyages, fieldArmy, headline, relocate, removeCorps, setWar } from './game';
 import { dropSieges } from './siege';
 import { armyKnown, fogOn, knowsBooks } from './intel';
 import { fleetsOnFall } from './navy';
@@ -117,6 +117,7 @@ function heir(g: Game, r: Region, gone: string): string | null {
 /** A nation whose homeland lies beyond the map cannot be conquered on it: it takes its forces home and is out of the war. */
 function leave(g: Game, n: Nation): void {
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
+  endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
   // Ground it held goes back to its owner, or to whoever holds the country round it. Done in passes so that a
@@ -217,6 +218,7 @@ function layDown(g: Game, n: Nation, to: string): void {
   n.fellOn = { turn: g.turn, week: g.week, to, how: 'terms' };
   delete n.freedOn;
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
+  endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
   dropSieges(g, n.id);

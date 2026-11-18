@@ -80,6 +80,7 @@ public:
 		bool bSea = false;
 		int32 Sea = INDEX_NONE; // (which sea, for a sea's name)
 		bool bRegion = false; // a province's own name, small, written whole where the province's middle is
+		bool bOverRoofs = false; // a province's name with no open ground or water of its own to lie on: it lies over its town's roofs, a little smaller, with a soft dark shadow
 	};
 	const TArray<FMapWord>& GetMapWords() const { return MapWords; }
 	FVector2D WorldToMap(const FVector& World) const;

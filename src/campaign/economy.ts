@@ -204,7 +204,8 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   const peace = n.atWar.length ? 1 : BUDGET.upkeep.peace;
   const out: LedgerLine[] = [];
   const land: Partial<Record<Kind, { divs: number; cost: number }>> = {};
-  for (const c of g.corps) {
+  // (Corps at sea on a long passage are paid for as well.)
+  for (const c of g.atSea?.length ? [...g.corps, ...g.atSea.map((v) => v.corps)] : g.corps) {
     if (c.nat !== nat || c.dead) continue;
     const row = (land[c.kind] ??= { divs: 0, cost: 0 });
     row.divs += c.divs;

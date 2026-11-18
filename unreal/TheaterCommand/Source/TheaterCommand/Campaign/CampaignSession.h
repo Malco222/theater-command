@@ -128,6 +128,8 @@ public:
 	FString GarrisonWhy(int32 RegionId);
 	/** (Rules 84.2.5; ruling 211(a).) Why these corps cannot go forward onto that ground by themselves ("Guns cannot take ground alone. ..."), in the rules' own sentence; empty where they can, and before that version. */
 	FString WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId);
+	/** Why the chosen corps cannot go by sea to a place the by-sea offer leaves out: the rules' own sentence for the first test it fails, or nothing. */
+	FString WhyNotBySea(const TArray<int32>& CorpsIds, int32 RegionId);
 	bool OrderGate(int32 GateId, bool bShut, FString& OutNote);
 	/** (Rules 84.2.) The warning where the corps in hand are the last to hold a gate's province: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
 	FString GateLeft(const TArray<int32>& CorpsIds);
@@ -263,6 +265,12 @@ public:
 	// own small file beside the options and never in a save. None of these calls changes the war, so none forgets
 	// the questions kept (see CallRules).
 
+	/**
+	 * Whether the ARSENAL is open, the page lesson 10 sends the player to: while it is, that lesson's note says its words
+	 * for being there (it asks for the artillery corps, since a note never asks for what is already done; the UI director,
+	 * build 1640). The screen sets it before it asks the desk, and it goes with every lesson call's moment.
+	 */
+	void SetLessonPageOpen(bool bOpen) { bLessonPageOpen = bOpen; }
 	/** The note on the desk for this moment: bCard, the month card is open; InHand, the corps of the army in hand. */
 	bool LessonNow(bool bCard, const TArray<int32>& InHand, FLessonDesk& Out);
 	/** A deed only the screen sees: "card" (the month card lesson 1 lay on, put down) or "line" (one of its lines followed). */
@@ -342,6 +350,8 @@ private:
 	void KeepNotebook(const TSharedPtr<FJsonObject>& Answer);
 	/** A lesson call's answer read into the desk, the notebook written where it changed. */
 	bool ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLessonDesk& Out);
+	/** The ARSENAL is open, as the screen last said (SetLessonPageOpen). */
+	bool bLessonPageOpen = false;
 
 	TUniquePtr<FRulesHost> Host;
 	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
