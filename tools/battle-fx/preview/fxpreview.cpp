@@ -415,11 +415,21 @@ namespace
 			}
 		}
 		auto Place = [](const Frame& F, const Vec& L) { return F.At + F.Fw * L.X + F.Right * L.Y + F.Up * L.Z; };
+		auto Level_ = [](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit(); };
+		auto Right_ = [&](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit().Cross(ZUp).Unit(); };
 		const double Meet = 300.0;
 		const bool bStruck = ShotName == "hit" || ShotName == "trail";
 		const char* TrailIs = std::getenv("FX_TRAIL");
 		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
 		TheaterFx::Dice Spots(11);
+		// flak: "burst" is one burst beside the aircraft's path, watched from a fixed eye; "flak" is heavy guns firing
+		// round the aircraft as it flies on, bursts every 0.9 s or so (ragged), more behind than ahead
+		const bool bFlak = ShotName == "flak" || ShotName == "burst";
+		const Frame Start = Fly(0.15);
+		const Vec StartLevel = Vec(Start.Fw.X, Start.Fw.Y, 0.0).Unit();
+		const Vec StartRight = StartLevel.Cross(ZUp).Unit();
+		const Vec BurstAt = Start.At + StartLevel * 60.0 - StartRight * 25.0 + ZUp * 4.0;
+		double NextBurst = 0.2;
 		auto Shoot = [&](const Frame& F)
 		{
 			const Vec Level = Vec(F.Fw.X, F.Fw.Y, 0.0).Unit();
@@ -427,7 +437,18 @@ namespace
 			Camera Cam;
 			Cam.W = W;
 			Cam.H = H;
-			if (ShotName == "side")
+			if (ShotName == "burst")
+			{
+				Cam.Eye = BurstAt + StartRight * 95.0 - StartLevel * 10.0 + ZUp * 8.0;
+				Cam.Forward = (BurstAt + StartLevel * 8.0 - Cam.Eye).Unit();
+			}
+			else if (ShotName == "flak")
+			{
+				// (from well off the beam, so the wake of greying bursts the aircraft leaves behind is in the picture)
+				Cam.Eye = F.At - Level * 650.0 + LevelRight * 950.0 + ZUp * 120.0;
+				Cam.Forward = (F.At - Level * 520.0 - Cam.Eye).Unit();
+			}
+			else if (ShotName == "side")
 			{
 				// (off the outside wing, the aircraft left of the middle and its streams running off to the right)
 				Cam.Eye = F.At + LevelRight * 45.0 - Level * 8.0 + ZUp * 3.0;
@@ -515,6 +536,31 @@ namespace
 					DrawBetween(Step, Until, T, F);
 					continue;
 				}
+				if (bFlak)
+				{
+					if (ShotName == "burst")
+					{
+						if (Step == 9)
+						{
+							Fx.AirFlak(T, BurstAt, "heavy");
+						}
+					}
+					else
+					{
+						for (int Guard = 0; NextBurst <= T && Guard < 4; ++Guard)
+						{
+							Vec Where;
+							do
+							{
+								Where = F.At + Level_(F) * Spots.U(-80.0, 30.0) + Right_(F) * (Spots.Bell() * 35.0) + ZUp * (Spots.Bell() * 14.0);
+							} while ((Where - F.At).Length() < 18.0);
+							Fx.AirFlak(T, Where, "heavy");
+							NextBurst += 0.9 * Spots.U(0.6, 1.4);
+						}
+					}
+					DrawBetween(Step, Until, T, F);
+					continue;
+				}
 				for (size_t G = 0; G < Guns.size(); ++G)
 				{
 					const Vec Muzzle = Place(F, Guns[G]);
@@ -587,7 +633,7 @@ namespace
 			}
 			Puffs(C, Cam, Fx, N);
 			char Name[256];
-			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s%s-f%03d.ppm", OutDir.c_str(), Kind.c_str(), ShotName.c_str(), bStruck ? ("-" + TrailKind).c_str() : "", bDusk ? "-dusk" : "", FrameNo);
+			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s%s-f%03d.ppm", OutDir.c_str(), bFlak ? "flak" : Kind.c_str(), ShotName.c_str(), bStruck ? ("-" + TrailKind).c_str() : "", bDusk ? "-dusk" : "", FrameNo);
 			C.Save(Name);
 			std::printf("frame %d: %d puffs\n", FrameNo, N);
 		}

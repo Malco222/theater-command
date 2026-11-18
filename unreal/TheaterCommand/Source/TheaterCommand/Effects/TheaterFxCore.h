@@ -168,6 +168,11 @@ namespace TheaterFx
 		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind);
 		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
 		void TrailStop(int Id);
+		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
+		 * see-through lobes of smoke in a crooked chain, longer along the wind, with thin wisps trailing downwind; it
+		 * hangs where it burst, drifts with the wind, greys and stretches, and is gone by about 9 s. Kind is an
+		 * air_flak row ("heavy"). */
+		void AirFlak(double Now, const Vec& At, const char* Kind = "heavy");
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds);
 
@@ -236,6 +241,7 @@ namespace TheaterFx
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
+			Span FlameLift; // (metres a fire's tongue stands off the skin)
 			Rgb Col, ColFull, ColOld;
 		};
 		/** A trail being laid: where its point was at the last call, and how far it has gone since its last puff. */

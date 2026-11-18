@@ -346,6 +346,14 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
+void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.AirFlak(Now, ToFx(At), Named(Kind).c_str());
+	}
+}
+
 void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds)
 {
 	if (IsReady())
@@ -561,6 +569,7 @@ void FBattleEffects::RunTest(const FVector& Centre)
 	Add(15.5, 4, -36.0, -10.0, TEXT("mg"), TEXT("")); // a machine gun's burst, tracer
 	Add(16.0, 5, 24.0, 18.0, TEXT(""), TEXT("")); // a wreck burning
 	Add(18.0, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
+	Add(19.0, 6, 0.0, 60.0, TEXT("heavy"), TEXT("")); // a heavy flak burst hanging 60 m up over the far row
 }
 
 void FBattleEffects::PlayTest(double Now)
@@ -607,6 +616,9 @@ void FBattleEffects::PlayTest(double Now)
 		}
 		case 5:
 			Burn(Where, 3.0f, 12.0f);
+			break;
+		case 6:
+			AirFlak(Now, Where + FVector(0.0, 0.0, 60.0 * UnitsPerMetre), Shot.Size);
 			break;
 		default:
 			break;

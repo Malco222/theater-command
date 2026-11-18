@@ -1823,6 +1823,136 @@ namespace TheaterFx
 		Flashes.push_back(L);
 	}
 
+	void Battle::AirFlak(double Now, const Vec& At, const char* Kind)
+	{
+		// The art director's hanging-smoke brief (2026-11-16 03:44Z), the look Brian picked: smoke, never a body. Five
+		// to eight lobes of different sizes in a crooked chain, longer along the wind and lopsided, with three to five
+		// thin wisps trailing downwind; dense at the heart and fading to nothing at the edge, torn more as it ages,
+		// lit only on its sunward side. A soft flash of about 0.2 s with no sparks sits off-centre in it. It hangs
+		// where it burst and drifts with the wind; it greys, stretches to about three times its length by 8 s, and
+		// fades away by about 9 s. Never cut off.
+		std::string Name = Kind && *Kind ? Kind : "heavy";
+		if (!Has("air_flak." + Name + ".long_m"))
+		{
+			Name = "heavy"; // (a kind the recipe does not know bursts as heavy)
+		}
+		const std::string P = "air_flak." + Name + ".";
+		Dice D(++Seeds * 86028121ull ^ PlaceKey(At));
+		const double Half = 0.5 * Num(P + "long_m", 22.0);
+		const double AcrossK = Num(P + "across_m", 16.0) / std::max(2.0 * Half, 1e-3);
+		const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)); // (down the wind, level)
+		const Vec Side = ZUp.Cross(Down).Unit(Vec(0.0, 1.0, 0.0));
+		const double Stretch = Num(P + "stretch_mps", 2.0);
+		const double Downwind = Num(P + "downwind_mps", 0.6);
+		const double Grow = Num(P + "grow", 1.6);
+		const double Alpha = Num(P + "alpha", 0.75);
+		const double HalfBy = Num(P + "half_by_s", 8.0);
+		const double Shade = Num(P + "cloud_shade", 4.0);
+		const Rgb Young = Picture(P + "colour", Rgb::FromPicture(46, 43, 42));
+		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
+		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
+		{
+			Bit B;
+			B.Born = Now;
+			B.From = From;
+			B.Vel = Vel;
+			B.Windage = 1.0;
+			B.Life = Life;
+			B.R0 = R;
+			B.R1 = R1;
+			B.Grow = 0.8;
+			B.Col = Young;
+			B.Col2 = Old;
+			B.Alpha = A;
+			B.HazeBy = HalfBy; // (its opacity falls to half by half_by_s, then it fades out over its last tenth)
+			B.HazeAlpha = 0.5 * A;
+			B.FadeIn = 0.04;
+			B.Hold = 0.88;
+			B.Heart = 0.9;
+			B.Rim = 0.0;
+			B.Rough = 0.45;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.TurnRate = D.Bell() * 0.08;
+			B.Centre = At;
+			B.CloudShade = Shade;
+			B.CloudR = Half;
+			return B;
+		};
+		// the lobes: a crooked chain down the wind, never a clump: spread along the wind, wandering across it and up
+		// and down, of different sizes, each drawn out along the wind; one end of the chain longer than the other
+		const int Lobes = static_cast<int>(std::lround(Pick(D, P + "lobes", 5.0, 8.0)));
+		const double Lopsided = D.U(0.75, 1.3);
+		double Ps = D.Bell() * 0.15 * Half, Pz = D.Bell() * 0.1 * Half;
+		for (int I = 0; I < Lobes; ++I)
+		{
+			double Pa = (-0.6 + 1.2 * (I + D.U(-0.3, 0.3)) / std::max(1, Lobes - 1)) * Half;
+			Pa *= Pa > 0.0 ? Lopsided : 1.0 / Lopsided;
+			const double R = Half * Pick(D, P + "lobe_r", 0.3, 0.55);
+			const Vec From = At + Down * Pa + Side * (Ps * AcrossK) + ZUp * (Pz * AcrossK);
+			// (each end of the chain draws away along the wind, the downwind end faster: it stretches and leans)
+			const Vec Vel = Down * (Stretch * Pa / Half + Downwind);
+			const double Life = Pick(D, P + "life_s", 8.5, 9.5);
+			Bit B = Smoke(From, R, R * Grow * D.U(0.85, 1.15), Vel, Alpha * D.U(0.6, 1.0), Life);
+			B.Along = (Down + Side * (0.25 * D.Bell()) + ZUp * (0.2 * D.Bell())).Unit(Down);
+			B.Stretch = D.U(1.2, 1.7);
+			Bits.push_back(B);
+			Ps = std::clamp(Ps + D.Bell() * 0.35 * Half, -0.5 * Half, 0.5 * Half);
+			Pz = std::clamp(Pz + D.Bell() * 0.25 * Half, -0.35 * Half, 0.35 * Half);
+		}
+		// wisps trailing downwind, thin, coming in as the burst smears
+		const int Wisps = static_cast<int>(std::lround(Pick(D, P + "wisps", 3.0, 5.0)));
+		for (int I = 0; I < Wisps; ++I)
+		{
+			const double R = Half * D.U(0.12, 0.22);
+			const Vec From = At + Down * (Half * D.U(0.2, 1.1)) + Side * (D.Bell() * 0.4 * Half) + ZUp * (D.Bell() * 0.2 * Half);
+			Bit B = Smoke(From, R, R * 2.0, Down * (Stretch * D.U(1.0, 1.6) + Downwind), D.U(0.2, 0.4), Pick(D, P + "life_s", 8.5, 9.5) * D.U(0.85, 1.0));
+			B.Along = Down;
+			B.Stretch = D.U(2.4, 3.2);
+			B.FadeIn = 0.6;
+			B.Rough = 0.6;
+			Bits.push_back(B);
+		}
+		// the flash: soft, no sparks, off-centre in the smoke and laid in front of it from the eye
+		const double FlashS = Num(P + "flash_s", 0.2);
+		const Vec Off = (Down * D.Bell() + Side * D.Bell() + ZUp * D.Bell()) * (0.25 * Half);
+		const Vec ToEye = bEyeKnown ? (LastEye - At).Unit(ZUp) : Vec();
+		const Vec Hot = At + Off + ToEye * (0.6 * Half);
+		auto Glow = [&](const char* Key, const Rgb& Fallback, double RFallback, double A, double Heart)
+		{
+			Bit B;
+			B.Born = Now;
+			B.From = Hot;
+			B.Windage = 1.0;
+			B.Life = FlashS * D.U(0.85, 1.15);
+			B.R0 = Num(P + Key + std::string("_m"), RFallback) * D.U(0.85, 1.15);
+			B.R1 = B.R0 * 1.15;
+			B.Col = Picture(P + Key, Fallback);
+			B.Col2 = B.Col * 0.6;
+			B.Alpha = A;
+			B.FadeIn = 0.01;
+			B.Hold = 0.3;
+			B.Heart = Heart;
+			B.Rim = 0.0;
+			B.Rough = 0.3;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.bLight = true;
+			Bits.push_back(B);
+		};
+		Glow("flash_glow", Rgb::FromPicture(150, 70, 14), 8.0, 0.55, 0.7);
+		Glow("flash_mid", Rgb::FromPicture(255, 170, 60), 3.5, 0.8, 0.85);
+		Glow("flash_heart", Rgb::FromPicture(255, 245, 215), 1.6, 1.0, 0.95);
+		Flash L;
+		L.At = Hot;
+		L.Col = Picture(P + "flash_mid", Rgb::FromPicture(255, 170, 60));
+		L.Born = Now;
+		L.Life = FlashS;
+		L.Strength = Num(P + "lamp", 0.35);
+		L.Radius = Num(P + "lamp_reach_m", 60.0);
+		Flashes.push_back(L);
+	}
+
 	const Battle::TrailRow& Battle::TrailRowOf(const std::string& Kind)
 	{
 		for (const TrailRow& R : TrailRows)
@@ -1854,6 +1984,7 @@ namespace TheaterFx
 			R.Lumpy = Clamp01(Num(P + "lumpy", 0.0));
 			R.SmearS = std::max(0.0, Num(P + "smear_s", 0.0));
 			R.Rise = Num(P + "rise_mps", 0.0);
+			R.FlameLift = Range(P + "flame_lift_m", 0.3, 0.6);
 			R.Col = Picture(P + "colour", Rgb::FromPicture(128, 126, 122));
 			R.ColFull = Picture(P + "colour_full", R.Col);
 			R.ColOld = Picture(P + "colour_old", R.ColFull);
@@ -2015,7 +2146,7 @@ namespace TheaterFx
 				const Vec Curl = (Side * (0.2 * D.Bell()) + Lift * D.U(-0.05, 0.1)) * Len;
 				// (art director 21:37Z: fire in a slipstream stands off the skin and spills past the silhouette, so each
 				// tongue lifts above or below as it streams aft; the heart stays on the cowl)
-				const Vec Spill = Lift * ((D.U() < 0.5 ? 1.0 : -1.0) * Pick(D, "air_trails." + Tr->Kind + ".flame_lift_m", 0.3, 0.6));
+				const Vec Spill = Lift * ((D.U() < 0.5 ? 1.0 : -1.0) * Row.FlameLift.Pick(D));
 				const int Pieces = 4;
 				for (int I = 0; I < Pieces; ++I)
 				{

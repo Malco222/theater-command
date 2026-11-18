@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, AirFlak, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -110,6 +110,12 @@ public:
 	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind);
 	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void TrailStop(int32 Id);
+	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row
+	 * ("heavy", the 88 mm class). A soft flash, then see-through lobes of smoke in a crooked chain that hang where
+	 * they burst, drift with the wind, grey and stretch, and are gone in about 9 s. The battle decides where and how
+	 * often (the art director's brief: within about two wingspans of the formation, more behind than ahead, every
+	 * 2.5 s for light guns, 1.4 s medium, 0.9 s heavy, ragged). */
+	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */

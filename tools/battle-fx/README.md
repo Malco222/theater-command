@@ -87,5 +87,20 @@ Blasts->TrailStop(EngineId);
 - Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
 - The same clock rule applies as for `AirGun`.
 
+## Flak at height
+
+```cpp
+// a heavy flak shell bursting near the bombers (the battle picks where and how often)
+Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
+```
+
+- Smoke, never a ball: a soft flash, then five to eight see-through lobes in a crooked chain down the wind, with wisps.
+  It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
+- The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
+  ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
+  for home. Each burst is about 10 to 16 puffs.
+- The preview: `./fxpreview recipe.txt out air hmg 6,20,95,245 960x540 burst` (one burst, close) or `... 360 960x540
+  flak` (heavy guns round a flying aircraft).
+
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
