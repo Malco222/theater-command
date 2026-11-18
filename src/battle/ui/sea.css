@@ -5,15 +5,27 @@
 .sea .nw { white-space: nowrap; }
 .sea .offer .otop .tc-data { white-space: nowrap; }
 .sea .offer .oside { display: block; }
+/* Every card's parts on the same lines as its neighbours': the name, what it is, then the fleets and the staff's chance,
+   however the names wrap. Up to three cards a row at 1280 and up: five practice actions lie three and two. */
+.sea .offer { grid-row: span 3; grid-template-rows: subgrid; row-gap: 4px; align-content: start; }
 
 /* ---- The top bar: one row at 1280 and up (the UI director, 7) ---- */
 .sea.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
 .sea .bbar { flex-wrap: nowrap; gap: 12px; }
-.sea .btitle { flex: 0 1 auto; min-width: 160px; max-width: none; }
+/* The title is as wide as its longest line. Where the bar's middle would be squeezed under its floor, its facts fold at
+   the dot on purpose (sea-page.ts fitTitle: .is-folded, each fact a line of its own, the dot gone by the fold rule), so
+   the box shrinks to its longest line and the rest goes to the middle (the UI director, keep-together review). It holds
+   three lines' height whether folded or not, so the bar is one height at every width, whichever title is shown. */
+.sea .btitle { flex: none; min-width: 0; max-width: none; min-height: 60px; align-content: center; }
+.sea .btitle.is-folded .facts > span { flex-direction: column; }
 .sea .btitle .tc-title-3 { line-height: 24px; } /* wraps rather than cut (the fold rule) */
 /* Under 1440 the title takes the type scale's next size down (the prose size, bold) so it holds one line, and keeps
    its line height, so the bar is one height at every width (the UI director, round 2). */
 @media (max-width: 1439px) { .sea .btitle .tc-title-3 { font-size: 15px; } }
+/* And at any width where the facts have folded and a long sea's name would still push the buttons off the bar; there
+   the middle may give 8 more, its break bars still 52 wide at 1280 ("The action in the Central Mediterranean"). */
+.sea .btitle.is-small .tc-title-3 { font-size: 15px; }
+.sea .btitle.is-small ~ .bbal { min-width: 312px; }
 /* The same: under 1440 the clock's buttons drop their key letters, so the date and the fleets hold one line beside the
    title. Space, the key the opening dispatch asks for, joins the keys band below the sea; 1, 2 and 3 stay in the
    buttons' tooltips (the band holds one line at 1280 with one more key, not two). */
@@ -24,7 +36,12 @@
 @media (max-width: 1439px) { .sea .keys .kbreak { display: block; } }
 .sea .bclock { flex: none; }
 .sea .bspeed { flex: none; }
-.sea .bbal { flex: 1 1 340px; min-width: 330px; max-width: 420px; }
+/* The middle of the bar (the odds, the two break bars, the nations) keeps 16 clear of the buttons, the bar's gap and this
+   margin, and narrows to fit (the UI director, keep-together mend 1), never so far that a break bar is under about 50
+   wide (the floor: the label, its two gaps and two bars of 50); where it is narrow, the two odds fold at their dot. */
+.sea .bbal { flex: 1 1 360px; min-width: 320px; max-width: 420px; margin-right: 4px; grid-template-columns: minmax(0, 1fr); }
+.sea .bends { display: grid; grid-template-columns: auto minmax(0, max-content) auto; justify-content: space-between; column-gap: 6px; align-items: start; }
+.sea .bends #ratio { white-space: normal; min-width: 0; }
 /* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
 .sea .bclock .tc-label { color: var(--paper-300); }
 .sea .bclock .tc-label.is-paused { color: var(--brass-300); }

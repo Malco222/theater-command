@@ -515,9 +515,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // after its screen and lost to a light fleet of the same weight 95 times in 100 (b407, ruling 217); with the
       // screen 600 m ahead of it, still 13 in 100 short. So the screen closes up on the line: a ship more than
       // 'station' ahead of the rearmost slows to half the fleet's speed until the line comes up (never a dead stop).
-      // A ship the player has sent at a speed of its own goes at it.
+      // A ship the player has sent at a speed of its own goes at it. The line holds its fleet's course too, from the
+      // middle of its own fleet to the middle of the enemy's, so it comes on as it drew up: each steering for the enemy
+      // nearest it, the wings turned in toward the middle and the line came on bunched (b438).
       const line = this.keepsStation(u) ? this.keeping(u.side) : null;
       if (line) {
+        const [ax, ay] = this.centre(u.side), [bx, by] = this.centre(other(u.side));
+        want = bearing(ax, ay, bx, by);
         speed = Math.min(speed, line.slowest * SEA.speeds.cruise);
         if (this.ahead(u) - line.rear > SEA.ai.station) speed = Math.min(speed, line.slowest * SEA.speeds.slow);
       }

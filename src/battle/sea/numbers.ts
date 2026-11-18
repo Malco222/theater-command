@@ -16,7 +16,7 @@ export const SEA = seaData as unknown as {
   side: { breakAt: number; spread: number; admiral: number; pursuit: number };
   strike: { windup: number; every: number; share: number; radius: number };
   air: { every: number; share: number };
-  pieces: { most: number };
+  pieces: { most: number; frontage: number };
   ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
 };

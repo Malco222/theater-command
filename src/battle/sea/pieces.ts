@@ -55,15 +55,24 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
     const order: SeaClass[] = ['dd', 'ca', 'bb', 'cv'];
     const toward = side === 'att' ? 1 : -1;
     const baseY = side === 'att' ? F.edge : F.size - F.edge;
+    const sideW = mine.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + f.ships[c] * shipWeight(f, c), 0), 0);
     order.forEach((c) => {
       const list = rows[c];
       const gap = c === 'dd' ? 500 : 650;
       const y = baseY - toward * ROW[c] * F.row;
+      // Each row is as wide as its share of its side's weight: a side of pieces.frontage weight stands at the natural
+      // spacing (650 m between big ships, 500 m between fours of destroyers), a heavier one closes its rows up and a
+      // lighter one opens them out, so fleets of the same weight and make meet on the same front however many pieces
+      // they come in. Spaced by the count of their pieces, many light ships stood on a wider front than a few heavy ones
+      // of the same weight, their wings out of reach, and lost 7 to 14 in 100 more often than the card (b438).
+      const rowW = list.reduce((m, p) => m + p.n * shipWeight(p.f, c), 0);
+      const front = (gap * SEA.pieces.frontage * rowW) / (Math.max(1e-6, sideW) * RULES_CLASSES[c].power * SEA.classes[c].per);
+      const slot = list.length ? front / list.length : gap;
       list.forEach((p, i) => {
         // The defender's line is the attacker's turned half round, not its mirror: each side's first ship is on its
         // own left, so a ship turning to starboard does for one side what it does for the other (b402: drawn as a
         // mirror, the same helm put one side across the other's bows).
-        const x = F.size / 2 + (side === 'def' ? -1 : 1) * (i - (list.length - 1) / 2) * gap;
+        const x = F.size / 2 + (side === 'def' ? -1 : 1) * (i - (list.length - 1) / 2) * slot;
         const w = shipWeight(p.f, c);
         const u: SeaUnit = {
           id, side, corps: p.f.id, nat: p.f.nat, kind: c,

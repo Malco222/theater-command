@@ -69,6 +69,30 @@ describe('the pieces', () => {
     for (const c of SEA_CLASSES) expect(att.filter((u) => u.extra.cls === c).reduce((n, u) => n + u.extra.ships0, 0)).toBe(big.ships[c] ?? 0);
   });
 
+  it('fleets of the same weight and make draw up on the same front, however many pieces they come in (b438)', () => {
+    // Many light pieces against fewer heavier ones of the same weight: the same ships in the same proportions, one side
+    // in two fleets of plain ships, the other in one fleet with a heavier multiplier.
+    const fleets = plainTicket({ seed: 1, odds: 1,
+      att: [{ name: 'A', nat: 'UK', ships: { bb: 4, ca: 12, dd: 32 } }, { name: 'B', nat: 'UK', ships: { bb: 2, ca: 6, dd: 16 } }],
+      def: [{ name: 'C', nat: 'GER', ships: { bb: 3, ca: 9, dd: 24 } }] }).place.fleets;
+    const { units } = drawUp(fleets);
+    const front = (side: 'att' | 'def', c: 'bb' | 'ca' | 'dd'): number => {
+      const xs = units.filter((u) => u.side === side && u.extra.cls === c).map((u) => u.x).sort((a, b) => a - b);
+      return ((xs[xs.length - 1] - xs[0]) * xs.length) / (xs.length - 1); // the row's pieces times their spacing
+    };
+    const pieces = (side: 'att' | 'def'): number => units.filter((u) => u.side === side).length;
+    expect(pieces('att')).toBeGreaterThan(pieces('def'));
+    for (const c of ['bb', 'ca', 'dd'] as const) expect(front('att', c), c).toBeCloseTo(front('def', c), 6);
+    // A side of pieces.frontage weight stands at the natural spacing: 650 m between big ships, 500 m between fours.
+    const even = drawUp(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } }], def: [BATTLE] }).place.fleets).units
+      .filter((u) => u.side === 'att');
+    expect(SEA.pieces.frontage).toBe(50);
+    for (const [c, gap] of [['bb', 650], ['ca', 650], ['dd', 500]] as const) {
+      const xs = even.filter((u) => u.extra.cls === c).map((u) => u.x).sort((a, b) => a - b);
+      expect(xs[1] - xs[0], c).toBeCloseTo(gap, 6);
+    }
+  });
+
   it("each side's hulls come to the same multiple of its weight, so toughness picks who sinks, not who wins", () => {
     const { units, info } = drawUp(plainTicket({ att: [HOME], def: [BATTLE], seed: 1 }).place.fleets);
     for (const side of ['att', 'def'] as const) {

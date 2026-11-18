@@ -4,7 +4,8 @@
 //
 // Mouse: left picks (drag for a box, Shift adds), right orders (on the water to steer for it, on an enemy to engage it
 // or, for a carrier, to strike it; drag to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R the chosen ships break
-// off, Tab next piece, Esc drops the choice. A plain left click never gives an order, and Enter does nothing.
+// off, Tab next piece, Esc drops the choice. A plain left click never gives an order, and Enter does nothing on the
+// field; on the after card it presses CONTINUE, past the half-second key guard.
 // The words are the UI director's and the design director's (reviews of 17 November, logs b368 and b370).
 
 import { createGame } from '../../campaign/game';
@@ -13,7 +14,7 @@ import { beginHuman, humanUp, stepAI } from '../../campaign/turn';
 import type { Game, SeaReport } from '../../campaign/types';
 import { Clock, type Speed } from '../core/clock';
 import { diceChance } from '../core/parity';
-import { lineUp, unitAt, unitsIn } from '../core/select';
+import { lineUp } from '../core/select';
 import type { Command, FieldEvent, Side } from '../core/types';
 import { closeWith, foughtOf, seaAhead, type SeaAhead } from '../sea/handoff';
 import { SEA } from '../sea/numbers';
@@ -21,8 +22,8 @@ import { SeaSim, type SeaLosses } from '../sea/sim';
 import { PRACTICE, type Practice } from '../sea/practice';
 import { plainTicket, type PlainFleet } from '../sea/ticket';
 import type { SeaClass, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from '../sea/types';
-import { toField, toScreen } from './draw';
-import { drawSea, live, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
+import { toField, toScreen, type Camera } from './draw';
+import { aircraftOf, aircraftSaid, drawSea, layoutSea, live, pieceAt, piecesIn, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
 
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -81,13 +82,15 @@ interface State {
   trayFrom: number;
   trayShown: number;
   traySel: string;
+  /** The view keeps both fleets framed as they close, until the player moves it themselves (the art director, keep-together 2). */
+  follow: boolean;
 }
 
 const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, chasing: false, chaseByHand: false, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, chasing: false, chaseByHand: false, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '', follow: true,
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -172,6 +175,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   const sc = S.scene;
   sc.me = t.att.human ? 'att' : 'def';
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
+  sc.layout = undefined; sc.keep = undefined; S.follow = true;
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.handing = false; S.closing = true; S.chasing = false; S.chaseByHand = false; S.tag = null;
@@ -216,6 +220,8 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   el('balMe').style.background = ours; el('balThem').style.background = theirsCol;
   canvas = el('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
+  fitTitle();
+  void document.fonts?.ready.then(() => { if (S.sim === sim) fitTitle(); });
   fit(true);
   frameFleets();
   wireBattle();
@@ -226,8 +232,10 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   S.last = now();
 }
 
-/** What a piece is, numbered in kind, with what it has lost: "Cruiser 2", "Destroyers 4 · 3 of 4" (the design director). */
-const whatOf = (u: SeaUnit): string => shownName(u);
+/** What a piece is, numbered in kind, with what it has lost: "Cruiser 2", "Destroyers 4 · 3 of 4" (the design director),
+ *  and a carrier's aircraft once they are worn, counted the same way: "Carrier 1 · 18 aircraft" (the UI director,
+ *  keep-together). */
+const whatOf = (u: SeaUnit): string => shownName(u, S.sim!.ticket);
 
 function card(u: SeaUnit, color: string): string {
   return `<button class="tc-card is-press ucard" data-unit="${u.id}" title="${esc(u.name)}">
@@ -260,7 +268,12 @@ function updateTray(force = false): void {
     set('str', u.str, false);
     set('mor', u.mor, true);
     const what = el.querySelector<HTMLElement>('.uwhat b')!, w = whatOf(u);
-    if (what.textContent !== w) what.textContent = w;
+    if (what.textContent !== w) {
+      what.textContent = w;
+      // The hover on a worn carrier's name says what the count means: "18 of its 36 aircraft can still fly."
+      const said = aircraftSaid(S.sim!.ticket, u);
+      if (said) what.title = said; else what.removeAttribute('title');
+    }
     const st = el.querySelector<HTMLElement>('.ustate')!;
     // Once the action is over nothing is under way: the card says so (the design director, b356, b368).
     const doing = S.sim!.over ? (live(u) ? 'action over' : '') : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
@@ -286,7 +299,10 @@ function sizeChips(): void {
   const probe = (sel: string, html: string): number => {
     const e = c.querySelector<HTMLElement>(sel)!, old = e.innerHTML;
     e.innerHTML = html;
-    const w = e.scrollWidth;
+    // The text's own width, to the fraction: scrollWidth rounds, and a name 0.4 px over its box loses its end.
+    const r = document.createRange();
+    r.selectNodeContents(e);
+    const w = Math.ceil(r.getBoundingClientRect().width) + 1;
     e.innerHTML = old;
     return w;
   };
@@ -294,6 +310,14 @@ function sizeChips(): void {
   for (const u of S.sim!.units) if (u.side === S.scene.me) {
     const n0 = u.extra.ships0;
     names.add(n0 === 1 ? u.name : `${u.name} · ${n0 - 1} of ${n0}`);
+    // A carrier's name grows with its aircraft count once they are worn: "Carrier 1 · 35 aircraft", "· no aircraft".
+    const full = aircraftOf(S.sim!.ticket, u);
+    if (full > 0) {
+      const most = String(Math.max(1, full - 1));
+      // Any count up to the full one, in the widest digits of its length.
+      for (const d of ['0', '4', '8']) names.add(`${u.name} · ${most.replace(/\d/g, d)} aircraft`);
+      names.add(`${u.name} · no aircraft`);
+    }
   }
   let w = probe('.ustate', `<b>${STATE_WORD.steady}</b><span class="act"> · ${ORDER_WORD.attack}</span>`);
   for (const n of names) w = Math.max(w, probe('.uwhat b', esc(n)));
@@ -380,15 +404,16 @@ function updateTop(force = false): void {
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
   // The balance bar, as on land: the card's odds and the odds standing now, the attacker's to the defender's as the
   // campaign counts them, and under it each side's share at those odds, ours from the left, with the card's mark.
-  // Now is the card's odds moved by what each side has lost, so before a shot the two agree (the coasts' aircraft
-  // are on the card and not on the field).
+  // Now is the card's odds moved by what each side has lost, as the staff reckons it when asked to take over (the
+  // whole wear, aircraft included), so before a shot the two agree and the bar and the staff's chance tell one story.
   const k = sim.ticket.reckoning.odds, nowOdds = (k * (1 - sim.lostShare('att'))) / Math.max(1e-6, 1 - sim.lostShare('def'));
   const share = (o: number): number => (me === 'att' ? o : 1) / (1 + o);
   el('balMe').style.width = `${(share(nowOdds) * 100).toFixed(1)}%`;
   el('balThem').style.width = `${((1 - share(nowOdds)) * 100).toFixed(1)}%`;
   el('balMark').style.left = `${(share(k) * 100).toFixed(1)}%`;
-  const ratio = `Card ${odds(k)} to 1 · now ${odds(nowOdds)} to 1`;
-  if (el('ratio').textContent !== ratio) el('ratio').textContent = ratio;
+  // Where the middle of the bar is narrow, the two odds fold at their dot, and the dot goes (the fold rule).
+  const ratio = facts([`Card ${odds(k)} to 1`, `now ${odds(nowOdds)} to 1`]);
+  if (el('ratio').dataset.was !== ratio) { el('ratio').dataset.was = ratio; el('ratio').innerHTML = ratio; }
   el('brkMe').style.width = `${(sim.nearBreak(me) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
   document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
@@ -430,6 +455,23 @@ function updateTop(force = false): void {
   }
 }
 
+/**
+ * The title's facts fold at their dot, on purpose, only where the bar's middle would otherwise be squeezed under its
+ * floor and push the buttons off the bar: folded, the title's box is as wide as its longest line and the middle takes
+ * the rest (the UI director, keep-together review). Worked out again when the window changes size.
+ */
+function fitTitle(): void {
+  const bar = document.querySelector<HTMLElement>('.sea .bbar'), title = bar?.querySelector<HTMLElement>('.btitle'), acts = bar?.querySelector<HTMLElement>('.bacts');
+  if (!bar || !title || !acts) return;
+  title.classList.remove('is-folded', 'is-small');
+  const pad = parseFloat(getComputedStyle(bar).paddingRight) || 0;
+  const over = (): boolean => acts.getBoundingClientRect().right > bar.getBoundingClientRect().right - pad + 0.5;
+  // First the facts fold; then, for a sea with a long name ("the Central Mediterranean"), the title takes the type
+  // scale's next size down, as it does under 1440, so the buttons are never pushed off the bar.
+  if (over()) title.classList.add('is-folded');
+  if (over()) title.classList.add('is-small');
+}
+
 function fit(first = false): void {
   const r = canvas.getBoundingClientRect();
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -439,31 +481,62 @@ function fit(first = false): void {
   if (first) whole();
 }
 const SIZE = SEA.field.size;
+/** The closest the view goes, in screen pixels a metre. */
+const MAX_Z = 0.6;
 function whole(): void { S.scene.cam = { x: SIZE / 2, y: SIZE / 2, z: Math.min(S.scene.W / SIZE, (S.scene.H - 60) / SIZE) * 0.97 }; }
+/** How much of the view the two fleets take when framed: about two thirds of its width, or most of the sea's height
+ *  under the dispatch strip, whichever binds (the art director, keep-together 2). */
+const FILL_W = 0.68, FILL_H = 0.9;
+/** Where the view should stand to frame both fleets: every live piece as it is drawn, clear of the dispatch strip and
+ *  the far ports' name under it (the UI director, sea-226 mend 2). Null with nothing afloat. */
+function frameTarget(): Camera | null {
+  const sc = S.scene, lay = sc.layout;
+  const us = S.sim!.units.filter(live);
+  if (!us.length) return null;
+  let ax = Infinity, bx = -Infinity, ay = Infinity, by = -Infinity;
+  const add = (x: number, y: number): void => { ax = Math.min(ax, x); bx = Math.max(bx, x); ay = Math.min(ay, y); by = Math.max(by, y); };
+  for (const u of us) {
+    add(u.x, u.y);
+    const p = lay?.pieces.get(u.id);
+    if (p) for (const [sx, sy] of p.ships) { const r = p.L / 2 + 4; add(...toField(sc, sx - r, sy - r)); add(...toField(sc, sx + r, sy + r)); }
+  }
+  const top = (sc.clearTop ?? 50) + 30, foot = 24;
+  const z = Math.max(minZoom(), Math.min(MAX_Z, (FILL_W * sc.W) / Math.max(1, bx - ax), (FILL_H * (sc.H - top - foot)) / Math.max(1, by - ay)));
+  return { x: (ax + bx) / 2, y: (ay + by) / 2 + (top - foot) / 2 / z, z };
+}
 /** Each action opens framed on the two fleets; WHOLE SEA stays a button (the art director, 1). */
 function frameFleets(): void {
-  const us = S.sim!.units.filter(live);
-  if (!us.length) { whole(); return; }
-  const pad = 1500;
-  const xs = us.map((u) => u.x), ys = us.map((u) => u.y);
-  const [ax, bx, ay, by] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
-  // Nothing starts under a panel (the UI director, sea-226 mend 2): the fleets are framed in the sea below the
-  // dispatch strip and the far ports' name under it.
-  const c = S.scene.cam, top = (S.scene.clearTop ?? 50) + 28, foot = 16;
-  c.z = Math.max(minZoom(), Math.min(0.6, Math.min(S.scene.W / (bx - ax), (S.scene.H - top - foot) / (by - ay))));
-  c.x = (ax + bx) / 2;
-  c.y = (ay + by) / 2 + (top - foot) / 2 / c.z;
+  // The drawing spaces the hulls by their size on the screen, so the frame and the drawing are worked out together.
+  for (let i = 0; i < 4; i++) {
+    S.scene.layout = layoutSea(S.sim!, S.scene);
+    const t = frameTarget();
+    if (!t) { whole(); return; }
+    Object.assign(S.scene.cam, t);
+    clampCam();
+  }
+}
+/** The view eases after the fleets as they close, a few seconds behind them, while the player leaves it to the page. */
+function followFleets(dt: number): void {
+  const t = frameTarget();
+  if (!t) return;
+  const c = S.scene.cam, k = 1 - Math.exp(-dt / 0.6);
+  c.z = Math.exp(Math.log(c.z) + (Math.log(t.z) - Math.log(c.z)) * k);
+  c.x += (t.x - c.x) * k; c.y += (t.y - c.y) * k;
   clampCam();
 }
+/** The player has moved the view themselves: it stays where they put it. */
+const byHand = (): void => { S.follow = false; };
 function minZoom(): number { return Math.min(S.scene.W / SIZE, S.scene.H / SIZE) * 0.8; }
 function zoomAt(px: number, py: number, k: number): void {
   const c = S.scene.cam;
   const [fx, fy] = toField(S.scene, px, py);
-  c.z = Math.max(minZoom(), Math.min(0.6, c.z * k));
+  c.z = Math.max(minZoom(), Math.min(MAX_Z, c.z * k));
   const [nx, ny] = toField(S.scene, px, py);
   c.x += fx - nx; c.y += fy - ny;
   clampCam();
 }
+/** The view stays on the board, as the land page's on its field: zoomed in, no desk shows past its edges; zoomed out,
+ *  it stays centred. */
 function clampCam(): void {
   const c = S.scene.cam;
   const hw = S.scene.W / 2 / c.z, hh = S.scene.H / 2 / c.z;
@@ -483,8 +556,8 @@ const give = (c: Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed }
   if (ok && inChase) S.chaseByHand = true;
   return ok;
 };
-/** How near the pointer must be to a piece to take it, in metres: a few pixels at any zoom. */
-const reachPx = (): number => Math.max(250, 18 / S.scene.cam.z);
+/** A piece the player may take in hand: their own, afloat and not breaking off. */
+const mineToTake = (id: number): boolean => { const u = unit(id); return !!u && u.side === S.scene.me && orderable(u); };
 
 function wireBattle(): void {
   const sc = S.scene;
@@ -506,14 +579,17 @@ function wireBattle(): void {
     const [px, py] = pos(e);
     const [fx, fy] = toField(sc, px, py);
     if (!down) {
-      const u = unitAt(sim.units.filter(live), fx, fy, reachPx(), sc.me);
+      // The whole drawn piece is under the pointer, every hull and the water between, as its outline shows (the UI
+      // director, keep-together 2).
+      const id = pieceAt(sc, px, py, (i) => { const x = unit(i); return !!x && live(x); });
+      const u = id !== null ? unit(id) : undefined;
       sc.hover = u ? u.id : null;
       canvas.style.cursor = u && u.side !== sc.me && sc.sel.size ? 'crosshair' : u && u.side === sc.me ? 'pointer' : 'default';
       return;
     }
     if (Math.hypot(px - down.x, py - down.y) > 6) down.moved = true;
     if (!down.moved) return;
-    if (down.touch || down.button === 1) { sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam(); }
+    if (down.touch || down.button === 1) { byHand(); sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam(); }
     else if (down.button === 0) { const [ax, ay] = toField(sc, down.x, down.y); sc.box = [ax, ay, fx, fy]; }
     else if (down.button === 2) {
       const ids = chosen();
@@ -534,10 +610,10 @@ function wireBattle(): void {
     if (d.touch) { if (!d.moved) pickAt(px, py, false); return; }
     if (d.button === 0) {
       if (sc.box) {
-        const [x0, y0, x1, y1] = sc.box;
-        const got = unitsIn(sim.units, sc.me, x0, y0, x1, y1).filter(orderable);
+        const [a, b] = toScreen(sc, sc.box[0], sc.box[1]), [c, d] = toScreen(sc, sc.box[2], sc.box[3]);
+        const got = piecesIn(sc, a, b, c, d, mineToTake);
         if (!e.shiftKey) sc.sel.clear();
-        for (const u of got) sc.sel.add(u.id);
+        for (const id of got) sc.sel.add(id);
         sc.box = null;
       } else pickAt(px, py, e.shiftKey);
     } else if (d.button === 2) {
@@ -553,14 +629,16 @@ function wireBattle(): void {
   canvas.addEventListener('pointercancel', () => { down = null; sc.box = null; sc.line = null; });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
+    byHand();
     const [px, py] = pos(e);
     const notched = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
     if (e.ctrlKey || notched) zoomAt(px, py, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
-  window.onresize = (): void => { if (S.screen !== 'choose') { fit(); trayMore(); } };
+  window.onresize = (): void => { if (S.screen !== 'choose') { fitTitle(); fit(); trayMore(); } };
   app.querySelectorAll<HTMLElement>('[data-clock]').forEach((el) => el.addEventListener('click', () => setClock(Number(el.dataset.clock) as Speed)));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
+    byHand();
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
   }));
@@ -588,16 +666,15 @@ function wireBattle(): void {
   tray.addEventListener('dblclick', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-unit]');
     const u = el ? unit(Number(el.dataset.unit)) : undefined;
-    if (u) { sc.cam.x = u.x; sc.cam.y = u.y; sc.cam.z = Math.max(sc.cam.z, 0.12); clampCam(); }
+    if (u) { byHand(); sc.cam.x = u.x; sc.cam.y = u.y; sc.cam.z = Math.max(sc.cam.z, 0.12); clampCam(); }
   });
 }
 
 function pickAt(px: number, py: number, add: boolean): void {
-  const sim = S.sim!, sc = S.scene;
-  const [fx, fy] = toField(sc, px, py);
-  const u = unitAt(sim.units.filter((x) => x.side === sc.me && orderable(x)), fx, fy, reachPx(), sc.me);
-  if (!u) { if (!add) sc.sel.clear(); return; }
-  if (add) { if (sc.sel.has(u.id)) sc.sel.delete(u.id); else sc.sel.add(u.id); } else { sc.sel.clear(); sc.sel.add(u.id); }
+  const sc = S.scene;
+  const id = pieceAt(sc, px, py, mineToTake);
+  if (id === null) { if (!add) sc.sel.clear(); return; }
+  if (add) { if (sc.sel.has(id)) sc.sel.delete(id); else sc.sel.add(id); } else { sc.sel.clear(); sc.sel.add(id); }
 }
 
 function orderAt(px: number, py: number): void {
@@ -605,13 +682,21 @@ function orderAt(px: number, py: number): void {
   const ids = chosen();
   if (!ids.length) return;
   const [fx, fy] = toField(sc, px, py);
-  const foe = unitAt(sim.units.filter((x) => x.side !== sc.me && live(x)), fx, fy, reachPx());
+  const foeId = pieceAt(sc, px, py, (i) => { const x = unit(i); return !!x && x.side !== sc.me && live(x); });
+  const foe = foeId !== null ? sim.units.find((x) => x.id === foeId) : undefined;
   if (foe) { if (give({ do: 'attack', units: ids, target: foe.id })) sc.ping = { x: foe.x, y: foe.y, at: now(), kind: 'attack' }; }
   else if (give({ do: 'move', units: ids, x: fx, y: fy })) sc.ping = { x: fx, y: fy, at: now(), kind: 'move' };
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Enter presses the lit button of the card that stands, and nothing on the field (the keys rule, 21:42): on the
+    // after card it is CONTINUE, once the card has stood half a second and only for a fresh press, never one held
+    // from before it came up (the key guard).
+    if (S.screen === 'after' && !e.repeat && now() >= S.guardUntil) document.querySelector<HTMLElement>('.after [data-act="continue"]')?.click();
+    return;
+  }
   // Esc answers a standing question at once, guard or not: it is the answer that changes nothing.
   if (e.key === 'Escape' && (S.asking || S.handing)) { keepFighting(); return; }
   if (now() < S.guardUntil) { if (e.key === 'Tab' || e.key === ' ') e.preventDefault(); return; }
@@ -635,15 +720,15 @@ window.addEventListener('keydown', (e) => {
       const i = mine.findIndex((u) => u.id === cur);
       const next = mine[(i + (e.shiftKey ? mine.length - 1 : 1)) % mine.length];
       sc.sel.clear(); sc.sel.add(next.id);
-      sc.cam.x = next.x; sc.cam.y = next.y; clampCam();
+      byHand(); sc.cam.x = next.x; sc.cam.y = next.y; clampCam();
       break;
     }
-    case 'ArrowLeft': case 'a': sc.cam.x -= pan; clampCam(); break;
-    case 'ArrowRight': case 'd': sc.cam.x += pan; clampCam(); break;
-    case 'ArrowUp': case 'w': sc.cam.y += pan; clampCam(); break;
-    case 'ArrowDown': case 's': sc.cam.y -= pan; clampCam(); break;
-    case '+': case '=': zoomAt(sc.W / 2, sc.H / 2, 1.25); break;
-    case '-': zoomAt(sc.W / 2, sc.H / 2, 0.8); break;
+    case 'ArrowLeft': case 'a': byHand(); sc.cam.x -= pan; clampCam(); break;
+    case 'ArrowRight': case 'd': byHand(); sc.cam.x += pan; clampCam(); break;
+    case 'ArrowUp': case 'w': byHand(); sc.cam.y += pan; clampCam(); break;
+    case 'ArrowDown': case 's': byHand(); sc.cam.y -= pan; clampCam(); break;
+    case '+': case '=': byHand(); zoomAt(sc.W / 2, sc.H / 2, 1.25); break;
+    case '-': byHand(); zoomAt(sc.W / 2, sc.H / 2, 0.8); break;
     default: return;
   }
   updateTop(); updateTray(true);
@@ -682,6 +767,7 @@ function frame(): void {
   for (const e of v.events) if (e.text && !(e.what === 'nearBreak' && e.side === S.scene.me)) { S.dispatch = e; S.dispatchAge = 0; }
   if (S.clock.speed > 0) S.dispatchAge += dt;
   for (const id of [...S.scene.sel]) { const u = unit(id); if (!u || !orderable(u)) S.scene.sel.delete(id); }
+  if (S.follow) followFleets(dt);
   drawSea(ctx, sim, S.scene);
   updateTop();
   updateTray();
@@ -788,7 +874,7 @@ function showAfter(): void {
     <h3 class="tc-label">Against the staff's reckoning</h3>
     <p class="dice">${esc(reckoned(won, S.scene.me === 'att' ? chanceOf(t) : 1 - chanceOf(t)))}${rep ? '' : ' A practice action hands nothing back.'}</p>
     ${sides}
-    <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
+    <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue <span class="tc-key">Enter</span></button></div>
   </div>`;
   document.body.appendChild(veil);
   veil.querySelector('[data-act="continue"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; veil.remove(); showChooser(); });
