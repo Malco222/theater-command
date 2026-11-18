@@ -1,0 +1,398 @@
+// Italy's boats on the record's seas, and Force H at Gibraltar (ruling 233, rider b564; the historian's rows in
+// historian/italian-boats-b562.md). In the grand campaign Italy's submarines are shared out among four beats by the
+// historian's rows, as shares of the boats the fleet has after the game's own losses: the Atlantic from Bordeaux (only
+// while the Axis holds it), and the Mediterranean's west, centre and east. At stops 4 and 5 the staff places them by
+// need. Germany sends U-boats into the Mediterranean from the U-boat Fleet, by date at stops 1 and 2 and at stops 3
+// to 5 only while an Axis army fights in North Africa. Force H is at home in Gibraltar with the Western Mediterranean
+// as its beat, and at stops 1 and 2 its carriers come and go as the record has them. The history campaigns keep the
+// war at sea they always had.
+import { describe, expect, it } from 'vitest';
+import navy from '../data/campaign/navy.json';
+import { createGame, declareWar, relocate } from '../src/campaign/game';
+import { openEscorts } from '../src/campaign/fleets';
+import { NAVY, armyInAfrica, closedTo, fleetReach, navalAI, navalUpkeep, placeBoats, shippingIn, wholeShares, zoneOf } from '../src/campaign/navy';
+import { startOpen } from '../src/campaign/staff';
+import type { Fleet, Game } from '../src/campaign/types';
+
+const ITALY = ['Atlantic Submarine Fleet', 'Submarine Fleet', 'Central Submarine Fleet', 'Eastern Submarine Fleet'];
+const MED_UBOATS = ['Western Mediterranean U-boat Fleet', 'Eastern Mediterranean U-boat Fleet'];
+
+/** A grand campaign on its first day, at a stop of the history dial. */
+function wide(stop = 3, human: string | null = null): Game {
+  const g = startOpen(createGame(1, human));
+  if (stop !== 3) g.flags.hist = stop;
+  return g;
+}
+const named = (g: Game, name: string): Fleet | undefined => g.fleets.find((f) => f.name === name);
+const boats = (g: Game, name: string): number => named(g, name)?.ships.ss ?? 0;
+const italian = (g: Game): number[] => ITALY.map((name) => boats(g, name));
+const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+const news = (g: Game, turn: number): string[] => g.headlines.filter((h) => h.turn === turn).map((h) => h.text);
+/** France has fallen and Bordeaux is Germany's, as it was from June 1940. */
+const frenchFall = (g: Game): void => { g.byName.Bordeaux.ctrl = 'GER'; };
+/** Force H forms in July 1940 (turn 11), as its row has it. */
+function forceH(g: Game): Fleet {
+  g.turn = 11;
+  navalUpkeep(g, 'UK');
+  return named(g, 'Force H')!;
+}
+
+describe('the rows', () => {
+  it('are the historian\'s, and every group is a fleet the chart can carry', () => {
+    const B = NAVY.beats!;
+    expect(B.ITA.rows.map((r) => r[0])).toEqual([10, 13, 14, 15, 19, 21, 24, 29, 39, 41, 45, 47]);
+    expect(B.ITA.rows.find((r) => r[0] === 24)).toEqual([24, 14, 15, 30, 20]);
+    expect(B.GER.rows).toEqual([[26, 0, 6], [28, 5, 15], [39, 10, 10], [53, 10, 3], [61, 0, 0]]);
+    const g = wide();
+    for (const nat of ['ITA', 'GER']) {
+      for (const G of B[nat].groups) {
+        expect(G.name, G.name).toMatch(/ Fleet$/);
+        if (G.base) expect(g.byName[G.base], G.base).toBeDefined();
+        if (G.home) expect(zoneOf(g, G.home), G.home).toBeGreaterThanOrEqual(0);
+        if (G.zone) expect(zoneOf(g, G.zone), G.zone).toBeGreaterThanOrEqual(0);
+      }
+    }
+    // The existing Italian fleet is the western beat, under the name saves and tests already know.
+    expect(B.ITA.groups[1]).toEqual({ name: 'Submarine Fleet' });
+    expect(B.GER.from).toBe('U-boat Fleet');
+    for (const name of B.GER.cause!.ground) expect(g.byName[name], name).toBeDefined();
+    // Force H's row is the old one, with the grand campaign's own beat beside it.
+    const row = navy.fleets.find((f) => f.name === 'Force H')!;
+    expect(row.home).toBe('iberia');
+    expect((row as any).open).toEqual({ home: 'wmed', zone: 'wmed', tied: true });
+  });
+
+  it('share whole boats by largest remainder and keep the total exactly', () => {
+    expect(wholeShares(100, [14, 15, 30, 20])).toEqual([18, 19, 38, 25]);
+    expect(wholeShares(79, [14, 15, 30, 20])).toEqual([14, 15, 30, 20]);
+    expect(wholeShares(60, [14, 15, 30, 20])).toEqual([11, 11, 23, 15]);
+    expect(wholeShares(7, [0, 0])).toEqual([0, 0]);
+    for (let n = 0; n < 120; n++) expect(sum(wholeShares(n, [11, 15, 30, 20]))).toBe(n);
+  });
+});
+
+describe('Italy\'s boats by the historian\'s rows (stops 1 to 3)', () => {
+  it('in August 1941 each beat takes its share of the boats the fleet has left after its losses', () => {
+    const g = wide();
+    frenchFall(g);
+    g.turn = 24;
+    named(g, 'Submarine Fleet')!.ships.dd = 2; // a transfer moves only submarines
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([18, 19, 38, 25]);
+    // The game's own losses stand: of 60 boats left, the same shares, and never a boat more.
+    for (const name of ITALY) named(g, name)!.ships.ss = 0;
+    named(g, 'Submarine Fleet')!.ships.ss = 60;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([11, 11, 23, 15]);
+    expect(named(g, 'Submarine Fleet')!.ships.dd).toBe(2);
+    // December 1941 is still the August row.
+    g.turn = 28;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([11, 11, 23, 15]);
+  });
+
+  it('the groups form when they first have boats, with a line of news, and sail for their own beats', () => {
+    const g = wide();
+    g.turn = 9;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([0, 100, 0, 0]);
+    g.turn = 10;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([0, 30, 40, 30]);
+    expect(news(g, 10)).toContain('The Central Submarine Fleet forms at Augusta.');
+    expect(news(g, 10)).toContain('The Eastern Submarine Fleet forms at Leros.');
+    const centre = named(g, 'Central Submarine Fleet')!, east = named(g, 'Eastern Submarine Fleet')!;
+    expect([g.regions[centre.base].name, g.seas[centre.station].key, centre.duty]).toEqual(['Sicily', 'central', 'raid']);
+    expect([g.regions[east.base].name, g.seas[east.station].key, east.duty]).toEqual(['Rhodes', 'libyan', 'raid']);
+    expect(fleetReach(g, centre)).toContain(centre.station);
+    expect(fleetReach(g, east)).toContain(east.station);
+    // A second month says nothing more.
+    g.turn = 11;
+    placeBoats(g, 'ITA');
+    expect(news(g, 11).filter((t) => /Submarine Fleet forms/.test(t))).toEqual([]);
+  });
+
+  it('the Atlantic flotilla sails only while the Axis holds Bordeaux, and its boats come home when it is lost', () => {
+    const g = wide();
+    g.turn = 15;
+    placeBoats(g, 'ITA');
+    // Bordeaux is French: the Atlantic's count is left out and the Mediterranean shares everything.
+    expect(named(g, 'Atlantic Submarine Fleet')).toBeUndefined();
+    expect(italian(g)).toEqual([0, 25, 42, 33]);
+    frenchFall(g);
+    g.turn = 16;
+    placeBoats(g, 'ITA');
+    expect(news(g, 16)).toContain('The Atlantic Submarine Fleet forms at Bordeaux.');
+    const atl = named(g, 'Atlantic Submarine Fleet')!;
+    expect(g.regions[atl.base].name).toBe('Bordeaux');
+    expect(g.seas[atl.home].key).toBe('biscay');
+    expect(g.seas[atl.station].key).toBe('natl');
+    expect(italian(g)).toEqual([30, 18, 29, 23]);
+    // From March 1941 the flotilla hunts off the Iberian coast.
+    g.turn = 19;
+    placeBoats(g, 'ITA');
+    expect(g.seas[atl.station].key).toBe('iberia');
+    expect(fleetReach(g, atl)).toContain(atl.station);
+    // Bordeaux falls to the Allies: the flotilla stands down and the Mediterranean has its boats again.
+    g.byName.Bordeaux.ctrl = 'UK';
+    g.turn = 20;
+    placeBoats(g, 'ITA');
+    expect(named(g, 'Atlantic Submarine Fleet')).toBeUndefined();
+    expect(sum(italian(g))).toBe(100);
+    expect(italian(g)).toEqual([0, 25, 42, 33]);
+    // Retaken, it forms again.
+    frenchFall(g);
+    g.turn = 21;
+    placeBoats(g, 'ITA');
+    expect(boats(g, 'Atlantic Submarine Fleet')).toBe(31);
+    expect(news(g, 21)).toContain('The Atlantic Submarine Fleet forms at Bordeaux.');
+  });
+
+  it('after the last row its shares hold, and the Atlantic has none', () => {
+    const g = wide();
+    frenchFall(g);
+    g.turn = 60;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([0, 30, 60, 10]);
+  });
+});
+
+describe('Italy\'s boats by need (stops 4 and 5)', () => {
+  it('with no enemy shipping in reach, the boats are placed as the war opened', () => {
+    for (const stop of [4, 5]) {
+      const g = wide(stop);
+      frenchFall(g);
+      g.turn = 28;
+      placeBoats(g, 'ITA');
+      expect(italian(g), `stop ${stop}`).toEqual([0, 30, 40, 30]);
+    }
+  });
+
+  it('at war with Britain, the boats go where her cargoes sail: to the Atlantic, while the Axis holds Bordeaux', () => {
+    const g = wide(4);
+    frenchFall(g);
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 28;
+    placeBoats(g, 'ITA');
+    const atl = named(g, 'Atlantic Submarine Fleet')!;
+    expect(atl.ships.ss).toBe(100);
+    expect(shippingIn(g, 'ITA', atl.station)).toBeGreaterThan(0);
+    expect(fleetReach(g, atl)).toContain(atl.station);
+    // The chart's Mediterranean carries no enemy lane: the beats there have none of the enemy's cargoes to hunt.
+    for (const key of ['wmed', 'central', 'libyan']) expect(shippingIn(g, 'ITA', zoneOf(g, key)), key).toBe(0);
+    // Without Bordeaux there is no enemy shipping in Italy's reach, and the opening split stands.
+    g.byName.Bordeaux.ctrl = 'UK';
+    g.turn = 29;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([0, 30, 40, 30]);
+  });
+
+  it('at stop 3 the same war keeps to the historian\'s rows', () => {
+    const g = wide(3);
+    frenchFall(g);
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 28;
+    placeBoats(g, 'ITA');
+    expect(italian(g)).toEqual([18, 19, 38, 25]);
+  });
+});
+
+describe('Germany\'s U-boats in the Mediterranean', () => {
+  it('at stops 1 and 2 they go by date, taken from the U-boat Fleet up to as many as it has, and come back', () => {
+    for (const stop of [1, 2]) {
+      const g = wide(stop);
+      const pool = named(g, 'U-boat Fleet')!;
+      pool.ships.ss = 40;
+      const med = (): number[] => MED_UBOATS.map((name) => boats(g, name));
+      g.turn = 25;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([0, 0]);
+      g.turn = 26;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([0, 6]);
+      expect(news(g, 26)).toContain('The Eastern Mediterranean U-boat Fleet forms at Leros.');
+      g.turn = 28;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([5, 15]);
+      expect(pool.ships.ss).toBe(20);
+      expect(news(g, 28)).toContain('The Western Mediterranean U-boat Fleet forms at La Spezia.');
+      const west = named(g, MED_UBOATS[0])!;
+      expect([g.regions[west.base].name, g.seas[west.station].key]).toEqual(['Liguria', 'wmed']);
+      g.turn = 39;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([10, 10]);
+      // Play's losses are its own: what the Mediterranean lost is not made good from the Atlantic beyond the row.
+      g.turn = 53;
+      named(g, MED_UBOATS[1])!.ships.ss = 1;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([10, 3]);
+      expect(pool.ships.ss + sum(med())).toBe(31);
+      g.turn = 61;
+      placeBoats(g, 'GER');
+      expect(med()).toEqual([0, 0]);
+      expect(pool.ships.ss).toBe(31);
+    }
+  });
+
+  it('a short U-boat Fleet sends what it has, in the row\'s proportion', () => {
+    const g = wide(1);
+    named(g, 'U-boat Fleet')!.ships.ss = 8;
+    g.turn = 28;
+    placeBoats(g, 'GER');
+    expect(MED_UBOATS.map((name) => boats(g, name))).toEqual([2, 6]);
+    expect(boats(g, 'U-boat Fleet')).toBe(0);
+  });
+
+  it('at stop 3 they go only while an Axis army fights in North Africa', () => {
+    const g = wide(3);
+    const cause = NAVY.beats!.GER.cause!;
+    g.turn = 26;
+    // Italy's army stands in Libya, but Italy is not at war: no cause.
+    expect(armyInAfrica(g, cause)).toBe(false);
+    placeBoats(g, 'GER');
+    expect(boats(g, MED_UBOATS[1])).toBe(0);
+    declareWar(g, 'ITA', 'UK');
+    expect(armyInAfrica(g, cause)).toBe(true);
+    placeBoats(g, 'GER');
+    expect(boats(g, MED_UBOATS[1])).toBe(6);
+    // Before October 1941 the cause does not hold, whatever the army does.
+    g.turn = 25;
+    expect(armyInAfrica(g, cause)).toBe(false);
+    // The Axis armies leave Africa: the U-boats go back to the U-boat Fleet.
+    g.turn = 28;
+    const rome = g.byName.Rome;
+    const ground = new Set(cause.ground.map((name) => g.byName[name].id));
+    for (const c of g.corps) if (!c.dead && cause.by.includes(c.nat) && ground.has(c.reg)) relocate(g, c, rome);
+    expect(armyInAfrica(g, cause)).toBe(false);
+    const before = boats(g, 'U-boat Fleet');
+    placeBoats(g, 'GER');
+    expect(MED_UBOATS.map((name) => boats(g, name))).toEqual([0, 0]);
+    expect(boats(g, 'U-boat Fleet')).toBe(before + 6);
+  });
+});
+
+describe('Force H', () => {
+  it('in the grand campaign is at home in Gibraltar with the Western Mediterranean as its beat, and keeps to it', () => {
+    const g = wide();
+    const f = forceH(g);
+    expect([g.regions[f.base].name, g.seas[f.home].key, g.seas[f.station].key, f.tied, f.duty]).toEqual(['Gibraltar', 'wmed', 'wmed', true, 'patrol']);
+    expect(f.ships).toEqual({ bb: 2, cv: 1, ca: 2, dd: 9, ss: 0 });
+    navalAI(g, 'UK');
+    expect([g.seas[f.zone].key, f.stance]).toEqual(['wmed', 'patrol']);
+  });
+
+  it('in a history campaign keeps the row it always had', () => {
+    const g = createGame(1, null);
+    const f = forceH(g);
+    expect([g.regions[f.base].name, g.seas[f.home].key, g.seas[f.station].key, f.tied]).toEqual(['Gibraltar', 'iberia', 'iberia', false]);
+  });
+
+  it('a grand campaign begun later takes the beat over from the history it was played on', () => {
+    const g = createGame(1, null);
+    const f = forceH(g);
+    g.flags.open = 1;
+    openEscorts(g);
+    expect([g.seas[f.home].key, g.seas[f.zone].key, g.seas[f.station].key, f.tied]).toEqual(['wmed', 'wmed', 'wmed', true]);
+  });
+
+  it('at stops 1 and 2 loses the Ark Royal in December 1941, has the Eagle from March 1942 and loses her in August', () => {
+    for (const stop of [1, 2]) {
+      const g = wide(stop);
+      const f = forceH(g);
+      g.turn = 28;
+      navalUpkeep(g, 'UK');
+      expect(f.ships.cv).toBe(0);
+      expect(f.lost.cv).toBe(1);
+      expect(news(g, 28)).toContain('The carrier Ark Royal is sunk off Gibraltar.');
+      g.turn = 31;
+      navalUpkeep(g, 'UK');
+      expect(f.ships.cv).toBe(1);
+      expect(news(g, 31)).toContain('The carrier Eagle joins Force H.');
+      g.turn = 36;
+      navalUpkeep(g, 'UK');
+      expect(f.ships.cv).toBe(0);
+      expect(f.lost.cv).toBe(2);
+      expect(news(g, 36)).toContain('The carrier Eagle is sunk in the Pedestal convoy.');
+      expect(f.ships.bb + f.ships.ca + f.ships.dd).toBe(13);
+    }
+  });
+
+  it('at stops 3 to 5, in a history campaign and under a player, its carrier goes only if play sinks it', () => {
+    const games = [wide(3), wide(4), wide(5), createGame(1, null), wide(1, 'UK')];
+    for (const g of games) {
+      const f = forceH(g);
+      for (const turn of [28, 31, 36]) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        expect(f.ships.cv).toBe(1);
+      }
+      expect(f.lost.cv).toBe(0);
+      expect(g.headlines.some((h) => /Ark Royal|Eagle/.test(h.text))).toBe(false);
+    }
+  });
+
+  it('a carrier play has already sunk is not sunk again by the record', () => {
+    const g = wide(1);
+    const f = forceH(g);
+    f.ships.cv = 0;
+    f.lost.cv = 1;
+    g.turn = 28;
+    navalUpkeep(g, 'UK');
+    expect(f.lost.cv).toBe(1);
+    expect(news(g, 28).some((t) => /Ark Royal/.test(t))).toBe(false);
+  });
+});
+
+describe('what is left alone', () => {
+  it('a history campaign\'s boats stay where they always were', () => {
+    const g = createGame(1, null);
+    frenchFall(g);
+    for (const turn of [10, 15, 28, 40]) {
+      g.turn = turn;
+      placeBoats(g, 'ITA');
+      placeBoats(g, 'GER');
+    }
+    expect(italian(g)).toEqual([0, 100, 0, 0]);
+    expect(boats(g, 'U-boat Fleet')).toBe(27);
+    expect(g.fleets.some((f) => MED_UBOATS.includes(f.name))).toBe(false);
+  });
+
+  it('the player\'s own navy is his to place', () => {
+    const ita = wide(1, 'ITA');
+    frenchFall(ita);
+    ita.turn = 28;
+    placeBoats(ita, 'ITA');
+    expect(italian(ita)).toEqual([0, 100, 0, 0]);
+    const ger = wide(1, 'GER');
+    ger.turn = 28;
+    placeBoats(ger, 'GER');
+    expect(boats(ger, 'U-boat Fleet')).toBe(27);
+    expect(ger.fleets.some((f) => MED_UBOATS.includes(f.name))).toBe(false);
+  });
+});
+
+describe('the director\'s check: December 1941', () => {
+  it('the Western Mediterranean holds about 15 Italian and 5 German boats with Force H on it, and stays open to Britain', () => {
+    const g = wide(1);
+    const f = forceH(g);
+    frenchFall(g);
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 28;
+    // The record's own total for Italy at that date (79 boats, net of its losses) and a U-boat Fleet with boats to spare.
+    named(g, 'Submarine Fleet')!.ships.ss = 79;
+    named(g, 'U-boat Fleet')!.ships.ss = 100;
+    placeBoats(g, 'ITA');
+    placeBoats(g, 'GER');
+    for (const nat of ['ITA', 'GER', 'UK']) navalAI(g, nat);
+    const wmed = zoneOf(g, 'wmed');
+    const inWmed = (nat: string): number => g.fleets.filter((x) => x.nat === nat && x.zone === wmed && x.stance !== 'port').reduce((n, x) => n + x.ships.ss, 0);
+    expect(inWmed('ITA')).toBe(15);
+    expect(inWmed('GER')).toBe(5);
+    expect([f.zone, f.stance]).toEqual([wmed, 'patrol']);
+    expect(closedTo(g, wmed, 'UK')).toBe(false);
+    // Of a full fleet of 100 the western beat has 19, still near the record's 15.
+    for (const name of ITALY) named(g, name)!.ships.ss = name === 'Submarine Fleet' ? 100 : 0;
+    placeBoats(g, 'ITA');
+    expect(boats(g, 'Submarine Fleet')).toBe(19);
+  });
+});

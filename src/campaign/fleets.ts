@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -512,10 +512,12 @@ export const mergeTargets = (g: Game, f: Fleet): Fleet[] => g.fleets.filter((x) 
 
 /**
  * At the opening of a grand campaign the commands tied to a station on their own side's shipping lane are already
- * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about.
+ * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about. First the
+ * fleets already formed take what their rows say for the grand campaign (Force H's beat, ruling 233 rider b564).
  */
 export function openEscorts(g: Game): void {
   if (!seaWar(g)) return;
+  openFleetRows(g);
   for (const f of g.fleets) {
     if (!f.tied || !atSea(f) || f.stance !== 'patrol') continue;
     const rt = seaRoutes(g).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g, r.to, f.nat)) && whyNotEscort(g, f, r.id) === null);
