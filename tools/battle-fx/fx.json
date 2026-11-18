@@ -1356,6 +1356,8 @@
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
+  "muzzle_lamp_height_m": 6.0,
+  "_muzzle_lamp": "A gun's muzzle lamp (muzzles.<gun>.light_w) hangs this high times the square root of its strength above the muzzle, and its strength is cut by the square of how much lower that is than a shell's lamp of the same strength (burst.flash.light.height_m), so the ground at the gun's foot is lifted no more than at a shell's foot, never washed white. Build 1700: with the lamp at the muzzle, a tank gun at night lit the ground 1 m round its foot to 112 to 249 of 255.",
   "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",

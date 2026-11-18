@@ -109,3 +109,7 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
+
+`-TheaterFxLampLog` writes a log line for each frame a lamp is lit (where it hangs, in world units; how strong, in
+candelas; how far it reaches; its colour), and one for the first frame after with none. A 105 mm shell's lamp shows
+once at full strength, once at half, then out.
