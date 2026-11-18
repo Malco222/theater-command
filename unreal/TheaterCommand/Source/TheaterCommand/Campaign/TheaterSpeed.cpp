@@ -692,6 +692,7 @@ namespace TheaterSpeed
 		if (TidyLowMB <= 0.0 || HoldsMB < TidyLowMB)
 		{
 			TidyLowMB = HoldsMB;
+			bTidyOwed = false; // (a new least with no clear-out, as when the engine's spread purge ends: nothing is owed over it)
 			return;
 		}
 		if (CVarTidyAside.GetValueOnGameThread() == 0 || !GEngine)
@@ -709,8 +710,10 @@ namespace TheaterSpeed
 				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is asked for with the game holding %.0f MB, %.0f over its least since the last (tc.Speed.TidyAside)"), HoldsMB, OverMB);
 			}
 		}
-		else if (OverMB > 500.0 && !bTidyOwed)
+		else if (OverMB > 500.0 && !bTidyOwed && Now - TidiedAt > 5.0)
 		{
+			// (not in the seconds after one was asked for: the engine may put a clear-out off while it loads or while
+			// the last one's purge is unfinished, and until it runs the game still stands over its old least)
 			bTidyOwed = true;
 			if (bLogging)
 			{
