@@ -188,6 +188,16 @@ namespace
 		return Info;
 	}
 
+	/**
+	 * The frame's one size of small capital label (the UI director's type floor, ruled on build 1638): the larger
+	 * label size, 10 as the player sees it, with its letter-spacing brought down to 0.04 em so the word grows by a
+	 * few per cent in width, not a quarter. The smaller size that stood beside it, about 8, is retired.
+	 */
+	FSlateFontInfo SmallCaps()
+	{
+		return Typed(9.0f, true, 40);
+	}
+
 	/** Where the pieces of the frame are on the screen this frame (absolute): a town's plate or a province's name is not drawn under one. */
 	TArray<FSlateRect> FrameRects;
 
@@ -5050,7 +5060,7 @@ namespace
 									SNew(SHorizontalBox)
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("YOUR CHIEF OF STAFF SUGGESTS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("YOUR CHIEF OF STAFF SUGGESTS"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 									]
 									+ SHorizontalBox::Slot().AutoWidth()
 									[
@@ -5058,7 +5068,7 @@ namespace
 										.ToolTipText(FText::FromString(TEXT("Send him away. H opens the guide whenever you want it.")))
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->DismissAdviser(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("DISMISS"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+											SNew(STextBlock).Text(FText::FromString(TEXT("DISMISS"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 										]
 									]
 								]
@@ -5134,7 +5144,7 @@ namespace
 										.ToolTipText(FText::FromString(TEXT("The Guide: the ten lessons of FIRST COMMAND, done, waiting and to come; and how to play, the table, a month and what every button is for. (H)")))
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+											SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 										]
 									]
 									// (Rules 84.3.3; the look brief, section 6: the kit's tc-count on GUIDE's top right corner, the notes he
@@ -5158,7 +5168,7 @@ namespace
 									SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 									]
 								]
 							]
@@ -5365,7 +5375,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 									[
@@ -5471,7 +5481,7 @@ namespace
 											.ToolTipText(FText::FromString(TEXT("This army stays where it is this month and is asked for no more orders: NEXT ARMY passes it by. It can still be given an order.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("STAND THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+												SNew(STextBlock).Text(FText::FromString(TEXT("STAND THIS MONTH"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -5481,7 +5491,7 @@ namespace
 											.ToolTipText(FText::FromString(TEXT("This army stands this month. Press to take that back: it waits for orders again.")))
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->StandThisMonth(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("STANDING THIS MONTH"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+												SNew(STextBlock).Text(FText::FromString(TEXT("STANDING THIS MONTH"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 											]
 										]
 									]
@@ -5631,7 +5641,7 @@ namespace
 									// forecasts is headed by its order's own words, so nobody has to match a forecast to a button.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->NowLabel : FText::GetEmpty(); })
 									]
@@ -5682,7 +5692,7 @@ namespace
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterLabel : FText::GetEmpty(); })
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -5786,7 +5796,7 @@ namespace
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && F->bSoften ? EVisibility::Visible : EVisibility::Collapsed; })
 										+ SVerticalBox::Slot().AutoHeight()
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("SOFTEN THE LINE FIRST"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Text(FText::FromString(TEXT("SOFTEN THE LINE FIRST"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 										[
@@ -5808,7 +5818,7 @@ namespace
 													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bProbeOk; })
 													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ProbeLine(); } return FReply::Handled(); })
 													[
-														SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120))
+														SNew(STextBlock).Font(SmallCaps())
 														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bProbeOk ? BrightBrass : Faint); })
 														.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ProbeLabel : FText::GetEmpty(); })
 													]
@@ -5832,7 +5842,7 @@ namespace
 													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bBombOk; })
 													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BombLine(); } return FReply::Handled(); })
 													[
-														SNew(STextBlock).Text(FText::FromString(TEXT("BOMB THE LINE"))).Font(Font(TEXT("Bold"), 9, 120))
+														SNew(STextBlock).Text(FText::FromString(TEXT("BOMB THE LINE"))).Font(SmallCaps())
 														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bBombOk ? BrightBrass : Faint); })
 													]
 												]
@@ -5848,7 +5858,7 @@ namespace
 									// The Battle Ticket: what the map says about this fight.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										SNew(STextBlock).Text(FText::FromString(TEXT("THE BATTLE TICKET"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -5867,7 +5877,7 @@ namespace
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->TicketHidden > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ToggleTicket(); } return FReply::Handled(); })
 										[
-											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+											SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 											.Text_Lambda([this, Face]()
 											{
 												const FFaceOff* F = Face();
@@ -7541,7 +7551,7 @@ namespace
 				{
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("DIPLOMACY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Text(FText::FromString(TEXT("DIPLOMACY"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 					];
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 					[
@@ -7589,7 +7599,7 @@ namespace
 						return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false)
 							.OnClicked_Lambda([this, Tab]() { if (Controller.IsValid()) { Controller->SetProvinceTab(Tab); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 							];
 					};
 					if (bProvince && (Recruits.Num() > 0 || Works.Num() > 0))
@@ -7611,7 +7621,7 @@ namespace
 					{
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(Info.OptionsTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 					}
 					// (Ruling 46: "Forming here". A header that sums it up, then a line an order: its sign, what it is, a bar
@@ -7620,7 +7630,7 @@ namespace
 					{
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("FORMING HERE"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(FText::FromString(TEXT("FORMING HERE"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 						if (!Info.FormingHead.IsEmpty())
 						{
@@ -7676,7 +7686,7 @@ namespace
 									return FReply::Handled();
 								})
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 								]
 							]
 						];
@@ -7691,7 +7701,7 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Text(FText::FromString(Info.bPrizeToTake ? TEXT("THE PRIZE") : TEXT("WHAT IT PAYS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+									SNew(STextBlock).Text(FText::FromString(Info.bPrizeToTake ? TEXT("THE PRIZE") : TEXT("WHAT IT PAYS"))).Font(SmallCaps()).ColorAndOpacity(Brass)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 								[
@@ -7712,7 +7722,7 @@ namespace
 						// (Version 64) Fieldworks standing empty here, for a corps of the player's side to take over.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.LeftWorksTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass).AutoWrapText(true)
+							SNew(STextBlock).Text(Info.LeftWorksTitle).Font(SmallCaps()).ColorAndOpacity(Brass).AutoWrapText(true)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7724,7 +7734,7 @@ namespace
 						// (Version 63) Cut off from the rest of its country: what its troops live on, and for how long.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.PocketTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Info.bPocketSpent ? Alarm : BrightBrass).AutoWrapText(true)
+							SNew(STextBlock).Text(Info.PocketTitle).Font(SmallCaps()).ColorAndOpacity(Info.bPocketSpent ? Alarm : BrightBrass).AutoWrapText(true)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7737,7 +7747,7 @@ namespace
 						const bool bBesieged = Info.SiegeTitle.ToString().StartsWith(TEXT("BESIEGED"));
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.SiegeTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(bBesieged ? Alarm : Brass)
+							SNew(STextBlock).Text(Info.SiegeTitle).Font(SmallCaps()).ColorAndOpacity(bBesieged ? Alarm : Brass)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7757,7 +7767,7 @@ namespace
 						// The places of the province that are prizes of their own, and what happens to them if it is lost.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Info.PlacesTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(Info.PlacesTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
@@ -7769,7 +7779,7 @@ namespace
 						// The town: its building plots as a row of lots, each with what stands on it, and the way to its plan.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 							.Text(FText::FromString(FString::Printf(TEXT("THE TOWN  \u00B7  %d PLOT%s%s"), Info.Plots.Num(), Info.Plots.Num() == 1 ? TEXT("") : TEXT("S"),
 								Info.PlotsFree > 0 ? *FString::Printf(TEXT(", %d FREE"), Info.PlotsFree) : TEXT(""))))
 						];
@@ -7792,7 +7802,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("The town plan: every plot, what stands on it, and everything that could be built here: commerce, farming, learning, training, medicine and administration.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenTownPlan(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? BrightBrass : Muted)
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? BrightBrass : Muted)
 								.Text(FText::FromString(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? FString::Printf(TEXT("TOWN PLAN  \u00B7  %d TO BUILD"), Info.PlotsCanBuild) : FString(TEXT("TOWN PLAN"))))
 							]
 						];
@@ -8071,7 +8081,7 @@ namespace
 					return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
 						.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 						];
 				};
 				if (Army.bFleet)
@@ -8120,7 +8130,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Everything this fleet could be told to do: every sea in reach with the enemy known there, shipping lanes to escort, coasts to shell, and splitting ships off or joining another fleet.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetOrders(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("ORDERS: ESCORT, SHELL, SPLIT"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Text(FText::FromString(TEXT("ORDERS: ESCORT, SHELL, SPLIT"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 							]
 						];
 					}
@@ -8133,7 +8143,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("The fighters and strike aircraft its carriers bring. Send them to search a sea for the enemy, to strike a fleet your side has found, or to raid ships in a harbour.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetWings(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 								.Text(FText::FromString(FString::Printf(TEXT("CARRIER AIRCRAFT  \u00B7  %d"), Army.FleetAircraft)))
 							]
 						];
@@ -8272,7 +8282,7 @@ namespace
 						.ToolTipText(FText::FromString(TEXT("An ally's corps standing here can march with your army: it keeps its own flag and pay, but takes your orders, attacks beside your corps, and the ground you take together is yours. It goes home when you send it back, or if it is left a month with none of your troops beside it. It does not sail, dig in or get promoted.")))
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskAlliesToJoin(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.JoinButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.JoinButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 				}
@@ -8285,7 +8295,7 @@ namespace
 						.ToolTipText(Army.FoldTip)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFold(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.FoldButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.FoldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 				}
@@ -8846,7 +8856,7 @@ namespace
 					]
 					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
+						SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 					]
 				];
 		}
@@ -8858,7 +8868,7 @@ namespace
 				.ToolTipText(FText::FromString(Tip))
 				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
 				];
 		}
 
@@ -10003,7 +10013,7 @@ namespace
 					}
 					Label->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
-						SNew(STextBlock).Text(FText::FromString(Box.Label)).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Muted)
+						SNew(STextBlock).Text(FText::FromString(Box.Label)).Font(SmallCaps()).ColorAndOpacity(Muted)
 					];
 					Boxes->AddSlot().FillWidth(1.0f).Padding(K == 0 ? 0.0f : 10.0f, 0.0f, 0.0f, 0.0f)
 					[
@@ -10064,7 +10074,7 @@ namespace
 					[
 						SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(8.0f, 3.0f, 8.0f, 3.0f))
 						[
-							SNew(STextBlock).Text(FText::FromString(Lead.Tag)).Font(Font(TEXT("Bold"), 9, 220)).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(FText::FromString(Lead.Tag)).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 						]
 					];
 					if (!Lead.Stamp.IsEmpty())
@@ -10304,7 +10314,7 @@ namespace
 							.ToolTipText(FText::FromString(Each.bOk ? TEXT("What your staff ordered this month stands. From next month the desk is yours to run.") : TEXT("The desk is yours again.")))
 							.OnClicked_Lambda(Go(Each.Act))
 							[
-								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Each.bOk ? Cream : Faint)
+								SNew(STextBlock).Text(FText::FromString(Each.bOk ? TEXT("TAKE THE DESK BACK") : TEXT("THE DESK IS YOURS"))).Font(SmallCaps()).ColorAndOpacity(Each.bOk ? Cream : Faint)
 							]
 						];
 					}
@@ -10568,7 +10578,7 @@ namespace
 					SNew(SBorder).BorderImage(&WayTagBrush).Padding(FMargin(6.0f, 2.0f, 6.0f, 2.0f))
 					.ToolTipText(FText::FromString(Seat.bStays ? TEXT("No escort flies by night. Planned by day again, it goes with the bombers.") : TEXT("It could join the raid by day. No escort flies by night.")))
 					[
-						SNew(STextBlock).Text(FText::FromString(Seat.bStays ? TEXT("STAYS HOME") : TEXT("BY DAY ONLY"))).Font(Font(TEXT("Bold"), 8, 160)).ColorAndOpacity(Muted)
+						SNew(STextBlock).Text(FText::FromString(Seat.bStays ? TEXT("STAYS HOME") : TEXT("BY DAY ONLY"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 					]
 				];
 			}
@@ -10579,7 +10589,7 @@ namespace
 					SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass).Padding(FMargin(7.0f, 2.0f, 7.0f, 2.0f))
 					.ToolTipText(FText::FromString(TEXT("The raid is planned round this group. Plan from another group's page to lead with that one.")))
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("LEADS"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("1F1808"))))
+						SNew(STextBlock).Text(FText::FromString(TEXT("LEADS"))).Font(SmallCaps()).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("1F1808"))))
 					]
 				];
 			}
@@ -10607,7 +10617,7 @@ namespace
 				SNew(SHorizontalBox).ToolTipText(FText::FromString(TEXT("How fit the group is to fly. Rest and refit bring it back; a raid and a move both cost it.")))
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("READY"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(bCan ? Muted : Faint)
+					SNew(STextBlock).Text(FText::FromString(TEXT("READY"))).Font(SmallCaps()).ColorAndOpacity(bCan ? Muted : Faint)
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
@@ -10668,7 +10678,7 @@ namespace
 			[
 				SNew(SBorder).BorderImage(&ScrimBrush).Padding(FMargin(8.0f, 3.0f, 8.0f, 3.0f))
 				[
-					SNew(STextBlock).Text(FText::FromString(KindWord)).Font(Font(TEXT("Bold"), 9, 220)).ColorAndOpacity(BrightBrass)
+					SNew(STextBlock).Text(FText::FromString(KindWord)).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 				]
 			];
 			{
@@ -10806,7 +10816,7 @@ namespace
 						[
 							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass).Padding(FMargin(8.0f, 2.0f, 8.0f, 2.0f))
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("CHOSEN"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Ink)
+								SNew(STextBlock).Text(FText::FromString(TEXT("CHOSEN"))).Font(SmallCaps()).ColorAndOpacity(Ink)
 							]
 						];
 					}
@@ -10844,7 +10854,7 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight()
 								[
 									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).Font(SmallCaps()).ColorAndOpacity(Muted)]
 									// (the rules' own words, "2% · about 7", with a little more room about the dot)
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Says.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
 								]
@@ -10867,7 +10877,7 @@ namespace
 							Inside->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
 							[
 								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(Font(TEXT("Bold"), 9, 200)).ColorAndOpacity(Brass)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WHAT A HIT DOES"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 								+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.StopNote)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted.CopyWithNewOpacity(0.8f))]
 							];
 							for (int32 K = 0; K < Way.Hits.Num() && K < 3; ++K)
@@ -10911,7 +10921,7 @@ namespace
 						Inside->AddSlot().AutoHeight()
 						[
 							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("FIGHTERS LOST"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("FIGHTERS LOST"))).Font(SmallCaps()).ColorAndOpacity(Muted)]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Way.FightersLost.Replace(TEXT(" \u00B7 "), TEXT("  \u00B7  ")))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)]
 						];
 					}
@@ -11132,7 +11142,7 @@ namespace
 						.ToolTipText(FText::FromString(TEXT("Every target in reach as a list, with every figure in words.")))
 						.OnClicked_Lambda(Go(Card.AllAct))
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("THE WHOLE LIST"))).Font(Font(TEXT("Bold"), 9, 180)).ColorAndOpacity(Muted)
+							SNew(STextBlock).Text(FText::FromString(TEXT("THE WHOLE LIST"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 						]
 					]
 				];
@@ -11321,7 +11331,7 @@ namespace
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  LEVEL %d"), *General.Rank.ToUpper(), General.Level))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  LEVEL %d"), *General.Rank.ToUpper(), General.Level))).Font(SmallCaps()).ColorAndOpacity(Brass)
 					]
 				]
 				// How far he is toward his next level.
@@ -11566,7 +11576,7 @@ namespace
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Field.Pace.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(PaceInk)
+						SNew(STextBlock).Text(FText::FromString(Field.Pace.ToUpper())).Font(SmallCaps()).ColorAndOpacity(PaceInk)
 					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
@@ -11717,7 +11727,7 @@ namespace
 							bHeaded = true;
 							List->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 4.0f)
 							[
-								SNew(STextBlock).Text(FText::FromString(Labs.Eras.IsValidIndex(Tier) ? Labs.Eras[Tier].ToUpper() : FString())).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)
+								SNew(STextBlock).Text(FText::FromString(Labs.Eras.IsValidIndex(Tier) ? Labs.Eras[Tier].ToUpper() : FString())).Font(SmallCaps()).ColorAndOpacity(Faint)
 							];
 						}
 						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeTech(Node)];
@@ -12028,7 +12038,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 							[
-								SNew(STextBlock).Text(FText::FromString(Option.bNow ? TEXT("YOUR PATH TODAY") : TEXT(""))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Gain)
+								SNew(STextBlock).Text(FText::FromString(Option.bNow ? TEXT("YOUR PATH TODAY") : TEXT(""))).Font(SmallCaps()).ColorAndOpacity(Gain)
 							]
 						];
 					if (!Option.Text.IsEmpty())
@@ -12311,7 +12321,7 @@ namespace
 					TSharedRef<SHorizontalBox> Staff = SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 8.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Power.StaffLabel.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Power.bThreat ? Alarm : Brass)
+							SNew(STextBlock).Text(FText::FromString(Power.StaffLabel.ToUpper())).Font(SmallCaps()).ColorAndOpacity(Power.bThreat ? Alarm : Brass)
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
 						[
@@ -12365,9 +12375,9 @@ namespace
 			DiplomacyHead->AddSlot().AutoHeight().Padding(250.0f, 0.0f, 186.0f, 6.0f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left)[SNew(STextBlock).Text(FText::FromString(TEXT("ALLIES"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine < 0.0f ? Gain : Mine > 0.0f ? Alarm : Muted)]
-				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(TEXT("INDEPENDENT"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)]
-				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right)[SNew(STextBlock).Text(FText::FromString(TEXT("AXIS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine > 0.0f ? Gain : Mine < 0.0f ? Alarm : Muted)]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left)[SNew(STextBlock).Text(FText::FromString(TEXT("ALLIES"))).Font(SmallCaps()).ColorAndOpacity(Mine < 0.0f ? Gain : Mine > 0.0f ? Alarm : Muted)]
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(TEXT("INDEPENDENT"))).Font(SmallCaps()).ColorAndOpacity(Faint)]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right)[SNew(STextBlock).Text(FText::FromString(TEXT("AXIS"))).Font(SmallCaps()).ColorAndOpacity(Mine > 0.0f ? Gain : Mine < 0.0f ? Alarm : Muted)]
 			];
 
 			DiplomacyRows->ClearChildren();
@@ -12671,7 +12681,7 @@ namespace
 					: Choices.Num() > 0 ? FString(TEXT("RAISE IT A LEVEL")) : FString(TEXT("COMPLETE: IT CAN BE RAISED NO HIGHER"));
 				TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Heading)).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+					SNew(STextBlock).Text(FText::FromString(Heading)).Font(SmallCaps()).ColorAndOpacity(Brass)
 				];
 				if (Choices.Num() > 0)
 				{
@@ -13687,14 +13697,14 @@ namespace
 							.ToolTipText(FText::FromString(Level.Blurb + TEXT("\n") + FString::Join(Level.Lines, TEXT("\n"))))
 							.OnClicked_Lambda([this, LevelIndex]() { if (Controller.IsValid()) { Controller->PickLevel(LevelIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Level.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Level.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Blurb : FString();
 					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("DIFFICULTY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("DIFFICULTY"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -13720,14 +13730,14 @@ namespace
 							.ToolTipText(FText::FromString(Depth.Name + TEXT(" (") + Depth.Under + TEXT(")\n") + Depth.Blurb + TEXT("\nOil, supply and manpower are in the game at every depth. You can change the depth, or any one desk, in any month.")))
 							.OnClicked_Lambda([this, DepthIndex]() { if (Controller.IsValid()) { Controller->PickDepth(DepthIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Depth.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Depth.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Under + TEXT(". ") + Opening.Depths[Opening.DepthIndex].Blurb : FString();
 					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HOW DEEP"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HOW DEEP"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -13754,14 +13764,14 @@ namespace
 								Stop.Lines.Num() > 0 ? TEXT("\n") : TEXT(""), *FString::Join(Stop.Lines, TEXT("\n")))))
 							.OnClicked_Lambda([this, StopIndex]() { if (Controller.IsValid()) { Controller->PickHistory(StopIndex); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(Stop.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+								SNew(STextBlock).Text(FText::FromString(Stop.Name.ToUpper())).Font(SmallCaps()).ColorAndOpacity(bPicked ? BrightBrass : Muted)
 							]
 						];
 					}
 					const FString Says = Opening.Histories.IsValidIndex(Opening.HistoryIndex) ? Opening.Histories[Opening.HistoryIndex].Under + TEXT(". ") + Opening.Histories[Opening.HistoryIndex].Blurb : FString();
 					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 					[
-						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HISTORY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+						SNew(SBox).MinDesiredWidth(80.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HISTORY"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 					];
 					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -14032,7 +14042,7 @@ namespace
 				Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
 				[
 					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(76.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Brass)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(76.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Brass)]]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 					[
 						SNew(SBox).WidthOverride(120.0f).HeightOverride(6.0f)
@@ -14076,8 +14086,8 @@ namespace
 					Under->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
 						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(118.0f).Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Colour)]]
-						+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(Text.Left(1).ToUpper() + Text.Mid(1) + TEXT("."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Full - 118.0f).LineHeightPercentage(1.1f)]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(128.0f).Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Colour)]]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(Text.Left(1).ToUpper() + Text.Mid(1) + TEXT("."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Full - 128.0f).LineHeightPercentage(1.1f)]
 					];
 				};
 				Ground(TEXT("AT ITS BEST IN"), Note->Good, FLinearColor(FColor::FromHex(TEXT("8FBF6A"))));
@@ -14242,7 +14252,7 @@ namespace
 			{
 				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(Card.Carry.Num() >= 4 ? 6.0f : 0.0f, 0.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("DIGGING  \u00B7  NO WORKS YET"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Muted : Faint)
+					SNew(STextBlock).Text(FText::FromString(TEXT("DIGGING  \u00B7  NO WORKS YET"))).Font(SmallCaps()).ColorAndOpacity(bGoing ? Muted : Faint)
 					.ToolTipText(FText::FromString(TEXT("Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.")))
 				];
 			}
@@ -14347,7 +14357,7 @@ namespace
 				return SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 					[
-						SNew(SBox).WidthOverride(52.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Brass : Faint)]
+						SNew(SBox).WidthOverride(52.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bGoing ? Brass : Faint)]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 					[
@@ -14418,7 +14428,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Send this corps back to its own country's command.")))
 							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->SendBackCorps(Id); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 							]
 						]
 						// The way to the corps' service record: its honours and its diary.
@@ -14429,7 +14439,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("Its service record: what it has done, its honours and its diary.")))
 							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->OpenRecord(Id); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("RECORD"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+								SNew(STextBlock).Text(FText::FromString(TEXT("RECORD"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 							]
 						]
 					]
