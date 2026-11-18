@@ -1124,7 +1124,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
     // (A staff with history's list of shores opens its second front on those and nowhere else.)
     if (sea.second && (!opensOn(g, nat, r) || !builtUp(g, nat, r))) continue;
     // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
-    if (!shoreOpen(g, r.owner, !!r.overseas)) continue;
+    if (!shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
     const plan = planLanding(g, force, r);
     if (plan.why || plan.risk > L.risk) continue;
     // A staff heeds its own forecast, the one a player reads on the landing card: it puts nobody on a beach where
@@ -1438,7 +1438,7 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
   let best: Region | null = null, bv = 0;
   for (const r of g.regions) {
     if (r.ctrl !== you || !r.port || !r.seas.length || g.turn < (g.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
-    if (!opensOn(g, nat, r) || !builtUp(g, nat, r) || !shoreOpen(g, r.owner, !!r.overseas)) continue;
+    if (!opensOn(g, nat, r) || !builtUp(g, nat, r) || !shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
     // The way there over the water, whoever holds it now.
     if (!seaPath(g, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
     const defended = hostileUnits(g, r, nat).length > 0;
