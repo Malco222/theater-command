@@ -1109,7 +1109,7 @@ export interface Passing {
 }
 
 /** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'guard';
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'guard';
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {

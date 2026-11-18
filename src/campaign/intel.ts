@@ -20,6 +20,7 @@ import { levelIndex } from './difficulty';
 import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH } from './tech';
+import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
 
@@ -469,8 +470,10 @@ export function retire(g: Game, nat: string, id: number): boolean {
 
 // ---- Missions -------------------------------------------------------------------------------------------
 
-export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'guard'];
-const SABOTAGE: Mission[] = ['factory', 'rail', 'oil'];
+export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'airfield', 'guard'];
+const SABOTAGE: Mission[] = ['factory', 'rail', 'oil', 'airfield'];
+/** The missions offered in this campaign: wrecking an airfield only with its switch on (ruling 151(b)). */
+const missionsIn = (g: Game): Mission[] => (airPiece(g, 'field') ? MISSIONS : MISSIONS.filter((m) => m !== 'airfield'));
 export const isSabotage = (m: Mission): boolean => SABOTAGE.includes(m);
 
 export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text: string }> = {
@@ -479,6 +482,7 @@ export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text:
   factory: { label: 'Wreck a factory', doing: 'preparing to wreck a factory', text: 'One working factory is put out of action until engineers rebuild it. Tried once, next month, and then the agent must lie low.' },
   rail: { label: 'Cut the railway', doing: 'preparing to cut the railway', text: 'The track is blown. No train runs through the province until engineers relay it. Tried once, next month, and then the agent must lie low.' },
   oil: { label: 'Fire the oilfield', doing: 'preparing to fire the oilfield', text: `The wells are set alight: the field gives ${Math.round((1 - (data as any).missions.oil.cut) * 100)}% of its oil for ${(data as any).missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
+  airfield: { label: 'Wreck the airfield', doing: 'preparing to wreck the airfield', text: 'Runways cratered and the fuel dump set alight: every enemy air group based on the field is grounded for the month. Tried once, next month, and then the agent must lie low.' },
   guard: { label: 'Guard against saboteurs', doing: 'on guard', text: 'Watches for enemy agents here and in the provinces around, and is some help everywhere at home.' },
 };
 
@@ -520,6 +524,12 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   if (m === 'rail') {
     if (!onNet(r.id)) return `No railway runs through ${r.name}.`;
     if (railCut(g, r.id)) return `The railway at ${r.name} is already cut.`;
+    return null;
+  }
+  if (m === 'airfield') {
+    if (!airPiece(g, 'field')) return 'Not in this campaign.';
+    if (fieldWrecked(g, r.id)) return `The field at ${r.name} is already wrecked this month.`;
+    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).length) return `No enemy air group flies from ${r.name}.`;
     return null;
   }
   if (!r.oil) return `There is no oilfield at ${r.name}.`;
@@ -634,10 +644,16 @@ function attempt(g: Game, a: Agent): void {
   let done = false;
   if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
   else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
+  else if (ok && m === 'airfield' && wreckField(g, r.id, (n) => atWar(g, a.nat, n))) {
+    done = true;
+    const k = groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length;
+    text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
+  }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
   else text = m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
     : m === 'rail' ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.`
-      : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
+      : m === 'airfield' ? `Agent ${a.name} cannot get past the sentries on the field at ${r.name}.`
+        : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
   note(g, a, r.id, done ? 'sabotage' : 'failed', text, done);
   headline(g, done ? 'event' : 'info', text, a.nat, r.id);
   a.mission = 'watch';
@@ -676,12 +692,45 @@ export function guardChance(g: Game, nat: string, reg: number): { chance: number
   return { chance: clamp(p, 0, E.most), by: near ?? [...guards].sort((x, y) => skillOf(y) - skillOf(x) || x.id - y.id)[0] };
 }
 
+/**
+ * A plot against one of the player's airfields on home ground (ruling 151(b)), picked by how many of his air groups
+ * are based there; a guard can stop it as any other. False if he has no group based at home, so the plot goes as it
+ * always did.
+ */
+function plotField(g: Game, nat: string, foe: string): boolean {
+  const mine = (n: string): boolean => n === nat;
+  const pool: Region[] = [];
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || r.owner !== nat || r.overseas || fieldWrecked(g, r.id)) continue;
+    for (const _ of groupsOnField(g, r.id, mine)) pool.push(r);
+  }
+  if (!pool.length) return false;
+  const F = g.nations[foe];
+  const r = pool[Math.floor(draw(g, g.turn, 'fieldwhere', foe) * pool.length) % pool.length];
+  const G = guardChance(g, nat, r.id);
+  const who = { name: G.by?.name ?? '', nat };
+  if (G.by && draw(g, g.turn, 'guard', foe) < G.chance) {
+    const text = `Agent ${G.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? 'an' : 'a'} ${F.adj} sabotage ring on the field at ${r.name} before it can strike.`;
+    note(g, who, r.id, 'foiled', text, true);
+    headline(g, 'info', text, nat, r.id);
+    learn(g, G.by, 1);
+    return true;
+  }
+  if (!wreckField(g, r.id, mine)) return false;
+  const text = `Grounded this month: saboteurs wrecked the field at ${r.name}. Your police blame ${F.adj} agents.`;
+  note(g, who, r.id, 'struck', text, false);
+  headline(g, 'event', text, nat, r.id);
+  return true;
+}
+
 /** The other side's services at work against the player's home ground. */
 function plots(g: Game, nat: string): void {
   const T = threat(g, nat);
   for (const foe of T.foes) {
     if (draw(g, g.turn, 'plot', foe) >= T.each) continue;
     const F = g.nations[foe], K = INTEL.enemy.kinds;
+    // With the field's switch on, a share of the plots go for an airfield the player flies from (ruling 151(b)).
+    if (airPiece(g, 'field') && draw(g, g.turn, 'field', foe) < AIRV.field.enemyShare && plotField(g, nat, foe)) continue;
     const rail = draw(g, g.turn, 'kind', foe) < K.rail / (K.rail + K.factory);
     // Factories are picked by how many a province has; a railway anywhere on home ground will do.
     const pool: Region[] = [];
@@ -738,6 +787,8 @@ export function intelTick(g: Game, nat: string): void {
     if (a.months % INTEL.agents.watch === 0) learn(g, a, 1);
   }
   for (const k of Object.keys(g.intel.heat)) if (g.intel.heat[+k] <= g.turn) delete g.intel.heat[+k];
+  // (A field wrecked in an earlier month is mended: its mark goes.)
+  if (airPiece(g, 'field')) for (const k of Object.keys(g.flags)) if (k.startsWith('wreck:') && (g.flags[k] ?? 0) < g.turn) delete g.flags[k];
   plots(g, nat);
 }
 
@@ -781,7 +832,7 @@ export interface SpyRoom {
 
 function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);
-  const offers: MissionOffer[] = (out ? MISSIONS.filter((m) => m !== 'guard') : (['guard'] as Mission[])).map((m) => {
+  const offers: MissionOffer[] = (out ? missionsIn(g).filter((m) => m !== 'guard') : (['guard'] as Mission[])).map((m) => {
     const why = whyNotMission(g, a.nat, a.id, m);
     return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? '', now: a.mission === m, caught: caughtChance(g, a, m), success: isSabotage(m) ? successChance(a, m) : null };
   });

@@ -57,6 +57,11 @@
       "months": 3,
       "cut": 0.5
     },
+    "airfield": {
+      "caught": 0.18,
+      "success": 0.45,
+      "gain": 2
+    },
     "guard": {
       "caught": 0
     }

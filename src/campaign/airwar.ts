@@ -32,6 +32,7 @@ import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
+import { whyNotField, wrecked } from './airversion';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
 
@@ -213,7 +214,7 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
     // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
-    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : {}),
+    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
   };
 }
 

@@ -14,7 +14,7 @@ import openData from '../../data/campaign/open.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import { holds } from './diplomacy';
+import { holds, majorsOf } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
@@ -33,6 +33,7 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openFooting } from './footing';
 import { openWeather } from './weather';
+import { openAirVersion } from './airversion';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
@@ -117,6 +118,7 @@ export function startOpen(g: Game, wide = true): Game {
   openGovernment(g);
   openFooting(g);
   openWeather(g);
+  openAirVersion(g, majorsOf(g));
   openManpower(g);
   numberDivisions(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
