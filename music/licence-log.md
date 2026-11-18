@@ -11,7 +11,8 @@ credits kept in a list that ships with the game.
 | The Silent Front | The same: Brian's own song, sent 17 Nov 2026, same Google label and watermark | The same: not yet confirmed | The same |
 | A Vigil at the Ridge | The same: Brian's own song, sent 17 Nov 2026, same Google label and watermark | The same: not yet confirmed | The same |
 | Trench Line At Twilight | The same: Brian's own song, sent 18 Nov 2026, same Google label and watermark | The same: not yet confirmed | The same |
-| The melodies of the three pieces written here | Built on the tune of Brian's The Long Walk Home (its first eight bars), arranged and harmonised in this thread | Follows The Long Walk Home's line above | None beyond that |
+| The melodies of the three pieces written here | Built on Brian's The Final Salute (its low call and the tune above it, its first sixteen bars), arranged and harmonised in this thread (rebuilt 18 Nov on Brian's choice) | Follows The Final Salute's line above | None beyond that |
+| The earlier versions of those three (in `earlier/walk-versions/`, not in use) | Built on the tune of Brian's The Long Walk Home (its first eight bars) | Follows The Long Walk Home's line above | None beyond that |
 | The hall echo | Built by the program (`engine.make_hall`), no recorded room | The project's own | None |
 
 Nothing is taken from any film, series, game, anthem or march.
